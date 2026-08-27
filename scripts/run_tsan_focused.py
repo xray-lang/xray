@@ -73,8 +73,12 @@ TASK276_TSAN_TESTS: tuple[str, ...] = (
     "test_xtp_resource_stress",
     "test_runtime_generation",
     "test_entry_cell_runtime_archive",
+    "test_runtime_program_archive",
 )
-TASK276_TSAN_REGEX = "^(?:" + "|".join(TASK276_TSAN_TESTS) + ")$"
+# CTest compiles this with CMake's own regular expression engine, which has
+# no non-capturing group: "(?:" makes it reject the pattern and print the
+# compile error ahead of the JSON, which the discovery below then cannot read.
+TASK276_TSAN_REGEX = "^(" + "|".join(TASK276_TSAN_TESTS) + ")$"
 TSAN_PROBE_TIMEOUT = 60
 
 

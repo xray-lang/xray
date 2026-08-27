@@ -105,10 +105,11 @@ bool xr_module_resolver_set_lockfile(XrModuleResolver *r, XrLockfile *lockfile) 
     return true;
 }
 
-/* Callback to free cached XrModuleId entries during teardown. */
+/* Frees one cached entry during teardown. The map never copies or owns a key,
+ * so the resolver that built this one is the only owner left to release it. */
 static void free_cached_entry(const char *key, void *value, void *userdata) {
-    (void) key;
     (void) userdata;
+    xr_free((char *) key);
     if (!value)
         return;
     XrModuleId *id = (XrModuleId *) value;
@@ -526,7 +527,8 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
         XrModuleId *to_cache = clone_module_id(out_id);
         if (to_cache) {
             if (xr_hashmap_set(r->cache, cache_key, to_cache)) {
-                /* cache_key now owned by hashmap */
+                /* The map holds the key pointer without copying it, so the
+                 * resolver keeps ownership until its teardown releases it. */
                 return 0;
             }
             xr_module_id_cleanup(to_cache);

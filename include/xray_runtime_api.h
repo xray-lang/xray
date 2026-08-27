@@ -150,13 +150,17 @@ XRAY_API bool xr_program_load_target_plan(
  * Every call rechecks the published manifest identity, program/module-set
  * fingerprints, GCI, TargetPlan, and decoded cache before dispatch. Multiple
  * execute calls may run concurrently. Unload is a lifecycle boundary rather
- * than dynamic reload: the caller must stop and join every execute call before
- * calling xr_program_unload; concurrent execute/unload is unsupported. */
+ * than dynamic reload, and it is the boundary that decides: an execute that
+ * begins after unload was admitted is refused, and an unload racing an execute
+ * already in flight is refused instead of tearing it down. */
 XRAY_API bool xr_program_execute_direct_i64(
     const XrProgram *program, int64_t *result, char *diagnostic,
     size_t diagnostic_size);
 
-/* Releases a quiescent program after all execute calls have been joined. */
+/* Releases a quiescent program. Quiescence is decided before a single teardown
+ * step runs: a program with an execution in flight, or whose generation still
+ * owns a pin, is refused untouched and stays callable, so a caller that has not
+ * joined its executions loses nothing but the call. */
 XRAY_API bool xr_program_unload(XrProgram **program, char *diagnostic,
                                 size_t diagnostic_size);
 

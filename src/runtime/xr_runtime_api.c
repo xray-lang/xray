@@ -50,12 +50,20 @@ struct XrModule {
 };
 
 /* Program is a distinct public facade over the same artifact/generation
- * owners. It deliberately has no export registry or module-local entry cell. */
+ * owners. It deliberately has no export registry or module-local entry cell.
+ *
+ * Unlike a module, a program has no entry cell to close, so its own gate is
+ * what stops a new execution and proves to unload that none is in flight. The
+ * count has to be taken before the generation handle is read: the generation's
+ * pin is acquired inside the executor, and until then there is nothing keeping
+ * a concurrent unload from freeing the generation out from under the call. */
 struct XrProgram {
     XrRuntime *runtime;
     XrRuntimeArtifactAuthority *artifact_authority;
     XrTargetPlan *plan;
     XrLoadedModuleGeneration *generation;
+    xr_mutex_t gate;
+    uint32_t inflight_executions;
     bool unloading;
 };
 
@@ -413,6 +421,7 @@ XRAY_API bool xr_program_load_target_plan(
     created->artifact_authority = artifact_authority;
     created->plan = plan;
     created->generation = generation;
+    xr_mutex_init(&created->gate);
     xr_mutex_lock(&runtime->gate);
     runtime->loaded_artifacts++;
     xr_mutex_unlock(&runtime->gate);
@@ -425,12 +434,30 @@ XRAY_API bool xr_program_execute_direct_i64(
     size_t diagnostic_size) {
     if (result)
         *result = 0;
-    if (!program || !program->runtime || !program->generation ||
-        program->unloading || !result)
+    if (!program || !program->runtime || !program->generation || !result)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "program execution requires a loaded program and result");
-    return xr_module_generation_execute_program_direct_i64(
-        program->generation, result, diagnostic, diagnostic_size);
+    /* The in-flight count is the program's own quiescence proof rather than
+     * caller-visible state, so it is taken through the const handle: a caller
+     * holding a read-only program may still execute it, and unload has to be
+     * able to see that it did. */
+    XrProgram *owner = (XrProgram *) program;
+    xr_mutex_lock(&owner->gate);
+    if (owner->unloading) {
+        xr_mutex_unlock(&owner->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "program execution requires a loaded program and result");
+    }
+    owner->inflight_executions++;
+    xr_mutex_unlock(&owner->gate);
+
+    bool executed = xr_module_generation_execute_program_direct_i64(
+        owner->generation, result, diagnostic, diagnostic_size);
+
+    xr_mutex_lock(&owner->gate);
+    owner->inflight_executions--;
+    xr_mutex_unlock(&owner->gate);
+    return executed;
 }
 
 XRAY_API bool xr_program_unload(XrProgram **program, char *diagnostic,
@@ -439,11 +466,34 @@ XRAY_API bool xr_program_unload(XrProgram **program, char *diagnostic,
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "program is missing");
     XrProgram *owned = *program;
-    owned->unloading = true;
+    /* Quiescence is decided before a single teardown step runs. A program that
+     * is still executing, or whose generation still owns a pin, is refused
+     * untouched, so a refused unload leaves it callable instead of stranding
+     * it drained and unreachable. */
     XrModuleGenerationSnapshot snapshot;
-    if (!xr_module_generation_snapshot(owned->generation, &snapshot))
+    xr_mutex_lock(&owned->gate);
+    if (owned->unloading) {
+        xr_mutex_unlock(&owned->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "program is already unloading");
+    }
+    if (owned->inflight_executions != 0) {
+        xr_mutex_unlock(&owned->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
+                    "program cannot unload while an execution is in flight");
+    }
+    if (!xr_module_generation_snapshot(owned->generation, &snapshot)) {
+        xr_mutex_unlock(&owned->gate);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "program generation state is unreadable");
+    }
+    if (snapshot.total_pins != 0) {
+        xr_mutex_unlock(&owned->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
+                    "program cannot unload while its generation owns pins");
+    }
+    owned->unloading = true;
+    xr_mutex_unlock(&owned->gate);
     if (snapshot.state == XR_MODULE_GENERATION_ACTIVE &&
         !xr_module_generation_begin_drain(owned->generation, diagnostic,
                                           diagnostic_size))
@@ -453,6 +503,7 @@ XRAY_API bool xr_program_unload(XrProgram **program, char *diagnostic,
         !xr_module_generation_unload(&owned->generation, diagnostic,
                                      diagnostic_size))
         return false;
+    xr_mutex_destroy(&owned->gate);
     xr_target_plan_free(owned->plan);
     xr_runtime_artifact_authority_free(owned->artifact_authority);
     XrRuntime *runtime = owned->runtime;

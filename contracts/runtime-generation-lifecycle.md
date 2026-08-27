@@ -149,8 +149,10 @@ capabilities; they do not authorize general product graphs or dynamic reload.
    vector plus one XTP, canonicalizes only by verified program-module row, and
    reuses that same generation, decoded cache, and live manifest. Its execute
    call selects only `entry_target_function`. Multiple execute calls may run in
-   parallel, but this bounded lifecycle does not add a concurrent unload
-   protocol: callers must stop and join them before unload.
+   parallel, and unload decides quiescence before it takes a single teardown
+   step: an unload that lands while a call is in flight, or while the
+   generation still owns a pin, is refused with the program untouched and still
+   callable. That is a lifecycle boundary, not a concurrent reload protocol.
 10. Export names are a semantic-artifact fact. The TargetPlan carries dense
     numeric tables and no spelling, so lookup reads the verified source export
     table the plan retains and matches an exact name in it. It never resolves an
@@ -277,13 +279,13 @@ anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f2
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c f4422072f94b01c4411b4677cb62ba72304553753c9225074d981b6b20f43fa3
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c 0332f8c2423f606919ffab298a69ee14b863c4f5e590b5d51aa3c39f9344f14c
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 536faa4afd6b0374ccc17e9446320a43eeea92f5c696fbd5f6dac644e95c7d53
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 4c5b1182481f054504b44ff6f6e24c926a2071fcc9ca18cadcf7927b10c20da0
 anchor-sha256: tests/install/run_install_public_surface_tests.py 1bbef0d66f5d0d78dbe41848497b678c02c88fc9663f296d9863571fe20eb38e
-anchor-sha256: include/xray_runtime_api.h 07d75f03ee3baea4301bf30ac67c15b77d74feaec28322fb818c247970a1ce44
-anchor-sha256: src/runtime/xr_runtime_api.c 2297cb107d76409c13d0bb8019084722cb573bb79d5bce5b85613a32b45cf14a
+anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
+anchor-sha256: src/runtime/xr_runtime_api.c 7017a587d31ef34d2e9302796839e0e68518388eb473430f2adf41e584bb5386
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c b7ef1d75a66f12b0b408dcd73a672e3e7df8af4a140ce612612996b60a778b9a
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
 anchor-sha256: src/runtime/xr_entry_cell.c c2bc18e2eb0c40767bff70b0137387a81d55bbe0b767673befcdc5acce4386a0
@@ -295,4 +297,4 @@ anchor-sha256: src/vm/xr_vm_entry_adapter.h 260bca5ab4abcef7cc679f5674e92c0b2c8e
 anchor-sha256: src/vm/xr_vm_entry_adapter.c a18c76b33fa1a35b0b2b756d6eab77de5b7876f58b65bf6c5605a7596e701547
 anchor-sha256: xisa/target/vm_entry_adapters.def db46c172fa847c54cb24d477404f00d74db9996b99be9fa357a3ce0864a9ddb9
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h 50a175071a41a521e11fa672b7f17663b73dda321fd6ab9703196324e642dfda
-anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c ad03d77d583441969756a1f2d1be2cde504624c0cd4ed26ddae96a50c8a79ed5
+anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 1c09d9175acb0870f42515071a88cdf6beb1f28becdb179fd9b3435945bed680

@@ -5,6 +5,7 @@
 #include "base/xmalloc.h"
 #include "ir/xi.h"
 #include "ir/xi_coro_lower.h"
+#include "ir/xi_module.h"
 #include "ir/xi_stage.h"
 #include "plan/ownership/xr_ownership_certificate_internal.h"
 #include "plan/semantic/xr_semantic_builder.h"
@@ -111,6 +112,15 @@ static XrSemanticPlan *build_lifecycle_semantic_plan(void) {
             function->coro_plan->points[0].nroots == 1 &&
             function->coro_plan->points[0].ndrops == 1);
     function->stage = XI_STAGE_OPTIMIZED;
+    /* The SemanticPlan builder requires a lowered graph to carry a typed
+     * durable module identity and synthesizes none, so an in-memory probe
+     * names its own memory-namespace identity. xi_func_free owns the module
+     * it is attached to and releases it with the function. */
+    XiModule *module =
+        xi_module_new("typed_lifecycle_audit_probe.xr", "typed_lifecycle_audit_probe", function);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(module, "memory-module-v1:id=27:typed-lifecycle-audit-probe"));
+    function->module = module;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));

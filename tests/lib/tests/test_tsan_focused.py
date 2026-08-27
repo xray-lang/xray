@@ -49,6 +49,7 @@ class BuildIdentityTest(unittest.TestCase):
                 "test_xtp_resource_stress",
                 "test_runtime_generation",
                 "test_entry_cell_runtime_archive",
+                "test_runtime_program_archive",
             ),
         )
         self.assertIn("-fsanitize=thread", " ".join(spec.sanitizer_flags))
@@ -153,6 +154,20 @@ class CTestSelectionTest(unittest.TestCase):
             ),
         )
 
+    def test_discovery_regex_uses_only_cmake_regex_syntax(self):
+        """CTest compiles -R with CMake's own engine, not Python's.
+
+        Every case here drives discovery through a fake run, so a pattern that
+        Python accepts and CMake rejects passes all of them while the real lane
+        fails: CTest prints its compile error ahead of the JSON and discovery
+        reports unreadable output instead of a bad pattern.
+        """
+        self.assertNotIn("(?", tsan.TASK276_TSAN_REGEX)
+        self.assertTrue(tsan.TASK276_TSAN_REGEX.startswith("^("))
+        self.assertTrue(tsan.TASK276_TSAN_REGEX.endswith(")$"))
+        for name in tsan.TASK276_TSAN_TESTS:
+            self.assertIn(name, tsan.TASK276_TSAN_REGEX)
+
     def test_zero_selected_fails_closed(self):
         selected = tsan.discover_task276_ctests(
             self.build, self.log, run=lambda argv, **kwargs: self.discovery(()))
@@ -167,7 +182,7 @@ class CTestSelectionTest(unittest.TestCase):
             run=lambda argv, **kwargs: self.discovery(tsan.TASK276_TSAN_TESTS[:-1]),
         )
         self.assertIsNone(selected)
-        self.assertTrue(any("missing test_entry_cell_runtime_archive" in message
+        self.assertTrue(any(f"missing {tsan.TASK276_TSAN_TESTS[-1]}" in message
                             for message, _ in self.log.entries))
 
     def test_discovery_command_failure_propagates(self):

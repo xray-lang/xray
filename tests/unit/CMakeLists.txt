@@ -503,6 +503,27 @@ add_custom_command(
     VERBATIM)
 add_custom_target(runtime_scalar_artifact_fixture
     DEPENDS ${XR_RUNTIME_SCALAR_ARTIFACT_HEADER})
+# The bounded program capability needs an arbitrarily ordered XSM module set
+# plus one exact XTP, which no single-module fixture can stand in for. The
+# writer is a CLI mode of the closure test rather than one of its cases, so it
+# produces the artifacts without running them.
+set(XR_RUNTIME_PROGRAM_ARTIFACT_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/generated)
+set(XR_RUNTIME_PROGRAM_ARTIFACTS
+    ${XR_RUNTIME_PROGRAM_ARTIFACT_DIR}/runtime_program_0.xsm
+    ${XR_RUNTIME_PROGRAM_ARTIFACT_DIR}/runtime_program_1.xsm
+    ${XR_RUNTIME_PROGRAM_ARTIFACT_DIR}/runtime_program.xtp)
+add_custom_command(
+    OUTPUT ${XR_RUNTIME_PROGRAM_ARTIFACTS}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${XR_RUNTIME_PROGRAM_ARTIFACT_DIR}
+    COMMAND $<TARGET_FILE:test_xa_program_semantic_closure>
+            --write-program-runtime-artifacts ${XR_RUNTIME_PROGRAM_ARTIFACTS}
+    DEPENDS test_xa_program_semantic_closure
+    COMMENT "Generating exact XSM module-set/XTP program runtime fixture"
+    VERBATIM)
+add_custom_target(runtime_program_artifact_fixture
+    DEPENDS ${XR_RUNTIME_PROGRAM_ARTIFACTS})
 add_dependencies(test_runtime_target_plan_load_archive
     runtime_scalar_artifact_fixture)
 target_include_directories(test_runtime_target_plan_load_archive PRIVATE
@@ -513,7 +534,9 @@ target_link_libraries(test_runtime_target_plan_load_archive PRIVATE
 add_test(NAME test_runtime_target_plan_load_archive
     COMMAND $<TARGET_FILE:test_runtime_target_plan_load_archive>)
 add_xray_unit_test(test_runtime_generation
-    runtime/test_runtime_generation.c)
+    runtime/test_runtime_generation.c
+    runtime/test_runtime_generation_concurrency.c
+    runtime/test_runtime_generation_audit.c)
 add_xray_unit_test(test_dynamic_entry_runtime
     runtime/test_dynamic_entry_runtime.c)
 add_executable(test_runtime_generation_archive
@@ -534,6 +557,23 @@ target_link_libraries(test_runtime_api_archive PRIVATE
     xray_vm)
 add_test(NAME test_runtime_api_archive
     COMMAND $<TARGET_FILE:test_runtime_api_archive>)
+add_executable(test_runtime_program_archive
+    runtime/test_runtime_program_archive.c)
+add_dependencies(test_runtime_program_archive
+    runtime_program_artifact_fixture)
+target_include_directories(test_runtime_program_archive PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_runtime_program_archive PRIVATE
+    XR_RUNTIME_PROGRAM_ARTIFACT_DIR="${XR_RUNTIME_PROGRAM_ARTIFACT_DIR}")
+target_link_libraries(test_runtime_program_archive PRIVATE
+    xray_vm)
+add_test(NAME test_runtime_program_archive
+    COMMAND $<TARGET_FILE:test_runtime_program_archive>)
+set_tests_properties(test_runtime_program_archive PROPERTIES
+    LABELS "runtime;target-machine;typed-plan;vm;concurrency"
+    PROCESSORS 1
+    TIMEOUT 90)
 add_executable(test_entry_cell_runtime_archive
     runtime/test_entry_cell_runtime_archive.c)
 add_dependencies(test_entry_cell_runtime_archive
