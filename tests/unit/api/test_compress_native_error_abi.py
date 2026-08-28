@@ -103,8 +103,9 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
         self.assertIn("XR_GLOBAL_VAR_COMPRESSION_ERROR", vm_zlib_decompress)
         self.assertIn("compress_publish_builtin_enum_error", vm_zlib_decompress)
         self.assertIn("xr_builtin_enum_error_construct", vm_runtime)
-        self.assertIn("if (ctx && !XR_IS_NULL(ctx->pending_error))", vm_runtime)
-        self.assertIn("ctx->pending_error.ptr == result.value.ptr", vm_runtime)
+        # The consuming half of this channel moved into the execution context and
+        # its VM-side rediscovery was deleted with it, so the runtime source read
+        # here no longer carries either. test_execution_error_channel covers it.
         self.assertIn('"CompressionError", "InvalidData"', aot_gunzip)
         self.assertIn('"CompressionError", "InvalidData"', aot_inflate)
         self.assertIn('"CompressionError", "InvalidData"', aot_zlib_decompress)
