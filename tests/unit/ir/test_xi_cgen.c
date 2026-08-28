@@ -2706,13 +2706,14 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                  "native unsigned interpolation Backend plan should freeze");
     char semantic_hex[XR_FINGERPRINT_BYTES * 2u + 1u];
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(ir->semantic_plan), semantic_hex);
-    /* Re-anchored: an abort earlier in this file kept every test from here on
-     * from running at all, so this known answer went stale without a single
-     * red result to say so.  The digest below is what a tree with no local
-     * changes produces, so it records the plan as it is rather than a change
-     * made alongside it. */
+    /* Re-anchored because a SemanticPlan fingerprint covers the whole stdlib
+     * metadata registry: xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
+     * which xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
+     * Publishing http2, compress, mem and regex from .xr bodies renames their
+     * entries, so this digest moves even though the fixture below imports
+     * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b. */
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b") == 0,
+                        "fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;
