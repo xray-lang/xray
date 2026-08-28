@@ -1,0 +1,41 @@
+// An unsigned integer has two ways to become text: the conversion the language
+// applies for `print` and `string(x)`, and the `toString()` method. Both must
+// answer with the same digits.
+//
+// The method used to dispatch on the receiver's name into the signed integer
+// implementation, where the runtime value is a bare tagged word carrying no
+// sign, so every value with the high bit set produced its negative twin while
+// the conversion path was correct. Values below 2^63 agreed, which is why the
+// disagreement was easy to miss.
+
+@test
+fn test_unsigned_to_string_matches_conversion() {
+    var big: u64 = 18446744073709551615
+    assertEqual(big.toString(), "18446744073709551615")
+    assertEqual(big.toString(), string(big))
+    assertEqual("x=" + big.toString(), "x=18446744073709551615")
+}
+
+@test
+fn test_unsigned_to_string_at_high_bit_boundary() {
+    // 2^63 exactly: the smallest value whose high bit is set.
+    var half: u64 = 9223372036854775808
+    assertEqual(half.toString(), "9223372036854775808")
+
+    // One below it, where both paths always agreed.
+    var below: u64 = 9223372036854775807
+    assertEqual(below.toString(), "9223372036854775807")
+}
+
+@test
+fn test_signed_and_float_to_string_unchanged() {
+    // A fix for the unsigned answer must not pay for it here.
+    var negative: i64 = -1
+    assertEqual(negative.toString(), "-1")
+
+    var small: u64 = 42
+    assertEqual(small.toString(), "42")
+
+    var scalar: f64 = 1.5
+    assertEqual(scalar.toString(), "1.5")
+}

@@ -265,6 +265,24 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     uint16_t nargs = (uint16_t) (v->nargs - 1);
 
+    /* An unsigned integer prints one value two ways otherwise: the conversion
+     * path asks the type for its format and gets the unsigned one, while the
+     * method dispatches on the receiver's name to the signed integer table,
+     * where the runtime value is a bare tagged word carrying no sign. The
+     * string conversion opcode already takes the same hint the conversion path
+     * computes, so the method answers through it rather than through a second
+     * implementation that cannot see the type. */
+    if (v->nargs == 1 && v->args[0] && v->args[0]->type &&
+        xi_emit_type_is_unsigned_int(v->args[0]->type) &&
+        v->aux_int == ((int64_t) XI_METHOD_SYMBOL_TOSTRING << 1)) {
+        XiEmitReg receiver = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_TOSTRING, dst, receiver,
+                                  xi_emit_tostring_hint_for_type(v->args[0]->type)));
+        return;
+    }
+
     /* Lowering has proven this exact receiver is the imported `time` module.
      * Emit the dedicated operation so bytecode entry planning sees the timer
      * suspension and creates a resumable root. */
