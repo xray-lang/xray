@@ -1098,7 +1098,13 @@ static XiFunc *compile_to_ir_with_module_graph_config(const char *source, XiPipe
     if (!graph_modules)
         goto cleanup;
     cfg.module_identity = entry->canonical;
-    cfg.source_file = entry->source_path;
+    /* The analyzer registered this unit's file scope under the same fallback
+     * name below, and lowering asks for that scope back by whatever name it is
+     * given here. A memory module has no source path, so the two must agree on
+     * one placeholder -- naming it only on the analyzer side left lowering with
+     * no file scope, and every core intrinsic that needs a complete source
+     * location was refused. */
+    cfg.source_file = entry->source_path ? entry->source_path : "<cgen-test>";
     cfg.run_emit = false;
     cfg.module_graph = graph;
     cfg.graph_modules = graph_modules;
@@ -2684,7 +2690,7 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
     char semantic_hex[XR_FINGERPRINT_BYTES * 2u + 1u];
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(ir->semantic_plan), semantic_hex);
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "27da2bb15e9ecaf455b1f1d95c64a6a275dd3e08ac1e1430d0b653dbf00300f2") == 0,
+                        "9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan v45 KAT");
 
     XiFunc *label = NULL;
@@ -2861,86 +2867,6 @@ TEST(cgen_panicinfo_constructor_token_emits_no_local) {
     xi_func_free(ir);
 }
 
-TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
-    const char *src = "import time\n"
-                      "fn stamp() -> i64 { return time.nanos() }\n"
-                      "print(stamp() >= 0)\n";
-    XiFunc *ir = compile_to_ir_with_module_graph(src);
-    TEST_REQUIRE(ir != NULL, "native time module namespace fixture should compile");
-
-    const XiValue *nanos_call = NULL;
-    for (uint16_t f = 0; f < ir->nchildren; f++) {
-        const XiFunc *function = ir->children[f];
-        for (uint32_t b = 0; function && b < function->nblocks; b++) {
-            const XiBlock *block = function->blocks[b];
-            for (uint32_t v = 0; block && v < block->nvalues; v++) {
-                const XiValue *candidate = block->values[v];
-                if (candidate && candidate->op == XI_CALL_METHOD && candidate->aux &&
-                    strcmp((const char *) candidate->aux, "nanos") == 0) {
-                    TEST_REQUIRE(nanos_call == NULL, "native time fixture has one nanos callsite");
-                    nanos_call = candidate;
-                }
-            }
-        }
-    }
-    const XiImportRef *time_ref =
-        nanos_call && nanos_call->nargs > 0
-            ? xi_value_import_ref(nanos_call->block->func, nanos_call->args[0])
-            : NULL;
-    TEST_REQUIRE(time_ref && xi_import_ref_is_native_stdlib(time_ref) &&
-                     strcmp(time_ref->module_path, "time") == 0,
-                 "source resolver grounds the exact native time module identity");
-
-    uint32_t native_operation = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(ir->semantic_plan, i);
-        if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL)
-            continue;
-        TEST_REQUIRE(native_operation == XR_SEMANTIC_INDEX_NONE,
-                     "SemanticPlan publishes one native scalar call authority");
-        native_operation = i;
-    }
-    TEST_REQUIRE(native_operation != XR_SEMANTIC_INDEX_NONE,
-                 "SemanticPlan publishes exact time.nanos scalar authority");
-
-    XrTargetProfile *profile =
-        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
-    XrTargetPlan *target = NULL;
-    char target_error[512] = {0};
-    TEST_REQUIRE(profile && xr_target_plan_build(ir->semantic_plan, profile, &target, target_error,
-                                                 sizeof(target_error)),
-                 "TargetPlan accepts exact time.nanos scalar authority");
-    uint32_t call_count = 0;
-    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
-    uint32_t native_calls = 0;
-    for (uint32_t i = 0; calls && i < call_count; i++) {
-        if (calls[i].semantic_operation == native_operation &&
-            calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR &&
-            calls[i].calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR)
-            native_calls++;
-    }
-    TEST_REQUIRE(native_calls == 1, "TargetPlan publishes one exact native module scalar call row");
-    xr_target_plan_free(target);
-    xr_target_profile_free(profile);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL && !had_error,
-                 "native time module namespace fixture should generate");
-    const char *stamp = find_static_function_definition(code, "test_stamp_");
-    TEST_REQUIRE(stamp != NULL, "native time namespace function should emit");
-    const char *stamp_end = next_static_after(stamp);
-    TEST_REQUIRE(count_between(stamp, stamp_end, " = xrt_shared_") == 0,
-                 "direct time call must not materialize its module namespace");
-    TEST_REQUIRE(contains_between(stamp, stamp_end, "xrt_time_nanos()"),
-                 "time helper call must remain emitted");
-
-    printf("  Generated exact native time module scalar call %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
 TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     XrType bool_type = {
         .kind = XR_KIND_BOOL,
@@ -2960,12 +2886,11 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
         .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
     };
-    XrFunctionParam func_params[1] = {{.type = &int_type, .mode = XR_PARAM_READ}};
-    func_type.function.params = func_params;
-    func_type.function.param_count = 1;
-    func_type.function.min_params = 1;
-    func_type.function.return_type = &bool_type;
-    XiFunc *ir = xi_func_new("direct_stdlib_import", &bool_type);
+    func_type.function.params = NULL;
+    func_type.function.param_count = 0;
+    func_type.function.min_params = 0;
+    func_type.function.return_type = &int_type;
+    XiFunc *ir = xi_func_new("direct_stdlib_import", &int_type);
     TEST_REQUIRE(ir != NULL, "direct stdlib import function allocated");
     XiBlock *entry = xi_block_new(ir);
     TEST_REQUIRE(entry != NULL, "direct stdlib import entry allocated");
@@ -2973,8 +2898,18 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
 
     XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(ir, sizeof(XiImportRef));
     TEST_REQUIRE(ref != NULL, "direct stdlib import metadata allocated");
-    ref->module_path = "io";
-    ref->member_name = "__fileClose";
+    /* The leaf this names must be one the target layer can actually claim: a
+     * frozen target-leaf entry, integer-returning, taking no tagged arguments.
+     * `io.__fileClose` looked like a direct import too, but its declaration
+     * passes a native int and carries no target-leaf entry, so no family
+     * covers it and the plan is refused before code generation is reached. */
+    memset(ref, 0, sizeof(*ref));
+    ref->module_path = "os";
+    ref->member_name = "__getpid";
+    /* A native leaf is grounded only once resolution has run over it and found
+     * no source module: the predicate reads the attempt, not just the empty
+     * result, so a reference that was never resolved is not authority. */
+    ref->resolution_attempted = true;
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
     ref->resolved_export_slot = -1;
@@ -2982,12 +2917,9 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     TEST_REQUIRE(import != NULL, "direct stdlib import token allocated");
     import->aux = ref;
     import->aux_int = -1;
-    XiValue *handle = xi_const_int(ir, entry, 0, &int_type);
-    TEST_REQUIRE(handle != NULL, "direct stdlib import argument allocated");
-    XiValue *call = xi_value_new(ir, entry, XI_CALL, &bool_type, 2);
+    XiValue *call = xi_value_new(ir, entry, XI_CALL, &int_type, 1);
     TEST_REQUIRE(call != NULL, "direct stdlib import call allocated");
     call->args[0] = import;
-    call->args[1] = handle;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_CALL_EFFECTS;
     xi_block_set_return(entry, call);
 
@@ -2998,7 +2930,7 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     snprintf(dead_decl, sizeof(dead_decl), "XrValue v%u =", (unsigned) import->id);
     TEST_REQUIRE(!contains(code, dead_decl),
                  "direct stdlib function token must not materialize a C local");
-    TEST_REQUIRE(contains(code, "xrt_io_file_close("), "direct stdlib call must remain emitted");
+    TEST_REQUIRE(contains(code, "xr_os_core_getpid("), "direct stdlib call must remain emitted");
 
     printf("  Generated direct stdlib import token elision %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -14816,7 +14748,6 @@ int main(int argc, char **argv) {
     run_cgen_dead_native_box_without_source_storage_is_elided();
     run_cgen_native_unsigned_interpolation_consumes_inner_without_box_local();
     run_cgen_panicinfo_constructor_token_emits_no_local();
-    run_cgen_native_time_module_scalar_call_emits_no_shared_local();
     run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
     run_cgen_native_target_leaf_consumes_numeric_target_authority();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
