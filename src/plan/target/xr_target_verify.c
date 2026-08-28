@@ -6085,7 +6085,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 : NULL;
         bool direct = target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
                                  xr_semantic_call_target_binds_instance_method(
-                                     target, semantic, plan->semantic_dependencies,
+                                     target, semantic,
+                                     (const XrSemanticPlan *const *) plan->semantic_dependencies,
                                      plan->semantic_dependency_count));
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
@@ -6147,7 +6148,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             xr_semantic_plan_operation(semantic, call->semantic_operation);
         bool direct = target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
                                  xr_semantic_call_target_binds_instance_method(
-                                     target, semantic, plan->semantic_dependencies,
+                                     target, semantic,
+                                     (const XrSemanticPlan *const *) plan->semantic_dependencies,
                                      plan->semantic_dependency_count));
         /* The receiver fills parameter 0, so a method call's operands line up
          * with the parameter list one to one while a direct call's run one
