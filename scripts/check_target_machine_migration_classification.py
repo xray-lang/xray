@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -97,10 +98,22 @@ def validate_inventory_rows(root: Path, data: dict[str, Any], errors: list[str])
     return counts
 
 
+# A configured build tree carries its own copies of these files, and there can
+# be many such trees beside the sources. They are generated output, never the
+# install declarations this check governs, so the walk skips them outright
+# instead of reading each one back.
+_SKIP_DIRS = {".cache", ".evidence", ".git"}
+
+
 def install_blocks(root: Path) -> list[str]:
     blocks: list[str] = []
-    for path in root.rglob("CMakeLists.txt"):
-        text = path.read_text(encoding="utf-8", errors="strict")
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames if d not in _SKIP_DIRS and not d.startswith("build")
+        ]
+        if "CMakeLists.txt" not in filenames:
+            continue
+        text = (Path(dirpath) / "CMakeLists.txt").read_text(encoding="utf-8", errors="strict")
         blocks.extend(re.findall(r"\binstall\s*\((.*?)\)", text, flags=re.IGNORECASE | re.DOTALL))
     return blocks
 

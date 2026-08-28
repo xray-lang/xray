@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,10 +29,17 @@ SKIP_PARTS = {
     ".cache",
     ".evidence",
     ".git",
-    "build",
-    "build-asan",
-    "build-release",
 }
+
+# Any directory whose name starts with one of these is a build tree, not source
+# under governance. Naming them one by one meant a newly configured tree was
+# walked in full: a build directory holds far more files than the sources do,
+# so the walk cost, not the file count, is what this avoids.
+SKIP_PREFIXES = ("build",)
+
+
+def _is_skipped_dir(name: str) -> bool:
+    return name in SKIP_PARTS or name.startswith(SKIP_PREFIXES)
 
 SKIP_FILES = {
     Path("scripts/check_structural_object_json_map_boundary.py"),
@@ -111,13 +119,20 @@ RULES = (
 
 
 def iter_text_files(root: Path):
-    for path in root.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
-            continue
-        rel = path.relative_to(root)
-        if rel in SKIP_FILES or any(part in SKIP_PARTS for part in rel.parts):
-            continue
-        yield rel, path
+    # Prune skipped directories while walking rather than filtering afterwards:
+    # rglob would still descend into every build tree and cache before the
+    # filter ran, which is where the time went.
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not _is_skipped_dir(d)]
+        base = Path(dirpath)
+        for name in filenames:
+            path = base / name
+            if path.suffix.lower() not in TEXT_SUFFIXES:
+                continue
+            rel = path.relative_to(root)
+            if rel in SKIP_FILES:
+                continue
+            yield rel, path
 
 
 def under_any_root(rel: Path, roots: tuple[str, ...]) -> bool:
