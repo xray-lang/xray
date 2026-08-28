@@ -6330,10 +6330,10 @@ print(len(empty))           // 0
 |--|--|--|
 | `io` | 文件 IO + 文件系统 | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
 | `path` | 路径操作 | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
-| `os` | 操作系统接口 | `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec`；常量 `platform` `arch` `sep` `eol` |
+| `os` | 操作系统接口 | `platform()` `arch()` `sep()` `eol()` `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec` |
 
 > xray **没有**独立的 `fs` 模块，文件系统操作在 `io` 中；进程参数 / 进程信息走全局 `process` 对象（`process.args` / `process.file` / `process.dir`，见 §16.5），不在 `os` 中。
-> `os.platform` / `os.arch` / `os.sep` / `os.eol` 是**常量字符串**，不带括号；其余 `os.*` 是函数调用。
+> `os.platform()` / `os.arch()` 查询主机事实；`os.sep()` / `os.eol()` 在 Xray 模块中从平台名派生。
 
 ### 15.2 网络
 
@@ -6590,10 +6590,10 @@ os.getpid()               // 进程 ID
 os.getcwd()               // 当前工作目录
 os.hostname()             // 主机名
 os.tmpdir()               // 临时目录
-os.platform               // 常量："darwin" / "linux" / "windows"
-os.arch                   // 常量："arm64" / "x64" / "x86" / "ppc64" / "riscv64"
-os.sep                    // 常量：路径分隔符
-os.eol                    // 常量：行尾
+os.platform()             // "darwin" / "linux" / "windows"
+os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
+os.sep()                  // 路径分隔符
+os.eol()                  // 行尾
 os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 ```
 

@@ -30,6 +30,7 @@
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
+#include "../stdlib/xstdlib_target_leaf.h"
 #include "../base/xmalloc.h"
 #include <stddef.h>
 #include <string.h>
@@ -51,7 +52,7 @@ _Static_assert(offsetof(XrTypedLeafValueProductTuple6, field0) == 0u &&
                    offsetof(XrTypedLeafValueProductTuple6, field3) == 24u &&
                    offsetof(XrTypedLeafValueProductTuple6, field4) == 32u &&
                    offsetof(XrTypedLeafValueProductTuple6, field5) == 40u,
-               "leaf value product carrier offsets must match schema-53 x64 layout");
+               "leaf value product carrier offsets must match schema-54 x64 layout");
 
 typedef union XrTypedAggregateValue {
     XrTypedLeafAggregateI64x2 pair;
@@ -1575,6 +1576,58 @@ static XrTypedDispatchStatus execute_call_aggregate(XrTypedFrame *frame,
                                                     const XrTargetInstructionContract *contract,
                                                     XrTypedDispatchRowContext *context) {
     return execute_call_common(frame, row, contract, context, true);
+}
+
+static XrTypedDispatchStatus execute_native_leaf(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    if (!frame || !row || !contract || !context || !context->execution ||
+        !context->execution->plan || row->immediate_bits > UINT32_MAX ||
+        contract->result_rep != XR_TARGET_INSTRUCTION_REP_I64 || row->operand_count != 0)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(context->execution->plan, &call_count);
+    uint32_t call_index = (uint32_t) row->immediate_bits;
+    const XrTargetCallRecord *call =
+        calls && call_index < call_count ? &calls[call_index] : NULL;
+    if (!call || call->id != call_index || call->caller_function != row->function ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !bytes_are_zero(call->source_export_identity.bytes,
+                        sizeof(call->source_export_identity.bytes)) ||
+        !bytes_are_zero(call->source_callee_identity.bytes,
+                        sizeof(call->source_callee_identity.bytes)) ||
+        bytes_are_zero(call->native_callee_identity.bytes,
+                       sizeof(call->native_callee_identity.bytes)) ||
+        call->native_leaf <= XR_STDLIB_TARGET_LEAF_NONE ||
+        call->native_leaf >= XR_STDLIB_TARGET_LEAF_COUNT ||
+        call->calling_convention !=
+            XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR ||
+        call->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
+        call->argument_count != 0 || call->adapter_count != 0 || call->flags != 0 ||
+        call->result_slot != row->result_slot ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->array_hof_kind != XR_TARGET_ARRAY_HOF_NONE ||
+        call->array_result_element_storage != XR_TARGET_ARRAY_STORAGE_NONE)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+
+    int64_t result = 0;
+    if (!xr_stdlib_target_leaf_execute_i64(call->native_leaf, NULL, 0, &result))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    uint64_t result_bits = 0;
+    memcpy(&result_bits, &result, sizeof(result_bits));
+    return store_i64_bits(frame, row->result_slot, result_bits);
 }
 
 static XrTypedDispatchStatus execute_entry_call(

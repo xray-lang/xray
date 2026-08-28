@@ -1,5 +1,5 @@
 [package]
-name = "bili-analysis-server-fixture"
+name = "tests/bili-analysis-server-fixture"
 version = "0.0.0"
 
 [[bin]]

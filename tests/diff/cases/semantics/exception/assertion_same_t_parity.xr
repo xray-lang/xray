@@ -1,0 +1,46 @@
+// anchor: assertion-same-t-parity
+
+// Same-T contextual resolution, source evaluation order, and single
+// evaluation must hold identically on every backend. The sibling
+// contextual fixture also covers a value-carrying nullable, which the
+// AOT representation layer cannot yet materialise, so that operand
+// stays out of this backend-parity case.
+
+var octet = 7 as u8
+var nullableNull: i64? = null
+var value: i64 = 7
+
+assertEqual(octet, 7)
+assertEqual(7, octet)
+assertEqual(nullableNull, null)
+assertEqual(null, nullableNull)
+assertEqual(value, 7)
+assertEqual(1, 1)
+assertEqual(1.0, 1.0)
+
+var evaluationOrder = 0
+
+fn actualOnce() -> i64 {
+    evaluationOrder = evaluationOrder * 10 + 1
+    return 7
+}
+
+fn expectedOnce() -> i64 {
+    evaluationOrder = evaluationOrder * 10 + 2
+    return 7
+}
+
+assertEqual(actualOnce(), expectedOnce())
+assertEqual(evaluationOrder, 12)
+
+var anchoredCount = 0
+
+fn anchoredOnce() -> u8 {
+    anchoredCount = anchoredCount + 1
+    return 7 as u8
+}
+
+assertEqual(7, anchoredOnce())
+assertEqual(anchoredCount, 1)
+
+print("assertion-same-t-parity-ok")

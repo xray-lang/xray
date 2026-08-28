@@ -312,6 +312,44 @@ add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+add_test(NAME test_xi_cgen_native_target_leaf_emission
+    COMMAND $<TARGET_FILE:test_xi_cgen> native-target-leaf-emission)
+set_tests_properties(test_xi_cgen_native_target_leaf_emission PROPERTIES
+    LABELS "aot;cgen;native;target-machine;stdlib")
+set(XR_NATIVE_TARGET_LEAF_SOURCE
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/native_target_leaf.c)
+add_custom_command(
+    OUTPUT ${XR_NATIVE_TARGET_LEAF_SOURCE}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xi_cgen>
+            native-target-leaf-emission
+            ${XR_NATIVE_TARGET_LEAF_SOURCE}
+    DEPENDS test_xi_cgen
+    COMMENT "Generating verified native target leaf C fixture"
+    VERBATIM)
+set_source_files_properties(${XR_NATIVE_TARGET_LEAF_SOURCE}
+    PROPERTIES GENERATED TRUE)
+add_executable(test_native_target_leaf_native
+    ${XR_NATIVE_TARGET_LEAF_SOURCE})
+target_link_libraries(test_native_target_leaf_native PRIVATE xray_core)
+target_include_directories(test_native_target_leaf_native SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/aot
+    ${CMAKE_SOURCE_DIR}/include)
+set_target_properties(test_native_target_leaf_native PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED TRUE)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_native_target_leaf_native PRIVATE /W4 /WX /wd4702)
+else()
+    target_compile_options(test_native_target_leaf_native PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_native_target_leaf_native
+    COMMAND $<TARGET_FILE:test_native_target_leaf_native>)
+set_tests_properties(test_native_target_leaf_native PROPERTIES
+    LABELS "aot;cgen;native;target-machine;stdlib")
 add_test(NAME test_xi_cgen_iterator_rune_nth_emission
     COMMAND $<TARGET_FILE:test_xi_cgen> iterator-rune-nth-emission)
 target_sources(test_xi_cgen PRIVATE plan/target_profile_test_fixture.c)
@@ -415,6 +453,10 @@ add_xray_unit_test(test_target_profile plan/test_target_profile.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_test(NAME test_target_native_target_leaf_authority
+    COMMAND $<TARGET_FILE:test_target_plan> native-target-leaf-authority)
+set_tests_properties(test_target_native_target_leaf_authority PROPERTIES
+    LABELS "target-machine;vm;typed-plan;stdlib")
 add_test(NAME test_target_plan_fingerprint_snapshot_determinism
     COMMAND $<TARGET_FILE:test_target_plan> fingerprint-snapshot-determinism)
 add_test(NAME test_target_plan_fingerprint_channel_close
@@ -732,7 +774,14 @@ add_xray_unit_test(test_cache_artifact_verify
                    ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_program_target_plan_build
                    incremental/test_program_target_plan_build.c
+                   incremental/program_plan_cache_fixture.c
                    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_program_plan_cache_qualification
+                   incremental/test_program_plan_cache_qualification.c
+                   incremental/program_plan_cache_fixture.c
+                   ${XR_TARGET_PROFILE_TEST_FIXTURE})
+set_tests_properties(test_program_plan_cache_qualification PROPERTIES
+    LABELS "cache;target-plan;concurrency;mutation")
 add_xray_unit_test(test_dependency_graph incremental/test_dependency_graph.c)
 add_xray_unit_test(test_module_summary_build incremental/test_module_summary_build.c)
 add_xray_unit_test(test_compiler_session_generation
@@ -803,6 +852,11 @@ add_test(NAME test_assertion_same_t_contextual
             ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/assertion/same_t_contextual.xr)
 set_tests_properties(test_assertion_same_t_contextual PROPERTIES
     LABELS "frontend;vm;assertion;type-system")
+add_test(NAME test_array_growth_accounting
+    COMMAND $<TARGET_FILE:xray> run
+            ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/runtime/array_growth_accounting.xr)
+set_tests_properties(test_array_growth_accounting PROPERTIES
+    LABELS "vm;runtime;memory")
 add_executable(test_xrt_assertion_freestanding aot/test_xrt_assertion_freestanding.c)
 target_compile_definitions(test_xrt_assertion_freestanding PRIVATE
     XRAY_PROFILE_FREESTANDING=1)

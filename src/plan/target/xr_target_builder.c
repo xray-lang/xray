@@ -48,6 +48,7 @@
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_native_module_shape.h"
+#include "../semantic/xr_semantic_native_leaf_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
 #include "../semantic/xr_semantic_owner_forward_shape.h"
@@ -133,6 +134,7 @@ typedef struct XrTargetCallIntent {
     uint32_t source_export;
     XrStableId source_export_identity;
     XrStableId source_callee_identity;
+    XrStableId native_callee_identity;
     uint32_t result_value;
     uint32_t argument_begin;
     uint16_t argument_count;
@@ -144,6 +146,7 @@ typedef struct XrTargetCallIntent {
     uint8_t array_element_storage;
     uint8_t array_hof_kind;
     uint8_t array_result_element_storage;
+    uint16_t native_leaf;
     bool suspends;
     bool tail;
 } XrTargetCallIntent;
@@ -10038,6 +10041,44 @@ static bool collect_native_module_scalar_call_intent(XrTargetPlanBuilder *builde
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_native_target_leaf_scalar_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
+    const XrStdlibDefEntry *entry = NULL;
+    XrStableId native_identity = {{0}};
+    if (!xr_semantic_native_target_leaf_call_is_exact(builder->semantic_plan, operation, &entry,
+                                                      &native_identity) ||
+        !entry || entry->argc != 0 ||
+        !call_type_is_exact_scalar(builder->semantic_plan, operation->result_type))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native target leaf scalar dispatch authority is incomplete");
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .native_callee_identity = native_identity,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR,
+        .target_kind = XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR,
+        .native_leaf = entry->target_leaf,
+    };
+    if (!result_type ||
+        !stable_identity_from_pair("xray-target-native-target-leaf-scalar-v1", operation->id,
+                                   native_identity, entry->target_leaf, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native target leaf scalar call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 /* A payload-bearing source enum constructor has no callee ABI: its namespace
  * receiver and payloads are frozen semantic inputs to the materialization
  * recipe. The call row owns the exact constructor dispatch and the fresh
@@ -11091,6 +11132,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_native_module_scalar_call_is_exact(plan, operation, NULL)) {
             valid =
                 collect_native_module_scalar_call_intent(builder, i, operation, error, error_size);
+        } else if (xr_semantic_native_target_leaf_call_is_exact(plan, operation, NULL, NULL)) {
+            valid = collect_native_target_leaf_scalar_call_intent(builder, i, operation, error,
+                                                                  error_size);
         } else if (xr_semantic_adt_enum_constructor_is_exact(plan, operation, NULL)) {
             valid =
                 collect_adt_enum_constructor_call_intent(builder, i, operation, error, error_size);
@@ -12699,6 +12743,42 @@ static bool scalar_direct_i64_call_is_exact(const XrTargetPlanBuilder *builder,
     return true;
 }
 
+static bool scalar_native_target_leaf_i64_call_is_exact(
+    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    uint32_t call_index) {
+    if (!builder || !materialized || call_index >= materialized->call_count)
+        return false;
+    const XrTargetCallRecord *call = &materialized->calls[call_index];
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, call->semantic_operation);
+    const XrStdlibDefEntry *entry = NULL;
+    XrStableId identity = {{0}};
+    return operation && call->id == call_index &&
+           xr_semantic_native_target_leaf_call_is_exact(builder->semantic_plan, operation, &entry,
+                                                        &identity) &&
+           entry && entry->argc == 0 && call->caller_function == operation->function &&
+           call->callee_function == XR_SEMANTIC_INDEX_NONE && call->semantic_call_target ==
+                                                              XR_SEMANTIC_INDEX_NONE &&
+           call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR &&
+           call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR &&
+           call->native_leaf == entry->target_leaf &&
+           xr_stable_id_equal(call->native_callee_identity, identity) && call->argument_count == 0 &&
+           call->flags == 0 && call->adapter_count == 0 &&
+           call->result_mode == XR_TARGET_CALL_VALUE &&
+           call->result_ownership == XR_TARGET_CALL_NONE &&
+           call->caller_storage_slot == XR_SEMANTIC_INDEX_NONE &&
+           call->error_slot == XR_SEMANTIC_INDEX_NONE &&
+           call->error_mode == XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL &&
+           call->array_intrinsic_kind == XR_TARGET_ARRAY_INTRINSIC_NONE &&
+           call->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+           call->result_value == operation->result_value &&
+           semantic_type_is_exact_i64(builder->semantic_plan, operation->result_type) &&
+           scalar_call_rep_is_i64(materialized, call->result_register_rep) &&
+           scalar_call_rep_is_i64(materialized, call->result_memory_rep) &&
+           materialized_i64_slot(materialized, call->caller_function, operation->result_value,
+                                 NULL);
+}
+
 static bool scalar_instruction_analysis_init(const XrTargetPlanBuilder *builder,
                                              const XrTargetMaterializedPlan *materialized,
                                              XrScalarInstructionAnalysis *analysis) {
@@ -12782,9 +12862,12 @@ static bool scalar_instruction_analysis_init(const XrTargetPlanBuilder *builder,
     for (uint32_t call_index = 0; call_index < materialized->call_count; call_index++) {
         const XrTargetCallRecord *call = &materialized->calls[call_index];
         bool direct = scalar_direct_i64_call_is_exact(builder, materialized, call_index);
+        bool native_leaf =
+            scalar_native_target_leaf_i64_call_is_exact(builder, materialized, call_index);
         bool dynamic = entry_by_call[call_index] != XR_SEMANTIC_INDEX_NONE &&
                        source_entry_call_is_exact(builder, materialized, call_index);
-        if ((!direct && !dynamic) || call->semantic_operation >= analysis->operation_count)
+        if ((!direct && !dynamic && !native_leaf) ||
+            call->semantic_operation >= analysis->operation_count)
             continue;
         analysis->call_by_operation[call->semantic_operation] = call_index;
         if (dynamic)
@@ -12827,7 +12910,9 @@ static bool scalar_instruction_analysis_init(const XrTargetPlanBuilder *builder,
                 direct_local_callee_storage_value_is_exact(builder->semantic_plan, &shared,
                                                            producer) &&
                 shared.target_by_value[producer->result_value] == call->callee_function;
-            exact = direct && (closure || shared_callee);
+            bool native_callee = native_leaf && producer->opcode == XI_IMPORT_REF &&
+                                 producer->result_value == value;
+            exact = native_callee || (direct && (closure || shared_callee));
             break;
         }
         if (exact)
@@ -13038,26 +13123,33 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
                                        : XR_SEMANTIC_INDEX_NONE;
             if (entry_index != XR_SEMANTIC_INDEX_NONE)
                 opcode = XR_TARGET_INSTRUCTION_CALL_ENTRY_I64;
+            uint32_t call_index = operation_index < analysis->operation_count
+                                      ? analysis->call_by_operation[operation_index]
+                                      : XR_SEMANTIC_INDEX_NONE;
+            const XrTargetCallRecord *call =
+                call_index < materialized->call_count ? &materialized->calls[call_index] : NULL;
+            if (call && call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR)
+                opcode = XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64;
             const XrTargetInstructionContract *contract = xr_target_instruction_contract(opcode);
             uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
             bool direct_call_dispatch =
                 contract && contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_CALL;
             bool entry_call_dispatch =
                 contract && contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL;
+            bool native_leaf_dispatch =
+                contract && contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_NATIVE_LEAF;
             bool overflow_dispatch =
                 contract && contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_OVERFLOW;
-            bool call_dispatch = direct_call_dispatch || entry_call_dispatch;
-            uint32_t call_index = operation_index < analysis->operation_count
-                                      ? analysis->call_by_operation[operation_index]
-                                      : XR_SEMANTIC_INDEX_NONE;
-            const XrTargetCallRecord *call =
-                call_index < materialized->call_count ? &materialized->calls[call_index] : NULL;
+            bool call_dispatch = direct_call_dispatch || entry_call_dispatch || native_leaf_dispatch;
             if (!operation || !contract || operation->function != function_index ||
                 operation->block != block_index ||
                 (!call_dispatch && !overflow_dispatch && operation->effects != 0) ||
                 (direct_call_dispatch &&
                  (!call || !scalar_direct_i64_call_is_exact(builder, materialized, call_index) ||
-                  (executable_functions && !executable_functions[call->callee_function]))) ||
+                   (executable_functions && !executable_functions[call->callee_function]))) ||
+                (native_leaf_dispatch &&
+                 (!call || !scalar_native_target_leaf_i64_call_is_exact(
+                              builder, materialized, call_index))) ||
                 (entry_call_dispatch &&
                  (!call || entry_index >= materialized->entry_expectation_count ||
                   materialized->entry_expectations[entry_index].call != call_index ||
@@ -14617,6 +14709,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             .source_export = intent->source_export,
             .source_export_identity = intent->source_export_identity,
             .source_callee_identity = intent->source_callee_identity,
+            .native_callee_identity = intent->native_callee_identity,
             .result_value = intent->result_value,
             .result_slot = result->slot,
             .caller_storage_slot = caller_storage_result ? result->slot : XR_SEMANTIC_INDEX_NONE,
@@ -14630,6 +14723,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             .argument_count = intent->argument_count,
             .adapter_count = 0,
             .native_abi = machine->native_abi,
+            .native_leaf = intent->native_leaf,
             .flags = (intent->suspends ? XR_TARGET_CALL_SUSPEND : 0) |
                      (intent->tail ? XR_TARGET_CALL_TAIL : 0),
             .calling_convention = intent->calling_convention,
@@ -15122,6 +15216,7 @@ static uint32_t debug_fact_operation_for_instruction(const XrTargetMaterializedP
             return slot->semantic_operation;
     }
     if ((instruction->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+         instruction->opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64 ||
          instruction->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64) &&
         instruction->immediate_bits <= UINT32_MAX) {
         uint32_t call =
@@ -15833,7 +15928,8 @@ static bool graph_merge_module(XrTargetMaterializedPlan *target,
         graph_add_row(&row->result_slot, partition->slots_begin);
         graph_add_row(&row->operand_slots[0], partition->slots_begin);
         graph_add_row(&row->operand_slots[1], partition->slots_begin);
-        if (row->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64)
+        if (row->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+            row->opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64)
             row->immediate_bits += partition->calls_begin;
     }
     for (uint32_t i = 0; i < partition->calls_count; i++) {

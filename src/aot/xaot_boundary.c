@@ -14,6 +14,7 @@
 #include "refine/xr_aot_scalar_value.h"
 #include "xr_target_aggregate_c_projection.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
+#include "../plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../ir/xi_module.h"
 #include <stdio.h>
 #include <string.h>
@@ -50,6 +51,89 @@ static bool direct_i64_machine_rep(const XrTargetPlan *target, uint16_t rep) {
     const XrTargetMachineRepRecord *machine = xr_target_plan_machine_rep(target, rep);
     return machine && machine->kind == XR_MACHINE_REP_I64 &&
            machine->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+}
+
+/* A verified native target leaf is intentionally outside the direct-local
+ * family consumed by XaotDirectI64TargetView.  Recognize that exclusion from
+ * frozen identities before the legacy direct-local shape checks run; a live
+ * Xi drift still fails closed instead of falling through to name-based AOT
+ * dispatch. */
+static XaotDirectI64TargetStatus direct_i64_exclude_native_target_leaf(
+    const XaotBundle *bundle, const XiFunc *caller, const XiValue *call,
+    const XrTargetPlan *target, const XrTargetFunctionRecord *caller_row,
+    bool *excluded, char *errbuf, size_t errbuf_len) {
+    if (excluded)
+        *excluded = false;
+    if (!bundle || !caller || !call || !target || !caller_row || !excluded)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "native target leaf exclusion input is incomplete");
+
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_aot_scalar_semantic_value_id(target, caller, call, &semantic_function,
+                                         &semantic_value, NULL, 0))
+        return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    const XrTargetCallRecord *match = NULL;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        const XrTargetCallRecord *candidate = &calls[i];
+        if (candidate->caller_function != caller_row->id ||
+            candidate->result_value != semantic_value ||
+            candidate->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
+            candidate->calling_convention !=
+                XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR)
+            continue;
+        if (match)
+            return direct_i64_error(errbuf, errbuf_len,
+                                    "native target leaf TargetPlan call is ambiguous");
+        match = candidate;
+    }
+    if (!match)
+        return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+
+    const XrSemanticPlan *semantic =
+        xaot_bundle_program_semantic_for_func(bundle, caller, NULL);
+    const XrSemanticOperationRecord *operation =
+        semantic ? xr_semantic_plan_operation(semantic, match->semantic_operation) : NULL;
+    const XrStdlibDefEntry *entry = NULL;
+    XrStableId native_identity = {{0}};
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
+    uint32_t callee_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t callee_value = XR_SEMANTIC_INDEX_NONE;
+    const XiValue *callee = call->nargs == 1 && call->args ? call->args[0] : NULL;
+    const XiImportRef *ref =
+        callee && callee->op == XI_IMPORT_REF && callee->aux
+            ? (const XiImportRef *) callee->aux
+            : NULL;
+    bool exact = semantic && operation && operands &&
+                 semantic_function == caller_row->semantic_function &&
+                 operation->function == semantic_function &&
+                 operation->result_value == semantic_value &&
+                 xr_semantic_native_target_leaf_call_is_exact(
+                     semantic, operation, &entry, &native_identity) &&
+                 operation->operand_begin < operand_count && call->op == XI_CALL &&
+                 call->nargs == 1 && callee && ref && ref->module_path &&
+                 ref->member_name && entry && strcmp(ref->module_path, entry->module) == 0 &&
+                 strcmp(ref->member_name, entry->name) == 0 &&
+                 xr_aot_scalar_semantic_value_id(target, caller, callee, &callee_function,
+                                                 &callee_value, NULL, 0) &&
+                 callee_function == semantic_function &&
+                 callee_value == operands[operation->operand_begin].value &&
+                 match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                 match->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                 match->argument_count == 0 && match->adapter_count == 0 &&
+                 match->native_leaf == entry->target_leaf &&
+                 xr_stable_id_equal(match->native_callee_identity, native_identity);
+    if (!exact)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "native target leaf live binding is inexact");
+
+    *excluded = true;
+    return XAOT_DIRECT_I64_TARGET_UNCOVERED;
 }
 
 XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
@@ -202,6 +286,11 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
     XaotDirectI64TargetStatus status = xaot_boundary_direct_i64_function_status(
         bundle, caller, &target, &caller_row, errbuf, errbuf_len);
     if (status != XAOT_DIRECT_I64_TARGET_FOUND)
+        return status;
+    bool native_target_leaf = false;
+    status = direct_i64_exclude_native_target_leaf(
+        bundle, caller, call, target, caller_row, &native_target_leaf, errbuf, errbuf_len);
+    if (status == XAOT_DIRECT_I64_TARGET_INVALID || native_target_leaf)
         return status;
     uint32_t program_graph_count = 0;
     const XrTargetProgramGraphRecord *program_graphs =

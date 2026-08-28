@@ -1,0 +1,630 @@
+#!/usr/bin/env python3
+"""Qualify the product-level verified program plan cache.
+
+The unit suite proves the cache boundary in process. This runner drives the
+product entry point -- `xray build --native --cache-dir` -- and qualifies what
+only whole builds can show: that one program's identity is reproducible across
+independent cold builds, that a warm build rewrites nothing, that an edit and
+its revert move the identity and bring it back, that relocating the sources
+does not cost a recomputation, and that concurrent builds sharing one cache
+root converge on one published object with no residue.
+
+Native linking of a two-module product graph does not complete on the current
+base, so every assertion here reads the build's own cache report and the cache
+root rather than the final executable. The cache objects are published before
+the failing step, which is why the qualification is still exact.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import re
+import statistics
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+
+def _bootstrap() -> None:
+    lib = Path(__file__).resolve().parents[1] / "lib"
+    if str(lib) not in sys.path:
+        sys.path.insert(0, str(lib))
+
+
+_bootstrap()
+from xraytest import platform, proc, report, scheduler, workspace  # noqa: E402
+
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+SKIP_EXIT = 77
+
+SUMMARY_RE = re.compile(
+    r"\[module-summary\] modules=(\d+) graph=([0-9a-f]{64}) "
+    r"xsm-hits=(\d+) xsm-published=(\d+) xsm-missed=(\d+) "
+    r"workers=(\d+) tasks=(\d+) xsm-recomputed=(\d+) "
+    r"xsm-artifacts=([0-9a-f]{64}) "
+    r"xsm-publish-order=([0-9a-f]{64})"
+)
+PROGRAM_RE = re.compile(
+    r"\[program-closure\] modules=(\d+) dependencies=(\d+) "
+    r"psc=([0-9a-f]{64}) gci=([0-9a-f]{32})"
+)
+PLAN_CACHE_RE = re.compile(r"\[target-plan-cache\] (hit|miss|rebuild) ")
+
+PRODUCER_V1 = "export fn add1(value: i64) -> i64 { return value + 1 }\n"
+PRODUCER_V2 = "export fn add1(value: i64) -> i64 { return value + 2 }\n"
+ENTRY = 'import { add1 } from "./producer"\nfn main() -> i64 { return add1(41) }\n'
+# The same program with its two top-level statements in the other order.
+ENTRY_REORDERED = 'fn main() -> i64 { return add1(41) }\nimport { add1 } from "./producer"\n'
+# The same program with the dependency under a different module name.
+ENTRY_RENAMED = 'import { add1 } from "./producer2"\nfn main() -> i64 { return add1(41) }\n'
+
+
+@dataclass(frozen=True)
+class Identity:
+    """The fields that name one program.
+
+    `xsm-publish-order` is deliberately absent: it summarizes the modules this
+    run happened to recompute, so a warm run and a cold run of one identical
+    program report different values for it.
+    """
+
+    modules: int
+    graph: str
+    artifacts: str
+    psc: str
+    gci: str
+
+
+@dataclass(frozen=True)
+class Report:
+    identity: Identity
+    hits: int
+    published: int
+    missed: int
+    recomputed: int
+    plan_cache: str
+
+
+@dataclass
+class Config:
+    xray: Path
+    timeout: float | None
+    samples: int
+
+
+def build(config: Config, cache: Path, entry: Path, out: Path,
+          extra: tuple = ()) -> proc.ProcResult:
+    return proc.run(
+        [config.xray, "build", "--native", "-O", "0", "--verbose",
+         "--cache-dir", cache, *extra, "-o", out, entry],
+        timeout=config.timeout,
+    )
+
+
+def parse(result: proc.ProcResult) -> Report | None:
+    """The cache report a build states about itself, or None if it never got there."""
+    log = result.combined_text()
+    summary = SUMMARY_RE.search(log)
+    program = PROGRAM_RE.search(log)
+    plan_cache = PLAN_CACHE_RE.search(log)
+    if not summary or not program or not plan_cache:
+        return None
+    identity = Identity(
+        modules=int(summary.group(1)),
+        graph=summary.group(2),
+        artifacts=summary.group(9),
+        psc=program.group(3),
+        gci=program.group(4),
+    )
+    return Report(
+        identity=identity,
+        hits=int(summary.group(3)),
+        published=int(summary.group(4)),
+        missed=int(summary.group(5)),
+        recomputed=int(summary.group(8)),
+        plan_cache=plan_cache.group(1),
+    )
+
+
+def objects(cache: Path) -> dict[str, str]:
+    """Every published object under the cache root, by relative path and digest."""
+    found: dict[str, str] = {}
+    for kind in ("xsm", "xtp"):
+        for directory in sorted(cache.rglob(kind)):
+            if not directory.is_dir():
+                continue
+            for path in sorted(directory.iterdir()):
+                if path.is_file() and not path.name.startswith("."):
+                    found[str(path.relative_to(cache))] = hashlib.sha256(
+                        path.read_bytes()
+                    ).hexdigest()
+    return found
+
+
+def residue(cache: Path) -> list[str]:
+    """Names the store never finished publishing."""
+    return sorted(
+        str(path.relative_to(cache))
+        for path in cache.rglob(".tmp-*")
+        if path.is_file()
+    )
+
+
+def write_product(directory: Path, producer: str) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "producer.xr").write_text(producer, encoding="utf-8")
+    entry = directory / "entry.xr"
+    entry.write_text(ENTRY, encoding="utf-8")
+    return entry
+
+
+def qualify_determinism(rec: report.Report, config: Config,
+                        ws: workspace.Workspace) -> None:
+    """Independent cold builds of one program must agree byte for byte."""
+    d = ws.subdir("determinism")
+    entry = write_product(d / "src", PRODUCER_V1)
+    seen: list[tuple[Identity, dict[str, str]]] = []
+    for index in range(config.samples):
+        cache = d / f"cache-{index}"
+        result = build(config, cache, entry, d / f"out-{index}" / "app")
+        parsed = parse(result)
+        if not parsed:
+            rec.record("determinism: every cold build reports its cache decisions",
+                       report.Status.FAIL,
+                       f"run {index} produced no report",
+                       result.combined_text())
+            return
+        seen.append((parsed.identity, objects(cache)))
+
+    first_identity, first_objects = seen[0]
+    drifted = [
+        f"run {index}: {identity}" for index, (identity, _) in enumerate(seen)
+        if identity != first_identity
+    ]
+    rewritten = [
+        f"run {index}: {sorted(found.items())}" for index, (_, found) in enumerate(seen)
+        if found != first_objects
+    ]
+    rec.record(
+        f"determinism: {config.samples} independent cold builds share one identity",
+        report.Status.PASS if not drifted else report.Status.FAIL,
+        "\n".join([str(first_identity), *drifted]) if drifted else "",
+    )
+    rec.record(
+        "determinism: independent cold builds publish identical object bytes",
+        report.Status.PASS if not rewritten else report.Status.FAIL,
+        "\n".join([str(sorted(first_objects.items())), *rewritten]) if rewritten else "",
+    )
+
+
+def qualify_lifecycle(rec: report.Report, config: Config,
+                      ws: workspace.Workspace) -> None:
+    """Cold, warm, rebuild, edit, and revert over one cache root."""
+    d = ws.subdir("lifecycle")
+    source = d / "src"
+    entry = write_product(source, PRODUCER_V1)
+    cache = d / "cache"
+
+    stages: dict[str, Report] = {}
+    for name, extra in (("cold", ()), ("warm", ()), ("rebuild", ("--rebuild",))):
+        result = build(config, cache, entry, d / f"out-{name}" / "app", extra)
+        parsed = parse(result)
+        if not parsed:
+            rec.record(f"lifecycle: {name} reports its cache decisions",
+                       report.Status.FAIL, f"{name} produced no report",
+                       result.combined_text())
+            return
+        stages[name] = parsed
+    cold_objects = objects(cache)
+
+    rec.record("lifecycle: a cold build publishes every module",
+               report.Status.PASS if (stages["cold"].hits == 0 and
+                                      stages["cold"].published == stages["cold"].identity.modules and
+                                      stages["cold"].plan_cache == "miss")
+               else report.Status.FAIL, str(stages["cold"]))
+    rec.record("lifecycle: a warm build proves every module unchanged",
+               report.Status.PASS if (stages["warm"].hits == stages["warm"].identity.modules and
+                                      stages["warm"].published == 0 and
+                                      stages["warm"].recomputed == 0 and
+                                      stages["warm"].plan_cache == "hit" and
+                                      objects(cache) == cold_objects)
+               else report.Status.FAIL, str(stages["warm"]))
+    rec.record("lifecycle: a rebuild reproduces the identity it recomputes",
+               report.Status.PASS if (stages["rebuild"].identity == stages["cold"].identity and
+                                      stages["rebuild"].plan_cache == "rebuild" and
+                                      objects(cache) == cold_objects)
+               else report.Status.FAIL,
+               f"cold={stages['cold'].identity}\nrebuild={stages['rebuild'].identity}")
+
+    (source / "producer.xr").write_text(PRODUCER_V2, encoding="utf-8")
+    edited = parse(build(config, cache, entry, d / "out-edit" / "app"))
+    if not edited:
+        rec.record("lifecycle: an edit reports its cache decisions",
+                   report.Status.FAIL, "edit produced no report")
+        return
+    edited_objects = objects(cache)
+    rec.record("lifecycle: a dependency edit rotates the whole program identity",
+               report.Status.PASS if (edited.identity != stages["cold"].identity and
+                                      edited.identity.psc != stages["cold"].identity.psc and
+                                      edited.identity.gci != stages["cold"].identity.gci and
+                                      edited.published == edited.identity.modules)
+               else report.Status.FAIL,
+               f"cold={stages['cold'].identity}\nedit={edited.identity}")
+    rec.record("lifecycle: an edit leaves the objects it replaced immutable",
+               report.Status.PASS if all(edited_objects.get(name) == digest
+                                         for name, digest in cold_objects.items())
+               else report.Status.FAIL, str(sorted(edited_objects)))
+
+    (source / "producer.xr").write_text(PRODUCER_V1, encoding="utf-8")
+    reverted = parse(build(config, cache, entry, d / "out-revert" / "app"))
+    if not reverted:
+        rec.record("lifecycle: a revert reports its cache decisions",
+                   report.Status.FAIL, "revert produced no report")
+        return
+    rec.record("lifecycle: a revert returns the original identity from cache",
+               report.Status.PASS if (reverted.identity == stages["cold"].identity and
+                                      reverted.hits == reverted.identity.modules and
+                                      reverted.published == 0 and
+                                      objects(cache) == edited_objects)
+               else report.Status.FAIL,
+               f"cold={stages['cold'].identity}\nrevert={reverted.identity}")
+
+
+
+def qualify_reorder(rec: report.Report, config: Config,
+                    ws: workspace.Workspace) -> None:
+    """Rewriting the sources must move the identity, never silently reuse it.
+
+    Cache identity covers the normalized source text and the module set. Both
+    reorderings below leave the program's meaning alone, so a cache that
+    answered for them would be guessing rather than proving; a miss here is the
+    safe direction and the one the key is built to take.
+    """
+    d = ws.subdir("reorder")
+    cache = d / "cache"
+    source = d / "src"
+    entry = write_product(source, PRODUCER_V1)
+    base = parse(build(config, cache, entry, d / "out-base" / "app"))
+    if not base:
+        rec.record("reorder: the baseline build reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    base_objects = objects(cache)
+
+    entry.write_text(ENTRY_REORDERED, encoding="utf-8")
+    reordered = parse(build(config, cache, entry, d / "out-reordered" / "app"))
+    if not reordered:
+        rec.record("reorder: the reordered build reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    rec.record("reorder: reordering the entry's statements moves the identity",
+               report.Status.PASS if (reordered.identity != base.identity and
+                                      reordered.hits == 0 and
+                                      reordered.published == reordered.identity.modules)
+               else report.Status.FAIL,
+               f"base={base.identity}\nreordered={reordered.identity}\n{reordered}")
+
+    (source / "producer2.xr").write_text(PRODUCER_V1, encoding="utf-8")
+    entry.write_text(ENTRY_RENAMED, encoding="utf-8")
+    renamed = parse(build(config, cache, entry, d / "out-renamed" / "app"))
+    if not renamed:
+        rec.record("reorder: the renamed build reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    rec.record("reorder: renaming the dependency module moves the identity",
+               report.Status.PASS if (renamed.identity != base.identity and
+                                      renamed.identity != reordered.identity and
+                                      renamed.hits == 0)
+               else report.Status.FAIL,
+               f"base={base.identity}\nrenamed={renamed.identity}\n{renamed}")
+    rec.record("reorder: neither rewrite disturbs the objects already published",
+               report.Status.PASS if all(objects(cache).get(name) == digest
+                                         for name, digest in base_objects.items())
+               and not residue(cache)
+               else report.Status.FAIL,
+               f"base={sorted(base_objects)}\nnow={sorted(objects(cache))}\n"
+               f"residue={residue(cache)}")
+
+
+def qualify_relocation(rec: report.Report, config: Config,
+                       ws: workspace.Workspace) -> None:
+    """Moving the sources must not cost a recomputation.
+
+    Cache identity is derived from content. If any part of it reached for a
+    path, the same program under a new directory would miss its own objects.
+    """
+    d = ws.subdir("relocation")
+    cache = d / "cache"
+    original = write_product(d / "original", PRODUCER_V1)
+    cold = parse(build(config, cache, original, d / "out-original" / "app"))
+    if not cold:
+        rec.record("relocation: the original build reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    published = objects(cache)
+
+    moved = write_product(d / "moved", PRODUCER_V1)
+    relocated = parse(build(config, cache, moved, d / "out-moved" / "app"))
+    if not relocated:
+        rec.record("relocation: the relocated build reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    rec.record("relocation: the same content under a new path keeps one identity",
+               report.Status.PASS if relocated.identity == cold.identity
+               else report.Status.FAIL,
+               f"original={cold.identity}\nmoved={relocated.identity}")
+    rec.record("relocation: a relocated build is served, not recomputed",
+               report.Status.PASS if (relocated.hits == relocated.identity.modules and
+                                      relocated.published == 0 and
+                                      objects(cache) == published)
+               else report.Status.FAIL, str(relocated))
+
+
+def qualify_parallel(rec: report.Report, config: Config, ws: workspace.Workspace,
+                     workers: int) -> None:
+    """Builds sharing one cache root must converge on one published object.
+
+    Whichever build wins the publication race, the root must end up holding the
+    objects a serial cold build publishes, with nothing half-written.
+    """
+    d = ws.subdir("parallel")
+    entry = write_product(d / "src", PRODUCER_V1)
+    reference_cache = d / "cache-reference"
+    reference = parse(build(config, reference_cache, entry, d / "out-reference" / "app"))
+    if not reference:
+        rec.record("parallel: the serial reference reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    expected_objects = objects(reference_cache)
+
+    for phase in ("cold", "warm"):
+        cache = d / f"cache-{phase}"
+        if phase == "warm" and not parse(build(config, cache, entry, d / "out-prime" / "app")):
+            rec.record("parallel: the warm phase primes its cache",
+                       report.Status.FAIL, "priming build produced no report")
+            return
+        sched = scheduler.Scheduler({scheduler.LINK: workers})
+        tasks = [
+            scheduler.Task(
+                key=str(index),
+                fn=(lambda i=index: build(config, cache, entry, d / f"out-{phase}-{i}" / "app")),
+                tag=scheduler.LINK,
+            )
+            for index in range(workers)
+        ]
+        finished = sched.run(tasks)
+        reports: list[Report] = []
+        for index in range(workers):
+            value = finished.get(str(index))
+            if isinstance(value, BaseException):
+                rec.record(f"parallel-{phase}: every worker completes",
+                           report.Status.FAIL, f"worker {index} raised {value!r}")
+                return
+            parsed = parse(value)
+            if not parsed:
+                rec.record(f"parallel-{phase}: every worker reports its cache decisions",
+                           report.Status.FAIL, f"worker {index} produced no report",
+                           value.combined_text())
+                return
+            reports.append(parsed)
+
+        drifted = [str(item.identity) for item in reports
+                   if item.identity != reference.identity]
+        rec.record(f"parallel-{phase}: every concurrent build reports one identity",
+                   report.Status.PASS if not drifted else report.Status.FAIL,
+                   "\n".join([str(reference.identity), *drifted]) if drifted else "")
+        found = objects(cache)
+        rec.record(f"parallel-{phase}: the root holds exactly the serial objects",
+                   report.Status.PASS if found == expected_objects else report.Status.FAIL,
+                   f"want={sorted(expected_objects.items())}\ngot={sorted(found.items())}")
+        left = residue(cache)
+        rec.record(f"parallel-{phase}: no worker leaves an unfinished object",
+                   report.Status.PASS if not left else report.Status.FAIL, "\n".join(left))
+        published = sum(item.published for item in reports)
+        if phase == "cold":
+            rec.record("parallel-cold: publication totals the modules, however it raced",
+                       report.Status.PASS if published == reference.identity.modules
+                       else report.Status.FAIL,
+                       f"want={reference.identity.modules} got={published} "
+                       f"per-worker={[item.published for item in reports]}")
+        else:
+            served = all(item.hits == item.identity.modules and item.published == 0
+                         for item in reports)
+            rec.record("parallel-warm: every concurrent build is served, none republishes",
+                       report.Status.PASS if served else report.Status.FAIL,
+                       str([(item.hits, item.published) for item in reports]))
+
+
+def process_rss_bytes(pid: int) -> int:
+    """Resident size of one live process, or 0 where it cannot be read."""
+    status = Path(f"/proc/{pid}/status")
+    if status.is_file():
+        try:
+            match = re.search(r"(?m)^VmRSS:\s+(\d+)\s+kB$",
+                              status.read_text(encoding="ascii"))
+            return int(match.group(1)) * 1024 if match else 0
+        except (OSError, ValueError):
+            return 0
+    result = proc.run(["ps", "-o", "rss=", "-p", str(pid)], timeout=5)
+    try:
+        return int(result.stdout_text().strip()) * 1024 if result.ok else 0
+    except ValueError:
+        return 0
+
+
+def distribution(values: list[float], unit: str) -> dict:
+    ordered = sorted(values)
+    if not ordered:
+        return {"samples": 0, "unit": unit}
+
+    def at(quantile: float) -> float:
+        position = (len(ordered) - 1) * quantile
+        low, high = int(position), min(int(position) + 1, len(ordered) - 1)
+        fraction = position - low
+        return ordered[low] * (1.0 - fraction) + ordered[high] * fraction
+
+    return {
+        "samples": len(ordered),
+        "unit": unit,
+        "p50": round(at(0.50), 6),
+        "p95": round(at(0.95), 6),
+        "max": round(ordered[-1], 6),
+        "mean": round(statistics.fmean(ordered), 6),
+    }
+
+
+def measure_build(config: Config, cache: Path, entry: Path,
+                  out: Path) -> tuple[float, int]:
+    """Wall time and peak resident size of one build.
+
+    The kernel reports the child's high-water mark exactly; polling its live
+    resident size at any interval under-reports a build this short. Where the
+    kernel does not offer it, polling is the honest fallback and says so by
+    being the only number available. The shared process helper cannot be used
+    here because neither reading needs its pid while it runs.
+    """
+    import subprocess
+
+    argv = [str(config.xray), "build", "--native", "-O", "0", "--verbose",
+            "--cache-dir", str(cache), "-o", str(out), str(entry)]
+    started = time.perf_counter()
+    child = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if hasattr(os, "wait4"):
+        _, status, usage = os.wait4(child.pid, 0)
+        child.returncode = os.waitstatus_to_exitcode(status)
+        # ru_maxrss is bytes on Darwin and kilobytes everywhere else POSIX.
+        peak = int(usage.ru_maxrss if sys.platform == "darwin"
+                   else usage.ru_maxrss * 1024)
+    else:
+        peak = 0
+        while True:
+            peak = max(peak, process_rss_bytes(child.pid))
+            if child.poll() is not None:
+                break
+            time.sleep(0.01)
+    return time.perf_counter() - started, peak
+
+
+def measure(config: Config, ws: workspace.Workspace) -> dict:
+    """Cold and warm cost, reported rather than gated.
+
+    A threshold here would encode this machine. The point is a repeatable
+    number a later run can be compared against on the same hardware.
+    """
+    d = ws.subdir("measure")
+    entry = write_product(d / "src", PRODUCER_V1)
+    cold_times: list[float] = []
+    cold_rss: list[float] = []
+    warm_times: list[float] = []
+    warm_rss: list[float] = []
+    disk = {}
+    # One discarded warm-up per phase: the first build of a session pays for
+    # page cache and toolchain discovery that no later build repeats.
+    for index in range(config.samples + 1):
+        cache = d / f"cold-{index}"
+        seconds, rss = measure_build(config, cache, entry, d / f"out-cold-{index}" / "app")
+        if index:
+            cold_times.append(seconds)
+            cold_rss.append(float(rss))
+        else:
+            disk["cold_bytes"] = sum(
+                path.stat().st_size for path in cache.rglob("*") if path.is_file()
+            )
+    warm_cache = d / "warm"
+    measure_build(config, warm_cache, entry, d / "out-warm-prime" / "app")
+    for index in range(config.samples + 1):
+        seconds, rss = measure_build(config, warm_cache, entry,
+                                     d / f"out-warm-{index}" / "app")
+        if index:
+            warm_times.append(seconds)
+            warm_rss.append(float(rss))
+    disk["warm_bytes"] = sum(
+        path.stat().st_size for path in warm_cache.rglob("*") if path.is_file()
+    )
+    return {
+        "cold_seconds": distribution(cold_times, "s"),
+        "cold_peak_rss": distribution(cold_rss, "bytes"),
+        "warm_seconds": distribution(warm_times, "s"),
+        "warm_peak_rss": distribution(warm_rss, "bytes"),
+        "disk": disk,
+    }
+
+
+def self_test() -> int:
+    """Check the report parsing and statistics without building anything."""
+    log = (
+        "[program-closure] modules=2 dependencies=1 psc=" + "a" * 64 + " gci=" + "b" * 32 + "\n"
+        "[program-semantic-plan] modules=2 entry=1\n"
+        "[target-plan-cache] hit entry_0\n"
+        "[module-summary] modules=2 graph=" + "c" * 64 + " xsm-hits=2 xsm-published=0 "
+        "xsm-missed=0 workers=1 tasks=2 xsm-recomputed=0 xsm-artifacts=" + "d" * 64 +
+        " xsm-publish-order=" + "e" * 64 + "\n"
+    )
+    parsed = parse(proc.ProcResult(("x",), 0, log.encode("utf-8"), b"", False))
+    if not parsed or parsed.hits != 2 or parsed.plan_cache != "hit":
+        print("FAIL: report parsing")
+        return 1
+    if parsed.identity != Identity(2, "c" * 64, "d" * 64, "a" * 64, "b" * 32):
+        print("FAIL: identity fields")
+        return 1
+    # The publish order summarizes what this run recomputed, so it must not be
+    # able to separate two reports of one program.
+    other = parse(proc.ProcResult(
+        ("x",), 0, log.replace("e" * 64, "f" * 64).encode("utf-8"), b"", False))
+    if not other or other.identity != parsed.identity:
+        print("FAIL: publish order must not reach identity")
+        return 1
+    if parse(proc.ProcResult(("x",), 1, b"nothing here", b"", False)) is not None:
+        print("FAIL: a build with no report must not parse")
+        return 1
+    stats = distribution([1.0, 2.0, 3.0, 4.0], "s")
+    if stats["samples"] != 4 or stats["p50"] != 2.5 or stats["max"] != 4.0:
+        print(f"FAIL: distribution {stats}")
+        return 1
+    print("program plan cache qualification self-test: PASS")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("xray", nargs="?", default=None)
+    parser.add_argument("--samples", type=int, default=7)
+    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--measure", action="store_true")
+    parser.add_argument("--self-test", action="store_true")
+    ns = parser.parse_args(argv[1:])
+    if ns.self_test:
+        return self_test()
+
+    raw = ns.xray or os.environ.get("XRAY_BIN") or str(PROJECT_DIR / "build" /
+                                                       platform.exe_name("xray"))
+    xray = Path(raw)
+    if not (xray.is_file() and os.access(xray, os.X_OK)):
+        print(f"FAIL: xray binary not executable: {xray}")
+        return 1
+    config = Config(xray=xray, samples=max(1, ns.samples),
+                    timeout=platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 600))
+
+    rec = report.Report("program plan cache qualification")
+    ws = workspace.Workspace("xray_program_plan_cache", keep=True)
+    with ws:
+        qualify_determinism(rec, config, ws)
+        qualify_lifecycle(rec, config, ws)
+        qualify_relocation(rec, config, ws)
+        qualify_reorder(rec, config, ws)
+        qualify_parallel(rec, config, ws, max(2, ns.workers))
+        rec.write(verbose=True)
+        if ns.measure:
+            import json
+            print(json.dumps(measure(config, ws), indent=2, sort_keys=True))
+        ws.keep_on_exit(bool(rec.failed))
+        if rec.failed:
+            sys.stderr.write(f"Workdir kept: {ws.root}\n")
+    return rec.exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

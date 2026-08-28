@@ -221,33 +221,50 @@ XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root) {
     return project;
 }
 
-XR_FUNC bool xr_project_module_identity_authority(
-    const XrProject *project, XrModuleIdentityAuthority *authority,
-    char **namespace_out, char **physical_root_out) {
+static void project_authority_error(char *err, size_t err_size, const char *detail) {
+    if (err && err_size > 0)
+        snprintf(err, err_size, "%s", detail);
+}
+
+XR_FUNC bool xr_project_module_identity_authority(const XrProject *project,
+                                                  XrModuleIdentityAuthority *authority,
+                                                  char **namespace_out, char **physical_root_out,
+                                                  char *err, size_t err_size) {
     if (authority)
         *authority = (XrModuleIdentityAuthority) {0};
     if (namespace_out)
         *namespace_out = NULL;
     if (physical_root_out)
         *physical_root_out = NULL;
-    if (!project || !authority || !namespace_out || !physical_root_out ||
-        !project->root || !project->root[0] || !project->name || !project->name[0])
+    if (err && err_size > 0)
+        err[0] = '\0';
+    if (!project || !authority || !namespace_out || !physical_root_out || !project->root ||
+        !project->root[0]) {
+        project_authority_error(err, err_size, "manifest declares no project root");
         return false;
+    }
+    if (!project->name || !project->name[0]) {
+        project_authority_error(err, err_size, "manifest declares no package or project name");
+        return false;
+    }
 
     char *physical_root = xr_realpath(project->root);
     char *namespace_id = NULL;
-    if (!physical_root)
+    if (!physical_root) {
+        project_authority_error(err, err_size, "project root does not resolve to a real path");
         return false;
+    }
     if (project->is_package) {
-        if (!project->version || !project->version[0] ||
-            !xr_semver_is_valid(project->version)) {
+        if (!project->version || !project->version[0] || !xr_semver_is_valid(project->version)) {
+            project_authority_error(err, err_size,
+                                    "a [package] manifest requires an exact semantic version, "
+                                    "for example version = \"1.0.0\"");
             xr_free(physical_root);
             return false;
         }
         size_t name_length = strlen(project->name);
         size_t version_length = strlen(project->version);
-        if (version_length > SIZE_MAX - 2 ||
-            name_length > SIZE_MAX - version_length - 2) {
+        if (version_length > SIZE_MAX - 2 || name_length > SIZE_MAX - version_length - 2) {
             xr_free(physical_root);
             return false;
         }
@@ -257,8 +274,8 @@ XR_FUNC bool xr_project_module_identity_authority(
             xr_free(physical_root);
             return false;
         }
-        int written = snprintf(namespace_id, namespace_size, "%s@%s",
-                               project->name, project->version);
+        int written =
+            snprintf(namespace_id, namespace_size, "%s@%s", project->name, project->version);
         if (written < 0 || (size_t) written + 1 != namespace_size) {
             xr_free(namespace_id);
             xr_free(physical_root);
@@ -273,12 +290,20 @@ XR_FUNC bool xr_project_module_identity_authority(
     }
 
     XrModuleIdentityAuthority candidate = {
-        .kind = project->is_package ? XR_MODULE_IDENTITY_PACKAGE
-                                    : XR_MODULE_IDENTITY_PROJECT,
+        .kind = project->is_package ? XR_MODULE_IDENTITY_PACKAGE : XR_MODULE_IDENTITY_PROJECT,
         .namespace_id = namespace_id,
         .physical_root = physical_root,
     };
     if (!xr_module_identity_authority_valid(&candidate)) {
+        /* A package namespace is a publication coordinate, so the manifest
+         * name carries the owner scope; a project name is a single segment. */
+        project_authority_error(
+            err, err_size,
+            project->is_package ? "a [package] name must be an exact owner-scoped coordinate, "
+                                  "for example name = \"acme/app\"; use [project] for a manifest "
+                                  "that is not published under an owner"
+                                : "a [project] name must be a single segment of letters, digits, "
+                                  "'_', '-' or '.'");
         xr_free(namespace_id);
         xr_free(physical_root);
         return false;

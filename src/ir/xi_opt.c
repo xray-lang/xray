@@ -1722,7 +1722,10 @@ XR_FUNC XiPassChange xi_opt_dce(XiFunc *f) {
     compute_use_counts(f);
 
     /* Iteratively remove dead values (values with 0 uses and no side effects).
-     * Removing a value may make its operands dead, so we iterate. */
+     * PHIs live outside blk->values[], but they are pure SSA definitions too;
+     * leaving an unused PHI behind makes ownership inference manufacture a
+     * release for a value the program never observes. Removing either kind of
+     * definition may make its operands dead, so iterate to a fixed point. */
     bool changed = true;
     while (changed) {
         changed = false;
@@ -1749,6 +1752,26 @@ XR_FUNC XiPassChange xi_opt_dce(XiFunc *f) {
                 chg.values_changed = true;
                 chg.n_removed++;
                 /* Don't increment i: next value shifted into position */
+            }
+
+            XiPhi **previous = &blk->phis;
+            XiPhi *phi = blk->phis;
+            while (phi) {
+                XiPhi *next = phi->next;
+                if (phi->value.uses > 0) {
+                    previous = &phi->next;
+                    phi = next;
+                    continue;
+                }
+                for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                    if (phi->value.args[a])
+                        phi->value.args[a]->uses--;
+                }
+                *previous = next;
+                changed = true;
+                chg.values_changed = true;
+                chg.n_removed++;
+                phi = next;
             }
         }
     }
@@ -3050,6 +3073,12 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_LEN:
             return XR_REP_I64;
         case XI_COPY:
+            /* An identity alias has no carrier of its own. In particular, a
+             * narrowed type view must not erase a nullable source's tag before
+             * the proven native use where select_rep inserts the UNBOX. */
+            if (xi_copy_is_identity_alias(v) && v->nargs == 1 && v->args && v->args[0])
+                return sr_def_rep(v->args[0], policy);
+            return sr_type_native_boundary_rep(v->type);
         case XI_SOURCE_MOVE:
         case XI_OWNER_FORWARD:
             return sr_type_native_boundary_rep(v->type);

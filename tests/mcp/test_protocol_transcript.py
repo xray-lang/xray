@@ -238,8 +238,8 @@ def test_runner_stdout_is_protocol_isolated(xray: Path) -> None:
                     "name": "xray_run",
                     "arguments": {
                         "code": "print(\"runner-out\")\n",
-                        "timeoutMs": 1000,
                         "moduleId": "mcp-transcript-run",
+                        "timeoutMs": 1000,
                     },
                 },
             )

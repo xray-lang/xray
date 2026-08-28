@@ -2,10 +2,10 @@ import os
 import io
 import path
 
-print(len(os.platform) > 0)
-print(len(os.arch) > 0)
-print(len(os.sep) > 0)
-print(len(os.eol) >= 1)
+print(len(os.platform()) > 0)
+print(len(os.arch()) > 0)
+print(len(os.sep()) > 0)
+print(len(os.eol()) >= 1)
 print(os.getpid() > 0)
 print(os.uid() >= 0)
 print(os.gid() >= 0)

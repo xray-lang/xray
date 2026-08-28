@@ -568,8 +568,10 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
     return xa_analyzer_get_resolved_call(ctx->analyzer, node);
 }
 
-static const XaResolvedCall *xa_record_resolved_source_function_call(
-    XaInferContext *ctx, AstNode *node, const AstNode *callee, const XaSymbol *target) {
+static const XaResolvedCall *xa_record_resolved_source_function_call(XaInferContext *ctx,
+                                                                     AstNode *node,
+                                                                     const AstNode *callee,
+                                                                     const XaSymbol *target) {
     if (!ctx || !ctx->analyzer || !ctx->analyzer->resolved_call_table || !node || !callee ||
         callee->type != AST_VARIABLE || callee->as.variable.symbol_id == 0 || !target ||
         target->id != callee->as.variable.symbol_id || target->kind != XA_SYM_FUNCTION ||
@@ -583,8 +585,8 @@ static const XaResolvedCall *xa_record_resolved_source_function_call(
         .target_symbol_id = target->id,
         .intrinsic_id = XA_INTRINSIC_NONE,
         .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
-        .flags = ctx->unsafe_depth > 0 ? XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE
-                                      : XA_RESOLVED_CALL_FLAG_NONE,
+        .flags =
+            ctx->unsafe_depth > 0 ? XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE : XA_RESOLVED_CALL_FLAG_NONE,
     };
     xa_resolved_call_table_set((XaResolvedCallTable *) ctx->analyzer->resolved_call_table, node,
                                &resolved);
@@ -3132,9 +3134,8 @@ static XaAssertEqualContextKind xa_assert_equal_context_kind(AstNode *node) {
         return XA_ASSERT_EQUAL_CONTEXT_NONE;
     if (literal->type == AST_UNARY_NEG)
         literal = xa_call_unwrap_grouping(literal->as.unary.operand);
-    return literal && literal->type == AST_LITERAL_FLOAT
-               ? XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL
-               : XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL;
+    return literal && literal->type == AST_LITERAL_FLOAT ? XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL
+                                                         : XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL;
 }
 
 static bool xa_parallel_options_callee_is_parallel(XaInferContext *ctx, AstNode *callee) {
@@ -7114,7 +7115,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     bool saved_payload_ctor_value = ctx->allow_payload_enum_ctor_value;
     if (payload_variant)
         ctx->allow_payload_enum_ctor_value = true;
+    /* Only a bare identifier callee names an intrinsic; an argument or a
+     * member path that happens to be typed here is still a value position. */
+    bool saved_core_intrinsic_callee = ctx->allow_core_intrinsic_callee;
+    ctx->allow_core_intrinsic_callee = call->callee->type == AST_VARIABLE;
     XrType *callee_type = xa_visit_infer_expr(ctx, call->callee);
+    ctx->allow_core_intrinsic_callee = saved_core_intrinsic_callee;
     ctx->allow_payload_enum_ctor_value = saved_payload_ctor_value;
     if (optional_function_call && callee_type)
         callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
@@ -7622,20 +7628,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     XrType *assert_equal_unanchored_type = NULL;
     XrType *assert_equal_preinferred_second = NULL;
     bool assert_equal_mixed_unanchored_numeric = false;
-    if (core_assert_equal && call->arg_count >= 2 && call->arguments[0] &&
-        call->arguments[1]) {
-        assert_equal_context_kinds[0] =
-            xa_assert_equal_context_kind(call->arguments[0]);
-        assert_equal_context_kinds[1] =
-            xa_assert_equal_context_kind(call->arguments[1]);
-        bool first_numeric = assert_equal_context_kinds[0] ==
-                                 XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL ||
-                             assert_equal_context_kinds[0] ==
-                                 XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL;
-        bool second_numeric = assert_equal_context_kinds[1] ==
-                                  XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL ||
-                              assert_equal_context_kinds[1] ==
-                                  XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL;
+    if (core_assert_equal && call->arg_count >= 2 && call->arguments[0] && call->arguments[1]) {
+        assert_equal_context_kinds[0] = xa_assert_equal_context_kind(call->arguments[0]);
+        assert_equal_context_kinds[1] = xa_assert_equal_context_kind(call->arguments[1]);
+        bool first_numeric = assert_equal_context_kinds[0] == XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL ||
+                             assert_equal_context_kinds[0] == XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL;
+        bool second_numeric =
+            assert_equal_context_kinds[1] == XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL ||
+            assert_equal_context_kinds[1] == XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL;
         if (first_numeric && second_numeric &&
             assert_equal_context_kinds[0] == assert_equal_context_kinds[1]) {
             assert_equal_unanchored_type =
@@ -7648,10 +7648,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
              * independently so SAME_T rejects the mixed pair; never let the
              * source order turn one literal into a widening authority. */
             assert_equal_mixed_unanchored_numeric = true;
-        } else if (assert_equal_context_kinds[0] ==
-                       XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL &&
-                   assert_equal_context_kinds[1] ==
-                       XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL) {
+        } else if (assert_equal_context_kinds[0] == XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL &&
+                   assert_equal_context_kinds[1] == XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL) {
             assert_equal_unanchored_type = xr_type_new_null(ctx->analyzer->isolate);
         }
 
@@ -7783,9 +7781,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         bool saved_copy_view = ctx->allow_view_expr_for_copy;
         XrType *assert_equal_context_type = NULL;
         XaAssertEqualContextKind assert_equal_context_kind =
-            core_assert_equal && slot >= 0 && slot < 2
-                ? assert_equal_context_kinds[slot]
-                : XA_ASSERT_EQUAL_CONTEXT_NONE;
+            core_assert_equal && slot >= 0 && slot < 2 ? assert_equal_context_kinds[slot]
+                                                       : XA_ASSERT_EQUAL_CONTEXT_NONE;
         if (assert_equal_context_kind != XA_ASSERT_EQUAL_CONTEXT_NONE &&
             !assert_equal_mixed_unanchored_numeric) {
             if (assert_equal_unanchored_type) {
@@ -7842,11 +7839,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             pre_expansion_tail = ctx->analyzer->diagnostics_tail;
             pre_expansion_count = ctx->analyzer->diagnostic_count;
         }
-        XrType *arg_type =
-            core_assert_equal && i == 1 && assert_equal_preinferred_second
-                ? assert_equal_preinferred_second
-                : xa_visit_call_arg_for_param_mode(ctx, arg_node, parallel_callback_label, access,
-                                                   param_mode);
+        XrType *arg_type = core_assert_equal && i == 1 && assert_equal_preinferred_second
+                               ? assert_equal_preinferred_second
+                               : xa_visit_call_arg_for_param_mode(
+                                     ctx, arg_node, parallel_callback_label, access, param_mode);
         if (guard_default_expansion) {
             ctx->default_expansion_depth--;
             ctx->file_path = saved_expansion_file;
@@ -7866,10 +7862,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XrType *same_t_value = same_t && same_t->is_nullable
                                        ? xr_type_non_nullable(ctx->analyzer->isolate, same_t)
                                        : same_t;
-            bool null_matches =
-                assert_equal_context_kind == XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL &&
-                XR_TYPE_IS_NULL(arg_type) && same_t &&
-                (same_t->is_nullable || XR_TYPE_IS_NULL(same_t));
+            bool null_matches = assert_equal_context_kind == XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL &&
+                                XR_TYPE_IS_NULL(arg_type) && same_t &&
+                                (same_t->is_nullable || XR_TYPE_IS_NULL(same_t));
             bool numeric_matches =
                 assert_equal_context_kind != XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL && same_t_value &&
                 xr_type_equals(same_t_value, arg_type);
@@ -8367,8 +8362,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     bool assert_equal_same_t = false;
     if (core_assert_equal && arg_count >= 2 && effective_arg_types && effective_arg_types[0] &&
         effective_arg_types[1] && !XR_TYPE_IS_UNKNOWN(effective_arg_types[0]) &&
-        !XR_TYPE_IS_UNKNOWN(effective_arg_types[1]) &&
-        !XR_TYPE_IS_ERROR(effective_arg_types[0]) && !XR_TYPE_IS_ERROR(effective_arg_types[1])) {
+        !XR_TYPE_IS_UNKNOWN(effective_arg_types[1]) && !XR_TYPE_IS_ERROR(effective_arg_types[0]) &&
+        !XR_TYPE_IS_ERROR(effective_arg_types[1])) {
         XrType *actual_type = effective_arg_types[0];
         XrType *expected_type = effective_arg_types[1];
         assert_equal_same_t = xr_type_equals(actual_type, expected_type);
@@ -8389,9 +8384,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
     if (core_assert_equal && arg_count >= 2 && effective_arg_types && effective_arg_types[0] &&
         effective_arg_types[1] && !XR_TYPE_IS_UNKNOWN(effective_arg_types[0]) &&
-        !XR_TYPE_IS_UNKNOWN(effective_arg_types[1]) &&
-        !XR_TYPE_IS_ERROR(effective_arg_types[0]) && !XR_TYPE_IS_ERROR(effective_arg_types[1]) &&
-        !assert_equal_same_t) {
+        !XR_TYPE_IS_UNKNOWN(effective_arg_types[1]) && !XR_TYPE_IS_ERROR(effective_arg_types[0]) &&
+        !XR_TYPE_IS_ERROR(effective_arg_types[1]) && !assert_equal_same_t) {
         XrLocation loc = {.file = ctx->file_path,
                           .line = call->arguments[1] ? call->arguments[1]->line : node->line,
                           .column = call->arguments[1] ? call->arguments[1]->column : node->column};

@@ -1,5 +1,5 @@
 [package]
-name = "duplicate-export-smoke"
+name = "tests/duplicate-export-smoke"
 version = "1.0.0"
 license = "MIT"
 main = "main.xr"

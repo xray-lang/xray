@@ -212,7 +212,7 @@ failed:
 }
 
 static void test_deterministic_closed_world_identity(void) {
-    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(7));
+    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(8));
     char error[256] = {0};
     ClosureFixtureIds first_ids = {0};
     ClosureFixtureIds second_ids = {0};
@@ -267,23 +267,23 @@ static void test_deterministic_closed_world_identity(void) {
         0x2e, 0x0e, 0x44, 0xb9, 0x3b, 0x0e, 0x6a, 0xe1,
         0xc7, 0x6d, 0x37, 0x7a, 0x0b, 0x97, 0x3a, 0x1a,
     };
-    static const uint8_t v7_closure_fingerprint[XR_FINGERPRINT_BYTES] = {
-        0x44, 0xaa, 0x4a, 0xba, 0xd1, 0x29, 0x19, 0x76, 0x46, 0xe8, 0xad,
-        0x10, 0x0c, 0xc3, 0x9c, 0x30, 0x91, 0x2e, 0x44, 0xdf, 0xdc, 0x84,
-        0x78, 0xbb, 0x4d, 0x42, 0x88, 0x8a, 0xd0, 0x0f, 0x23, 0x00,
+    static const uint8_t v8_closure_fingerprint[XR_FINGERPRINT_BYTES] = {
+        0x8d, 0xa9, 0x32, 0x9b, 0xb4, 0x4b, 0x38, 0x18, 0x34, 0x29, 0xe5,
+        0x7a, 0x03, 0xa5, 0x83, 0x8c, 0x70, 0xbc, 0x7a, 0x71, 0x3b, 0x23,
+        0x52, 0xd1, 0xf2, 0x3b, 0xff, 0xc4, 0xef, 0x16, 0x12, 0x50,
     };
-    static const uint8_t v7_generation_id[XR_STABLE_ID_BYTES] = {
-        0xef, 0x1f, 0x2a, 0x9e, 0x84, 0x6a, 0x38, 0x2b,
-        0xd3, 0x9e, 0xb4, 0x12, 0x58, 0xe5, 0x80, 0x44,
+    static const uint8_t v8_generation_id[XR_STABLE_ID_BYTES] = {
+        0x58, 0x71, 0x32, 0x53, 0x7b, 0xb6, 0x92, 0x23,
+        0xb2, 0x16, 0x5d, 0x88, 0x12, 0x3b, 0x83, 0x95,
     };
     REQUIRE(memcmp(first_ids.entry_function.bytes, canonical_entry_function_identity,
                    sizeof(canonical_entry_function_identity)) == 0);
     REQUIRE(memcmp(first_ids.helper_function.bytes, canonical_helper_function_identity,
                    sizeof(canonical_helper_function_identity)) == 0);
-    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes, v7_closure_fingerprint,
-                   sizeof(v7_closure_fingerprint)) == 0);
-    REQUIRE(memcmp(xr_program_semantic_closure_generation_id(first).bytes, v7_generation_id,
-                   sizeof(v7_generation_id)) == 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes, v8_closure_fingerprint,
+                   sizeof(v8_closure_fingerprint)) == 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_generation_id(first).bytes, v8_generation_id,
+                   sizeof(v8_generation_id)) == 0);
 
     ClosureFixtureIds alternate_locator_ids = {0};
     XrProgramSemanticClosure *alternate_locator = build_fixture(

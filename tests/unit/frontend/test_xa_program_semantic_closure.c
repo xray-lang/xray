@@ -46,6 +46,7 @@
 #include "plan/semantic/xr_program_semantic_closure.h"
 #include "plan/semantic/xr_program_semantic_closure_internal.h"
 #include "plan/semantic/xr_scalar_call_semantics.h"
+#include "plan/semantic/xr_source_semantic_identity.h"
 #include "plan/semantic/xr_semantic_plan_internal.h"
 #include "plan/semantic/xr_semantic_verify.h"
 #include "plan/target/xr_target_builder.h"
@@ -502,6 +503,124 @@ static void scalar_graph_fixture_cleanup(ScalarGraphFixture *fixture) {
             xr_test_rmdir(fixture->directory);
     }
     memset(fixture, 0, sizeof(*fixture));
+}
+
+static bool source_graph_csv_fixture_build(ScalarGraphFixture *fixture) {
+    memset(fixture, 0, sizeof(*fixture));
+    fixture->graph = xr_module_graph_new(g_session, g_resolver);
+    if (!fixture->graph)
+        return false;
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = "psc-source-graph-csv",
+    };
+    char *graph_error = NULL;
+    int built = xr_module_graph_build_source(
+        fixture->graph, &authority,
+        "import csv\nfn root() -> i64 { return 0 }\n", &graph_error);
+    if (built != 0) {
+        fprintf(stderr, "  csv source graph build failed: %s\n",
+                graph_error ? graph_error : "unknown graph error");
+        xr_free(graph_error);
+        goto fail;
+    }
+    xr_free(graph_error);
+    if (xr_module_graph_topological_sort(fixture->graph) != 0 ||
+        fixture->graph->has_cycle || fixture->graph->spec_count != 3 ||
+        fixture->graph->topo_count != 3 || fixture->graph->entry_index < 0)
+        goto fail;
+    XrModuleSpec *entry =
+        &fixture->graph->specs[fixture->graph->entry_index];
+    if (entry->dep_count != 1 || !entry->dep_indices)
+        goto fail;
+    int csv_index = entry->dep_indices[0];
+    XrModuleSpec *csv = &fixture->graph->specs[csv_index];
+    if (csv_index == fixture->graph->entry_index || csv->dep_count != 1 ||
+        !csv->dep_indices)
+        goto fail;
+    int text_index = csv->dep_indices[0];
+    XrModuleSpec *text = &fixture->graph->specs[text_index];
+    if (text_index == fixture->graph->entry_index || text_index == csv_index ||
+        text->dep_count != 0 || !entry->ast || !csv->ast ||
+        entry->ast->as.program.statements[0]->type != AST_IMPORT_STMT ||
+        csv->ast->as.program.statements[0]->type != AST_IMPORT_STMT ||
+        strcmp(entry->ast->as.program.statements[0]->as.import_stmt.module_name,
+               "csv") != 0 ||
+        strcmp(csv->ast->as.program.statements[0]->as.import_stmt.module_name,
+               "text") != 0)
+        goto fail;
+    fixture->analyzer = xa_analyzer_new(g_session);
+    if (!fixture->analyzer)
+        goto fail;
+    xa_analyzer_set_build_profile(fixture->analyzer,
+                                  XA_ANALYZER_BUILD_PROFILE_HOSTED);
+    xa_analyzer_set_graph(fixture->analyzer, fixture->graph);
+    if (!scalar_graph_analyze_all(fixture))
+        goto fail;
+    return true;
+
+fail:
+    scalar_graph_fixture_cleanup(fixture);
+    return false;
+}
+
+typedef enum SourceGraphResignMutation {
+    SOURCE_GRAPH_RESIGN_SOURCE_FINGERPRINT,
+    SOURCE_GRAPH_RESIGN_IMPORT_LOCATOR,
+    SOURCE_GRAPH_RESIGN_BINDING,
+    SOURCE_GRAPH_RESIGN_CONTRACT,
+} SourceGraphResignMutation;
+
+static bool source_graph_outer_resign_rejects(
+    const XrProgramSemanticClosure *source,
+    SourceGraphResignMutation mutation) {
+    char error[256] = {0};
+    XrProgramSemanticClosure *rebuilt = NULL;
+    bool ok = xr_program_semantic_closure_create(
+                  &source->limits, source->policy_fingerprint, &rebuilt, error,
+                  sizeof(error)) &&
+              xr_program_semantic_closure_set_family(
+                  rebuilt, XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH,
+                  error, sizeof(error));
+    for (uint32_t i = 0; ok && i < source->module_count; i++) {
+        const XrProgramSemanticModuleRecord *row = &source->modules[i];
+        XrProgramSemanticModuleInput input = {
+            .module_identity = row->module_identity,
+            .module_authority_fingerprint = row->module_authority_fingerprint,
+            .source_fingerprint = row->source_fingerprint,
+            .export_fingerprint = row->export_fingerprint,
+        };
+        if (i == 0 && mutation == SOURCE_GRAPH_RESIGN_SOURCE_FINGERPRINT)
+            input.source_fingerprint.bytes[0] ^= UINT8_C(0x80);
+        ok = xr_program_semantic_closure_add_module(rebuilt, &input, error,
+                                                    sizeof(error));
+    }
+    for (uint32_t i = 0; ok && i < source->dependency_count; i++) {
+        const XrProgramSemanticDependencyRecord *row = &source->dependencies[i];
+        XrProgramSemanticDependencyInput input = {
+            .source_module = row->source_module,
+            .dependency_module = row->dependency_module,
+            .import_locator = row->import_locator,
+            .resolver_binding = row->resolver_binding,
+            .contract_fingerprint = row->contract_fingerprint,
+            .kind = row->kind,
+        };
+        if (i == 0 && mutation == SOURCE_GRAPH_RESIGN_IMPORT_LOCATOR)
+            input.import_locator.start_column++;
+        else if (i == 0 && mutation == SOURCE_GRAPH_RESIGN_BINDING)
+            input.resolver_binding.bytes[0] ^= UINT8_C(0x40);
+        else if (i == 0 && mutation == SOURCE_GRAPH_RESIGN_CONTRACT)
+            input.contract_fingerprint.bytes[0] ^= UINT8_C(0x20);
+        ok = xr_program_semantic_closure_add_dependency(
+            rebuilt, &input, error, sizeof(error));
+    }
+    bool rejected = ok &&
+                    !xr_program_semantic_closure_freeze(rebuilt, error,
+                                                        sizeof(error)) &&
+                    xr_program_semantic_closure_failure_kind(rebuilt) ==
+                        XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_INVALID;
+    xr_program_semantic_closure_free(rebuilt);
+    return rejected;
 }
 
 static void scalar_graph_plan_fixture_cleanup(ScalarGraphPlanFixture *fixture) {
@@ -3361,17 +3480,17 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
         scalar_graph_outer_resign_rejects(closure, SCALAR_GRAPH_OUTER_RESIGN_WRONG_IMPORT_LOCATOR));
 
     static const uint8_t expected_resolver_binding[16] = {
-        0x4b, 0x37, 0xf0, 0x3b, 0x77, 0xbb, 0xcd, 0xc5,
-        0x8c, 0x88, 0x2a, 0x03, 0x81, 0xb0, 0xc9, 0x6d,
+        0xe5, 0x57, 0x7e, 0x1f, 0xe4, 0x39, 0x42, 0xdb,
+        0x16, 0x77, 0x8b, 0x97, 0xde, 0x37, 0xaf, 0x87,
     };
     static const uint8_t expected_fingerprint[32] = {
-        0xb4, 0x66, 0x72, 0xdb, 0xd9, 0x97, 0x5f, 0x6d, 0x6a, 0x80, 0xd5,
-        0x19, 0xe4, 0x76, 0x77, 0xd5, 0x0e, 0xe7, 0x9f, 0xea, 0x00, 0xab,
-        0x81, 0x5d, 0x0e, 0x3c, 0xbd, 0x3d, 0x95, 0x6c, 0x18, 0x09,
+        0xa0, 0xe9, 0xff, 0x52, 0x43, 0xa6, 0x9c, 0x2d, 0x5f, 0xbd, 0x83,
+        0x93, 0x14, 0x32, 0x01, 0x1a, 0x63, 0x10, 0x52, 0x4e, 0xb5, 0x40,
+        0x63, 0x01, 0x47, 0x1a, 0xd9, 0x91, 0xa2, 0x8f, 0x5b, 0x84,
     };
     static const uint8_t expected_generation_id[16] = {
-        0x0b, 0x25, 0x95, 0x08, 0xb6, 0x71, 0x9d, 0xc0,
-        0x8f, 0xe9, 0xe1, 0x59, 0xc0, 0xfb, 0x1e, 0x5b,
+        0x7d, 0xe8, 0x17, 0xa0, 0xd2, 0x09, 0x77, 0xa4,
+        0xb5, 0xa1, 0xd1, 0x5f, 0x06, 0xee, 0x0d, 0x1a,
     };
     XrFingerprint fingerprint = xr_program_semantic_closure_fingerprint(closure);
     XrGenerationClosureId generation_id =
@@ -3427,6 +3546,82 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
 
     closure->dependencies[0].contract_fingerprint.bytes[0] ^= UINT8_C(0x80);
     ASSERT_FALSE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    xr_program_semantic_closure_free(closure);
+    scalar_graph_fixture_cleanup(&fixture);
+}
+
+TEST(entry_csv_text_publishes_complete_source_module_graph_authority) {
+    ScalarGraphFixture fixture;
+    ASSERT_TRUE(source_graph_csv_fixture_build(&fixture));
+    char error[256] = {0};
+    XrProgramSemanticClosure *closure = NULL;
+    XaProgramSemanticClosurePublishStatus status =
+        xa_program_semantic_closure_publish_source_module_graph(
+            fixture.analyzer, fixture.graph, &closure, error, sizeof(error));
+    if (status != XA_PROGRAM_SEMANTIC_CLOSURE_READY)
+        fprintf(stderr, "  csv source graph publication failed: %s\n", error);
+    ASSERT_EQ_INT(status, XA_PROGRAM_SEMANTIC_CLOSURE_READY);
+    ASSERT_NOT_NULL(closure);
+    ASSERT_TRUE(xr_program_semantic_closure_is_verified(closure));
+    ASSERT_EQ_UINT(xr_program_semantic_closure_family(closure),
+                   XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_module_count(closure), 3);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_dependency_count(closure), 2);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_type_count(closure), 0);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_type_field_count(closure), 0);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_function_count(closure), 0);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_function_parameter_count(closure),
+                   0);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_call_count(closure), 0);
+
+    for (uint32_t i = 0; i < closure->module_count; i++) {
+        const XrProgramSemanticModuleRecord *row = &closure->modules[i];
+        XrFingerprint expected = {{0}};
+        XrProgramSemanticModuleInput module = {
+            .module_identity = row->module_identity,
+            .module_authority_fingerprint = row->module_authority_fingerprint,
+            .source_fingerprint = row->source_fingerprint,
+        };
+        ASSERT_TRUE(xr_source_semantic_module_graph_exports(&module, &expected));
+        ASSERT_TRUE(fingerprint_equal(row->export_fingerprint, expected));
+    }
+    for (uint32_t i = 0; i < closure->dependency_count; i++) {
+        const XrProgramSemanticDependencyRecord *row =
+            &closure->dependencies[i];
+        ASSERT_EQ_UINT(row->kind,
+                       XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE);
+        ASSERT_EQ_UINT(row->import_locator.kind, AST_IMPORT_STMT);
+        ASSERT_TRUE(memcmp(row->exported_declaration.bytes,
+                           (uint8_t[XR_STABLE_ID_BYTES]) {0},
+                           XR_STABLE_ID_BYTES) == 0);
+        ASSERT_TRUE(memcmp(row->exported_function.bytes,
+                           (uint8_t[XR_STABLE_ID_BYTES]) {0},
+                           XR_STABLE_ID_BYTES) == 0);
+    }
+    ASSERT_TRUE(source_graph_outer_resign_rejects(
+        closure, SOURCE_GRAPH_RESIGN_SOURCE_FINGERPRINT));
+    ASSERT_TRUE(source_graph_outer_resign_rejects(
+        closure, SOURCE_GRAPH_RESIGN_IMPORT_LOCATOR));
+    ASSERT_TRUE(source_graph_outer_resign_rejects(
+        closure, SOURCE_GRAPH_RESIGN_BINDING));
+    ASSERT_TRUE(source_graph_outer_resign_rejects(
+        closure, SOURCE_GRAPH_RESIGN_CONTRACT));
+
+    XrModuleSpec *entry =
+        &fixture.graph->specs[fixture.graph->entry_index];
+    int csv_index = entry->dep_indices[0];
+    XrModuleSpec *csv = &fixture.graph->specs[csv_index];
+    int text_index = csv->dep_indices[0];
+    csv->dep_indices[0] = fixture.graph->entry_index;
+    XrProgramSemanticClosure *invalid = NULL;
+    ASSERT_EQ_INT(xa_program_semantic_closure_publish_source_module_graph(
+                      fixture.analyzer, fixture.graph, &invalid, error,
+                      sizeof(error)),
+                  XA_PROGRAM_SEMANTIC_CLOSURE_INVALID);
+    ASSERT_NULL(invalid);
+    csv->dep_indices[0] = text_index;
+    ASSERT_TRUE(xr_program_semantic_closure_verify(closure, error,
+                                                   sizeof(error)));
     xr_program_semantic_closure_free(closure);
     scalar_graph_fixture_cleanup(&fixture);
 }
@@ -3593,6 +3788,7 @@ RUN_TEST(source_backed_scalar_snapshot_builds_verified_closure);
 RUN_TEST(source_backed_leaf_aggregate_publishes_typed_psc);
 RUN_TEST(source_backed_leaf_product_freezes_all_direct_local_callers);
 RUN_TEST(two_source_module_scalar_graph_publishes_complete_authority);
+RUN_TEST(entry_csv_text_publishes_complete_source_module_graph_authority);
 RUN_TEST(strict_call_locator_boundaries_fail_after_source_republication);
 RUN_TEST(published_snapshot_is_pointer_free_and_ignores_node_ids);
 RUN_TEST(snapshot_projects_after_analyzer_and_graph_teardown);

@@ -143,6 +143,11 @@ typedef struct XaInferContext {
     // visitor sets this while typing the callee of `Enum.Variant(...)`.
     bool allow_payload_enum_ctor_value;
 
+    // Direct-only core intrinsics have a call-site plan and no value form. The
+    // call visitor sets this while typing a bare-identifier callee, which is
+    // the one position where naming them is meaningful.
+    bool allow_core_intrinsic_callee;
+
     // The variable being declared is not visible inside its own initializer.
     // This lets `var copy = copy(x)` call the outer/builtin `copy` while still
     // reporting `var x = x` as an unresolved self-reference when no outer x exists.

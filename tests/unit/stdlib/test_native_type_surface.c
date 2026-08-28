@@ -20,6 +20,7 @@
 #include "../../../src/runtime/class/xclass.h"
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../src/shared/xobject_shape.h"
+#include "../../../src/stdlib/xstdlib_metadata.h"
 #include "../../../stdlib/stdlib_cache.h"
 
 static const XrModuleIdentityAuthority k_native_surface_memory_authority = {
@@ -233,6 +234,37 @@ TEST(native_module_object_and_enum_metadata) {
     xray_vm_delete(iso);
 }
 
+TEST(native_direct_member_resolves_each_page_alloc_arity) {
+    const XrStdlibDefEntry *one =
+        xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 1);
+    const XrStdlibDefEntry *two =
+        xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 2);
+
+    ASSERT_NOT_NULL(one);
+    ASSERT_NOT_NULL(two);
+    ASSERT_TRUE(one != two);
+    ASSERT_EQ_INT(one->argc, 1);
+    ASSERT_EQ_INT(two->argc, 2);
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 0));
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 3));
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "missing", 1));
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("missing", "pageAlloc", 1));
+}
+
+TEST(native_direct_member_identity_rejects_duplicate_tuple) {
+    const XrStdlibDefEntry entries[] = {
+        {.module = "fixture", .name = "call", .argc = 1},
+        {.module = "fixture", .name = "call", .argc = 2},
+        {.module = "fixture", .name = "call", .argc = 1},
+    };
+
+    ASSERT_NULL(xr_stdlib_metadata_unique_func_arity_in_entries(entries, 3, "fixture", "call", 1));
+    ASSERT_TRUE(xr_stdlib_metadata_unique_func_arity_in_entries(entries, 3, "fixture", "call", 2) ==
+                &entries[1]);
+    ASSERT_NULL(xr_stdlib_metadata_unique_func_arity_in_entries(entries, 3, ".fixture", "call", 2));
+    ASSERT_NULL(xr_stdlib_metadata_unique_func_arity_in_entries(entries, 3, "fixture", "", 2));
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("stdlib/native-type-surface");
 RUN_TEST(native_type_methods_match_runtime_tables);
@@ -240,4 +272,6 @@ RUN_TEST(native_type_protocol_rejects_null_isolate);
 RUN_TEST(native_receiver_alias_contracts_are_typed_data);
 RUN_TEST(native_type_lookup_and_typed_json_contract_are_total);
 RUN_TEST(native_module_object_and_enum_metadata);
+RUN_TEST(native_direct_member_resolves_each_page_alloc_arity);
+RUN_TEST(native_direct_member_identity_rejects_duplicate_tuple);
 TEST_MAIN_END()

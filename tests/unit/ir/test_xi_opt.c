@@ -35,6 +35,7 @@ static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
 static XrType stub_str = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
+static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 14, .frozen = true};
 static XrType stub_task = {
     .kind = XR_KIND_INSTANCE, .id = 10, .frozen = true, .instance = {.class_name = "Task"}};
 static XrType stub_result_group = {
@@ -48,6 +49,13 @@ static XrType stub_task_array = {
 static XrType stub_u8 = {.kind = XR_KIND_INT, .id = 8, .frozen = true, .scalar_rep = XR_NATIVE_U8};
 static XrType stub_uint64 = {
     .kind = XR_KIND_INT, .id = 11, .frozen = true, .scalar_rep = XR_NATIVE_U64};
+static XrType stub_nullable_int = {
+    .kind = XR_KIND_INT,
+    .id = 15,
+    .frozen = true,
+    .is_nullable = true,
+    .scalar_rep = XR_NATIVE_I64,
+};
 static XrType stub_u8_array = {
     .kind = XR_KIND_ARRAY,
     .id = 9,
@@ -1200,6 +1208,56 @@ TEST(dce_cascading) {
     xi_func_free(f);
 }
 
+TEST(dce_removes_unused_typed_phi_and_inputs) {
+    XiFunc *f = make_func("dead_typed_phi", &stub_void);
+    XiBlock *entry = f->entry;
+    XiValue *left_null = xi_const_null(f, entry, &stub_null);
+    XiValue *right_null = xi_const_null(f, entry, &stub_null);
+
+    XiBlock *merge = xi_block_new(f);
+    xi_block_add_pred(merge, entry);
+    xi_block_add_pred(merge, entry);
+    merge->sealed = true;
+    XiPhi *phi = xi_phi_new(f, merge, &stub_any, 2);
+    phi->value.args[0] = left_null;
+    phi->value.args[1] = right_null;
+    xi_block_set_return(merge, NULL);
+
+    XiPassChange change = xi_opt_dce(f);
+
+    assert(change.values_changed && change.n_removed == 3 &&
+           "dead typed PHI and its two now-unused inputs must be removed");
+    assert(merge->phis == NULL && "dead PHI must not survive outside the value list");
+    assert(entry->nvalues == 0 && "dead PHI inputs must be removed at the fixed point");
+    xi_func_free(f);
+}
+
+TEST(dce_keeps_observed_typed_phi) {
+    XiFunc *f = make_func("live_typed_phi", &stub_void);
+    XiBlock *entry = f->entry;
+    XiValue *left_null = xi_const_null(f, entry, &stub_null);
+    XiValue *right_null = xi_const_null(f, entry, &stub_null);
+
+    XiBlock *merge = xi_block_new(f);
+    xi_block_add_pred(merge, entry);
+    xi_block_add_pred(merge, entry);
+    merge->sealed = true;
+    XiPhi *phi = xi_phi_new(f, merge, &stub_any, 2);
+    phi->value.args[0] = left_null;
+    phi->value.args[1] = right_null;
+    XiValue *print = xi_value_new(f, merge, XI_PRINT, &stub_void, 1);
+    print->args[0] = &phi->value;
+    print->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(merge, NULL);
+
+    XiPassChange change = xi_opt_dce(f);
+
+    assert(!change.values_changed && "an observed typed PHI is not dead");
+    assert(merge->phis == phi && print->args[0] == &phi->value &&
+           "DCE must preserve the live PHI type view");
+    xi_func_free(f);
+}
+
 /* ========== Phi Simplification Tests ========== */
 
 TEST(phi_simplify_trivial) {
@@ -1729,6 +1787,33 @@ TEST(select_rep_unbox_param_for_arith) {
     assert(p0->rep == XR_REP_I64 && "i64 param should have I64 rep");
     /* ADD result is I64, return needs TAGGED: should have BOX */
     assert(blk->control->op == XI_BOX && "return should BOX the ADD result");
+    xi_func_free(f);
+}
+
+TEST(select_rep_identity_copy_preserves_source_carrier) {
+    XiFunc *f = make_func("identity_copy_source_carrier", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *source = xi_param(f, blk, 0, &stub_nullable_int);
+    XiValue *copy = xi_value_new(f, blk, XI_COPY, &stub_int, 1);
+    XiValue *one = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_int, copy, one);
+    REQUIRE(source && copy && one && add);
+    copy->args[0] = source;
+    copy->aux_int = XI_COPY_KIND_IDENTITY;
+    xi_block_set_return(blk, add);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    xi_opt_select_rep_with_policy(f, &policy);
+
+    REQUIRE(source->rep == XR_REP_TAGGED);
+    REQUIRE(copy->rep == XR_REP_TAGGED);
+    REQUIRE(add->args[0] != copy);
+    REQUIRE(add->args[0] && add->args[0]->op == XI_UNBOX);
+    REQUIRE(add->args[0]->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
+    REQUIRE(add->args[0]->nargs == 1 && add->args[0]->args[0] == copy);
+    REQUIRE(add->args[0]->rep == XR_REP_I64);
+
     xi_func_free(f);
 }
 
@@ -2659,6 +2744,8 @@ int main(void) {
     run_dce_keeps_side_effects();
     run_codegen_opaque_blocks_constant_folding_and_fence_survives_dce();
     run_dce_cascading();
+    run_dce_removes_unused_typed_phi_and_inputs();
+    run_dce_keeps_observed_typed_phi();
 
     /* Phi simplification */
     run_phi_simplify_trivial();
@@ -2681,6 +2768,7 @@ int main(void) {
     /* SelectRepresentations */
     run_select_rep_box_const_for_return();
     run_select_rep_unbox_param_for_arith();
+    run_select_rep_identity_copy_preserves_source_carrier();
     run_select_rep_no_change_for_call();
     run_select_rep_arith_chain_stays_unboxed();
     run_select_rep_keeps_narrow_store_for_shared_typed_array();

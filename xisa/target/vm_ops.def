@@ -316,3 +316,13 @@
   :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate overflow-predicate-record :control none
   :semantic none :dispatch overflow :dispatch-arg none)
+
+; The call record owns the generated leaf kind and stable native callee
+; identity. The dispatcher executes that sealed target without module/member
+; lookup and without consulting SemanticPlan or Xi.
+(define-target-instruction call-native-leaf-i64
+  :id 44 :name "call.native-leaf.i64" :arity 0 :terminator no
+  :result-rep i64 :operand-reps ()
+  :result-ownership trivial :operand-ownership ()
+  :effects () :error none :suspend no :immediate call-record :control none
+  :semantic xi.call :dispatch native-leaf :dispatch-arg none)

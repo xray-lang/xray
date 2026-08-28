@@ -28,8 +28,8 @@ typedef struct XlspAnalysisIdentity {
     char *identity;
 } XlspAnalysisIdentity;
 
-XR_FUNC bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
-                                         const char *uri);
+XR_FUNC bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope,
+                                         XrCompilerSession *session, const char *uri);
 XR_FUNC void xlsp_analysis_identity_pop(XlspAnalysisIdentity *scope);
 
 // Generate diagnostics for a document

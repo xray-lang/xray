@@ -485,8 +485,8 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
                 doc->parse_error ? " (with parse errors)" : "");
         // Use incremental update with content hash for true change detection
         XlspAnalysisIdentity doc_identity;
-        xlsp_analysis_identity_push(&doc_identity, xr_compiler_session_current_for_isolate(isolate),
-                                    doc->uri);
+        xlsp_analysis_identity_push(&doc_identity,
+                                    xr_compiler_session_current_for_isolate(isolate), doc->uri);
         xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri, (XrAstNode *) ast,
                                  doc->content_hash);
         xlsp_analysis_identity_pop(&doc_identity);

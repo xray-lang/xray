@@ -255,6 +255,26 @@ static XrType scalar_string = {
     .frozen = true,
 };
 
+static XrType *union_int_string_members[] = {&scalar_int, &scalar_string};
+
+static XrType union_int_string = {
+    .kind = XR_KIND_UNION,
+    .id = 301,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .frozen = true,
+    .union_type = {
+        .members = union_int_string_members,
+        .member_count = 2,
+    },
+};
+
+static XrType union_as_dynamic_result = {
+    .kind = XR_KIND_UNKNOWN,
+    .id = 302,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .frozen = true,
+};
+
 static XrType scalar_unit = {
     .kind = XR_KIND_UNIT,
     .id = 4,
@@ -5527,7 +5547,69 @@ static void test_assertion_plan_and_native_condition_materialization_are_exact(v
     xi_func_free(function);
 }
 
+static XrTargetPlan *build_union_as_conversion_target(uint32_t target_tid,
+                                                       const char *target_name,
+                                                       XiFunc **out_function,
+                                                       XrTargetProfile **out_profile) {
+    XiFunc *function = xi_func_new("union_as_conversion_refinement", &scalar_unit);
+    XiBlock *entry = xi_block_new(function);
+    XiValue *constant = xi_const_int(function, entry, 7, &scalar_int);
+    XiValue *store = xi_value_new(function, entry, XI_SET_SHARED, &scalar_unit, 1);
+    XiValue *load = xi_value_new(function, entry, XI_GET_SHARED, &union_int_string, 0);
+    XiValue *conversion =
+        xi_value_new(function, entry, XI_AS, &union_as_dynamic_result, 1);
+    REQUIRE(function && entry && constant && store && load && conversion);
+    store->aux_int = 0;
+    store->args[0] = constant;
+    load->aux_int = 0;
+    conversion->args[0] = load;
+    conversion->aux_int = (int64_t) target_tid << 1;
+    conversion->aux = (void *) target_name;
+    xi_block_set_return(entry, NULL);
+    XrTargetPlan *target = build_attached_target_plan(function, out_profile);
+    *out_function = function;
+    return target;
+}
+
+static void test_union_as_conversion_refinement_is_exact_and_fail_closed(void) {
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    XiFunc *function = NULL;
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_union_as_conversion_target(
+        XR_TID_I64, TYPE_NAME_I64, &function, &profile);
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan != NULL && xr_aot_refinement_plan_view(plan).verified);
+    xr_aot_refinement_plan_free(plan);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+
+    /* Hostile adjacent shape: bool has a valid runtime id and spelling, but it
+     * is not a structural member of i64|string. The signed plans remain valid;
+     * the AOT use-site authority must still refuse the conversion. */
+    plan = NULL;
+    function = NULL;
+    profile = NULL;
+    target = build_union_as_conversion_target(
+        XR_TID_BOOL, TYPE_NAME_BOOL, &function, &profile);
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    REQUIRE(plan == NULL &&
+            diag.issue == XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "union-as-conversion") == 0) {
+        test_union_as_conversion_refinement_is_exact_and_fail_closed();
+        puts("Union AS conversion AOT refinement tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "scalar-array-range-fill-refinement") == 0) {
         test_scalar_array_range_fill_refinement_is_exact_and_fail_closed();
         puts("Scalar Array.fill AOT refinement tests passed");
@@ -5598,6 +5680,7 @@ int main(int argc, char **argv) {
     test_array_hof_refinement_is_exact_and_fail_closed();
     test_string_concat_cleanup_materialization_is_exact();
     test_assertion_plan_and_native_condition_materialization_are_exact();
+    test_union_as_conversion_refinement_is_exact_and_fail_closed();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");
     return 0;

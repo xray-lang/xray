@@ -15,6 +15,16 @@
 #ifndef XRT_CORE_FREESTANDING_H
 #define XRT_CORE_FREESTANDING_H
 
+/* The Windows UCRT publishes snprintf/vsnprintf as external inline wrappers.
+ * Merely parsing a shared semantic header that reaches <stdio.h> can therefore
+ * materialize _stdio_common_vsprintf at -O0 even when generated target code
+ * never formats a value.  A freestanding translation unit must not acquire a
+ * hosted CRT dependency from header mechanics; a real stdio call remains an
+ * ordinary undefined symbol and is rejected by the provider ABI inventory. */
+#if defined(_WIN32) && !defined(_NO_CRT_STDIO_INLINE)
+#define _NO_CRT_STDIO_INLINE
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -27,6 +37,26 @@
 #endif
 #include "xrt_callable.h"
 
+#include "../shared/xr_raw_scalar_core.h"
+#include "../shared/xr_byte_array_copy_core.h"
+#include "../shared/xr_raw_memory_core.h"
+#include "../shared/xr_data_pointer_core.h"
+#include "../shared/xr_obj_header.h"
+#include "../shared/xr_elem_type.h"
+#include "../shared/xr_byte_slice_scalar_core.h"
+#include "../shared/xr_pod_slice_core.h"
+#include "../shared/xr_arith_core.h"
+#include "../shared/xr_error_messages.h"
+#include "../shared/xr_enum_metadata_core.h"
+#include "../shared/xr_length_source_core.h"
+#include "../shared/xr_string_concat_core.h"
+#include "../base/xnumber_parse_error.h"
+
+/* Several shared semantic cores include <string.h> for their hosted build, and
+ * a hosted libc may define the mem* names as fortified macros that expand to
+ * __*_chk entry points. A freestanding object may only reference the ABI it
+ * declares, so take these names back after the shared cores have been read:
+ * undefining them earlier is undone by whatever those headers pull in. */
 #ifdef memcpy
 #undef memcpy
 #endif
@@ -44,21 +74,6 @@ void *memcpy(void *dst, const void *src, size_t n);
 void *memmove(void *dst, const void *src, size_t n);
 void *memset(void *dst, int value, size_t n);
 int memcmp(const void *a, const void *b, size_t n);
-
-#include "../shared/xr_raw_scalar_core.h"
-#include "../shared/xr_byte_array_copy_core.h"
-#include "../shared/xr_raw_memory_core.h"
-#include "../shared/xr_data_pointer_core.h"
-#include "../shared/xr_obj_header.h"
-#include "../shared/xr_elem_type.h"
-#include "../shared/xr_byte_slice_scalar_core.h"
-#include "../shared/xr_pod_slice_core.h"
-#include "../shared/xr_arith_core.h"
-#include "../shared/xr_error_messages.h"
-#include "../shared/xr_enum_metadata_core.h"
-#include "../shared/xr_length_source_core.h"
-#include "../shared/xr_string_concat_core.h"
-#include "../base/xnumber_parse_error.h"
 
 /* Freestanding shares the concat kernel's two passes; the guard names the
  * owner so a second copy cannot appear here unnoticed. */

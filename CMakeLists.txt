@@ -1067,6 +1067,7 @@ file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
     "stdlib/sync/*.c"
     "stdlib/parallel/*.c"
     "stdlib/simd/*.c"
+    "stdlib/codegen/*.c"
     "stdlib/sys/*.c"
     "stdlib/regex/*.c"
     "stdlib/path/*.c"
@@ -1174,6 +1175,32 @@ else()
 endif()
 
 file(GLOB XRAY_STDLIB_SCRIPT_SOURCES CONFIGURE_DEPENDS "stdlib/*/*.xr")
+if(NOT XR_STDLIB_FULL)
+    # The generated embedded-source table is the binary's source-module
+    # descriptor set. Keep it aligned with the same feature gates that select
+    # native factories and private-leaf binders; a source file that merely
+    # exists in the repository must not make a disabled module loadable.
+    if(NOT XR_STDLIB_FILESYSTEM)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/(io|os)/[^/]+\\.xr$")
+    endif()
+    if(NOT XR_STDLIB_NET)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/(net|http)/[^/]+\\.xr$")
+    endif()
+    if(NOT XR_STDLIB_DATA)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/(csv|toml|yaml|xml)/[^/]+\\.xr$")
+    endif()
+    if(NOT XR_STDLIB_CLUSTER)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/cluster/[^/]+\\.xr$")
+    endif()
+    if(NOT XR_STDLIB_WS)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/ws/[^/]+\\.xr$")
+    endif()
+endif()
 set(XRAY_STDLIB_EMBEDDED_SOURCE_INC
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_sources.inc")
 set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR
@@ -4297,6 +4324,65 @@ if(BUILD_TESTS)
     )
     set_tests_properties(runtime_header_dependency_lint PROPERTIES
         LABELS "meta;runtime;headers;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME program_plan_cache_qualification_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/run_program_plan_cache_qualification.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(program_plan_cache_qualification_self_test PROPERTIES
+        LABELS "meta;target-machine;cache;target-plan"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME program_plan_cache_qualification
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/run_program_plan_cache_qualification.py
+                $<TARGET_FILE:xray>
+                --samples 3
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    # Measured ~10s: four concurrent link-tagged builds plus the serial phases.
+    set_tests_properties(program_plan_cache_qualification PROPERTIES
+        LABELS "aot;cache;target-plan;incremental;concurrency"
+        PROCESSORS 4
+        SKIP_RETURN_CODE 77
+        COST 15
+        TIMEOUT 300
+    )
+
+    add_test(
+        NAME runtime_archive_cache_symbol_lint
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_archive_cache_symbols.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --archive $<TARGET_FILE:xray_vm>
+                --archive $<TARGET_FILE:xray_rt_coro>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(runtime_archive_cache_symbol_lint PROPERTIES
+        LABELS "meta;runtime;cache;target-machine"
+        PROCESSORS 1
+        SKIP_RETURN_CODE 77
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME runtime_archive_cache_symbol_lint_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_archive_cache_symbols.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(runtime_archive_cache_symbol_lint_self_test PROPERTIES
+        LABELS "meta;runtime;cache;target-machine"
         PROCESSORS 1
         TIMEOUT 30
     )

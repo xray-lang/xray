@@ -318,6 +318,7 @@ static void hash_call_base(XrSHA256Context *ctx, const XrTargetCallRecord *recor
     hash_u64(ctx, record->source_export);
     hash_id(ctx, record->source_export_identity);
     hash_id(ctx, record->source_callee_identity);
+    hash_id(ctx, record->native_callee_identity);
     hash_u64(ctx, record->result_value);
     hash_u64(ctx, record->result_slot);
     hash_u64(ctx, record->caller_storage_slot);
@@ -331,6 +332,7 @@ static void hash_call_base(XrSHA256Context *ctx, const XrTargetCallRecord *recor
     hash_u64(ctx, record->argument_count);
     hash_u64(ctx, record->adapter_count);
     hash_u64(ctx, record->native_abi);
+    hash_u64(ctx, record->native_leaf);
     hash_u64(ctx, record->flags);
     hash_u64(ctx, record->calling_convention);
     hash_u64(ctx, record->target_kind);
@@ -791,7 +793,7 @@ void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t lay
 
 void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_index,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-call-v5\0";
+    static const uint8_t domain[] = "xray-target-call-v6\0";
     const XrTargetCallRecord *call = &plan->calls[call_index];
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
@@ -1121,6 +1123,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR;
         bool native_namespace_yieldable =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+        bool native_target_leaf =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR;
         /* The construction is one of the rows that names a SemanticPlan call
          * target rather than a sealed builtin, so its target index must index
          * that table. */
@@ -1149,7 +1153,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              !rune_to_string &&
              !rune_is_whitespace && !string_slice_range && !stringbuilder_to_string &&
              !stringbuilder_append_string && !json_namespace_value && !array_member_scalar &&
-             !native_module_scalar && !native_namespace_yieldable && !source_class_constructor &&
+             !native_module_scalar && !native_namespace_yieldable && !native_target_leaf &&
+             !source_class_constructor &&
              !adt_enum_constructor && !array_intrinsic && !array_fill && !array_hof &&
              !panic_info_constructor && !scalar_copy && !container_copy && !map_entries_iterator &&
              !map_entry_iterator_has_next && !map_entry_iterator_next) ||
@@ -1163,7 +1168,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
               string_runes || iterator_rune_has_next || iterator_rune_next || iterator_rune_nth ||
               rune_to_uint32 || rune_to_string ||
               rune_is_whitespace || string_slice_range || json_namespace_value ||
-              array_member_scalar || native_module_scalar || adt_enum_constructor ||
+               array_member_scalar || native_module_scalar || native_target_leaf ||
+               adt_enum_constructor ||
               array_intrinsic || array_fill || array_hof || panic_info_constructor || scalar_copy ||
               container_copy || map_entries_iterator || map_entry_iterator_has_next ||
               map_entry_iterator_next) &&

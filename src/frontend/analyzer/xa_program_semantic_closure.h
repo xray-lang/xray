@@ -57,4 +57,12 @@ xa_program_semantic_closure_publish_scalar_module_graph(
     struct XaAnalyzer *analyzer, const struct XrModuleGraph *graph,
     XrProgramSemanticClosure **out, char *error, size_t error_size);
 
+/* Freeze the complete bounded acyclic source-module graph reachable from the
+ * graph entry. This publication carries modules and exact resolved source
+ * edges only; downstream executable authority must be added by a later slice. */
+XR_FUNC XaProgramSemanticClosurePublishStatus
+xa_program_semantic_closure_publish_source_module_graph(
+    struct XaAnalyzer *analyzer, const struct XrModuleGraph *graph,
+    XrProgramSemanticClosure **out, char *error, size_t error_size);
+
 #endif  // XA_PROGRAM_SEMANTIC_CLOSURE_H

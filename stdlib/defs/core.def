@@ -1860,44 +1860,30 @@ module os {
     fields: "const stdout: string, const stderr: string, const exitCode: i64"
   }
 
-  const platform {
-    signature: ": string"
-    doc: "Current operating system name"
-    vm: "os.platform"
-    vm_value: "xrs_string_value_c(isolate, get_platform())"
-    aot_const: "helper_value"
+  fn __platform {
+    signature: "(): string"
+    doc: "Host operating system name"
+    vm: "os_platform"
     aot: "xrt_os_platform"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
     layer: "system"
+    return_ownership: "fresh"
   }
 
-  const arch {
-    signature: ": string"
-    doc: "Current CPU architecture name"
-    vm: "os.arch"
-    vm_value: "xrs_string_value_c(isolate, get_arch())"
-    aot_const: "helper_value"
+  fn __arch {
+    signature: "(): string"
+    doc: "Host CPU architecture name"
+    vm: "os_arch"
     aot: "xrt_os_arch"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
     layer: "system"
-  }
-
-  const sep {
-    signature: ": string"
-    doc: "Platform path separator"
-    vm: "os.sep"
-    vm_value: "xrs_string_value_c(isolate, get_sep())"
-    aot_const: "helper_value"
-    aot: "xrt_os_sep"
-    layer: "system"
-  }
-
-  const eol {
-    signature: ": string"
-    doc: "Platform end-of-line string"
-    vm: "os.eol"
-    vm_value: "xrs_string_value_c(isolate, get_eol())"
-    aot_const: "helper_value"
-    aot: "xrt_os_eol"
-    layer: "system"
+    return_ownership: "fresh"
   }
 
   fn __getenv {
@@ -1937,11 +1923,11 @@ module os {
     layer: "system"
   }
 
-  fn __environ {
-    signature: "(): Map<string, string>"
-    doc: "Get all environment variables"
-    vm: "os_environ"
-    aot: "xrt_os_environ"
+  fn __environBlock {
+    signature: "(): Array<string>"
+    doc: "Host environment block as raw NAME=VALUE entries"
+    vm: "os_environ_block"
+    aot: "xrt_os_environ_block"
     argc: 0
     arg_spec: ""
     aot_direct: true
@@ -1969,6 +1955,7 @@ module os {
     argc: 0
     arg_spec: ""
     aot_direct: true
+    target_leaf: "i64-getpid"
     link_object: false
     layer: "system"
   }
@@ -2012,11 +1999,11 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __username {
+  fn __systemUsername {
     signature: "(): string?"
-    doc: "Get current user name"
-    vm: "os_username"
-    aot: "xrt_os_username"
+    doc: "Get the host-reported current user name"
+    vm: "os_system_username"
+    aot: "xrt_os_system_username"
     argc: 0
     arg_spec: ""
     aot_direct: true

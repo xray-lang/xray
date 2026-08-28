@@ -86,6 +86,11 @@ FREESTANDING_HEADER_ONLY_SYMBOLS = {
     "mem.volatileStore",
 }
 
+TARGET_LEAF_KINDS = {
+    "": "XR_STDLIB_TARGET_LEAF_NONE",
+    "i64-getpid": "XR_STDLIB_TARGET_LEAF_I64_GETPID",
+}
+
 
 @dataclasses.dataclass(frozen=True)
 class StdlibEntry:
@@ -111,6 +116,7 @@ class StdlibEntry:
     allocation: str
     return_ownership: str
     semantic_intrinsic: bool
+    target_leaf: str
     caps: tuple[str, ...]
 
     @property
@@ -640,6 +646,29 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} returns reference-capable "
                     f"type {signature_return!r} and requires explicit return_ownership"
                 )
+            target_leaf = str(props.get("target_leaf", ""))
+            if target_leaf not in TARGET_LEAF_KINDS:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported target_leaf for "
+                    f"{current_module}.{current_name}: {target_leaf}"
+                )
+            if target_leaf and (
+                signature != "(): i64"
+                or argc_raw != "0"
+                or arg_spec
+                or not aot_direct
+                or aot_kind != "method"
+                or ret != "value"
+                or vm_binding != "normal"
+                or vm_ifdef
+                or aot_enum
+                or str(props.get("define", ""))
+                or caps
+            ):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} target_leaf "
+                    "requires one unconditional direct `(): i64` scalar member"
+                )
 
             entries.append(
                 StdlibEntry(
@@ -665,6 +694,7 @@ def parse_def_metadata(
                     allocation=allocation,
                     return_ownership=return_ownership,
                     semantic_intrinsic=semantic_intrinsic,
+                    target_leaf=target_leaf,
                     caps=caps,
                 )
             )
@@ -1632,6 +1662,12 @@ def emit_defs_header(
             "#include <stdint.h>",
             '#include "../base/xentry_plan.h"',
             "",
+            "typedef enum XrStdlibTargetLeafKind {",
+            "    XR_STDLIB_TARGET_LEAF_NONE = 0,",
+            "    XR_STDLIB_TARGET_LEAF_I64_GETPID = 1,",
+            "    XR_STDLIB_TARGET_LEAF_COUNT,",
+            "} XrStdlibTargetLeafKind;",
+            "",
             "typedef struct XrStdlibDefEntry {",
             "    const char *module;",
             "    const char *name;",
@@ -1650,6 +1686,7 @@ def emit_defs_header(
             "    const char *aot_kind;",
             "    uint32_t runtime_capabilities;",
             "    uint16_t argc;",
+            "    uint16_t target_leaf;",
             "    bool aot_direct;",
             "} XrStdlibDefEntry;",
             "",
@@ -1775,7 +1812,7 @@ def emit_defs_header(
             f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
             f"{c_string(e.aot_enum)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
-            f"{c_string(e.aot_kind)}, {runtime_caps}, {argc}, "
+            f"{c_string(e.aot_kind)}, {runtime_caps}, {argc}, {TARGET_LEAF_KINDS[e.target_leaf]}, "
             f"{'true' if e.aot_direct else 'false'}"
             "},"
         )

@@ -12,7 +12,7 @@
   "sections": [
     {
       "heading": "Core built-ins",
-      "markdown": "- `print(value)` — print with newline\n- `dump(value)` — debug print with type info\n- `typeOf(value)` — return a stable TypeId / `Type.xxx` value\n- `typeName(value)` — return the debug/logging type name\n- `x is T` — runtime type check with analyzer narrowing\n- `i64(value)` / `f64(value)` / `string(value)` / `bool(value)` — explicit conversions\n- `assert(condition)` and `assert_*` helpers — testing assertions"
+      "markdown": "- `print(value)` — print with newline\n- `dump(value)` — debug print with type info\n- `typeOf(value)` — return a stable TypeId / `Type.xxx` value\n- `typeName(value)` — return the debug/logging type name\n- `x is T` — runtime type check with analyzer narrowing\n- `i64(value)` / `f64(value)` / `string(value)` / `bool(value)` — explicit conversions\n- `assert(cond, msg?)` / `assertEqual(a, b, msg?)` / `assertThrows(action, msg?)` / `assertPanics(action, msg?)` — testing assertions"
     },
     {
       "heading": "Printing and debugging",

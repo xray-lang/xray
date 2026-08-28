@@ -1,0 +1,18 @@
+// mem.pageAlloc's optional protection argument is represented by two exact
+// native registry rows. Both arities must retain independent call authority.
+import mem
+
+fn run() {
+    var first = mem.pageAlloc(4096)
+    print(first.isNull())
+    print(mem.pageFree(first, 4096))
+
+    // PROT_READ | PROT_WRITE. Keep this overload fixture focused on call
+    // identity; native module constant projection is a separate authority.
+    var second = mem.pageAlloc(4096, 3)
+    print(second.isNull())
+    print(mem.pageFree(second, 4096))
+    print("ok")
+}
+
+run()

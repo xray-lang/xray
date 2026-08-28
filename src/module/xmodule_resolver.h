@@ -72,8 +72,8 @@ typedef struct {
 
     /*
      * Optional stdlib source directory (e.g. "stdlib/").
-     * When non-NULL the resolver also probes for stdlib/<name>/<name>.xr
-     * script extensions. NULL means only native modules are valid.
+     * When non-NULL the resolver probes for a development source path.
+     * Embedded canonical sources remain valid when this is NULL.
      */
     const char *stdlib_path;
 

@@ -5516,6 +5516,118 @@ static bool xicgen_emit_program_direct_i64_call(
     return true;
 }
 
+typedef enum CgNativeTargetLeafStatus {
+    CG_NATIVE_TARGET_LEAF_UNCOVERED = 0,
+    CG_NATIVE_TARGET_LEAF_EXACT,
+    CG_NATIVE_TARGET_LEAF_INVALID,
+} CgNativeTargetLeafStatus;
+
+/* Consume the backend-neutral numeric leaf selected by the verified
+ * TargetPlan.  No import/module/member spelling participates in this
+ * projection: the only C-specific choice is the final numeric leaf-to-symbol
+ * mapping. */
+static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    const char **out_symbol) {
+    if (out_symbol)
+        *out_symbol = NULL;
+    if (!ctx || !function || !value || !out_symbol || value->op != XI_CALL ||
+        value->nargs != 1 || !value->args || !value->args[0])
+        return CG_NATIVE_TARGET_LEAF_UNCOVERED;
+    const XrTargetPlan *target = cg_function_target_plan(ctx, function);
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    if (!target || !cg_value_semantic_id(ctx, function, value, &semantic_value))
+        return CG_NATIVE_TARGET_LEAF_UNCOVERED;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    const XrTargetCallRecord *match = NULL;
+    for (uint32_t i = 0; i < call_count; i++) {
+        const XrTargetCallRecord *candidate = &calls[i];
+        if (candidate->caller_function != function->semantic_plan_function_index ||
+            candidate->result_value != semantic_value ||
+            candidate->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
+            candidate->calling_convention !=
+                XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR)
+            continue;
+        if (match)
+            return CG_NATIVE_TARGET_LEAF_INVALID;
+        match = candidate;
+    }
+    if (!match)
+        return CG_NATIVE_TARGET_LEAF_UNCOVERED;
+    const XrTargetValueRepRecord *result =
+        xr_target_plan_value_rep(target, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        result ? xr_target_plan_machine_rep(target, result->register_rep) : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        result ? xr_target_plan_machine_rep(target, result->memory_rep) : NULL;
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
+        target, function->semantic_plan_function_index, &instruction_count);
+    uint32_t matching_instructions = 0;
+    for (uint32_t i = 0; i < instruction_count; i++)
+        if (instructions[i].opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64 &&
+            instructions[i].immediate_bits == match->id)
+            matching_instructions++;
+    XrCValueEmissionView emission = {0};
+    bool exact = match->id < call_count && match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                 match->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                 match->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                 match->source_export == XR_SEMANTIC_INDEX_NONE && match->argument_count == 0 &&
+                 match->adapter_count == 0 && match->flags == 0 &&
+                 match->result_mode == XR_TARGET_CALL_VALUE &&
+                 match->result_ownership == XR_TARGET_CALL_NONE && result && register_rep &&
+                 memory_rep && register_rep->kind == XR_MACHINE_REP_I64 &&
+                 memory_rep->kind == XR_MACHINE_REP_I64 && matching_instructions == 1 &&
+                 cg_value_emission_view(ctx, function, value, &emission) ==
+                     CG_VALUE_EMISSION_FOUND &&
+                 emission.rep == XR_C_VALUE_REP_I64 && emission.c_type &&
+                 strcmp(emission.c_type, "int64_t") == 0;
+    if (!exact)
+        return CG_NATIVE_TARGET_LEAF_INVALID;
+    switch (match->native_leaf) {
+        case XR_STDLIB_TARGET_LEAF_I64_GETPID:
+            *out_symbol = "xr_os_core_getpid";
+            return CG_NATIVE_TARGET_LEAF_EXACT;
+        default:
+            return CG_NATIVE_TARGET_LEAF_INVALID;
+    }
+}
+
+static bool cg_native_target_leaf_import_is_exact_callee(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *import) {
+    if (!ctx || !function || !import || import->op != XI_IMPORT_REF)
+        return false;
+    bool seen = false;
+    for (uint32_t bi = 0; bi < function->nblocks; bi++) {
+        const XiBlock *block = function->blocks[bi];
+        if (!block)
+            continue;
+        if (block->control == import)
+            return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            for (uint16_t i = 0; i < phi->value.nargs; i++)
+                if (phi->value.args[i] == import)
+                    return false;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *user = block->values[vi];
+            if (!user || user == import)
+                continue;
+            for (uint16_t i = 0; i < user->nargs; i++) {
+                if (user->args[i] != import)
+                    continue;
+                const char *symbol = NULL;
+                if (i != 0 || cg_native_target_leaf_i64_call(ctx, function, user, &symbol) !=
+                                  CG_NATIVE_TARGET_LEAF_EXACT ||
+                    !symbol)
+                    return false;
+                seen = true;
+            }
+        }
+    }
+    return seen;
+}
+
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
@@ -5534,6 +5646,20 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         cg_direct_i64_call_view(ctx, f, v, &direct_i64);
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
         emit_codegen_abort_expr(out);
+        return;
+    }
+    const char *native_leaf_symbol = NULL;
+    CgNativeTargetLeafStatus native_leaf_status =
+        cg_native_target_leaf_i64_call(ctx, f, v, &native_leaf_symbol);
+    if (native_leaf_status == CG_NATIVE_TARGET_LEAF_INVALID) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: XR_TARGET_1001: native target leaf C binding is incomplete\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (native_leaf_status == CG_NATIVE_TARGET_LEAF_EXACT) {
+        fprintf(out, "%s()", native_leaf_symbol);
         return;
     }
     if (!ctx->program_direct_i64_required &&
@@ -13765,16 +13891,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         const char *helper = NULL;
         int64_t int_const = 0;
         bool has_int_const = false;
-        if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "os")) {
-            if (strcmp(field, "platform") == 0)
-                helper = "xrt_os_platform";
-            else if (strcmp(field, "arch") == 0)
-                helper = "xrt_os_arch";
-            else if (strcmp(field, "sep") == 0)
-                helper = "xrt_os_sep";
-            else if (strcmp(field, "eol") == 0)
-                helper = "xrt_os_eol";
-        } else if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "log")) {
+        if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "log")) {
             if (strcmp(field, "DEBUG") == 0) {
                 int_const = 10;
                 has_int_const = true;

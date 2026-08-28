@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 
+ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 2
 KIND = "xray-live-refusal-root-cause"
 GENERATOR = "tests/diff/survey_refusals.py"
@@ -28,7 +29,13 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 SURVEY_LINE = re.compile(
     r"^\[refusal-survey\]\s+owner=([a-z0-9-]+)\s+family=([^\s]+)(?:\s+(.*))?$"
 )
-DIAGNOSTIC = re.compile(r"\b(XR_[A-Z0-9_]+):\s*([^\r\n]+)")
+DIAGNOSTIC_REGISTRY = "contracts/target-machine/diagnostic-codes.toml"
+REGISTRY_CODE = re.compile(r'^id = "(XR_[A-Z]+_[0-9]{4})"$', re.M)
+# This checker replays every build log independently of the generator, so the
+# two must not share code here. What they do share is the governed registry:
+# code identity is decided there, once, and both sides look it up rather than
+# each carrying its own idea of what an XR_-shaped token means.
+DIAGNOSTIC_SHAPE = re.compile(r"\b(XR_[A-Z0-9_]+)(?::[ \t]*|[ \t]+)([^\r\n]+)")
 
 
 def load_module(name: str, path: Path) -> Any:
@@ -122,6 +129,9 @@ def expected_inputs(root: Path, diff: Any) -> dict[str, Any]:
         "cases": rows,
         "divergence_baseline": file_identity(root, divergence_path),
         "refusal_baseline": file_identity(root, refusal_path),
+        # The registry decides which refusals count as carrying a diagnostic, so a
+        # manifest is only replayable against the registry revision that produced it.
+        "diagnostic_registry": file_identity(root, root / DIAGNOSTIC_REGISTRY),
     }
 
 
@@ -141,6 +151,9 @@ def fact_from_detail(family: str, detail: str) -> str:
         ("value-machine", r"\bvalue-machine=(\d+)"),
         ("value-shape", r"\bvalue-shape=(\d+)"),
         ("value-flags", r"\bvalue-flags=(\d+)"),
+        ("definition-rep", r"\bdefinition-rep=(\d+)"),
+        ("use-rep", r"\buse-rep=(\d+)"),
+        ("machine-rep", r"\bmachine-rep=(\d+)"),
         ("parameter-ordinal", r"\bparameter-ordinal=(\d+)"),
         ("storage-mask", r"\bstorage-mask=(\d+)"),
         ("operand-mode", r"\boperand-mode=(\d+)"),
@@ -190,11 +203,27 @@ def refusal_rows(log: bytes) -> list[dict[str, Any]]:
     return rows
 
 
-def diagnostic_row(log: bytes) -> dict[str, str] | None:
-    match = DIAGNOSTIC.search(log.decode("utf-8", errors="backslashreplace"))
-    if match is None:
-        return None
-    return {"code": match.group(1), "message": match.group(2).strip()}
+def registered_diagnostic_codes(root: Path) -> frozenset[str]:
+    """Load the governed diagnostic registry, the sole authority over code identity."""
+    path = root / DIAGNOSTIC_REGISTRY
+    if not path.is_file():
+        raise RuntimeError(f"diagnostic registry missing: {DIAGNOSTIC_REGISTRY}")
+    codes = frozenset(REGISTRY_CODE.findall(path.read_text(encoding="utf-8", errors="strict")))
+    if not codes:
+        raise RuntimeError(f"diagnostic registry declares no codes: {DIAGNOSTIC_REGISTRY}")
+    return codes
+
+
+def diagnostic_row(log: bytes, codes: frozenset[str]) -> dict[str, str] | None:
+    """Report the first registered code in the log, with the message it introduces."""
+    text = log.decode("utf-8", errors="backslashreplace")
+    best: tuple[int, str, str] | None = None
+    for match in DIAGNOSTIC_SHAPE.finditer(text):
+        if match.group(1) not in codes:
+            continue
+        if best is None or match.start() < best[0]:
+            best = (match.start(), match.group(1), match.group(2).strip())
+    return None if best is None else {"code": best[1], "message": best[2]}
 
 
 def missing_evidence_gap(diagnostic: dict[str, str] | None) -> dict[str, str | None]:
@@ -233,7 +262,9 @@ def exact_keys(value: Any, keys: set[str], where: str, errors: list[str]) -> boo
     return True
 
 
-def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
+def validate_core(
+    manifest: dict[str, Any], manifest_path: Path, codes: frozenset[str]
+) -> list[str]:
     errors: list[str] = []
     top = {
         "schema", "kind", "generator", "status", "identity", "coverage", "measurement",
@@ -335,7 +366,7 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
             errors.append(f"{where} log identity mismatch")
             continue
         reconstructed = refusal_rows(data)
-        reconstructed_diagnostic = diagnostic_row(data)
+        reconstructed_diagnostic = diagnostic_row(data, codes)
         if reconstructed_diagnostic != row.get("diagnostic"):
             errors.append(f"{where} diagnostic does not match raw log")
         if reconstructed != row.get("refusals"):
@@ -435,7 +466,8 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
 
 
 def validate_current(root: Path, build: Path, manifest_path: Path, manifest: dict[str, Any]) -> list[str]:
-    errors = validate_core(manifest, manifest_path)
+    codes = registered_diagnostic_codes(root)
+    errors = validate_core(manifest, manifest_path, codes)
     diff = load_module("xray_live_refusal_diff_owner", root / "tests/diff/run_backend_diff.py")
     try:
         current_inputs = expected_inputs(root, diff)
@@ -483,6 +515,11 @@ def validate_current(root: Path, build: Path, manifest_path: Path, manifest: dic
 
 
 def self_test() -> int:
+    codes = registered_diagnostic_codes(ROOT)
+    for required in ("XR_TARGET_1000", "XR_TARGET_1001", "XR_CORO_4003"):
+        if required not in codes:
+            print(f"diagnostic registry does not carry {required}", file=sys.stderr)
+            return 1
     decision_source = (
         "[refusal-survey] owner=target-plan-builder family=calls "
         "XR_TARGET_1003: direct-local argument contract needs unsupported storage or ownership "
@@ -590,8 +627,20 @@ def self_test() -> int:
             },
         }
         path = base / "evidence.json"
-        if validate_core(manifest, path):
+        if validate_core(manifest, path, codes):
             print("self-test rejected valid fixture", file=sys.stderr)
+            return 1
+        alternate_root = base / "alternate-root"
+        alternate_registry = alternate_root / DIAGNOSTIC_REGISTRY
+        alternate_registry.parent.mkdir(parents=True)
+        alternate_registry.write_text(
+            '[[code]]\nid = "XR_TARGET_1000"\nname = "authority"\n'
+            'message = "authority was not produced"\n',
+            encoding="utf-8",
+        )
+        alternate_codes = registered_diagnostic_codes(alternate_root)
+        if not validate_core(manifest, path, alternate_codes):
+            print("self-test ignored the selected root diagnostic registry", file=sys.stderr)
             return 1
         mutations = []
         bad = copy.deepcopy(manifest); bad["schema"] = 1; mutations.append(bad)
@@ -611,22 +660,22 @@ def self_test() -> int:
             "evidence_gap": missing_evidence_gap(bad["results"][0]["diagnostic"]),
         }); mutations.append(bad)
         for index, mutation in enumerate(mutations):
-            if not validate_core(mutation, path):
+            if not validate_core(mutation, path, codes):
                 print(f"self-test mutation {index} was accepted", file=sys.stderr)
                 return 1
         log_path.write_bytes(log + b"mutation\n")
-        if not validate_core(manifest, path):
+        if not validate_core(manifest, path, codes):
             print("self-test log mutation was accepted", file=sys.stderr)
             return 1
         missing_log = b"Error: XR_TARGET_1000: authority was not produced\n"
         log_path.write_bytes(missing_log)
-        gap = missing_evidence_gap(diagnostic_row(missing_log))
+        gap = missing_evidence_gap(diagnostic_row(missing_log, codes))
         missing = copy.deepcopy(manifest)
         missing["status"] = "failed"
         missing["results"][0].update({
             "first_refusal": None,
             "refusals": [],
-            "diagnostic": diagnostic_row(missing_log),
+            "diagnostic": diagnostic_row(missing_log, codes),
             "build_log": {
                 "path": "evidence.json.logs/0000.log",
                 "sha256": digest_bytes(missing_log),
@@ -644,11 +693,75 @@ def self_test() -> int:
             "refusal_event_count": 0,
             "root_cause_count": 0,
         })
-        missing_errors = validate_core(missing, path)
+        missing_errors = validate_core(missing, path, codes)
         if not any("missing source-emitted refusal evidence" in error for error in missing_errors) \
                 or any("refusal rows do not match raw log" in error for error in missing_errors):
             print("self-test did not classify missing source evidence precisely", file=sys.stderr)
             return 1
+    colon_free_log = (
+        b"Error: Xi pipeline failed at ownership: XR_CORO_4003 func '<main>': "
+        b"state 1 error continuation is not derivable\n"
+    )
+    if diagnostic_row(colon_free_log, codes) != {
+        "code": "XR_CORO_4003",
+        "message": "func '<main>': state 1 error continuation is not derivable",
+    }:
+        print("self-test lost a space-separated diagnostic code", file=sys.stderr)
+        return 1
+    materialization_source = (
+        "[refusal-survey] owner=aot-representation-refinement "
+        "family=refinement_materialization XR_TARGET_1006: materialized AOT value "
+        "representation does not match verified refinement authority "
+        "definer-opcode=4 use-opcode=17 definition-rep=3 use-rep=0 machine-rep=0"
+    )
+    materialization_log = (
+        materialization_source + "\n"
+        "Error: XR_TARGET_1006: module representation materialization failed for 'm': "
+        "XR_AOT_REFINEMENT_REPRESENTATION record=0 value=5 operation=6\n"
+    ).encode("utf-8")
+    materialization_rows = refusal_rows(materialization_log)
+    expected_materialization_fact = (
+        "refinement_materialization|XR_TARGET_1006: materialized AOT value representation "
+        "does not match verified refinement authority|definer-opcode=4|use-opcode=17|"
+        "definition-rep=3|use-rep=0|machine-rep=0"
+    )
+    if len(materialization_rows) != 1 \
+            or materialization_rows[0]["owner"] != "aot-representation-refinement" \
+            or materialization_rows[0]["family"] != "refinement_materialization" \
+            or materialization_rows[0]["blocking_fact"] != expected_materialization_fact \
+            or diagnostic_row(materialization_log, codes) != {
+                "code": "XR_TARGET_1006",
+                "message": (
+                    "materialized AOT value representation does not match verified refinement "
+                    "authority definer-opcode=4 use-opcode=17 definition-rep=3 use-rep=0 "
+                    "machine-rep=0"
+                ),
+            }:
+        print("self-test lost materialization refusal evidence", file=sys.stderr)
+        return 1
+    # An internal enumerator name is XR_-shaped but carries no registered
+    # identity, so a refusal that names one still owes a stable diagnostic.
+    unregistered_log = (
+        b"Error: module representation materialization failed for 'm': "
+        b"XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE record=0 value=5 operation=6\n"
+    )
+    if "XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE" in codes:
+        print("registry unexpectedly carries an enumerator name", file=sys.stderr)
+        return 1
+    if diagnostic_row(unregistered_log, codes) is not None:
+        print("self-test read an unregistered name as a code", file=sys.stderr)
+        return 1
+    # Reach the uncoded classification through the log reader, not by passing
+    # None: that shortcut leaves the lookup untested on this path.
+    uncoded_log = b"Error: Xi pipeline failed at ownership: coroutine lowering failed closed\n"
+    if diagnostic_row(uncoded_log, codes) is not None \
+            or missing_evidence_gap(diagnostic_row(uncoded_log, codes)) != {
+        "classification": "opaque-refusal-without-structured-diagnostic",
+        "diagnostic_code": None,
+        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
+    }:
+        print("self-test misread an uncoded refusal", file=sys.stderr)
+        return 1
     print("live refusal manifest injection self-test: PASS")
     return 0
 

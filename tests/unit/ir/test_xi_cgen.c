@@ -66,6 +66,7 @@ static int tests_failed = 0;
 static const char *g_test_filter = NULL;
 static const char *g_string_runes_c_output = NULL;
 static const char *g_rune_to_string_c_output = NULL;
+static const char *g_native_target_leaf_c_output = NULL;
 
 typedef struct TestAotPlan {
     XaotBundle bundle;
@@ -2851,32 +2852,6 @@ TEST(cgen_panicinfo_constructor_token_emits_no_local) {
     xi_func_free(ir);
 }
 
-TEST(cgen_static_os_module_namespace_fields_emit_no_shared_locals) {
-    const char *src = "import os\n"
-                      "fn describe() -> string { return os.platform + os.arch }\n"
-                      "print(describe())\n";
-    XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "static os module namespace fixture should compile");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL && !had_error,
-                 "static os module namespace fixture should generate");
-
-    const char *describe = find_static_function_definition(code, "test_describe_");
-    TEST_REQUIRE(describe != NULL, "static os namespace function should emit");
-    const char *describe_end = next_static_after(describe);
-    TEST_REQUIRE(count_between(describe, describe_end, " = xrt_shared_") == 0,
-                 "direct os field loads must not materialize their module namespace");
-    TEST_REQUIRE(contains_between(describe, describe_end, "xrt_os_platform()") &&
-                     contains_between(describe, describe_end, "xrt_os_arch()"),
-                 "os field helpers must remain emitted");
-
-    printf("  Generated direct os module namespace %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
 TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
     const char *src = "import time\n"
                       "fn stamp() -> i64 { return time.nanos() }\n"
@@ -3007,6 +2982,68 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     TEST_REQUIRE(contains(code, "xrt_io_file_close("), "direct stdlib call must remain emitted");
 
     printf("  Generated direct stdlib import token elision %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_native_target_leaf_consumes_numeric_target_authority) {
+    XrType int_type = {
+        .kind = XR_KIND_INT,
+        .id = 162,
+        .scalar_rep = XR_NATIVE_I64,
+        .frozen = true,
+    };
+    XrType function_type = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 163,
+        .frozen = true,
+        .function = {
+            .return_type = &int_type,
+            .throw_effect = XR_FN_EFFECT_NO_THROW,
+        },
+    };
+    XiFunc *ir = xi_func_new("native_target_leaf", &int_type);
+    XiBlock *entry = ir ? xi_block_new(ir) : NULL;
+    TEST_REQUIRE(ir != NULL && entry != NULL, "native target leaf fixture allocated");
+    XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(ir, sizeof(*ref));
+    TEST_REQUIRE(ref != NULL, "native target leaf import metadata allocated");
+    *ref = (XiImportRef) {
+        .module_path = "os",
+        .member_name = "__getpid",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    XiValue *import = xi_value_new(ir, entry, XI_IMPORT_REF, &function_type, 0);
+    XiValue *call = xi_value_new(ir, entry, XI_CALL, &int_type, 1);
+    TEST_REQUIRE(import != NULL && call != NULL, "native target leaf call allocated");
+    import->aux = ref;
+    call->args[0] = import;
+    xi_block_set_return(entry, call);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "native_target_leaf", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "native target leaf fixture should generate from TargetPlan authority");
+    TEST_REQUIRE(contains(code, "xr_os_core_getpid()"),
+                 "numeric target leaf must project to the scalar OS core symbol");
+    TEST_REQUIRE(!contains(code, "xrt_os_getpid("),
+                 "native target leaf must not use the tagged legacy AOT wrapper");
+    char import_decl[64];
+    snprintf(import_decl, sizeof(import_decl), "XrValue v%u =", (unsigned) import->id);
+    TEST_REQUIRE(!contains(code, import_decl),
+                 "native target leaf import token must not materialize a C local");
+
+    if (g_native_target_leaf_c_output) {
+        FILE *generated = fopen(g_native_target_leaf_c_output, "wb");
+        size_t length = strlen(code);
+        TEST_REQUIRE(generated != NULL, "native target leaf C output should open");
+        TEST_REQUIRE(fwrite(code, 1, length, generated) == length && fclose(generated) == 0,
+                     "native target leaf C output should be written exactly");
+    }
+
+    printf("  Generated numeric native target leaf %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -14796,6 +14833,13 @@ int main(int argc, char **argv) {
 
     g_test_filter = getenv("XRAY_TEST_FILTER");
     setup();
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "native-target-leaf-emission") == 0) {
+        g_native_target_leaf_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_native_target_leaf_consumes_numeric_target_authority();
+        teardown();
+        puts("Native target leaf CGen tests passed");
+        return tests_failed > 0 ? 1 : 0;
+    }
     if ((argc == 2 || argc == 3) && strcmp(argv[1], "string-runes-emission") == 0) {
         g_string_runes_c_output = argc == 3 ? argv[2] : NULL;
         run_cgen_string_runes_consumes_immutable_emission_recipe();
@@ -14849,8 +14893,8 @@ int main(int argc, char **argv) {
     run_cgen_native_unsigned_interpolation_consumes_inner_without_box_local();
     run_cgen_panicinfo_constructor_token_emits_no_local();
     run_cgen_native_time_module_scalar_call_emits_no_shared_local();
-    run_cgen_static_os_module_namespace_fields_emit_no_shared_locals();
     run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
+    run_cgen_native_target_leaf_consumes_numeric_target_authority();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
     run_cgen_string_runes_consumes_immutable_emission_recipe();
     run_cgen_string_slice_range_consumes_immutable_emission_recipe();

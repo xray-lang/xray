@@ -18,6 +18,12 @@
 #include <stddef.h>
 #include <string.h>
 
+#ifdef XR_OS_WINDOWS
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
 typedef const char *(*XrOsCoreGetenvFn)(void *ctx, const char *name);
 typedef const char *(*XrOsCoreStringFn)(void *ctx);
 typedef bool (*XrOsCoreEnvEntryFn)(void *ctx, const char *key, size_t key_len, const char *value,
@@ -87,6 +93,14 @@ static inline const char *xr_os_core_eol(void) {
 #endif
 }
 
+static inline int64_t xr_os_core_getpid(void) {
+#ifdef XR_OS_WINDOWS
+    return (int64_t) _getpid();
+#else
+    return (int64_t) getpid();
+#endif
+}
+
 static inline bool xr_os_core_has_env_value(const char *value) {
     return value && value[0] != '\0';
 }
@@ -111,35 +125,6 @@ static inline const char *xr_os_core_tmpdir(XrOsCoreGetenvFn getenv_fn, void *ct
 #else
     return "/tmp";
 #endif
-}
-
-static inline const char *xr_os_core_username(XrOsCoreStringFn system_username_fn, void *system_ctx,
-                                              XrOsCoreGetenvFn getenv_fn, void *env_ctx) {
-    if (system_username_fn) {
-        const char *user = system_username_fn(system_ctx);
-        if (xr_os_core_has_env_value(user))
-            return user;
-    }
-
-    if (!getenv_fn)
-        return NULL;
-
-    const char *candidate = NULL;
-#ifdef XR_OS_WINDOWS
-    candidate = getenv_fn(env_ctx, "USERNAME");
-    if (xr_os_core_has_env_value(candidate))
-        return candidate;
-#endif
-
-    candidate = getenv_fn(env_ctx, "USER");
-    if (xr_os_core_has_env_value(candidate))
-        return candidate;
-
-    candidate = getenv_fn(env_ctx, "LOGNAME");
-    if (xr_os_core_has_env_value(candidate))
-        return candidate;
-
-    return NULL;
 }
 
 static inline const char *xr_os_core_homedir(XrOsCoreGetenvFn getenv_fn, void *env_ctx,

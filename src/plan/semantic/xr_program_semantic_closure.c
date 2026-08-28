@@ -498,6 +498,8 @@ bool xr_program_semantic_closure_add_dependency(XrProgramSemanticClosure *closur
     begin_mutation(closure);
     bool selective =
         closure && closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    bool source_graph =
+        closure && closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH;
     bool selective_input =
         input && input->kind == XR_PROGRAM_SEMANTIC_DEPENDENCY_SELECTIVE_FUNCTION_IMPORT &&
         locator_is_valid(input->import_locator) &&
@@ -510,11 +512,19 @@ bool xr_program_semantic_closure_add_dependency(XrProgramSemanticClosure *closur
         locator_is_empty(input->import_locator) && stable_id_is_zero(input->exported_declaration) &&
         stable_id_is_zero(input->exported_function) && stable_id_is_zero(input->resolver_binding) &&
         memcmp(input->reserved, (uint8_t[7]) {0}, sizeof(input->reserved)) == 0;
+    bool source_graph_input =
+        input && input->kind == XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE &&
+        locator_is_valid(input->import_locator) &&
+        stable_id_is_zero(input->exported_declaration) &&
+        stable_id_is_zero(input->exported_function) &&
+        !stable_id_is_zero(input->resolver_binding) &&
+        memcmp(input->reserved, (uint8_t[7]) {0}, sizeof(input->reserved)) == 0;
     if (!collecting(closure) || !input || stable_id_is_zero(input->source_module) ||
         stable_id_is_zero(input->dependency_module) ||
         stable_id_equal(input->source_module, input->dependency_module) ||
         fingerprint_is_zero(input->contract_fingerprint) ||
-        (selective ? !selective_input : !opaque_input))
+        (selective ? !selective_input
+                   : source_graph ? !source_graph_input : !opaque_input))
         return fail(error, error_size, "XR_SEM_0019", "program dependency authority is incomplete");
     for (uint32_t i = 0; i < closure->dependency_count; i++) {
         const XrProgramSemanticDependencyRecord *row = &closure->dependencies[i];
@@ -886,7 +896,7 @@ static void canonicalize_tables(XrProgramSemanticClosure *closure) {
 
 static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v7\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v8\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);

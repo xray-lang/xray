@@ -76,6 +76,19 @@ def registry_modules(root: Path) -> dict[str, str]:
     return {match.group("name"): match.group("factory") for match in REGISTRY_ENTRY_RE.finditer(text)}
 
 
+def source_modules(root: Path) -> set[str]:
+    stdlib_root = root / "stdlib"
+    return {
+        path.name
+        for path in stdlib_root.iterdir()
+        if path.is_dir() and (path / f"{path.name}.xr").is_file()
+    }
+
+
+def loadable_modules(root: Path) -> set[str]:
+    return set(registry_modules(root)) | source_modules(root)
+
+
 def load_stdlibgen(root: Path):
     module_path = root / "tools/stdlibgen/stdlibgen.py"
     spec = importlib.util.spec_from_file_location("xray_stdlibgen_for_boundary", module_path)

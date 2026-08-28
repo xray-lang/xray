@@ -1,5 +1,5 @@
 [package]
-name = "c-only-amalgam-smoke"
+name = "tests/c-only-amalgam-smoke"
 version = "1.0.0"
 license = "MIT"
 main = "main.xr"
