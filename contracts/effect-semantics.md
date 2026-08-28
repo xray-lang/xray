@@ -529,7 +529,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c ebb76758144c92a2ca
 anchor-sha256: src/runtime/value/xtype.h d4084248d406b13acd38b2f8dfbbd593eeda7d8868b6ca12bb301e9e2c740ba2
 anchor-sha256: src/ir/xi.h 1b027ffe7038d84bef2ff1b1699f9776f6beda2df4fb03154bd3fd4eeac25647
 anchor-sha256: src/ir/xi_lower.c 5c83d887833b6197c71328aa2f126d4a18bd8dfc318f73cdc9e745fd2b4408e7
-anchor-sha256: src/app/cli/xcmd_verify.c 913e7aaec8314dcb89872b935568445bde529d356e2107dd138be81da1196993
+anchor-sha256: src/app/cli/xcmd_verify.c 4d806bacb7a94efeba2d3d05e1ef657596fb7cbac2f315aff0d40f0e4de49629
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 8edabf61c929ecf8b65d6b0da31dc9c073e1cccbdac69444394a50539bf5e600
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1

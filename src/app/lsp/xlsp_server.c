@@ -424,10 +424,6 @@ void xlsp_server_free(XrLspServer *server) {
 
     xlsp_transport_free(server->transport);
 
-    /* Before the analyzer goes: it holds a borrowed pointer into this graph,
-     * and the graph outlives a single parse so nothing else would free it. */
-    xlsp_release_module_graph(server);
-
     if (server->workspace_analyzer) {
         xa_analyzer_free(server->workspace_analyzer);
     }

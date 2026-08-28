@@ -77,7 +77,6 @@ XR_FUNC void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server);
  * analyzer's borrowed pointer to it first. Call before tearing the analyzer
  * down: the graph outlives a single parse on purpose, so nothing else frees
  * it at shutdown. */
-XR_FUNC void xlsp_release_module_graph(XrLspServer *server);
 
 // Rename (moved to xlsp_rename.h / xlsp_rename.c)
 
