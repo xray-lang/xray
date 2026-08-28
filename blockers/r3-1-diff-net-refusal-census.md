@@ -5,7 +5,7 @@
 - **冻结起点**: `xray@00f665c5c`，tree `afe293b71`
 - **分支**: `work/1-diff-net-unseal-00f665c5c`
 
-本文是普查报告，不是阻塞单。三份阻塞单单列在 `blockers/r3-1-*.md`。
+本文是普查报告，不是阻塞单。四份阻塞单单列在 `blockers/r3-1-*.md`。
 
 ---
 
@@ -394,6 +394,7 @@ Coverage: 514 not comparable, 510 listed.
 | **能构建但两端输出分歧（真分歧）** | **2** |
 
 那 2 条真分歧稳定复现 3/3，单列为 `blockers/r3-1-embed-lane-stdlib-module-not-bundled.md`。
+18 条解封的同样各复跑 3 次，**18/18 全部 3/3 稳定 PASS**。
 **这正是差分网存在的理由**：它们被登记成"不可比"埋了下去，一解封就露出来。
 
 48 条的首次拒绝只有 9 族，且 44 条是 `vm too:` ——
@@ -419,9 +420,47 @@ Coverage: 514 not comparable, 510 listed.
 同一份代码在 `xmodule_graph.c:823-826` 的 preload 路径上是**做对了**的（正确还原成
 `namespace_id`），bundle 路径丢了这层映射——又是一处"同一事实两处实现、只改一侧就漂移"。
 
+### 4.2 删行之前必须查的一件事：五个 lane 共享同一份 refusal baseline
+
+`run_backend_diff.py:821` 从 divergence baseline 的文件名派生 refusal baseline
+（`<stem>_not_comparable.txt`），而 `backend_diff_optimized`、`backend_diff_deterministic`、
+三个 `task190_*_backend_diff` **都没有设 `XRAY_DIFF_BASELINE`**——它们全部落到默认的
+`known_failures.txt`，因而**共读 `known_failures_not_comparable.txt` 这一份**。
+
+它们各自跑不同的用例清单、而且用**不同的编译策略**
+（`backend_diff_optimized` 是 `XRAY_AOT_TEST_OPT=2` + `XRAY_DIFF_XI_OPT=vm=full,aot=full`）。
+所以：**在默认档下能构建、因而被删掉的一行，在 `-O2 + full` 档下可能仍然拒绝**，
+那条删除就会在那个 lane 上变成一条 `Cases that stopped building` 的新红。
+
+本次删掉的 5 条里有 2 条出现在别的 lane 的 manifest 中：
+
+```
+semantics/optimizer/pass_ifconv_select_shape.xr      → optimizer_cases.txt
+semantics/stdlib/mem_from_address_shared_core.xr     → task190_mem_cases.txt
+```
+
+**已在各自 lane 的完整配置下实测，均 PASS（各 2/2），删除安全。** 三个 `task190_*`
+lane 的全量运行也确认没有 `Cases that stopped building`：
+
+```
+task190_mem              1 passed, 0 failed,  4 refused, 0 skipped
+task190_extern           5 passed, 0 failed,  4 refused, 0 skipped
+task190_layout           2 passed, 0 failed,  1 refused, 0 skipped
+backend_diff_optimized  50 passed, 0 failed,  9 refused, 0 skipped
+backend_diff_determin.   1 passed, 0 failed, 17 refused, 0 skipped
+```
+
+五个 lane **全部没有 `Cases that stopped building`，也没有 `New differential failures`**。
+`backend_diff_optimized` 是其中唯一用不同编译策略的（`-O2` + `XI_OPT=vm=full,aot=full`），
+它的 50/59 通过率也是这批 lane 里最高的，与 §3.5 里 `semantics/optimizer` 是唯一健康类别
+的观察一致。
+
+**下一个删行的人要照做这一步**：先 `grep` 五份 manifest 看这一行有没有被别的 lane 引用，
+有的话在那个 lane 的环境变量下单跑一次。默认档绿不代表 `-O2 + full` 档绿。
+
 ---
 
-## 5. 三份阻塞单
+## 5. 四份阻塞单
 
 | 文件 | Requested owner | 覆盖条数 |
 | --- | --- | --- |
@@ -443,8 +482,15 @@ Coverage: 514 not comparable, 510 listed.
 
 ## 6. 下游影响（改动这两份清单必然波及，接手方需知）
 
-1. **`scripts/check_live_refusal_manifest.py:131`** 把这两份清单的 sha256 + size 写进 manifest。
-   本次改动使已生成的 live refusal manifest 失效，需重跑 `tests/diff/survey_refusals.py` 重生成。
+1. **`scripts/check_live_refusal_manifest.py:131`** 把这两份清单的 sha256 + size 写进 manifest，
+   所以本次改动让已生成的 live refusal manifest 失效，需重跑 `tests/diff/survey_refusals.py` 重生成。
+
+   **但没有任何 gate 在守它**：`survey_refusals.py` / `check_live_refusal_manifest.py` /
+   `task289_assertion_cases.txt` 在 `CMakeLists.txt`、`.github/workflows/`、`*.cmake`、`*.sh`
+   里**零引用**（已 grep 确认），ctest 的 498 项里也没有对应条目。
+   所以这条影响是文档性的，不会让任何测试变红——它同时也是 8 号那份"四件孤儿资产写完没人调用"
+   结论的又一个实例：**这里有一份能算出准确证据的收集器，和一个会检查它的校验器，
+   两个都没接线**。
 2. **`analysis/a-stdlib-public-native-migration.{json,md}`** 有三处按**行号**引用
    `known_failures_not_comparable.txt:426`。本次重排注释块使这三处指向错误的用例，需要重指。
 3. **`contracts/differential-protocol.md:42-43`** 硬编码 `564 refusals` / `68`。
