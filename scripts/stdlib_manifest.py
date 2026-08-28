@@ -116,7 +116,7 @@ def def_public_symbols(root: Path) -> dict[str, set[str]]:
     symbols: dict[str, set[str]] = {}
     for part in parts:
         for entry in part:
-            if getattr(entry, "is_internal", False):
+            if entry.is_internal:
                 continue
             if hasattr(entry, "type_name"):
                 name = f"{entry.type_name}.{entry.name}"
