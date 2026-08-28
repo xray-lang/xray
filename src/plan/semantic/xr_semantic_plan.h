@@ -18,6 +18,7 @@
 
 #include "xr_semantic_ids.h"
 #include "../../shared/xr_assertion_plan.h"
+#include "../../shared/xr_print_plan.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -94,6 +95,7 @@ typedef enum XrSemanticIntrinsicKind {
     XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_NEXT = 23,
     XR_SEM_INTRINSIC_ASSERTION = 24,
     XR_SEM_INTRINSIC_NATIVE_TARGET_LEAF_SCALAR_CALL = 25,
+    XR_SEM_INTRINSIC_OUTPUT = 26,
     XR_SEM_INTRINSIC_COUNT,
 } XrSemanticIntrinsicKind;
 
@@ -111,6 +113,19 @@ typedef enum XrSemanticAssertionEvidenceSlot {
     XR_SEM_ASSERT_EVIDENCE_CAPABILITIES = 7,
     XR_SEM_ASSERT_EVIDENCE_COUNT = 8,
 } XrSemanticAssertionEvidenceSlot;
+
+/* XI_PRINT projects XrPrintPlan into the generic evidence slots the same way.
+ * The group's framing is recorded, not each operand's, because the plan owns
+ * that decision. */
+typedef enum XrSemanticPrintEvidenceSlot {
+    XR_SEM_PRINT_EVIDENCE_SCHEMA = 0,
+    XR_SEM_PRINT_EVIDENCE_BUILTIN_ID = 1,
+    XR_SEM_PRINT_EVIDENCE_SEPARATOR = 2,
+    XR_SEM_PRINT_EVIDENCE_TERMINATOR = 3,
+    XR_SEM_PRINT_EVIDENCE_TARGET = 4,
+    XR_SEM_PRINT_EVIDENCE_CAPABILITIES = 5,
+    XR_SEM_PRINT_EVIDENCE_COUNT = 6,
+} XrSemanticPrintEvidenceSlot;
 
 typedef enum XrSemanticArrayHofKind {
     XR_SEM_ARRAY_HOF_NONE = 0,
@@ -484,6 +499,8 @@ typedef struct XrSemanticOperationRecord {
 
 XR_FUNC bool xr_semantic_operation_assertion_plan(const XrSemanticOperationRecord *operation,
                                                   XrAssertionPlan *out);
+XR_FUNC bool xr_semantic_operation_print_plan(const XrSemanticOperationRecord *operation,
+                                              XrPrintPlan *out);
 
 typedef struct XrSemanticEdgeRecord {
     XrStableId id;
