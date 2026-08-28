@@ -1,6 +1,6 @@
 version = 1
 
 [[function]]
-symbol = "xray_no_alloc_compress_gzip_reject"
+symbol = "xray_no_alloc_compress_header_judgements_ok"
 scope = "semantic"
 requires = ["no_semantic_alloc"]

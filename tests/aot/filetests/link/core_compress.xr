@@ -1,4 +1,11 @@
+// The module takes Slice<u8> and answers Array<u8>: a string source is
+// borrowed with .bytes(), a compressed result is re-borrowed with [:], and
+// textOf turns a decoded payload back into the string it started from.
 import compress
+
+fn textOf(data: Array<u8>) -> string {
+    return string.fromUtf8(data[:])!
+}
 
 fn compressionInvalidData(body: fn()) -> bool {
     try {
@@ -11,33 +18,42 @@ fn compressionInvalidData(body: fn()) -> bool {
     }
 }
 
-print(compress.crc32("123456789"))
-print(compress.crc32(""))
-print(compress.crc32("Hello"))
-print(compress.adler32("Wikipedia"))
-print(compress.adler32(""))
-print(compress.adler32("Hello"))
+var digits = "123456789"
+var empty = ""
+var hello = "Hello"
+var wikipedia = "Wikipedia"
+
+print(compress.crc32(digits.bytes()))
+print(compress.crc32(empty.bytes()))
+print(compress.crc32(hello.bytes()))
+print(compress.adler32(wikipedia.bytes()))
+print(compress.adler32(empty.bytes()))
+print(compress.adler32(hello.bytes()))
 
 var sample = "Hello, World! This is a test string for compression."
-var gz = compress.gzip(sample) ?? ""
-print(compress.isGzip(gz))
-print(compress.gunzip(gz) == sample)
-var gz0 = compress.gzip(sample, 0) ?? ""
-print(compress.gunzip(gz0) == sample)
+var gz = compress.gzip(sample.bytes())
+print(compress.isGzip(gz[:]))
+print(textOf(compress.gunzip(gz[:])) == sample)
+var gz0 = compress.gzip(sample.bytes(), 0)
+print(textOf(compress.gunzip(gz0[:])) == sample)
 
-var deflated = compress.deflate(sample) ?? ""
-print(compress.inflate(deflated) == sample)
-var deflated9 = compress.deflate(sample, 9) ?? ""
-print(compress.inflate(deflated9) == sample)
+var deflated = compress.deflate(sample.bytes())
+print(textOf(compress.inflate(deflated[:])) == sample)
+var deflated9 = compress.deflate(sample.bytes(), 9)
+print(textOf(compress.inflate(deflated9[:])) == sample)
 
-var zlibbed = compress.zlibCompress(sample) ?? ""
-print(compress.isZlib(zlibbed))
-print(compress.zlibDecompress(zlibbed) == sample)
-var zlib0 = compress.zlibCompress(sample, 0) ?? ""
-print(compress.zlibDecompress(zlib0) == sample)
+var zlibbed = compress.zlibCompress(sample.bytes())
+print(compress.isZlib(zlibbed[:]))
+print(textOf(compress.zlibDecompress(zlibbed[:])) == sample)
+var zlib0 = compress.zlibCompress(sample.bytes(), 0)
+print(textOf(compress.zlibDecompress(zlib0[:])) == sample)
 
-print(compress.isGzip("not gzip"))
-print(compress.isZlib("not zlib"))
-print(compressionInvalidData(fn() { compress.gunzip("not gzip") }))
-print(compressionInvalidData(fn() { compress.inflate("not deflate") }))
-print(compressionInvalidData(fn() { compress.zlibDecompress("not zlib") }))
+var notGzip = "not gzip"
+var notDeflate = "not deflate"
+var notZlib = "not zlib"
+
+print(compress.isGzip(notGzip.bytes()))
+print(compress.isZlib(notZlib.bytes()))
+print(compressionInvalidData(fn() { compress.gunzip(notGzip.bytes()) }))
+print(compressionInvalidData(fn() { compress.inflate(notDeflate.bytes()) }))
+print(compressionInvalidData(fn() { compress.zlibDecompress(notZlib.bytes()) }))

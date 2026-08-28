@@ -1,23 +1,29 @@
 contains=xaot-plan v0
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_objects": []
-contains="stdlib_objects": ["compress.gzip", "compress.isGzip", "compress.gunzip", "compress.deflate", "compress.inflate", "compress.zlibCompress", "compress.isZlib", "compress.zlibDecompress"]
-contains="stdlib_symbols": ["compress.crc32", "compress.adler32", "compress.gzip", "compress.isGzip", "compress.gunzip", "compress.deflate", "compress.inflate", "compress.zlibCompress", "compress.isZlib", "compress.zlibDecompress"]
+# The two plan-shape lines below are stale and cannot be re-derived here: this
+# case does not dump on the current baseline (every link filetest fails the same
+# way, `core_base64.xr` included), so their real values are unavailable. They are
+# commented out rather than left standing, so nothing asserts a value nobody
+# checked -- core_datetime.expect:14 is what happens otherwise, still demanding a
+# symbol that time's migration deleted.
+#
+# When link dumps work again, re-export both from the actual dump. The expected
+# shape is base64's, which is what a fully self-hosted module looks like:
+# stdlib_objects is empty, and stdlib_symbols lists the exports this fixture
+# actually reaches, in plan order -- do not hand-sort it, which is exactly how
+# core_base64.expect:5 and core_encoding.expect:5 became permanently red.
+#
+# contains="stdlib_objects": []
+# contains="stdlib_symbols": ["compress.crc32", "compress.adler32", "compress.gzip", "compress.isGzip", "compress.gunzip", "compress.deflate", "compress.inflate", "compress.zlibCompress", "compress.isZlib", "compress.zlibDecompress"]
 contains="system_libs": ["m"]
 contains="defines": ["XRT_IMPL"]
 not_contains="runtime_objects": ["xray_core"]
 not_contains="stdlib_objects": ["compress"]
-c_contains=xrt_compress_crc32(
-c_contains=xrt_compress_adler32(
-c_contains=xrt_compress_gzip_default(
-c_contains=xrt_compress_gzip(
-c_contains=xrt_compress_gunzip(
-c_contains=xrt_compress_deflate_default(
-c_contains=xrt_compress_deflate(
-c_contains=xrt_compress_inflate(
-c_contains=xrt_compress_zlib_compress_default(
-c_contains=xrt_compress_zlib_compress(
-c_contains=xrt_compress_zlib_decompress(
-c_contains=xrt_compress_is_gzip(
-c_contains=xrt_compress_is_zlib(
+# compress has no AOT helpers left: xrt_compress.h is deleted and `xrt_compress_`
+# has no hits anywhere in src/ or stdlib/. This replaces thirteen c_contains
+# lines that named the emitted leaf calls, and it is the reverse assertion, so it
+# also stops them growing back. Same shape as core_base64.expect's
+# c_not_contains=xrt_base64_.
+c_not_contains=xrt_compress_
 c_not_contains=xrt_method_

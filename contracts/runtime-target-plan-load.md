@@ -435,7 +435,7 @@ roots, or general product activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 1cf11ea13e8dc488227f8a537bef196cd0ce212eeebcfb6507a248482fe120e6
+anchor-sha256: CMakeLists.txt 3c26de730f8ac7afa5f1bf6a9099f8d13445014c53f8522f3caba1b7366cbd9e
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
@@ -477,7 +477,7 @@ anchor-sha256: src/runtime/xr_runtime_api.c 8c21c572ff8621d6c9ab53e464991459c4d7
 anchor-sha256: src/app/cli/xcmd_run.c 4bbdfcfe6426abc90b411dd271bb849297a930e3c6364692225d8ba08e1c2f98
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
-anchor-sha256: tests/unit/plan/test_target_plan.c 47bd5b9d388ea56f4d7d2d7fdf79dfc871b35df46792fc4fec7f30af1617a9cf
+anchor-sha256: tests/unit/plan/test_target_plan.c 73c23de544075aa56e8cf574a191407d4a721809ebb245223d0e7dc826cd0d3a
 anchor-sha256: tests/unit/plan/test_xtp_format.c 795c26fae371fc7b022c36816777cc5fc4f3b80f8b860ba5f4f6ffbbe35e3625
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 49f4208a4f0a55e4b13e204af4fd3dbf51a66702bac20ae34a6dec2a1f1c059b
