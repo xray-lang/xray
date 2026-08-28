@@ -517,6 +517,23 @@ static bool op_is_call(uint16_t op) {
 static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv);
 static XiFunc *arc_resolve_namespace_method_callee(const XiFunc *caller, const XiValue *user);
 
+/* The one place that answers "which function does this call reach". A resolved
+ * callee carries the whole-program fixed point for its return ABI, which is
+ * stronger evidence than the contract lowering wrote at the call site; sites
+ * that fail to resolve silently fall back to the weaker fact instead of
+ * failing, so a form missed here becomes a wrong ownership answer rather than
+ * an error. Promotion to a tail call changes neither the callee nor the operand
+ * naming it, so both call forms resolve the same way. */
+static XiFunc *arc_callee_of(const XiFunc *caller, const XiValue *call) {
+    if (!call)
+        return NULL;
+    if ((call->op == XI_CALL || call->op == XI_TAIL_CALL) && call->nargs >= 1)
+        return arc_resolve_callee(caller, call->args[0]);
+    if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT)
+        return arc_resolve_namespace_method_callee(caller, call);
+    return NULL;
+}
+
 static bool arc_type_is_raw_pointer(const XrType *type) {
     return type && XR_TYPE_IS_POINTER(type);
 }
@@ -794,16 +811,7 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
 static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
     if (call_returns_intrinsic_fresh(f, v))
         return true;
-    XiFunc *callee = NULL;
-    /* Promotion to a tail call does not change who is being called or what it
-     * returns, and both forms name the callee in the same operand. Reading only
-     * the unpromoted form leaves the callee unresolved, so an owned result is
-     * classified as not fresh and never retained before the use that consumes
-     * it, which the ownership certificate then reports as a negative balance. */
-    if (v && (v->op == XI_CALL || v->op == XI_TAIL_CALL) && v->nargs >= 1)
-        callee = arc_resolve_callee(f, v->args[0]);
-    else if (v && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT))
-        callee = arc_resolve_namespace_method_callee(f, v);
+    XiFunc *callee = arc_callee_of(f, v);
     if (callee && callee->arc_return_ownership.complete)
         return callee->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
     if (v && v->call_return_ownership.complete)
@@ -984,11 +992,7 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
             return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
         if (xi_call_result_aliases_receiver(value) && value->nargs >= 1)
             return arc_return_value_ownership(f, value->args[0], (uint8_t) (depth + 1));
-        XiFunc *callee = NULL;
-        if ((value->op == XI_CALL || value->op == XI_TAIL_CALL) && value->nargs >= 1)
-            callee = arc_resolve_callee(f, value->args[0]);
-        else if (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT)
-            callee = arc_resolve_namespace_method_callee(f, value);
+        XiFunc *callee = arc_callee_of(f, value);
         XiReturnOwnership summary = callee && callee->arc_return_ownership.complete
                                         ? callee->arc_return_ownership
                                         : value->call_return_ownership;
@@ -1069,11 +1073,7 @@ XR_FUNC int16_t xi_arc_value_alias_operand(const XiFunc *function, const XiValue
         return 0;
     if (!op_is_call(value->op))
         return -1;
-    XiFunc *callee = NULL;
-    if (value->op == XI_CALL && value->nargs >= 1)
-        callee = arc_resolve_callee((XiFunc *) function, value->args[0]);
-    else if (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT)
-        callee = arc_resolve_namespace_method_callee((XiFunc *) function, value);
+    XiFunc *callee = arc_callee_of(function, value);
     XiReturnOwnership summary = callee && callee->arc_return_ownership.complete
                                     ? callee->arc_return_ownership
                                     : value->call_return_ownership;
@@ -1149,11 +1149,7 @@ static bool arc_callee_borrows_param(XiFunc *callee, uint16_t pidx) {
 static bool arc_call_arg_is_callee_borrowed(XiFunc *f, const XiValue *user, uint16_t a) {
     if (a < 1)
         return false;
-    XiFunc *callee = NULL;
-    if (user->op == XI_CALL)
-        callee = arc_resolve_callee(f, user->args[0]);
-    else if (user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT)
-        callee = arc_resolve_namespace_method_callee(f, user);
+    XiFunc *callee = arc_callee_of(f, user);
     uint16_t parameter = (uint16_t) (a - 1);
     /* The call-site return contract is the only ownership evidence when a
      * relative module function has no live XiFunc pointer in this compilation.

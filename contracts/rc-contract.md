@@ -120,7 +120,7 @@ this one. A contract names what it proves; this line names what it does not.
 ## Digest anchors
 
 anchor-sha256: src/ir/xi_arc_verify.c b0344b309501c8daa318f5669974aba949d93187fb5087fd20ecc6a5be4e83a6
-anchor-sha256: src/ir/xi_arc.c 2f3a202dc58565f49a24337bdb18d2b2bfbe407afc04012d998a5ab1db245228
+anchor-sha256: src/ir/xi_arc.c 011abf35a6d8bb8ddbc35eed30dd1c57d3a8628f11b5a36e75bb97639f146de0
 anchor-sha256: src/ir/xi_lower_expr.c b8421b194a9519fe9947ee517810a607001000c0a9c36c0027b736d997bc1c4a
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ee09e8d9638b171daadfe2166003003206567d325390876b28a6f010bf397c19
 anchor-sha256: src/aot/xrt_coll.h 37e45c48a5f5a68e523a853ddf3d557d3ee6976337d7ab620df4d88d39228879
