@@ -260,7 +260,16 @@ builds the whole tree, and the tree does not build: the generated fixtures
 they do at `bb6eac777`, with `XR_TARGET_1003: leaf product program target projection is
 invalid` from `test_xi_program_semantic.c:2536` and `:2766`.
 
-No sanitizer reported anything; the failure is in the build phase. This matters for
-process, not just for this lane: the repository requires `asan_focused` before handing off
-any change under `src/ir/`, `src/aot/`, or `src/analysis/`, and that requirement cannot be
-satisfied by anyone until those two fixtures are repaired.
+No sanitizer reported anything; the failure is in the build phase.
+
+**This is already fixed upstream.** The same fixtures were diagnosed as an architecture
+predicate wrongly refusing the leaf/product projection on arm64 hosts, and the fix is
+integrated at `afa2df8bf`, which is the integration branch's current head. This branch is
+based on `bb6eac777` and is 71 commits behind it, so it does not carry that fix. The
+statement to take from this section is therefore about this branch's base only, not about
+the integration branch: rebasing onto the current head is expected to make the tree build
+and let `asan_focused` actually run its sanitizers.
+
+A separate entry in the bug ledger records that once the tree does build, `asan_focused`
+has one genuine sanitizer failure of its own in the LSP incremental refresh path. That is
+unrelated to this lane and was not reached here.
