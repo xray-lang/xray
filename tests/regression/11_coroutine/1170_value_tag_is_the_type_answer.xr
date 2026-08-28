@@ -1,0 +1,33 @@
+// A value states its own type in the tag it carries. Reading the pointed-to
+// object header instead asks a different question, and only pointers that
+// actually address a standard header can answer it. The channel predicate read
+// the header, so for a value whose payload has another shape it landed on
+// unrelated memory and reported whatever type tag that memory happened to
+// spell. Once that memory spelled the channel tag, a string was dispatched as
+// a channel and the program died on a method the string does have.
+//
+// The shape needs all three: a cross-module call, a single string parameter,
+// and an allocating method on it. It also needs enough calls for the misread
+// memory to reach the channel tag, so a case that calls once cannot see it.
+
+import { byte_length } from "./_value_tag_lib"
+
+@test
+fn test_string_stays_a_string_across_many_calls() {
+    var s = "a".repeat(64)
+    var total = 0
+    for (var k = 0; k < 40; k++) {
+        total = total + byte_length(s)
+    }
+    assertEqual(total, 2560)
+}
+
+@test
+fn test_channel_is_still_recognized_as_a_channel() {
+    // The predicate must keep answering yes for an actual channel.
+    var ch = Channel<i64>(4)
+    ch.send(7)
+    assertEqual(ch.isClosed(), false)
+    ch.close()
+    assertEqual(ch.isClosed(), true)
+}

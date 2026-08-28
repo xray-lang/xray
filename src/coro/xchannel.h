@@ -334,10 +334,14 @@ static inline XrValue xr_value_from_channel(XrChannel *ch) {
     return XR_FROM_PTR(ch);
 }
 
+/* A value states its own type in the tag it carries, which every other
+ * XR_IS_* predicate reads. Reading the pointed-to object header instead asks a
+ * different question, and only the pointers that actually address a standard
+ * header can answer it: for a value whose payload has another shape the read
+ * lands on unrelated memory and reports whatever type tag that memory happens
+ * to spell. */
 static inline bool xr_value_is_channel(XrValue v) {
-    if (!XR_IS_PTR(v))
-        return false;
-    return XR_OBJ_GET_TYPE((XrObjHeader *) XR_TO_PTR(v)) == XR_TCHANNEL;
+    return XR_IS_CHANNEL(v);
 }
 
 static inline XrChannel *xr_value_to_channel(XrValue v) {
