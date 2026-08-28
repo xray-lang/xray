@@ -1,0 +1,30 @@
+# `_`-prefixed .xr files that no test case imports, and that are allowed to
+# stay that way.
+#
+# The five case discoverers (backend_diff, regression, aot_tests,
+# aot_filetests, manifest_sweep) all skip `_`-prefixed files, so a library
+# module is only ever compiled because some case imports it. When the last
+# importer goes away the module silently leaves every gate, and an emitter
+# crash inside it keeps the suite green. scripts/check_underscore_case_reachability.py
+# fails on any `_`-prefixed file that no case reaches, directly or
+# transitively; this file is the list of deliberate exceptions.
+#
+# Rules, the same ratchet the other baselines use:
+#   - The list may only shrink. A listed file that becomes reachable again
+#     fails the gate, so the line is deleted by the change that reconnected it.
+#   - A line naming a file that no longer exists fails the gate.
+#   - Adding a line requires the reason to be written here, next to it. An
+#     unreachable file with no reason is a file to delete, not to allow.
+#
+# Established 2026-08-28, when the reachability gate was written.
+#
+# --- manual benchmarks, not test cases -------------------------------------
+# Both declare `@test` and would be collected by `xray test` if they were not
+# `_`-prefixed, which is exactly why they are: one opens 100 concurrent
+# loopback connections and the other 1000, to compare the io_uring completion
+# backend against the epoll readiness backend. Their own headers say "Run via
+# tests/manual; not a regression test." Nothing under tests/manual/ is
+# referenced by CMakeLists at all, so these are not modules that lost their
+# importer -- they never had one, and should not get one.
+tests/manual/_bench_echo.xr
+tests/manual/_bench_echo_hi.xr

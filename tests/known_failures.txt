@@ -18,3 +18,51 @@
 #
 # Example (commented out so this file starts empty):
 # tests/regression/09_jit_x64/082_throw_heap_type.xr  ISSUE=https://github.com/xray-lang/xray/issues/9999  ADDED=2026-05-17  OWNER=xingleixu@gmail.com
+
+stdlib_boundary_builtin-schema  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md  ADDED=2026-08-28  OWNER=xingleixu@gmail.com
+# Registered on 2026-08-28 and red on arrival. check_stdlib_boundary.py has
+# eight sub-checks; only five were ever wired into ctest, so this one had been
+# failing with nothing reporting it. Three errors, one cause: the Iterator
+# declaration in stdlib/types/iterator.xr now carries five methods
+# (hasNext, iterator, next, nth, toString) where the schema requires exactly
+# hasNext/next/nth, the compiler's Iterator method table comes back empty
+# against it, and the API inventory does not expose the full schema.
+#
+# Listed rather than hidden: this file suppresses nothing -- no runner reads it
+# -- so the lane stays red and visible. The entry exists so the failure has a
+# date and an owner and expires in thirty days like every other suppression.
+
+aot_incremental_cache  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md  ADDED=2026-08-28  OWNER=xingleixu@gmail.com
+# Fails exactly once after any edit to src/aot/xrt_*.h, then passes on a re-run.
+# Reproduced across several branches and reported independently by more than one
+# lane this round; four of those headers (xrt_arith.h, xrt_core_freestanding.h,
+# xrt_arc.h, xrt_coll.h, xrt_method.h) were touched in the current round alone.
+#
+# Recorded here because the cost is not the red -- it is that every person who
+# hits it spends a cycle proving the failure is not theirs. A defect that makes
+# people audit their own innocent changes is worth a line even when it clears on
+# a re-run.
+#
+# Not a timeout, and not only the first run. Two separate things were true at
+# once and the timeout hid the second:
+#
+#   - Its TIMEOUT was raised (120 -> 300, COST 170) because the lane's own
+#     comment recorded "~119s" against a real 163-166s. A ceiling derived from
+#     a stale measurement.
+#   - Underneath that, it has six standing failures, identical in name and
+#     count on the base commit and on the merged tree, so `rc=1` is the script
+#     reporting, not a kill:
+#         cold: build failed
+#         evidence-body-change: expected declarations hit
+#         evidence-body-change: expected semantic_graph hit
+#         evidence-body-change: expected evidence cache summary: hits=2 misses=2
+#         class-cold: build failed
+#         lto-cold: build failed
+#
+# So raising the timeout makes it fail *reliably* rather than intermittently.
+# Do not read the new stability as a fix.
+#
+# The first-run-after-xrt-headers pattern sits on top of that: a cache key that
+# appears not to include those headers, so the first run after they change
+# reads a stale artifact. Confirm that before fixing; the alternative is a
+# generation counter that lags by one.

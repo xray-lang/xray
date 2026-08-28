@@ -7,6 +7,8 @@ name: Nightly
 #   - windows-msvc-release: MSVC Release CRT with the four Win11
 #                           coroutine scenarios that exposed
 #                           STATUS_HEAP_CORRUPTION in May 2026
+#   - fuzz-smoke          : short coverage-guided libFuzzer runs of the
+#                           four tests/fuzz harnesses
 #
 # Nightly failures are actionable signals. The Linux MSan lane remains
 # informational because GitHub-hosted Ubuntu runners do not provide an
@@ -214,3 +216,162 @@ jobs:
         # failure tails to tests/tmp/win11_coro_failures.log.
         run: |
           python3 ./scripts/repro_win11_coro_burn.py 5
+
+  # ---------------------------------------------------------------------------
+  # 4. libFuzzer smoke (lexer / parser / stdlib data / XTP decoder)
+  #
+  # The four harnesses in tests/fuzz have shipped with a documented build recipe
+  # and a 45-file seed corpus for some time, and nothing has ever run them:
+  # grepping .github/ for "fuzz" matched no workflow line before this job. Only
+  # fuzz_xtp_decode had any automation at all, and only in its FUZZ_STANDALONE
+  # shape -- tests/unit registers it as the ctest test_xtp_fuzz_entry, which
+  # walks a fixed 26-entry mutation matrix and never invokes libFuzzer. The
+  # coverage-guided form of all four is new here.
+  #
+  # This job depends on the global instrumentation that ENABLE_FUZZING now turns
+  # on (see the ENABLE_FUZZING block in CMakeLists.txt). Previously the
+  # -fsanitize=fuzzer flags reached only each harness's own glue while xray_core
+  # was built clean, which measured as 10 coverage counters in fuzz_lexer and 12
+  # in fuzz_parser -- an 11 MB executable with twelve counters. libFuzzer had no
+  # gradient to follow and ASan could not see allocations inside the library, so
+  # wiring these harnesses into CI ahead of that fix would have bought an
+  # expensive green light rather than a test.
+  #
+  # What 60 seconds per harness proves: each harness still compiles and links
+  # against current headers, and survives a large number of mutations of the
+  # real corpus without tripping ASan or UBSan. What it does not prove: absence
+  # of bugs. The run starts from the same 45 committed seeds every night and
+  # keeps nothing between nights, so it re-explores one small neighbourhood
+  # rather than deepening a corpus over time. Read a pass as a smoke signal.
+  # Growing this into real fuzzing means persisting the corpus across runs
+  # (cache or an external service such as OSS-Fuzz), not raising the timeout.
+  # ---------------------------------------------------------------------------
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    name: libFuzzer Smoke (Linux Clang)
+    timeout-minutes: 60
+    # Informational for now, deliberately and not permanently.
+    #
+    # fuzz_stdlib_data is known to fail on contact, and not on a mutation: it
+    # segfaults while tearing down the VM on the committed seed corpus/
+    # stdlib_data/00_csv_basic.txt, a 17-byte CSV. The read is of uninitialised
+    # heap (0xbebe...) in xr_obj_destroy_array -> xr_coro_heap_sub_external
+    # (xcoro_heap.h:346), reached from xray_vm_delete, and it reproduces on the
+    # second executed unit before any mutation happens. That is a pre-existing
+    # runtime bug this lane surfaces rather than anything fuzzing introduced --
+    # it was simply never run.
+    #
+    # Making the lane blocking today would therefore paint nightly red on its
+    # first execution over a known defect, which is how a lane teaches people to
+    # ignore it -- the failure mode the full-suite comment above calls out.
+    # Flip this to blocking (delete the line) once that teardown bug is fixed.
+    # Unlike linux-msan, whose continue-on-error is permanent and caused by
+    # uninstrumented system libraries, nothing here is unfixable.
+    continue-on-error: true
+
+    env:
+      # UBSan findings must abort for libFuzzer to treat them as crashes;
+      # left recoverable they only print and the run stays green.
+      UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+      ASAN_OPTIONS: "abort_on_error=1:detect_leaks=1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang ninja-build
+
+      # ENABLE_FUZZING implies ASan + UBSan + SanitizerCoverage on every target,
+      # so this build is materially slower than the other Linux lanes.
+      - name: Configure (fuzzing)
+        run: >-
+          cmake -B build-fuzz -G Ninja
+          -DENABLE_FUZZING=ON
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+
+      # Only the four harnesses, not the whole project: nothing else in the
+      # tree needs to link libFuzzer.
+      - name: Build harnesses
+        run: >-
+          cmake --build build-fuzz -j
+          --target fuzz_lexer fuzz_parser fuzz_stdlib_data fuzz_xtp_decode
+
+      - name: Fuzz
+        run: |
+          set -u
+          work="${RUNNER_TEMP}/fuzz"
+          findings="${work}/findings"
+          mkdir -p "$findings"
+          status=0
+
+          # $1 target, $2 corpus subdir, $3 -max_len, $4 -max_total_time
+          run_one() {
+            corpus="${work}/corpus/$2"
+            mkdir -p "$corpus"
+            # libFuzzer writes every newly discovered input back into the first
+            # corpus directory it is given. Point it at a scratch copy so the
+            # checked-in seeds stay read-only -- on a throwaway runner that only
+            # keeps the diff clean, but it also means anyone pasting these
+            # commands locally does not silently grow tests/fuzz/corpus.
+            cp -R "tests/fuzz/corpus/$2/." "$corpus/" 2>/dev/null || true
+
+            echo "::group::$1"
+            # -timeout=25 matters: libFuzzer's default per-input timeout is 1200s,
+            # so without it one hanging input would consume the whole budget and
+            # then the job timeout, reported as neither a crash nor a timeout.
+            "build-fuzz/tests/fuzz/$1" "$corpus" \
+              -max_total_time="$4" \
+              -max_len="$3" \
+              -timeout=25 \
+              -print_final_stats=1 \
+              -artifact_prefix="${findings}/$1-"
+            rc=$?
+            echo "::endgroup::"
+
+            if [ "$rc" -ne 0 ]; then
+              echo "FAIL rc=$rc  $1" >> "${work}/report.txt"
+              status=1
+            else
+              echo "ok        $1" >> "${work}/report.txt"
+            fi
+          }
+
+          # Every harness runs even after one fails, so a first red night
+          # reports all four results instead of only the earliest crash.
+          run_one fuzz_lexer       lexer       4096 60
+          run_one fuzz_parser      parser      4096 60
+          run_one fuzz_stdlib_data stdlib_data 4096 60
+          # fuzz_xtp_decode builds a full valid XTP artifact and runs two decode
+          # paths per input, so -max_len is 256x larger and each execution costs
+          # vastly more: measured at ~2 exec/s locally, against ~280 exec/s for
+          # fuzz_parser. 120s buys it a few hundred executions, so treat this
+          # one as an exercise of the decode paths rather than as search -- the
+          # deterministic coverage comes from the test_xtp_fuzz_entry ctest.
+          # Doubling the time here would not change that; persisting a corpus
+          # across nights is what would.
+          run_one fuzz_xtp_decode  xtp         1048576 120
+
+          {
+            echo "### libFuzzer smoke"
+            echo '```'
+            cat "${work}/report.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$status"
+
+      # always(), not failure(): the fuzz step runs all four harnesses and only
+      # reports at the end, and libFuzzer can leave useful artifacts (slow-unit,
+      # oom) on runs that still exit 0. if-no-files-found=ignore keeps a clean
+      # night from warning.
+      - name: Upload crash artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-findings
+          path: ${{ runner.temp }}/fuzz/findings
+          if-no-files-found: ignore
+          retention-days: 30

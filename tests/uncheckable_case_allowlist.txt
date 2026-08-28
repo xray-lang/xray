@@ -1,0 +1,44 @@
+# `_`-prefixed modules that do not pass `xray check` on their own, and are
+# allowed not to.
+#
+# scripts/check_underscore_case_reachability.py --check-with <xray> runs the
+# front end over each `_`-prefixed module in isolation. Reachability proves a
+# library is compiled as part of *some* case; it does not prove the library is
+# individually sound, because an importer refused for an unrelated reason takes
+# its library's coverage down with it and nothing says so. This file is the
+# list of modules for which failing that check is the correct outcome.
+#
+# Rules, the same ratchet as the other baselines:
+#   - The list may only shrink. A listed module that starts passing fails the
+#     gate, so the line is deleted by the change that fixed it.
+#   - A line naming a file that no longer exists fails the gate.
+#   - Adding a line requires the reason written here, next to it.
+#
+# Established 2026-08-28, when --check-with was added. It found three, and all
+# three had been invisible for exactly the reason the check exists.
+#
+# --- a deliberately unimportable fixture ------------------------------------
+# One line: `export var SHARED_COUNTERS: [i64; 2] = [3, 5]`. Its only importer
+# is freestanding_mutable_fixed_array_import_reject.xr, whose name says what it
+# asserts: a mutable fixed array must NOT be importable under freestanding.
+# The module is the negative half of that test, so it failing the front end
+# alone is the assertion succeeding, not a defect.
+tests/aot/filetests/link/_freestanding_mutable_fixed_array_lib.xr
+#
+# --- manual benchmarks whose source went stale ------------------------------
+# Both fail at line 57 with
+#   go argument transfer of type '<error>' requires explicit copy(...), move of
+#   a proven unique root, or a const/synchronized shared value
+# which is the same stale-against-the-current-go-argument-rule family that
+# tests/regression/baseline_failures.txt records for seven network cases.
+# These two are `_`-prefixed manual benchmarks under tests/manual/, a directory
+# CMakeLists never references, so nothing has compiled them since the rule
+# changed and nothing reported it. They are also on
+# tests/unreachable_case_allowlist.txt, for the separate reason that no case
+# imports them.
+#
+# Listed rather than fixed because tests/ case bodies are not this lane's to
+# edit. Whoever owns the go-argument rule can delete both lines by updating
+# fifty-seven characters in each file.
+tests/manual/_bench_echo.xr
+tests/manual/_bench_echo_hi.xr

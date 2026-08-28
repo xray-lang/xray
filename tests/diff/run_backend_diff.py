@@ -532,7 +532,7 @@ def collect_cases(base_cases_file: str, extra_cases_file: str) -> list[Path]:
             raise FileNotFoundError(f"base case manifest not found: {base_cases_file}")
         cases = sorted(base)
     else:
-        # cases/liveness/ is run_liveness_diff.sh's, which enforces a wall-clock
+        # cases/liveness/ is run_liveness_diff.py's, which enforces a wall-clock
         # budget and honors .live sidecars. This net has no per-case timeout and
         # compares terminating output, so a by-design non-terminating liveness
         # case would hang it. An explicit base manifest still wins if it names them.

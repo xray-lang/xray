@@ -1063,6 +1063,27 @@ target_include_directories(test_xrt_data_pointer_owner_freestanding PRIVATE
 )
 add_test(NAME test_xrt_data_pointer_owner_freestanding
     COMMAND $<TARGET_FILE:test_xrt_data_pointer_owner_freestanding>)
+# The C90 half of the same family. It was written, listed as a fixture in
+# contracts/semantic-owners.toml, and registered nowhere -- so the one thing it
+# proves, that the restricted data-pointer adapter compiles and runs under
+# strict ISO C90, was proved by nobody. Its null_test and byte_array_copy
+# siblings are registered below; check_semantic_owners.py even hardcodes a
+# requirement that the byte_array_copy one stays registered, and this file was
+# simply left out of that tuple.
+#
+# Not add_xray_unit_test(): that macro links xray_core and does not set the
+# standard, and the whole value of a C90 KAT is compiling without either.
+if(NOT WIN32)
+    add_executable(test_xrt_data_pointer_owner_c90 aot/test_xrt_data_pointer_owner_c90.c)
+    target_include_directories(test_xrt_data_pointer_owner_c90 PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_target_properties(test_xrt_data_pointer_owner_c90 PROPERTIES C_STANDARD 90 C_EXTENSIONS OFF)
+    add_test(NAME test_xrt_data_pointer_owner_c90
+        COMMAND $<TARGET_FILE:test_xrt_data_pointer_owner_c90>)
+endif()
 add_executable(test_cell_access_core stdlib/test_cell_access_core.c)
 target_include_directories(test_cell_access_core PRIVATE
     ${XRAY_COMMON_INCLUDES}

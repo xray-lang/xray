@@ -1,0 +1,150 @@
+# tests/ci_exclusions.txt
+# ----------------------------------------------------------------------------
+# ctest lanes that CI skips, and the reason each one is skipped.
+#
+#   <test name>  LANE=<lanes>  ISSUE=<ref>  ADDED=YYYY-MM-DD  OWNER=<contact>
+#                REASON=<prose to end of line>
+#
+# Comment lines and blank lines are ignored. One test per line; the fields may
+# appear in any order after the name, and REASON must come last because it runs
+# to the end of the line.
+#
+# Lanes:
+#   core       the sanitizer and coverage jobs' `ctest --exclude-regex`
+#   release09  the 0.9 consolidation gate the unit-tests job runs
+#   gate       scripts/run_release_09_gate.py's own KNOWN_AOT_BOUNDARY_RE
+# A test may name several, comma separated.
+#
+# Rules, enforced by scripts/check_ci_exclusions.py (ctest entry
+# `ci_exclusion_discipline`, so it runs locally and in CI):
+#   - ADDED must be <= 30 days old. This is the same window
+#     tests/known_failures.txt uses, and for the same reason: an exclusion
+#     nobody has re-justified in a month is not a decision, it is sediment.
+#   - ISSUE must point at something a reader can follow.
+#   - OWNER must be a reachable contact.
+#   - REASON must say what the exclusion costs -- what this lane is the only
+#     thing checking -- not merely that it is red.
+#   - Restoring a lane means deleting its line. Do not comment it out.
+#   - .github/workflows/ci.yml derives its regexes from this file. It must not
+#     restate them; the gate fails if it does.
+#
+# WHY THIS FILE EXISTS
+#
+# Until 2026-08-28 twenty-one names lived as two inline regexes in
+# ci.yml, whose own comment said "Adding a name is a decision to stop testing
+# something, so it needs a reason recorded next to it" -- while not one of the
+# twenty-one carried a reason, a date, or an owner. The only prose beside them
+# described four names that had already been removed.
+#
+# The archaeology behind this file, done before writing it:
+#
+#   - Twenty of the twenty-one entered on 2026-07-17 in three commits
+#     (ff452f607, c542fe38f, bd8b3611c) whose message bodies are empty. Not
+#     "the reason is recorded elsewhere" -- no reason was written.
+#   - The rule demanding a reason (ci.yml:18-19) was added on 2026-07-30 by
+#     fc0e244b2, thirteen days later, and was never applied retroactively.
+#   - The one entry that did have a reason, test_vm_exception, has had it
+#     revoked by events: d38bacfa0 (2026-04-26) excluded it on Linux only,
+#     writing "macOS ARM64 retains a full ctest run with no exclusions", and
+#     7306b4b01 (2026-07-17, empty body) deleted that guard and excluded it on
+#     macOS too. The explanatory comment went with it.
+#
+# And the exclusions demonstrably hid regressions:
+#
+#   - c0707a8a9 (2026-08-05): parallel.map/mapInto/reduce refused native builds
+#     when the optional Options argument was omitted. The commit says the
+#     symptom "is what stdlib_embedded_layout had been red on" -- for nineteen
+#     days, inside an excluded lane.
+#   - e0db27358 (2026-08-05): every enum declared through `xray eval` /
+#     xray_vm_dostring() / `xray run -` got zero variants. "test_vm_api,
+#     test_vm_exception and test_vm_parallel_isolate were all red on this one
+#     cause" -- meaning test_vm_exception had not been red for the SEGFAULT
+#     its 2026-04-26 exclusion cited for months, and nobody was told.
+#   - 14ac2ca1f (2026-08-05): `x as T` on an already-T value lost move/alias
+#     provenance; the symptom is exactly the diagnostic sys_thread_vm asserts.
+#   - 02cc78c07 (2026-07-30): "the other two are missing or wrong test assets
+#     that were failing their own gates" -- aot_freestanding_provider_abi and
+#     byte_array_aot_c90_hotpath, both excluded, both red.
+#   - c6dbbd257 (2026-07-20): "The coro-heap UAF that previously crashed this
+#     test is fixed" -- http_static_route_full_parse's actual cause was fixed
+#     three days after it was excluded. It stayed excluded for another 39.
+#
+# So every ADDED date below is 2026-08-28: this is the first time any of these
+# has been justified in writing, and the clock starts now. Several of them are
+# expected to leave this file as soon as somebody measures them -- the
+# archaeology found no evidence that most are still failing, only that nobody
+# has looked. `ctest -R '^<name>$'` is the whole experiment.
+#
+# The template for leaving is already in the history. When aot_filetests and
+# the differential lanes came back (20daf3da3, bb02ac7f9, fc0e244b2), each
+# removal recorded four things: the date, what that lane was the only driver
+# for, what replaced the blanket exclusion (a shrink-only ratchet), and the
+# cost of the exclusion in numbers -- "PR CI ran zero VM/AOT comparisons on a
+# two-backend language". Write those four things when you delete a line here.
+#
+# WHAT THE FIRST MEASUREMENT REMOVED, same day
+#
+# Writing the reasons down was half of it; running the twenty-one was the other
+# half, and it had never been done. `ctest -j2` over all of them, Release, no
+# sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: 7 passed, 13 failed, 1 timed out and
+# then passed in 24.4s when re-run serially (query_surface_residue, whose 30s
+# TIMEOUT was raised in the same change -- 18.7s on an idle machine is not a
+# budget, it is a coin flip).
+#
+# Six lanes were deleted from this file on the strength of that, restoring
+# their blocking coverage:
+#
+#     stdlib_migration_contracts        stdlib_self_hosting_consistency
+#     binary_stdlib_surface_inventory   binary_public_native_readiness
+#     string_surface_residue            query_surface_residue
+#
+# All six are pure Python gates: their `add_test` COMMAND takes no
+# $<TARGET_FILE:xray> and reads only source and metadata, so their verdict
+# cannot depend on the build configuration, and passing here means passing in
+# every CI job. Deleting them is not a guess.
+#
+# Two more pass here and are kept anyway, with the experiment that would remove
+# them written on their line: test_vm_exception and
+# aot_freestanding_provider_abi both consume the compiler binary, so a Release
+# pass says nothing certain about the Debug and sanitizer builds CI uses.
+#
+# The remaining thirteen were measured failing, and each line now says so with
+# its wall time. That converts "excluded, reason unknown" into "excluded,
+# failing, here is what it costs" -- which is a debt, not a mystery.
+# ----------------------------------------------------------------------------
+
+test_vm_exception  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=Pins the error/panic contract: VM_RUNTIME_ERROR, VM_COLD_THROW and OP_THROW must route through one helper so stack unwinding stays consistent, and catching a source-level enum error must clear pending_error. Excluded 2026-04-26 for a Linux-Debug SEGFAULT that the same commit said did not reproduce on macOS; the Linux-only guard was deleted 2026-07-17 with an empty commit body, so it is now skipped on the platform its own exclusion called healthy. e0db27358 later found it red for an entirely different cause. Longest-standing exclusion in the file at 124 days. Measure it before renewing this line. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: PASSES in 7.3s. Its stated cause was a Linux Debug SEGFAULT, so a Release pass does not refute it -- but nothing has refuted it either in the 124 days since, and e0db27358 already found it red for an unrelated reason in between. Run it in the Debug build the unit-tests job uses; if it passes there the line goes.
+
+sys_thread_vm  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=The only lane asserting sys.Thread handle lifetime in both directions: an escaping handle with no join/detach must warn, and a non-escaping one must leave stderr completely empty, so the silence is itself the assertion. 14ac2ca1f fixed a provenance defect whose symptom is exactly this diagnostic while the lane was excluded and could not report it. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (1.8s).
+
+stdlib_embedded_layout  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=Points XRAY_STDLIB_PATH at an empty directory so everything that resolves must come from the binary's embedded stdlib, then runs backend-diff to require the embedded copy to mean the same thing under VM and AOT. It was red for nineteen days on a real generic-lowering defect (c0707a8a9) that nobody saw because the lane was excluded. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (0.1s).
+
+parallel_plan_vm_scaling_gate  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=Requires every parallel-plan lane to run and to print exactly the expected block. Scaling defects show up as missing or duplicated lines rather than as crashes, which is why it compares whole expected output instead of substrings; excluding it removes the only check of that shape. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (0.1s).
+
+http_static_route_full_parse  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=The only lane proving the HTTP static route table initializes identically under the VM and under AOT. The table is built at startup, so a VM-only pass says nothing about the natively compiled form. Its stated cause -- a coro-heap UAF -- was fixed on 2026-07-20, three days after the exclusion landed (c6dbbd257); the residual 90s timeout under sanitizers is already addressed by XR_TEST_TIMEOUT_SCALE. This line is the most likely of the twenty-one to be deletable today. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (21.2s).
+
+test_stdlib_boundary_manifest  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=Unit coverage for the task-196 stdlib boundary manifest, whose central invariant is that source consistency is never reported as completion. Losing it means the manifest can claim a module is finished on evidence that only says it parses. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (6.8s).
+
+
+
+
+
+
+
+byte_array_aot_c90_hotpath  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=Ratio and code-shape gate for the AOT byte-array hot path against a C reference, where mismatched output always fails because a benchmark whose output disagrees with the reference is not slow, it is wrong, and its timing is meaningless. 02cc78c07 found it red on exactly that: the reference had wrapped to 0 against the program's 6528000000, so the ratio being compared meant nothing. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (14.1s).
+
+aot_freestanding_allowlist  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=Two independent things: the committed stdlib/freestanding_allowlist must equal the set the analyzer actually enforces (two hand-maintained lists, so drift makes the gate test the wrong set), and each module's probe must compile to a no-libc relocatable object with undefined symbols confined to a minimal hook/mem surface. Its registration is guarded by NOT ENABLE_ASAN/UBSAN/TSAN/MSAN, so excluding it in the sanitizer jobs is a no-op -- there it is never registered at all. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (6.2s).
+
+aot_freestanding_provider_abi  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=Freestanding provider objects must stay inside their declared ABI: no undefined symbols outside the allowlist, every core provider hook reached, and no hosted value-ops bridge or hosted runtime symbol carried along. 02cc78c07 found it red on a provider object referencing an undeclared xrt_global_ctx, which is precisely the class of defect it exists to catch. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: PASSES in 0.5s. It is kept only because it consumes $<TARGET_FILE:xray> and therefore could behave differently in the Debug and sanitizer builds CI actually uses -- unlike the six pure-script lanes deleted from this file today, whose verdict cannot depend on the build. The experiment that would delete this line is one `ctest -R '^aot_freestanding_provider_abi$'` in a sanitizer build.
+
+aot_manifest_sweep  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=The 115/132 broad guard that ordinary language, value and stdlib differential cases must not quietly start pulling in coroutine or runtime archives; explicit coroutine cases are the documented exception and every other runtime dependency has to be registered here. Excluding it lets runtime creep into the no-runtime cases unobserved. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (89.4s).
+
+aot_isolate_symbol_gate  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=A native binary must carry neither the compiler nor the VM: under a size ceiling, its link command never pulls xray_core, and its symbol table contains no isolate, VM, parser or analyzer symbols. This is the shipping-artifact promise of an AOT language, and it is registered unconditionally, so the exclusion is fully effective in every job. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (44.3s).
+
+install_public_surface  LANE=core,release09  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=xray_core is the compiler's internal development aggregate and must not reach the install prefix, and the emitted link command must mention neither it nor the source tree; both the XrayCore single-component prefix and the full install are checked. It is also the only ctest entry in the repository that runs `xray fmt` and `xray fmt --check` at all, so excluding it leaves the formatter with zero end-to-end coverage. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (22.7s).
+
+aot_link_command_manifest  LANE=core,gate  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=Manifest-first link smoke: exactly nine public attributes, an xray.toml-declared prebuilt dynamic library that links and runs, reachability deciding what the link pulls (core math taking -lm rather than the hosted umbrella runtime), and AVX2/AVX-512 intent confined to attributed function islands. Registered under if(NOT WIN32). It is the one name excluded twice -- here and hardcoded in run_release_09_gate.py -- which is why the gate lane exists in this file at all. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (11.0s).
+
+test_compress_native_error_abi  LANE=core  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=task-198 typed native error ABI for the compress decompressor. e07f6fa40's timing table measures it at 32s, which suggests it was excluded for cost rather than for failing -- but that was never written down, so nobody could tell the difference. If cost is the reason, the fix is a tier assignment, not a blanket exclusion. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (12.4s).
+
+test_crypto_native_error_abi  LANE=core  ISSUE=xray-docs/analysis/test-suite-quality-analysis-2026-08-22-cn.md#3.3  ADDED=2026-08-28  OWNER=xingleixu@gmail.com  REASON=task-198 typed native error ABI for crypto.randomBytes. Measured at 63s in e07f6fa40's timing table, the same cost-not-redness question as its compress sibling, and the same answer: put it in a tier, do not remove it from every blocking job. MEASURED 2026-08-28 on Release, no sanitizer, XRAY_STDLIB_VM_FASTPATHS=OFF: still fails (17.9s).

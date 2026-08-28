@@ -1,0 +1,57 @@
+# Parallel VM lane ratchet baseline
+#
+# Every line is a case that fails today and is tracked, not forgotten. The
+# suite gates the other 15 cases; these are excluded from the verdict so that a
+# red baseline cannot hide a fresh regression.
+#
+# Rules
+#   - The list may only shrink. run_parallel_vm_tests.py fails when a case
+#     outside this list fails AND when a listed case starts passing, so a fix
+#     must delete its line in the same change.
+#   - Adding a line requires a written reason under one of the groups below.
+#   - Never add a line to make an unrelated change go green.
+#
+# Established 2026-08-28, when tests/vm/run_parallel_vm_tests.sh was ported to
+# Python and registered. The shell runner had existed with ZERO callers -- not
+# one reference anywhere in CMakeLists, the workflows, or any script -- so
+# these 29 cases had never run in any gate. The 14 below are what the first
+# run found. Verdicts are stable: --jobs 1 reproduces the same 14, and the
+# behavioural one below reproduces identically five times in a row.
+#
+# --- coroutine lowering fails closed (12) -----------------------------------
+# All twelve stop at the same compile-time refusal, with an empty stdout:
+#   Xi IR pipeline failed at ownership: coroutine lowering failed closed
+#   before publishing CoroLowered (func=<main>)
+# This is the tree-level state of the AOT/coroutine line on this branch, not
+# something these cases did: parallel_plan_vm_scaling_baseline is also driven
+# by run_parallel_plan_scaling_gate.py, which IS registered (the
+# parallel_plan_vm_scaling_gate ctest entry) and is red on the same
+# diagnostic. blockers/b-current-census-report.md records the family.
+parallel_lane_panic_propagates_original
+parallel_plan_cleanup_after_panic
+parallel_plan_fallback_single_lane
+parallel_plan_for_each_vm_batch
+parallel_plan_map_cleanup_after_panic
+parallel_plan_map_vm_batch
+parallel_plan_nested_dispatch_gate
+parallel_plan_reduce_aggregate_vm_batch
+parallel_plan_reduce_generic_failure_cleanup
+parallel_plan_reduce_reference_accumulator
+parallel_plan_reduce_vm_batch
+parallel_plan_vm_scaling_baseline
+#
+# --- semantic plan refuses the shape (1) ------------------------------------
+# Xi IR pipeline failed at semantic-plan: XR_SEM_0019: coroutine state count
+# disagrees with grounded call authority function=0 operation=13 opcode=117
+# selector=forEach expected=0 actual=1 (func=<main>)
+# Same family as the coroutine-state-count entries in the regression baseline.
+parallel_shadowing_no_intrinsic
+#
+# --- a real behavioural divergence (1) --------------------------------------
+# The only entry here that is not a compiler refusal: the program runs, exits
+# 0, writes nothing to stderr, and prints five lines where six are expected --
+# one `true` is missing between `map-closed` and `mapinto-closed`. That is a
+# close-during-dispatch result that never arrived, which is exactly the defect
+# class this corpus was written to catch, and it went unobserved for as long as
+# the runner had no caller. Reproduces identically on five serial runs.
+parallel_plan_map_close_during_dispatch
