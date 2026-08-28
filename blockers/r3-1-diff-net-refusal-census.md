@@ -66,12 +66,26 @@
 它既不超时也不报诊断，就是安静地多出一条"这个用例不能构建"。
 
 本 lane 实际踩到：pkill 掉超时的 `backend_diff_embedded` 后重跑，13 个残留锁让 runner
-空转三分半。清理（只清自己 worktree 的，注意 `-type d`，同目录下的 `.cache-root.lock`
-是普通文件不该删）：
+空转三分半。
+
+清理有**两条**限定，缺一条都会出事。先看，再删：
 
 ```bash
-find .cache/xray-test -name "*.lock" -type d -exec rmdir {} \; 2>/dev/null
+find .cache/xray-test -name "*.lock" -type d -exec ls -ld {} \;
 ```
+
+```bash
+find .cache/xray-test -name "*.lock" -type d \
+     -not -newermt "<你上次启动测试的时刻>" -exec rmdir {} \;
+```
+
+- `-type d`：`DirLock` 的锁是**目录**；同一片缓存下的
+  `aot-objects/<tag>/O0/aot/<triple>/.cache-root.lock` 是**普通文件**，不该一起删。
+- `-not -newermt <时刻>`：**只清死锁**。`rmdir` 删得掉活锁（`DirLock` 建的是空目录），
+  删掉就等于拆掉正在跑的测试的互斥保护，两个进程会同时构建同一个二进制。
+  10 号在自己的树上实测：11 个锁里只有 3 个是死的，无限定的命令会连删 8 个活锁。
+
+**只清自己 worktree 的，且只清自己的死的。**
 
 **归因纪律**：凡是 kill 过 diff lane 的树，重跑前必须先清锁；重跑结果里出现
 `cannot lock binary cache` 的用例一律不可归因。
@@ -491,7 +505,8 @@ XRAY_TOOLCHAIN_PROBE_SCALE=16 XRAY_TEST_CASE_TIMEOUT=900 XRAY_DIFF_JOBS=6 \
 **3. 归因之前先排除三种伪造拒绝。** 全部在 §2 有实证：`***Timeout`（一眼可见）、
 `no provider reached READY`（长得像真诊断，是探针在负载下超时）、
 `cannot lock binary cache`（最阴，来自被 kill 的 lane 留下的残留锁，静默多出一条"不能构建"）。
-kill 过 diff lane 的树，重跑前先清锁。
+kill 过 diff lane 的树，重跑前先清锁——**只清自己 worktree 的死锁**，
+两条限定（`-type d` 与 `-not -newermt`）见 §2，无限定的清理会删掉别的测试正在持有的活锁。
 
 **4. 分布对照的键必须是 `(诊断码, 归一化消息)` 二元组，不能只用码。** §3.2 给了理由，
 本轮另有两条独立验证：同一个 `XR_SEM_0019` 在两条线上分别是
