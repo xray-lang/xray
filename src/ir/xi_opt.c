@@ -2299,41 +2299,6 @@ static bool sr_method_name_is(const XiValue *v, const char *name) {
     return false;
 }
 
-static bool sr_type_is_pod_span_elem(const XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool sr_builtin_receiver_registry_matches(const XrType *receiver_type,
-                                                 XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver_type && receiver_type->kind == XR_KIND_INT &&
-                   !receiver_type->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver_type);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver_type);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver_type);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && receiver_type->kind == XR_KIND_SLICE &&
-                   sr_type_is_pod_span_elem(receiver_type->container.element_type);
-    }
-    return false;
-}
-
 static bool sr_call_method_matches_receiver_registry_id(const XiValue *v,
                                                         XaBuiltinReceiverMethodId method_id) {
     const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
@@ -2341,7 +2306,7 @@ static bool sr_call_method_matches_receiver_registry_id(const XiValue *v,
         v->nargs < 1 || !v->args[0] || !v->aux)
         return false;
     return strcmp((const char *) v->aux, spec->source_name) == 0 &&
-           sr_builtin_receiver_registry_matches(v->args[0]->type, spec->receiver);
+           xa_builtin_receiver_matches_type(v->args[0]->type, spec->receiver);
 }
 
 static bool sr_is_typed_array_native_receiver_method(const XiValue *v) {

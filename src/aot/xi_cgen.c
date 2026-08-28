@@ -368,41 +368,6 @@ static bool cg_method_name_is(const XiValue *v, const char *name, int symbol) {
     return (int) (v->aux_int >> 1) == symbol;
 }
 
-static bool cg_builtin_receiver_pod_span_elem(const XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
-                                                 XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver_type && receiver_type->kind == XR_KIND_INT &&
-                   !receiver_type->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver_type);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver_type);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver_type);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && receiver_type->kind == XR_KIND_SLICE &&
-                   cg_builtin_receiver_pod_span_elem(receiver_type->container.element_type);
-    }
-    return false;
-}
-
 /* Check whether an op is void-like (produces no named result). */
 static bool cg_is_void_like(const XiValue *v) {
     if (!v)

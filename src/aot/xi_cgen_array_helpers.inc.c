@@ -3005,7 +3005,7 @@ static bool cg_call_method_matches_receiver_registry_id(const XiValue *v,
     return spec && v && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
            v->nargs >= 1 && v->args[0] &&
            cg_method_name_is(v, spec->source_name, cg_method_sym(spec->source_name)) &&
-           cg_builtin_receiver_registry_matches(v->args[0]->type, spec->receiver);
+           xa_builtin_receiver_matches_type(v->args[0]->type, spec->receiver);
 }
 
 static bool cg_array_elem_info_from_storage_plan(const XaotArrayStoragePlan *plan,

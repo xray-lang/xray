@@ -174,6 +174,207 @@ Xi 层：按名字认出 time.sleep → 建 1 个 COROUTINE_STATE   → actual =
 所以 `actual = 1` **不是** `flags` 带来的，是 Xi 协程分析那条**独立的、按名字硬编码的**路径带来的。
 第一节的 `flags`/`effects` 分歧与本条是**两个独立的分歧**，不要合并处理。
 
+### 第 7 份判据：给 `flags` 加位的闸，比协程分析的 roster 窄得多
+
+追这条时挖出的。给一条指令的实例 `flags` 加上 `XI_FLAG_MAY_SUSPEND` 的闸**总共只有两个**：
+
+```c
+src/ir/xi_lower_expr.c:5404  lower_call_resumes_by_netpoll_retry
+    → 转调 xr_stdlib_metadata_func_resumes_by_netpoll_retry，该函数硬性要求 module == "net"
+
+src/ir/xi_lower_expr.c:505   xi_lower_method_may_suspend
+    if (xi_lower_type_is_named_instance(receiver_type, "WorkQueue"))
+        return strcmp(method, "pop") == 0 && (nargs == 0 || nargs == 1);
+    if (xi_lower_type_is_named_instance(receiver_type, "ResultGroup"))
+        return strcmp(method, "recv") == 0 && nargs == 0;
+    return false;
+```
+
+对照 Xi 协程分析的 roster（`xi_value_is_blocking_*_method_call`）认的 14 个
+`(选择子, arity)` 组合，**lowering 闸只认其中 3 个**。Channel 与 Task 有专属 opcode
+（表默认值自带该位）不受影响，但 `Semaphore.acquire` / `CountdownLatch.wait` /
+`EventCount.wait` **既不在 lowering 闸里、也没有专属 opcode**，与 `time.sleep` 处境相同。
+
+### 一条被实测否定的修法（重要，避免重走）
+
+一个自然的修法猜想是：**让 `effects` 携带实例信息，使它与 `flags` 恒等**——如果 `time.sleep`
+的 yieldable 性本该经 `effects` 传到验证层，那本节与第一节就是同一个修复。
+
+**实测否定：`flags` 对这条调用也不带 `MAY_SUSPEND`。** 两条独立证据：
+
+1. 前述临时探针的触发条件正是 `flags.MAY_SUSPEND != effects.MAY_SUSPEND`，跑这个用例**从未触发**
+   → 两字段一致，都是 0。
+2. 上面枚举的两个闸都不认 `time`（一个要求 `module == "net"`，另一个只认两个 handle 选择子）。
+
+**所以第一节与本节是两个独立的缺陷，"让 effects 跟上 flags"修不了本节。**
+
+### 影响面：45 条，10 个不同 selector
+
+在 1 号的基线上按 `(码, 归一化消息)` 二元组聚类：
+
+```
+45 条 "coroutine state count disagrees with grounded call authority"
+  27  selector=sleep
+   5  selector=(空)
+   4  selector=get
+   3  selector=map
+   1  selector=wait / call / run / runDirect / lock / push  各 1
+```
+
+用现成用例独立复现了两个非 `sleep` 的形态：
+
+```
+tests/diff/cases/semantics/concurrency/barrier_compose.xr   selector=wait expected=0 actual=1
+tests/diff/cases/semantics/concurrency/once_compose.xr      selector=call expected=0 actual=1
+```
+
+**`get` / `map` / `push` / `lock` 不在协程分析那 14 个 roster 里**，说明产生协程状态的路径
+不止 `xi_coro_is_*_call` 这一族——**影响面的边界尚未摸到底，在枚举完整之前不应确定修法。**
+
+### 同族的 name-based 硬编码不止一处
+
+`xi_coro_is_time_sleep_call` 之外，同文件还有两处同型：
+
+- `xi_coro_is_test_yield_call`（`:323`）硬编码 3 个 `test_yield` 成员名
+- `xi_coro_is_net_io_call`（`:338`）硬编码 4 个 net 成员名，且用的是**公开拼写**
+  `accept/read/write/writeBytes`，而 metadata 侧是 `__accept/__read/...` **7 个私有拼写**
+
+#### `xi_coro_is_net_io_call` 是一颗定时炸弹（6 号的迁移会触发）
+
+stdlib 自举正在做的事，正是**把公开表面迁进 Xray、把 C leaf 改成 `__` 私有拼写**。
+这个硬编码认的是迁移**之前**的公开拼写，所以：
+
+> **6 号每迁一个涉及 net 的模块，那四个公开拼写就会失效，而协程分析会静默地不再认为
+> 那些调用可挂起。**
+
+它不报错——只是少建协程状态，然后在下游以本节这个诊断的**反面形态**冒出来：
+`expected=1 actual=0`（而不是现在看到的 `expected=0 actual=1`）。
+
+同类事故本轮已经发生过一次：5 号的新单测引用 `mem.cacheLineSize`，6 号把它改名为
+`mem.__cacheLineSize`，**两个分支单独都绿，合并后单测查不到符号**。那一次有测试在喊；
+`xi_coro_is_net_io_call` 这一处**没有测试钉住**，失效时不会有人喊。
+
+### 完整枚举：协程状态有且仅有一个来源，而它有 7 个分支
+
+收口判据是「每一条都能说出它的协程状态是哪一行代码建的」。**静态正推得到的答案是唯一的。**
+
+实体的唯一产生点是 `xr_semantic_builder.c:6037-6041`，它逐条读 `XiCoroPlan::points`：
+
+```c
+const XiCoroPlan *coro = ctx->functions[function].source->coro_plan;
+for (uint32_t state = 0; state < coro->nstates; state++) {
+    const XiCoroSuspendPoint *point = &coro->points[state];
+    ... append_entity(ctx, XR_SEM_ENTITY_COROUTINE_STATE, ...)
+}
+```
+
+而 `points` 由 `xi_coro_analyze.c:2049-2145` 的两趟扫描填充（计数一趟、物化一趟），
+**两趟用的是同一个判据，没有第二条路径**：
+
+```c
+if (xi_coro_is_suspend_point(f, v, resolver))   /* :2073 计数 */
+    npoints++;
+...
+if (xi_coro_is_suspend_point(f, v, resolver)) { /* :2128 物化 */
+    pt->state_id = pi + 1; pt->op = v; pt->kind = xi_coro_suspend_kind(f, v, resolver);
+}
+...
+plan->nstates = npoints;                         /* :2145 */
+```
+
+所以**每一个协程状态都来自 `xi_coro_is_suspend_point_impl`（`:665`）判为真的一条 `XiValue`**，
+而它有 **7 个互相独立的判定分支**：
+
+| # | 分支 | 依据 | 验证层有无对应 |
+|---|---|---|---|
+| 1 | `xi_coro_is_net_io_call` | 硬编码 4 个 net **公开拼写** | **无** |
+| 2 | `xi_coro_value_carries_suspend_contract` | **`v->flags & XI_FLAG_MAY_SUSPEND`** | 验证层问的是 `effects`，**不同的字** |
+| 3 | opcode ∈ {YIELD, GEN_YIELD, GO, AWAIT, CHAN_SEND, CHAN_RECV, SELECT_BLOCK, SCOPE_EXIT} | opcode 直接匹配 | 部分（`effects` 表默认值 + `opcode == XI_GO`） |
+| 4 | 7 个 blocking builtin 家族 | 14 个 (选择子, arity) 组合 | 部分（`BUILTIN_INSTANCE_YIELDABLE` target kind） |
+| 5 | `xi_coro_is_time_sleep_call` | 硬编码 `time` + `sleep` | **无** |
+| 6 | `xi_coro_is_test_yield_call` | 硬编码 3 个 `test_yield` 成员名 | **无** |
+| 7 | `xi_coro_call_suspends` / `..._method_call_suspends` | **递归到被调方** | 部分（`DIRECT_LOCAL` 且 `suspendable[]`） |
+
+对照语义验证层（`xr_semantic_verify.c:4956`）的 `expected`，它**只由两项析取而成**：
+
+```c
+operation_is_static_suspend(op)   /* effects 位 ‖ opcode == XI_GO */
+|| dynamic_suspend                /* 只看 call target 的 kind */
+```
+
+**7 个分支 vs 2 个分支。** 这就是本节分歧的完整结构，也是那 10 个不同 selector 的来源：
+`sleep` 走第 5 条、`wait` 走第 4 条、而 `get` / `map` / `push` / `lock` / `call` 这些
+**不在任何 roster 里的选择子走的是第 7 条（递归）**——用户函数调用了一个挂起函数，
+于是调用点自身成为挂起点，而验证层的 `dynamic_suspend` 只在 target kind 恰为
+`DIRECT_LOCAL`/`SOURCE_INSTANCE_METHOD_LOCAL` 且被判 suspendable 时才跟得上。
+
+**枚举到此闭合**：不存在「查不出协程状态由哪一行建」的条目，因为产生点唯一、判据唯一。
+分歧的规模不是「45 条用例」，而是**判定分支数 7 : 2**。
+
+### 实测交叉验证：两个判定集合是**交叉**，不是包含（推翻了本节先前的表述）
+
+45 条逐条编译实测，**45/45 全部是本诊断，无一条因别的原因失败**。分布：
+
+```
+selector:  sleep 27 | (空) 5 | get 4 | map 3 | wait·call·run·runDirect·lock·push 各 1
+opcode:    117 XI_CALL_METHOD 40 条 | 116 XI_CALL 5 条（空 selector ⟺ XI_CALL，一一对应）
+(expected, actual):  0/1 共 44 条 | 1/0 共 1 条
+```
+
+**那一条 `expected=1 actual=0` 是本节最重要的实测结果**：
+
+```
+tests/diff/cases/semantics/coro/channel_for_in_recv_or.xr
+  function=0 operation=53 opcode=116 selector=(空) expected=1 actual=0
+  L14  print(drain_sum(ints))     ← drain_sum 体内是 for (msg in ch)，channel 迭代是挂起点
+```
+
+验证层判定它挂起，**而 Xi 没有建协程状态**——方向与其余 44 条相反。
+
+**因此「Xi 的 7 条判定分支 ⊇ 验证层的 2 条」是错的**，本节先前按这个包含关系推导的部分应以此为准：
+**两个判定集合是交叉的**。Xi 多认了一批（44 条），也漏认了一批（至少 1 条）。
+
+这对修法方向有直接影响：**让 Xi 侧三条硬编码改读 metadata 只收拢了多认的那一侧**，
+漏认的那一侧（经普通函数调用传递进来的挂起性）是**另一个缺口**，必须单独查。
+
+其余实测事实：
+
+- **12 个 http 用例全部指向同一处**：`stdlib/http/http.xr:1011` 的 `time.sleep(...)`。
+  这与 fastpaths 构建期生成器死在 `http.xr` 是同一行。
+- **survey 模式**（收集全部 gap 而非首报）下，45 条用例共 **75 处** gap，**全量仍只有 1 处反向**。
+- 空 selector 的 5 条全是无接收者的 `f(args)` 语法（`XI_CALL` 没有方法名 metadata）。
+  其中 2 条经 A/B 最小化确认：把 `defer { cleanup(...) }` 改成裸 `cleanup(...)`，
+  gap 从 2 降为 1 但仍然报错——**触发因素是「经 upvalue cell 间接调嵌套函数」，
+  `defer` 只是把同一处复制成正常路径与异常展开路径两份**。
+
+### 修法方向（已裁决：本轮不做，留作下一轮开头的工作项）
+
+枚举闭合后，问题的正确提法变了：**不是「哪一份判据是真值」，而是「为什么产生方有 7 种
+识别方式，而消费方只有 2 种」。**
+
+**关键论证——「验证层没有对应」不是疏忽，接手的人必须先读这一段：**
+
+三条硬编码分支（第 1、5、6 条：net / `time.sleep` / `test_yield`）读的是**名字**：
+模块名加成员名加实参数。验证层读的是 **metadata 与 call target kind**，那是**结构化的事实**。
+
+**结构化事实里根本没有这些名字。** 所以「让验证层去追认这三条硬编码」在物理上做不到——
+它没有那些名字可读，除非把名字表也复制一份进验证层，那只是把第 8 份判据造出来。
+
+**因此唯一可行的方向是反过来：让 Xi 侧那三条硬编码改读 metadata。**
+`vm_binding: "yieldable"` 已经在 `stdlib/defs/core.def` 里（`time.sleep` 见 `:58-68`），
+`xr_stdlib_metadata_func_is_yieldable()` 已经存在于 `src/stdlib/xstdlib_metadata.h:182`。
+改完之后 **7 条分支收敛成 4 条**，且与 stdlib 自举迁移同向——迁移正在把这些事实结构化，
+硬编码是逆流。
+
+**本轮不做的三条理由**（裁决记录）：
+
+1. 它改协程状态数 → 改 SemanticPlan / TargetPlan 指纹 → 需与身份 KAT 的重算协调；
+2. 集成分支已推进，在其上再引入一个改指纹的语义变更，风险与收益不成比例；
+3. 它现在是一个**交接质量足够高**的工作项：产生点唯一、7 个分支逐条列出、每个 selector
+   已归到分支、修法方向已论证。接手者第一天就能动手。
+
+**接手时最容易走错的一步，就是去补验证层。** 上面那段论证说明了为什么那条路走不通。
+
 ### 与 1 号统计的对应关系
 
 1 号的清单里 `XR_SEM_0019` 有 49 条，其中 **45 条**的消息是
@@ -313,6 +514,54 @@ B lane 修 `xi_local_addr_names_operand_storage` 时，处理的是 `XI_LOCAL_AD
 
 **有意保留未合并的**：`xrt_core_freestanding.h:1271` 的 span 判据是 freestanding profile 的
 独立副本（该文件不 include `xrt_coll.h`），属于**有意的 profile 隔离**，不是漏网的第三份。
+
+## 五、无静态目标的 closure：两处各自论证过，论证的不是同一件事
+
+3 号在全局效应摘要线上撞到、我核实的。**这一组的形态与前四组都不同，也最隐蔽。**
+
+同一个调用点（`XG_CALL_CLOSURE` 且 `static_target_func_id == XG_NO_ID`），两个判据给出相反答案：
+
+```c
+src/analysis/xglobal_summary.c:2850   xg_body_reachability_mark_call
+    if (call->kind == XG_CALL_CLOSURE)
+        /* Closure and builtin calls carry their local effect/capability
+         * contract on the owner body.  Concrete direct function targets are
+         * recorded above; no declaration-tree fallback is permitted here. */
+        return true;
+
+src/analysis/xglobal_summary.c:2727   xg_callsite_effects_compose
+    /* A closure without a stable target is deliberately unprovable. */
+    return false;
+```
+
+两个函数的前两个分支**完全对称**（`NATIVE/EXTERN/CLASS_ALLOC` 一组，
+`DIRECT_FUNC` 或带静态目标的 `CLOSURE` 一组）。分歧只在第三处：
+**A 为无静态目标的 closure 多写了一个兜底分支，B 没有**——`XG_CALL_CLOSURE` 在 B 里
+只出现一次（带静态目标的那次），其余落到函数尾的 `return false`。
+
+### 为什么这一组比前四组更难发现
+
+前四组都是**漂移**：某一份忘了跟上，没人为差异辩护过。这一组不是——
+**两处各自写了注释论证自己为什么对，而且两段论证单独看都成立**：
+
+- A 的论证成立：closure 的效应/能力契约确实记在 owner body 上，可达性标记到此为止是对的。
+- B 的论证也成立：没有稳定目标就无法组合被调方的效应集合，判为不可证是保守且正确的。
+
+**它们回答的根本不是同一个问题**——A 问「这个调用点处理完了吗」，B 问「能否算出它的效应集合」。
+把两段注释并排读才看得出来，而它们相隔 160 行、在两个函数里。
+
+**这是本 packet 里唯一一组「注释齐全、每一处都经过思考」的分歧。** 前四组的教训是
+「重复会漂移」，这一组的教训不同：**判据分歧不一定源于疏忽，也可能源于两处各自想清楚了一个
+略微不同的问题，而没有人把两个问题并排放在一起看过。** 加共享判据解决不了这一类——
+需要先确定「无静态目标的 closure 在可达性与效应组合两个维度上分别意味着什么」。
+
+### 3 号报告的后果（我未独立复现，如实标注）
+
+据 3 号：print 变成普通调用之后，**几乎所有程序的 entry plan 都退化成全零**
+（`root_representation` 停在 `ELIDED`，连 `assert(true)` 也中招），而只有
+`test_xglobal_summary` 里一个用例在喊。他已写进 `blockers/3-kat-surface-recompute-residue.md` 第 4 节。
+
+**这一条的后果我没有独立验证**，只核实了两处判据本身的分歧确实存在、注释确实如上。
 
 ---
 

@@ -141,42 +141,6 @@ typedef XaBuiltinReceiverKind XlspReceiverKind;
 typedef XaBuiltinMethodTypeKind XlspMethodTypeKind;
 typedef XaBuiltinReceiverMethodSpec XlspReceiverMethodSpec;
 
-static bool xlsp_type_is_pod_slice_elem(XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool xlsp_receiver_matches(XrType *type, XlspReceiverKind receiver) {
-    switch (receiver) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return type && type->kind == XR_KIND_INT && !type->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return type && type->kind == XR_KIND_INT && !type->is_nullable &&
-                   (type->scalar_rep == XR_NATIVE_U8 || type->scalar_rep == XR_NATIVE_U16 ||
-                    type->scalar_rep == XR_NATIVE_U32 || type->scalar_rep == XR_NATIVE_U64 ||
-                    type->scalar_rep == XR_NATIVE_USIZE);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(type);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return type && XR_TYPE_IS_ARRAY(type);
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(type);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return type && XR_TYPE_IS_SLICE(type) && type->container.element_type &&
-                   xlsp_type_is_pod_slice_elem(type->container.element_type);
-    }
-    return false;
-}
-
 static const XlspReceiverMethodSpec *xlsp_find_receiver_method(XrType *type,
                                                                const char *method_name) {
     if (!type || !method_name)
@@ -185,7 +149,7 @@ static const XlspReceiverMethodSpec *xlsp_find_receiver_method(XrType *type,
     for (size_t i = 0; i < n; i++) {
         const XlspReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
         if (strcmp(spec->source_name, method_name) == 0 &&
-            xlsp_receiver_matches(type, spec->receiver))
+            xa_builtin_receiver_matches_type(type, spec->receiver))
             return spec;
     }
     return NULL;
@@ -215,6 +179,9 @@ static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec
             return;
         case XA_BUILTIN_RECEIVER_ARRAY:
         case XA_BUILTIN_RECEIVER_POD_SLICE:
+        /* Map prints as its own type; naming it here rather than letting it
+         * fall out of the switch keeps the next receiver kind visible. */
+        case XA_BUILTIN_RECEIVER_MAP:
             xlsp_type_label(type, buf, buf_size);
             return;
     }
@@ -424,7 +391,7 @@ static int xlsp_append_receiver_registry_completions(XrJsonValue *items, XrType 
     size_t count = xa_builtin_receiver_method_count();
     for (size_t i = 0; i < count; i++) {
         const XlspReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
-        if (!xlsp_receiver_matches(type, spec->receiver) ||
+        if (!xa_builtin_receiver_matches_type(type, spec->receiver) ||
             xlsp_completion_has_label(items, spec->source_name))
             continue;
 
