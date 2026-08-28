@@ -127,3 +127,7 @@ tests/network/ws_tests/autobahn/reports/
 *.xrc
 
 .xray-cycles.json
+
+# Scratch directories the program-semantic-closure tests create in the working tree
+psc_scalar_graph_*/
+psc_private_leaf_*/
