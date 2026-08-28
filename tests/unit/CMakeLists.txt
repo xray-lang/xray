@@ -1162,7 +1162,9 @@ endif()
 # regex/ — Regex engine
 # ============================================================================
 
-add_xray_unit_test(test_regex regex/test_regex.c)
+# test_regex is gone with the C regex engine: it reached into stdlib/regex's
+# internal headers, and the automata now live in stdlib/regex/regex.xr. Its
+# coverage moved to tests/regression/10_stdlib/1101_regex_engine.xr.
 
 # ============================================================================
 # api/ — Public API defense tests

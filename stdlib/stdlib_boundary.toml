@@ -157,9 +157,16 @@ policy = "xray_semantic"
 semantic_source = "stdlib/regex/regex.xr"
 factory_source = "stdlib/regex/xregex_binding.c"
 factory_symbol = "regex"
-public_native = ["Regex", "Regex.find", "Regex.findAll", "Regex.findGroup", "Regex.findText", "Regex.replace", "Regex.split", "Regex.test", "RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text", "find", "findAll", "fullFind"]
+# Regex and RegexMatch stay listed because stdlibgen gives native_class /
+# class / class_field entries no is_internal attribute, so they cannot be made
+# private by renaming the way fn entries can -- the same reason sys keeps
+# OsMutex and net keeps NetConn. Regex additionally cannot stop being a native
+# class at all: the literal syntax /pat/flags lowers to XI_REGEX_COMPILE with
+# its result type pinned to type_regex (src/ir/xi_lower_expr.c:11349).
+# Every method and module function that was on this list is now Xray.
+public_native = ["Regex", "Regex.flags", "Regex.pattern", "Regex.prog", "RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text"]
 private_native_sources = ["stdlib/regex/*.c"]
-private_native_reason = "Mature regex automata implementation with bounded native data structures"
+private_native_reason = "Handle allocation plus three lookups owned elsewhere: the shared flag-string mask and the unicode property tables"
 perf_suite = "stdlib/regex"
 
 [[module]]

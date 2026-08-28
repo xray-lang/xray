@@ -52,30 +52,6 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "compress.__zlibDecompress";
     if (strcmp(symbol, "crypto.__randomBytes") == 0)
         return "crypto.__randomBytes";
-    if (strcmp(symbol, "regex.__compile") == 0)
-        return "regex.__compile";
-    if (strcmp(symbol, "regex.__test") == 0)
-        return "regex.__test";
-    if (strcmp(symbol, "regex.__count") == 0)
-        return "regex.__count";
-    if (strcmp(symbol, "regex.__findText") == 0)
-        return "regex.__findText";
-    if (strcmp(symbol, "regex.__findGroup") == 0)
-        return "regex.__findGroup";
-    if (strcmp(symbol, "regex.find") == 0)
-        return "regex.find";
-    if (strcmp(symbol, "regex.fullFind") == 0)
-        return "regex.fullFind";
-    if (strcmp(symbol, "regex.findAll") == 0)
-        return "regex.findAll";
-    if (strcmp(symbol, "regex.__replace") == 0)
-        return "regex.__replace";
-    if (strcmp(symbol, "regex.__replaceAll") == 0)
-        return "regex.__replaceAll";
-    if (strcmp(symbol, "regex.__split") == 0)
-        return "regex.__split";
-    if (strcmp(symbol, "regex.__isValid") == 0)
-        return "regex.__isValid";
     if (strcmp(symbol, "cluster.__start") == 0)
         return "cluster.__start";
     if (strcmp(symbol, "cluster.__join") == 0)
@@ -92,28 +68,6 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
 static const char *xaot_stdlib_generated_define_for_symbol(const char *symbol) {
     if (!symbol)
         return NULL;
-    if (strcmp(symbol, "regex.__compile") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.__test") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.__count") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.__findText") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.__findGroup") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.find") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.fullFind") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.findAll") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.__replace") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.__replaceAll") == 0)
-        return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.__split") == 0)
-        return "XRT_ENABLE_REGEX";
     return NULL;
 }
 

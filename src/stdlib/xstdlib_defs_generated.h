@@ -219,23 +219,11 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"sys", "__pipeRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read one chunk from a pipe endpoint", "sys_pipe_read_yieldable", "yieldable", "", "xrt_sys_pipe_read", "vv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", "sys_pipe_write_yieldable", "yieldable", "", "xrt_sys_pipe_write", "vv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", "sys_pipe_close", "normal", "", "xrt_sys_pipe_close", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "normal", "", "xrt_regex_compile_default", "s", "value", "", "regex.__compile", "XRT_ENABLE_REGEX", "alloc", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "normal", "", "xrt_regex_compile_with_flags", "ss", "value", "", "regex.__compile", "XRT_ENABLE_REGEX", "alloc", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__test", "(pattern: Regex, s: string): bool", "Test if regex matches", "regex_test", "normal", "", "xrt_regex_test", "vs", "value", "", "regex.__test", "XRT_ENABLE_REGEX", "alloc", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__count", "(pattern: Regex, s: string): i64", "Count matches", "regex_count", "normal", "", "xrt_regex_count", "vs", "value", "", "regex.__count", "XRT_ENABLE_REGEX", "alloc", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__findText", "(pattern: Regex, s: string): string?", "Find first matching text", "regex_find_text", "normal", "", "xrt_regex_find_text", "vs", "value", "", "regex.__findText", "XRT_ENABLE_REGEX", "alloc", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__findGroup", "(pattern: Regex, s: string, index: i64): string?", "Find capture group", "regex_find_group", "normal", "", "xrt_regex_find_group", "vsv", "value", "", "regex.__findGroup", "XRT_ENABLE_REGEX", "alloc", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "find", "(pattern: Regex, s: string, offset?: i64): RegexMatch?", "Find first match", "regex_find", "normal", "", "xrt_regex_find", "vs", "value", "", "regex.find", "XRT_ENABLE_REGEX", "alloc", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "find", "(pattern: Regex, s: string, offset?: i64): RegexMatch?", "Find first match", "regex_find", "normal", "", "xrt_regex_find_offset", "vsv", "value", "", "regex.find", "XRT_ENABLE_REGEX", "alloc", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "fullFind", "(pattern: Regex, s: string): RegexMatch?", "Find full match", "regex_full_match", "normal", "", "xrt_regex_full_find", "vs", "value", "", "regex.fullFind", "XRT_ENABLE_REGEX", "alloc", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "findAll", "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>", "Find all matches", "regex_find_all", "normal", "", "xrt_regex_find_all", "vs", "value", "", "regex.findAll", "XRT_ENABLE_REGEX", "alloc", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "findAll", "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>", "Find all matches", "regex_find_all", "normal", "", "xrt_regex_find_all_limit", "vsv", "value", "", "regex.findAll", "XRT_ENABLE_REGEX", "alloc", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__replace", "(pattern: Regex, s: string, repl: string): string", "Replace first match", "regex_replace", "normal", "", "xrt_regex_replace", "vss", "value", "", "regex.__replace", "XRT_ENABLE_REGEX", "alloc", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__replaceAll", "(pattern: Regex, s: string, repl: string): string", "Replace all matches", "regex_replace_all", "normal", "", "xrt_regex_replace_all", "vss", "value", "", "regex.__replaceAll", "XRT_ENABLE_REGEX", "alloc", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__split", "(pattern: Regex, s: string, limit?: i64): Array<string>", "Split string by regex", "regex_split", "normal", "", "xrt_regex_split", "vs", "value", "", "regex.__split", "XRT_ENABLE_REGEX", "alloc", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__split", "(pattern: Regex, s: string, limit?: i64): Array<string>", "Split string by regex", "regex_split", "normal", "", "xrt_regex_split_limit", "vsv", "value", "", "regex.__split", "XRT_ENABLE_REGEX", "alloc", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__escape", "(s: string): string", "Escape regex special chars", "regex_escape", "normal", "", "xrt_regex_escape", "s", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"regex", "__isValid", "(pattern: string): bool", "Check if pattern is valid", "regex_is_valid", "normal", "", "xrt_regex_is_valid", "s", "value", "", "regex.__isValid", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"regex", "__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", "regex_compile", "normal", "", "", "sv", "value", "", "", "", "alloc", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"regex", "__regexMatchNew", "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch", "Allocate a RegexMatch with its four fields set", "regex_match_new", "normal", "", "", "vvsv", "value", "", "", "", "alloc", "", 0, 4, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"regex", "__regexParseFlags", "(flags: string): i64", "Flag string to mask, the shared VM/AOT authority", "regex_parse_flags", "normal", "", "", "s", "value", "", "", "", "pure", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"regex", "__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", "regex_unicode_prop_id", "normal", "", "", "s", "value", "", "", "", "pure", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"regex", "__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", "regex_unicode_has_prop", "normal", "", "", "vv", "value", "", "", "", "pure", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"os", "__platform", "(): string", "Host operating system name", "os_platform", "normal", "", "xrt_os_platform", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"os", "__arch", "(): string", "Host CPU architecture name", "os_arch", "normal", "", "xrt_os_arch", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"os", "__getenv", "(name: string): string?", "Get environment variable", "os_getenv", "normal", "", "xrt_os_getenv", "s", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -587,7 +575,6 @@ static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = 
     {"sys", "OsCondvar", "objectClass", "sysCondvarClass", "&g_sys_condvar_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSCONDVAR"},
     {"sys", "OsBarrier", "objectClass", "sysBarrierClass", "&g_sys_barrier_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSBARRIER"},
     {"sys", "OsOnce", "objectClass", "sysOnceClass", "&g_sys_once_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSONCE"},
-    {"regex", "Regex", "objectClass", "regexClass", "&g_regex_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_REGEX"},
     {"mem", "Buffer", "objectClass", "memBufferClass", "&g_mem_buffer_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER"},
     {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
     {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER"},
@@ -595,6 +582,7 @@ static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = 
 #define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
 
 static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {
+    {"regex", "Regex", "objectClass", "regexClass", "XR_CLASS_BUILTIN", "XR_BK_REGEX"},
     {"regex", "RegexMatch", "objectClass", "regexMatchClass", "XR_CLASS_BUILTIN | XR_CLASS_FINAL", "XR_BK_REGEX_MATCH"},
 };
 #define XR_STDLIB_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_def_entries) / sizeof(xr_stdlib_class_def_entries[0])))
@@ -613,13 +601,6 @@ static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = 
     {"sys", "OsCondvar", "broadcast", "sys_condvar_broadcast", 0, "0"},
     {"sys", "OsBarrier", "wait", "sys_barrier_wait", 0, "0"},
     {"sys", "OsOnce", "call", "sys_once_call", 1, "0"},
-    {"regex", "Regex", "test", "re_m_test", 1, "0"},
-    {"regex", "Regex", "find", "re_m_find", 2, "0"},
-    {"regex", "Regex", "findText", "re_m_find_text", 1, "0"},
-    {"regex", "Regex", "findGroup", "re_m_find_group", 2, "0"},
-    {"regex", "Regex", "findAll", "re_m_find_all", 2, "0"},
-    {"regex", "Regex", "replace", "re_m_replace", 2, "0"},
-    {"regex", "Regex", "split", "re_m_split", 2, "0"},
     {"mem", "Buffer", "asBytes", "mem_buffer_as_bytes", 0, "0"},
     {"mem", "Buffer", "asMutBytes", "mem_buffer_as_mut_bytes", 0, "0"},
     {"mem", "Buffer", "borrowPtr", "mem_buffer_borrow_ptr", 0, "0"},
@@ -636,6 +617,9 @@ static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = 
 #define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / sizeof(xr_stdlib_class_method_def_entries[0])))
 
 static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[] = {
+    {"regex", "Regex", "pattern", "0"},
+    {"regex", "Regex", "flags", "0"},
+    {"regex", "Regex", "prog", "0"},
     {"regex", "RegexMatch", "start", "0"},
     {"regex", "RegexMatch", "end", "0"},
     {"regex", "RegexMatch", "text", "0"},

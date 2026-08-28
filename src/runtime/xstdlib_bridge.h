@@ -31,22 +31,15 @@ struct XrChannel;
 
 /* ========== Regex Bridge ========== */
 
-// Get pattern string from regex object
-XR_FUNC const char *xr_regex_pattern(const struct XrRegex *re);
-
-// Extract XrRegex* from an XrValue
-XR_FUNC struct XrRegex *xr_value_to_regex(XrValue v);
-
 /*
- * Compile a regex literal (the OP_REGEX_COMPILE bytecode helper).
- * Both arguments must be strings; flag chars 'i' / 'm' / 's' are
- * recognized, anything else is silently ignored to mirror the old
- * inline parser. Returns a wrapped XrRegex value on success, or
- * xr_null() on parse / compile failure.
+ * Build a Regex for a regex literal (the OP_REGEX_COMPILE bytecode helper).
+ * Both arguments must be strings; flag chars 'i' / 'm' / 's' are recognised
+ * and anything else is silently ignored, which is the long-standing behaviour
+ * of xr_regex_core_parse_flags. It records the pattern and the flag mask;
+ * compilation belongs to stdlib/regex/regex.xr and happens on first use.
  *
- * Lives in stdlib/regex but is forward-declared here so the VM
- * dispatch loop can reach it without pulling stdlib headers into
- * src/vm — the same bridge pattern xr_value_to_regex already uses.
+ * Lives in stdlib/regex but is forward-declared here so the VM dispatch loop
+ * can reach it without pulling stdlib headers into src/vm.
  */
 XR_FUNC XrValue xr_regex_compile_literal(struct XrVMRuntime *isolate, XrValue pattern,
                                          XrValue flags);

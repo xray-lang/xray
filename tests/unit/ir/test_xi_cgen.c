@@ -2713,7 +2713,7 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * entries, so this digest moves even though the fixture below imports
      * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b. */
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4") == 0,
+                        "cc61180bf811d21347f4ca0c5a1c9bace0f0fe303687efe8eef60f3dc2187c63") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;

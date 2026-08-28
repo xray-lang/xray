@@ -135,10 +135,23 @@ EW_END_TEXT = 8, EW_WORD_BOUNDARY = 16, EW_NOT_WORD_BOUND = 32
 TR_HAS_EMPTY_WIDTH = 1   TR_HAS_ANY_SCALAR = 2   TR_HAS_UNICODE = 4   TR_HAS_CAPTURE = 8
 ```
 
-### 2.5 unicode 区间区
+### 2.5 unicode 属性区
 
-第 `j` 条区间在 `prog[PH_UNI_BASE + j*3 + k]`：`k=0` lo 码点、`k=1` hi 码点、`k=2` negated(0/1)。
+第 `j` 条在 `prog[PH_UNI_BASE + j*3 + k]`：`k=0` prop_id、`k=1` negated(0/1)、`k=2` 保留。
 `const UNI_STRIDE: i64 = 3`
+
+**存 prop_id 而不是展开的码点区间**，和 C 侧一致（`xregex_compile.c:144-145` 的
+`unicode_ranges[idx].prop_id` / `.negated`）。理由是所有权，不是省事：`\p{Han}` 的码点区间
+是 **unicode 的语义**，权威在 `src/base/xunicode.c` 的属性表，那里不在 `stdlib/` 下，
+inventory 也不把它算作 regex 的 C 所有者。把几百条区间抄进 `regex.xr` 会给同一个问题
+造出第二个所有者 —— 正是本 lane 要消灭的东西。
+
+因此保留两个薄的私有叶子，它们转发到 unicode 的既有权威、不含 regex 语义：
+
+```
+__unicodePropId(name: string) -> i64      // 名字 → 属性 id，-1 = 无效
+__unicodeHasProp(cp: i64, propId: i64) -> bool
+```
 
 ## 3. AST：编译期 SoA，不用 enum
 

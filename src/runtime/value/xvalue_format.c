@@ -362,11 +362,14 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                 if (!format_datetime_method(isolate, sb, inst, "toString"))
                     xr_strbuf_append_cstr(sb, "DateTime{...}", 13);
             } else if (cls && cls->builtin_kind == XR_BK_REGEX) {
-                struct XrRegex *re = xr_value_to_regex(val);
-                const char *pat = re ? xr_regex_pattern(re) : NULL;
-                if (pat) {
+                /* Regex keeps its pattern in field slot 0. The engine moved to
+                 * stdlib/regex/regex.xr, so the handle no longer has a native
+                 * body holding an XrRegex*. */
+                XrValue pat_val = xr_instance_get_field_fast(inst, 0);
+                if (XR_IS_STRING(pat_val)) {
+                    XrString *pat = XR_TO_STRING(pat_val);
                     xr_strbuf_append_cstr(sb, "/", 1);
-                    xr_strbuf_append_cstr(sb, pat, strlen(pat));
+                    xr_strbuf_append_cstr(sb, pat->data, pat->length);
                     xr_strbuf_append_cstr(sb, "/", 1);
                 } else {
                     xr_strbuf_append_cstr(sb, "<Regex>", 7);

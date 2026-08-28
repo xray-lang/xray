@@ -380,20 +380,21 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
 #endif  /* XR_STDLIB_VM_BIND_MODULE_OS */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_REGEX
-static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "__compile", regex_compile);
-    XRS_EXPORT(module, isolate, "__test", regex_test);
-    XRS_EXPORT(module, isolate, "__count", regex_count);
-    XRS_EXPORT(module, isolate, "__findText", regex_find_text);
-    XRS_EXPORT(module, isolate, "__findGroup", regex_find_group);
-    XRS_EXPORT(module, isolate, "find", regex_find);
-    XRS_EXPORT(module, isolate, "fullFind", regex_full_match);
-    XRS_EXPORT(module, isolate, "findAll", regex_find_all);
-    XRS_EXPORT(module, isolate, "__replace", regex_replace);
-    XRS_EXPORT(module, isolate, "__replaceAll", regex_replace_all);
-    XRS_EXPORT(module, isolate, "__split", regex_split);
-    XRS_EXPORT(module, isolate, "__escape", regex_escape);
-    XRS_EXPORT(module, isolate, "__isValid", regex_is_valid);
+XR_FUNC bool xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    XRS_EXPORT(module, isolate, "__regexNew", regex_compile);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__regexMatchNew", regex_match_new);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__regexParseFlags", regex_parse_flags);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__unicodePropId", regex_unicode_prop_id);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__unicodeHasProp", regex_unicode_has_prop);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_REGEX */
 

@@ -1410,7 +1410,6 @@ target_include_directories(xray_compiler PRIVATE
 )
 
 add_library(xray_aot_core STATIC
-    src/aot/xrt_regex_core.c
     ${AOT_RANDOM_SRC}
     ${AOT_TIME_SRC}
     src/base/xarena.c
@@ -1419,11 +1418,6 @@ add_library(xray_aot_core STATIC
     src/base/xunicode.c
     stdlib/compress/compress.c
     stdlib/crypto/crypto.c
-    stdlib/regex/xregex.c
-    stdlib/regex/xregex_compile.c
-    stdlib/regex/xregex_dfa.c
-    stdlib/regex/xregex_nfa.c
-    stdlib/regex/xregex_parse.c
 )
 target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1 XR_CRYPTO_CORE_ONLY=1)
 target_include_directories(xray_aot_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

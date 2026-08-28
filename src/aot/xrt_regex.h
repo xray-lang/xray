@@ -18,6 +18,17 @@
 #include "xrt_arc.h"
 #include "xrt_value.h"
 
+/* The definitions of everything declared below lived in xrt_regex_core.c,
+ * which was deleted together with the C regex engine: stdlib/regex/regex.xr is
+ * now the single owner of parsing, compilation and matching, and an AOT-side C
+ * engine would be a second owner of the same semantics. The declarations stay
+ * because src/aot/xrt.h includes this header unconditionally and
+ * src/aot/xrt_coll.h references xrt_regex_destroy_builtin under
+ * XRT_ENABLE_REGEX; a generated AOT program that actually calls any of them
+ * will not link until the AOT side is given an Xray-backed path. That is not
+ * reachable today: AOT is fail-closed for every migrated stdlib module on this
+ * base (XR_TARGET_1000), regex included. See
+ * blockers/r3-6-5-aot-regex-runtime-has-no-xray-backed-path.md */
 typedef struct XrRegex XrRegex;
 void xr_regex_free(XrRegex *re);
 
