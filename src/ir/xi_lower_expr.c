@@ -3934,26 +3934,13 @@ static XiValue *lower_core_print_call(XiLower *l, AstNode *node, CallExprNode *c
             return xi_const_null(l->func, l->cur_block, l->type_null);
     }
 
-    XiValue *print =
-        xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, (uint16_t) args.count);
+    XiValue *print = xi_value_new_print(l->func, l->cur_block, l->type_unit, &plan);
     if (!print) {
         l->had_error = true;
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
     for (int i = 0; i < args.count; i++)
         print->args[i] = args.items[i];
-    if (!xi_value_set_print_plan(l->func, print, &plan)) {
-        l->had_error = true;
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
-    print->source_span = (XiSourceSpan) {
-        .start_line = source.line,
-        .start_column = source.column,
-        .end_line = source.end_line,
-        .end_column = source.end_column,
-    };
-    print->flags = xi_op_default_effects(XI_PRINT);
-    print->line = (uint32_t) node->line;
     return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 

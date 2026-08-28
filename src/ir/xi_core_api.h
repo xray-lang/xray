@@ -18,6 +18,12 @@ XR_FUNC bool xi_value_set_assertion_plan(XiFunc *f, XiValue *value, const XrAsse
 XR_FUNC bool xi_value_clone_assertion_plan(XiFunc *f, XiValue *dst, const XiValue *src);
 XR_FUNC bool xi_value_set_print_plan(XiFunc *f, XiValue *value, const XrPrintPlan *plan);
 XR_FUNC bool xi_value_clone_print_plan(XiFunc *f, XiValue *dst, const XiValue *src);
+/* Build one print operation from its plan.  Arity, span, effects and line all
+ * follow from the plan, so a caller cannot set some of them and leave the rest
+ * to disagree — which is what the semantic builder refuses when it compares the
+ * span against the plan's location.  Arguments are filled in by the caller. */
+XR_FUNC XiValue *xi_value_new_print(XiFunc *f, XiBlock *blk, struct XrType *unit_type,
+                                    const XrPrintPlan *plan);
 /* Clone metadata between values of the same operation.  Unlike the shallow
  * field copier, this preserves ownership for operation-specific aux payloads. */
 XR_FUNC bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src);
