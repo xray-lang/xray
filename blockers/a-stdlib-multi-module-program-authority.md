@@ -1,10 +1,40 @@
 # Blocker: AOT refuses every module graph that contains an Xray standard-library module
 
 - **Lane**: A (standard-library self-hosting)
-- **Status**: `BLOCKED`
+- **Status**: `PARTIALLY LIFTED` — the program-authority guard is gone; what it
+  was masking is now measurable. See "2026-08-28 update" below.
 - **Requested owner**: H (compiler / unified target machine)
 - **Severity**: blocks the AOT and generated-C half of every standard-library
   migration slice, not one module.
+
+## 2026-08-28 update: the guard is lifted
+
+Round-3 lane 4 removed the refusal this packet is about. Two commits on
+`work/4-multi-module-authority-00f665c5c`:
+
+- `2eb6c863e` splits the canonical program authority from the executable slice.
+  The complete reachable source-module graph is now published as the program
+  authority for every module count, so `nmodules != 1` no longer refuses.
+- `dc6a37e00` lets a TargetPlan carry module partitions without claiming a
+  cross-module call edge, and builds those partitions for any module count.
+
+**This packet's own prediction held exactly.** It said:
+
+> Lifting the program-authority guard therefore does not deliver 19 working
+> modules. It converts a masked refusal into a measurable one.
+
+That is what happened. No module newly reaches generated C; every refusal that
+used to read `XR_TARGET_1000 program authority` now reads as a specific target
+or semantic refusal naming what is actually missing. The measurement below
+replaces the masked column with the real distribution.
+
+The remaining wall is documented as an architecture diagnosis in
+`analysis/multi-module-program-authority.md` section 8.2: the ordinary
+TargetPlan verify path interprets one merged table through the entry
+SemanticPlan alone, and the two-module graph family reaches past that by
+opening a parallel verify path built for its own narrow shape rather than by
+fixing the assumption. Making multi-module plans verifiable means making that
+verifier partition-aware, which is a separate piece of work.
 
 ## Exact source identity
 
