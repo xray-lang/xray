@@ -54,7 +54,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         manifest = load_manifest(ROOT)
         os_module = manifest.by_name["os"]
         binders = private_leaf_binder_modules(ROOT)
-        self.assertEqual({"io", "net", "os"}, set(binders))
+        self.assertEqual({"cluster", "crypto", "io", "net", "os", "runtime"}, set(binders))
         self.assertIn("os", source_modules(ROOT))
         self.assertNotIn("os", registry_modules(ROOT))
         self.assertEqual(
