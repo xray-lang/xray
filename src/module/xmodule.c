@@ -789,6 +789,17 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
     if (!registry)
         return NULL;
 
+    /* A module whose bytecode travels inside this binary resolves to itself.
+     *
+     * load_script_module already serves that bytecode instead of reading the
+     * file, but only once the name resolves, and nothing resolved it: the
+     * embedded lookup below is reached only for a specifier starting with '.',
+     * while a bundle names its modules by the absolute path they were compiled
+     * from. So an embedded build went looking for the source tree it was built
+     * from, and said the module was missing when that tree had moved. */
+    if (find_embedded_module(registry, module_name))
+        return xr_strdup(module_name);
+
     const char *importer = get_importer_path(isolate);
     char *embedded_path = resolve_embedded_relative(registry, module_name, importer);
     if (embedded_path)
