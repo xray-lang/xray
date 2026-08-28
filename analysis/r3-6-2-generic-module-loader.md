@@ -222,6 +222,29 @@ make a disabled module loadable」。
 `API inventory does not expose the complete Iterator schema`）。
 基线树跑同一脚本，输出**逐字相同**。
 
+### 9.0 运行期实测（不是推理）
+
+改动后用 `build-nofp/xray` 实跑，每一条特殊路径都单独验证过：
+
+| 验证的东西 | 怎么验的 | 结果 |
+|---|---|---|
+| `mem` 的 `Buffer` 类在模块加载时注册（从工厂移进 binder） | `mem.alloc(32).asBytes()` | `len == 32` |
+| `sync` 的 5 个 `native_type_exports` | 逐个构造 `Semaphore` / `CountdownLatch` / `EventCount` / `WorkQueue` / `ResultGroup` | 全部构造成功 |
+| 15 个纯样板模块走通用路径 | `import path/log/url/datetime/encoding/toml/text` 并调用 | 正常 |
+| `math` 作为「无源有 binder」行 | `math.sqrt(81.0)` | `9.0` |
+| `prelude` 作为「无源无 binder」行 | `import prelude` | no-op，不报错 |
+| 叶子绑定未受影响 | `compress.crc32` / `crypto.sha256` / `os.getpid` / `regex.compile` / `mem.sizeOf<i64>` | 全部正常 |
+
+`test_yield` 需要 `XR_BUILD_TEST_MODULES=ON`，所以两边**各建了一个 test-modules 二进制**
+（源外构建，不动 `build-nofp`）做 A/B：
+
+- 描述符表确实多出 `{"test_yield", NULL, xr_stdlib_vm_bind_test_yield_generated}`
+- `test_yield_scheduler_contract.xr`：两边输出都是 `100 / 42 / 42 / 0 / 1 / 2 / 2`
+- `test_yield_selective_import.xr`：两边都报同样的 `E0350: stdlib module 'test_yield'
+  has no member 'add'`。原因是 `test_yield` 不在 core.def，analyzer 因此没有它的
+  成员表，`import { add } from test_yield` 这条命名导入路径查不到——**这在基线上
+  就是这样**，与 `native_fn_exports` 无关。
+
 ### 9.1 为什么模块加载的改动不可能改变 AOT 的拒绝
 
 值得单独写下来，因为它决定了上表最后两行怎么归因：**AOT 根本不走这条改动**。
