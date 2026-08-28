@@ -168,7 +168,6 @@ static inline XrAotResult xr_aot_error(XrValue error, bool error_is_value) {
 /* Provider-owned allocation, task, suspension, and root-executor surface. */
 typedef struct XrAotRuntimeInfo {
     int64_t live_bytes;
-    double live_kb;
     int64_t live_objects;
     int64_t finalizer_count;
     int64_t blocks;

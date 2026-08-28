@@ -482,14 +482,15 @@ static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
 
 // runtime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
-    {"liveBytes", XLSP_SYM_FUNCTION, "fn(): i64", "Get live memory usage in bytes", NULL, 0},
-    {"liveObjects", XLSP_SYM_FUNCTION, "fn(): i64", "Get live object count", NULL, 0},
-    {"sharedBytes", XLSP_SYM_FUNCTION, "fn(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak", NULL, 0},
-    {"staticBytes", XLSP_SYM_FUNCTION, "fn(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "Get a typed snapshot of the current execution-local reclamation domain", NULL, 0},
-    {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo = { liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }", "Typed snapshot of the current execution-local reclamation domain", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "", NULL, 0},
+    {"liveBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"liveObjects", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"sharedBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"staticBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo", "Class type", NULL, 0},
+    {"__RuntimeStats", XLSP_SYM_CLASS, "type __RuntimeStats = { liveBytes: i64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }", "Raw counters read in one pass from the current execution-local reclamation domain", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 6
+#define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 7
 
 // simd module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_simd_symbols[] = {

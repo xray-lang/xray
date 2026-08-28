@@ -14,13 +14,14 @@
  *   the collector rather than retained as no-op stubs. This module exposes the
  *   runtime introspection surface, while `mem` only carries raw-memory
  *   capabilities:
- *   - runtime.liveBytes()                - live memory bytes
- *   - runtime.liveObjects()              - live object count
- *   - runtime.info()                     - typed RuntimeInfo snapshot
+ *   The public surface lives in stdlib/runtime/runtime.xr. What remains here
+ *   answers raw counters and applies no policy: which counters make up a
+ *   snapshot and the derived kilobyte reading are the module body's, so both
+ *   backends compile one statement of each.
  *
- *   Standalone AOT routes the same surface through the provider-owned current
- *   execution-local reclamation domain. The compiler materializes RuntimeInfo with the same typed
- *   field layout, so neither backend reports unrelated host-process state.
+ *   Standalone AOT routes the same counters through the provider-owned current
+ *   execution-local reclamation domain, so neither backend reports unrelated
+ *   host-process state.
  */
 
 #include "runtime.h"
@@ -53,9 +54,10 @@ static XrCoroHeap *get_heap(XrVMRuntime *isolate) {
     return NULL;
 }
 
-/* ========== runtime.liveBytes() ========== */
+/* ========== runtime.__liveBytes() / runtime.__liveObjects() ========== */
 
-// Return live memory usage in bytes
+// Live memory usage in bytes. Read on its own rather than through the snapshot
+// so a monitoring loop costs a counter read and no allocation.
 static XrValue runtime_live_bytes(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
@@ -63,12 +65,19 @@ static XrValue runtime_live_bytes(XrVMRuntime *isolate, XrValue *args, int argc)
     return heap ? xr_int(heap->totalbytes) : xr_int(0);
 }
 
-/* ========== runtime.sharedBytes() / runtime.staticBytes() ========== */
+// Total live object count (O(1) via an incremental counter).
+static XrValue runtime_live_objects(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) argc;
+    (void) args;
+    XrCoroHeap *heap = get_heap(isolate);
+    return heap ? xr_int((int64_t) heap->object_count) : xr_int(0);
+}
 
-// Live bytes held by SYNC_SHARED system-heap objects. liveBytes() reads the
-// current coroutine heap; this reads the one domain a coroutine's teardown
-// never bounds — a monotonic rise here is the cheap production signal of a
-// shared-domain cycle leak.
+/* ========== runtime.__sharedLiveBytes() / runtime.__staticAllocBytes() ========== */
+
+// Live bytes held by SYNC_SHARED system-heap objects. The reclamation-domain
+// counters below read the current coroutine heap; this reads the one domain a
+// coroutine's teardown never bounds.
 static XrValue runtime_shared_bytes(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     (void) argc;
@@ -84,41 +93,21 @@ static XrValue runtime_static_bytes(XrVMRuntime *isolate, XrValue *args, int arg
     return xr_int((int64_t) xr_sysheap_static_alloc_bytes_total());
 }
 
-/* ========== runtime.disableCycleCollection() / runtime.enableCycleCollection() ========== */
+/* ========== runtime.__stats() ========== */
 
-// Pause the automatic cycle collector (increment cycle_collection_disabled, saturate at 255).
-// Under RC the only thing that can be paused is the cycle-collector
-// auto-trigger; xr_cycle_add_root honours cycle_collection_disabled.
-
-// Resume the automatic cycle collector (decrement cycle_collection_disabled)
-
-/* ========== runtime.isCycleCollectionEnabled() ========== */
-
-// Whether the automatic cycle collector is enabled
-
-/* ========== runtime.liveObjects() ========== */
-
-// Return total live object count (O(1) via incremental counter)
-static XrValue runtime_live_objects(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) argc;
-    (void) args;
-    XrCoroHeap *heap = get_heap(isolate);
-    return heap ? xr_int((int64_t) heap->object_count) : xr_int(0);
-}
-
-/* ========== runtime.info() ========== */
-
-// Return an exact, typed snapshot. The object class is generated from
-// stdlib/defs/core.def, so the runtime and analyzer share one field schema.
-static XrValue runtime_info(XrVMRuntime *isolate, XrValue *args, int argc) {
+// One pass over the current execution-local reclamation domain. The record
+// class is generated from stdlib/defs/core.def, so the runtime and the analyzer
+// share one field schema. Callers select fields and derive scaled readings in
+// runtime.xr; nothing here interprets the counters.
+static XrValue runtime_stats(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
 
     XrCoroHeap *heap = get_heap(isolate);
-    XrClass *cls = xr_stdlib_record_class_get(isolate, "runtime", "RuntimeInfo");
-    XR_CHECK(cls != NULL, "runtime.info: RuntimeInfo class unavailable");
+    XrClass *cls = xr_stdlib_record_class_get(isolate, "runtime", "__RuntimeStats");
+    XR_CHECK(cls != NULL, "runtime.__stats: __RuntimeStats class unavailable");
     XrObjectInstance *object = xr_object_instance_new_with_class(xr_current_coro(isolate), cls);
-    XR_CHECK(object != NULL, "runtime.info: RuntimeInfo allocation failed");
+    XR_CHECK(object != NULL, "runtime.__stats: __RuntimeStats allocation failed");
 
     XrRegionStats stats = {0};
     if (heap)
@@ -126,8 +115,6 @@ static XrValue runtime_info(XrVMRuntime *isolate, XrValue *args, int argc) {
 
     xr_object_instance_set_by_key(isolate, object, "liveBytes",
                                   xr_int(heap ? heap->totalbytes : 0));
-    xr_object_instance_set_by_key(isolate, object, "liveKB",
-                                  xr_float(heap ? (double) heap->totalbytes / 1024.0 : 0.0));
     xr_object_instance_set_by_key(isolate, object, "liveObjects",
                                   xr_int(heap ? (int64_t) heap->object_count : 0));
     xr_object_instance_set_by_key(isolate, object, "finalizerCount",

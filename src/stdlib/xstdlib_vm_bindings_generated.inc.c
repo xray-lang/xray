@@ -282,11 +282,11 @@ static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *mo
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_RUNTIME
 static void xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "liveBytes", runtime_live_bytes);
-    XRS_EXPORT(module, isolate, "liveObjects", runtime_live_objects);
-    XRS_EXPORT(module, isolate, "sharedBytes", runtime_shared_bytes);
-    XRS_EXPORT(module, isolate, "staticBytes", runtime_static_bytes);
-    XRS_EXPORT(module, isolate, "info", runtime_info);
+    XRS_EXPORT(module, isolate, "__stats", runtime_stats);
+    XRS_EXPORT(module, isolate, "__liveBytes", runtime_live_bytes);
+    XRS_EXPORT(module, isolate, "__liveObjects", runtime_live_objects);
+    XRS_EXPORT(module, isolate, "__sharedLiveBytes", runtime_shared_bytes);
+    XRS_EXPORT(module, isolate, "__staticAllocBytes", runtime_static_bytes);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_RUNTIME */
 

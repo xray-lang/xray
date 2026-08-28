@@ -1,0 +1,64 @@
+// runtime — reclamation-domain introspection composed in Xray over three
+// private counter reads.
+//
+// Reclamation is per-coroutine reference counting and nothing else, so there is
+// no collection event to observe or control; this module reports state and
+// changes none. The native entry points are internal `__*` primitives that
+// answer raw counters. Which counters make up a snapshot, and the derived
+// kilobyte reading, are decided here so VM and AOT compile the same Xray
+// semantics rather than one restatement each.
+
+const BYTES_PER_KB: f64 = 1024.0
+
+export final class RuntimeInfo {
+    liveBytes: i64
+    liveKB: f64
+    liveObjects: i64
+    finalizerCount: i64
+    blocks: i64
+    freeBlocks: i64
+    fullBlocks: i64
+
+    constructor(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64,
+                blocks: i64, freeBlocks: i64, fullBlocks: i64) {
+        this.liveBytes = liveBytes
+        this.liveKB = liveKB
+        this.liveObjects = liveObjects
+        this.finalizerCount = finalizerCount
+        this.blocks = blocks
+        this.freeBlocks = freeBlocks
+        this.fullBlocks = fullBlocks
+    }
+}
+
+// A typed snapshot of the current execution-local reclamation domain. The
+// kilobyte reading is the byte count scaled here, not a second thing to read.
+export fn info() -> RuntimeInfo {
+    var raw = __stats()
+    return RuntimeInfo(raw.liveBytes, (raw.liveBytes.toF64()) / BYTES_PER_KB,
+                       raw.liveObjects, raw.finalizerCount,
+                       raw.blocks, raw.freeBlocks, raw.fullBlocks)
+}
+
+// Live memory bytes in the current execution-local reclamation domain.
+export fn liveBytes() -> i64 {
+    return __liveBytes()
+}
+
+// Live object count in the same domain.
+export fn liveObjects() -> i64 {
+    return __liveObjects()
+}
+
+// Live bytes held by SYNC_SHARED system-heap objects. This is the one domain a
+// coroutine's teardown never bounds, so a monotonic rise here is the cheap
+// production signal of a shared-domain cycle leak.
+export fn sharedBytes() -> i64 {
+    return __sharedLiveBytes()
+}
+
+// Memory allocated into the MODULE_STATIC class and module arena, which only
+// grows.
+export fn staticBytes() -> i64 {
+    return __staticAllocBytes()
+}

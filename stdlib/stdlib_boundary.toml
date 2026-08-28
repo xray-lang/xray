@@ -188,10 +188,12 @@ perf_suite = "stdlib/codegen"
 name = "runtime"
 public = true
 layer = "L0"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/runtime/runtime.xr"
 factory_source = "stdlib/runtime/runtime.c"
-public_native = ["RuntimeInfo", "info", "liveBytes", "liveObjects", "sharedBytes", "staticBytes"]
+public_native = []
+private_native_sources = ["stdlib/runtime/*.c"]
+private_native_reason = "Private reclamation-domain and system-heap counter reads consumed by runtime.xr"
 perf_suite = "stdlib/runtime"
 
 [[module]]

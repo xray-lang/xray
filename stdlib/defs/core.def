@@ -2610,64 +2610,16 @@ module io {
 }
 
 module runtime {
-  object RuntimeInfo {
-    fields: "const liveBytes: i64, const liveKB: f64, const liveObjects: i64, const finalizerCount: i64, const blocks: i64, const freeBlocks: i64, const fullBlocks: i64"
+  object __RuntimeStats {
+    fields: "const liveBytes: i64, const liveObjects: i64, const finalizerCount: i64, const blocks: i64, const freeBlocks: i64, const fullBlocks: i64"
     exact: true
-    doc: "Typed snapshot of the current execution-local reclamation domain"
+    doc: "Raw counters read in one pass from the current execution-local reclamation domain"
   }
 
-  fn liveBytes {
-    signature: "(): i64"
-    doc: "Get live memory usage in bytes"
-    vm: "runtime_live_bytes"
-    aot: "xr_aot_runtime_live_bytes"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn liveObjects {
-    signature: "(): i64"
-    doc: "Get live object count"
-    vm: "runtime_live_objects"
-    aot: "xr_aot_runtime_live_objects"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn sharedBytes {
-    signature: "(): i64"
-    doc: "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak"
-    vm: "runtime_shared_bytes"
-    aot: "xr_aot_runtime_shared_bytes"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn staticBytes {
-    signature: "(): i64"
-    doc: "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)"
-    vm: "runtime_static_bytes"
-    aot: "xr_aot_runtime_static_bytes"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn info {
-    signature: "(): RuntimeInfo"
-    doc: "Get a typed snapshot of the current execution-local reclamation domain"
-    vm: "runtime_info"
+  fn __stats {
+    signature: "(): __RuntimeStats"
+    doc: "Read the current execution-local reclamation domain counters"
+    vm: "runtime_stats"
     aot: "xr_aot_runtime_info"
     argc: 0
     arg_spec: ""
@@ -2675,6 +2627,59 @@ module runtime {
     link_object: false
     layer: "runtime"
     return_ownership: "fresh"
+    visibility: "internal"
+  }
+
+  fn __liveBytes {
+    signature: "(): i64"
+    doc: "Live memory bytes in the current execution-local reclamation domain"
+    vm: "runtime_live_bytes"
+    aot: "xr_aot_runtime_live_bytes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    visibility: "internal"
+  }
+
+  fn __liveObjects {
+    signature: "(): i64"
+    doc: "Live object count in the current execution-local reclamation domain"
+    vm: "runtime_live_objects"
+    aot: "xr_aot_runtime_live_objects"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    visibility: "internal"
+  }
+
+  fn __sharedLiveBytes {
+    signature: "(): i64"
+    doc: "Live bytes held by SYNC_SHARED system-heap objects (process-wide)"
+    vm: "runtime_shared_bytes"
+    aot: "xr_aot_runtime_shared_bytes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    visibility: "internal"
+  }
+
+  fn __staticAllocBytes {
+    signature: "(): i64"
+    doc: "Memory allocated into the MODULE_STATIC class/module arena (process-wide)"
+    vm: "runtime_static_bytes"
+    aot: "xr_aot_runtime_static_bytes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+    visibility: "internal"
   }
 }
 
