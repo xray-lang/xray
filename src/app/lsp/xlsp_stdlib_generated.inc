@@ -320,18 +320,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
 
 // mem module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
-    {"sizeOf", XLSP_SYM_FUNCTION, "fn(): i64", "Compile-time size in bytes of a statically laid out type T", NULL, 0},
-    {"alignOf", XLSP_SYM_FUNCTION, "fn(): i64", "Compile-time alignment in bytes of a statically laid out type T", NULL, 0},
-    {"offsetOf", XLSP_SYM_FUNCTION, "fn(field: string): i64", "Compile-time byte offset of a field in a fixed-layout struct T", NULL, 0},
-    {"slice", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>", "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked", NULL, 0},
-    {"assumeInitialized", XLSP_SYM_FUNCTION, "fn(buffer: Buffer): any", "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T", NULL, 0},
     {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", NULL, 0},
-    {"ptr", XLSP_SYM_FUNCTION, "fn(addr: i64): Ptr<u8>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
-    {"withSliceMut", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any", "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked", NULL, 0},
-    {"mutPtr", XLSP_SYM_FUNCTION, "fn(addr: i64): MutPtr<u8>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
-    {"addr", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>): i64", "Numeric address of any Ptr<T> or MutPtr<T>", NULL, 0},
-    {"load", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", NULL, 0},
-    {"store", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()", "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset", NULL, 0},
     {"fence", XLSP_SYM_FUNCTION, "fn(ordering: i64): ()", "", NULL, 0},
     {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, rw: i64): ()", "", NULL, 0},
     {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, n: i64): ()", "", NULL, 0},
@@ -354,7 +343,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 33
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 22
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

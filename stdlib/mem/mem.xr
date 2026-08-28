@@ -5,26 +5,27 @@
 // its meaning can be stated in Xray, and stays in the .def when the compiler
 // owns its meaning.
 //
-// Three groups keep .def rows:
+// Two groups keep .def rows:
 //
-//   1. The layout/pointer/borrow intrinsics — sizeOf, alignOf, offsetOf, ptr,
-//      mutPtr, slice, load, store, withSliceMut, assumeInitialized. These are
-//      not calls the VM can make: the analyzer computes their result type from
-//      an explicit type argument, and lowering encodes the selected T, endian,
-//      and owner evidence directly onto the backend op. Their VM entry points
-//      are deliberately unreachable stubs. Xray has no way to spell "the
-//      caller's T decides my return type and my element layout", so a source
-//      body here could only restate a lie.
-//
-//   2. Buffer and its four methods, because a native class and its methods have
+//   1. Buffer and its four methods, because a native class and its methods have
 //      no internal spelling in the .def metadata: renaming them cannot make
 //      them private, and Buffer additionally occupies a runtime core class slot.
 //
-//   3. pageAlloc, because its .def declares two arities that select two
+//   2. pageAlloc, because its .def declares two arities that select two
 //      different AOT entry points (xrt_mem_page_alloc_default for the
 //      read/write default, xrt_mem_page_alloc when protection bits are given).
 //      Xray has no function overloading, and collapsing the pair into one
 //      default-argument function would erase the one-argument entry point.
+//
+// The layout, pointer and borrow intrinsics — sizeOf, alignOf, offsetOf, ptr,
+// mutPtr, addr, slice, load, store, withSliceMut, assumeInitialized — have no
+// row anywhere in this module. They are not calls the VM can make: the analyzer
+// computes their result type from an explicit type argument, and lowering
+// encodes the selected T, endian, and owner evidence directly onto the backend
+// op. Xray has no way to spell "the caller's T decides my return type and my
+// element layout", and a .def signature could only restate something no backend
+// reads, so their declaration is a row in
+// src/frontend/analyzer/xa_intrinsic_registry.def instead.
 //
 // Everything else is a plain forward over a private leaf, so the VM and AOT
 // compile the same Xray semantics instead of one restatement each.

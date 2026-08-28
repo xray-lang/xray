@@ -2327,13 +2327,15 @@ static void test_plan_snapshot_and_determinism(void) {
      * plan->semantic_fingerprint, and xr_semantic_plan.c in turn hashes
      * plan->stdlib_registry_fingerprint, which
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
-     * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d") != 0)
+     * Publishing http2, compress, mem and regex from .xr bodies renamed their
+     * entries, and dropping mem's eleven layout and pointer rows in favour of
+     * registry intrinsic identities deletes eleven more, so this digest moves
+     * again even though the fixture imports nothing.
+     * Old: 566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d. */
+    if (strcmp(target_hex, "12a956e651f0b7a4ee068d16822c7bc2f6171ed7a070e2a520cf0ce816622421") != 0)
         fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d") == 0);
+                   "12a956e651f0b7a4ee068d16822c7bc2f6171ed7a070e2a520cf0ce816622421") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4492,10 +4494,12 @@ static void test_channel_close_call_authority(void) {
      * plan->semantic_fingerprint first, and xr_semantic_plan.c in turn hashes
      * plan->stdlib_registry_fingerprint, which
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
-     * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f. */
-    REQUIRE(strcmp(call_hex, "23d4e50eae43bf74bde6bdf6ff008813d37c837f806229abe544e39b8392070e") ==
+     * Publishing http2, compress, mem and regex from .xr bodies renamed their
+     * entries, and dropping mem's eleven layout and pointer rows in favour of
+     * registry intrinsic identities deletes eleven more, so this digest moves
+     * again even though the fixture imports nothing.
+     * Old: 23d4e50eae43bf74bde6bdf6ff008813d37c837f806229abe544e39b8392070e. */
+    REQUIRE(strcmp(call_hex, "365a8da94605c87b4650c7661daea0b8eed10f6c3daf111da92dafa111938655") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -5251,10 +5255,12 @@ static void test_direct_local_call_adapter_family(void) {
      * plan->semantic_fingerprint first, and xr_semantic_plan.c in turn hashes
      * plan->stdlib_registry_fingerprint, which
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
-     * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc. */
-    REQUIRE(strcmp(call_hex, "9347a21545b86d1447bc3afe873931c016b318be11d27235c5058b0315b6780e") ==
+     * Publishing http2, compress, mem and regex from .xr bodies renamed their
+     * entries, and dropping mem's eleven layout and pointer rows in favour of
+     * registry intrinsic identities deletes eleven more, so this digest moves
+     * again even though the fixture imports nothing.
+     * Old: 9347a21545b86d1447bc3afe873931c016b318be11d27235c5058b0315b6780e. */
+    REQUIRE(strcmp(call_hex, "c11ef84b03131b8d7a61f2224efe5a6ab8e47bff42e91e0e3f9b0521c1cbad73") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -5774,10 +5780,12 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * plan->semantic_fingerprint first, and xr_semantic_plan.c in turn hashes
      * plan->stdlib_registry_fingerprint, which
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
-     * entries, so this digest moves even though the fixture imports nothing.
-     * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e. */
-    REQUIRE(strcmp(tail_hex, "45df332a6c8d7316367994714bdbb600729e23d91c6bdae6de869dd10ea015fe") ==
+     * Publishing http2, compress, mem and regex from .xr bodies renamed their
+     * entries, and dropping mem's eleven layout and pointer rows in favour of
+     * registry intrinsic identities deletes eleven more, so this digest moves
+     * again even though the fixture imports nothing.
+     * Old: 45df332a6c8d7316367994714bdbb600729e23d91c6bdae6de869dd10ea015fe. */
+    REQUIRE(strcmp(tail_hex, "c9b9d23ae0f8b4e64b643a4afe20bf3d8b8f34da817c2e143b916f35daba5619") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

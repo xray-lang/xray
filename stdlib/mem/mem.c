@@ -324,27 +324,6 @@ static XrValue mem_cache_line_size(XrVMRuntime *isolate, XrValue *args, int argc
     return xr_int(XR_CACHE_LINE);
 }
 
-static XrValue mem_size_of(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    return xr_int(0);
-}
-
-static XrValue mem_align_of(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    return xr_int(0);
-}
-
-static XrValue mem_offset_of(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    return xr_int(0);
-}
-
 /* Managed allocation face (mem.alloc/allocZeroed/allocAligned). */
 static inline XrValue mem_ptr_result(void *p) {
     return xr_int((int64_t) (intptr_t) p);
@@ -466,76 +445,6 @@ static XrValue mem_page_free(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (bytes <= 0)
         return xr_bool(false);
     return xr_bool(xr_mem_unmap(mem_rawptr_arg(args[0]), (size_t) bytes));
-}
-
-/*
- * Address <-> pointer bridge (mem.ptr / mem.mutPtr / mem.addr). In the VM a
- * raw pointer already IS an address-width int (mem_rawptr_arg / OP_PTR_LOAD),
- * so both directions are identity re-tags here; the AOT helpers cast between
- * int64 and the native .ptr slot. ptr/mutPtr enable MMIO / physical-address
- * access (147 §7.2): constructing the pointer is safe, dereferencing it stays
- * unsafe-gated as usual.
- */
-static XrValue mem_ptr(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    int64_t addr = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
-    return xr_int(addr);
-}
-
-static XrValue mem_mut_ptr(XrVMRuntime *isolate, XrValue *args, int argc) {
-    return mem_ptr(isolate, args, argc);
-}
-
-static XrValue mem_addr(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    if (argc < 1)
-        return xr_int(0);
-    return xr_int((int64_t) (intptr_t) mem_rawptr_arg(args[0]));
-}
-
-/* Direct mem.load/store<T> calls are compiler intrinsics: the selected T and
- * endian are encoded on XI_PTR_LOAD/STORE before bytecode or C emission. These
- * exports keep the module metadata complete but are never valid dynamic calls. */
-static XrValue mem_load_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    return xr_null();
-}
-
-static XrValue mem_store_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    return xr_null();
-}
-
-/* mem.slice<T> is lowered with static element layout and owner evidence before
- * bytecode/AOT emission. Dynamic invocation cannot carry those proofs. */
-static XrValue mem_slice_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    return xr_null();
-}
-
-/* mem.assumeInitialized<T> is compiler-only.  The analyzer publishes the
- * exact layout plus a dominating complete-output proof and lowering consumes
- * the Buffer in one backend operation; a dynamic call cannot carry either. */
-static XrValue mem_assume_initialized_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    return xr_null();
-}
-
-/* mem.withSliceMut<T> is likewise compiler-only: lowering creates a writable
- * call-bound Slice place and invokes the proven noescape callback directly. */
-static XrValue mem_with_slice_mut_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    return xr_null();
 }
 
 /*

@@ -2540,13 +2540,14 @@ static void test_immutable_owned_snapshot(void) {
     /* Re-anchored because the SemanticPlan fingerprint covers the whole stdlib
      * metadata registry: xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def
-     * entry.  Publishing http2, compress, mem and regex from .xr bodies renames
-     * their entries, so this digest moves even though the probe plan below imports
-     * nothing.  The two registry digests above are unaffected: they cover the
-     * operation-owner registry, not the stdlib registry.
-     * Old: 5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881. */
+     * entry.  Publishing http2, compress, mem and regex from .xr bodies renamed
+     * their entries, and dropping mem's eleven layout and pointer rows in favour
+     * of registry intrinsic identities deletes eleven more, so this digest moves
+     * again even though the probe plan below imports nothing.  The two registry digests above are
+     * unaffected: they cover the operation-owner registry, not the stdlib registry. Old:
+     * 71cc98da6f063685a0ce4b45624aa3d94aa29acf4871cc5764a607393f47d76c. */
     REQUIRE(strcmp(semantic_hex,
-                   "71cc98da6f063685a0ce4b45624aa3d94aa29acf4871cc5764a607393f47d76c") == 0);
+                   "a3f0d60b69f16c36b3919904e6cfad5f3d399c95c65d61720a0f34b0b38759d6") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3608,12 +3609,14 @@ static void test_source_export_call_target_authority(void) {
      * from .xr bodies therefore moves dependency_id, and the source-export call
      * target key "call-target-v4:...:dependency=<dependency-id>:export=..." moves
      * target_id with it.  export_id is keyed off the export's own shape with no
-     * fingerprint in the key, so it stays put.
-     * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
-     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "1e3473bd3c7bd746dc40f3a0d79c9c55") == 0);
+     * fingerprint in the key, so it stays put.  Dropping mem's eleven layout and
+     * pointer rows in favour of registry intrinsic identities deletes eleven
+     * more .def entries, which moves the same pair again.
+     * Old dependency_id: 1e3473bd3c7bd746dc40f3a0d79c9c55.
+     * Old target_id:     9224bbcbb03e730dd6a246927371d9db. */
+    REQUIRE(strcmp(dependency_id, "2f8640b6025074033b7722001b79e9b4") == 0);
     REQUIRE(strcmp(export_id, "0dfad701bd306712350ea91732781cb5") == 0);
-    REQUIRE(strcmp(target_id, "9224bbcbb03e730dd6a246927371d9db") == 0);
+    REQUIRE(strcmp(target_id, "1d0633882f301a13338a8dd8aeb3c165") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));

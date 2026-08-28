@@ -2709,11 +2709,13 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
     /* Re-anchored because a SemanticPlan fingerprint covers the whole stdlib
      * metadata registry: xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
-     * entries, so this digest moves even though the fixture below imports
-     * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b. */
+     * Publishing http2, compress, mem and regex from .xr bodies renamed their
+     * entries, and dropping mem's eleven layout and pointer rows in favour of
+     * registry intrinsic identities deletes eleven more, so this digest moves
+     * again even though the fixture below imports nothing.  Old:
+     * fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4. */
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4") == 0,
+                        "4ac4363d7cc79120974b7a960646f4d72c26cf02e4c30aaac1250799a8a99fbb") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;
