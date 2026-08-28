@@ -142,7 +142,6 @@
 1502_http_request_options.xr
 1509_ws_pure_protocol.xr
 1510_http2_client.xr
-1601_narrowing_facts.xr
 #
 # --- exposed-on-gate-install 2026-08-28 (14) --------------------------------
 # Failing before this change and listed nowhere. Nine days without a gate.
