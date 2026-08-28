@@ -159,18 +159,6 @@ static XrType stub_unrepresented_int = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
 };
-/* The bool the runtime actually interns.  `stub_bool` predates the field and
- * leaves it zero, which spells `XR_NATIVE_I64` -- harmless where only the kind
- * is read, but the native module boundary admits a bool exactly when it claims
- * no machine width, because a bool that named one would be describing an
- * integer.  `mem.pageFree` returns a bool, so this is the spelling its result
- * has to carry. */
-static XrType stub_exact_bool = {
-    .kind = XR_KIND_BOOL,
-    .id = 36,
-    .frozen = true,
-    .scalar_rep = XR_SCALAR_REP_NONE,
-};
 /* `MutPtr<u8>`.  A raw pointer is the one boundary type whose exactness rests
  * on the canonical key rather than on a kind plus a representation, and the key
  * the plan writes for a pointer names kind and mutability and nothing else --
@@ -4283,7 +4271,7 @@ static void test_native_module_pointer_boundary_authority(void) {
      * position here and the two halves stay separately demonstrated. */
     XrType *ptr_and_bytes[] = {&stub_mut_ptr_u8, &stub_i64};
     XrSemanticPlan *release = build_native_module_member_call_plan(
-        "mem", NULL, "__pageFree", 2, ptr_and_bytes, immediate, &stub_exact_bool);
+        "mem", NULL, "__pageFree", 2, ptr_and_bytes, immediate, &stub_bool);
     XrSemanticOperationRecord *release_call = native_module_call_operation(release);
     REQUIRE(release_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
             release_call->operand_count == 3 && release_call->metadata_count == 1);
@@ -4325,7 +4313,7 @@ static void test_native_module_pointer_boundary_authority(void) {
      * not to the one-record question of whether a type can cross at all. */
     XrType *const_ptr_and_bytes[] = {&stub_const_ptr_u8, &stub_i64};
     XrSemanticPlan *const_release = build_native_module_member_call_plan(
-        "mem", NULL, "__pageFree", 2, const_ptr_and_bytes, immediate, &stub_exact_bool);
+        "mem", NULL, "__pageFree", 2, const_ptr_and_bytes, immediate, &stub_bool);
     const XrSemanticOperationRecord *const_call = native_module_call_operation(const_release);
     REQUIRE(const_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
     expect_exact_raw_pointer_type(const_release,
@@ -4344,7 +4332,7 @@ static void test_native_module_pointer_boundary_authority(void) {
         "mem", NULL, "pageAlloc", 1, nullable_result, immediate, &stub_nullable_mut_ptr_u8));
     XrType *nullable_argument[] = {&stub_nullable_mut_ptr_u8, &stub_i64};
     expect_no_native_module_scalar_call(build_native_module_member_call_plan(
-        "mem", NULL, "__pageFree", 2, nullable_argument, immediate, &stub_exact_bool));
+        "mem", NULL, "__pageFree", 2, nullable_argument, immediate, &stub_bool));
 }
 
 static void test_native_namespace_yieldable_authority(void) {
