@@ -46,7 +46,10 @@ src/plan/semantic/xr_semantic_builder.c:4725:  record->effects = xi_generated_op
 src/plan/semantic/xr_semantic_builder.c:4759:  record->flags   = value->flags;                        // 取【该实例的实际 flags】
 ```
 
-`effects` 只带 opcode 的表默认值，**丢弃了 lowering 对这一条指令的判断**；`flags` 带的是实例值。
+**这两个字段在回答两个不同的问题**，不是同一个问题的两份答案：`effects` 回答「这类 opcode
+一般会不会挂起」，`flags` 回答「这一条操作会不会挂起」。说 `effects`「丢弃了」实例判断是错的措辞——
+它从一开始就没在回答那个问题。**八个消费点问的都是后者，所以问 `effects` 的那四处，是在问一个
+答不了这个问题的字段。**
 `xi_effect.h` 的头注释自己写明了这一点：*"the lowerer may set additional flags"*。
 
 ### 穷举证据（不是抽样）
@@ -89,6 +92,93 @@ record->effects & XI_EFFECT_MAY_SUSPEND == false   ← 问 effects 的层说「�
   **这一条会改 SemanticPlan / TargetPlan 指纹**，需要与 3 号协调重算。
 
 ---
+
+## 一之二、挂起性的**实证最小复现**（4 行源码，确定性，与负载无关）
+
+3 号在 KAT 重算线上撞出、我独立复现了同一个诊断。这是本 packet 里唯一有最小复现的一项。
+
+```xray
+import time
+
+fn main() {
+    time.sleep(1)
+}
+```
+
+```
+$ xray build --native probe_sleep.xr
+Error: Xi pipeline failed at semantic-plan:
+  XR_SEM_0019: coroutine state count disagrees with grounded call authority
+  function=1 operation=7 opcode=117 selector=sleep expected=0 actual=1
+```
+
+`opcode=117` 是 `XI_CALL_METHOD`。3 号在裸语句形式下得到 `function=0 operation=5`，
+其余字段（`opcode=117 selector=sleep expected=0 actual=1`）**逐字相同**。
+
+### 第 6 份挂起性判据，以及它为什么与 Xi 层矛盾
+
+诊断发出点是 `src/plan/semantic/xr_semantic_verify.c:4977`。它的 `expected` 由两项析取而成：
+
+```c
+src/plan/semantic/xr_semantic_verify.c:4723
+static bool operation_is_static_suspend(const XrSemanticOperationRecord *operation) {
+    return operation &&
+           ((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 || operation->opcode == XI_GO);
+}
+```
+
+加上 `dynamic_suspend`（`:4940-4953`），后者**只看 call target 的 kind**
+（`NATIVE_YIELDABLE` / `NATIVE_NAMESPACE_YIELDABLE` / `BUILTIN_INSTANCE_YIELDABLE` /
+`SOURCE_INSTANCE_METHOD_OPEN`，或 `DIRECT_LOCAL` 且被判 suspendable）。
+
+`actual` 则是 `work.state_counts[operation]`——Xi 层实际建了几个 `COROUTINE_STATE` 实体。
+Xi 层建它的依据是：
+
+```c
+src/ir/xi_coro_analyze.c:312
+static bool xi_coro_is_time_sleep_call(const XiFunc *f, const XiValue *v,
+                                       const XiCoroResolver *resolver) {
+    if (!xi_value_is_method_call_like(v) || v->nargs != 2) return false;
+    const char *method = (const char *) v->aux;
+    if (!method || strcmp(method, "sleep") != 0) return false;
+    return resolver && resolver->value_is_module_import &&
+           resolver->value_is_module_import(resolver->ud, f, v->args[0], "time");
+}
+```
+
+**两层用的是完全不同的识别方式：**
+
+| 层 | 「`time.sleep` 会不会挂起」的依据 |
+|---|---|
+| Xi 协程分析 | **模块名 `"time"` + 方法名 `"sleep"` + 实参数** 硬编码匹配 |
+| 语义计划验证 | `effects` 位（不带）**或** call target 的 kind |
+
+`time.sleep` 在 `stdlib/defs/core.def:58-68` 确实声明了 `vm_binding: "yieldable"`，
+所以 `xr_stdlib_metadata_func_is_yieldable("time","sleep")` 为真——**但语义验证层这条路径
+根本不查 metadata**，它只认 `effects` 位与 target kind。于是：
+
+```
+Xi 层：按名字认出 time.sleep → 建 1 个 COROUTINE_STATE   → actual = 1
+语义层：effects 不带 MAY_SUSPEND，target kind 也不在名单里 → expected = 0
+→ XR_SEM_0019，编译当场失败
+```
+
+### 一条排除掉的错误因果（避免下一个人重走）
+
+我最初假设这是 `flags` / `effects` 分歧（本 packet 第一节）的直接后果。**实测否定了这一点。**
+
+我在 `xr_semantic_builder.c` 的 `record->flags = value->flags;` 之后插了一段临时探针，
+凡 `flags.MAY_SUSPEND != effects.MAY_SUSPEND` 就打印。**跑这个用例，探针一次都没有触发**——
+说明这条 `XI_CALL_METHOD` 的两个字在 MAY_SUSPEND 上是一致的（都不带）。
+
+所以 `actual = 1` **不是** `flags` 带来的，是 Xi 协程分析那条**独立的、按名字硬编码的**路径带来的。
+第一节的 `flags`/`effects` 分歧与本条是**两个独立的分歧**，不要合并处理。
+
+### 与 1 号统计的对应关系
+
+1 号的清单里 `XR_SEM_0019` 有 49 条，其中 **45 条**的消息是
+`coroutine state count disagrees with grounded call authority`。本条最小复现产生的正是这条消息，
+**但我没有逐条核对那 45 条是否都出自同一根因**，不作断言。
 
 ## 二、`representation_recipe`：同一张表两份，`OBJECT_REF` 一侧有一侧无
 
@@ -172,6 +262,20 @@ xi_lower_stmt.c:3048  aux_int = cleanup_body_depth > 0 ? CLEANUP_LOCAL_HANDLER :
 `XI_TRY_AUX_CLEANUP_LOCAL_HANDLER`（=2）**在除 AOT CGen 外的每一层都被当成别的东西**。
 这与 `xi.h:238-244` 那段注释描述的失败模式（B lane 已修的那个）是同一个形状换了一个 aux 字。
 
+### 这是同一形状第二次出现，说明上一轮修的是实例不是类
+
+B lane 修 `xi_local_addr_names_operand_storage` 时，处理的是 `XI_LOCAL_ADDR.aux_int`；
+这里是 `XI_TRY.aux_int`。**同一个病换了一个 opcode 的 aux 字，就再长一次。**
+
+我对「类」的判断：**根因不是某个判据写了多份，而是 `aux_int` 这个字段没有解释层。**
+每个 opcode 各自约定 `aux_int` 的含义（`XI_LOCAL_ADDR` 用位标志、`XI_TRY` 用枚举值加哨兵
+`-1`、`XI_CALL_METHOD` 用左移一位的方法符号），而**解释这个约定的代码散在每个消费点里**。
+只要这个格局不变，任何新的 aux 约定都会以同样的方式再分裂一次——抽出第 N 个共享判据
+只是修第 N 个实例。
+
+因此本条的正确产出**可能不是再抽一个 `xi_try_is_generated_cleanup`**，而是先回答：
+`aux_int` 的每一种约定应该在哪里被唯一地解释一次。这超出本 lane 的授权，交出。
+
 **裁决请求**：统一判据 `xi_try_is_generated_cleanup(aux) = (aux == 1 || aux == 2)` 会让 `2`
 在四层从「非清理」变「清理」，是行为变更。但五层当前互相矛盾本身就是缺陷，不是可保留的设计。
 
@@ -209,3 +313,34 @@ xi_lower_stmt.c:3048  aux_int = cleanup_body_depth > 0 ? CLEANUP_LOCAL_HANDLER :
 
 **有意保留未合并的**：`xrt_core_freestanding.h:1271` 的 span 判据是 freestanding profile 的
 独立副本（该文件不 include `xrt_coll.h`），属于**有意的 profile 隔离**，不是漏网的第三份。
+
+---
+
+## 附：显式排除的靶子（重复但**不该**合并）
+
+判据去重最大的自伤风险是拆掉设计上的独立性。以下两处满足「逐位不变」的验收标准，
+**但仍然不合并**，理由记录在此，避免下一个人重新发现并动手：
+
+**1、`semantic_operation_is_call_shaped`（`xr_target_builder.c:8914`）与
+`operation_is_call_shaped`（`xr_target_verify.c:5053`）** —— 正规化后逐字重复。
+不合并的理由是同文件 `xr_target_verify.c:1105-1112` 明写的设计意图：
+
+> *"The raw-pointer test stays local and derives its answer by re-parsing the frozen canonical
+> key, which is an independent route to the same fact and the reason this verifier catches a
+> record whose fields and key disagree."*
+
+验证侧对 builder 的独立重算**是一道防线，不是漏抽的重复**。验证侧另有约 71 个
+`*_is_exact` 同源副本，无条件合并会系统性地拆掉 verifier 的独立性。
+
+**2、`xrt_core_freestanding.h:1271` 的 span 载体判据** —— 与 `xrt_coll.h` 那份逐字相同，
+但该文件**不 include `xrt_coll.h`**，它是 freestanding profile 的独立副本。
+这是 **profile 边界**，不是漂移。
+
+### 由此得出的一条通则（建议纳入本 lane 的边界）
+
+> **验证侧对 builder 的独立重算，默认推定为有意，除非注释或证据表明相反。**
+
+判断一处重复该不该合，看的不是两份代码是否相同，而是**「两处各算一遍」本身是否在提供价值**。
+`mark_coroutine_functions` 那一对该合（差异纯粹是诊断措辞），`operation_is_call_shaped`
+那一对不该合（差异是独立取证路径）——两者在源码上都是「逐字重复」。
+
