@@ -213,8 +213,8 @@ make a disabled module loadable」。
 | `binary_stdlib_runtime_baseline` | 基线红 | 同上，同样两个文件同样两条 |
 | `aot_link_command_manifest` | 基线红 | `XR_TARGET_1003` / `XR_TARGET_1000`；`analysis/r3-6-stdlib-selfhost-remaining-six.md` §3.1 已记录它在基线上失败 |
 | `aot_manifest_sweep` | 与本 lane 无关 | 618 个用例中 3 个失败，全是 `tests/diff/cases/spread/*`，这三个文件**一个 import 都没有**，报的是 spread 表达式的 representation schema 问题 |
-| `native_output_boundary` | 基线红（见 §9.1） | `XR_TARGET_1000: product TargetPlan requires one canonical program authority`，模块图是 `mem.xr` + 入口两个模块 |
-| `backend_diff_embedded` | 负载超时（见 §9.1） | `Timeout`；当时 load average 59，00-SHARED §4 要求串行复跑后再归因 |
+| `native_output_boundary` | 基线红 | `XR_TARGET_1000: product TargetPlan requires one canonical program authority`，模块图是 `mem.xr` + 入口两个模块 |
+| `backend_diff_embedded` | 负载超时，串行复跑后**零回归**（见 §9.2） | 两边各跑一次完整差分：只在基线通过的用例 0 个 |
 
 `check_stdlib_boundary.py` 还剩三条 Iterator 错误
 （`Iterator declaration methods must be exactly hasNext/next/nth`、
@@ -244,6 +244,31 @@ make a disabled module loadable」。
   has no member 'add'`。原因是 `test_yield` 不在 core.def，analyzer 因此没有它的
   成员表，`import { add } from test_yield` 这条命名导入路径查不到——**这在基线上
   就是这样**，与 `native_fn_exports` 无关。
+
+### 9.2 差分套件的 A/B：零回归
+
+`backend_diff_embedded` 在聚焦门里是 `Timeout`（当时 load 59），按 00-SHARED §4 必须
+串行复跑后才能归因。做法是**两边各跑一次完整的 `run_backend_diff.py`**——基线树用
+`git archive HEAD` 导出并单独构建了一个二进制，两次都绕开 ctest 的 900s 上限：
+
+| | 基线 | 本分支 |
+|---|---|---|
+| Results | 103 passed, 0 failed, 572 refused, 1 skipped | 150 passed, 0 failed, 525 refused, 1 skipped |
+| `Cases that stopped building` | 59 | **14** |
+| 用例总数 | 610 | 610 |
+
+逐用例做集合差，**只在基线通过的用例是 0 个**——没有任何一个用例从通过变成不通过。
+`Cases that stopped building` 我这边的 14 条是基线 59 条的**真子集**。
+
+反方向的 47 个差异（我这边多通过 47 个）**不是本 lane 的功劳**，是环境噪声：基线树跑在
+`/private/tmp` 下、只构建了 `xray` 目标因而缺 `libxray_compiler.a`，而 AOT 的
+`native-run` 探针在负载下会 `probe stage timed out after 10000 ms`（基线 114 次，
+本分支 108 次）。噪声的方向对本分支有利，但要判定的是回归，而回归数为零。
+
+`Listed cases now build` 基线 2 条、本分支 4 条。这是 ratchet 在说
+`tests/diff/known_failures_not_comparable.txt` 里有条目已经不需要了。
+**本 lane 没有动那份清单**：多出来的两条同样落在上面那批噪声里，
+而清单「只能缩不能加」的规矩要求删除有确切依据，不是在一次带噪声的跑里顺手删。
 
 ### 9.1 为什么模块加载的改动不可能改变 AOT 的拒绝
 
