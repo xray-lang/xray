@@ -108,6 +108,36 @@ static XrType stub_u8 = {
     .frozen = true,
     .scalar_rep = XR_NATIVE_U8,
 };
+/* An integer that states its machine width.  `XR_SCALAR_REP_NONE` is UINT8_MAX
+ * rather than zero, so a stub that omits the field is already `XR_NATIVE_I64`
+ * and the two spellings agree -- this one says so out loud, because the native
+ * module boundary admits an integer exactly when it names a representation and
+ * a fixture resting on that silently would read as the opposite claim. */
+static XrType stub_i64 = {
+    .kind = XR_KIND_INT,
+    .id = 30,
+    .frozen = true,
+    .scalar_rep = XR_NATIVE_I64,
+};
+/* The same integer with its representation still open. Nothing else about the
+ * type differs, which is what makes it the single-term counterexample for the
+ * boundary judgement. */
+static XrType stub_unrepresented_int = {
+    .kind = XR_KIND_INT,
+    .id = 32,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+/* The type lowering gives a whole-module import reference. A module namespace
+ * is not a declared type, so lowering leaves it unknown; the plan reads that as
+ * an ownership root with no children, which is exactly what the namespace
+ * receiver rows are proved against. */
+static XrType stub_module_namespace = {
+    .kind = XR_KIND_UNKNOWN,
+    .id = 31,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_view_string = {
     .kind = XR_KIND_STRING,
     .id = 15,
@@ -776,6 +806,88 @@ static XrSemanticPlan *build_native_namespace_yieldable_plan(const char *module,
     bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "native-namespace plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
+    return plan;
+}
+
+/* `import mem; mem.cacheLineSize()` in the shape the plan sees it.
+ *
+ * The receiver is not a value the program constructed: the module initializer
+ * publishes the whole-module import reference into a shared slot and the nested
+ * function loads that slot back, so the namespace is reachable only through the
+ * one store the root performs.  Every knob this fixture exposes is a term of
+ * that authority rather than a convenience.  `member_name` distinguishes
+ * `import mem` from `import { cacheLineSize } from mem` -- the second names a
+ * member, not the namespace, and must not inherit namespace authority.
+ * `method_immediate` carries the `XI_CALL_METHOD` encoding `(symbol << 1) |
+ * optional_chaining`, so an odd value spells `mem?.cacheLineSize()` and zero
+ * spells a callsite whose method symbol never resolved -- neither of which
+ * names a single implementation.  `scalar_type` is the type both the result and
+ * every argument carry across the boundary, which the generated direct shim
+ * moves as one plain tagged value. */
+static XrSemanticPlan *
+build_native_module_scalar_call_plan(const char *module, const char *member_name,
+                                     const char *selector, uint16_t argument_count,
+                                     int64_t method_immediate, XrType *scalar_type) {
+    XiFunc *root = xi_func_new("native_module_scalar_root", &stub_unit);
+    XiFunc *caller = xi_func_new("native_module_scalar_caller", scalar_type);
+    REQUIRE(root != NULL && caller != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(root_entry != NULL && caller_entry != NULL);
+    root->children = (XiFunc **) xr_malloc(sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = caller;
+    root->nchildren = root->children_cap = 1;
+    caller->parent_func = root;
+    /* A grounded native reference: the resolver ran and bound no source module,
+     * which is what separates a declared stdlib module from one the module
+     * graph simply never visited. */
+    XiImportRef import_ref = {
+        .module_path = module,
+        .member_name = member_name,
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolved_func = NULL,
+        .resolved_module = NULL,
+        .resolution_attempted = true,
+    };
+    XiValue *import = xi_value_new(root, root_entry, XI_IMPORT_REF, &stub_module_namespace, 0);
+    XiValue *store = xi_value_new(root, root_entry, XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(import != NULL && store != NULL);
+    import->aux = &import_ref;
+    import->aux_int = -1;
+    store->args[0] = import;
+    store->aux_int = 0;
+    root->nshared = 1;
+    xi_block_set_return(root_entry, NULL);
+    XiValue *receiver =
+        xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_module_namespace, 0);
+    REQUIRE(receiver != NULL);
+    receiver->aux_int = 0;
+    XiValue *arguments[4] = {0};
+    REQUIRE(argument_count <= 4);
+    for (uint16_t index = 0; index < argument_count; index++) {
+        arguments[index] = xi_const_int(caller, caller_entry, index + 1, scalar_type);
+        REQUIRE(arguments[index] != NULL);
+    }
+    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, scalar_type,
+                                 (uint16_t) (argument_count + 1u));
+    REQUIRE(call != NULL);
+    call->args[0] = receiver;
+    for (uint16_t index = 0; index < argument_count; index++)
+        call->args[index + 1u] = arguments[index];
+    call->aux = (void *) selector;
+    call->aux_int = method_immediate;
+    xi_block_set_return(caller_entry, call);
+    root->stage = caller->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native-module-scalar plan build failed: %s\n", error);
     REQUIRE(built && plan != NULL);
     xi_func_free(root);
     return plan;
@@ -2537,8 +2649,16 @@ static void test_immutable_owned_snapshot(void) {
                    "0c776fa995496d59811d3daaef5f79a47ff4fbfe7e27020a510686100fb8d1fc") == 0);
     REQUIRE(strcmp(registry_hex,
                    "89144a97b515dd8f7890c96a3cbbae1f8c3777b573c89b0f5e3d2e04cb57e0bd") == 0);
+    /* Re-anchored because the SemanticPlan fingerprint covers the whole stdlib
+     * metadata registry: xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
+     * which xr_stdlib_metadata_registry_fingerprint derives from every .def
+     * entry.  Publishing http2, compress, mem and regex from .xr bodies renames
+     * their entries, so this digest moves even though the probe plan below imports
+     * nothing.  The two registry digests above are unaffected: they cover the
+     * operation-owner registry, not the stdlib registry.
+     * Old: 5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881. */
     REQUIRE(strcmp(semantic_hex,
-                   "5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881") == 0);
+                   "71cc98da6f063685a0ce4b45624aa3d94aa29acf4871cc5764a607393f47d76c") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3590,9 +3710,22 @@ static void test_source_export_call_target_authority(void) {
     xr_stable_id_hex(plan->dependencies[0].id, dependency_id);
     xr_stable_id_hex(dependency->source_exports[0].id, export_id);
     xr_stable_id_hex(target->id, target_id);
-    REQUIRE(strcmp(dependency_id, "07d7615bf5acb1563714c7917d10c70b") == 0);
+    /* Re-anchored because these two stable IDs are fingerprint-derived.  A
+     * dependency's canonical key is
+     * "dependency-v1:schema=%u:path=...:module=...:semantic=<fingerprint>"
+     * (xr_semantic_verify.c), so it embeds the imported module's SemanticPlan
+     * fingerprint - and that fingerprint covers the whole stdlib metadata
+     * registry (xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
+     * derived from every .def entry).  Publishing http2, compress, mem and regex
+     * from .xr bodies therefore moves dependency_id, and the source-export call
+     * target key "call-target-v4:...:dependency=<dependency-id>:export=..." moves
+     * target_id with it.  export_id is keyed off the export's own shape with no
+     * fingerprint in the key, so it stays put.
+     * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
+     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
+    REQUIRE(strcmp(dependency_id, "1e3473bd3c7bd746dc40f3a0d79c9c55") == 0);
     REQUIRE(strcmp(export_id, "0dfad701bd306712350ea91732781cb5") == 0);
-    REQUIRE(strcmp(target_id, "1e2276f17fb709b095f4a66a0b087ba4") == 0);
+    REQUIRE(strcmp(target_id, "9224bbcbb03e730dd6a246927371d9db") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -3809,6 +3942,169 @@ static void test_native_target_leaf_scalar_authority(void) {
         REQUIRE(shadowed->operations[index].intrinsic_kind !=
                 XR_SEM_INTRINSIC_NATIVE_TARGET_LEAF_SCALAR_CALL);
     xr_semantic_plan_free(shadowed);
+}
+
+/* The `XI_CALL_METHOD` immediate is `(method symbol << 1) | optional chaining`.
+ * The symbol is whatever the isolate's symbol table handed the selector -- any
+ * member name registers one -- so the family reads the immediate for a resolved
+ * symbol and a clear chaining bit, never for a particular symbol id. */
+#define NATIVE_MODULE_CALL_IMMEDIATE(symbol, optional_chaining)                                    \
+    (((int64_t) (symbol) << 1) | (int64_t) (optional_chaining))
+static const int32_t k_native_module_method_symbol = 37;
+
+static XrSemanticOperationRecord *native_module_call_operation(XrSemanticPlan *plan) {
+    XrSemanticOperationRecord *call = NULL;
+    REQUIRE(plan != NULL);
+    for (uint32_t index = 0; index < plan->operation_count; index++) {
+        if (plan->operations[index].opcode != XI_CALL_METHOD)
+            continue;
+        REQUIRE(call == NULL);
+        call = &plan->operations[index];
+    }
+    REQUIRE(call != NULL);
+    return call;
+}
+
+/* A shape the family declines still has to be a plan the verifier accepts:
+ * refusing the mark and refusing the program are different answers, and only
+ * the first one is what a near-miss callsite earns.  The method call itself
+ * must still be there -- a fixture that lost it would report no mark for a
+ * reason that has nothing to do with the knob under test. */
+static void expect_no_native_module_scalar_call(XrSemanticPlan *plan) {
+    char error[512] = {0};
+    REQUIRE(plan != NULL && native_module_call_operation(plan) != NULL);
+    for (uint32_t index = 0; index < plan->operation_count; index++)
+        REQUIRE(plan->operations[index].intrinsic_kind !=
+                XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+}
+
+static void test_native_module_scalar_call_authority(void) {
+    char error[512] = {0};
+    /* A nullary member is the narrowest shape the family holds: the receiver
+     * operand carries the whole callsite contract, and the registry answers on
+     * the module path and selector alone. */
+    XrSemanticPlan *nullary = build_native_module_scalar_call_plan(
+        "mem", NULL, "__cacheLineSize", 0,
+        NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64);
+    const XrSemanticOperationRecord *nullary_call = native_module_call_operation(nullary);
+    REQUIRE(nullary_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+            nullary_call->operand_count == 1 && (nullary_call->flags & XI_FLAG_MAY_SUSPEND) == 0);
+    REQUIRE(xr_semantic_plan_verify(nullary, error, sizeof(error)));
+    xr_semantic_plan_free(nullary);
+
+    /* `sys.cpuCount` proves the family is not one module's private arrangement:
+     * a second module path reaches the same authority through the same rows. */
+    XrSemanticPlan *other_module = build_native_module_scalar_call_plan(
+        "sys", NULL, "cpuCount", 0, NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0),
+        &stub_i64);
+    REQUIRE(native_module_call_operation(other_module)->intrinsic_kind ==
+            XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
+    xr_semantic_plan_free(other_module);
+
+    /* `math.randomInt(min, max)` carries arguments, so the argument half of the
+     * boundary judgement is live: each operand states its own parameter index
+     * and crosses as one plain scalar. */
+    XrSemanticPlan *plan = build_native_module_scalar_call_plan(
+        "math", NULL, "randomInt", 2,
+        NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64);
+    XrSemanticOperationRecord *call = native_module_call_operation(plan);
+    const XrSemanticOperationRecord *import = NULL;
+    for (uint32_t index = 0; index < plan->operation_count; index++)
+        if (plan->operations[index].opcode == XI_IMPORT_REF)
+            import = &plan->operations[index];
+    REQUIRE(import != NULL && import->import_resolution == XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB);
+    REQUIRE(call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+            call->operand_count == 3 && call->metadata_count == 1 &&
+            (call->flags & XI_FLAG_MAY_SUSPEND) == 0 &&
+            (call->effects & XI_EFFECT_MAY_SUSPEND) == 0 && call->result_alias_operand == -1 &&
+            call->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT);
+    REQUIRE(strcmp(plan->metadata[call->metadata_begin], "randomInt") == 0);
+    const XrSemanticOperandRecord *receiver = &plan->operands[call->operand_begin];
+    REQUIRE(receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+            receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+            receiver->ownership_action == XR_SEM_OPERAND_BORROW);
+    for (uint16_t index = 1; index < call->operand_count; index++) {
+        const XrSemanticOperandRecord *argument = receiver + index;
+        REQUIRE(argument->role == XR_SEM_OPERAND_ARGUMENT &&
+                argument->parameter == (int16_t) (index - 1) &&
+                argument->flags == XR_SEM_OPERAND_CALL_CONTRACT);
+    }
+    /* No coroutine state: a direct native member returns before it can park. */
+    uint32_t state_count = 0;
+    for (uint32_t index = 0; index < plan->entity_count; index++)
+        state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE;
+    REQUIRE(state_count == 0 && plan->call_target_count == 0);
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+
+    /* The mark has to survive the wire, because the backends read it from the
+     * decoded plan and never from the builder that produced it. */
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_encode(plan, &bytes, &size, error, sizeof(error)) &&
+            xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)) &&
+            xr_semantic_plan_verify(decoded, error, sizeof(error)));
+    const XrSemanticOperationRecord *decoded_call = native_module_call_operation(decoded);
+    REQUIRE(decoded_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+            decoded_call->semantic_immediate == call->semantic_immediate &&
+            decoded_call->operand_count == call->operand_count);
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+
+    /* Tampering that keeps the mark is caught: the verifier re-proves every
+     * term of a marked operation, so an immediate the family would never have
+     * accepted is reported rather than trusted. */
+    int64_t saved_immediate = call->semantic_immediate;
+    call->semantic_immediate |= 1;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    call->semantic_immediate = saved_immediate;
+
+    /* Clearing the mark is caught too, and that is the half a one-way verifier
+     * cannot state.  An exact namespace callsite that lost its mark has no
+     * proven target, and the native backend refuses the module over one such
+     * callsite -- so silence here would hide the very fault the family exists
+     * to prevent.  Classification and exactness therefore have to agree in both
+     * directions, exactly as the sibling target-leaf family states them. */
+    uint8_t saved_intrinsic = call->intrinsic_kind;
+    call->intrinsic_kind = XR_SEM_INTRINSIC_NONE;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    call->intrinsic_kind = saved_intrinsic;
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+
+    /* `mem?.cacheLineSize()` -- the odd immediate is the optional chaining bit,
+     * and a callsite that may not dispatch at all names no single target. */
+    expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
+        "mem", NULL, "__cacheLineSize", 0,
+        NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 1), &stub_i64));
+    /* A zero immediate is a callsite whose method symbol never resolved. */
+    expect_no_native_module_scalar_call(
+        build_native_module_scalar_call_plan("mem", NULL, "__cacheLineSize", 0, 0, &stub_i64));
+    /* The registry is the only authority over the selector: an invented member
+     * has no frozen row and therefore no single implementation. */
+    expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
+        "mem", NULL, "__not_a_native", 0,
+        NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64));
+    /* Arity is part of the identity, not a detail the row tolerates: the
+     * registry is asked for the member at this callsite's argument count. */
+    expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
+        "mem", NULL, "__cacheLineSize", 1,
+        NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64));
+    /* `import { cacheLineSize } from mem` publishes a member reference, not the
+     * module namespace, so the receiver it stores is a different value even
+     * though the module path and selector read the same. */
+    expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
+        "mem", "cacheLineSize", "cacheLineSize", 0,
+        NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64));
+    /* An integer whose representation is still open has not said what the shim
+     * would move.  Module path, selector and arity are the baseline's, so the
+     * registry still names one implementation and this is the boundary
+     * judgement refusing on its own rather than the lookup refusing for it. */
+    expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
+        "mem", NULL, "__cacheLineSize", 0,
+        NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_unrepresented_int));
 }
 
 static void test_native_namespace_yieldable_authority(void) {
@@ -5871,6 +6167,7 @@ int main(int argc, char **argv) {
     test_indirect_callable_state_authority();
     test_native_yieldable_call_target_authority();
     test_native_target_leaf_scalar_authority();
+    test_native_module_scalar_call_authority();
     test_native_namespace_yieldable_authority();
     test_builtin_instance_yieldable_authority();
     test_source_instance_method_local_authority();

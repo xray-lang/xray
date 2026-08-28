@@ -1,2 +1,3 @@
+--> 12:9 E0382
 cannot mutate owner 'owner' while Slice view 'view' is active
 may relocate the owner

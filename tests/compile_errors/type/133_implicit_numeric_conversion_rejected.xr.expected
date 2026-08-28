@@ -1,7 +1,21 @@
+--> 14:5 E0352
 Type 'u64' is not assignable to type 'u8'
+
+--> 15:5 E0352
 Type 'i32' is not assignable to type 'u32'
+
+--> 16:5 E0352
 Type 'usize' is not assignable to type 'u64'
+
+--> 17:5 E0352
 Type 'u64' is not assignable to type 'f64'
+
+--> 18:5 E0352
 Type 'f64' is not assignable to type 'f32'
+
+--> 19:10 E0356
 Argument 1: type 'u64' is not assignable to parameter type 'u8'
+
+--> 6:1 E0352
+misplaced 6:12
 Return type mismatch: expected 'u8', got 'u64'

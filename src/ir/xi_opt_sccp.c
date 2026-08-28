@@ -242,21 +242,6 @@ static bool both_int(SccpCell a, SccpCell b) {
     return a.kind == SCCP_CONST_INT && b.kind == SCCP_CONST_INT;
 }
 
-static bool sccp_type_is_unsigned_int(const XrType *type) {
-    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
-        return false;
-    switch (type->scalar_rep) {
-        case XR_NATIVE_U8:
-        case XR_NATIVE_U16:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_U64:
-        case XR_NATIVE_USIZE:
-            return true;
-        default:
-            return false;
-    }
-}
-
 static bool sccp_type_is_int_like(const XrType *type) {
     return type && type->kind == XR_KIND_INT && !type->is_nullable;
 }
@@ -276,7 +261,7 @@ static bool sccp_compare_uses_unsigned(const XiValue *v) {
     const XrType *left = v->args[0] ? v->args[0]->type : NULL;
     const XrType *right = v->args[1] ? v->args[1]->type : NULL;
     return sccp_type_is_int_like(left) && sccp_type_is_int_like(right) &&
-           (sccp_type_is_unsigned_int(left) || sccp_type_is_unsigned_int(right));
+           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
 }
 
 /* XI_SHR with a statically-unsigned lhs is a logical shift (OP_SHR_U). */
@@ -284,7 +269,7 @@ static bool sccp_shr_uses_unsigned(const XiValue *v) {
     if (!v || v->op != XI_SHR || v->nargs < 1)
         return false;
     const XrType *left = v->args[0] ? v->args[0]->type : NULL;
-    return sccp_type_is_int_like(left) && sccp_type_is_unsigned_int(left);
+    return sccp_type_is_int_like(left) && xr_type_is_exact_unsigned_integer(left);
 }
 
 /* XI_DIV / XI_MOD on statically-unsigned operands are unsigned (OP_DIV_U /
@@ -296,12 +281,12 @@ static bool sccp_divmod_uses_unsigned(const XiValue *v) {
      * integer literals for typed uint params (operand types lose signedness,
      * the div node's own type stays uint). Result-unsigned implies
      * operand-unsigned in well-typed code, so it cannot over-trigger. */
-    if (sccp_type_is_unsigned_int(v->type))
+    if (xr_type_is_exact_unsigned_integer(v->type))
         return true;
     const XrType *left = v->args[0] ? v->args[0]->type : NULL;
     const XrType *right = v->args[1] ? v->args[1]->type : NULL;
     return sccp_type_is_int_like(left) && sccp_type_is_int_like(right) &&
-           (sccp_type_is_unsigned_int(left) || sccp_type_is_unsigned_int(right));
+           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
 }
 
 /* True if the cell carries integer range info (const or range). */

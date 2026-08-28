@@ -1,0 +1,84 @@
+// regex — typed public module surface over the private native regex leaves.
+//
+// Ownership split. Every module-level function of `regex` is owned here: this
+// file is the single place that names them, fixes their parameter names and
+// their optional-argument defaults, and it forwards each one straight to a
+// private `__` leaf. No matching, scanning, or replacement logic lives here.
+//
+// The automata stay in C on purpose. Pattern parsing, NFA/DFA construction,
+// the bounded XrSplitPart / XrMatch scratch buffers, and the escape character
+// class are one shared owner (stdlib/regex/*.c plus src/shared/xr_regex_core.h,
+// consumed by both the VM binding and the AOT runtime). Reimplementing any of
+// them here would mint a second authority for the same question, which is the
+// failure mode task-256 was written to avoid — so every function below is a
+// pass-through with no added validation and no added policy.
+//
+// `Regex` and `RegexMatch` also stay native classes. stdlibgen gives
+// native_class / class / class_method / class_field entries no `is_internal`
+// attribute (tools/stdlibgen/stdlibgen.py:329-382), so they cannot be made
+// private by renaming the way `fn` entries can; they remain listed in
+// public_native, exactly as sys keeps OsMutex and net keeps NetConn. The
+// instance-method surface (`re.test(s)`, `re.find(s)`, ...) therefore keeps
+// dispatching through the class_method table and is untouched by this file.
+//
+// Optional-argument defaults below are not chosen here; they restate what the
+// argc-short C entry points already do, so the one-argument and two-argument
+// spellings cannot drift apart:
+//   compile flags ""  — VM: xregex_binding.c:229 (XR_RE_NONE when argc < 2)
+//                       AOT: xrt_regex_core.c:98-100 (compile_default passes
+//                            NULL/0 to compile_with_flags; "" parses to NONE)
+//   find    offset 0   — VM: xregex_binding.c:376
+//                       AOT: xrt_regex_core.c:239-241
+//   findAll limit -1   — VM: xregex_binding.c:404-405 via
+//                            xr_regex_core_limit_arg(false, ...) -> -1
+//                       AOT: xrt_regex_core.c:284-286
+//   split   limit -1   — VM: xregex_binding.c:494-495 (same helper)
+//                       AOT: xrt_regex_core.c:347-349
+
+// ========== Compilation ==========
+
+// An empty flag string parses to "no flags", which is what the argc-1 leaf
+// applies, so the single spelling below covers both native entry points.
+export fn compile(pattern: string, flags: string = "") -> Regex {
+    return __compile(pattern, flags)
+}
+
+export fn isValid(pattern: string) -> bool { return __isValid(pattern) }
+
+// ========== Matching ==========
+
+export fn test(pattern: Regex, s: string) -> bool { return __test(pattern, s) }
+export fn count(pattern: Regex, s: string) -> i64 { return __count(pattern, s) }
+
+export fn findText(pattern: Regex, s: string) -> string? { return __findText(pattern, s) }
+
+export fn findGroup(pattern: Regex, s: string, index: i64) -> string? {
+    return __findGroup(pattern, s, index)
+}
+
+// find, fullFind and findAll stay native, and the reason is naming rather than
+// logic: they answer RegexMatch, and RegexMatch is not a name this file can
+// write. Regex is a prelude built-in type (stdlib/prelude/builtin_symbols.def:115)
+// and so resolves anywhere, but RegexMatch is declared only by the compiler
+// input stdlib/types/regex.xr and registered from core.def, which puts it out
+// of scope in a standard-library module body. Measured: a body naming it fails
+// with `E0365: undefined type 'RegexMatch'`.
+
+// ========== Rewriting ==========
+
+export fn replace(pattern: Regex, s: string, repl: string) -> string {
+    return __replace(pattern, s, repl)
+}
+
+export fn replaceAll(pattern: Regex, s: string, repl: string) -> string {
+    return __replaceAll(pattern, s, repl)
+}
+
+export fn split(pattern: Regex, s: string, limit: i64 = -1) -> Array<string> {
+    return __split(pattern, s, limit)
+}
+
+// The escaped character class is shared by the VM and AOT leaves
+// (xr_regex_core_is_special in src/shared/xr_regex_core.h); restating it here
+// would give the same question two answers, so this stays a pass-through.
+export fn escape(s: string) -> string { return __escape(s) }

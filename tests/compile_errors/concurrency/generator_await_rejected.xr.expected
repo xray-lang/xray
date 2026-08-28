@@ -1,1 +1,3 @@
+--> 7:1 E0385
+misplaced 7:11
 generator 'gen' cannot reach the scheduler; `await` is not allowed in a body that uses `yield expr`

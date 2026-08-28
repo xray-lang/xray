@@ -446,16 +446,26 @@ static inline XrValue xrt_enum_descriptor_box_new(uint32_t layout_id, uint8_t me
     return value;
 }
 
+/* Whether a value carries an erased enum descriptor box.  This is the question
+ * both readers below ask before they trust the pointer, and each used to spell
+ * out the same three discriminants inline; the answers only ever differed by
+ * accident, never by intent.  What legitimately differs is what a reader does
+ * when the answer is no -- one reports a mismatch, the other aborts -- so the
+ * judgement is shared here and the fallback stays with each caller. */
+static inline int xrt_value_is_enum_descriptor(XrValue value) {
+    return value.tag == XR_TAG_PTR && value.heap_type == XR_TENUM_DESCRIPTOR && value.ptr != NULL;
+}
+
 static inline int xrt_enum_descriptor_matches(XrValue value, uint32_t layout_id,
                                               uint8_t metadata_kind) {
-    if (value.tag != XR_TAG_PTR || value.heap_type != XR_TENUM_DESCRIPTOR || !value.ptr)
+    if (!xrt_value_is_enum_descriptor(value))
         return 0;
     const XrAotErasedEnumDescriptor *box = (const XrAotErasedEnumDescriptor *) value.ptr;
     return box->layout_id == layout_id && box->metadata_kind == metadata_kind;
 }
 
 static inline int64_t xrt_enum_descriptor_unbox(XrValue value) {
-    if (value.tag != XR_TAG_PTR || value.heap_type != XR_TENUM_DESCRIPTOR || !value.ptr) {
+    if (!xrt_value_is_enum_descriptor(value)) {
         fprintf(stderr, "xray: value is not an erased enum descriptor\n");
         abort();
     }

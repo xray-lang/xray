@@ -1,1 +1,2 @@
-error[E0804]: `void` keyword was removed
+--> 4:11 E0804
+`void` keyword was removed

@@ -1,2 +1,4 @@
+--> 4:1 E0352
+misplaced 6:15
 payload enum 'Result' is not directly iterable because its value set is not finite
 use `Result.variants` to iterate variant descriptors

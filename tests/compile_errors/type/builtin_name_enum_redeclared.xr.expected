@@ -1,1 +1,2 @@
+--> 5:1 E0350
 enum 'TaskResult' redeclares the builtin 'TaskResult'

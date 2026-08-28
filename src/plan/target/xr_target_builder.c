@@ -13,6 +13,7 @@
  *   the immutable plan, so later families never depend on append order.
  */
 
+#include "xr_target_call_abi_shape.h"
 #include "../semantic/xr_semantic_heap_literal_shape.h"
 #include "../semantic/xr_i64_overflow_predicate_semantics.h"
 #include "xr_target_builder.h"
@@ -48,6 +49,7 @@
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_native_module_shape.h"
+#include "../semantic/xr_semantic_native_module_call_shape.h"
 #include "../semantic/xr_semantic_native_leaf_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
@@ -1682,55 +1684,35 @@ static const char *semantic_native_module_namespace_path(const XrSemanticPlan *p
                : NULL;
 }
 
-/* A native stdlib namespace member call with a plain scalar contract. The
- * frozen definition registry names one implementation for the module path plus
- * the selector, the receiver is a namespace handle rather than a value, and
- * every argument and the result cross the boundary as one plain scalar, so the
- * row states no ownership obligation of its own. */
+/* The frozen call shape plus the one term only this layer can state: the
+ * receiver and the result must be values of the function that owns the
+ * operation. The TargetPlan builder is about to emit a call row keyed on that
+ * function, so a row naming a value from another function would key a call to a
+ * frame that never holds it. The shared shape judgement deliberately stays out
+ * of this: it answers what the callsite is, not which frame is about to claim
+ * it, and the other three consumers do not emit rows. */
 static bool semantic_native_module_scalar_call_shape_is_exact(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     const char **out_selector, uint32_t *out_receiver_value, uint32_t *argument_count) {
-    uint32_t operands_count = 0, metadata_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operands_count);
-    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
-    if (!plan || !operation ||
-        operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL ||
-        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
-        (operation->semantic_immediate & 1) != 0 || operation->operand_count == 0 ||
-        operation->operand_begin >= operands_count ||
-        operation->operand_count > operands_count - operation->operand_begin ||
-        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
-        !metadata || (operation->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
-        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
-        operation->result_alias_operand != -1 ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
-        !xr_semantic_native_module_boundary_type_is_exact(
-            xr_semantic_plan_type(plan, operation->result_type), true))
+    const char *selector = NULL;
+    uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t arity = 0;
+    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL ||
+        !xr_semantic_native_module_scalar_call_shape_is_exact(plan, operation, &selector,
+                                                              &receiver_value, &arity))
         return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, operation->function);
-    if (!function || receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
-        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
-        receiver->value < function->value_begin ||
-        receiver->value >= function->value_begin + function->value_count ||
+    if (!function || receiver_value < function->value_begin ||
+        receiver_value >= function->value_begin + function->value_count ||
         operation->result_value < function->value_begin ||
         operation->result_value >= function->value_begin + function->value_count)
         return false;
-    for (uint16_t i = 1; i < operation->operand_count; i++) {
-        const XrSemanticOperandRecord *argument = receiver + i;
-        if (argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) (i - 1) ||
-            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            !xr_semantic_native_module_boundary_type_is_exact(
-                xr_semantic_plan_type(plan, argument->type), false))
-            return false;
-    }
     if (out_selector)
-        *out_selector = metadata[operation->metadata_begin];
+        *out_selector = selector;
     if (out_receiver_value)
-        *out_receiver_value = receiver->value;
+        *out_receiver_value = receiver_value;
     if (argument_count)
-        *argument_count = (uint32_t) (operation->operand_count - 1u);
+        *argument_count = arity;
     return true;
 }
 
@@ -8791,24 +8773,20 @@ static bool note_aggregate_value(XrTargetPlanBuilder *builder,
            append_value_intent(builder, &value, error, error_size);
 }
 
+/* The shared walk in xr_semantic_coroutine_lifecycle_shape.h decides which
+ * functions hold a coroutine state; only the wording of a malformed plan is
+ * this layer's own. */
 static bool mark_coroutine_functions(const XrSemanticPlan *plan, uint8_t *deferred,
                                      uint32_t function_count, char *error, size_t error_size) {
-    size_t entity_count = xr_semantic_plan_entity_count(plan);
-    size_t operation_count = xr_semantic_plan_operation_count(plan);
-    for (size_t i = 0; i < entity_count; i++) {
-        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
-        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
-            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION)
-            continue;
-        if (entity->subject >= operation_count)
+    switch (xr_semantic_mark_coroutine_state_functions(plan, deferred, function_count)) {
+        case XR_SEMANTIC_COROUTINE_STATE_MARK_OPERATION_OUT_OF_RANGE:
             return fail(error, error_size, "XR_TARGET_1001",
                         "coroutine state operation identity is out of range");
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(plan, entity->subject);
-        if (!operation || operation->function >= function_count)
+        case XR_SEMANTIC_COROUTINE_STATE_MARK_FUNCTION_OUT_OF_RANGE:
             return fail(error, error_size, "XR_TARGET_1001",
                         "coroutine state function identity is out of range");
-        deferred[operation->function] = 1;
+        case XR_SEMANTIC_COROUTINE_STATE_MARK_OK:
+            break;
     }
     return true;
 }
@@ -14708,50 +14686,16 @@ static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t 
     return -1;
 }
 
-static bool machine_reps_have_same_call_abi(const XrTargetMachineRepRecord *caller,
-                                            const XrTargetMachineRepRecord *callee) {
-    return caller && callee && caller->kind == callee->kind &&
-           caller->register_bits == callee->register_bits &&
-           caller->memory_size == callee->memory_size &&
-           caller->memory_align == callee->memory_align &&
-           caller->signedness == callee->signedness && caller->root_kind == callee->root_kind &&
-           caller->null_encoding == callee->null_encoding && caller->detail == callee->detail &&
-           caller->lane_count == callee->lane_count && caller->reserved == callee->reserved &&
-           memcmp(caller->legal_conversion_mask, callee->legal_conversion_mask,
-                  sizeof(caller->legal_conversion_mask)) == 0;
-}
-
-/* A reference-capable container handed over by value.
- *
- * The callee always borrows it: the allocation stays the caller's for the
- * extent of the call and the callee releases nothing. What the caller holds is
- * its own business -- a freshly built container is owned, a shared read of a
- * local is borrowed -- so the two sides agree on representation and are allowed
- * to differ in ownership alone. An Array and a String reach this boundary in
- * the same tagged carrier, so they ask this one question instead of stating the
- * same rep agreement twice in spellings that could drift. */
-/* Both sides of a by-value container boundary hold the same tagged carrier, so
- * they must agree on representation and on call ABI. They need not agree on
- * ownership: what the caller holds is its own business -- a freshly built array
- * or a fresh concatenation is owned, a shared read of a local is borrowed -- and
- * `callee_ownership` states the one side the boundary does fix. */
+/* The shared judgement in xr_target_call_abi_shape.h decides this; only the
+ * container holding the machine-rep table differs between the two layers, and
+ * it must be proven non-null before it is read. */
 static bool tagged_container_value_boundary(const XrTargetMaterializedPlan *materialized,
                                             const XrTargetValueRepRecord *caller,
                                             const XrTargetValueRepRecord *callee,
                                             uint8_t callee_ownership) {
-    return materialized && caller && callee &&
-           caller->register_rep < materialized->machine_rep_count &&
-           caller->memory_rep < materialized->machine_rep_count &&
-           callee->register_rep < materialized->machine_rep_count &&
-           callee->memory_rep < materialized->machine_rep_count &&
-           machine_reps_have_same_call_abi(&materialized->machine_reps[caller->register_rep],
-                                           &materialized->machine_reps[callee->register_rep]) &&
-           machine_reps_have_same_call_abi(&materialized->machine_reps[caller->memory_rep],
-                                           &materialized->machine_reps[callee->memory_rep]) &&
-           materialized->machine_reps[caller->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-           materialized->machine_reps[caller->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-           materialized->machine_reps[callee->register_rep].ownership == callee_ownership &&
-           materialized->machine_reps[callee->memory_rep].ownership == callee_ownership;
+    return materialized && xr_target_tagged_container_value_boundary(
+                               materialized->machine_reps, materialized->machine_rep_count, caller,
+                               callee, callee_ownership);
 }
 
 static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
@@ -14880,11 +14824,12 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 caller->memory_rep < materialized->machine_rep_count &&
                 callee->register_rep < materialized->machine_rep_count &&
                 callee->memory_rep < materialized->machine_rep_count &&
-                machine_reps_have_same_call_abi(
+                xr_target_machine_reps_have_same_call_abi(
                     &materialized->machine_reps[caller->register_rep],
                     &materialized->machine_reps[callee->register_rep]) &&
-                machine_reps_have_same_call_abi(&materialized->machine_reps[caller->memory_rep],
-                                                &materialized->machine_reps[callee->memory_rep]) &&
+                xr_target_machine_reps_have_same_call_abi(
+                    &materialized->machine_reps[caller->memory_rep],
+                    &materialized->machine_reps[callee->memory_rep]) &&
                 materialized->machine_reps[caller->register_rep].ownership ==
                     XR_TARGET_OWNERSHIP_OWNED &&
                 materialized->machine_reps[callee->register_rep].ownership ==
@@ -16609,6 +16554,305 @@ done:
     xr_free(producer_dependencies);
     materialized_dispose(&modules[0].target);
     materialized_dispose(&modules[1].target);
+    return built;
+}
+
+/* N-way selection merge over the per-module machine representation tables. Each
+ * module's table is already sorted, so taking the smallest remaining record and
+ * advancing every source that ties it yields one deduplicated union plus a
+ * per-module remap from local rep id to the merged id. */
+static bool module_set_merge_machine_reps(const XrTargetMaterializedPlan *sources,
+                                          uint32_t source_count, XrTargetMaterializedPlan *target,
+                                          uint16_t (*rep_maps)[256]) {
+    uint32_t *indexes = (uint32_t *) xr_calloc(source_count, sizeof(*indexes));
+    if (!indexes)
+        return false;
+    uint32_t merged = 0;
+    bool ok = true;
+    for (;;) {
+        const XrTargetMachineRepRecord *best = NULL;
+        for (uint32_t i = 0; i < source_count; i++) {
+            if (indexes[i] >= sources[i].machine_rep_count)
+                continue;
+            const XrTargetMachineRepRecord *candidate = &sources[i].machine_reps[indexes[i]];
+            if (!best || compare_rep_record(candidate, best) < 0)
+                best = candidate;
+        }
+        if (!best)
+            break;
+        if (merged >= target->machine_rep_count || merged >= 256u) {
+            ok = false;
+            break;
+        }
+        target->machine_reps[merged] = *best;
+        target->machine_reps[merged].id = merged;
+        for (uint32_t i = 0; i < source_count; i++) {
+            if (indexes[i] >= sources[i].machine_rep_count ||
+                compare_rep_record(&sources[i].machine_reps[indexes[i]], best) != 0)
+                continue;
+            rep_maps[i][indexes[i]] = (uint16_t) merged;
+            indexes[i]++;
+        }
+        merged++;
+    }
+    xr_free(indexes);
+    if (ok)
+        target->machine_rep_count = merged;
+    return ok;
+}
+
+/* Same shape for capabilities, except a capability claimed by two modules must
+ * be claimed identically: a differing provider or flag set is not a union. */
+static bool module_set_merge_capabilities(const XrTargetMaterializedPlan *sources,
+                                          uint32_t source_count, XrTargetMaterializedPlan *target) {
+    uint32_t *indexes = (uint32_t *) xr_calloc(source_count, sizeof(*indexes));
+    if (!indexes)
+        return false;
+    uint32_t merged = 0;
+    bool ok = true;
+    for (;;) {
+        const XrTargetCapabilityRecord *best = NULL;
+        for (uint32_t i = 0; i < source_count; i++) {
+            if (indexes[i] >= sources[i].capability_count)
+                continue;
+            const XrTargetCapabilityRecord *candidate = &sources[i].capabilities[indexes[i]];
+            if (!best || candidate->capability < best->capability)
+                best = candidate;
+        }
+        if (!best)
+            break;
+        if (merged >= target->capability_count) {
+            ok = false;
+            break;
+        }
+        target->capabilities[merged] = *best;
+        target->capabilities[merged].id = merged;
+        for (uint32_t i = 0; ok && i < source_count; i++) {
+            if (indexes[i] >= sources[i].capability_count)
+                continue;
+            const XrTargetCapabilityRecord *row = &sources[i].capabilities[indexes[i]];
+            if (row->capability != best->capability)
+                continue;
+            if (row->provider != best->provider || row->flags != best->flags)
+                ok = false;
+            else
+                indexes[i]++;
+        }
+        if (!ok)
+            break;
+        merged++;
+    }
+    xr_free(indexes);
+    if (ok)
+        target->capability_count = merged;
+    return ok;
+}
+
+static void module_set_dispose(XrTargetMaterializedPlan *materialized, uint32_t count) {
+    for (uint32_t i = 0; i < count; i++)
+        materialized_dispose(&materialized[i]);
+    xr_free(materialized);
+}
+
+static bool module_set_partition_rows(const XrSemanticPlan *const *modules, uint32_t module_count,
+                                      const XrTargetMaterializedPlan *materialized,
+                                      XrTargetModulePartitionRecord *partitions,
+                                      XrTargetMaterializedPlan *merged, uint16_t (*rep_maps)[256],
+                                      char *error, size_t error_size) {
+    uint32_t value_reps = 0, extents = 0, layouts = 0, fields = 0, functions = 0, slots = 0;
+    uint32_t instructions = 0, calls = 0, call_arguments = 0, root_maps = 0, root_slots = 0;
+    uint32_t cleanups = 0, adapters = 0, coroutines = 0, debug_facts = 0;
+    for (uint32_t row = 0; row < module_count; row++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_unique_module_entity(modules[row]);
+        if (!entity)
+            return fail(error, error_size, "XR_TARGET_1000",
+                        "target module set partition has no exact module identity");
+        partitions[row] = (XrTargetModulePartitionRecord) {
+            .module_identity = entity->id,
+            .semantic_fingerprint = xr_semantic_plan_fingerprint(modules[row]),
+            .program_module_row = row,
+            .semantic_module = row,
+            .value_reps_begin = value_reps,
+            .value_reps_count = materialized[row].value_rep_count,
+            .extents_begin = extents,
+            .extents_count = materialized[row].extent_count,
+            .layouts_begin = layouts,
+            .layouts_count = materialized[row].layout_count,
+            .fields_begin = fields,
+            .fields_count = materialized[row].field_count,
+            .functions_begin = functions,
+            .functions_count = materialized[row].function_count,
+            .slots_begin = slots,
+            .slots_count = materialized[row].slot_count,
+            .instructions_begin = instructions,
+            .instructions_count = materialized[row].instruction_count,
+            .calls_begin = calls,
+            .calls_count = materialized[row].call_count,
+            .call_arguments_begin = call_arguments,
+            .call_arguments_count = materialized[row].call_argument_count,
+            .root_maps_begin = root_maps,
+            .root_maps_count = materialized[row].root_map_count,
+            .root_slots_begin = root_slots,
+            .root_slots_count = materialized[row].root_slot_count,
+            .cleanups_begin = cleanups,
+            .cleanups_count = materialized[row].cleanup_count,
+            .adapters_begin = adapters,
+            .adapters_count = materialized[row].adapter_count,
+            .coroutines_begin = coroutines,
+            .coroutines_count = materialized[row].coroutine_count,
+            .debug_facts_begin = debug_facts,
+            .debug_facts_count = materialized[row].debug_fact_count,
+        };
+        value_reps += materialized[row].value_rep_count;
+        extents += materialized[row].extent_count;
+        layouts += materialized[row].layout_count;
+        fields += materialized[row].field_count;
+        functions += materialized[row].function_count;
+        slots += materialized[row].slot_count;
+        instructions += materialized[row].instruction_count;
+        calls += materialized[row].call_count;
+        call_arguments += materialized[row].call_argument_count;
+        root_maps += materialized[row].root_map_count;
+        root_slots += materialized[row].root_slot_count;
+        cleanups += materialized[row].cleanup_count;
+        adapters += materialized[row].adapter_count;
+        coroutines += materialized[row].coroutine_count;
+        debug_facts += materialized[row].debug_fact_count;
+        if (!graph_merge_module(merged, &materialized[row], &partitions[row], rep_maps[row]))
+            return fail(error, error_size, "XR_TARGET_1004",
+                        "target module set row merge is not exact");
+    }
+    return true;
+}
+
+bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *modules,
+                                             uint32_t module_count, const XrSemanticPlan *entry,
+                                             XrTargetProfile *profile, XrTargetPlan **out,
+                                             char *error, size_t error_size) {
+    if (out)
+        *out = NULL;
+    if (!modules || !module_count || module_count > XR_TARGET_MAX_PROGRAM_MODULES || !entry ||
+        !profile || !out)
+        return fail(error, error_size, "XR_TARGET_1000",
+                    "target module set builder input is invalid");
+    if (!xr_target_semantic_module_partition_set_verify(modules, module_count, error, error_size))
+        return false;
+    uint32_t entry_row = module_count;
+    for (uint32_t row = 0; row < module_count; row++)
+        if (modules[row] == entry)
+            entry_row = entry_row == module_count ? row : module_count;
+    if (entry_row >= module_count)
+        return fail(error, error_size, "XR_TARGET_1000",
+                    "target module set entry module is missing or ambiguous");
+
+    XrTargetMaterializedPlan *materialized =
+        (XrTargetMaterializedPlan *) xr_calloc(module_count, sizeof(*materialized));
+    XrTargetModulePartitionRecord *partitions =
+        (XrTargetModulePartitionRecord *) xr_calloc(module_count, sizeof(*partitions));
+    uint16_t (*rep_maps)[256] = (uint16_t (*)[256]) xr_calloc(module_count, sizeof(*rep_maps));
+    const XrSemanticPlan **entry_dependencies = NULL;
+    uint32_t entry_dependency_count = 0;
+    if (!materialized || !partitions || !rep_maps) {
+        xr_free(materialized);
+        xr_free(partitions);
+        xr_free(rep_maps);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "target module set builder allocation failed");
+    }
+
+    /* Every module is planned against its own direct dependency vector, so a
+     * module's target rows stay interpretable in its own semantic index space. */
+    bool built = true;
+    for (uint32_t row = 0; built && row < module_count; row++) {
+        const XrSemanticPlan **dependencies = NULL;
+        uint32_t dependency_count = 0;
+        built = xr_target_semantic_program_module_direct_dependencies(
+            modules, module_count, row, &dependencies, &dependency_count, error, error_size);
+        built = built && build_program_graph_module(modules[row], dependencies, dependency_count,
+                                                    profile, &materialized[row], error, error_size);
+        if (built && row == entry_row) {
+            entry_dependencies = dependencies;
+            entry_dependency_count = dependency_count;
+            dependencies = NULL;
+        }
+        xr_free(dependencies);
+    }
+
+    XrTargetMaterializedPlan merged = {0};
+    for (uint32_t row = 0; built && row < module_count; row++) {
+        built = graph_add_count(&merged.machine_rep_count, materialized[row].machine_rep_count) &&
+                graph_add_count(&merged.capability_count, materialized[row].capability_count) &&
+                graph_accumulate_counts(&merged, &materialized[row]);
+        if (!built)
+            fail(error, error_size, "XR_EXEC_5003", "target module set row count overflowed");
+    }
+    built = built && graph_allocate_materialized(&merged, error, error_size);
+    if (built && !module_set_merge_machine_reps(materialized, module_count, &merged, rep_maps)) {
+        fail(error, error_size, "XR_TARGET_1004",
+             "target module set machine representation union is not exact");
+        built = false;
+    }
+    if (built && !module_set_merge_capabilities(materialized, module_count, &merged)) {
+        fail(error, error_size, "XR_TARGET_1004",
+             "target module set capability union is not exact");
+        built = false;
+    }
+    built = built && module_set_partition_rows(modules, module_count, materialized, partitions,
+                                               &merged, rep_maps, error, error_size);
+
+    if (built) {
+        XrTargetPlanDraft draft = {
+            .semantic_plan = entry,
+            .semantic_dependencies = entry_dependencies,
+            .semantic_dependency_count = entry_dependency_count,
+            .semantic_modules = modules,
+            .semantic_module_count = module_count,
+            .profile = profile,
+            .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
+            .machine_reps = merged.machine_reps,
+            .machine_reps_count = merged.machine_rep_count,
+            .value_reps = merged.value_reps,
+            .value_reps_count = merged.value_rep_count,
+            .extents = merged.extents,
+            .extents_count = merged.extent_count,
+            .layouts = merged.layouts,
+            .layouts_count = merged.layout_count,
+            .fields = merged.fields,
+            .fields_count = merged.field_count,
+            .functions = merged.functions,
+            .functions_count = merged.function_count,
+            .slots = merged.slots,
+            .slots_count = merged.slot_count,
+            .instructions = merged.instructions,
+            .instructions_count = merged.instruction_count,
+            .calls = merged.calls,
+            .calls_count = merged.call_count,
+            .call_arguments = merged.call_arguments,
+            .call_arguments_count = merged.call_argument_count,
+            .root_maps = merged.root_maps,
+            .root_maps_count = merged.root_map_count,
+            .root_slots = merged.root_slots,
+            .root_slots_count = merged.root_slot_count,
+            .cleanups = merged.cleanups,
+            .cleanups_count = merged.cleanup_count,
+            .adapters = merged.adapters,
+            .adapters_count = merged.adapter_count,
+            .capabilities = merged.capabilities,
+            .capabilities_count = merged.capability_count,
+            .coroutines = merged.coroutines,
+            .coroutines_count = merged.coroutine_count,
+            .debug_facts = merged.debug_facts,
+            .debug_facts_count = merged.debug_fact_count,
+            .module_partitions = partitions,
+            .module_partitions_count = module_count,
+        };
+        built = xr_target_plan_freeze(&draft, out, error, error_size);
+    }
+    materialized_dispose(&merged);
+    module_set_dispose(materialized, module_count);
+    xr_free(partitions);
+    xr_free(rep_maps);
+    xr_free(entry_dependencies);
     return built;
 }
 

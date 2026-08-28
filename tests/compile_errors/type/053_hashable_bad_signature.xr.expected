@@ -1,1 +1,2 @@
+--> 1:7 E0375
 Class 'BadSig' implements Hashable but is missing operator==(other: BadSig) -> bool and hash() -> i64

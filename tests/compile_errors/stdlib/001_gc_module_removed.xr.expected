@@ -1,1 +1,5 @@
-Module 'gc' not found
+# The `gc` module was removed (reclamation is reference counting, task 247), so
+# the import must not resolve. Module resolution reports this before it has a
+# source position, hence `--> ?`.
+--> ?
+module 'gc' not found

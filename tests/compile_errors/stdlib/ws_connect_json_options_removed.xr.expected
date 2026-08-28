@@ -1,1 +1,2 @@
+--> 4:35
 type 'JSON.Object' is not assignable to parameter type 'WsConnectOptions?'

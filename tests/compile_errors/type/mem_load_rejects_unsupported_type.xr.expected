@@ -1,1 +1,3 @@
+--> 4:1 E0358
+misplaced 4:20
 mem.load<T>() supports T = i8, u8, i16, u16, i32, u32, i64, u64, isize, usize, f32, f64, Ptr<U> or MutPtr<U>

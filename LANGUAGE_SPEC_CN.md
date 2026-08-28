@@ -685,6 +685,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
 | `Endian` | `Native` \| `LE` \| `BE` |
 | `Utf8Error` | `InvalidUtf8` |
+| `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
 | `StringSliceError` | `InvalidByteRange` |
 | `CompressionError` | `InvalidData` |
 | `CryptoError` | `InvalidLength` |
@@ -5944,7 +5945,7 @@ fn measuredKernel(value: u64) -> u64 {
 
 | 函数 | 签名 | 说明 |
 |--|--|--|
-| `print` | `(...values) -> ()` | 输出到 stdout，追加恰好一个换行；多参以恰好一个空格分隔；`print()` 只输出换行 |
+| `print` | `(...values) -> ()` | 输出到 stdout，追加恰好一个换行；多参以恰好一个空格分隔；`print()` 只输出换行。一次调用是一个不可分割的组：所有参数先从左到右各求值一次，再全部渲染，最后一次性写出 |
 | `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
 | `len` | `(value) -> i64` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
 

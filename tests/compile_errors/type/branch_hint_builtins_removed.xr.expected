@@ -1,2 +1,5 @@
+--> 1:11 E0351
 Undeclared variable 'likely'
+
+--> 2:12 E0351
 Undeclared variable 'unlikely'

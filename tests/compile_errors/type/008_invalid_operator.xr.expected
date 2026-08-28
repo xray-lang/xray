@@ -1,0 +1,2 @@
+--> 4:22 E0352
+operator '-' is not defined for 'string' and 'string'

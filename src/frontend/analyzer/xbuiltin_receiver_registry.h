@@ -302,7 +302,7 @@ xa_builtin_receiver_method_memory_effect(const XaBuiltinReceiverMethodSpec *spec
 }
 
 /* Element types a Slice<T> may span POD-wise. */
-static inline bool xa_builtin_type_is_pod_span_elem(XrType *type) {
+static inline bool xa_builtin_type_is_pod_span_elem(const XrType *type) {
     if (!type || type->is_nullable)
         return false;
     switch (type->kind) {
@@ -316,10 +316,16 @@ static inline bool xa_builtin_type_is_pod_span_elem(XrType *type) {
     }
 }
 
-/* Does `receiver` satisfy a spec's declared receiver kind? Single definition
- * shared by the call/expr visitors and the error-set analyzer: a divergent copy
- * would let one pass believe a call is an intrinsic while another does not. */
-static inline bool xa_builtin_receiver_matches_type(XrType *receiver, XaBuiltinReceiverKind kind) {
+/* Does `receiver` satisfy a spec's declared receiver kind?
+ *
+ * Every pass that asks this question asks it here. Seven passes used to carry
+ * their own copy, and each copy had dropped the MAP arm, so a Map method the
+ * analyzer recognised was not an intrinsic to anyone downstream -- which is
+ * exactly what the previous wording of this comment warned would happen. The
+ * compiler had been reporting each of those copies as an unhandled enumeration
+ * value all along. */
+static inline bool xa_builtin_receiver_matches_type(const XrType *receiver,
+                                                    XaBuiltinReceiverKind kind) {
     switch (kind) {
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
@@ -423,6 +429,11 @@ xa_builtin_receiver_method_documentation_group(const XaBuiltinReceiverMethodSpec
             return XA_BUILTIN_DOC_GROUP_U8_SLICE;
         case XA_BUILTIN_RECEIVER_POD_SLICE:
             return XA_BUILTIN_DOC_GROUP_POD_SLICE;
+        /* Map has no documentation group of its own, so it reads as general.
+         * Saying so here rather than falling out of the switch keeps the
+         * compiler able to name the next receiver kind that needs a group. */
+        case XA_BUILTIN_RECEIVER_MAP:
+            return XA_BUILTIN_DOC_GROUP_GENERAL;
     }
     return XA_BUILTIN_DOC_GROUP_GENERAL;
 }

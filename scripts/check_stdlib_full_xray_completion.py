@@ -33,11 +33,15 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from stdlib_symbol_inventory import (  # noqa: E402
-    QUEUE_ORDER,
+    LEAF_CLASSES,
     ModuleRow,
+    NATIVE_LEAF_ALLOWLIST_PATH,
+    QUEUE_ORDER,
     SymbolRow,
     build_rows,
+    has_compiler_owned_semantic_source,
     is_semantic_c_owner,
+    leaf_is_approved,
     summarize,
 )
 
@@ -84,12 +88,16 @@ UNRUN_BANNER = (
     "UNRUN gates were not run and must not be counted as passing: {names}"
 )
 
-# A native leaf is allowlisted only once it carries a class naming why the C
-# boundary is permanent. The inventory records `unclassified` for every leaf
-# because approving one needs a per-symbol record -- ABI, ownership, effect,
-# provider, deletion trigger -- that the manifest schema cannot hold, so an
-# empty or `unclassified` class is an unapproved leaf.
-UNAPPROVED_LEAF_CLASSES = {"", "unclassified"}
+# A native leaf is allowlisted only once it carries a class naming which C
+# boundary it crosses. The inventory writes that class from a per-symbol
+# record in `stdlib/native_leaf_allowlist.toml` -- ABI, ownership, effect,
+# provider, deletion trigger -- and leaves the leaf `unclassified` when no
+# usable record reaches it.
+#
+# There is deliberately no list of unapproved spellings here. Approval is
+# membership of the inventory's closed `LEAF_CLASSES` set, so a class name
+# nobody defined fails the gate; a denylist of `{"", "unclassified"}` would
+# have approved every misspelling instead.
 
 
 # Probe field spellings. The probe writer and this reader are separate
@@ -617,6 +625,17 @@ def drift_note(gate_subject: str, derived: int, counts: dict[str, Any], key: str
     return []
 
 
+def compiler_owned_exception_note(module: ModuleRow, xray_owned: dict[str, int]) -> str | None:
+    """State the exception for one module, or answer None when it does not hold."""
+    if not has_compiler_owned_semantic_source(module, xray_owned.get(module.name, 0)):
+        return None
+    return (
+        f"{module.name}: semantic source {module.semantic_source} is the compiler's built-in "
+        f"symbol registry, expanded at C compile time and exporting nothing, so this gate has "
+        f"no question to ask it; every other gate still counts it"
+    )
+
+
 def gate_source_coverage(
     root: Path, modules: list[ModuleRow], rows: list[SymbolRow], counts: dict[str, Any]
 ) -> GateResult:
@@ -635,6 +654,10 @@ def gate_source_coverage(
 
     for module in sorted(modules, key=lambda m: m.name):
         if module.audience != "production":
+            continue
+        exception = compiler_owned_exception_note(module, xray_owned)
+        if exception:
+            notes.append(exception)
             continue
         source = module.semantic_source
         if not source.endswith(".xr"):
@@ -681,7 +704,7 @@ def gate_source_coverage(
 
 
 def gate_no_whole_module_native_policy(
-    modules: list[ModuleRow], counts: dict[str, Any]
+    modules: list[ModuleRow], rows: list[SymbolRow], counts: dict[str, Any]
 ) -> GateResult:
     """No production module may declare its whole body native.
 
@@ -689,16 +712,28 @@ def gate_no_whole_module_native_policy(
     all, which is the coarsest form of the defect the other gates count symbol
     by symbol.
     """
-    offenders = [
-        f"{m.name}: policy {m.policy} (layer {m.layer or '<none>'}, "
-        f"semantic source {m.semantic_source or '<none>'})"
-        for m in sorted(modules, key=lambda m: m.name)
-        if m.audience == "production" and m.policy in {"native_primitive", "native_library"}
-    ]
+    xray_owned: dict[str, int] = {}
+    for row in rows:
+        if row.xray_body:
+            xray_owned[row.module] = xray_owned.get(row.module, 0) + 1
+    notes: list[str] = []
+    offenders: list[str] = []
+    for m in sorted(modules, key=lambda m: m.name):
+        if m.audience != "production" or m.policy not in {"native_primitive", "native_library"}:
+            continue
+        exception = compiler_owned_exception_note(m, xray_owned)
+        if exception:
+            notes.append(exception)
+            continue
+        offenders.append(
+            f"{m.name}: policy {m.policy} (layer {m.layer or '<none>'}, "
+            f"semantic source {m.semantic_source or '<none>'})"
+        )
     result = counted_gate(
         "stdlib_no_whole_module_native_policy",
         "production modules declared native_primitive or native_library",
         offenders,
+        notes,
         singular="production module declared native_primitive or native_library",
     )
     result.notes.extend(
@@ -742,8 +777,13 @@ def gate_native_leaf_allowlist(rows: list[SymbolRow], counts: dict[str, Any]) ->
     """Every native leaf has to carry an approved allowlist class.
 
     A leaf is the one form of C the completion definition keeps, so each one
-    needs a class stating why its boundary is permanent. Without that class the
-    leaf is undecided residue, not an accepted boundary.
+    needs a record stating which boundary it crosses and what would have to
+    become true for it to be deleted. Without that record the leaf is undecided
+    residue, not an accepted boundary.
+
+    Approval is membership of the closed class set the inventory defines, so a
+    class name nobody defined fails the gate rather than passing it by not
+    being one of the two known unapproved spellings.
     """
     offenders = [
         f"{row.module}::{row.symbol} (kind {row.kind}, class "
@@ -751,12 +791,14 @@ def gate_native_leaf_allowlist(rows: list[SymbolRow], counts: dict[str, Any]) ->
         + (f"; {row.leaf_reason}" if row.leaf_reason else "")
         + ")"
         for row in sorted(rows, key=lambda r: (r.module, r.symbol))
-        if row.native_leaf and row.leaf_class in UNAPPROVED_LEAF_CLASSES
+        if row.native_leaf and not leaf_is_approved(row)
     ]
     total_leaves = sum(1 for row in rows if row.native_leaf)
     notes = [
         f"{total_leaves} native leaves in total; an approved class needs a per-symbol "
-        f"record naming ABI, ownership, effect, provider and deletion trigger"
+        f"record in {NATIVE_LEAF_ALLOWLIST_PATH.as_posix()} naming ABI, ownership, "
+        f"effect, provider and deletion trigger",
+        f"approved classes: {', '.join(sorted(LEAF_CLASSES))}",
     ]
     result = counted_gate(
         "stdlib_native_leaf_allowlist",
@@ -1103,7 +1145,7 @@ def main(argv: list[str]) -> int:
 
     components = [
         gate_source_coverage(root, modules, rows, counts),
-        gate_no_whole_module_native_policy(modules, counts),
+        gate_no_whole_module_native_policy(modules, rows, counts),
         gate_no_public_native_surface(modules, counts),
         gate_native_leaf_allowlist(rows, counts),
         gate_no_handwritten_c_semantic_owner(modules, rows, counts),

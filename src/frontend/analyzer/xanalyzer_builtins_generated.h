@@ -213,32 +213,28 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
 };
 #define GEN_CLUSTER_FUNCTION_COUNT 10
 
-static const char *g_gen_compress_gunzip_3_errors[] = {
+static const char *g_gen_compress___gunzip_1_errors[] = {
     "CompressionError.InvalidData",
 };
 
-static const char *g_gen_compress_inflate_5_errors[] = {
+static const char *g_gen_compress___inflate_3_errors[] = {
     "CompressionError.InvalidData",
 };
 
-static const char *g_gen_compress_zlibdecompress_7_errors[] = {
+static const char *g_gen_compress___zlibdecompress_5_errors[] = {
     "CompressionError.InvalidData",
 };
 
 // compress module functions
 static const XaBuiltinMember g_gen_compress_functions[] = {
-    {"crc32", "(data: string): i64", "Compute CRC-32 checksum", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"adler32", "(data: string): i64", "Compute Adler-32 checksum", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"gzip", "(data: string, level?: i64): string?", "Gzip compress", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"gunzip", "(data: string): string", "Gzip decompress", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress_gunzip_3_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"deflate", "(data: string, level?: i64): string?", "Deflate compress", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"inflate", "(data: string): string", "Inflate decompress", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress_inflate_5_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"zlibCompress", "(data: string, level?: i64): string?", "Zlib compress", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"zlibDecompress", "(data: string): string", "Zlib decompress", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress_zlibdecompress_7_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"isGzip", "(data: string): bool", "Check if gzip data", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"isZlib", "(data: string): bool", "Check if zlib data", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__gzip", "(data: string, level: i64): string?", "Gzip-wrap and deflate at the given level", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__gunzip", "(data: string): string", "Inflate a gzip member, refusing a header that is not gzip", true, false, true, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress___gunzip_1_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__deflate", "(data: string, level: i64): string?", "Raw deflate at the given level", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__inflate", "(data: string): string", "Raw inflate", true, false, true, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress___inflate_3_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__zlibCompress", "(data: string, level: i64): string?", "Zlib-wrap and deflate at the given level", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__zlibDecompress", "(data: string): string", "Inflate a zlib stream, refusing a header that is not zlib", true, false, true, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress___zlibdecompress_5_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_COMPRESS_FUNCTION_COUNT 10
+#define GEN_COMPRESS_FUNCTION_COUNT 6
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
@@ -249,8 +245,8 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 
 // http2 module functions
 static const XaBuiltinMember g_gen_http2_functions[] = {
-    {"supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?", "Execute one typed HTTP/2 request", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?", "Execute one typed HTTP/2 request", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_HTTP2_FUNCTION_COUNT 2
 
@@ -370,42 +366,37 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 
 // mem module functions
 static const XaBuiltinMember g_gen_mem_functions[] = {
-    {"fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"prefetch", "(ptr: Ptr<u8>, rw: i64): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"cacheInvalidate", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"cacheLineSize", "(): i64", "CPU cache line size in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__prefetch", "(ptr: Ptr<u8>, rw: i64): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cacheInvalidate", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cacheLineSize", "(): i64", "CPU cache line size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"sizeOf", "(): i64", "Compile-time size in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"alignOf", "(): i64", "Compile-time alignment in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"offsetOf", "(field: string): i64", "Compile-time byte offset of a field in a fixed-layout struct T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"slice", "(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>", "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"assumeInitialized", "(buffer: Buffer): any", "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T", true, false, false, true, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
     {"pageAlloc", "(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"ptr", "(addr: i64): Ptr<u8>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"withSliceMut", "(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any", "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked", true, false, false, true, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"mutPtr", "(addr: i64): MutPtr<u8>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"addr", "(ptr: Ptr<u8>): i64", "Numeric address of any Ptr<T> or MutPtr<T>", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"load", "(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"store", "(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()", "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"move", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"set", "(dst: MutPtr<u8>, u8: i64, n: i64): ()", "Fill n bytes at dst with byte (memset)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"compare", "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"volatileLoad", "(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"volatileStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    // Module constants (is_method=false)
-    {"PROT_NONE", ": i64", "No access protection for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"PROT_READ", ": i64", "Readable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"PROT_WRITE", ": i64", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"PROT_EXEC", ": i64", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__move", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__set", "(dst: MutPtr<u8>, u8: i64, n: i64): ()", "Fill n bytes at dst with byte (memset)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__compare", "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__volatileLoad", "(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__volatileStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_MEM_FUNCTION_COUNT 33
+#define GEN_MEM_FUNCTION_COUNT 29
 
 // net.__CopyBidirectionalResult object fields
 static const XaBuiltinObjectField g_gen_net___copybidirectionalresult_object_fields[] = {
@@ -525,19 +516,19 @@ static const XaBuiltinMember g_gen_os_functions[] = {
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
-    {"compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"test", "(pattern: Regex, s: string): bool", "Test if regex matches", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"count", "(pattern: Regex, s: string): i64", "Count matches", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"findText", "(pattern: Regex, s: string): string?", "Find first matching text", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"findGroup", "(pattern: Regex, s: string, index: i64): string?", "Find capture group", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__test", "(pattern: Regex, s: string): bool", "Test if regex matches", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__count", "(pattern: Regex, s: string): i64", "Count matches", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__findText", "(pattern: Regex, s: string): string?", "Find first matching text", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__findGroup", "(pattern: Regex, s: string, index: i64): string?", "Find capture group", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
     {"find", "(pattern: Regex, s: string, offset?: i64): RegexMatch?", "Find first match", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
     {"fullFind", "(pattern: Regex, s: string): RegexMatch?", "Find full match", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
     {"findAll", "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>", "Find all matches", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"replace", "(pattern: Regex, s: string, repl: string): string", "Replace first match", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"replaceAll", "(pattern: Regex, s: string, repl: string): string", "Replace all matches", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"split", "(pattern: Regex, s: string, limit?: i64): Array<string>", "Split string by regex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"escape", "(s: string): string", "Escape regex special chars", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"isValid", "(pattern: string): bool", "Check if pattern is valid", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__replace", "(pattern: Regex, s: string, repl: string): string", "Replace first match", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__replaceAll", "(pattern: Regex, s: string, repl: string): string", "Replace all matches", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__split", "(pattern: Regex, s: string, limit?: i64): Array<string>", "Split string by regex", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__escape", "(s: string): string", "Escape regex special chars", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__isValid", "(pattern: string): bool", "Check if pattern is valid", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_REGEX_FUNCTION_COUNT 13
 

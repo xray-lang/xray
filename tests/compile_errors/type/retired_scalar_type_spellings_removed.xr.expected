@@ -1,3 +1,11 @@
+--> 0:1 E0365
+misplaced 1:22
 undefined type 'int'
+
+--> 0:1 E0365
+misplaced 2:19
 undefined type 'byte'
+
+--> 0:1 E0365
+misplaced 3:20
 undefined type 'float'

@@ -1,2 +1,4 @@
+--> 7:1 E0374
+misplaced 7:5
 method 'Child.write' conflicts with inherited method 'write'
 Xray does not support method overload or method hiding

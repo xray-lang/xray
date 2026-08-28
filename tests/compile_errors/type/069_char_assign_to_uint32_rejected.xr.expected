@@ -1,1 +1,2 @@
+--> 1:5 E0352
 Type 'rune' is not assignable to type 'u32'

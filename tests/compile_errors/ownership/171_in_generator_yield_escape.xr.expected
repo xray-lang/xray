@@ -1,1 +1,2 @@
+--> 2:11 E0352
 cannot yield borrowed 'read' parameter 'data'; yield an owned value or copy(data)

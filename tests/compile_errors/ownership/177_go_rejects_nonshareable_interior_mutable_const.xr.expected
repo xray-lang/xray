@@ -1,1 +1,2 @@
+--> 6:5 E0363
 go closure cannot capture non-shareable interior-mutable const 'plan'

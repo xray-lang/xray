@@ -1,1 +1,2 @@
+--> 5:11 E0354
 raw pointer `deref()` must be inside an `unsafe { }` block

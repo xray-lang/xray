@@ -1,2 +1,5 @@
+--> 1:4 E0384
 cannot declare function 'chunks' returning Slice view
+
+--> 3:11 E0383
 cannot yield Slice view from generator

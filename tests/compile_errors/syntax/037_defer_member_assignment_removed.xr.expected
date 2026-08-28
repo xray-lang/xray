@@ -1,2 +1,3 @@
+--> 5:11
 expected '{' after defer
 defer { ... }

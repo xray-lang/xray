@@ -1,1 +1,3 @@
+--> 4:1 E0358
+misplaced 4:20
 mem.load<T>() pointer values require the compile-time literal Endian.Native

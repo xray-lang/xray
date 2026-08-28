@@ -1,3 +1,4 @@
+--> 9:11 E0356
 type 'EnumVariant<Color>' is not assignable to parameter type 'Color'
 'Color.variants' yields variant descriptors
 iterate 'Color' directly when actual enum values are required

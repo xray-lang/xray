@@ -269,32 +269,6 @@ static void alloc_mark_enum_descriptor_erasure(XaAllocScan *scan, AstNode *site,
                           "erased enum descriptor");
 }
 
-static bool alloc_pod_span_element(const XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    return type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT || type->kind == XR_KIND_BOOL ||
-           type->kind == XR_KIND_RUNE;
-}
-
-static bool alloc_receiver_matches(const XrType *receiver, XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver && receiver->kind == XR_KIND_ARRAY;
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver && receiver->kind == XR_KIND_SLICE &&
-                   alloc_pod_span_element(receiver->container.element_type);
-    }
-    return false;
-}
-
 static const XaBuiltinReceiverMethodSpec *alloc_receiver_method(const XrType *receiver,
                                                                 const char *name) {
     if (!receiver || !name)
@@ -302,7 +276,7 @@ static const XaBuiltinReceiverMethodSpec *alloc_receiver_method(const XrType *re
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
         if (strcmp(spec->source_name, name) == 0 &&
-            alloc_receiver_matches(receiver, spec->receiver))
+            xa_builtin_receiver_matches_type(receiver, spec->receiver))
             return spec;
     }
     return NULL;

@@ -44,17 +44,23 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CLUSTER */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_COMPRESS
-static void xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "crc32", compress_crc32);
-    XRS_EXPORT(module, isolate, "adler32", compress_adler32);
-    XRS_EXPORT(module, isolate, "gzip", compress_gzip);
-    XRS_EXPORT(module, isolate, "gunzip", compress_gunzip);
-    XRS_EXPORT(module, isolate, "deflate", compress_deflate);
-    XRS_EXPORT(module, isolate, "inflate", compress_inflate);
-    XRS_EXPORT(module, isolate, "zlibCompress", compress_zlib_compress);
-    XRS_EXPORT(module, isolate, "zlibDecompress", compress_zlib_decompress);
-    XRS_EXPORT(module, isolate, "isGzip", compress_is_gzip);
-    XRS_EXPORT(module, isolate, "isZlib", compress_is_zlib);
+XR_FUNC bool xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    XRS_EXPORT(module, isolate, "__gzip", compress_gzip);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__gunzip", compress_gunzip);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__deflate", compress_deflate);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__inflate", compress_inflate);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__zlibCompress", compress_zlib_compress);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__zlibDecompress", compress_zlib_decompress);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_COMPRESS */
 
@@ -72,9 +78,15 @@ XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_HTTP2
-static void xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "supported", h2_supported);
-    XRS_EXPORT(module, isolate, "request", h2_request_typed);
+XR_FUNC bool xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    XRS_EXPORT(module, isolate, "__supported", h2_supported);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__request", h2_request_typed);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP2 */
 
@@ -211,39 +223,35 @@ static void xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *mod
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_MEM
 static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "fence", mem_fence);
-    XRS_EXPORT(module, isolate, "prefetch", mem_prefetch);
-    XRS_EXPORT(module, isolate, "cacheFlush", mem_cache_flush);
-    XRS_EXPORT(module, isolate, "cacheInvalidate", mem_cache_invalidate);
-    XRS_EXPORT(module, isolate, "nontemporalStore", mem_nontemporal_store);
-    XRS_EXPORT(module, isolate, "cacheLineSize", mem_cache_line_size);
+    XRS_EXPORT(module, isolate, "__fence", mem_fence);
+    XRS_EXPORT(module, isolate, "__prefetch", mem_prefetch);
+    XRS_EXPORT(module, isolate, "__cacheFlush", mem_cache_flush);
+    XRS_EXPORT(module, isolate, "__cacheInvalidate", mem_cache_invalidate);
+    XRS_EXPORT(module, isolate, "__nontemporalStore", mem_nontemporal_store);
+    XRS_EXPORT(module, isolate, "__cacheLineSize", mem_cache_line_size);
     XRS_EXPORT(module, isolate, "sizeOf", mem_size_of);
     XRS_EXPORT(module, isolate, "alignOf", mem_align_of);
     XRS_EXPORT(module, isolate, "offsetOf", mem_offset_of);
     XRS_EXPORT(module, isolate, "slice", mem_slice_intrinsic);
     XRS_EXPORT(module, isolate, "assumeInitialized", mem_assume_initialized_intrinsic);
-    XRS_EXPORT(module, isolate, "alloc", mem_alloc);
-    XRS_EXPORT(module, isolate, "allocZeroed", mem_alloc_zeroed);
-    XRS_EXPORT(module, isolate, "allocAligned", mem_alloc_aligned);
+    XRS_EXPORT(module, isolate, "__alloc", mem_alloc);
+    XRS_EXPORT(module, isolate, "__allocZeroed", mem_alloc_zeroed);
+    XRS_EXPORT(module, isolate, "__allocAligned", mem_alloc_aligned);
     XRS_EXPORT(module, isolate, "pageAlloc", mem_page_alloc);
-    XRS_EXPORT(module, isolate, "pageProtect", mem_page_protect);
-    XRS_EXPORT(module, isolate, "pageFree", mem_page_free);
+    XRS_EXPORT(module, isolate, "__pageProtect", mem_page_protect);
+    XRS_EXPORT(module, isolate, "__pageFree", mem_page_free);
     XRS_EXPORT(module, isolate, "ptr", mem_ptr);
     XRS_EXPORT(module, isolate, "withSliceMut", mem_with_slice_mut_intrinsic);
     XRS_EXPORT(module, isolate, "mutPtr", mem_mut_ptr);
     XRS_EXPORT(module, isolate, "addr", mem_addr);
     XRS_EXPORT(module, isolate, "load", mem_load_intrinsic);
     XRS_EXPORT(module, isolate, "store", mem_store_intrinsic);
-    XRS_EXPORT(module, isolate, "copy", mem_copy);
-    XRS_EXPORT(module, isolate, "move", mem_move);
-    XRS_EXPORT(module, isolate, "set", mem_set);
-    XRS_EXPORT(module, isolate, "compare", mem_compare);
-    XRS_EXPORT(module, isolate, "volatileLoad", mem_volatile_load);
-    XRS_EXPORT(module, isolate, "volatileStore", mem_volatile_store);
-    xr_module_add_export(isolate, module, "PROT_NONE", xr_int(XR_MEM_PROT_NONE));
-    xr_module_add_export(isolate, module, "PROT_READ", xr_int(XR_MEM_PROT_READ));
-    xr_module_add_export(isolate, module, "PROT_WRITE", xr_int(XR_MEM_PROT_WRITE));
-    xr_module_add_export(isolate, module, "PROT_EXEC", xr_int(XR_MEM_PROT_EXEC));
+    XRS_EXPORT(module, isolate, "__copy", mem_copy);
+    XRS_EXPORT(module, isolate, "__move", mem_move);
+    XRS_EXPORT(module, isolate, "__set", mem_set);
+    XRS_EXPORT(module, isolate, "__compare", mem_compare);
+    XRS_EXPORT(module, isolate, "__volatileLoad", mem_volatile_load);
+    XRS_EXPORT(module, isolate, "__volatileStore", mem_volatile_store);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MEM */
 
@@ -373,19 +381,19 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_REGEX
 static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "compile", regex_compile);
-    XRS_EXPORT(module, isolate, "test", regex_test);
-    XRS_EXPORT(module, isolate, "count", regex_count);
-    XRS_EXPORT(module, isolate, "findText", regex_find_text);
-    XRS_EXPORT(module, isolate, "findGroup", regex_find_group);
+    XRS_EXPORT(module, isolate, "__compile", regex_compile);
+    XRS_EXPORT(module, isolate, "__test", regex_test);
+    XRS_EXPORT(module, isolate, "__count", regex_count);
+    XRS_EXPORT(module, isolate, "__findText", regex_find_text);
+    XRS_EXPORT(module, isolate, "__findGroup", regex_find_group);
     XRS_EXPORT(module, isolate, "find", regex_find);
     XRS_EXPORT(module, isolate, "fullFind", regex_full_match);
     XRS_EXPORT(module, isolate, "findAll", regex_find_all);
-    XRS_EXPORT(module, isolate, "replace", regex_replace);
-    XRS_EXPORT(module, isolate, "replaceAll", regex_replace_all);
-    XRS_EXPORT(module, isolate, "split", regex_split);
-    XRS_EXPORT(module, isolate, "escape", regex_escape);
-    XRS_EXPORT(module, isolate, "isValid", regex_is_valid);
+    XRS_EXPORT(module, isolate, "__replace", regex_replace);
+    XRS_EXPORT(module, isolate, "__replaceAll", regex_replace_all);
+    XRS_EXPORT(module, isolate, "__split", regex_split);
+    XRS_EXPORT(module, isolate, "__escape", regex_escape);
+    XRS_EXPORT(module, isolate, "__isValid", regex_is_valid);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_REGEX */
 

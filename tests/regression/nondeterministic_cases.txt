@@ -1,0 +1,53 @@
+# Regression cases whose verdict is not reproducible, and why.
+#
+# scripts/check_regression_corpus.py passes every case listed here to the
+# ratchet as `skipped`. tests/lib/xraytest/ratchet.py defines what that means:
+# a skipped case is neither a new failure nor evidence that a baselined entry
+# is fixed, because it produced no verdict. That is exactly right for a case
+# that decides at random -- judging one would make the gate report the outcome
+# of a coin flip.
+#
+# A listed case must ALSO stay in baseline_failures.txt. The two files answer
+# different questions: the baseline says "this is not a fresh regression", this
+# file says "do not read anything into whichever way it landed today".
+#
+# Rules:
+#   - The list may only shrink. It is a statement that a defect makes a case
+#     unjudgeable, so it is deleted by the change that fixes the defect.
+#   - Adding a line requires the measurement here, next to it: how many runs,
+#     how many failed, and what the failure signature was. "Seems flaky" is not
+#     an entry.
+#   - Never add a line to quiet a case that fails consistently. That is a
+#     regression with a slow reproducer, not a nondeterministic one.
+#
+# Established 2026-08-28, when the corpus got its ctest entry and the gate
+# started reporting these three at random.
+#
+# --- one uninitialized pointer, three cases ---------------------------------
+# Measured serially, eight runs each, on Release / no sanitizer /
+# XRAY_STDLIB_VM_FASTPATHS=OFF:
+#
+#     1305_csv_basic.xr     0 139 0 0 0 139 0 0    (2/8 SIGSEGV)
+#     1309_xml_advanced.xr  0 138 0 0 0 138 0 0    (2/8 SIGBUS)
+#     1308_xml_basic.xr     0 0 139 0              (1/4 SIGSEGV)
+#
+# Signal, not assertion: the programs die, they do not disagree. The same
+# afternoon, tests/fuzz/fuzz_stdlib_data -- wired into CI for the first time in
+# this change -- aborted on its own committed seed
+# tests/fuzz/corpus/stdlib_data/00_csv_basic.txt, and ASan named the address:
+#
+#     src/mem/xcoro_heap.h:346: member access within misaligned address
+#     0xbebebebebebebebe for type 'XrCoroHeap'
+#       xr_coro_heap_sub_external -> xr_obj_destroy_array
+#       -> xr_fixed_heap_finalize -> xray_vm_delete
+#
+# 0xbebe... is ASan's malloc fill pattern, so that pointer was never
+# initialized, and the crash is in VM teardown rather than in any parser. An
+# uninitialized read explains all four observations at once, including why they
+# land differently run to run and why CSV and XML both show it.
+#
+# See blockers/r3-8-stdlib-data-fuzzer-crashes-on-its-own-seed.md. Fixing
+# xcoro_heap.h:346 should delete all three lines below.
+1305_csv_basic.xr
+1308_xml_basic.xr
+1309_xml_advanced.xr

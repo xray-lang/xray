@@ -35,6 +35,7 @@ CONTRACT_SPECS = (
             "src/frontend/analyzer/xa_intrinsic_registry.def",
             "src/ir/xi_method_sym.def",
             "src/ir/xi_semantic_intrinsic.c",
+            "src/plan/semantic/xr_semantic_native_module_call_shape.h",
             "src/shared/xr_core_intrinsic.def",
             "contracts/capability-deletions.tsv",
             "scripts/check_branch_hint_surface_residue.py",

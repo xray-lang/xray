@@ -1,0 +1,3 @@
+// owned/shared 绑定前缀已被移除：所有权由值能力和显式 copy/move 边界决定。
+owned total = 41 + 1
+print(total)

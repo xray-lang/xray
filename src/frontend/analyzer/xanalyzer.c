@@ -300,8 +300,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
      * `assertEqual`'s same-T relation is checked at the resolved call site;
      * unknown here means a value of any one inferred type, not truthiness. */
     XrType *assert_params[2] = {t_bool, t_string};
-    XrType *fn_assert =
-        xr_type_new_function(analyzer->isolate, assert_params, 2, t_void, false);
+    XrType *fn_assert = xr_type_new_function(analyzer->isolate, assert_params, 2, t_void, false);
     fn_assert->function.min_params = 1;
     register_core_builtin_func(analyzer, XR_CORE_BUILTIN_ASSERT, fn_assert);
 
@@ -311,8 +310,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     fn_assert_equal->function.min_params = 2;
     register_core_builtin_func(analyzer, XR_CORE_BUILTIN_ASSERT_EQUAL, fn_assert_equal);
 
-    XrType *action_type =
-        xr_type_new_function(analyzer->isolate, NULL, 0, p_any, false);
+    XrType *action_type = xr_type_new_function(analyzer->isolate, NULL, 0, p_any, false);
     XrType *action_params[2] = {action_type, t_string};
     XrType *fn_assert_action =
         xr_type_new_function(analyzer->isolate, action_params, 2, t_void, false);
@@ -864,15 +862,13 @@ static XrModuleSpec *xa_graph_spec_for_ast(XaAnalyzer *analyzer, XrAstNode *ast)
     return NULL;
 }
 
-static XrModuleSpec *xa_graph_spec_for_identity(XaAnalyzer *analyzer,
-                                                const char *module_identity) {
+static XrModuleSpec *xa_graph_spec_for_identity(XaAnalyzer *analyzer, const char *module_identity) {
     XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
     if (!graph || !module_identity || !xr_module_identity_valid(module_identity, NULL))
         return NULL;
     XrModuleSpec *match = NULL;
     for (int i = 0; i < graph->spec_count; i++) {
-        if (!graph->specs[i].canonical ||
-            strcmp(graph->specs[i].canonical, module_identity) != 0)
+        if (!graph->specs[i].canonical || strcmp(graph->specs[i].canonical, module_identity) != 0)
             continue;
         if (match)
             return NULL;
@@ -916,8 +912,7 @@ static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNo
     const XrModuleSpec *owner = xa_graph_spec_for_ast(analyzer, ast);
     if (!owner)
         owner = xa_graph_spec_for_identity(analyzer, analyzer->current_module_identity);
-    if (!owner || !owner->source_path ||
-        !xr_module_identity_authority_valid(&owner->authority))
+    if (!owner || !owner->source_path || !xr_module_identity_authority_valid(&owner->authority))
         return NULL;
     XrModuleId mid;
     char *err = NULL;
@@ -1977,8 +1972,7 @@ static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, con
         !analyzer->current_stdlib_module_name)
         return;
 
-    const XaBuiltinModule *mod =
-        xa_builtin_get_module_info(analyzer->current_stdlib_module_name);
+    const XaBuiltinModule *mod = xa_builtin_get_module_info(analyzer->current_stdlib_module_name);
     if (!mod || !mod->functions)
         return;
 
@@ -2045,10 +2039,9 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
                                              : compile_identity.kind == XR_COMPILE_UNIT_STDLIB;
     analyzer->current_module_identity =
         module_spec ? module_spec->canonical : compile_identity.module_identity;
-    analyzer->current_stdlib_module_name =
-        module_spec && module_spec->kind == XR_MOD_STDLIB
-            ? module_spec->authority.namespace_id
-            : compile_identity.stdlib_module_name;
+    analyzer->current_stdlib_module_name = module_spec && module_spec->kind == XR_MOD_STDLIB
+                                               ? module_spec->authority.namespace_id
+                                               : compile_identity.stdlib_module_name;
 
     // Set current file/scope for symbol ownership tracking. The root global
     // scope is reserved for builtins/prelude; source modules live in their
@@ -2069,7 +2062,10 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     if (analyzer->semantic_revision == 0)
         analyzer->semantic_revision = 1;
 
-    analyzer->current_file = NULL;
+    /* The file cursor names the scope that stays installed, so it outlives the
+     * pass exactly as that scope does.  Clearing one half of a two-half fact
+     * left the analyzer claiming a file scope with no file, and every consumer
+     * that ran after analysis read the missing half. */
     analyzer->current_module_is_stdlib = false;
     analyzer->current_module_identity = NULL;
     analyzer->current_stdlib_module_name = NULL;

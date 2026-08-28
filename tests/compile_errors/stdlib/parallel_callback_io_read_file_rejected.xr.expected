@@ -1,1 +1,2 @@
+--> 6:19
 parallel.forEach callback cannot throw or suspend; io.readFile() is not allowed in a parallel callback

@@ -1,4 +1,11 @@
+--> 2:12 E0354
 Array has no member 'appendFrom'
+
+--> 3:12 E0354
 Array has no member 'repeatFrom'
+
+--> 8:10 E0352
 Slice view has no member 'load'
+
+--> 9:10 E0352
 Slice view has no member 'store'

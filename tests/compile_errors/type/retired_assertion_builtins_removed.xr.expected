@@ -1,0 +1,14 @@
+--> 1:1 E0351
+Undeclared variable 'assert_true'
+
+--> 2:1 E0351
+Undeclared variable 'assert_false'
+
+--> 3:1 E0351
+Undeclared variable 'assert_eq'
+
+--> 4:1 E0351
+Undeclared variable 'assert_ne'
+
+--> 5:1 E0351
+Undeclared variable 'assert_throws'

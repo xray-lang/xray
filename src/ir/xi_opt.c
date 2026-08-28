@@ -261,21 +261,6 @@ XR_FUNC bool xi_rewrite_value_to_const_literal(XiValue *v, const XiConstLiteral 
     }
 }
 
-static bool opt_type_is_unsigned_int(const XrType *type) {
-    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
-        return false;
-    switch (type->scalar_rep) {
-        case XR_NATIVE_U8:
-        case XR_NATIVE_U16:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_U64:
-        case XR_NATIVE_USIZE:
-            return true;
-        default:
-            return false;
-    }
-}
-
 static bool opt_type_is_int_like(const XrType *type) {
     return type && type->kind == XR_KIND_INT && !type->is_nullable;
 }
@@ -295,7 +280,7 @@ static bool opt_compare_uses_unsigned(const XiValue *v) {
     const XrType *left = v->args[0] ? v->args[0]->type : NULL;
     const XrType *right = v->args[1] ? v->args[1]->type : NULL;
     return opt_type_is_int_like(left) && opt_type_is_int_like(right) &&
-           (opt_type_is_unsigned_int(left) || opt_type_is_unsigned_int(right));
+           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
 }
 
 /* Replace all uses of 'old_val' in the function with 'new_val'.
@@ -811,7 +796,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                     continue;
                 }
                 bool shr_unsigned = v->op == XI_SHR && opt_type_is_int_like(lhs->type) &&
-                                    opt_type_is_unsigned_int(lhs->type);
+                                    xr_type_is_exact_unsigned_integer(lhs->type);
                 /* Result-type check recovers the unsigned intent when inlining
                  * has substituted integer literals for typed uint params (the
                  * operand types lose their signedness, but the div node's own
@@ -819,10 +804,10 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                  * well-typed code, so this cannot over-trigger vs the VM. */
                 bool divmod_unsigned =
                     (v->op == XI_DIV || v->op == XI_MOD) &&
-                    (opt_type_is_unsigned_int(v->type) ||
+                    (xr_type_is_exact_unsigned_integer(v->type) ||
                      (opt_type_is_int_like(lhs->type) && opt_type_is_int_like(rhs->type) &&
-                      (opt_type_is_unsigned_int(lhs->type) ||
-                       opt_type_is_unsigned_int(rhs->type))));
+                      (xr_type_is_exact_unsigned_integer(lhs->type) ||
+                       xr_type_is_exact_unsigned_integer(rhs->type))));
                 if (fold_int_binary(v->op, lhs_i, rhs_i, shr_unsigned, divmod_unsigned, &result)) {
                     rewrite_to_const_int(v, result);
                     chg.values_changed = true;
@@ -2314,41 +2299,6 @@ static bool sr_method_name_is(const XiValue *v, const char *name) {
     return false;
 }
 
-static bool sr_type_is_pod_span_elem(const XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool sr_builtin_receiver_registry_matches(const XrType *receiver_type,
-                                                 XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver_type && receiver_type->kind == XR_KIND_INT &&
-                   !receiver_type->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver_type);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver_type);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver_type);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && receiver_type->kind == XR_KIND_SLICE &&
-                   sr_type_is_pod_span_elem(receiver_type->container.element_type);
-    }
-    return false;
-}
-
 static bool sr_call_method_matches_receiver_registry_id(const XiValue *v,
                                                         XaBuiltinReceiverMethodId method_id) {
     const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
@@ -2356,7 +2306,7 @@ static bool sr_call_method_matches_receiver_registry_id(const XiValue *v,
         v->nargs < 1 || !v->args[0] || !v->aux)
         return false;
     return strcmp((const char *) v->aux, spec->source_name) == 0 &&
-           sr_builtin_receiver_registry_matches(v->args[0]->type, spec->receiver);
+           xa_builtin_receiver_matches_type(v->args[0]->type, spec->receiver);
 }
 
 static bool sr_is_typed_array_native_receiver_method(const XiValue *v) {

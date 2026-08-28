@@ -69,16 +69,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {
 
 // compress module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {
-    {"crc32", XLSP_SYM_FUNCTION, "fn(data: string): i64", "Compute CRC-32 checksum", NULL, 0},
-    {"adler32", XLSP_SYM_FUNCTION, "fn(data: string): i64", "Compute Adler-32 checksum", NULL, 0},
-    {"gzip", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "Gzip compress", NULL, 0},
-    {"gunzip", XLSP_SYM_FUNCTION, "fn(data: string): string", "Gzip decompress", NULL, 0},
-    {"deflate", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "Deflate compress", NULL, 0},
-    {"inflate", XLSP_SYM_FUNCTION, "fn(data: string): string", "Inflate decompress", NULL, 0},
-    {"zlibCompress", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "Zlib compress", NULL, 0},
-    {"zlibDecompress", XLSP_SYM_FUNCTION, "fn(data: string): string", "Zlib decompress", NULL, 0},
-    {"isGzip", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Check if gzip data", NULL, 0},
-    {"isZlib", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Check if zlib data", NULL, 0},
+    {"crc32", XLSP_SYM_FUNCTION, "fn(data: string): i64", "", NULL, 0},
+    {"adler32", XLSP_SYM_FUNCTION, "fn(data: string): i64", "", NULL, 0},
+    {"isGzip", XLSP_SYM_FUNCTION, "fn(data: string): bool", "", NULL, 0},
+    {"isZlib", XLSP_SYM_FUNCTION, "fn(data: string): bool", "", NULL, 0},
+    {"gzip", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "wrap and compress. A level outside 0..9 is taken to the nearest end of", NULL, 0},
+    {"gunzip", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"deflate", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "", NULL, 0},
+    {"inflate", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"zlibCompress", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "", NULL, 0},
+    {"zlibDecompress", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_COMPRESS_SYMBOL_COUNT 10
 
@@ -191,8 +191,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
 
 // http2 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http2_symbols[] = {
-    {"supported", XLSP_SYM_FUNCTION, "fn(): bool", "Whether the built-in HTTP/2 standard module is available on this target", NULL, 0},
-    {"request", XLSP_SYM_FUNCTION, "fn(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?", "Execute one typed HTTP/2 request", NULL, 0},
+    {"supported", XLSP_SYM_FUNCTION, "fn(): bool", "", NULL, 0},
+    {"request", XLSP_SYM_FUNCTION, "fn(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_HTTP2_SYMBOL_COUNT 2
 
@@ -320,39 +320,39 @@ static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
 
 // mem module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
-    {"fence", XLSP_SYM_FUNCTION, "fn(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", NULL, 0},
-    {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, rw: i64): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", NULL, 0},
-    {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
-    {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", NULL, 0},
-    {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", NULL, 0},
-    {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): i64", "CPU cache line size in bytes", NULL, 0},
     {"sizeOf", XLSP_SYM_FUNCTION, "fn(): i64", "Compile-time size in bytes of a statically laid out type T", NULL, 0},
     {"alignOf", XLSP_SYM_FUNCTION, "fn(): i64", "Compile-time alignment in bytes of a statically laid out type T", NULL, 0},
     {"offsetOf", XLSP_SYM_FUNCTION, "fn(field: string): i64", "Compile-time byte offset of a field in a fixed-layout struct T", NULL, 0},
     {"slice", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>", "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked", NULL, 0},
     {"assumeInitialized", XLSP_SYM_FUNCTION, "fn(buffer: Buffer): any", "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T", NULL, 0},
-    {"alloc", XLSP_SYM_FUNCTION, "fn(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", NULL, 0},
-    {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", NULL, 0},
-    {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", NULL, 0},
     {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", NULL, 0},
-    {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
-    {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
     {"ptr", XLSP_SYM_FUNCTION, "fn(addr: i64): Ptr<u8>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
     {"withSliceMut", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any", "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked", NULL, 0},
     {"mutPtr", XLSP_SYM_FUNCTION, "fn(addr: i64): MutPtr<u8>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
     {"addr", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>): i64", "Numeric address of any Ptr<T> or MutPtr<T>", NULL, 0},
     {"load", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", NULL, 0},
     {"store", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()", "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset", NULL, 0},
-    {"copy", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
-    {"move", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (may overlap; memmove)", NULL, 0},
-    {"set", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<u8>, u8: i64, n: i64): ()", "Fill n bytes at dst with byte (memset)", NULL, 0},
-    {"compare", XLSP_SYM_FUNCTION, "fn(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", "Compare n bytes at a and b (memcmp: <0, 0, >0)", NULL, 0},
-    {"volatileLoad", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
-    {"volatileStore", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", NULL, 0},
-    {"PROT_NONE", XLSP_SYM_CONSTANT, "i64", "No access protection for mem.pageAlloc/pageProtect", NULL, 0},
-    {"PROT_READ", XLSP_SYM_CONSTANT, "i64", "Readable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
-    {"PROT_WRITE", XLSP_SYM_CONSTANT, "i64", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
-    {"PROT_EXEC", XLSP_SYM_CONSTANT, "i64", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
+    {"fence", XLSP_SYM_FUNCTION, "fn(ordering: i64): ()", "", NULL, 0},
+    {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, rw: i64): ()", "", NULL, 0},
+    {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, n: i64): ()", "", NULL, 0},
+    {"cacheInvalidate", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, n: i64): ()", "", NULL, 0},
+    {"nontemporalStore", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, v: i64, size: i64): ()", "", NULL, 0},
+    {"cacheLineSize", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"alloc", XLSP_SYM_FUNCTION, "fn(n: i64): Buffer", "", NULL, 0},
+    {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: i64): Buffer", "", NULL, 0},
+    {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: i64, align: i64): Buffer", "", NULL, 0},
+    {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "", NULL, 0},
+    {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, bytes: i64): bool", "", NULL, 0},
+    {"copy", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "", NULL, 0},
+    {"move", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "", NULL, 0},
+    {"set", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<u8>, byte: i64, n: i64): ()", "", NULL, 0},
+    {"compare", XLSP_SYM_FUNCTION, "fn(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", "", NULL, 0},
+    {"volatileLoad", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, size: i64): i64", "", NULL, 0},
+    {"volatileStore", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, v: i64, size: i64): ()", "", NULL, 0},
+    {"PROT_NONE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"PROT_READ", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"PROT_WRITE", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"PROT_EXEC", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 33
 
@@ -464,19 +464,19 @@ static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
 
 // regex module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
-    {"compile", XLSP_SYM_FUNCTION, "fn(pattern: string, flags?: string): Regex", "Compile regex pattern", NULL, 0},
-    {"test", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): bool", "Test if regex matches", NULL, 0},
-    {"count", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): i64", "Count matches", NULL, 0},
-    {"findText", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): string?", "Find first matching text", NULL, 0},
-    {"findGroup", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, index: i64): string?", "Find capture group", NULL, 0},
     {"find", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, offset?: i64): RegexMatch?", "Find first match", NULL, 0},
     {"fullFind", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): RegexMatch?", "Find full match", NULL, 0},
     {"findAll", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>", "Find all matches", NULL, 0},
-    {"replace", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, repl: string): string", "Replace first match", NULL, 0},
-    {"replaceAll", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, repl: string): string", "Replace all matches", NULL, 0},
-    {"split", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, limit?: i64): Array<string>", "Split string by regex", NULL, 0},
-    {"escape", XLSP_SYM_FUNCTION, "fn(s: string): string", "Escape regex special chars", NULL, 0},
-    {"isValid", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "Check if pattern is valid", NULL, 0},
+    {"compile", XLSP_SYM_FUNCTION, "fn(pattern: string, flags?: string): Regex", "", NULL, 0},
+    {"isValid", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
+    {"test", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): bool", "", NULL, 0},
+    {"count", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): i64", "", NULL, 0},
+    {"findText", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): string?", "", NULL, 0},
+    {"findGroup", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, index: i64): string?", "", NULL, 0},
+    {"replace", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, repl: string): string", "", NULL, 0},
+    {"replaceAll", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, repl: string): string", "", NULL, 0},
+    {"split", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, limit?: i64): Array<string>", "", NULL, 0},
+    {"escape", XLSP_SYM_FUNCTION, "fn(s: string): string", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 13
 

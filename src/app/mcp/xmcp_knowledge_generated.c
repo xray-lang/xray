@@ -617,12 +617,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "discover",
         .signature = "(): ()",
-        .summary = "Start LAN auto-discovery",
+        .summary = "",
     },
     {
         .name = "info",
         .signature = "(): ClusterInfo?",
-        .summary = "Get cluster status info",
+        .summary = "",
     },
     {
         .name = "join",
@@ -636,13 +636,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "monitor",
-        .signature = "(name: string, coro_name?: string): Channel",
-        .summary = "Monitor node or remote coroutine",
+        .signature = "(name: string, coroName: string? = null): Channel<string>",
+        .summary = "",
     },
     {
         .name = "nodes",
-        .signature = "(): Array<string>",
-        .summary = "List cluster node names",
+        .signature = "(): Array<string>?",
+        .summary = "",
     },
     {
         .name = "parseAddress",
@@ -652,12 +652,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "self",
         .signature = "(): string",
-        .summary = "Get own node name",
+        .summary = "",
     },
     {
         .name = "send",
         .signature = "(topic: string, envelope: move Buffer): ClusterDelivery",
-        .summary = "Hand one canonical opaque service envelope to local and connected transports",
+        .summary = "",
     },
     {
         .name = "start",
@@ -708,52 +708,52 @@ static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     {
         .name = "adler32",
         .signature = "(data: string): i64",
-        .summary = "Compute Adler-32 checksum",
+        .summary = "",
     },
     {
         .name = "crc32",
         .signature = "(data: string): i64",
-        .summary = "Compute CRC-32 checksum",
+        .summary = "",
     },
     {
         .name = "deflate",
-        .signature = "(data: string, level?: i64): string?",
-        .summary = "Deflate compress",
+        .signature = "(data: string, level: i64 = DEFAULT_COMPRESSION): string?",
+        .summary = "",
     },
     {
         .name = "gunzip",
         .signature = "(data: string): string",
-        .summary = "Gzip decompress",
+        .summary = "",
     },
     {
         .name = "gzip",
-        .signature = "(data: string, level?: i64): string?",
-        .summary = "Gzip compress",
+        .signature = "(data: string, level: i64 = DEFAULT_COMPRESSION): string?",
+        .summary = "",
     },
     {
         .name = "inflate",
         .signature = "(data: string): string",
-        .summary = "Inflate decompress",
+        .summary = "",
     },
     {
         .name = "isGzip",
         .signature = "(data: string): bool",
-        .summary = "Check if gzip data",
+        .summary = "",
     },
     {
         .name = "isZlib",
         .signature = "(data: string): bool",
-        .summary = "Check if zlib data",
+        .summary = "",
     },
     {
         .name = "zlibCompress",
-        .signature = "(data: string, level?: i64): string?",
-        .summary = "Zlib compress",
+        .signature = "(data: string, level: i64 = DEFAULT_COMPRESSION): string?",
+        .summary = "",
     },
     {
         .name = "zlibDecompress",
         .signature = "(data: string): string",
-        .summary = "Zlib decompress",
+        .summary = "",
     },
 };
 
@@ -761,52 +761,52 @@ static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
     {
         .name = "decrypt",
         .signature = "(key: string, ciphertext: string): string?",
-        .summary = "AES-256-CBC decrypt",
+        .summary = "",
     },
     {
         .name = "encrypt",
         .signature = "(key: string, plaintext: string): string",
-        .summary = "AES-256-CBC encrypt",
+        .summary = "",
     },
     {
         .name = "hmac",
         .signature = "(algo: string, key: string, data: string): string?",
-        .summary = "Compute HMAC",
+        .summary = "",
     },
     {
         .name = "md5",
         .signature = "(data: string): string",
-        .summary = "Compute MD5 hash",
+        .summary = "",
     },
     {
         .name = "randomBytes",
         .signature = "(n: i64): string",
-        .summary = "Generate random bytes",
+        .summary = "",
     },
     {
         .name = "sha1",
         .signature = "(data: string): string",
-        .summary = "Compute SHA-1 hash",
+        .summary = "",
     },
     {
         .name = "sha256",
         .signature = "(data: string): string",
-        .summary = "Compute SHA-256 hash",
+        .summary = "",
     },
     {
         .name = "sha512",
         .signature = "(data: string): string",
-        .summary = "Compute SHA-512 hash",
+        .summary = "",
     },
     {
         .name = "timingSafeEqual",
         .signature = "(a: string, b: string): bool",
-        .summary = "Constant-time string comparison",
+        .summary = "",
     },
     {
         .name = "uuid",
         .signature = "(): string",
-        .summary = "Generate UUID v4",
+        .summary = "",
     },
 };
 
@@ -2206,12 +2206,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
     {
         .name = "request",
         .signature = "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?",
-        .summary = "Execute one typed HTTP/2 request",
+        .summary = "",
     },
     {
         .name = "supported",
         .signature = "(): bool",
-        .summary = "Whether the built-in HTTP/2 standard module is available on this target",
+        .summary = "",
     },
 };
 
@@ -2448,12 +2448,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "readDir",
-        .signature = "(path: Path): Array<Path>",
+        .signature = "(path: Path): Array<Path>?",
         .summary = "",
     },
     {
         .name = "readDirRecursive",
-        .signature = "(path: Path): Array<Path>",
+        .signature = "(path: Path): Array<Path>?",
         .summary = "",
     },
     {
@@ -3091,22 +3091,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "PROT_EXEC",
         .signature = ": i64",
-        .summary = "Executable page protection bit for mem.pageAlloc/pageProtect",
+        .summary = "",
     },
     {
         .name = "PROT_NONE",
         .signature = ": i64",
-        .summary = "No access protection for mem.pageAlloc/pageProtect",
+        .summary = "",
     },
     {
         .name = "PROT_READ",
         .signature = ": i64",
-        .summary = "Readable page protection bit for mem.pageAlloc/pageProtect",
+        .summary = "",
     },
     {
         .name = "PROT_WRITE",
         .signature = ": i64",
-        .summary = "Writable page protection bit for mem.pageAlloc/pageProtect",
+        .summary = "",
     },
     {
         .name = "addr",
@@ -3121,17 +3121,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "alloc",
         .signature = "(n: i64): Buffer",
-        .summary = "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped",
+        .summary = "",
     },
     {
         .name = "allocAligned",
         .signature = "(n: i64, align: i64): Buffer",
-        .summary = "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))",
+        .summary = "",
     },
     {
         .name = "allocZeroed",
         .signature = "(n: i64): Buffer",
-        .summary = "Allocate n zero-initialized bytes as a managed Buffer",
+        .summary = "",
     },
     {
         .name = "assumeInitialized",
@@ -3141,32 +3141,32 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "cacheFlush",
         .signature = "(ptr: Ptr<u8>, n: i64): ()",
-        .summary = "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available",
+        .summary = "",
     },
     {
         .name = "cacheInvalidate",
         .signature = "(ptr: Ptr<u8>, n: i64): ()",
-        .summary = "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available",
+        .summary = "",
     },
     {
         .name = "cacheLineSize",
         .signature = "(): i64",
-        .summary = "CPU cache line size in bytes",
+        .summary = "",
     },
     {
         .name = "compare",
         .signature = "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64",
-        .summary = "Compare n bytes at a and b (memcmp: <0, 0, >0)",
+        .summary = "",
     },
     {
         .name = "copy",
         .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()",
-        .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
+        .summary = "",
     },
     {
         .name = "fence",
         .signature = "(ordering: i64): ()",
-        .summary = "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)",
+        .summary = "",
     },
     {
         .name = "load",
@@ -3176,7 +3176,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "move",
         .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()",
-        .summary = "Copy n bytes from src to dst (may overlap; memmove)",
+        .summary = "",
     },
     {
         .name = "mutPtr",
@@ -3186,7 +3186,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "nontemporalStore",
         .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
-        .summary = "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available",
+        .summary = "",
     },
     {
         .name = "offsetOf",
@@ -3201,17 +3201,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "pageFree",
         .signature = "(ptr: MutPtr<u8>, bytes: i64): bool",
-        .summary = "Release anonymous pages from mem.pageAlloc; returns false on OS failure",
+        .summary = "",
     },
     {
         .name = "pageProtect",
         .signature = "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool",
-        .summary = "Change anonymous page protection bits; returns false on OS failure",
+        .summary = "",
     },
     {
         .name = "prefetch",
         .signature = "(ptr: Ptr<u8>, rw: i64): ()",
-        .summary = "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch",
+        .summary = "",
     },
     {
         .name = "ptr",
@@ -3220,8 +3220,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "set",
-        .signature = "(dst: MutPtr<u8>, u8: i64, n: i64): ()",
-        .summary = "Fill n bytes at dst with byte (memset)",
+        .signature = "(dst: MutPtr<u8>, byte: i64, n: i64): ()",
+        .summary = "",
     },
     {
         .name = "sizeOf",
@@ -3241,12 +3241,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "volatileLoad",
         .signature = "(ptr: Ptr<u8>, size: i64): i64",
-        .summary = "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
+        .summary = "",
     },
     {
         .name = "volatileStore",
         .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
-        .summary = "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
+        .summary = "",
     },
     {
         .name = "withSliceMut",
@@ -3970,18 +3970,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "compile",
-        .signature = "(pattern: string, flags?: string): Regex",
-        .summary = "Compile regex pattern",
+        .signature = "(pattern: string, flags: string = \"\"): Regex",
+        .summary = "",
     },
     {
         .name = "count",
         .signature = "(pattern: Regex, s: string): i64",
-        .summary = "Count matches",
+        .summary = "",
     },
     {
         .name = "escape",
         .signature = "(s: string): string",
-        .summary = "Escape regex special chars",
+        .summary = "",
     },
     {
         .name = "find",
@@ -3996,12 +3996,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     {
         .name = "findGroup",
         .signature = "(pattern: Regex, s: string, index: i64): string?",
-        .summary = "Find capture group",
+        .summary = "",
     },
     {
         .name = "findText",
         .signature = "(pattern: Regex, s: string): string?",
-        .summary = "Find first matching text",
+        .summary = "",
     },
     {
         .name = "fullFind",
@@ -4011,95 +4011,100 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     {
         .name = "isValid",
         .signature = "(pattern: string): bool",
-        .summary = "Check if pattern is valid",
+        .summary = "",
     },
     {
         .name = "replace",
         .signature = "(pattern: Regex, s: string, repl: string): string",
-        .summary = "Replace first match",
+        .summary = "",
     },
     {
         .name = "replaceAll",
         .signature = "(pattern: Regex, s: string, repl: string): string",
-        .summary = "Replace all matches",
+        .summary = "",
     },
     {
         .name = "split",
-        .signature = "(pattern: Regex, s: string, limit?: i64): Array<string>",
-        .summary = "Split string by regex",
+        .signature = "(pattern: Regex, s: string, limit: i64 = -1): Array<string>",
+        .summary = "",
     },
     {
         .name = "test",
         .signature = "(pattern: Regex, s: string): bool",
-        .summary = "Test if regex matches",
+        .summary = "",
     },
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "RuntimeInfo",
-        .signature = "{ liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }",
-        .summary = "Typed snapshot of the current execution-local reclamation domain",
+        .signature = "RuntimeInfo",
+        .summary = "",
     },
     {
         .name = "RuntimeInfo.blocks",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "RuntimeInfo.constructor",
+        .signature = "(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64): ()",
+        .summary = "",
     },
     {
         .name = "RuntimeInfo.finalizerCount",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = ": i64",
+        .summary = "",
     },
     {
         .name = "RuntimeInfo.freeBlocks",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = ": i64",
+        .summary = "",
     },
     {
         .name = "RuntimeInfo.fullBlocks",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = ": i64",
+        .summary = "",
     },
     {
         .name = "RuntimeInfo.liveBytes",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = ": i64",
+        .summary = "",
     },
     {
         .name = "RuntimeInfo.liveKB",
-        .signature = "const f64",
-        .summary = "Object field",
+        .signature = ": f64",
+        .summary = "",
     },
     {
         .name = "RuntimeInfo.liveObjects",
-        .signature = "const i64",
-        .summary = "Object field",
+        .signature = ": i64",
+        .summary = "",
     },
     {
         .name = "info",
         .signature = "(): RuntimeInfo",
-        .summary = "Get a typed snapshot of the current execution-local reclamation domain",
+        .summary = "",
     },
     {
         .name = "liveBytes",
         .signature = "(): i64",
-        .summary = "Get live memory usage in bytes",
+        .summary = "",
     },
     {
         .name = "liveObjects",
         .signature = "(): i64",
-        .summary = "Get live object count",
+        .summary = "",
     },
     {
         .name = "sharedBytes",
         .signature = "(): i64",
-        .summary = "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak",
+        .summary = "",
     },
     {
         .name = "staticBytes",
         .signature = "(): i64",
-        .summary = "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)",
+        .summary = "",
     },
 };
 
@@ -5179,37 +5184,37 @@ static const XmcpGeneratedStdlibSymbol _symbols_time[] = {
     {
         .name = "clock",
         .signature = "(): i64",
-        .summary = "CPU clock time in milliseconds",
+        .summary = "",
     },
     {
         .name = "localOffset",
         .signature = "(): i64",
-        .summary = "Local UTC offset in minutes for the current wall time",
+        .summary = "",
     },
     {
         .name = "localOffsetAt",
         .signature = "(timestamp: i64): i64",
-        .summary = "Local UTC offset in minutes at a Unix timestamp",
+        .summary = "",
     },
     {
         .name = "micros",
         .signature = "(): i64",
-        .summary = "Monotonic time in microseconds",
+        .summary = "",
     },
     {
         .name = "monotonic",
         .signature = "(): i64",
-        .summary = "Monotonic time in milliseconds",
+        .summary = "",
     },
     {
         .name = "nanos",
         .signature = "(): i64",
-        .summary = "Monotonic time in nanoseconds",
+        .summary = "",
     },
     {
         .name = "now",
         .signature = "(): i64",
-        .summary = "Current time in milliseconds since epoch",
+        .summary = "",
     },
     {
         .name = "sleep",
@@ -6779,8 +6784,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Printing and debugging\n"
             "```xray\n"
-            "print(\"hello\")                 // auto-appends a newline\n"
-            "print(\"a:\", a, \"b:\", b)        // multiple arguments separated by spaces\n"
+            "print(\"hello\")                 // appends exactly one newline\n"
+            "print(\"a:\", a, \"b:\", b)        // arguments separated by exactly one space\n"
+            "print()                        // writes just that newline\n"
             "dump(some_obj)                 // debug output, with type info and structure\n"
             "```\n"
             "\n"
@@ -8535,15 +8541,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `NodeAddress.port` | `: i64` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: i64` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: i64` |  |\n"
-            "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
-            "| `cluster.info` | `(): ClusterInfo?` | Get cluster status info |\n"
+            "| `cluster.discover` | `(): ()` |  |\n"
+            "| `cluster.info` | `(): ClusterInfo?` |  |\n"
             "| `cluster.join` | `(addr: string): bool` |  |\n"
             "| `cluster.listen` | `(pattern: string, capacity: i64 = 1024): Channel<Buffer>?` |  |\n"
-            "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
-            "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
+            "| `cluster.monitor` | `(name: string, coroName: string? = null): Channel<string>` |  |\n"
+            "| `cluster.nodes` | `(): Array<string>?` |  |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
-            "| `cluster.self` | `(): string` | Get own node name |\n"
-            "| `cluster.send` | `(topic: string, envelope: move Buffer): ClusterDelivery` | Hand one canonical opaque service envelope to local and connected transports |\n"
+            "| `cluster.self` | `(): string` |  |\n"
+            "| `cluster.send` | `(topic: string, envelope: move Buffer): ClusterDelivery` |  |\n"
             "| `cluster.start` | `(config: ClusterConfig): bool` |  |\n"
             "| `cluster.stop` | `(): ()` |  |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
@@ -8593,16 +8599,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `compress.adler32` | `(data: string): i64` | Compute Adler-32 checksum |\n"
-            "| `compress.crc32` | `(data: string): i64` | Compute CRC-32 checksum |\n"
-            "| `compress.deflate` | `(data: string, level?: i64): string?` | Deflate compress |\n"
-            "| `compress.gunzip` | `(data: string): string` | Gzip decompress |\n"
-            "| `compress.gzip` | `(data: string, level?: i64): string?` | Gzip compress |\n"
-            "| `compress.inflate` | `(data: string): string` | Inflate decompress |\n"
-            "| `compress.isGzip` | `(data: string): bool` | Check if gzip data |\n"
-            "| `compress.isZlib` | `(data: string): bool` | Check if zlib data |\n"
-            "| `compress.zlibCompress` | `(data: string, level?: i64): string?` | Zlib compress |\n"
-            "| `compress.zlibDecompress` | `(data: string): string` | Zlib decompress |\n"
+            "| `compress.adler32` | `(data: string): i64` |  |\n"
+            "| `compress.crc32` | `(data: string): i64` |  |\n"
+            "| `compress.deflate` | `(data: string, level: i64 = DEFAULT_COMPRESSION): string?` |  |\n"
+            "| `compress.gunzip` | `(data: string): string` |  |\n"
+            "| `compress.gzip` | `(data: string, level: i64 = DEFAULT_COMPRESSION): string?` |  |\n"
+            "| `compress.inflate` | `(data: string): string` |  |\n"
+            "| `compress.isGzip` | `(data: string): bool` |  |\n"
+            "| `compress.isZlib` | `(data: string): bool` |  |\n"
+            "| `compress.zlibCompress` | `(data: string, level: i64 = DEFAULT_COMPRESSION): string?` |  |\n"
+            "| `compress.zlibDecompress` | `(data: string): string` |  |\n"
             "",
         .symbols = _symbols_compress,
         .symbol_count = (int)(sizeof(_symbols_compress) / sizeof(_symbols_compress[0])),
@@ -8621,16 +8627,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `crypto.decrypt` | `(key: string, ciphertext: string): string?` | AES-256-CBC decrypt |\n"
-            "| `crypto.encrypt` | `(key: string, plaintext: string): string` | AES-256-CBC encrypt |\n"
-            "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` | Compute HMAC |\n"
-            "| `crypto.md5` | `(data: string): string` | Compute MD5 hash |\n"
-            "| `crypto.randomBytes` | `(n: i64): string` | Generate random bytes |\n"
-            "| `crypto.sha1` | `(data: string): string` | Compute SHA-1 hash |\n"
-            "| `crypto.sha256` | `(data: string): string` | Compute SHA-256 hash |\n"
-            "| `crypto.sha512` | `(data: string): string` | Compute SHA-512 hash |\n"
-            "| `crypto.timingSafeEqual` | `(a: string, b: string): bool` | Constant-time string comparison |\n"
-            "| `crypto.uuid` | `(): string` | Generate UUID v4 |\n"
+            "| `crypto.decrypt` | `(key: string, ciphertext: string): string?` |  |\n"
+            "| `crypto.encrypt` | `(key: string, plaintext: string): string` |  |\n"
+            "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` |  |\n"
+            "| `crypto.md5` | `(data: string): string` |  |\n"
+            "| `crypto.randomBytes` | `(n: i64): string` |  |\n"
+            "| `crypto.sha1` | `(data: string): string` |  |\n"
+            "| `crypto.sha256` | `(data: string): string` |  |\n"
+            "| `crypto.sha512` | `(data: string): string` |  |\n"
+            "| `crypto.timingSafeEqual` | `(a: string, b: string): bool` |  |\n"
+            "| `crypto.uuid` | `(): string` |  |\n"
             "",
         .symbols = _symbols_crypto,
         .symbol_count = (int)(sizeof(_symbols_crypto) / sizeof(_symbols_crypto[0])),
@@ -8997,8 +9003,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?` | Execute one typed HTTP/2 request |\n"
-            "| `http2.supported` | `(): bool` | Whether the built-in HTTP/2 standard module is available on this target |\n"
+            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?` |  |\n"
+            "| `http2.supported` | `(): bool` |  |\n"
             "",
         .symbols = _symbols_http2,
         .symbol_count = (int)(sizeof(_symbols_http2) / sizeof(_symbols_http2[0])),
@@ -9063,8 +9069,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.lines` | `(path: Path): LineIterator?` |  |\n"
             "| `io.mkdir` | `(path: Path): bool` |  |\n"
             "| `io.mkdirp` | `(path: Path): bool` |  |\n"
-            "| `io.readDir` | `(path: Path): Array<Path>` |  |\n"
-            "| `io.readDirRecursive` | `(path: Path): Array<Path>` |  |\n"
+            "| `io.readDir` | `(path: Path): Array<Path>?` |  |\n"
+            "| `io.readDirRecursive` | `(path: Path): Array<Path>?` |  |\n"
             "| `io.readFile` | `(path: Path): string?` |  |\n"
             "| `io.readFileBytes` | `(path: Path): Array<u8>?` |  |\n"
             "| `io.readLines` | `(path: Path): Array<string>` |  |\n"
@@ -9274,38 +9280,38 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `mem.PROT_EXEC` | `: i64` | Executable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.PROT_NONE` | `: i64` | No access protection for mem.pageAlloc/pageProtect |\n"
-            "| `mem.PROT_READ` | `: i64` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.PROT_WRITE` | `: i64` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
+            "| `mem.PROT_EXEC` | `: i64` |  |\n"
+            "| `mem.PROT_NONE` | `: i64` |  |\n"
+            "| `mem.PROT_READ` | `: i64` |  |\n"
+            "| `mem.PROT_WRITE` | `: i64` |  |\n"
             "| `mem.addr` | `(ptr: Ptr<u8>): i64` | Numeric address of any Ptr<T> or MutPtr<T> |\n"
             "| `mem.alignOf` | `(): i64` | Compile-time alignment in bytes of a statically laid out type T |\n"
-            "| `mem.alloc` | `(n: i64): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
-            "| `mem.allocAligned` | `(n: i64, align: i64): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
-            "| `mem.allocZeroed` | `(n: i64): Buffer` | Allocate n zero-initialized bytes as a managed Buffer |\n"
+            "| `mem.alloc` | `(n: i64): Buffer` |  |\n"
+            "| `mem.allocAligned` | `(n: i64, align: i64): Buffer` |  |\n"
+            "| `mem.allocZeroed` | `(n: i64): Buffer` |  |\n"
             "| `mem.assumeInitialized` | `(buffer: Buffer): any` | Unsafe compiler-verified materialization of a completely initialized native output Buffer as T |\n"
-            "| `mem.cacheFlush` | `(ptr: Ptr<u8>, n: i64): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
-            "| `mem.cacheInvalidate` | `(ptr: Ptr<u8>, n: i64): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
-            "| `mem.cacheLineSize` | `(): i64` | CPU cache line size in bytes |\n"
-            "| `mem.compare` | `(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
-            "| `mem.copy` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
-            "| `mem.fence` | `(ordering: i64): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
+            "| `mem.cacheFlush` | `(ptr: Ptr<u8>, n: i64): ()` |  |\n"
+            "| `mem.cacheInvalidate` | `(ptr: Ptr<u8>, n: i64): ()` |  |\n"
+            "| `mem.cacheLineSize` | `(): i64` |  |\n"
+            "| `mem.compare` | `(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64` |  |\n"
+            "| `mem.copy` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n"
+            "| `mem.fence` | `(ordering: i64): ()` |  |\n"
             "| `mem.load` | `(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"
-            "| `mem.move` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
+            "| `mem.move` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n"
             "| `mem.mutPtr` | `(addr: i64): MutPtr<u8>` | Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
-            "| `mem.nontemporalStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
+            "| `mem.nontemporalStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n"
             "| `mem.offsetOf` | `(field: string): i64` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
             "| `mem.pageAlloc` | `(bytes: i64, prot?: i64): MutPtr<u8>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
-            "| `mem.pageFree` | `(ptr: MutPtr<u8>, bytes: i64): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
-            "| `mem.pageProtect` | `(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
-            "| `mem.prefetch` | `(ptr: Ptr<u8>, rw: i64): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
+            "| `mem.pageFree` | `(ptr: MutPtr<u8>, bytes: i64): bool` |  |\n"
+            "| `mem.pageProtect` | `(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool` |  |\n"
+            "| `mem.prefetch` | `(ptr: Ptr<u8>, rw: i64): ()` |  |\n"
             "| `mem.ptr` | `(addr: i64): Ptr<u8>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
-            "| `mem.set` | `(dst: MutPtr<u8>, u8: i64, n: i64): ()` | Fill n bytes at dst with byte (memset) |\n"
+            "| `mem.set` | `(dst: MutPtr<u8>, byte: i64, n: i64): ()` |  |\n"
             "| `mem.sizeOf` | `(): i64` | Compile-time size in bytes of a statically laid out type T |\n"
             "| `mem.slice` | `(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>` | Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked |\n"
             "| `mem.store` | `(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
-            "| `mem.volatileLoad` | `(ptr: Ptr<u8>, size: i64): i64` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
-            "| `mem.volatileStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.volatileLoad` | `(ptr: Ptr<u8>, size: i64): i64` |  |\n"
+            "| `mem.volatileStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n"
             "| `mem.withSliceMut` | `(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any` | Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked |\n"
             "",
         .symbols = _symbols_mem,
@@ -9592,19 +9598,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Regex.replace` | `(text: string, replacement: string): string` |  |\n"
             "| `Regex.split` | `(text: string, limit?: i64): Array<string>` |  |\n"
             "| `Regex.test` | `(text: string): bool` |  |\n"
-            "| `regex.compile` | `(pattern: string, flags?: string): Regex` | Compile regex pattern |\n"
-            "| `regex.count` | `(pattern: Regex, s: string): i64` | Count matches |\n"
-            "| `regex.escape` | `(s: string): string` | Escape regex special chars |\n"
+            "| `regex.compile` | `(pattern: string, flags: string = \"\"): Regex` |  |\n"
+            "| `regex.count` | `(pattern: Regex, s: string): i64` |  |\n"
+            "| `regex.escape` | `(s: string): string` |  |\n"
             "| `regex.find` | `(pattern: Regex, s: string, offset?: i64): RegexMatch?` | Find first match |\n"
             "| `regex.findAll` | `(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>` | Find all matches |\n"
-            "| `regex.findGroup` | `(pattern: Regex, s: string, index: i64): string?` | Find capture group |\n"
-            "| `regex.findText` | `(pattern: Regex, s: string): string?` | Find first matching text |\n"
+            "| `regex.findGroup` | `(pattern: Regex, s: string, index: i64): string?` |  |\n"
+            "| `regex.findText` | `(pattern: Regex, s: string): string?` |  |\n"
             "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` | Find full match |\n"
-            "| `regex.isValid` | `(pattern: string): bool` | Check if pattern is valid |\n"
-            "| `regex.replace` | `(pattern: Regex, s: string, repl: string): string` | Replace first match |\n"
-            "| `regex.replaceAll` | `(pattern: Regex, s: string, repl: string): string` | Replace all matches |\n"
-            "| `regex.split` | `(pattern: Regex, s: string, limit?: i64): Array<string>` | Split string by regex |\n"
-            "| `regex.test` | `(pattern: Regex, s: string): bool` | Test if regex matches |\n"
+            "| `regex.isValid` | `(pattern: string): bool` |  |\n"
+            "| `regex.replace` | `(pattern: Regex, s: string, repl: string): string` |  |\n"
+            "| `regex.replaceAll` | `(pattern: Regex, s: string, repl: string): string` |  |\n"
+            "| `regex.split` | `(pattern: Regex, s: string, limit: i64 = -1): Array<string>` |  |\n"
+            "| `regex.test` | `(pattern: Regex, s: string): bool` |  |\n"
             "",
         .symbols = _symbols_regex,
         .symbol_count = (int)(sizeof(_symbols_regex) / sizeof(_symbols_regex[0])),
@@ -9623,19 +9629,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `runtime.RuntimeInfo` | `{ liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }` | Typed snapshot of the current execution-local reclamation domain |\n"
-            "| `runtime.RuntimeInfo.blocks` | `const i64` | Object field |\n"
-            "| `runtime.RuntimeInfo.finalizerCount` | `const i64` | Object field |\n"
-            "| `runtime.RuntimeInfo.freeBlocks` | `const i64` | Object field |\n"
-            "| `runtime.RuntimeInfo.fullBlocks` | `const i64` | Object field |\n"
-            "| `runtime.RuntimeInfo.liveBytes` | `const i64` | Object field |\n"
-            "| `runtime.RuntimeInfo.liveKB` | `const f64` | Object field |\n"
-            "| `runtime.RuntimeInfo.liveObjects` | `const i64` | Object field |\n"
-            "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current execution-local reclamation domain |\n"
-            "| `runtime.liveBytes` | `(): i64` | Get live memory usage in bytes |\n"
-            "| `runtime.liveObjects` | `(): i64` | Get live object count |\n"
-            "| `runtime.sharedBytes` | `(): i64` | Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak |\n"
-            "| `runtime.staticBytes` | `(): i64` | Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only) |\n"
+            "| `RuntimeInfo` | `RuntimeInfo` |  |\n"
+            "| `RuntimeInfo.blocks` | `: i64` |  |\n"
+            "| `RuntimeInfo.constructor` | `(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64): ()` |  |\n"
+            "| `RuntimeInfo.finalizerCount` | `: i64` |  |\n"
+            "| `RuntimeInfo.freeBlocks` | `: i64` |  |\n"
+            "| `RuntimeInfo.fullBlocks` | `: i64` |  |\n"
+            "| `RuntimeInfo.liveBytes` | `: i64` |  |\n"
+            "| `RuntimeInfo.liveKB` | `: f64` |  |\n"
+            "| `RuntimeInfo.liveObjects` | `: i64` |  |\n"
+            "| `runtime.info` | `(): RuntimeInfo` |  |\n"
+            "| `runtime.liveBytes` | `(): i64` |  |\n"
+            "| `runtime.liveObjects` | `(): i64` |  |\n"
+            "| `runtime.sharedBytes` | `(): i64` |  |\n"
+            "| `runtime.staticBytes` | `(): i64` |  |\n"
             "",
         .symbols = _symbols_runtime,
         .symbol_count = (int)(sizeof(_symbols_runtime) / sizeof(_symbols_runtime[0])),
@@ -9977,13 +9984,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `time.clock` | `(): i64` | CPU clock time in milliseconds |\n"
-            "| `time.localOffset` | `(): i64` | Local UTC offset in minutes for the current wall time |\n"
-            "| `time.localOffsetAt` | `(timestamp: i64): i64` | Local UTC offset in minutes at a Unix timestamp |\n"
-            "| `time.micros` | `(): i64` | Monotonic time in microseconds |\n"
-            "| `time.monotonic` | `(): i64` | Monotonic time in milliseconds |\n"
-            "| `time.nanos` | `(): i64` | Monotonic time in nanoseconds |\n"
-            "| `time.now` | `(): i64` | Current time in milliseconds since epoch |\n"
+            "| `time.clock` | `(): i64` |  |\n"
+            "| `time.localOffset` | `(): i64` |  |\n"
+            "| `time.localOffsetAt` | `(timestamp: i64): i64` |  |\n"
+            "| `time.micros` | `(): i64` |  |\n"
+            "| `time.monotonic` | `(): i64` |  |\n"
+            "| `time.nanos` | `(): i64` |  |\n"
+            "| `time.now` | `(): i64` |  |\n"
             "| `time.sleep` | `(ms: i64): ()` | Sleep for milliseconds |\n"
             "",
         .symbols = _symbols_time,

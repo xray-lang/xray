@@ -1,1 +1,2 @@
+--> 1:15 E0352
 fixed array repeat count must be a positive compile-time integer expression

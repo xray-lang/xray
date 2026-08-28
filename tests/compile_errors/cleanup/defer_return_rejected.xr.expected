@@ -1,1 +1,2 @@
+--> 2:1 E0395
 a defer body cannot return from its owning function

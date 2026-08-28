@@ -1,3 +1,11 @@
+--> 0:1 E0365
+misplaced 1:12
 undefined type 'Bytes'
+
+--> 0:1 E0365
+misplaced 2:11
 undefined type 'ByteSlice'
+
+--> 0:1 E0365
+misplaced 3:11
 undefined type 'ByteView'

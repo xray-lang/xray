@@ -1,1 +1,2 @@
+--> 1:20 E0356
 type 'string' is not assignable to parameter type 'CoroGroupKey'

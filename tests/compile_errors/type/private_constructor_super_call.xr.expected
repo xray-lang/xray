@@ -1,1 +1,3 @@
+--> 7:1 E0377
+misplaced 7:9
 cannot access private member 'constructor' of 'Base' from here

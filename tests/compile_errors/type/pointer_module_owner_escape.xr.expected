@@ -1,1 +1,2 @@
+--> 4:16 E0352
 cannot store raw pointer borrow in module-level binding

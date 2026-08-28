@@ -1,0 +1,8 @@
+# Known-deviating spec snippets: sha:<sha12> of the fence body per row.
+# Rows are removed as the spec or the compiler converges;
+# regenerate with --update-baseline only alongside a written reason.
+#
+# Empty on purpose. LANGUAGE_SPEC.md's 17 runnable fences and 1 error demo all
+# agree with the compiler as of 2026-08-28, so the English gate starts with
+# nothing forgiven. Its Chinese sibling carries four benign excerpt rows; see
+# tests/meta/spec_snippet_baseline_cn.txt.

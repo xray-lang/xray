@@ -1,1 +1,3 @@
+--> 2:9 E0356
+misplaced 2:14
 channel send argument transfer of type '(i64, i64, i64)' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value

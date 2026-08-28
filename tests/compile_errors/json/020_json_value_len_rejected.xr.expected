@@ -1,1 +1,2 @@
+--> 2:7 E0352
 len() requires a Lengthable value, got 'JSON.Value'

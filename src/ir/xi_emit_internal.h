@@ -45,21 +45,6 @@ static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
     return v;
 }
 
-static inline bool xi_emit_type_is_unsigned_int(const XrType *type) {
-    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
-        return false;
-    switch (type->scalar_rep) {
-        case XR_NATIVE_U8:
-        case XR_NATIVE_U16:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_U64:
-        case XR_NATIVE_USIZE:
-            return true;
-        default:
-            return false;
-    }
-}
-
 static inline bool xi_emit_type_is_int_like(const XrType *type) {
     return type && type->kind == XR_KIND_INT && !type->is_nullable;
 }
@@ -67,7 +52,7 @@ static inline bool xi_emit_type_is_int_like(const XrType *type) {
 static inline int xi_emit_tostring_hint_for_type(const XrType *type) {
     if (!type || type->is_nullable)
         return 0;
-    if (xi_emit_type_is_unsigned_int(type))
+    if (xr_type_is_exact_unsigned_integer(type))
         return 3;
     if (type->kind == XR_KIND_INT)
         return 1;
@@ -84,16 +69,17 @@ static inline bool xi_emit_compare_uses_unsigned(const XiValue *v) {
     const XrType *left = v->args[0] ? v->args[0]->type : NULL;
     const XrType *right = v->args[1] ? v->args[1]->type : NULL;
     return xi_emit_type_is_int_like(left) && xi_emit_type_is_int_like(right) &&
-           (xi_emit_type_is_unsigned_int(left) || xi_emit_type_is_unsigned_int(right));
+           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
 }
 
 /* XI_SHR on a statically-unsigned lhs is a logical shift (OP_SHR_U). Keyed on
  * the lhs only: xray shift results take the left operand's width/signedness.
- * Mirrors cg_type_is_unsigned_int in the AOT backend (xi_cgen.c). */
+ * The VM and the AOT backend read the same judgement for this, so a widening
+ * of what counts as unsigned reaches both at once. */
 static inline bool xi_emit_shr_uses_unsigned(const XiValue *v) {
     if (!v || v->op != XI_SHR || v->nargs < 1)
         return false;
-    return xi_emit_type_is_unsigned_int(v->args[0] ? v->args[0]->type : NULL);
+    return xr_type_is_exact_unsigned_integer(v->args[0] ? v->args[0]->type : NULL);
 }
 
 /* XI_DIV / XI_MOD on statically-unsigned integer operands are unsigned
@@ -106,7 +92,7 @@ static inline bool xi_emit_divmod_uses_unsigned(const XiValue *v) {
     const XrType *left = v->args[0] ? v->args[0]->type : NULL;
     const XrType *right = v->args[1] ? v->args[1]->type : NULL;
     return xi_emit_type_is_int_like(left) && xi_emit_type_is_int_like(right) &&
-           (xi_emit_type_is_unsigned_int(left) || xi_emit_type_is_unsigned_int(right));
+           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
 }
 
 /* ========== Emit Context ========== */

@@ -62,6 +62,10 @@ XR_FUNC bool xa_typed_program_is_current(const XaTypedProgram *program);
 XR_FUNC uint64_t xa_typed_program_semantic_revision(const XaTypedProgram *program);
 XR_FUNC const struct AstNode *xa_typed_program_syntax(const XaTypedProgram *program);
 XR_FUNC struct XaAnalyzer *xa_typed_program_semantics(const XaTypedProgram *program);
+/* The compilation unit this typed program was published from.  Consumers that
+ * attribute their output to exact source read it here: the snapshot outlives
+ * the analysis pass, so it stays correct after analysis has returned. */
+XR_FUNC const char *xa_typed_program_source_file(const XaTypedProgram *program);
 XR_FUNC const struct XgGlobalEvidence *
 xa_typed_program_global_evidence(const XaTypedProgram *program);
 XR_FUNC uint32_t xa_typed_program_module_id(const XaTypedProgram *program);

@@ -153,11 +153,11 @@ perf_suite = "stdlib/base64"
 name = "regex"
 public = true
 layer = "L3"
-policy = "native_library"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/regex/regex.xr"
 factory_source = "stdlib/regex/xregex_binding.c"
 factory_symbol = "regex"
-public_native = ["Regex", "Regex.find", "Regex.findAll", "Regex.findGroup", "Regex.findText", "Regex.replace", "Regex.split", "Regex.test", "RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text", "compile", "count", "escape", "find", "findAll", "findGroup", "findText", "fullFind", "isValid", "replace", "replaceAll", "split", "test"]
+public_native = ["Regex", "Regex.find", "Regex.findAll", "Regex.findGroup", "Regex.findText", "Regex.replace", "Regex.split", "Regex.test", "RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text", "find", "findAll", "fullFind"]
 private_native_sources = ["stdlib/regex/*.c"]
 private_native_reason = "Mature regex automata implementation with bounded native data structures"
 perf_suite = "stdlib/regex"
@@ -166,10 +166,19 @@ perf_suite = "stdlib/regex"
 name = "mem"
 public = true
 layer = "L1"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/mem/mem.xr"
 factory_source = "stdlib/mem/mem.c"
-public_native = ["Buffer", "Buffer.asBytes", "Buffer.asMutBytes", "Buffer.borrowPtr", "Buffer.resize", "PROT_EXEC", "PROT_NONE", "PROT_READ", "PROT_WRITE", "addr", "alignOf", "alloc", "allocAligned", "allocZeroed", "assumeInitialized", "cacheFlush", "cacheInvalidate", "cacheLineSize", "compare", "copy", "fence", "load", "move", "mutPtr", "nontemporalStore", "offsetOf", "pageAlloc", "pageFree", "pageProtect", "prefetch", "ptr", "set", "sizeOf", "slice", "store", "volatileLoad", "volatileStore", "withSliceMut"]
+# Partial migration. The retained rows are the ones whose meaning the compiler
+# owns rather than the source: Buffer plus its methods occupy a runtime core
+# class slot and have no internal spelling in .def metadata, the layout/pointer/
+# borrow intrinsics take their result type from an explicit type argument and
+# lower to backend ops rather than calls, and pageAlloc declares two arities
+# that select two AOT entry points, which Xray cannot express without function
+# overloading.
+public_native = ["Buffer", "Buffer.asBytes", "Buffer.asMutBytes", "Buffer.borrowPtr", "Buffer.resize", "addr", "alignOf", "assumeInitialized", "load", "mutPtr", "offsetOf", "pageAlloc", "ptr", "sizeOf", "slice", "store", "withSliceMut"]
+private_native_sources = ["stdlib/mem/mem.c"]
+private_native_reason = "Private fence, cache, allocation, page, address and bulk-byte leaves consumed by mem.xr"
 perf_suite = "stdlib/mem"
 
 [[module]]
@@ -377,13 +386,13 @@ perf_suite = "stdlib/ws"
 name = "http2"
 public = true
 layer = "L5"
-policy = "native_library"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/http2/http2.xr"
 factory_source = "stdlib/http2/http2_binding.c"
 factory_symbol = "http2"
-public_native = ["request", "supported"]
+public_native = []
 private_native_sources = ["stdlib/http2/*.c"]
-private_native_reason = "HTTP/2 framing, HPACK and connection data plane remain an explicit native library boundary"
+private_native_reason = "HTTP/2 framing, HPACK and the TLS/ALPN connection pool are wire-protocol machinery consumed by http2.xr"
 perf_suite = "stdlib/http2"
 
 [[module]]
@@ -402,12 +411,12 @@ perf_suite = "stdlib/crypto"
 name = "compress"
 public = true
 layer = "L3"
-policy = "native_library"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/compress/compress.xr"
 factory_source = "stdlib/compress/compress.c"
-public_native = ["adler32", "crc32", "deflate", "gunzip", "gzip", "inflate", "isGzip", "isZlib", "zlibCompress", "zlibDecompress"]
+public_native = []
 private_native_sources = ["stdlib/compress/*.c"]
-private_native_reason = "zlib-compatible compression and checksum kernels"
+private_native_reason = "Deflate coder and its gzip/zlib container payloads, which Xray cannot build as strings, consumed by compress.xr"
 perf_suite = "stdlib/compress"
 
 [[module]]

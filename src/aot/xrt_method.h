@@ -805,8 +805,7 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
                 len = (size_t) bytes->length;
                 has_bytes = len == 0 || data != NULL;
             }
-        } else if (arg0.tag == XR_TAG_AGG_REF && arg0.ext == 0 && arg0.heap_type == UINT16_MAX &&
-                   arg0.ptr) {
+        } else if (xrt_value_is_span_ref(arg0)) {
             xr_span_t bytes = xrt_span_from_value_ref(arg0);
             if (bytes.length >= 0 && (uint64_t) bytes.length <= (uint64_t) SIZE_MAX &&
                 (bytes.length == 0 || bytes.data != NULL)) {

@@ -1,1 +1,2 @@
+--> 5:20 E0363
 closure cannot capture borrowed parameter 'data'

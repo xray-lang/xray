@@ -16,73 +16,78 @@
 # baseline and was permanently red, which hid the nine real disagreements it
 # had actually found.
 #
-# One case path per line. Comments and blank lines ignored.
+# One case path per line. `#` starts a comment, blank lines are ignored.
+#
+# --- the inline comment on every line ---------------------------------------
+#
+# Each line carries the first refusal that case actually hit, with the
+# case-specific operands stripped so that two cases blocked on one gap read
+# alike. `vm too:` prefixes a case the VM also refuses at compile time -- for
+# this lane that is the common case, because `embed` shares the VM's front end
+# and only the bundling step past it is its own.
+#
+# Measured 2026-08-28 on 00f665c5c (tree afe293b71) with:
+#   cmake -S . -B build-nofp -G Ninja -DCMAKE_BUILD_TYPE=Release \
+#         -DXRAY_STDLIB_VM_FASTPATHS=OFF
+#
+# --- what the 48 refusals are blocked on ------------------------------
+#
+# 9 distinct first refusals; 44 of the cases are refused by the VM too.
+#
+#     20  coroutine lowering failed closed before publishing CoroLowered (at ownership)
+#     13  XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+#      4  bytecode bundling failed
+#      3  XR_OWN_3002 owner equivalence class has no ownership-defining operation (at semantic-plan)
+#      8  (spread over 5 further first refusals, one or two cases each)
+#
+# `bytecode bundling failed` is this lane's own boundary and nothing else's:
+# the front end published a program and the bundler would not serialize it.
 
-tests/diff/cases/semantics/cleanup/defer_nested_cleanup_and_local_control.xr
-tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr
-tests/diff/cases/semantics/collections/array_capacity_panic_shared_core.xr
-tests/diff/cases/semantics/collections/array_char_compact.xr
-tests/diff/cases/semantics/collections/hof_index_param.xr
-tests/diff/cases/semantics/collections/json_forin_shared_core.xr
-tests/diff/cases/semantics/collections/method_self_return_ownership.xr
-tests/diff/cases/semantics/concurrency/barrier_compose.xr
-tests/diff/cases/semantics/concurrency/condvar_compose.xr
-tests/diff/cases/semantics/concurrency/mutex_cross_coroutine.xr
-tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr
-tests/diff/cases/semantics/concurrency/once_compose.xr
-tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr
-tests/diff/cases/semantics/coro/await_value_error_keeps_channel.xr
-tests/diff/cases/semantics/coro/channel_for_in_recv_or.xr
-tests/diff/cases/semantics/coro/channel_recv_timeout_unbuffered.xr
-tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr
-tests/diff/cases/semantics/coro/channel_send_timeout_unbuffered.xr
-tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr
-tests/diff/cases/semantics/coro/linked_scope_error_propagates_at_exit.xr
-tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr
-tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr
-tests/diff/cases/semantics/coro/select_send_transfer.xr
-tests/diff/cases/semantics/exception/defer_nested_function_call.xr
-tests/diff/cases/semantics/exception/panic_exception_shape.xr
-tests/diff/cases/semantics/functions/bare_lambda_expression_positions.xr
-tests/diff/cases/semantics/functions/function_type_surface.xr
-tests/diff/cases/semantics/functions/higher_order_closures.xr
-tests/diff/cases/semantics/iter_order/map_set_order.xr
-tests/diff/cases/semantics/modules/xmod_class.xr
-tests/diff/cases/semantics/modules/xmod_default_arg_class.xr
-tests/diff/cases/semantics/modules/xmod_static.xr
-tests/diff/cases/semantics/oop/computed_accessor_inheritance.xr
-tests/diff/cases/semantics/oop/function_typed_field_call.xr
-tests/diff/cases/semantics/oop/generic_class_constructor_lambda_return.xr
-tests/diff/cases/semantics/oop/method_as_value.xr
-tests/diff/cases/semantics/oop/operator_overload_result_type.xr
-tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr
-tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr
-tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr
-tests/diff/cases/semantics/optional_call.xr
-tests/diff/cases/semantics/ownership/converged_capability_positive.xr
-tests/diff/cases/semantics/slice/slice_value_to_string.xr
-tests/diff/cases/semantics/stdlib/datetime_core_direct.xr
-tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr
-tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr
-tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr
-tests/diff/cases/semantics/stdlib/parallel_api_reference.xr
-tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr
-tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr
-tests/diff/cases/semantics/stdlib/probe_module_shapes.xr
-tests/diff/cases/semantics/stdlib/sync_module_import.xr
-tests/diff/cases/semantics/stdlib/sys_process_direct.xr
-tests/diff/cases/semantics/string/char_scalar.xr
-tests/regression/11_coroutine/1106_select.xr
-tests/regression/11_coroutine/1111_comprehensive.xr
-tests/regression/11_coroutine/1113_select_send.xr
-tests/regression/11_coroutine/1118_comprehensive.xr
-tests/regression/11_coroutine/1123_channel_timeout.xr
-tests/regression/11_coroutine/1124_coro_stats.xr
-tests/regression/11_coroutine/1155_channel_close_timeout_fanout.xr
-tests/regression/11_coroutine/1156_select_close_wake.xr
-tests/regression/11_coroutine/1157_work_queue_generic_class.xr
-tests/regression/11_coroutine/1161_multiple_task_awaiters.xr
-tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr
-tests/regression/11_coroutine/1167_channel_explicit_transfer.xr
-tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr
+tests/diff/cases/semantics/cleanup/defer_nested_cleanup_and_local_control.xr  # vm too: XR_OWN_3005 single ownership disposition does not post-dominate its origin (at semantic-plan)
+tests/diff/cases/semantics/collections/array_capacity_panic_shared_core.xr  # vm too: XR_SEM_0019 Array intrinsic authority is not exact (at semantic-plan)
+tests/diff/cases/semantics/collections/array_char_compact.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/collections/json_forin_shared_core.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/concurrency/barrier_compose.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/concurrency/condvar_compose.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/concurrency/mutex_cross_coroutine.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/concurrency/once_compose.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/coro/await_value_error_keeps_channel.xr  # vm too: XR_CORO_4003 func <case>: state 1 error continuation is not derivable (at ownership)
+tests/diff/cases/semantics/coro/channel_for_in_recv_or.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/coro/linked_scope_error_propagates_at_exit.xr  # vm too: XR_CORO_4003 func <case>: state 1 error continuation is not derivable (at ownership)
+tests/diff/cases/semantics/coro/select_send_transfer.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/exception/defer_nested_function_call.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/exception/panic_exception_shape.xr  # vm too: XR_SEM_0019 Array intrinsic authority is not exact (at semantic-plan)
+tests/diff/cases/semantics/functions/function_type_surface.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/functions/higher_order_closures.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/iter_order/map_set_order.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/modules/xmod_class.xr  # coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/modules/xmod_default_arg_class.xr  # coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/modules/xmod_static.xr  # coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/oop/computed_accessor_inheritance.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/oop/function_typed_field_call.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/oop/generic_class_constructor_lambda_return.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/oop/operator_overload_result_type.xr  # vm too: bytecode bundling failed
+tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr  # vm too: XR_SEM_0019 value aggregate declaration facts are unavailable (at semantic-plan)
+tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr  # vm too: XR_SEM_0019 value aggregate declaration facts are unavailable (at semantic-plan)
+tests/diff/cases/semantics/slice/slice_value_to_string.xr  # vm too: XR_OWN_3002 owner equivalence class has no ownership-defining operation (at semantic-plan)
+tests/diff/cases/semantics/stdlib/datetime_core_direct.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/parallel_api_reference.xr  # vm too: func <case>: v139 in b1 uses v112 defined in b22 which does not dominate b1 (at ownership)
+tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/probe_module_shapes.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/sync_module_import.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/sys_process_direct.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/string/char_scalar.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/regression/11_coroutine/1106_select.xr  # vm too: bytecode bundling failed
+tests/regression/11_coroutine/1111_comprehensive.xr  # vm too: bytecode bundling failed
+tests/regression/11_coroutine/1113_select_send.xr  # vm too: bytecode bundling failed
+tests/regression/11_coroutine/1118_comprehensive.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1157_work_queue_generic_class.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1161_multiple_task_awaiters.xr  # vm too: XR_OWN_3002 owner equivalence class has no ownership-defining operation (at semantic-plan)
+tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr  # vm too: XR_OWN_3002 owner equivalence class has no ownership-defining operation (at semantic-plan)

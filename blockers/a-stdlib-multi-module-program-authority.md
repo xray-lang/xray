@@ -1,10 +1,101 @@
 # Blocker: AOT refuses every module graph that contains an Xray standard-library module
 
 - **Lane**: A (standard-library self-hosting)
-- **Status**: `BLOCKED`
+- **Status**: `PARTIALLY LIFTED` — the program-authority guard is gone; what it
+  was masking is now measurable. See "2026-08-28 update" below.
 - **Requested owner**: H (compiler / unified target machine)
 - **Severity**: blocks the AOT and generated-C half of every standard-library
   migration slice, not one module.
+
+## 2026-08-28 update: the guard is lifted
+
+Round-3 lane 4 removed the refusal this packet is about. Two commits on
+`work/4-multi-module-authority-00f665c5c`:
+
+- `2eb6c863e` splits the canonical program authority from the executable slice.
+  The complete reachable source-module graph is now published as the program
+  authority for every module count, so `nmodules != 1` no longer refuses.
+- `dc6a37e00` lets a TargetPlan carry module partitions without claiming a
+  cross-module call edge, and builds those partitions for any module count.
+
+**This packet's own prediction held exactly.** It said:
+
+> Lifting the program-authority guard therefore does not deliver 19 working
+> modules. It converts a masked refusal into a measurable one.
+
+That is what happened. No module newly reaches generated C; every refusal that
+used to read `XR_TARGET_1000 program authority` now reads as a specific target
+or semantic refusal naming what is actually missing. The measurement below
+replaces the masked column with the real distribution.
+
+### Measured, same probe corpus, both sides
+
+`scripts/probe_stdlib_backends.py` run twice on the same machine, once with a
+compiler built from `00f665c5c` and once from `f781680de`. Both runs report
+`baseline_ok`, so both are attributable to the modules.
+
+| AOT outcome | `00f665c5c` | after | change |
+|---|---:|---:|---|
+| generated C | 0 | 0 | — |
+| `XR_TARGET_1000` program authority | **20** | **0** | the guard is gone |
+| `XR_TARGET_1003` target/call authority | 5 | 24 | +19, exactly what was masked |
+| `XR_TARGET_1001` | 0 | 1 | |
+| `XR_SEM_0019` semantic layer | 3 | 3 | — |
+| refusal with no code | 5 | 5 | — |
+| VM passes | 26/33 | 26/33 | untouched |
+
+No module regressed and no module newly reaches generated C. The 20 masked
+refusals became measurable ones, and they are not one gap but five distinct
+judgements:
+
+| refusal | count |
+|---|---:|
+| `call target has no consumable adapter authority` | 10 |
+| `call-shaped operation has no exact target authority` | 10 |
+| `direct-local argument contract needs unsupported storage or ownership` | 2 |
+| `direct-local managed aggregate needs frozen clone` | 1 |
+| `source-export call authority is incomplete` | 1 |
+
+The earlier table in this packet reports one module (`time`) reaching generated
+C. That was measured on `bb6eac777369`; by `00f665c5c` `time` was already
+refused at `XR_TARGET_1000`, so the "1" is not a baseline this change can be
+compared against. Measured against `00f665c5c` the count is 0 on both sides.
+
+### The generator this blocks is past the guard too
+
+The build-time `xray_stdlib_bcgen native-fastpaths` step no longer stops at the
+program-authority guard. Its 1439-line harness carries 25 import statements
+naming 14 modules directly; the transitive closure over `stdlib/*/*.xr` reaches
+22, but `http2` and `mem` have no `.xr` source and a module without one never
+enters the graph, so what the compiler actually receives is measured at 21:
+
+```
+$ build-nofp/xray build --native -c -o /tmp/x.c main.xr
+[xi-native] 21 modules (topo order):
+  ... [20] .../stdlib_vm_fastpaths/main.xr (entry)
+``` It now reaches per-module Xi compilation and stops at
+
+```
+Error: Xi pipeline failed for 'stdlib/http/http.xr' at semantic-plan:
+  XR_SEM_0019: coroutine state count disagrees with grounded call authority
+  function=77 operation=3785 opcode=117 selector=sleep expected=0 actual=1
+```
+
+That is the same judgement that fails `tests/unit/aot/test_xaot_driver.c:1001`,
+whose source is `import time` + `time.sleep(1)` inside `await go`, and that test
+fails identically on `00f665c5c`, on the first commit here, and on the last. So
+the generator's next wall is a pre-existing coroutine-state defect, not a
+multi-module one.
+
+### The remaining multi-module wall
+
+Documented as an architecture diagnosis in
+`analysis/multi-module-program-authority.md` section 8.2: the ordinary
+TargetPlan verify path interprets one merged table through the entry
+SemanticPlan alone, and the two-module graph family reaches past that by
+opening a parallel verify path built for its own narrow shape rather than by
+fixing the assumption. Making multi-module plans verifiable means making that
+verifier partition-aware, which is a separate piece of work.
 
 ## Exact source identity
 

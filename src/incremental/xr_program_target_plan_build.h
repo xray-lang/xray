@@ -51,6 +51,12 @@ typedef struct XrProgramTargetPlanBuildRequest {
     const XrSemanticPlan *semantic_plan;
     const XrSemanticPlan *const *semantic_dependencies;
     uint32_t semantic_dependency_count;
+    /* Every module of the program, in program module row order, when the caller
+     * has one canonical module set. A set of more than one module is planned as
+     * one partitioned TargetPlan so that each module's target rows stay
+     * attributable; a single module keeps the plain module-set path. */
+    const XrSemanticPlan *const *program_modules;
+    uint32_t program_module_count;
     XrTargetProfile *profile;
     XrCacheStore *cache_store;
     XrCacheFingerprint optimization_budget;

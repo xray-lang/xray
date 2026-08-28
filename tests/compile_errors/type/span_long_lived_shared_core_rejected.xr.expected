@@ -1,3 +1,9 @@
+--> 17:1 E0383
+misplaced 17:21
 cannot store Slice view in module-level binding
+
+--> 22:7 E0382
 cannot mutate owner 'bytes' while Slice view 'bv' is active
+
+--> 40:8 E0382
 cannot mutate owner 'values' while Slice view 'iv' is active

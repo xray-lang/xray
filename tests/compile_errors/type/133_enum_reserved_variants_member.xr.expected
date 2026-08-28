@@ -1,2 +1,3 @@
+--> 3:5 E0352
 cannot declare a variant named 'variants'
 '.variants' is the reserved static variant metadata view

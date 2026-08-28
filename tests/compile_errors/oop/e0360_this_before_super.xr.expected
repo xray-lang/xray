@@ -1,0 +1,8 @@
+# 一个缺陷（super 之前读 this）必然同时违反「super 必须最靠前」，编译器两条都报。
+--> 9:1 E0360
+misplaced 9:21
+Cannot access 'this' before calling super()
+
+--> 10:1 E0359
+misplaced 10:9
+super() must be the first statement

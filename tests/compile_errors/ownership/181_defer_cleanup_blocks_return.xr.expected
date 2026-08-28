@@ -1,1 +1,3 @@
+--> 4:1 E0382
+misplaced 4:12
 cannot return 'buf': a cleanup in this block reads it

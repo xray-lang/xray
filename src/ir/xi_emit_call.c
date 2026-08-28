@@ -273,7 +273,7 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
      * computes, so the method answers through it rather than through a second
      * implementation that cannot see the type. */
     if (v->nargs == 1 && v->args[0] && v->args[0]->type &&
-        xi_emit_type_is_unsigned_int(v->args[0]->type) &&
+        xr_type_is_exact_unsigned_integer(v->args[0]->type) &&
         v->aux_int == ((int64_t) XI_METHOD_SYMBOL_TOSTRING << 1)) {
         XiEmitReg receiver = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)

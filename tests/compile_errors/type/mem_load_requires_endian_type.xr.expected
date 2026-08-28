@@ -1,1 +1,3 @@
+--> 4:1 E0356
+misplaced 4:20
 mem.load<T>() endian must have type Endian, got 'i64'

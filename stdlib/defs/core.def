@@ -693,46 +693,9 @@ module math {
 }
 
 module compress {
-  fn crc32 {
-    signature: "(data: string): i64"
-    doc: "Compute CRC-32 checksum"
-    vm: "compress_crc32"
-    aot: "xrt_compress_crc32"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn adler32 {
-    signature: "(data: string): i64"
-    doc: "Compute Adler-32 checksum"
-    vm: "compress_adler32"
-    aot: "xrt_compress_adler32"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
-
-  fn gzip {
-    signature: "(data: string, level?: i64): string?"
-    doc: "Gzip compress"
-    vm: "compress_gzip"
-    aot: "xrt_compress_gzip_default"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: true
-    layer: "alloc"
-    return_ownership: "fresh"
-  }
-
-  fn gzip {
-    signature: "(data: string, level?: i64): string?"
-    doc: "Gzip compress"
+  fn __gzip {
+    signature: "(data: string, level: i64): string?"
+    doc: "Gzip-wrap and deflate at the given level"
     vm: "compress_gzip"
     aot: "xrt_compress_gzip"
     argc: 2
@@ -740,12 +703,13 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn gunzip {
+  fn __gunzip {
     signature: "(data: string): string"
-    doc: "Gzip decompress"
+    doc: "Inflate a gzip member, refusing a header that is not gzip"
     effect: "CompressionError.InvalidData"
     vm: "compress_gunzip"
     aot: "xrt_compress_gunzip"
@@ -754,25 +718,13 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn deflate {
-    signature: "(data: string, level?: i64): string?"
-    doc: "Deflate compress"
-    vm: "compress_deflate"
-    aot: "xrt_compress_deflate_default"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: true
-    layer: "alloc"
-    return_ownership: "fresh"
-  }
-
-  fn deflate {
-    signature: "(data: string, level?: i64): string?"
-    doc: "Deflate compress"
+  fn __deflate {
+    signature: "(data: string, level: i64): string?"
+    doc: "Raw deflate at the given level"
     vm: "compress_deflate"
     aot: "xrt_compress_deflate"
     argc: 2
@@ -780,12 +732,13 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn inflate {
+  fn __inflate {
     signature: "(data: string): string"
-    doc: "Inflate decompress"
+    doc: "Raw inflate"
     effect: "CompressionError.InvalidData"
     vm: "compress_inflate"
     aot: "xrt_compress_inflate"
@@ -794,25 +747,13 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn zlibCompress {
-    signature: "(data: string, level?: i64): string?"
-    doc: "Zlib compress"
-    vm: "compress_zlib_compress"
-    aot: "xrt_compress_zlib_compress_default"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: true
-    layer: "alloc"
-    return_ownership: "fresh"
-  }
-
-  fn zlibCompress {
-    signature: "(data: string, level?: i64): string?"
-    doc: "Zlib compress"
+  fn __zlibCompress {
+    signature: "(data: string, level: i64): string?"
+    doc: "Zlib-wrap and deflate at the given level"
     vm: "compress_zlib_compress"
     aot: "xrt_compress_zlib_compress"
     argc: 2
@@ -820,12 +761,13 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn zlibDecompress {
+  fn __zlibDecompress {
     signature: "(data: string): string"
-    doc: "Zlib decompress"
+    doc: "Inflate a zlib stream, refusing a header that is not zlib"
     effect: "CompressionError.InvalidData"
     vm: "compress_zlib_decompress"
     aot: "xrt_compress_zlib_decompress"
@@ -834,31 +776,8 @@ module compress {
     aot_direct: true
     link_object: true
     layer: "alloc"
+    visibility: "internal"
     return_ownership: "fresh"
-  }
-
-  fn isGzip {
-    signature: "(data: string): bool"
-    doc: "Check if gzip data"
-    vm: "compress_is_gzip"
-    aot: "xrt_compress_is_gzip"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: true
-    layer: "alloc"
-  }
-
-  fn isZlib {
-    signature: "(data: string): bool"
-    doc: "Check if zlib data"
-    vm: "compress_is_zlib"
-    aot: "xrt_compress_is_zlib"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: true
-    layer: "alloc"
   }
 }
 
@@ -1468,7 +1387,7 @@ module regex {
   class_field RegexMatch.groups {
   }
 
-  fn compile {
+  fn __compile {
     signature: "(pattern: string, flags?: string): Regex"
     doc: "Compile regex pattern"
     vm: "regex_compile"
@@ -1483,7 +1402,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn compile {
+  fn __compile {
     signature: "(pattern: string, flags?: string): Regex"
     doc: "Compile regex pattern"
     vm: "regex_compile"
@@ -1498,7 +1417,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn test {
+  fn __test {
     signature: "(pattern: Regex, s: string): bool"
     doc: "Test if regex matches"
     vm: "regex_test"
@@ -1512,7 +1431,7 @@ module regex {
     allocation: "no_heap"
   }
 
-  fn count {
+  fn __count {
     signature: "(pattern: Regex, s: string): i64"
     doc: "Count matches"
     vm: "regex_count"
@@ -1526,7 +1445,7 @@ module regex {
     allocation: "no_heap"
   }
 
-  fn findText {
+  fn __findText {
     signature: "(pattern: Regex, s: string): string?"
     doc: "Find first matching text"
     vm: "regex_find_text"
@@ -1541,7 +1460,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn findGroup {
+  fn __findGroup {
     signature: "(pattern: Regex, s: string, index: i64): string?"
     doc: "Find capture group"
     vm: "regex_find_group"
@@ -1631,7 +1550,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn replace {
+  fn __replace {
     signature: "(pattern: Regex, s: string, repl: string): string"
     doc: "Replace first match"
     vm: "regex_replace"
@@ -1646,7 +1565,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn replaceAll {
+  fn __replaceAll {
     signature: "(pattern: Regex, s: string, repl: string): string"
     doc: "Replace all matches"
     vm: "regex_replace_all"
@@ -1661,7 +1580,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn split {
+  fn __split {
     signature: "(pattern: Regex, s: string, limit?: i64): Array<string>"
     doc: "Split string by regex"
     vm: "regex_split"
@@ -1676,7 +1595,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn split {
+  fn __split {
     signature: "(pattern: Regex, s: string, limit?: i64): Array<string>"
     doc: "Split string by regex"
     vm: "regex_split"
@@ -1691,7 +1610,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn escape {
+  fn __escape {
     signature: "(s: string): string"
     doc: "Escape regex special chars"
     vm: "regex_escape"
@@ -1704,7 +1623,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn isValid {
+  fn __isValid {
     signature: "(pattern: string): bool"
     doc: "Check if pattern is valid"
     vm: "regex_is_valid"
@@ -2576,7 +2495,7 @@ module mem {
     argc: 1
   }
 
-  fn fence {
+  fn __fence {
     signature: "(ordering: i64): ()"
     doc: "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)"
     vm: "mem_fence"
@@ -2588,7 +2507,7 @@ module mem {
     layer: "core"
   }
 
-  fn prefetch {
+  fn __prefetch {
     signature: "(ptr: Ptr<u8>, rw: i64): ()"
     doc: "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch"
     vm: "mem_prefetch"
@@ -2601,7 +2520,7 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn cacheFlush {
+  fn __cacheFlush {
     signature: "(ptr: Ptr<u8>, n: i64): ()"
     doc: "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_flush"
@@ -2613,7 +2532,7 @@ module mem {
     layer: "core"
   }
 
-  fn cacheInvalidate {
+  fn __cacheInvalidate {
     signature: "(ptr: Ptr<u8>, n: i64): ()"
     doc: "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_invalidate"
@@ -2625,7 +2544,7 @@ module mem {
     layer: "core"
   }
 
-  fn nontemporalStore {
+  fn __nontemporalStore {
     signature: "(ptr: MutPtr<u8>, v: i64, size: i64): ()"
     doc: "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available"
     vm: "mem_nontemporal_store"
@@ -2637,7 +2556,7 @@ module mem {
     layer: "core"
   }
 
-  fn cacheLineSize {
+  fn __cacheLineSize {
     signature: "(): i64"
     doc: "CPU cache line size in bytes"
     vm: "mem_cache_line_size"
@@ -2707,47 +2626,7 @@ module mem {
     semantic_intrinsic: true
   }
 
-  const PROT_NONE {
-    signature: ": i64"
-    doc: "No access protection for mem.pageAlloc/pageProtect"
-    vm: "mem.PROT_NONE"
-    vm_value: "xr_int(XR_MEM_PROT_NONE)"
-    aot_const: "int64"
-    value: 0
-    layer: "core"
-  }
-
-  const PROT_READ {
-    signature: ": i64"
-    doc: "Readable page protection bit for mem.pageAlloc/pageProtect"
-    vm: "mem.PROT_READ"
-    vm_value: "xr_int(XR_MEM_PROT_READ)"
-    aot_const: "int64"
-    value: 1
-    layer: "core"
-  }
-
-  const PROT_WRITE {
-    signature: ": i64"
-    doc: "Writable page protection bit for mem.pageAlloc/pageProtect"
-    vm: "mem.PROT_WRITE"
-    vm_value: "xr_int(XR_MEM_PROT_WRITE)"
-    aot_const: "int64"
-    value: 2
-    layer: "core"
-  }
-
-  const PROT_EXEC {
-    signature: ": i64"
-    doc: "Executable page protection bit for mem.pageAlloc/pageProtect"
-    vm: "mem.PROT_EXEC"
-    vm_value: "xr_int(XR_MEM_PROT_EXEC)"
-    aot_const: "int64"
-    value: 4
-    layer: "core"
-  }
-
-  fn alloc {
+  fn __alloc {
     signature: "(n: i64): Buffer"
     doc: "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped"
     vm: "mem_alloc"
@@ -2761,7 +2640,7 @@ module mem {
     return_ownership: "fresh"
   }
 
-  fn allocZeroed {
+  fn __allocZeroed {
     signature: "(n: i64): Buffer"
     doc: "Allocate n zero-initialized bytes as a managed Buffer"
     vm: "mem_alloc_zeroed"
@@ -2775,7 +2654,7 @@ module mem {
     return_ownership: "fresh"
   }
 
-  fn allocAligned {
+  fn __allocAligned {
     signature: "(n: i64, align: i64): Buffer"
     doc: "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))"
     vm: "mem_alloc_aligned"
@@ -2815,7 +2694,7 @@ module mem {
     layer: "core"
   }
 
-  fn pageProtect {
+  fn __pageProtect {
     signature: "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool"
     doc: "Change anonymous page protection bits; returns false on OS failure"
     vm: "mem_page_protect"
@@ -2827,7 +2706,7 @@ module mem {
     layer: "core"
   }
 
-  fn pageFree {
+  fn __pageFree {
     signature: "(ptr: MutPtr<u8>, bytes: i64): bool"
     doc: "Release anonymous pages from mem.pageAlloc; returns false on OS failure"
     vm: "mem_page_free"
@@ -2915,7 +2794,7 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn copy {
+  fn __copy {
     signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
     doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
     allocation: "no_heap"
@@ -2928,7 +2807,7 @@ module mem {
     layer: "core"
   }
 
-  fn move {
+  fn __move {
     signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
     doc: "Copy n bytes from src to dst (may overlap; memmove)"
     vm: "mem_move"
@@ -2941,7 +2820,7 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn set {
+  fn __set {
     signature: "(dst: MutPtr<u8>, u8: i64, n: i64): ()"
     doc: "Fill n bytes at dst with byte (memset)"
     vm: "mem_set"
@@ -2954,7 +2833,7 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn compare {
+  fn __compare {
     signature: "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64"
     doc: "Compare n bytes at a and b (memcmp: <0, 0, >0)"
     vm: "mem_compare"
@@ -2966,7 +2845,7 @@ module mem {
     layer: "core"
   }
 
-  fn volatileLoad {
+  fn __volatileLoad {
     signature: "(ptr: Ptr<u8>, size: i64): i64"
     doc: "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
     vm: "mem_volatile_load"
@@ -2978,7 +2857,7 @@ module mem {
     layer: "core"
   }
 
-  fn volatileStore {
+  fn __volatileStore {
     signature: "(ptr: MutPtr<u8>, v: i64, size: i64): ()"
     doc: "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
     vm: "mem_volatile_store"
@@ -3490,7 +3369,7 @@ module net {
 }
 
 module http2 {
-  fn supported {
+  fn __supported {
     signature: "(): bool"
     doc: "Whether the built-in HTTP/2 standard module is available on this target"
     vm: "h2_supported"
@@ -3502,7 +3381,7 @@ module http2 {
     layer: "runtime"
   }
 
-  fn request {
+  fn __request {
     signature: "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?"
     doc: "Execute one typed HTTP/2 request"
     vm: "h2_request_typed"

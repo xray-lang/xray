@@ -1,1 +1,3 @@
+--> 5:1 E0352
+misplaced 6:11
 tuple type '(i64, string, bool)' is not iterable

@@ -1,1 +1,2 @@
+--> 2:24 E0358
 JSON.value() cannot encode type 'fn() -> i64': FUNCTION_FIELD
