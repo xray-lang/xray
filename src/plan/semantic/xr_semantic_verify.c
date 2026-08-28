@@ -5918,8 +5918,24 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                 disagreement = "no-call-contract";
             else if (!read && !reference)
                 disagreement = "parameter-mode-is-neither-read-nor-ref";
-            else if (read && (operand->access != XR_CALL_ARG_PLAIN || addressable))
+            else if (read && operand->access != XR_CALL_ARG_PLAIN)
                 disagreement = "read-argument-access";
+            /* A `read` parameter whose type is a fixed-layout value aggregate is
+             * declared at the callee to use the borrowed call-bound place ABI,
+             * and the dependency froze that as XR_SEM_PARAMETER_READ_PLACE. The
+             * caller's addressable operand is that same fact spelled at the call
+             * site, not a borrow the callee never asked for, so require the
+             * callee's own record to authorize it rather than refusing the
+             * agreement outright. */
+            else if (read && addressable && (parameter->flags & XR_SEM_PARAMETER_READ_PLACE) == 0)
+                disagreement = "read-argument-place-unauthorized";
+            else if (read && addressable &&
+                     (operand->origin == XI_PLACE_ORIGIN_NONE ||
+                      operand->origin > XI_PLACE_ORIGIN_PROJECTION_TEMP ||
+                      operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+                      operand->escape != XI_PLACE_ESCAPE_NONE ||
+                      operand->ownership_action != XR_SEM_OPERAND_BORROW))
+                disagreement = "read-place-provenance";
             else if (reference && (operand->access != XR_CALL_ARG_REF || !addressable ||
                                    operand->ownership_action != XR_SEM_OPERAND_BORROW))
                 disagreement = "ref-argument-access";
