@@ -159,11 +159,12 @@ XrProgramSemanticClosure *source_program_closure = NULL;   /* 可执行切片权
 | SemanticPlan builder | ✅ 依赖表动态，上限 100000 | `xr_semantic_builder.c:2931` |
 | SemanticPlan module-set verify | ✅ 逐条循环，无固定下标 | `xr_semantic_verify.c:5892` |
 | `xaot_resolve_semantic_dependencies` | ✅ 干净的 N 循环 | `xaot_driver.c:1678` |
-| `xr_target_plan_build_module_set` | ⚠️ 依赖数上限 4096，但**不产出模块分区** | `xr_target_builder.c:16620` |
-| **TargetPlan 模块分区** | ❌ **只有 `build_program_graph` 产出，硬编码 2** | `xr_target_builder.c:16561, 16600` |
-| **TargetPlan verify** | ❌ **非 graph plan 必须零分区** | `xr_target_verify.c:10661` |
+| `xr_target_plan_build_module_set` | ⚠️ 依赖数上限 4096，**不产出模块分区**（保持原样） | `xr_target_builder.c:16620` |
+| **TargetPlan 模块分区** | **✅ 本轮新增 N 模块通用构建器**（原先只有 `build_program_graph`，硬编码 2） | `xr_target_builder.c` 尾部新增 |
+| **TargetPlan verify（分区结构）** | **✅ 本轮拆开**（原先「非 graph plan 必须零分区」把两个事实绑成一处判据） | `xr_target_verify.c:10707` |
+| **TargetPlan verify（逐行）** | ❌ **仍用 entry 一个 SemanticPlan 解释整张合并表** | `xr_target_verify.c:4533`，见 8.2 |
 | `XrTargetProgramGraphRecord` | ❌ 单 entry / 单 producer / 单 call / 单 argument 的扁平记录 | `xr_target_plan.h:928` |
-| AOT bundle 安装 | ❌ 要求 `program_module_count == nmodules` | `xaot_bundle.c:681` |
+| AOT bundle 安装 | ✅ 分区数现在等于模块数即可满足 | `xaot_bundle.c:677` |
 | C emission | ❌ 每个模块都要能映射到一个分区 | `xaot_driver.c:1993` |
 
 ### 6.1 剩余缺口的确切形状
@@ -176,7 +177,7 @@ program TargetPlan，但要求 `xaot_bundle_program_semantic_for_module` 能把�
 （`builder_freeze` 的 draft 根本没赋这几个字段），
 `xr_target_plan_program_module_count` 于是返回 1，与 `nmodules` 不等。
 
-更硬的是 `xr_target_verify.c:10661`：
+更硬的是 `xr_target_verify.c` 当时的这条判据（本轮已拆开）：
 
 ```c
 if (plan->program_graphs_count || plan->module_partitions_count ||
@@ -282,8 +283,8 @@ VM 执行路径是 **module-local 编译**，AOT 与字节码打包路径是 **m
 |---|---|---|
 | 拓扑权威接线 | `src/aot/xaot_driver.c` | ✅ 已完成 |
 | TargetPlan N 模块分区 | `src/plan/target/xr_target_builder.c` | ❌ **禁止文件**（与 5 号冲突），需裁决 |
-| 非 graph plan 允许携带分区 | `src/plan/target/xr_target_verify.c:10661` | ❌ 需裁决 |
-| 跨模块非标量返回 | `src/plan/target/xr_target_builder.c:10729` | ❌ 需裁决 |
+| 非 graph plan 允许携带分区 | `src/plan/target/xr_target_verify.c:10707` | ✅ 已完成（`dc6a37e00`） |
+| 跨模块非标量返回（L3） | `src/plan/target/xr_target_builder.c:10729` | ❌ 本轮不做 |
 | bundle 安装判据 | `src/aot/xaot_bundle.c:677` | ✅ 在范围内，但**放松它是不正确的**——见 8.1 |
 
 ### 8.1 一条不要重试的路：放松 `xaot_bundle` 的模块数判据
@@ -320,7 +321,7 @@ VM 执行路径是 **module-local 编译**，AOT 与字节码打包路径是 **m
 L3 最严重，因为它不是某一处写错，而是**一个结构性假设被几十个函数共享，
 而第一个打破它的族选择了绕开而不是修正**。
 
-证据：`verify_value_reps`（`xr_target_verify.c:4531`）第一句是
+证据：`verify_value_reps`（`xr_target_verify.c:4523`，判据在 `:4533`）第一句是
 
 ```c
 if (plan->functions_count != xr_semantic_plan_function_count(plan->semantic_plan))
@@ -360,7 +361,7 @@ SemanticPlan 的 program provenance 作为程序身份，而分区集按定义�
 代价是多模块 AOT 目前没有增量。要恢复增量，需要给 cache context 一条
 以 `xr_target_semantic_module_partition_set_fingerprint` 为键的并行通路。
 
-### 8.5 剩余缺口的可行路径（已取证）
+### 8.5 本轮走的路径（记录，便于后来者续接）
 
 `build_module_set` **没有行可分**：它的 draft 只 materialize entry 一个模块的表
 （`builder_materialize`，`xr_target_builder.c:15595`），依赖只以索引形式出现在 call 行里
@@ -381,7 +382,7 @@ SemanticPlan 的 program provenance 作为程序身份，而分区集按定义�
 `graph_merge_capabilities`（`:15973`）、以及 `build_program_graph` 自身的
 `XrProgramGraphModuleDraft modules[2]` 与 `.module_partitions_count = 2u`。
 
-**真正的设计问题不在这些数字，在 `xr_target_verify.c:10661`**：
+**真正的设计问题不在这些数字，在当时的这条 verify 判据（本轮已拆开，现 `xr_target_verify.c:10707`）**：
 
 ```c
 if (plan->program_graphs_count || plan->module_partitions_count ||
@@ -400,6 +401,18 @@ target_call / target_argument / caller_slot / callee_slot / ...`），
 **分区是模块集事实，图边是调用事实。** 把它们拆开，「N 个分区、0 条图边」就是一个合法形态，
 这正是拓扑权威在 TargetPlan 层的对应物——与第 2 节拆开 authority 指针是**同一个病灶的第二层表现**：
 一个为极窄族设计的记录被当成了通用形态的载体。
+
+本轮（`dc6a37e00`）就是这么做的：
+
+- `xr_target_semantic_module_partition_set_verify` / `_fingerprint`（`xr_target_plan.c`）
+  给分区集一套**不依赖 program provenance** 的身份——模块由自己 SemanticPlan 的
+  唯一 module entity 认定，因为分区回答的是「覆盖哪几个模块」，与 PSC 的可执行 provenance 无关。
+- `xr_target_plan_build_program_module_set`（`xr_target_builder.c` 尾部新增）为 N 个模块
+  各跑一遍 materialize，再 N 路归并 machine reps 与 capabilities，逐模块记录分区偏移，
+  **不产生任何 `program_graphs` 行**。
+- `verify_module_partition_plan`（`xr_target_verify.c`）校验分区表精确、分区集合法、
+  每个分区指名它的模块、以及分区集指纹匹配。
+- freeze gate 与 `xr_target_plan_verify` 按「有没有图边」而不是「有没有分区」分流。
 
 **默认配置（不加 `-DXRAY_STDLIB_VM_FASTPATHS=OFF`）能完成构建**这个验收标准，
 要求 fastpaths 生成器的模块图走完整条 AOT 链路到 C emission。
