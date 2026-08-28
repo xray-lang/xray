@@ -684,6 +684,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
 | `Endian` | `Native` \| `LE` \| `BE` |
 | `Utf8Error` | `InvalidUtf8` |
+| `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
 | `StringSliceError` | `InvalidByteRange` |
 | `CompressionError` | `InvalidData` |
 | `CryptoError` | `InvalidLength` |

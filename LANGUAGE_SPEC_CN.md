@@ -685,6 +685,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
 | `Endian` | `Native` \| `LE` \| `BE` |
 | `Utf8Error` | `InvalidUtf8` |
+| `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
 | `StringSliceError` | `InvalidByteRange` |
 | `CompressionError` | `InvalidData` |
 | `CryptoError` | `InvalidLength` |
