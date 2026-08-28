@@ -239,6 +239,78 @@ tests/diff/cases/semantics/concurrency/once_compose.xr      selector=call expect
 - `xi_coro_is_net_io_call`（`:338`）硬编码 4 个 net 成员名，且用的是**公开拼写**
   `accept/read/write/writeBytes`，而 metadata 侧是 `__accept/__read/...` **7 个私有拼写**
 
+#### `xi_coro_is_net_io_call` 是一颗定时炸弹（6 号的迁移会触发）
+
+stdlib 自举正在做的事，正是**把公开表面迁进 Xray、把 C leaf 改成 `__` 私有拼写**。
+这个硬编码认的是迁移**之前**的公开拼写，所以：
+
+> **6 号每迁一个涉及 net 的模块，那四个公开拼写就会失效，而协程分析会静默地不再认为
+> 那些调用可挂起。**
+
+它不报错——只是少建协程状态，然后在下游以本节这个诊断的**反面形态**冒出来：
+`expected=1 actual=0`（而不是现在看到的 `expected=0 actual=1`）。
+
+同类事故本轮已经发生过一次：5 号的新单测引用 `mem.cacheLineSize`，6 号把它改名为
+`mem.__cacheLineSize`，**两个分支单独都绿，合并后单测查不到符号**。那一次有测试在喊；
+`xi_coro_is_net_io_call` 这一处**没有测试钉住**，失效时不会有人喊。
+
+### 完整枚举：协程状态有且仅有一个来源，而它有 7 个分支
+
+收口判据是「每一条都能说出它的协程状态是哪一行代码建的」。**静态正推得到的答案是唯一的。**
+
+实体的唯一产生点是 `xr_semantic_builder.c:6037-6041`，它逐条读 `XiCoroPlan::points`：
+
+```c
+const XiCoroPlan *coro = ctx->functions[function].source->coro_plan;
+for (uint32_t state = 0; state < coro->nstates; state++) {
+    const XiCoroSuspendPoint *point = &coro->points[state];
+    ... append_entity(ctx, XR_SEM_ENTITY_COROUTINE_STATE, ...)
+}
+```
+
+而 `points` 由 `xi_coro_analyze.c:2049-2145` 的两趟扫描填充（计数一趟、物化一趟），
+**两趟用的是同一个判据，没有第二条路径**：
+
+```c
+if (xi_coro_is_suspend_point(f, v, resolver))   /* :2073 计数 */
+    npoints++;
+...
+if (xi_coro_is_suspend_point(f, v, resolver)) { /* :2128 物化 */
+    pt->state_id = pi + 1; pt->op = v; pt->kind = xi_coro_suspend_kind(f, v, resolver);
+}
+...
+plan->nstates = npoints;                         /* :2145 */
+```
+
+所以**每一个协程状态都来自 `xi_coro_is_suspend_point_impl`（`:665`）判为真的一条 `XiValue`**，
+而它有 **7 个互相独立的判定分支**：
+
+| # | 分支 | 依据 | 验证层有无对应 |
+|---|---|---|---|
+| 1 | `xi_coro_is_net_io_call` | 硬编码 4 个 net **公开拼写** | **无** |
+| 2 | `xi_coro_value_carries_suspend_contract` | **`v->flags & XI_FLAG_MAY_SUSPEND`** | 验证层问的是 `effects`，**不同的字** |
+| 3 | opcode ∈ {YIELD, GEN_YIELD, GO, AWAIT, CHAN_SEND, CHAN_RECV, SELECT_BLOCK, SCOPE_EXIT} | opcode 直接匹配 | 部分（`effects` 表默认值 + `opcode == XI_GO`） |
+| 4 | 7 个 blocking builtin 家族 | 14 个 (选择子, arity) 组合 | 部分（`BUILTIN_INSTANCE_YIELDABLE` target kind） |
+| 5 | `xi_coro_is_time_sleep_call` | 硬编码 `time` + `sleep` | **无** |
+| 6 | `xi_coro_is_test_yield_call` | 硬编码 3 个 `test_yield` 成员名 | **无** |
+| 7 | `xi_coro_call_suspends` / `..._method_call_suspends` | **递归到被调方** | 部分（`DIRECT_LOCAL` 且 `suspendable[]`） |
+
+对照语义验证层（`xr_semantic_verify.c:4956`）的 `expected`，它**只由两项析取而成**：
+
+```c
+operation_is_static_suspend(op)   /* effects 位 ‖ opcode == XI_GO */
+|| dynamic_suspend                /* 只看 call target 的 kind */
+```
+
+**7 个分支 vs 2 个分支。** 这就是本节分歧的完整结构，也是那 10 个不同 selector 的来源：
+`sleep` 走第 5 条、`wait` 走第 4 条、而 `get` / `map` / `push` / `lock` / `call` 这些
+**不在任何 roster 里的选择子走的是第 7 条（递归）**——用户函数调用了一个挂起函数，
+于是调用点自身成为挂起点，而验证层的 `dynamic_suspend` 只在 target kind 恰为
+`DIRECT_LOCAL`/`SOURCE_INSTANCE_METHOD_LOCAL` 且被判 suspendable 时才跟得上。
+
+**枚举到此闭合**：不存在「查不出协程状态由哪一行建」的条目，因为产生点唯一、判据唯一。
+分歧的规模不是「45 条用例」，而是**判定分支数 7 : 2**。
+
 ### 与 1 号统计的对应关系
 
 1 号的清单里 `XR_SEM_0019` 有 49 条，其中 **45 条**的消息是
