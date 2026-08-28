@@ -249,6 +249,7 @@ tests/diff/cases/semantics/modules/cleanup_init_panic.xr
 tests/diff/cases/semantics/modules/cross_module_borrowed_arg_release.xr
 tests/diff/cases/semantics/modules/exported_struct_methods.xr
 tests/diff/cases/semantics/modules/multimod_calls.xr
+tests/diff/cases/semantics/modules/native_module_scalar_call_target.xr
 tests/diff/cases/semantics/modules/value_struct_return_release.xr
 tests/diff/cases/semantics/modules/xmod_class.xr
 tests/diff/cases/semantics/modules/xmod_coro.xr

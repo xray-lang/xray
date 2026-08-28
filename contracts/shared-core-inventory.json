@@ -1059,7 +1059,6 @@
         "xr_numeric_core_i64_abs_magnitude",
         "xr_numeric_core_i64_abs_wrap",
         "xr_numeric_core_i64_add_wrap",
-        "xr_numeric_core_i64_math_abs",
         "xr_numeric_core_i64_mul_wrap",
         "xr_numeric_core_i64_neg_wrap",
         "xr_numeric_core_i64_sub_wrap",
