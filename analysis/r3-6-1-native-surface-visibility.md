@@ -20,7 +20,13 @@ native class 现在也能在自己模块的 `.xr` 体里被命名。
 | 提交 | 内容 |
 |---|---|
 | `9ac33a122` | 10 种 `.def` 条目全部带 `visibility` 字段和统一的 `is_internal` |
-| （本次） | native class 进入 analyzer 类型表，可在自己模块的 `.xr` 里被命名 |
+| `ec779c417` | native class 进入 analyzer 类型表，可在自己模块的 `.xr` 里被命名 |
+| `11c19cd02` | 用上述能力清掉 4 个类及其成员；顺带修掉 §3.2 的 leaf 误判 |
+| `4c03e3915` | 重锚 `xanalyzer.c` 的两份契约 |
+
+**门的变化**：`stdlib_no_public_native_surface` **128 → 105**。
+和基线（`34be0379c`，`git archive` 出来的独立树）逐条对比，
+八个分项里**只有这一个数字动了**，`stdlib_native_leaf_allowlist` 两边都是 PASS。
 
 拼法按种类分三档，理由在 `tools/stdlibgen/stdlibgen.py` 的模块 docstring：
 
@@ -233,3 +239,56 @@ is_leaf = symbol.startswith("__") or (
   （实测 total 159 / xr 148 / 93.08%，11 条全是 `NetError` 及其 10 个 variant）；
   把它标 internal 会让比例变成 100%，但它同时是用户 `import { NetError }` 的名字。
   `sys` 的路见 §5。
+
+
+## 7. 这一轮实际清掉了什么，以及为什么只有这些
+
+清掉的 23 个 = 4 个类 + 它们继承下去的成员：
+
+| 模块 | 清掉 | 剩下 |
+|---|---|---|
+| `regex` | `Regex` + 7 个 `Regex.*` = 8 | 8（`RegexMatch` + 4 个字段 + `find`/`findAll`/`fullFind`）|
+| `mem` | `Buffer` + 4 个方法（`class_method` 与同名 `type_method` 一起）= 5 | 12（全是 `fn`）|
+| `net` | `NetConn`/`NetListener` + 8 个方法 = 10 | 1（`NetError`）|
+
+判据是 §4 那一条，而这 4 个恰好满足它的最强形式：
+**它们各自是唯一发布该名字的条目，而名字根本不是从这里来的**——
+`Regex` / `NetConn` / `NetListener` 来自 prelude 表（`builtin_symbols.def:105,106,115`），
+`Buffer` 来自 `resolve_known_named` 的 well-known 分支。
+所以 `.def` 那一行说的是「运行时类装在哪个槽、哪个 native body」，是绑定不是 API。
+
+实测（这些行现在真的会不导出了，因为 `XaBuiltinClass` 带 `is_internal` 而 analyzer 读它）：
+用户脚本同时注解这 4 个类型，**编译并运行通过**；全树 grep 不到任何
+`import { NetConn } from net` 形式的具名 import；整棵 stdlib 仍然构建通过——
+`cluster.xr:18` 的裸 `move Buffer` 就是在那里被检查的。
+
+**剩下的 105 为什么没动。** 不是能力不够，是它们不满足判据：
+
+- `sys` 的 22 个：`OsMutex` 五族是 `fn` + `native_class` **双声明**，
+  `fn OsMutex` 是用户写 `sys.OsMutex()` 时的构造签名，标掉它需要 `sys.xr` 先接过类型层。
+  私有叶子 `fn __osMutexNew`（`core.def:120`）已经就位，`sys.xr:198` 也已经在用它，
+  缺的是 `sys.xr` 里那一批 `export`。这是模块迁移，不是元数据。
+- `cluster` 的 5 个：`ClusterInfo` / `ClusterDelivery` 是 `cluster.xr:16,18` 两个公开函数的
+  返回类型，三个测试文件具名 import 它们（`tests/diff/.../cluster_typed_control_surface.xr:1-7` 等）。
+  要诚实清空得让 `cluster.xr` 自己 `export type` / `export enum` 定义它们，
+  代价是 `exact: true` 的布局和 `stable_enum_layout_id` 要和 C 侧构造的值对齐。
+- `net` 的 `NetError`、`sync` 的 5 个、`regex` 的 `RegexMatch` 一族：见 §5 / §6。
+- `math` 的 51 个：另有 blocker。
+
+## 8. focused gate 的 13 个失败，逐条归因
+
+`ctest -R 'stdlib|boundary|manifest|native_type|inventory'`，13 个失败。**没有一个是本分支引入的**：
+
+| 失败 | 归因 | 证据 |
+|---|---|---|
+| `test_stdlib_boundary_manifest` | 基线已红 | private-leaf binder 集合在基线树和本树上**逐字相同**（`cluster compress crypto http2 io net os runtime`），而测试要求 `{io,net,os}` |
+| `test_native_type_surface` | 基线已红 | 基线树里同一条 `ASSERT_NOT_NULL(cluster_info_signature)` 就在（`:219`），而基线的 `g_gen_cluster_functions` 里 `"info"` 出现 **0** 次 |
+| `binary_stdlib_kat_baseline` | 与本分支无关 | 抱怨 `core_base64.expect` / `core_encoding.expect` 缺 anchors；base64 / encoding 两个模块本分支一行未改 |
+| `eval_stdlib_overlay` | 与本分支无关 | `xray run: stdin source requires --module-id with a valid memory identity`——CLI 接口要求，本分支改动面里没有任何 CLI 文件 |
+| `stdlib_embedded_layout` | 同上 | 同一条 `--module-id` 报错 |
+| `aot_link_command_manifest`、`aot_manifest_sweep`、`native_output_boundary`、`zero_cost_plan_inventory`、`error_effect_convergence_inventory`、`target_machine_inventory` | AOT / inventory 线基线 fail-closed | 见 `00-SHARED.md` 与 `analysis/r3-6-stdlib-selfhost-remaining-six.md` §0.1 |
+| `binary_stdlib_runtime_baseline` | 性能基线，十条 lane 同机并行 | 未单独复跑 |
+| `legacy_product_residue_inventory` | Timeout | 已知 load-induced，见前一轮 §3.1 |
+
+Python 层做了完整的前后对比（`tests/unit/stdlib/*.py`，基线树 vs 本树）：
+八个测试逐个跑，**零回归**，其中 `test_stdlib_module_merge_gate` 从基线的 FAIL 变成了 PASS。
