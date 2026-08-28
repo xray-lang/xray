@@ -721,7 +721,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
             )
         )
     for const in constants:
-        if getattr(const, "is_internal", False):
+        if const.is_internal:
             continue
         source, line = source_for("const", const.module, const.name)
         category, surface, doc_module = module_inventory_surface(const.module)
@@ -741,7 +741,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
             )
         )
     for handle in handles:
-        if getattr(handle, "is_internal", False):
+        if handle.is_internal:
             continue
         source, line = source_for("handle", handle.module, handle.name)
         category, surface, doc_module = module_inventory_surface(handle.module)
@@ -775,7 +775,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                 )
             )
     for object_shape in object_shapes:
-        if getattr(object_shape, "is_internal", False):
+        if object_shape.is_internal:
             continue
         source, line = source_for("object", object_shape.module, object_shape.name)
         category, surface, doc_module = module_inventory_surface(object_shape.module)
@@ -811,7 +811,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                 )
             )
     for enum in enums:
-        if getattr(enum, "is_internal", False):
+        if enum.is_internal:
             continue
         source, line = source_for("enum", enum.module, enum.name)
         category, surface, doc_module = module_inventory_surface(enum.module)

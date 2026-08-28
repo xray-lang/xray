@@ -16,23 +16,28 @@ C-side binding -- `vm:`, `aot:`, `argc`, `core_slot`, `native_body` and the
 rest still name the same C -- but stops counting as part of the module's
 public surface, so an `.xr` semantic source can publish over it.
 
-Two spellings decide it, and they differ per kind on purpose:
+Three spellings decide it, and they differ per kind on purpose:
 
-* `fn` defaults to internal when the name starts with `__`, because a leaf
-  reached only from the module's own `.xr` body wants a name a caller cannot
-  spell anyway. An explicit `visibility:` key overrides that default.
-* Every other kind -- `const`, `type_method`, `native_class`, `class`,
-  `class_method`, `class_field` -- takes an explicit `visibility: "internal"`
-  key and nothing else. A class name is a user-visible type name that leaks
-  into diagnostics, LSP completion and error messages, so `__Buffer` would be
-  a worse name rather than a private one.
+* `fn`, `const`, `handle`, `object` and `enum` default to internal when the
+  name starts with `__`, because a leaf reached only from the module's own
+  `.xr` body wants a name a caller cannot spell anyway. An explicit
+  `visibility:` key overrides that default, which is how a shape that must
+  keep a spellable name can still leave the public surface.
+* `class` and `native_class` have no prefix rule and take an explicit
+  `visibility: "internal"` key only. A class name is a user-visible type name
+  that reaches diagnostics, LSP completion and error messages, so `__Buffer`
+  would be a worse name rather than a private one.
+* `type_method`, `class_method` and `class_field` inherit. A member that
+  declares no visibility of its own takes the visibility of the `class` or
+  `native_class` with the same name in the same module. That way marking a
+  class internal is one line rather than one line per member, and a member
+  cannot be left publicly reachable on a class nothing can name. A member may
+  still say `visibility: "public"` explicitly to opt out. A member whose owner
+  is not a declared class -- `Coro.CoroLocal` has `type_method` rows and no
+  class row -- stays public.
 
-Class members inherit. A `class_method`, `class_field` or `type_method` that
-declares no visibility of its own takes the visibility of the `class` or
-`native_class` of the same name in the same module. That way marking a class
-internal is one line rather than one line per member, and a member cannot be
-left publicly reachable on a class nothing can name. A member may still say
-`visibility: "public"` explicitly to opt out of the inheritance.
+Because the declaring class may appear after its members in the file, member
+inheritance is resolved once, after the whole `.def` set is parsed.
 """
 
 from __future__ import annotations
@@ -151,6 +156,26 @@ def validate_target_leaf_source_owner(
     owners[target_leaf] = symbol
 
 
+def resolve_visibility(props: dict[str, object], default: str, context: str) -> str:
+    """Read an entry's own visibility, falling back to the kind's default."""
+    visibility = str(props.get("visibility", default))
+    if visibility not in {"public", "internal"}:
+        raise SystemExit(f"{context}: unsupported visibility: {visibility}")
+    return visibility
+
+
+def resolve_member_visibility(props: dict[str, object], context: str) -> str:
+    """Read a class member's visibility, where empty means inherit.
+
+    The declaring class may appear after the member in the .def file, so the
+    empty answer is resolved once the whole file is parsed.
+    """
+    visibility = str(props.get("visibility", ""))
+    if visibility not in {"", "public", "internal"}:
+        raise SystemExit(f"{context}: unsupported visibility: {visibility}")
+    return visibility
+
+
 @dataclasses.dataclass(frozen=True)
 class StdlibEntry:
     module: str
@@ -228,10 +253,15 @@ class StdlibConstEntry:
     define: str
     layer: str
     caps: tuple[str, ...]
+    visibility: str
 
     @property
     def symbol(self) -> str:
         return f"{self.module}.{self.name}"
+
+    @property
+    def is_internal(self) -> bool:
+        return self.visibility == "internal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -247,6 +277,7 @@ class StdlibHandleEntry:
     name: str
     doc: str
     fields: tuple[StdlibHandleFieldEntry, ...]
+    visibility: str
 
     @property
     def symbol(self) -> str:
@@ -254,11 +285,7 @@ class StdlibHandleEntry:
 
     @property
     def is_internal(self) -> bool:
-        return self.name.startswith("__")
-
-    @property
-    def is_internal(self) -> bool:
-        return self.name.startswith("__")
+        return self.visibility == "internal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -268,6 +295,7 @@ class StdlibObjectShapeEntry:
     doc: str
     fields: tuple[StdlibHandleFieldEntry, ...]
     exact: bool
+    visibility: str
 
     @property
     def symbol(self) -> str:
@@ -275,7 +303,7 @@ class StdlibObjectShapeEntry:
 
     @property
     def is_internal(self) -> bool:
-        return self.name.startswith("__")
+        return self.visibility == "internal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -290,6 +318,7 @@ class StdlibEnumEntry:
     name: str
     doc: str
     variants: tuple[StdlibEnumVariantEntry, ...]
+    visibility: str
 
     @property
     def symbol(self) -> str:
@@ -297,7 +326,7 @@ class StdlibEnumEntry:
 
     @property
     def is_internal(self) -> bool:
-        return self.name.startswith("__")
+        return self.visibility == "internal"
 
 
 def stable_enum_layout_id(module: str, enum: StdlibEnumEntry) -> int:
@@ -345,10 +374,15 @@ class StdlibTypeMethodEntry:
     signature: str
     doc: str
     allocation: str
+    visibility: str
 
     @property
     def symbol(self) -> str:
         return f"{self.type_name}.{self.name}"
+
+    @property
+    def is_internal(self) -> bool:
+        return self.visibility == "internal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -360,10 +394,15 @@ class StdlibNativeClassEntry:
     native_body_expr: str
     flags: str
     builtin_kind: str
+    visibility: str
 
     @property
     def symbol(self) -> str:
         return f"{self.module}.{self.name}"
+
+    @property
+    def is_internal(self) -> bool:
+        return self.visibility == "internal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -374,10 +413,15 @@ class StdlibClassEntry:
     core_slot: str
     flags: str
     builtin_kind: str
+    visibility: str
 
     @property
     def symbol(self) -> str:
         return f"{self.module}.{self.name}"
+
+    @property
+    def is_internal(self) -> bool:
+        return self.visibility == "internal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -388,10 +432,15 @@ class StdlibClassMethodEntry:
     vm: str
     argc: str
     flags: str
+    visibility: str
 
     @property
     def symbol(self) -> str:
         return f"{self.class_name}.{self.name}"
+
+    @property
+    def is_internal(self) -> bool:
+        return self.visibility == "internal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -400,10 +449,15 @@ class StdlibClassFieldEntry:
     class_name: str
     name: str
     flags: str
+    visibility: str
 
     @property
     def symbol(self) -> str:
         return f"{self.class_name}.{self.name}"
+
+    @property
+    def is_internal(self) -> bool:
+        return self.visibility == "internal"
 
 
 def strip_comment(line: str) -> str:
@@ -681,14 +735,11 @@ def parse_def_metadata(
                     f"{path}:{line_no}: unsupported vm_ifdef for "
                     f"{current_module}.{current_name}: {vm_ifdef}"
                 )
-            visibility = str(
-                props.get("visibility", "internal" if current_name.startswith("__") else "public")
+            visibility = resolve_visibility(
+                props,
+                "internal" if current_name.startswith("__") else "public",
+                f"{path}:{line_no}: {current_module}.{current_name}",
             )
-            if visibility not in {"public", "internal"}:
-                raise SystemExit(
-                    f"{path}:{line_no}: unsupported visibility for "
-                    f"{current_module}.{current_name}: {visibility}"
-                )
             allocation = str(props.get("allocation", ""))
             if allocation not in {"", "no_heap", "may_heap"}:
                 raise SystemExit(
@@ -834,6 +885,11 @@ def parse_def_metadata(
                     define=str(props.get("define", "")),
                     layer=str(props.get("layer", "")),
                     caps=caps,
+                    visibility=resolve_visibility(
+                        props,
+                        "internal" if current_name.startswith("__") else "public",
+                        f"{path}:{line_no}: {current_module}.{current_name}",
+                    ),
                 )
             )
         elif current_kind == "handle":
@@ -850,6 +906,11 @@ def parse_def_metadata(
                     name=current_name,
                     doc=str(props.get("doc", "Native handle type")),
                     fields=fields,
+                    visibility=resolve_visibility(
+                        props,
+                        "internal" if current_name.startswith("__") else "public",
+                        f"{path}:{line_no}: {current_module}.{current_name}",
+                    ),
                 )
             )
         elif current_kind == "object":
@@ -872,6 +933,11 @@ def parse_def_metadata(
                     doc=str(props.get("doc", "Native exact object shape")),
                     fields=fields,
                     exact=exact,
+                    visibility=resolve_visibility(
+                        props,
+                        "internal" if current_name.startswith("__") else "public",
+                        f"{path}:{line_no}: {current_module}.{current_name}",
+                    ),
                 )
             )
         elif current_kind == "enum":
@@ -886,6 +952,11 @@ def parse_def_metadata(
                     doc=str(props.get("doc", "Native enum type")),
                     variants=parse_enum_variants(
                         str(props["variants"]),
+                        f"{path}:{line_no}: {current_module}.{current_name}",
+                    ),
+                    visibility=resolve_visibility(
+                        props,
+                        "internal" if current_name.startswith("__") else "public",
                         f"{path}:{line_no}: {current_module}.{current_name}",
                     ),
                 )
@@ -910,6 +981,9 @@ def parse_def_metadata(
                     signature=str(props["signature"]),
                     doc=str(props["doc"]),
                     allocation=allocation,
+                    visibility=resolve_member_visibility(
+                        props, f"{path}:{line_no}: {current_module}.{current_name}"
+                    ),
                 )
             )
         elif current_kind == "native_class":
@@ -934,6 +1008,9 @@ def parse_def_metadata(
                     native_body_expr=native_body_expr,
                     flags=str(props.get("flags", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY")),
                     builtin_kind=str(props.get("builtin_kind", "")),
+                    visibility=resolve_visibility(
+                        props, "public", f"{path}:{line_no}: {current_module}.{current_name}"
+                    ),
                 )
             )
         elif current_kind == "class":
@@ -949,6 +1026,9 @@ def parse_def_metadata(
                     core_slot=str(props["core_slot"]),
                     flags=str(props.get("flags", "XR_CLASS_BUILTIN")),
                     builtin_kind=str(props.get("builtin_kind", "")),
+                    visibility=resolve_visibility(
+                        props, "public", f"{path}:{line_no}: {current_module}.{current_name}"
+                    ),
                 )
             )
         elif current_kind == "class_method":
@@ -965,6 +1045,9 @@ def parse_def_metadata(
                     vm=str(props["vm"]),
                     argc=str(props["argc"]),
                     flags=str(props.get("flags", "0")),
+                    visibility=resolve_member_visibility(
+                        props, f"{path}:{line_no}: {current_module}.{current_name}"
+                    ),
                 )
             )
         elif current_kind == "class_field":
@@ -975,6 +1058,9 @@ def parse_def_metadata(
                     class_name=class_name,
                     name=field_name,
                     flags=str(props.get("flags", "0")),
+                    visibility=resolve_member_visibility(
+                        props, f"{path}:{line_no}: {current_module}.{current_name}"
+                    ),
                 )
             )
         else:
@@ -1111,6 +1197,27 @@ def parse_def_metadata(
 
     if current_module is not None or current_kind is not None:
         raise SystemExit("unterminated stdlib .def block")
+
+    # A member that declared no visibility of its own takes the visibility of
+    # the class it hangs off, so marking a class internal is one line rather
+    # than one line per member. A member whose owner is not a declared class --
+    # Coro.CoroLocal has type_method rows and no class row -- stays public.
+    class_visibility = {
+        (entry.module, entry.name): entry.visibility
+        for entry in (*native_classes, *classes)
+    }
+
+    def inherit(entry, owner: str):
+        if entry.visibility:
+            return entry
+        return dataclasses.replace(
+            entry, visibility=class_visibility.get((entry.module, owner), "public")
+        )
+
+    type_methods = [inherit(e, e.type_name) for e in type_methods]
+    class_methods = [inherit(e, e.class_name) for e in class_methods]
+    class_fields = [inherit(e, e.class_name) for e in class_fields]
+
     return (
         entries,
         constants,
@@ -1158,6 +1265,11 @@ def parse_type_methods(root: Path) -> list[StdlibTypeMethodEntry]:
 def parse_native_classes(root: Path) -> list[StdlibNativeClassEntry]:
     _, _, _, _, _, _, native_classes, _, _, _ = parse_def_metadata(root)
     return native_classes
+
+
+def parse_classes(root: Path) -> list[StdlibClassEntry]:
+    _, _, _, _, _, _, _, classes, _, _ = parse_def_metadata(root)
+    return classes
 
 
 def parse_class_methods(root: Path) -> list[StdlibClassMethodEntry]:
