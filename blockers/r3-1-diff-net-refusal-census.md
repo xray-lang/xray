@@ -420,6 +420,48 @@ Coverage: 514 not comparable, 510 listed.
 同一份代码在 `xmodule_graph.c:823-826` 的 preload 路径上是**做对了**的（正确还原成
 `namespace_id`），bundle 路径丢了这层映射——又是一处"同一事实两处实现、只改一侧就漂移"。
 
+### 4.1.1 embedded lane 的 gate 实测：红 132 条，与本 lane 的改动零关系
+
+补跑了完整 `backend_diff_embedded`（直跑 runner，`XRAY_DIFF_JOBS=4`、
+`XRAY_TOOLCHAIN_PROBE_SCALE=16`、`XRAY_TEST_CASE_TIMEOUT=900`，load 16–22）：
+
+```
+=== Results: 486 passed, 132 failed, 55 refused, 3 skipped ===
+Ratchet: 132 diverging, 0 baselined.
+=== Cases that stopped building ===  7 条
+Coverage: 55 not comparable, 48 listed.
+```
+
+伪影三项检索同样全 0。两项归因检查都做了，**结论是这些红一条都不是本 lane 引入的**：
+
+- **132 条分歧里，本 lane 删掉的 18 条一条都不在**（逐条比对）。它们各自复跑 3 次全 PASS。
+- **7 条 `stopped building` 既不在改后的清单、也不在 `00f665c5c` 的原清单里，
+  本 lane 更没有复验过它们**——它们是冻结基线上就存在的、清单外的拒绝。
+
+那 7 条是：
+
+```
+semantics/collections/array_fill_ref_cross_module.xr
+semantics/collections/stringbuilder_append_shared_core.xr
+semantics/collections/stringbuilder_scalar_known_append_shared_core.xr
+semantics/int_wrap/stringbuilder_numeric_shared_core.xr
+semantics/modules/xmod_inherit_lib_subclass.xr
+semantics/oop/generic_instance_in_declared_member_types.xr
+semantics/oop/native_class_reference_field_transfer.xr
+```
+
+这也把 §4.1 那份阻塞单的估计**往上修正了**：packet 按"import 标准库的 97 条里 86 条失败
+＋ 2 条 coro"估的是 88，gate 实测是 **132**。多出的 44 条属于什么还没归类
+（可能是间接 import，也可能有第二个成因），但归因方向不变——
+**它们在冻结基线上就红，而 `known_failures_embedded.txt` 是空的**，
+所以这条 lane 一直在报一个没有任何基线解释的红。
+
+另一个值得记的对比：embedded lane **486 条通过**，而 native lane 只有 161 条。
+embed 共享 VM 前端，覆盖面本来就宽得多——**它的红是一个打包缺陷造成的，不是覆盖缺口**，
+和 native 那 510 条的性质完全不同。
+
+---
+
 ### 4.2 删行之前必须查的一件事：五个 lane 共享同一份 refusal baseline
 
 `run_backend_diff.py:821` 从 divergence baseline 的文件名派生 refusal baseline
