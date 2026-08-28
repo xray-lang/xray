@@ -700,6 +700,73 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
     return true;
 }
 
+/* One module's view of a TargetPlan: the SemanticPlan that produced its rows,
+ * and the row ranges those rows occupy in every partitioned table. A plan that
+ * carries no partitions is the N=1 case of the same shape -- the entry
+ * SemanticPlan owning every row of every table -- so a judgement written
+ * against this view needs no single-module branch, and single-module plans
+ * keep meaning exactly what they meant before there were partitions.
+ *
+ * This exists because the six equivalent lookups on XrTargetPlan are all
+ * gated behind xr_target_plan_is_verified, and `verified` is only set after
+ * xr_target_plan_verify returns: the verifier can never reach them. */
+typedef struct XrTargetPartitionView {
+    const XrSemanticPlan *semantic;
+    XrTargetModulePartitionRecord range;
+} XrTargetPartitionView;
+
+static uint32_t verifier_partition_count(const XrTargetPlan *plan) {
+    if (!plan)
+        return 0u;
+    return plan->module_partitions_count ? plan->module_partitions_count : 1u;
+}
+
+static bool verifier_partition_view(const XrTargetPlan *plan, uint32_t index,
+                                    XrTargetPartitionView *out) {
+    if (!plan || !out || index >= verifier_partition_count(plan))
+        return false;
+    memset(out, 0, sizeof(*out));
+    if (plan->module_partitions_count) {
+        if (!plan->module_partitions)
+            return false;
+        out->range = plan->module_partitions[index];
+        uint32_t semantic_module = out->range.semantic_module;
+        out->semantic = plan->semantic_modules && semantic_module < plan->semantic_module_count
+                            ? plan->semantic_modules[semantic_module]
+                            : NULL;
+        return out->semantic != NULL;
+    }
+    out->semantic = plan->semantic_plan;
+    out->range.semantic_module = 0u;
+    out->range.program_module_row = 0u;
+#define XR_VERIFY_WHOLE_TABLE(name)                                                                \
+    do {                                                                                           \
+        out->range.name##_begin = 0u;                                                              \
+        out->range.name##_count = plan->name##_count;                                              \
+    } while (0)
+    XR_VERIFY_WHOLE_TABLE(value_reps);
+    XR_VERIFY_WHOLE_TABLE(extents);
+    XR_VERIFY_WHOLE_TABLE(layouts);
+    XR_VERIFY_WHOLE_TABLE(fields);
+    XR_VERIFY_WHOLE_TABLE(storage);
+    XR_VERIFY_WHOLE_TABLE(allocations);
+    XR_VERIFY_WHOLE_TABLE(extent_operands);
+    XR_VERIFY_WHOLE_TABLE(functions);
+    XR_VERIFY_WHOLE_TABLE(slots);
+    XR_VERIFY_WHOLE_TABLE(instructions);
+    XR_VERIFY_WHOLE_TABLE(calls);
+    XR_VERIFY_WHOLE_TABLE(call_arguments);
+    XR_VERIFY_WHOLE_TABLE(root_maps);
+    XR_VERIFY_WHOLE_TABLE(root_slots);
+    XR_VERIFY_WHOLE_TABLE(cleanups);
+    XR_VERIFY_WHOLE_TABLE(adapters);
+    XR_VERIFY_WHOLE_TABLE(coroutines);
+    XR_VERIFY_WHOLE_TABLE(entry_expectations);
+    XR_VERIFY_WHOLE_TABLE(debug_facts);
+#undef XR_VERIFY_WHOLE_TABLE
+    return out->semantic != NULL;
+}
+
 static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_t error_size) {
     if (plan->semantic_dependency_count > XR_TARGET_MAX_SEMANTIC_DEPENDENCIES ||
         plan->semantic_module_count > XR_TARGET_MAX_PROGRAM_MODULES ||
@@ -4924,16 +4991,28 @@ static bool verify_storage_and_allocations(const XrTargetPlan *plan, char *error
 }
 
 static bool verify_functions_and_slots(const XrTargetPlan *plan, char *error, size_t error_size) {
-    size_t semantic_functions = xr_semantic_plan_function_count(plan->semantic_plan);
-    if (plan->functions_count != semantic_functions)
+    /* A row's identity is global -- the tables are one table -- while the
+     * semantic function it names is local to the module that produced it. With
+     * a single partition the two coincide, which is exactly what they meant
+     * before there were partitions. */
+    uint32_t partition = 0;
+    XrTargetPartitionView view;
+    if (!verifier_partition_view(plan, partition, &view) ||
+        view.range.functions_count != xr_semantic_plan_function_count(view.semantic))
         return report(error, error_size, "XR_TARGET_1002",
                       "target function table does not cover the semantic plan");
     uint32_t next_slot = 0;
     uint32_t next_root = 0;
     uint32_t next_cleanup = 0;
     for (uint32_t i = 0; i < plan->functions_count; i++) {
+        while (i >= view.range.functions_begin + view.range.functions_count) {
+            if (!verifier_partition_view(plan, ++partition, &view) ||
+                view.range.functions_count != xr_semantic_plan_function_count(view.semantic))
+                return report(error, error_size, "XR_TARGET_1002",
+                              "target function table does not cover the semantic plan");
+        }
         const XrTargetFunctionRecord *function = &plan->functions[i];
-        if (function->id != i || function->semantic_function != i ||
+        if (function->id != i || function->semantic_function != i - view.range.functions_begin ||
             function->slot_begin != next_slot || function->root_begin != next_root ||
             function->cleanup_begin != next_cleanup || function->reserved != 0 ||
             !range_valid(function->slot_begin, function->slot_count, plan->slots_count) ||
@@ -9045,13 +9124,30 @@ static uint32_t debug_operation_for_instruction(const XrTargetPlan *plan,
 }
 
 static bool verify_debug_facts(const XrTargetPlan *plan, char *error, size_t error_size) {
-    const XrSemanticPlan *semantic = plan->semantic_plan;
-    const XrOwnershipCertificate *ownership = xr_semantic_plan_ownership(semantic);
     const XrFingerprint zero_fingerprint = {{0}};
     if (plan->debug_facts_count != plan->instructions_count)
         return report(error, error_size, "XR_TARGET_1005",
                       "target debug facts do not cover every instruction");
+    /* Debug facts and instructions are one row per row, and both tables carry
+     * the same partition ranges, so a fact is read through the SemanticPlan of
+     * the module whose instruction it describes. */
+    uint32_t partition = 0;
+    XrTargetPartitionView view;
+    if (!verifier_partition_view(plan, partition, &view) ||
+        view.range.debug_facts_count != view.range.instructions_count)
+        return report(error, error_size, "XR_TARGET_1005",
+                      "target debug facts do not cover every instruction");
+    const XrSemanticPlan *semantic = view.semantic;
+    const XrOwnershipCertificate *ownership = xr_semantic_plan_ownership(semantic);
     for (uint32_t i = 0; i < plan->debug_facts_count; i++) {
+        while (i >= view.range.debug_facts_begin + view.range.debug_facts_count) {
+            if (!verifier_partition_view(plan, ++partition, &view) ||
+                view.range.debug_facts_count != view.range.instructions_count)
+                return report(error, error_size, "XR_TARGET_1005",
+                              "target debug facts do not cover every instruction");
+            semantic = view.semantic;
+            ownership = xr_semantic_plan_ownership(semantic);
+        }
         const XrTargetDebugFactRecord *fact = &plan->debug_facts[i];
         const XrTargetInstructionRecord *instruction = &plan->instructions[i];
         uint32_t operation = debug_operation_for_instruction(plan, instruction);
@@ -9097,7 +9193,8 @@ static bool verify_debug_facts(const XrTargetPlan *plan, char *error, size_t err
                           "target debug source span was guessed");
         }
         XrFingerprint expected_layout = zero_fingerprint;
-        for (uint32_t layout = 0; layout < plan->layouts_count; layout++) {
+        for (uint32_t local = 0; local < view.range.layouts_count; local++) {
+            uint32_t layout = view.range.layouts_begin + local;
             if (plan->layouts[layout].semantic_type != semantic_operation->result_type)
                 continue;
             if (!fingerprint_is_zero(expected_layout))
