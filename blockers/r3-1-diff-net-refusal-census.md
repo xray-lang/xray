@@ -533,6 +533,15 @@ backend_diff_determin.   1 passed, 0 failed, 17 refused, 0 skipped
    所以这条影响是文档性的，不会让任何测试变红——它同时也是 8 号那份"四件孤儿资产写完没人调用"
    结论的又一个实例：**这里有一份能算出准确证据的收集器，和一个会检查它的校验器，
    两个都没接线**。
+
+   **但不要顺手把这根线接上。** 这两件事叠在一起有一个先后顺序，漏掉就会在集成分支上
+   加一条已知会红的门：本次改动**已经**让 manifest 失效（清单的 sha256 变了），
+   所以此刻接 `add_test` 立刻就红，而且红得有道理。正确顺序是
+   **先跑 `survey_refusals.py` 重算 manifest → 确认 `check_live_refusal_manifest.py` 绿 → 再接线**。
+   注意 `survey_refusals.py` 对干净树 fail-closed，所以重算必须在提交之后。
+
+   一般化一点：**"缺一根线"和"缺一根线加一次重算"是两回事**——
+   前者可以顺手做，后者要排期。便宜的那部分是接线，不便宜的是让被接的东西先绿。
 2. **`analysis/a-stdlib-public-native-migration.{json,md}`** 有三处按**行号**引用
    `known_failures_not_comparable.txt:426`。本次重排注释块使这三处指向错误的用例，需要重指。
 3. **`contracts/differential-protocol.md:42-43`** 硬编码 `564 refusals` / `68`。
