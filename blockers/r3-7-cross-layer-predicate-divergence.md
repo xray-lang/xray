@@ -314,6 +314,54 @@ B lane 修 `xi_local_addr_names_operand_storage` 时，处理的是 `XI_LOCAL_AD
 **有意保留未合并的**：`xrt_core_freestanding.h:1271` 的 span 判据是 freestanding profile 的
 独立副本（该文件不 include `xrt_coll.h`），属于**有意的 profile 隔离**，不是漏网的第三份。
 
+## 五、无静态目标的 closure：两处各自论证过，论证的不是同一件事
+
+3 号在全局效应摘要线上撞到、我核实的。**这一组的形态与前四组都不同，也最隐蔽。**
+
+同一个调用点（`XG_CALL_CLOSURE` 且 `static_target_func_id == XG_NO_ID`），两个判据给出相反答案：
+
+```c
+src/analysis/xglobal_summary.c:2850   xg_body_reachability_mark_call
+    if (call->kind == XG_CALL_CLOSURE)
+        /* Closure and builtin calls carry their local effect/capability
+         * contract on the owner body.  Concrete direct function targets are
+         * recorded above; no declaration-tree fallback is permitted here. */
+        return true;
+
+src/analysis/xglobal_summary.c:2727   xg_callsite_effects_compose
+    /* A closure without a stable target is deliberately unprovable. */
+    return false;
+```
+
+两个函数的前两个分支**完全对称**（`NATIVE/EXTERN/CLASS_ALLOC` 一组，
+`DIRECT_FUNC` 或带静态目标的 `CLOSURE` 一组）。分歧只在第三处：
+**A 为无静态目标的 closure 多写了一个兜底分支，B 没有**——`XG_CALL_CLOSURE` 在 B 里
+只出现一次（带静态目标的那次），其余落到函数尾的 `return false`。
+
+### 为什么这一组比前四组更难发现
+
+前四组都是**漂移**：某一份忘了跟上，没人为差异辩护过。这一组不是——
+**两处各自写了注释论证自己为什么对，而且两段论证单独看都成立**：
+
+- A 的论证成立：closure 的效应/能力契约确实记在 owner body 上，可达性标记到此为止是对的。
+- B 的论证也成立：没有稳定目标就无法组合被调方的效应集合，判为不可证是保守且正确的。
+
+**它们回答的根本不是同一个问题**——A 问「这个调用点处理完了吗」，B 问「能否算出它的效应集合」。
+把两段注释并排读才看得出来，而它们相隔 160 行、在两个函数里。
+
+**这是本 packet 里唯一一组「注释齐全、每一处都经过思考」的分歧。** 前四组的教训是
+「重复会漂移」，这一组的教训不同：**判据分歧不一定源于疏忽，也可能源于两处各自想清楚了一个
+略微不同的问题，而没有人把两个问题并排放在一起看过。** 加共享判据解决不了这一类——
+需要先确定「无静态目标的 closure 在可达性与效应组合两个维度上分别意味着什么」。
+
+### 3 号报告的后果（我未独立复现，如实标注）
+
+据 3 号：print 变成普通调用之后，**几乎所有程序的 entry plan 都退化成全零**
+（`root_representation` 停在 `ELIDED`，连 `assert(true)` 也中招），而只有
+`test_xglobal_summary` 里一个用例在喊。他已写进 `blockers/3-kat-surface-recompute-residue.md` 第 4 节。
+
+**这一条的后果我没有独立验证**，只核实了两处判据本身的分歧确实存在、注释确实如上。
+
 ---
 
 ## 附：显式排除的靶子（重复但**不该**合并）
