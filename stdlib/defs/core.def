@@ -1326,6 +1326,7 @@ module sys {
 
 module regex {
   native_class Regex {
+    visibility: "internal"
     super_slot: objectClass
     core_slot: regexClass
     native_body: g_regex_body_desc
@@ -2468,6 +2469,7 @@ module runtime {
 
 module mem {
   native_class Buffer {
+    visibility: "internal"
     super_slot: "objectClass"
     core_slot: "memBufferClass"
     native_body: "g_mem_buffer_body_desc"
@@ -2961,6 +2963,7 @@ module net {
   }
 
   native_class NetConn {
+    visibility: "internal"
     core_slot: "netConnClass"
     native_body_expr: "xr_netconn_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
@@ -2968,6 +2971,7 @@ module net {
   }
 
   native_class NetListener {
+    visibility: "internal"
     core_slot: "netListenerClass"
     native_body_expr: "xr_netlistener_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"

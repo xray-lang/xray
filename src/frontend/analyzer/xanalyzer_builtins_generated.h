@@ -365,7 +365,7 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 #define GEN_MATH_FUNCTION_COUNT 51
 
 static const XaBuiltinClass g_gen_mem_classes[] = {
-    {"Buffer", false},
+    {"Buffer", true},
 };
 #define GEN_MEM_CLASS_COUNT 1
 
@@ -433,8 +433,8 @@ static const XaBuiltinEnum g_gen_net_enums[] = {
 #define GEN_NET_ENUM_COUNT 1
 
 static const XaBuiltinClass g_gen_net_classes[] = {
-    {"NetConn", false},
-    {"NetListener", false},
+    {"NetConn", true},
+    {"NetListener", true},
 };
 #define GEN_NET_CLASS_COUNT 2
 
@@ -526,7 +526,7 @@ static const XaBuiltinMember g_gen_os_functions[] = {
 #define GEN_OS_FUNCTION_COUNT 25
 
 static const XaBuiltinClass g_gen_regex_classes[] = {
-    {"Regex", false},
+    {"Regex", true},
     {"RegexMatch", false},
 };
 #define GEN_REGEX_CLASS_COUNT 2
