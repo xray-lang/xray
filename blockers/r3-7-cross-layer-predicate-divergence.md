@@ -311,6 +311,42 @@ operation_is_static_suspend(op)   /* effects 位 ‖ opcode == XI_GO */
 **枚举到此闭合**：不存在「查不出协程状态由哪一行建」的条目，因为产生点唯一、判据唯一。
 分歧的规模不是「45 条用例」，而是**判定分支数 7 : 2**。
 
+### 实测交叉验证：两个判定集合是**交叉**，不是包含（推翻了本节先前的表述）
+
+45 条逐条编译实测，**45/45 全部是本诊断，无一条因别的原因失败**。分布：
+
+```
+selector:  sleep 27 | (空) 5 | get 4 | map 3 | wait·call·run·runDirect·lock·push 各 1
+opcode:    117 XI_CALL_METHOD 40 条 | 116 XI_CALL 5 条（空 selector ⟺ XI_CALL，一一对应）
+(expected, actual):  0/1 共 44 条 | 1/0 共 1 条
+```
+
+**那一条 `expected=1 actual=0` 是本节最重要的实测结果**：
+
+```
+tests/diff/cases/semantics/coro/channel_for_in_recv_or.xr
+  function=0 operation=53 opcode=116 selector=(空) expected=1 actual=0
+  L14  print(drain_sum(ints))     ← drain_sum 体内是 for (msg in ch)，channel 迭代是挂起点
+```
+
+验证层判定它挂起，**而 Xi 没有建协程状态**——方向与其余 44 条相反。
+
+**因此「Xi 的 7 条判定分支 ⊇ 验证层的 2 条」是错的**，本节先前按这个包含关系推导的部分应以此为准：
+**两个判定集合是交叉的**。Xi 多认了一批（44 条），也漏认了一批（至少 1 条）。
+
+这对修法方向有直接影响：**让 Xi 侧三条硬编码改读 metadata 只收拢了多认的那一侧**，
+漏认的那一侧（经普通函数调用传递进来的挂起性）是**另一个缺口**，必须单独查。
+
+其余实测事实：
+
+- **12 个 http 用例全部指向同一处**：`stdlib/http/http.xr:1011` 的 `time.sleep(...)`。
+  这与 fastpaths 构建期生成器死在 `http.xr` 是同一行。
+- **survey 模式**（收集全部 gap 而非首报）下，45 条用例共 **75 处** gap，**全量仍只有 1 处反向**。
+- 空 selector 的 5 条全是无接收者的 `f(args)` 语法（`XI_CALL` 没有方法名 metadata）。
+  其中 2 条经 A/B 最小化确认：把 `defer { cleanup(...) }` 改成裸 `cleanup(...)`，
+  gap 从 2 降为 1 但仍然报错——**触发因素是「经 upvalue cell 间接调嵌套函数」，
+  `defer` 只是把同一处复制成正常路径与异常展开路径两份**。
+
 ### 修法方向（已裁决：本轮不做，留作下一轮开头的工作项）
 
 枚举闭合后，问题的正确提法变了：**不是「哪一份判据是真值」，而是「为什么产生方有 7 种
