@@ -48,8 +48,6 @@ static void xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule 
 static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "__randomBytes", crypto_random_bytes_raw);
     XRS_EXPORT(module, isolate, "__timingSafeEqualBytes", crypto_timing_safe_equal_bytes);
-    XRS_EXPORT(module, isolate, "encrypt", crypto_encrypt);
-    XRS_EXPORT(module, isolate, "decrypt", crypto_decrypt);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 

@@ -1,0 +1,86 @@
+// Authenticated encryption: fixed wire forms, padding boundaries and refusal.
+//
+// The wire forms below were produced by the C implementation this module
+// replaced. They are here as a correctness reference, not as a compatibility
+// promise: they pin that the Xray cipher, the CBC chaining, the PKCS#7 padding
+// and the key derivation all agree with a known-good implementation, which
+// round-trip tests alone cannot show because a wrong cipher round-trips against
+// itself perfectly well.
+
+import crypto
+
+fn flipHexDigit(wire: string, at: i64) -> string {
+    var digits = "0123456789abcdef"
+    var c = digits.indexOf(wire.slice(at, at + 1))
+    var next = (c + 1) % 16
+    return wire.slice(0, at) + digits.slice(next, next + 1) + wire.slice(at + 1, len(wire))
+}
+
+@test
+fn test_reference_wire_forms_decrypt_to_their_plaintext() {
+    // empty
+    assertEqual(crypto.decrypt("k", "a3f5efed7ee5f8daaa6f138785ca5319bae9cd1c1b6e3bbfa53c5eff97e7d20b5e9ec3c68d1af84fa6f349a6cac2f4f6e5d1dfecb89630a43c86f99ed9283ac3"), "")
+    // short
+    assertEqual(crypto.decrypt("k", "3f537fbce40f59429b3674f92f1f182a9e730b651e7d2fdb0e1df016d44e31075b2f0d537e5a353f9b6296f1d924d64d5b138f91728da6c6e009592b05b27469"), "a")
+    // exact16
+    assertEqual(crypto.decrypt("k", "afd605ea384ec528fa1abfaad8ec3f3af8d923273c6f2fbbe99c88c8dd57102a5467579206b18b6a9c6f503721d52c7b082dde8a7d4fb369861fef7e99a95a538a44dbf4ef0594ed29bd27aa71ca83ea"), "0123456789abcdef")
+    // block17
+    assertEqual(crypto.decrypt("k", "c9461355b7079d826c0c0202430228c9922152a8d52a611f037671ee0dabedd6a20a6eac50551c4bd11f13a9bf9146803db0647f91699073ddad7c0aa62f4a46ea193a724c30bed45b48c0a2e09b29b2"), "0123456789abcdefg")
+    // long
+    assertEqual(crypto.decrypt("correct horse battery staple", "3b5d5a80a66ab1091f20b8d783074ccbaa0677293331b7178270700042c3e3c768c89c289d8e100e749008faab3a9273396c0a12cd03af6254bcc775d0ffd8721d3cf7c3443b7b440c026c95b90160b5f10e43861f4876dacfe15f8d8e77e56e"), "the quick brown fox jumps over the lazy dog")
+    // emptykey
+    assertEqual(crypto.decrypt("", "8e6b4a2e1ac9cbcb71610d17562a8eb188a9ff8d874471faba3eaa5c824df5cadf8b548c4032fd7047923cc82f9b358df273f34219d91cbf5c15fa06fe9ede71"), "payload")
+    // longkey
+    assertEqual(crypto.decrypt("this key is deliberately longer than the sixty four byte block size that sha256 uses", "c9d5ac2fde0a682636079f250379dfa9d6bd254f1045e84abdc80ab9da711386889841dbf1ec6175eed0ffc8f75ab7b0502a13be551f749bc4564c4534468fdd"), "x")
+}
+
+@test
+fn test_every_padding_length_round_trips() {
+    // PKCS#7 adds a whole block when the plaintext already fills one, so the
+    // trailing byte is never ambiguous. 0 through 33 covers both sides of two
+    // block boundaries.
+    for (var n = 0; n <= 33; n++) {
+        var plain = "a".repeat(n)
+        assertEqual(crypto.decrypt("k", crypto.encrypt("k", plain)), plain)
+    }
+}
+
+@test
+fn test_a_different_key_does_not_authenticate() {
+    var wire = crypto.encrypt("right key", "secret")
+    assertEqual(crypto.decrypt("wrong key", wire), null)
+}
+
+@test
+fn test_two_encryptions_of_one_plaintext_differ() {
+    // A fresh IV per call, so the same input must not produce the same wire
+    // form twice.
+    assert(crypto.encrypt("k", "same") != crypto.encrypt("k", "same"))
+}
+
+@test
+fn test_tampering_anywhere_is_refused() {
+    var wire = crypto.encrypt("k", "authenticate me before use")
+    // The tag covers the IV as well as the ciphertext, so damage in any of the
+    // three regions has to be caught.
+    assertEqual(crypto.decrypt("k", flipHexDigit(wire, 2)), null)
+    assertEqual(crypto.decrypt("k", flipHexDigit(wire, 40)), null)
+    assertEqual(crypto.decrypt("k", flipHexDigit(wire, len(wire) - 3)), null)
+}
+
+@test
+fn test_a_wire_form_of_the_wrong_length_is_a_typed_error() {
+    var wire = crypto.encrypt("k", "payload")
+    var reported = "no-throw"
+    try {
+        crypto.decrypt("k", wire.slice(0, len(wire) - 2))
+    } catch (e: CryptoError) {
+        reported = e.toString()
+    }
+    assertEqual(reported, "CryptoError.InvalidLength")
+}
+
+@test
+fn test_a_non_hex_wire_form_answers_null() {
+    assertEqual(crypto.decrypt("k", "zz" + crypto.encrypt("k", "x").slice(2, 128)), null)
+}

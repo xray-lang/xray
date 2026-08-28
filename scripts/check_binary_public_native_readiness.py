@@ -156,9 +156,15 @@ def check_module_payloads(root: Path) -> list[CheckResult]:
             failures.append(f"missing stdlib/{module}")
         if not entry.get("private_native_sources"):
             failures.append("private_native_sources must be declared")
-        if not public_symbols.get(module):
+        declared = set(entry.get("public_native", ()))
+        # A module that still publishes native symbols has to declare them in
+        # core.def. One whose public_native is empty has finished its cutover,
+        # which is the outcome this readiness check exists to reach, so absent
+        # declarations are the goal rather than a gap. Either way the manifest
+        # and core.def have to say the same thing.
+        if declared and not public_symbols.get(module):
             failures.append("core.def has no public declarations")
-        if set(entry.get("public_native", ())) != public_symbols.get(module, set()):
+        if declared != public_symbols.get(module, set()):
             failures.append("public_native does not exactly match core.def")
         results.append(result("BUILTIN_STDLIB_PAYLOAD", module, failures))
     return results

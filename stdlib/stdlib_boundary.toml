@@ -395,9 +395,9 @@ layer = "L3"
 policy = "xray_semantic"
 semantic_source = "stdlib/crypto/crypto.xr"
 factory_source = "stdlib/crypto/crypto.c"
-public_native = ["decrypt", "encrypt"]
+public_native = []
 private_native_sources = ["stdlib/crypto/*.c"]
-private_native_reason = "Platform CSPRNG, constant-time comparison and the AES block cipher consumed by crypto.xr"
+private_native_reason = "Platform CSPRNG and constant-time comparison consumed by crypto.xr"
 perf_suite = "stdlib/crypto"
 
 [[module]]

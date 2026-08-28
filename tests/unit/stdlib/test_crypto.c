@@ -73,103 +73,6 @@ TEST(crypto_hmac_sha256_basic) {
 
 /* ========== AES-256-CBC ========== */
 
-TEST(crypto_aes_cbc_roundtrip) {
-    // 256-bit key (32 bytes)
-    uint8_t key[32];
-    memset(key, 0x42, 32);
-
-    // 16-byte IV
-    uint8_t iv[16];
-    memset(iv, 0x01, 16);
-
-    // 32 bytes plaintext (2 blocks)
-    uint8_t plaintext[32] = "Hello AES-256 CBC encryption!!\0";
-    uint8_t ciphertext[32];
-    uint8_t decrypted[32];
-
-    XrAESContext ctx;
-    xr_aes_init(&ctx, key, 256);
-
-    xr_aes_cbc_encrypt(&ctx, iv, plaintext, ciphertext, 32);
-
-    // Ciphertext should differ from plaintext
-    ASSERT_TRUE(memcmp(plaintext, ciphertext, 32) != 0);
-
-    // Decrypt should recover plaintext
-    xr_aes_cbc_decrypt(&ctx, iv, ciphertext, decrypted, 32);
-    ASSERT_TRUE(memcmp(plaintext, decrypted, 32) == 0);
-}
-
-TEST(crypto_aes_cbc_single_block) {
-    uint8_t key[32] = {0};
-    uint8_t iv[16] = {0};
-    uint8_t plain[16] = {0};
-    uint8_t cipher[16], recovered[16];
-
-    XrAESContext ctx;
-    xr_aes_init(&ctx, key, 256);
-    xr_aes_cbc_encrypt(&ctx, iv, plain, cipher, 16);
-    xr_aes_cbc_decrypt(&ctx, iv, cipher, recovered, 16);
-
-    ASSERT_TRUE(memcmp(plain, recovered, 16) == 0);
-}
-
-TEST(crypto_core_aes_hex_roundtrip) {
-    const uint8_t key[] = "secret";
-    const uint8_t plain_text[] = "hello world";
-    uint8_t iv[16];
-    for (int i = 0; i < 16; i++)
-        iv[i] = (uint8_t) i;
-
-    size_t padded_len = 0;
-    size_t hex_len = 0;
-    ASSERT_TRUE(xr_crypto_core_aes_encrypt_plan(11, &padded_len, &hex_len));
-    ASSERT_EQ_INT((int) padded_len, 16);
-    ASSERT_EQ_INT((int) hex_len, 64);
-
-    uint8_t padded[16];
-    uint8_t cipher[16];
-    char hex[65];
-    ASSERT_TRUE(xr_crypto_core_aes_encrypt_hex(key, 6, plain_text, 11, iv, padded, sizeof(padded),
-                                               cipher, sizeof(cipher), hex, sizeof(hex)));
-    ASSERT_EQ_INT((int) strlen(hex), 64);
-    ASSERT_TRUE(strncmp(hex, "000102030405060708090a0b0c0d0e0f", 32) == 0);
-
-    uint8_t raw[32];
-    uint8_t plain[16];
-    size_t plain_len = 0;
-    ASSERT_TRUE(xr_crypto_core_aes_decrypt_hex(key, 6, hex, strlen(hex), raw, sizeof(raw), plain,
-                                               sizeof(plain), &plain_len));
-    ASSERT_EQ_INT((int) plain_len, 11);
-    ASSERT_TRUE(memcmp(plain, plain_text, plain_len) == 0);
-
-    ASSERT_TRUE(!xr_crypto_core_aes_decrypt_hex(key, 6, "xyz", 3, raw, sizeof(raw), plain,
-                                                sizeof(plain), &plain_len));
-}
-
-TEST(crypto_core_aes_empty_plaintext) {
-    const uint8_t key[] = "";
-    uint8_t iv[16] = {0};
-    uint8_t padded[16];
-    uint8_t cipher[16];
-    char hex[65];
-
-    size_t padded_len = 0;
-    size_t hex_len = 0;
-    ASSERT_TRUE(xr_crypto_core_aes_encrypt_plan(0, &padded_len, &hex_len));
-    ASSERT_EQ_INT((int) padded_len, 16);
-    ASSERT_EQ_INT((int) hex_len, 64);
-    ASSERT_TRUE(xr_crypto_core_aes_encrypt_hex(key, 0, NULL, 0, iv, padded, sizeof(padded), cipher,
-                                               sizeof(cipher), hex, sizeof(hex)));
-
-    uint8_t raw[32];
-    uint8_t plain[16];
-    size_t plain_len = 99;
-    ASSERT_TRUE(xr_crypto_core_aes_decrypt_hex(key, 0, hex, strlen(hex), raw, sizeof(raw), plain,
-                                               sizeof(plain), &plain_len));
-    ASSERT_EQ_INT((int) plain_len, 0);
-}
-
 /* ========== Random Array<u8> ========== */
 
 TEST(crypto_random_bytes) {
@@ -219,10 +122,6 @@ RUN_TEST_SUITE("Crypto - HMAC-SHA256");
 RUN_TEST(crypto_hmac_sha256_basic);
 
 RUN_TEST_SUITE("Crypto - AES-256-CBC");
-RUN_TEST(crypto_aes_cbc_roundtrip);
-RUN_TEST(crypto_aes_cbc_single_block);
-RUN_TEST(crypto_core_aes_hex_roundtrip);
-RUN_TEST(crypto_core_aes_empty_plaintext);
 
 RUN_TEST_SUITE("Crypto - Random");
 RUN_TEST(crypto_random_bytes);

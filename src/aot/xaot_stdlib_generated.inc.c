@@ -62,10 +62,6 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "compress.isZlib";
     if (strcmp(symbol, "crypto.__randomBytes") == 0)
         return "crypto.__randomBytes";
-    if (strcmp(symbol, "crypto.encrypt") == 0)
-        return "crypto.encrypt";
-    if (strcmp(symbol, "crypto.decrypt") == 0)
-        return "crypto.decrypt";
     if (strcmp(symbol, "regex.compile") == 0)
         return "regex.compile";
     if (strcmp(symbol, "regex.test") == 0)

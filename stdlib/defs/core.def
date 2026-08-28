@@ -925,33 +925,6 @@ module crypto {
     visibility: "internal"
   }
 
-  fn encrypt {
-    signature: "(key: string, plaintext: string): string"
-    doc: "AES-256-CBC encrypt"
-    vm: "crypto_encrypt"
-    aot: "xrt_crypto_encrypt"
-    argc: 2
-    arg_spec: "ss"
-    aot_direct: true
-    link_object: true
-    layer: "core"
-    return_ownership: "fresh"
-  }
-
-  fn decrypt {
-    signature: "(key: string, ciphertext: string): string?"
-    doc: "AES-256-CBC decrypt"
-    effect: "CryptoError.InvalidLength"
-    vm: "crypto_decrypt"
-    aot: "xrt_crypto_decrypt"
-    argc: 2
-    arg_spec: "ss"
-    aot_direct: true
-    link_object: true
-    layer: "core"
-    return_ownership: "fresh"
-  }
-
 }
 
 module sys {

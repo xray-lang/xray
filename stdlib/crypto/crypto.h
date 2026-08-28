@@ -103,10 +103,6 @@ XR_FUNC void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *d
  * Supports key sizes: 128, 192, or 256 bits.
  */
 
-// Initialize AES context with key
-// key_bits: 128, 192, or 256
-XR_FUNC void xr_aes_init(XrAESContext *ctx, const uint8_t *key, int key_bits);
-
 /*
  * AES-CBC (Cipher Block Chaining) mode encryption.
  * IMPORTANT: Input length must be multiple of 16 bytes (use PKCS7 padding).
@@ -118,22 +114,12 @@ XR_FUNC void xr_aes_init(XrAESContext *ctx, const uint8_t *key, int key_bits);
  *   output - Ciphertext buffer (same size as input)
  *   len    - Input length (must be multiple of 16)
  */
-XR_FUNC void xr_aes_cbc_encrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input,
-                                uint8_t *output, size_t len);
-
-// AES-CBC decryption (same parameters as encrypt)
-XR_FUNC void xr_aes_cbc_decrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input,
-                                uint8_t *output, size_t len);
 
 /* ========== Utility Functions ========== */
 
 // Convert bytes to lowercase hex string
 // Output buffer must have at least len*2+1 bytes
 XR_FUNC void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output);
-
-// Convert hex string to bytes
-// Returns: number of bytes written, or -1 on error (invalid hex or buffer too small)
-XR_FUNC int xr_hex_to_bytes(const char *hex, uint8_t *output, size_t max_len);
 
 // Securely wipe a memory region so the compiler cannot elide it.
 // Uses explicit_bzero / memset_s where available,
