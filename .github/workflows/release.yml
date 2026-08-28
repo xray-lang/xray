@@ -145,7 +145,6 @@ jobs:
           "-DCMAKE_CXX_COMPILER_RANLIB=$ranlibWrapper" `
           -DENABLE_TLS=OFF `
           -DBUILD_TESTS=OFF `
-          -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE `
           -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=TRUE
         cmake --build build-zig-sdk --target xray_rt_coro xray_aot_core
 

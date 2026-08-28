@@ -1087,16 +1087,12 @@ file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
 )
 set(STDLIB_SRC ${STDLIB_CORE_SRC})
 
-find_package(ZLIB QUIET)
 if(XR_STDLIB_FULL)
     # Full stdlib includes every built-in module. Group switches apply only to
     # modular builds, so "full" has one exact, fail-closed meaning.
     file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
     list(APPEND STDLIB_ALL_SRC "stdlib/stdlib_cache.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
-    if(NOT ZLIB_FOUND)
-        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX "compress_zlib\\.c$")
-    endif()
     if(NOT XR_BUILD_TEST_MODULES)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")
     endif()
@@ -1605,14 +1601,6 @@ else()
     target_link_libraries(xray_core PUBLIC m pthread)
     target_link_libraries(xray_rt_coro PUBLIC m pthread)
     target_link_libraries(xray_vm PUBLIC pthread)
-endif()
-if(ZLIB_FOUND)
-    target_link_libraries(xray_core_objs PUBLIC ZLIB::ZLIB)
-    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ZLIB::ZLIB)
-    target_link_libraries(xray_core PUBLIC ZLIB::ZLIB)
-    target_compile_definitions(xray_core_objs PRIVATE XR_HAS_ZLIB=1)
-    target_compile_definitions(xray_stdlib_bootstrap_core PRIVATE XR_HAS_ZLIB=1)
-    target_compile_definitions(xray_core PRIVATE XR_HAS_ZLIB=1)
 endif()
 
 # libffi: FFI / C interop. The bytecode VM marshals extern calls through
