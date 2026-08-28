@@ -10,6 +10,7 @@
 
 #include "xanalyzer_allocation.h"
 #include "xa_alloc_effect.h"
+#include "xa_intrinsic_registry.h"
 #include "xa_native_effect.h"
 #include "xa_selection.h"
 #include "xanalyzer.h"
@@ -347,9 +348,24 @@ static XaAllocationContractKind alloc_module_contract(XaSymbol *symbol) {
         symbol->links.import_member_name ? symbol->links.import_member_name : symbol->name;
     if (!module || !name)
         return XA_ALLOCATION_CONTRACT_MISSING;
-    return symbol->links.import_member_name
-               ? xa_builtin_get_module_func_abi_allocation_contract(module, name)
-               : xa_builtin_get_module_func_allocation_contract(module, name);
+    XaAllocationContractKind contract =
+        symbol->links.import_member_name
+            ? xa_builtin_get_module_func_abi_allocation_contract(module, name)
+            : xa_builtin_get_module_func_allocation_contract(module, name);
+    if (contract != XA_ALLOCATION_CONTRACT_MISSING)
+        return contract;
+    /* A module function with no stdlib declaration can still be a
+     * compiler-owned intrinsic, whose allocation contract is published by the
+     * canonical registry rather than by a .def row. */
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "%s.%s", module, name);
+    const XaIntrinsicDesc *desc =
+        key_len > 0 && (size_t) key_len < sizeof(key) ? xa_intrinsic_by_key(key) : NULL;
+    if (desc)
+        return desc->allocation == XA_INTRINSIC_ALLOCATION_MAY_ALLOC
+                   ? XA_ALLOCATION_CONTRACT_MAY_HEAP
+                   : XA_ALLOCATION_CONTRACT_NO_HEAP;
+    return XA_ALLOCATION_CONTRACT_MISSING;
 }
 
 typedef struct XaAllocIntrinsicContract {
