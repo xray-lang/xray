@@ -13,6 +13,7 @@
  *   the immutable plan, so later families never depend on append order.
  */
 
+#include "xr_target_call_abi_shape.h"
 #include "../semantic/xr_semantic_heap_literal_shape.h"
 #include "../semantic/xr_i64_overflow_predicate_semantics.h"
 #include "xr_target_builder.h"
@@ -8791,24 +8792,20 @@ static bool note_aggregate_value(XrTargetPlanBuilder *builder,
            append_value_intent(builder, &value, error, error_size);
 }
 
+/* The shared walk in xr_semantic_coroutine_lifecycle_shape.h decides which
+ * functions hold a coroutine state; only the wording of a malformed plan is
+ * this layer's own. */
 static bool mark_coroutine_functions(const XrSemanticPlan *plan, uint8_t *deferred,
                                      uint32_t function_count, char *error, size_t error_size) {
-    size_t entity_count = xr_semantic_plan_entity_count(plan);
-    size_t operation_count = xr_semantic_plan_operation_count(plan);
-    for (size_t i = 0; i < entity_count; i++) {
-        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
-        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
-            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION)
-            continue;
-        if (entity->subject >= operation_count)
+    switch (xr_semantic_mark_coroutine_state_functions(plan, deferred, function_count)) {
+        case XR_SEMANTIC_COROUTINE_STATE_MARK_OPERATION_OUT_OF_RANGE:
             return fail(error, error_size, "XR_TARGET_1001",
                         "coroutine state operation identity is out of range");
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(plan, entity->subject);
-        if (!operation || operation->function >= function_count)
+        case XR_SEMANTIC_COROUTINE_STATE_MARK_FUNCTION_OUT_OF_RANGE:
             return fail(error, error_size, "XR_TARGET_1001",
                         "coroutine state function identity is out of range");
-        deferred[operation->function] = 1;
+        case XR_SEMANTIC_COROUTINE_STATE_MARK_OK:
+            break;
     }
     return true;
 }
@@ -14708,50 +14705,16 @@ static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t 
     return -1;
 }
 
-static bool machine_reps_have_same_call_abi(const XrTargetMachineRepRecord *caller,
-                                            const XrTargetMachineRepRecord *callee) {
-    return caller && callee && caller->kind == callee->kind &&
-           caller->register_bits == callee->register_bits &&
-           caller->memory_size == callee->memory_size &&
-           caller->memory_align == callee->memory_align &&
-           caller->signedness == callee->signedness && caller->root_kind == callee->root_kind &&
-           caller->null_encoding == callee->null_encoding && caller->detail == callee->detail &&
-           caller->lane_count == callee->lane_count && caller->reserved == callee->reserved &&
-           memcmp(caller->legal_conversion_mask, callee->legal_conversion_mask,
-                  sizeof(caller->legal_conversion_mask)) == 0;
-}
-
-/* A reference-capable container handed over by value.
- *
- * The callee always borrows it: the allocation stays the caller's for the
- * extent of the call and the callee releases nothing. What the caller holds is
- * its own business -- a freshly built container is owned, a shared read of a
- * local is borrowed -- so the two sides agree on representation and are allowed
- * to differ in ownership alone. An Array and a String reach this boundary in
- * the same tagged carrier, so they ask this one question instead of stating the
- * same rep agreement twice in spellings that could drift. */
-/* Both sides of a by-value container boundary hold the same tagged carrier, so
- * they must agree on representation and on call ABI. They need not agree on
- * ownership: what the caller holds is its own business -- a freshly built array
- * or a fresh concatenation is owned, a shared read of a local is borrowed -- and
- * `callee_ownership` states the one side the boundary does fix. */
+/* The shared judgement in xr_target_call_abi_shape.h decides this; only the
+ * container holding the machine-rep table differs between the two layers, and
+ * it must be proven non-null before it is read. */
 static bool tagged_container_value_boundary(const XrTargetMaterializedPlan *materialized,
                                             const XrTargetValueRepRecord *caller,
                                             const XrTargetValueRepRecord *callee,
                                             uint8_t callee_ownership) {
-    return materialized && caller && callee &&
-           caller->register_rep < materialized->machine_rep_count &&
-           caller->memory_rep < materialized->machine_rep_count &&
-           callee->register_rep < materialized->machine_rep_count &&
-           callee->memory_rep < materialized->machine_rep_count &&
-           machine_reps_have_same_call_abi(&materialized->machine_reps[caller->register_rep],
-                                           &materialized->machine_reps[callee->register_rep]) &&
-           machine_reps_have_same_call_abi(&materialized->machine_reps[caller->memory_rep],
-                                           &materialized->machine_reps[callee->memory_rep]) &&
-           materialized->machine_reps[caller->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-           materialized->machine_reps[caller->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-           materialized->machine_reps[callee->register_rep].ownership == callee_ownership &&
-           materialized->machine_reps[callee->memory_rep].ownership == callee_ownership;
+    return materialized && xr_target_tagged_container_value_boundary(
+                               materialized->machine_reps, materialized->machine_rep_count, caller,
+                               callee, callee_ownership);
 }
 
 static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
@@ -14880,11 +14843,12 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 caller->memory_rep < materialized->machine_rep_count &&
                 callee->register_rep < materialized->machine_rep_count &&
                 callee->memory_rep < materialized->machine_rep_count &&
-                machine_reps_have_same_call_abi(
+                xr_target_machine_reps_have_same_call_abi(
                     &materialized->machine_reps[caller->register_rep],
                     &materialized->machine_reps[callee->register_rep]) &&
-                machine_reps_have_same_call_abi(&materialized->machine_reps[caller->memory_rep],
-                                                &materialized->machine_reps[callee->memory_rep]) &&
+                xr_target_machine_reps_have_same_call_abi(
+                    &materialized->machine_reps[caller->memory_rep],
+                    &materialized->machine_reps[callee->memory_rep]) &&
                 materialized->machine_reps[caller->register_rep].ownership ==
                     XR_TARGET_OWNERSHIP_OWNED &&
                 materialized->machine_reps[callee->register_rep].ownership ==

@@ -59,6 +59,7 @@
 #include "../semantic/xr_semantic_local_call_target_shape.h"
 #include "../semantic/xr_semantic_class_seal_shape.h"
 #include "xr_target_scalar_rep_shape.h"
+#include "xr_target_call_abi_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -810,44 +811,16 @@ static bool machine_reps_are_storage_compatible(const XrTargetMachineRepRecord *
            from->detail == to->detail && from->lane_count == to->lane_count;
 }
 
-static bool machine_reps_have_same_call_abi(const XrTargetMachineRepRecord *caller,
-                                            const XrTargetMachineRepRecord *callee) {
-    return caller && callee && caller->kind == callee->kind &&
-           caller->signedness == callee->signedness && caller->root_kind == callee->root_kind &&
-           caller->null_encoding == callee->null_encoding &&
-           caller->register_bits == callee->register_bits &&
-           caller->memory_size == callee->memory_size &&
-           caller->memory_align == callee->memory_align && caller->detail == callee->detail &&
-           caller->lane_count == callee->lane_count && caller->reserved == callee->reserved &&
-           memcmp(caller->legal_conversion_mask, callee->legal_conversion_mask,
-                  sizeof(caller->legal_conversion_mask)) == 0;
-}
-
-/* A reference-capable container handed over by value.
- *
- * The callee always borrows it: the allocation stays the caller's for the
- * extent of the call and the callee releases nothing. What the caller holds is
- * its own business -- a freshly built container is owned, a shared read of a
- * local is borrowed -- so the two sides agree on representation and are allowed
- * to differ in ownership alone. An Array and a String reach this boundary in
- * the same tagged carrier, so they are checked by this one judgement rather
- * than by two copies of the same rep agreement. */
+/* The shared judgement in xr_target_call_abi_shape.h decides this; only the
+ * container holding the machine-rep table differs between the two layers, and
+ * it must be proven non-null before it is read. */
 static bool verify_tagged_container_value_boundary(const XrTargetPlan *plan,
                                                    const XrTargetValueRepRecord *caller,
                                                    const XrTargetValueRepRecord *callee,
                                                    uint8_t callee_ownership) {
-    return plan && caller && callee && caller->register_rep < plan->machine_reps_count &&
-           caller->memory_rep < plan->machine_reps_count &&
-           callee->register_rep < plan->machine_reps_count &&
-           callee->memory_rep < plan->machine_reps_count &&
-           machine_reps_have_same_call_abi(&plan->machine_reps[caller->register_rep],
-                                           &plan->machine_reps[callee->register_rep]) &&
-           machine_reps_have_same_call_abi(&plan->machine_reps[caller->memory_rep],
-                                           &plan->machine_reps[callee->memory_rep]) &&
-           plan->machine_reps[caller->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-           plan->machine_reps[caller->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-           plan->machine_reps[callee->register_rep].ownership == callee_ownership &&
-           plan->machine_reps[callee->memory_rep].ownership == callee_ownership;
+    return plan &&
+           xr_target_tagged_container_value_boundary(plan->machine_reps, plan->machine_reps_count,
+                                                     caller, callee, callee_ownership);
 }
 
 static bool conversion_mask_is_independently_derived(const XrTargetPlan *plan, uint32_t index) {
@@ -2184,26 +2157,6 @@ static bool semantic_fixed_array_count(const XrSemanticPlan *plan, uint32_t sema
     return true;
 }
 
-static bool mark_coroutine_functions(const XrSemanticPlan *plan, uint8_t *deferred,
-                                     uint32_t function_count) {
-    size_t entity_count = xr_semantic_plan_entity_count(plan);
-    size_t operation_count = xr_semantic_plan_operation_count(plan);
-    for (size_t i = 0; i < entity_count; i++) {
-        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
-        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
-            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION)
-            continue;
-        if (entity->subject >= operation_count)
-            return false;
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(plan, entity->subject);
-        if (!operation || operation->function >= function_count)
-            return false;
-        deferred[operation->function] = 1;
-    }
-    return true;
-}
-
 static bool semantic_function_suspendability_is_exact(const XrSemanticPlan *plan, uint32_t function,
                                                       bool *out) {
     if (!plan || !out)
@@ -2226,7 +2179,8 @@ static bool semantic_function_suspendability_is_exact(const XrSemanticPlan *plan
             head[i] = XR_SEMANTIC_INDEX_NONE;
         for (uint32_t i = 0; i < target_count; i++)
             next[i] = XR_SEMANTIC_INDEX_NONE;
-        valid = mark_coroutine_functions(plan, suspendable, function_count);
+        valid = xr_semantic_mark_coroutine_state_functions(plan, suspendable, function_count) ==
+                XR_SEMANTIC_COROUTINE_STATE_MARK_OK;
     }
     for (uint32_t i = 0; valid && i < target_count; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
@@ -4569,8 +4523,9 @@ static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_dir
         deferred_functions = (uint8_t *) xr_calloc(semantic_functions, sizeof(*deferred_functions));
     if ((expected_values && !defined) || (plan->slots_count && !bound_slots) ||
         (semantic_functions && !deferred_functions) ||
-        !mark_coroutine_functions(plan->semantic_plan, deferred_functions,
-                                  (uint32_t) semantic_functions)) {
+        xr_semantic_mark_coroutine_state_functions(plan->semantic_plan, deferred_functions,
+                                                   (uint32_t) semantic_functions) !=
+            XR_SEMANTIC_COROUTINE_STATE_MARK_OK) {
         xr_free(defined);
         xr_free(bound_slots);
         xr_free(deferred_functions);
@@ -6649,10 +6604,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     caller_value->memory_rep < plan->machine_reps_count &&
                     callee_value->register_rep < plan->machine_reps_count &&
                     callee_value->memory_rep < plan->machine_reps_count &&
-                    machine_reps_have_same_call_abi(
+                    xr_target_machine_reps_have_same_call_abi(
                         &plan->machine_reps[caller_value->register_rep],
                         &plan->machine_reps[callee_value->register_rep]) &&
-                    machine_reps_have_same_call_abi(
+                    xr_target_machine_reps_have_same_call_abi(
                         &plan->machine_reps[caller_value->memory_rep],
                         &plan->machine_reps[callee_value->memory_rep]) &&
                     plan->machine_reps[caller_value->register_rep].ownership ==

@@ -700,4 +700,42 @@ xr_semantic_coroutine_lifecycle_projection_build(
     return XR_SEMANTIC_LIFECYCLE_PROJECTION_OK;
 }
 
+/* Which functions own a coroutine state.
+ *
+ * The plan records one COROUTINE_STATE entity per suspending operation, so a
+ * function is a coroutine exactly when such an entity names an operation that
+ * function holds.  The target builder and the target verifier both need this
+ * seed before they assign storage, and each carried its own copy of the walk:
+ * the same loop over the same entities with the same two range checks,
+ * differing only in whether a malformed identity leaves as a diagnostic or as
+ * a bare false.  A fixpoint whose seed is written twice is how two layers come
+ * to disagree about which function is a coroutine, so the walk lives here once
+ * and each layer keeps only its own vocabulary for reporting a broken plan. */
+typedef enum XrSemanticCoroutineStateMarkStatus {
+    XR_SEMANTIC_COROUTINE_STATE_MARK_OK = 0,
+    XR_SEMANTIC_COROUTINE_STATE_MARK_OPERATION_OUT_OF_RANGE,
+    XR_SEMANTIC_COROUTINE_STATE_MARK_FUNCTION_OUT_OF_RANGE,
+} XrSemanticCoroutineStateMarkStatus;
+
+static inline XrSemanticCoroutineStateMarkStatus
+xr_semantic_mark_coroutine_state_functions(const XrSemanticPlan *plan, uint8_t *deferred,
+                                           uint32_t function_count) {
+    size_t entity_count = xr_semantic_plan_entity_count(plan);
+    size_t operation_count = xr_semantic_plan_operation_count(plan);
+    for (size_t i = 0; i < entity_count; i++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION)
+            continue;
+        if (entity->subject >= operation_count)
+            return XR_SEMANTIC_COROUTINE_STATE_MARK_OPERATION_OUT_OF_RANGE;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan, entity->subject);
+        if (!operation || operation->function >= function_count)
+            return XR_SEMANTIC_COROUTINE_STATE_MARK_FUNCTION_OUT_OF_RANGE;
+        deferred[operation->function] = 1;
+    }
+    return XR_SEMANTIC_COROUTINE_STATE_MARK_OK;
+}
+
 #endif  // XR_SEMANTIC_COROUTINE_LIFECYCLE_SHAPE_H

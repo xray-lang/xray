@@ -836,6 +836,18 @@ static inline XrValue xrt_span_to_value_ref(xr_span_t *span) {
     return out;
 }
 
+/* Whether a value carries a frame-local Slice descriptor.  Every reader has to
+ * agree with xrt_span_to_value_ref above on which four fields make a value one
+ * of these, and each reader used to restate them: a boxing side that writes the
+ * discriminants and reading sides that each spell out their own copy is exactly
+ * how one field gains a meaning on one side only.  Note that `ext` is a
+ * discriminant here while the boxing side only zeroes it through its
+ * initializer. */
+static inline int xrt_value_is_span_ref(XrValue value) {
+    return value.tag == XR_TAG_AGG_REF && value.ext == 0 && value.heap_type == UINT16_MAX &&
+           value.ptr != NULL;
+}
+
 static inline XrValue xrt_span_box_value(xr_span_t span) {
     static _Thread_local xr_span_t slots[8];
     static _Thread_local unsigned cursor;
@@ -849,7 +861,7 @@ static inline xr_span_t xrt_span_empty(void) {
 }
 
 static inline xr_span_t xrt_span_from_value_ref(XrValue value) {
-    if (value.tag == XR_TAG_AGG_REF && value.ext == 0 && value.heap_type == UINT16_MAX && value.ptr)
+    if (xrt_value_is_span_ref(value))
         return *(const xr_span_t *) value.ptr;
     xrt_throw_error(XR_ERR_TYPE_MISMATCH, "expected Slice value");
     return xrt_span_empty();

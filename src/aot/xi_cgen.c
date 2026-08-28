@@ -5665,21 +5665,6 @@ static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, 
         fprintf(out, ")");
 }
 
-static bool cg_type_is_unsigned_int(const XrType *type) {
-    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
-        return false;
-    switch (type->scalar_rep) {
-        case XR_NATIVE_U8:
-        case XR_NATIVE_U16:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_U64:
-        case XR_NATIVE_USIZE:
-            return true;
-        default:
-            return false;
-    }
-}
-
 static const char *cg_shift_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_SHIFT_HI,
                                         XR_SEM_OWNER_ID_SHARED_SHIFT_LO, XR_SEM_CONSUMER_CGEN)) {
@@ -5715,7 +5700,7 @@ static void emit_shift_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ", %s)", kind);
         return;
     }
-    if (v->op == XI_SHR && v->nargs >= 1 && v->args[0] && cg_type_is_unsigned_int(v->args[0]->type))
+    if (v->op == XI_SHR && v->nargs >= 1 && v->args[0] && xr_type_is_exact_unsigned_integer(v->args[0]->type))
         kind = "XR_SHIFT_RIGHT_UNSIGNED";
 
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
@@ -9044,7 +9029,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
             return true;
         return arg_index < 2 && user->nargs >= 2 &&
                cg_value_plan_storage_rep(ctx, user) == XR_REP_I64 &&
-               cg_type_is_unsigned_int(user->type);
+               xr_type_is_exact_unsigned_integer(user->type);
     }
 
     template_op = xi_to_c_template_bitwise_binary_kind(user->op);
