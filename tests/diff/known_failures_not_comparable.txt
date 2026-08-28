@@ -170,7 +170,6 @@ tests/diff/cases/semantics/evaluation_order/e8_interpolation_order.xr
 tests/diff/cases/semantics/exception/array_class_throw_cleanup_lifetime.xr
 tests/diff/cases/semantics/exception/defer_nested_function_call.xr
 tests/diff/cases/semantics/exception/fixed_array_index_oob_panic_shape.xr
-tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr
 tests/diff/cases/semantics/exception/nested_defer.xr
 tests/diff/cases/semantics/exception/panic_exception_shape.xr
 tests/diff/cases/semantics/exception/pattern_catch.xr
@@ -269,7 +268,6 @@ tests/diff/cases/semantics/nullable_primitive_display.xr
 tests/diff/cases/semantics/nullable_scalar_target.xr
 tests/diff/cases/semantics/object/object_destructure.xr
 tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr
-tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr
 tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr
 tests/diff/cases/semantics/oop/class_field_copy_ref_local.xr
 tests/diff/cases/semantics/oop/class_field_default_initializers.xr
@@ -313,7 +311,6 @@ tests/diff/cases/semantics/oop/visibility_const.xr
 tests/diff/cases/semantics/optimizer/known_empty_call_result_is_null.xr
 tests/diff/cases/semantics/optimizer/known_nullable_never_assigned_keeps_type.xr
 tests/diff/cases/semantics/optimizer/known_struct_copy_is_not_an_alias.xr
-tests/diff/cases/semantics/optimizer/pass_ifconv_select_shape.xr
 tests/diff/cases/semantics/optimizer/pass_inline_small_callee.xr
 tests/diff/cases/semantics/optional_call.xr
 tests/diff/cases/semantics/ownership/auto_borrow_class_alias_return_downgrade.xr
@@ -487,7 +484,6 @@ tests/diff/cases/semantics/type/is_generic_instance_target.xr
 tests/diff/cases/semantics/types/enum_type_name.xr
 tests/diff/cases/semantics/types/fixed_width_type_tests.xr
 tests/diff/cases/semantics/types/object_field_invariance.xr
-tests/diff/cases/semantics/types/object_optional_sparse_fields.xr
 tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr
 tests/diff/cases/semantics/types/union_member_selection.xr
 tests/diff/cases/semantics/user_hashable_map_set_key.xr
