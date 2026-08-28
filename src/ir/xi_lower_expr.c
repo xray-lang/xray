@@ -3871,7 +3871,12 @@ static XrCoreBuiltinId lower_core_builtin_id(XiLower *l, AstNode *callee) {
 /* Call AST nodes do not own a complete delimiter range.  The resolved builtin
  * variable does own the stable source identity, so freeze the exact
  * callee-token span instead of inventing a call-expression end.  Every core
- * intrinsic plan is attributed the same way, so the rule is written once. */
+ * intrinsic plan is attributed the same way, so the rule is written once.
+ *
+ * The file comes from the typed program because that is the compilation unit
+ * this lowering was handed.  Reading it from the analyzer instead would make
+ * attribution depend on a cursor whose lifetime is the analysis pass, and
+ * lowering runs after that pass has returned. */
 static XrLocation lower_core_builtin_source(XiLower *l, AstNode *node, CallExprNode *call,
                                             const XrCoreIntrinsicDesc *desc) {
     const AstNode *source_node = call ? call->callee : NULL;
@@ -3882,7 +3887,7 @@ static XrLocation lower_core_builtin_source(XiLower *l, AstNode *node, CallExprN
                                  ? (uint32_t) source_node->column
                                  : (node && node->column > 0 ? (uint32_t) node->column : 0);
     XrLocation source = {
-        .file = l && l->analyzer ? l->analyzer->current_file : NULL,
+        .file = l ? xa_typed_program_source_file(l->typed_program) : NULL,
         .line = source_line,
         .column = source_column,
         .end_line = source_line,
