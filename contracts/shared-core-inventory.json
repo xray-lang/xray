@@ -566,8 +566,7 @@
         "xr_crypto_core_hash_digest_len",
         "xr_crypto_core_hex_digit",
         "xr_crypto_core_hex_to_bytes",
-        "xr_crypto_core_timing_safe_equal",
-        "xr_crypto_core_uuid_v4_write"
+        "xr_crypto_core_timing_safe_equal"
       ],
       "status": "production",
       "test_callers": [

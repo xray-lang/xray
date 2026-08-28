@@ -240,23 +240,18 @@ static const XaBuiltinMember g_gen_compress_functions[] = {
 };
 #define GEN_COMPRESS_FUNCTION_COUNT 10
 
-static const char *g_gen_crypto_randombytes_0_errors[] = {
-    "CryptoError.InvalidLength",
-};
-
 static const char *g_gen_crypto_decrypt_3_errors[] = {
     "CryptoError.InvalidLength",
 };
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
-    {"randomBytes", "(n: i64): string", "Generate random bytes", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_randombytes_0_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"uuid", "(): string", "Generate UUID v4", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__randomBytes", "(n: i64): Array<u8>", "Read n bytes from the platform CSPRNG", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__timingSafeEqualBytes", "(a: Array<u8>, b: Array<u8>): bool", "Compare two byte buffers in time independent of where they differ", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_decrypt_3_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_CRYPTO_FUNCTION_COUNT 5
+#define GEN_CRYPTO_FUNCTION_COUNT 4
 
 // http2 module functions
 static const XaBuiltinMember g_gen_http2_functions[] = {

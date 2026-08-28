@@ -441,32 +441,41 @@ static void crypto_publish_builtin_enum_error(XrVMRuntime *iso, int builtin_inde
     xr_vm_throw_exception(iso, exc);
 }
 
-static XrValue crypto_random_bytes(XrVMRuntime *isolate, XrValue *args, int nargs) {
+/* ========== Module-private native leaves ========== */
+
+// crypto.__randomBytes(n) -> Array<u8>
+//
+// The ceiling on n is the module's policy and lives in crypto.xr; this answers
+// whatever length it is asked for so the boundary states one fact only.
+static XrValue crypto_random_bytes_raw(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_INT(args[0]))
         return xr_null();
-    int len = (int) XR_TO_INT(args[0]);
-    if (len <= 0 || len > 1024) {
-        crypto_publish_builtin_enum_error(isolate, XR_GLOBAL_VAR_CRYPTO_ERROR, 0,
-                                          "crypto.randomBytes invalid length");
+    int64_t n = XR_TO_INT(args[0]);
+    if (n <= 0 || n > INT32_MAX)
         return xr_null();
-    }
-    uint8_t buf[1024];
-    char hex[2049];
-    xr_random_bytes(buf, len);
-    if (!xr_crypto_core_bytes_hex(buf, len, hex, sizeof(hex)))
+    XrArray *arr = xr_byte_array_new(xr_current_coro(isolate), (int32_t) n);
+    if (!arr)
         return xr_null();
-    return xr_string_value(xr_string_new(isolate, hex, len * 2));
+    xr_random_bytes(arr->data, (size_t) n);
+    arr->length = (int32_t) n;
+    return xr_value_from_array(arr);
 }
 
-static XrValue crypto_uuid(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) args;
-    (void) nargs;
-    uint8_t bytes[16];
-    xr_random_bytes(bytes, 16);
-    char uuid[37];
-    if (!xr_crypto_core_uuid_v4_write(bytes, uuid, sizeof(uuid)))
-        return xr_null();
-    return xr_string_value(xr_string_new(isolate, uuid, 36));
+// crypto.__timingSafeEqualBytes(a, b) -> bool
+//
+// Kept native because the comparison's cost must not depend on where the two
+// buffers first differ, and no Xray construct states that an optimizer has to
+// preserve the whole loop.
+static XrValue crypto_timing_safe_equal_bytes(XrVMRuntime *isolate, XrValue *args, int nargs) {
+    (void) isolate;
+    if (nargs < 2 || !xr_value_is_array(args[0]) || !xr_value_is_array(args[1]))
+        return xr_bool(false);
+    XrArray *a = xr_value_to_array(args[0]);
+    XrArray *b = xr_value_to_array(args[1]);
+    if (!a || !b || a->elem_type != XR_ELEM_U8 || b->elem_type != XR_ELEM_U8)
+        return xr_bool(false);
+    return xr_bool(xr_crypto_core_timing_safe_equal((const char *) a->data, (size_t) a->length,
+                                                    (const char *) b->data, (size_t) b->length));
 }
 
 /*
@@ -595,18 +604,6 @@ static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (plain != stack_plain)
         xr_free(plain);
     return result;
-}
-
-// Constant-time comparison to prevent timing attacks
-static XrValue crypto_timing_safe_equal(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
-        return xr_bool(false);
-    XrString *a = XR_TO_STRING(args[0]);
-    XrString *b = XR_TO_STRING(args[1]);
-    bool ok = xr_crypto_core_timing_safe_equal(XR_STRING_CHARS(a), a->length, XR_STRING_CHARS(b),
-                                               b->length);
-    return xr_bool(ok);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_CRYPTO 1

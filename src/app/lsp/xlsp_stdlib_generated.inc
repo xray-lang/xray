@@ -84,16 +84,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {
 
 // crypto module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
-    {"randomBytes", XLSP_SYM_FUNCTION, "fn(n: i64): string", "Generate random bytes", NULL, 0},
-    {"uuid", XLSP_SYM_FUNCTION, "fn(): string", "Generate UUID v4", NULL, 0},
     {"encrypt", XLSP_SYM_FUNCTION, "fn(key: string, plaintext: string): string", "AES-256-CBC encrypt", NULL, 0},
     {"decrypt", XLSP_SYM_FUNCTION, "fn(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", NULL, 0},
-    {"timingSafeEqual", XLSP_SYM_FUNCTION, "fn(a: string, b: string): bool", "Constant-time string comparison", NULL, 0},
     {"md5", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
     {"sha1", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
     {"sha256", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
     {"sha512", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
     {"hmac", XLSP_SYM_FUNCTION, "fn(algo: string, key: string, data: string): string?", "", NULL, 0},
+    {"randomBytes", XLSP_SYM_FUNCTION, "fn(n: i64): string", "", NULL, 0},
+    {"uuid", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
+    {"timingSafeEqual", XLSP_SYM_FUNCTION, "fn(a: string, b: string): bool", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT 10
 

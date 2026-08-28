@@ -898,31 +898,31 @@ module compress {
 }
 
 module crypto {
-  fn randomBytes {
-    signature: "(n: i64): string"
-    doc: "Generate random bytes"
-    effect: "CryptoError.InvalidLength"
-    vm: "crypto_random_bytes"
-    aot: "xrt_crypto_random_bytes"
+  fn __randomBytes {
+    signature: "(n: i64): Array<u8>"
+    doc: "Read n bytes from the platform CSPRNG"
+    vm: "crypto_random_bytes_raw"
+    aot: "xrt_crypto_random_bytes_raw"
     argc: 1
     arg_spec: "v"
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn uuid {
-    signature: "(): string"
-    doc: "Generate UUID v4"
-    vm: "crypto_uuid"
-    aot: "xrt_crypto_uuid"
-    argc: 0
-    arg_spec: ""
+  fn __timingSafeEqualBytes {
+    signature: "(a: Array<u8>, b: Array<u8>): bool"
+    doc: "Compare two byte buffers in time independent of where they differ"
+    vm: "crypto_timing_safe_equal_bytes"
+    aot: "xrt_crypto_timing_safe_equal_bytes"
+    argc: 2
+    arg_spec: "vv"
     aot_direct: true
-    link_object: true
-    layer: "system"
-    return_ownership: "fresh"
+    link_object: false
+    layer: "core"
+    visibility: "internal"
   }
 
   fn encrypt {
@@ -952,17 +952,6 @@ module crypto {
     return_ownership: "fresh"
   }
 
-  fn timingSafeEqual {
-    signature: "(a: string, b: string): bool"
-    doc: "Constant-time string comparison"
-    vm: "crypto_timing_safe_equal"
-    aot: "xrt_crypto_timing_safe_equal"
-    argc: 2
-    arg_spec: "ss"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-  }
 }
 
 module sys {

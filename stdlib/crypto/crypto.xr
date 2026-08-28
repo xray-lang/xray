@@ -358,3 +358,42 @@ export fn hmac(algo: string, key: string, data: string) -> string? {
     if (outerDigest == null) { return null }
     return hexOf(outerDigest!)
 }
+
+// A read this large is a mistake rather than a request: the ceiling belongs to
+// the module, not to the platform, so the leaf below answers any length and
+// this is the only place that refuses one.
+const MAX_RANDOM_BYTES: i64 = 1024
+
+// n random bytes, hex encoded. The hex form is what this module has always
+// published and what ws and http build their nonces and boundaries from.
+export fn randomBytes(n: i64) -> string {
+    if (n <= 0 || n > MAX_RANDOM_BYTES) { throw CryptoError.InvalidLength }
+    return hexOf(__randomBytes(n))
+}
+
+// A version 4 UUID as RFC 4122 defines it: sixteen random bytes with the
+// version written into the high nibble of byte 6 and the variant into the top
+// two bits of byte 8, printed 8-4-4-4-12.
+export fn uuid() -> string {
+    var b = __randomBytes(16)
+    b[6] = ((((b[6] as i64) & 15) | 64)) as u8
+    b[8] = ((((b[8] as i64) & 63) | 128)) as u8
+
+    var out = StringBuilder()
+    for (var i = 0; i < 16; i++) {
+        if (i == 4 || i == 6 || i == 8 || i == 10) { out.append("-") }
+        var v = b[i] as i64
+        var hi = (v >> 4) & 15
+        var lo = v & 15
+        out.append(HEX_DIGITS.slice(hi, hi + 1))
+        out.append(HEX_DIGITS.slice(lo, lo + 1))
+    }
+    return out.toString()
+}
+
+// Compare two strings in time that does not depend on where they first differ.
+// Unequal lengths answer false, but only after the comparison has run, which is
+// why the leaf is handed both buffers rather than a length check up front.
+export fn timingSafeEqual(a: string, b: string) -> bool {
+    return __timingSafeEqualBytes(toArray(a.bytes()), toArray(b.bytes()))
+}

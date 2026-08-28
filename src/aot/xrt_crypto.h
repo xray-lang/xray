@@ -40,40 +40,28 @@ static inline XrValue xrt_crypto_hex_result(const uint8_t *digest, size_t digest
     return result;
 }
 
-static inline XrValue xrt_crypto_random_bytes(XrValue len_value) {
+static inline XrValue xrt_crypto_random_bytes_raw(XrValue len_value) {
     if (!XR_IS_INT(len_value))
         return XR_NULL_VAL;
-    int64_t len64 = XR_TO_INT(len_value);
-    if (len64 <= 0 || len64 > 1024) {
-        xrt_crypto_set_builtin_enum_error("CryptoError", "InvalidLength", 0);
+    int64_t n = XR_TO_INT(len_value);
+    if (n <= 0 || n > INT32_MAX)
         return XR_NULL_VAL;
-    }
-
-    size_t len = (size_t) len64;
-    uint8_t buf[1024];
-    char hex[2049];
-    xr_random_bytes(buf, len);
-    if (!xr_crypto_core_bytes_hex(buf, len, hex, sizeof(hex)))
+    XrValue bytes_value = xrt_array_new_typed_uninit(n, XR_ELEM_U8);
+    xrt_array_t *bytes = (xrt_array_t *) bytes_value.ptr;
+    if (!bytes)
         return XR_NULL_VAL;
-
-    XrValue result = xrt_str_alloc(len * 2);
-    memcpy(xr_str_buf(result), hex, len * 2);
-    xr_str_buf(result)[len * 2] = '\0';
-    return result;
+    xr_random_bytes((uint8_t *) bytes->data, (size_t) n);
+    bytes->length = n;
+    return bytes_value;
 }
 
-static inline XrValue xrt_crypto_uuid(void) {
-    uint8_t bytes[16];
-    xr_random_bytes(bytes, 16);
-
-    char uuid[37];
-    if (!xr_crypto_core_uuid_v4_write(bytes, uuid, sizeof(uuid)))
-        return XR_NULL_VAL;
-
-    XrValue result = xrt_str_alloc(36);
-    memcpy(xr_str_buf(result), uuid, 36);
-    xr_str_buf(result)[36] = '\0';
-    return result;
+static inline XrValue xrt_crypto_timing_safe_equal_bytes(XrValue a_value, XrValue b_value) {
+    const xrt_array_t *a = (const xrt_array_t *) a_value.ptr;
+    const xrt_array_t *b = (const xrt_array_t *) b_value.ptr;
+    if (!a || !b)
+        return XR_FALSE_VAL;
+    return XR_FROM_BOOL(xr_crypto_core_timing_safe_equal(
+        (const char *) a->data, (size_t) a->length, (const char *) b->data, (size_t) b->length));
 }
 
 static inline XrValue xrt_crypto_encrypt(const char *key, int64_t key_len, const char *plain,
@@ -167,13 +155,6 @@ static inline XrValue xrt_crypto_decrypt(const char *key, int64_t key_len, const
     if (plain != stack_plain)
         XRT_FREE(plain);
     return result;
-}
-
-static inline XrValue xrt_crypto_timing_safe_equal(const char *a, int64_t a_len, const char *b,
-                                                   int64_t b_len) {
-    if (a_len < 0 || b_len < 0)
-        return XR_FALSE_VAL;
-    return XR_FROM_BOOL(xr_crypto_core_timing_safe_equal(a, (size_t) a_len, b, (size_t) b_len));
 }
 
 #endif  // XRT_CRYPTO_H
