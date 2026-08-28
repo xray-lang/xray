@@ -100,13 +100,12 @@ static const char kLeafProductXiSource[] =
     "    return (value.0, value.1, value.2, value.3, value.4, value.5)\n"
     "}\n";
 
-static const char kI64OverflowPredicateSource[] =
-    "fn overflow(a: i64, b: i64) -> i64 {\n"
-    "    if (a.addOverflows(b)) { return 1 }\n"
-    "    if (a.subOverflows(b)) { return 2 }\n"
-    "    if (a.mulOverflows(b)) { return 3 }\n"
-    "    return 0\n"
-    "}\n";
+static const char kI64OverflowPredicateSource[] = "fn overflow(a: i64, b: i64) -> i64 {\n"
+                                                  "    if (a.addOverflows(b)) { return 1 }\n"
+                                                  "    if (a.subOverflows(b)) { return 2 }\n"
+                                                  "    if (a.mulOverflows(b)) { return 3 }\n"
+                                                  "    return 0\n"
+                                                  "}\n";
 
 typedef struct ScalarFixture {
     XrModuleResolver *resolver;
@@ -397,10 +396,10 @@ static void expect_leaf_target_build_rejection(XrSemanticPlan *semantic, XrTarge
     ASSERT_NULL(candidate);
 }
 
-static XrTargetProfile *leaf_projection_profile_for_architecture(
-    const XrTargetProfile *base, uint16_t architecture) {
-    if (!base || (architecture != XR_TARGET_ARCH_AARCH64 &&
-                  architecture != XR_TARGET_ARCH_POWERPC64))
+static XrTargetProfile *leaf_projection_profile_for_architecture(const XrTargetProfile *base,
+                                                                 uint16_t architecture) {
+    if (!base ||
+        (architecture != XR_TARGET_ARCH_AARCH64 && architecture != XR_TARGET_ARCH_POWERPC64))
         return NULL;
     XrTargetProfileDraft draft = *xr_target_profile_facts(base);
     draft.machine.architecture = architecture;
@@ -439,8 +438,7 @@ static void assert_leaf_projection_architecture_boundary(XrSemanticPlan *semanti
         leaf_projection_profile_for_architecture(base_profile, XR_TARGET_ARCH_AARCH64);
     ASSERT_NOT_NULL(aarch64);
     XrTargetPlan *aarch64_plan = NULL;
-    ASSERT_MSG(xr_target_plan_build(semantic, aarch64, &aarch64_plan, error, sizeof(error)),
-               error);
+    ASSERT_MSG(xr_target_plan_build(semantic, aarch64, &aarch64_plan, error, sizeof(error)), error);
     ASSERT_NOT_NULL(aarch64_plan);
     ASSERT_TRUE(xr_target_plan_verify(aarch64_plan, error, sizeof(error)));
     xr_target_plan_free(aarch64_plan);
@@ -451,8 +449,7 @@ static void assert_leaf_projection_architecture_boundary(XrSemanticPlan *semanti
     ASSERT_NOT_NULL(powerpc64);
     XrTargetPlan *powerpc64_plan = NULL;
     memset(error, 0, sizeof(error));
-    ASSERT_FALSE(
-        xr_target_plan_build(semantic, powerpc64, &powerpc64_plan, error, sizeof(error)));
+    ASSERT_FALSE(xr_target_plan_build(semantic, powerpc64, &powerpc64_plan, error, sizeof(error)));
     ASSERT_NULL(powerpc64_plan);
     ASSERT_NOT_NULL(strstr(error, "XR_TARGET_1003"));
     xr_target_profile_free(powerpc64);
@@ -497,8 +494,7 @@ static void assert_leaf_product_target_shape(XrSemanticPlan *semantic, XrTargetP
     ASSERT_EQ_UINT(evidence.layout->align, 8);
     ASSERT_EQ_UINT(evidence.layout->field_count, 6);
     for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
-        const XrTargetFieldRecord *field =
-            &plan->fields[evidence.layout->field_begin + ordinal];
+        const XrTargetFieldRecord *field = &plan->fields[evidence.layout->field_begin + ordinal];
         ASSERT_EQ_UINT(field->layout, evidence.layout_index);
         ASSERT_EQ_UINT(field->semantic_field, ordinal);
         ASSERT_EQ_UINT(field->offset, ordinal * 8u);
@@ -526,8 +522,7 @@ static void assert_leaf_product_target_shape(XrSemanticPlan *semantic, XrTargetP
 
     uint32_t caller_count = 0;
     for (uint32_t i = 0; i < semantic->program_function_binding_count; i++) {
-        const XrSemanticProgramFunctionBinding *binding =
-            &semantic->program_function_bindings[i];
+        const XrSemanticProgramFunctionBinding *binding = &semantic->program_function_bindings[i];
         if (binding->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) {
             ASSERT_TRUE(caller_count < 2);
             evidence.callers[caller_count++] = binding->semantic_function;
@@ -536,9 +531,9 @@ static void assert_leaf_product_target_shape(XrSemanticPlan *semantic, XrTargetP
             ASSERT_EQ_UINT(evidence.callee, XR_SEMANTIC_INDEX_NONE);
             evidence.callee = binding->semantic_function;
         }
-        ASSERT_EQ_UINT(xr_target_plan_function_execution_family_mask(
-                           plan, binding->semantic_function),
-                       XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6);
+        ASSERT_EQ_UINT(
+            xr_target_plan_function_execution_family_mask(plan, binding->semantic_function),
+            XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6);
     }
     ASSERT_EQ_UINT(caller_count, 2);
     ASSERT_NE(evidence.callee, XR_SEMANTIC_INDEX_NONE);
@@ -577,11 +572,10 @@ static void assert_leaf_product_target_shape(XrSemanticPlan *semantic, XrTargetP
             ASSERT_EQ_UINT(rows[0].opcode, XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE);
         for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
             ASSERT_EQ_UINT(rows[scalar_begin + ordinal].opcode,
-                           role < 2
-                               ? (ordinal == 2 ? XR_TARGET_INSTRUCTION_VALUE_PRODUCT_GET_U8
-                                               : XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64)
-                               : (ordinal == 2 ? XR_TARGET_INSTRUCTION_CONST_U8
-                                               : XR_TARGET_INSTRUCTION_CONST_I64));
+                           role < 2 ? (ordinal == 2 ? XR_TARGET_INSTRUCTION_VALUE_PRODUCT_GET_U8
+                                                    : XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64)
+                                    : (ordinal == 2 ? XR_TARGET_INSTRUCTION_CONST_U8
+                                                    : XR_TARGET_INSTRUCTION_CONST_I64));
             ASSERT_EQ_UINT(rows[init + 1u + ordinal].opcode,
                            ordinal == 2 ? XR_TARGET_INSTRUCTION_VALUE_PRODUCT_SET_U8
                                         : XR_TARGET_INSTRUCTION_VALUE_PRODUCT_SET_I64);
@@ -595,8 +589,7 @@ static void assert_leaf_product_target_shape(XrSemanticPlan *semantic, XrTargetP
     *out = evidence;
 }
 
-static void assert_leaf_product_target_mutations(XrSemanticPlan *semantic,
-                                                 XrTargetProfile *profile,
+static void assert_leaf_product_target_mutations(XrSemanticPlan *semantic, XrTargetProfile *profile,
                                                  XrTargetPlan *plan,
                                                  LeafProductTargetEvidence evidence) {
     uint32_t saved_u32 = evidence.layout->fixed_prefix_size;
@@ -638,8 +631,8 @@ static void assert_leaf_product_target_mutations(XrSemanticPlan *semantic,
     plan->adapters_count = saved_adapter_count;
 
     uint32_t caller_count = 0;
-    const XrTargetInstructionRecord *caller_rows = xr_target_plan_function_instructions(
-        plan, evidence.callers[0], &caller_count);
+    const XrTargetInstructionRecord *caller_rows =
+        xr_target_plan_function_instructions(plan, evidence.callers[0], &caller_count);
     ASSERT_NOT_NULL(caller_rows);
     ASSERT_EQ_UINT(caller_count, 15);
     XrTargetInstructionRecord *mutable_rows =
@@ -655,8 +648,8 @@ static void assert_leaf_product_target_mutations(XrSemanticPlan *semantic,
     mutable_rows[3].opcode = saved_u16;
 
     uint32_t callee_count = 0;
-    const XrTargetInstructionRecord *callee_rows = xr_target_plan_function_instructions(
-        plan, evidence.callee, &callee_count);
+    const XrTargetInstructionRecord *callee_rows =
+        xr_target_plan_function_instructions(plan, evidence.callee, &callee_count);
     ASSERT_NOT_NULL(callee_rows);
     ASSERT_EQ_UINT(callee_count, 14);
     mutable_rows = &plan->instructions[(size_t) (callee_rows - plan->instructions)];
@@ -742,8 +735,8 @@ static void assert_leaf_product_vm_execution(XrTargetPlan *plan,
     }
 
     uint32_t caller_count = 0;
-    const XrTargetInstructionRecord *caller_rows = xr_target_plan_function_instructions(
-        plan, evidence->callers[0], &caller_count);
+    const XrTargetInstructionRecord *caller_rows =
+        xr_target_plan_function_instructions(plan, evidence->callers[0], &caller_count);
     ASSERT_NOT_NULL(caller_rows);
     ASSERT_EQ_UINT(caller_count, 15);
     XrTargetInstructionRecord *mutable_call =
@@ -779,7 +772,7 @@ static size_t substring_count(const char *text, const char *needle) {
 }
 
 static bool install_i64_overflow_global_evidence(XaotBundle *bundle, XiModule *module,
-                                                  XgGlobalEvidence *evidence) {
+                                                 XgGlobalEvidence *evidence) {
     if (!bundle || !module || !module->init || module->init->nchildren != 1 || !evidence)
         return false;
     XgBuildKey key = {
@@ -831,13 +824,12 @@ static bool install_i64_overflow_global_evidence(XaotBundle *bundle, XiModule *m
         return false;
     }
     for (uint32_t slot = 0; slot < module->nslots; slot++) {
-        const char *name = module->init->slot_owned_names
-                               ? module->init->slot_owned_names[slot]
-                               : NULL;
+        const char *name =
+            module->init->slot_owned_names ? module->init->slot_owned_names[slot] : NULL;
         if (!name)
             continue;
-        bool is_const = module->init->slot_owned_consts &&
-                        module->init->slot_owned_consts[slot] != 0;
+        bool is_const =
+            module->init->slot_owned_consts && module->init->slot_owned_consts[slot] != 0;
         uint32_t source_node_id = 2u + slot;
         XgDeclSummary storage = {
             .module_id = 1,
@@ -848,8 +840,7 @@ static bool install_i64_overflow_global_evidence(XaotBundle *bundle, XiModule *m
             .signature_key = source_node_id,
             .source_span_id = source_node_id,
             .storage_domain = XR_STORAGE_MODULE_STATIC,
-            .storage_mutability =
-                is_const ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE,
+            .storage_mutability = is_const ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE,
             .address_identity = XR_ADDRESS_MODULE_STABLE,
             .materialization_kind = XR_MATERIALIZE_STATIC_DATA,
         };
@@ -861,8 +852,7 @@ static bool install_i64_overflow_global_evidence(XaotBundle *bundle, XiModule *m
     return xaot_bundle_set_global_evidence(bundle, evidence, XG_BUILD_NATIVE_RELEASE);
 }
 
-static const char *find_i64_overflow_function_body(const char *source,
-                                                   const char **body_end,
+static const char *find_i64_overflow_function_body(const char *source, const char **body_end,
                                                    char symbol[128]) {
     if (body_end)
         *body_end = NULL;
@@ -907,8 +897,7 @@ static void test_leaf_product_symbol(XrStableId identity, char out[48]) {
 }
 
 static void assert_leaf_product_cgen_rejected(XiModule *module, XaotBundle *bundle,
-                                               XaotArtifactKind artifact_kind,
-                                               bool freestanding) {
+                                              XaotArtifactKind artifact_kind, bool freestanding) {
     XiCgenCtx *cgen = xi_cgen_ctx_new();
     ASSERT_NOT_NULL(cgen);
     ASSERT_TRUE(xi_cgen_ctx_set_aot_bundle(cgen, bundle));
@@ -947,12 +936,12 @@ static void assert_leaf_product_aot_cgen(XiModule *module, XrTargetPlan *plan,
     xi_cgen_ctx_set_artifact_kind(missing_plan_cgen, XAOT_ARTIFACT_HOSTED_FRAGMENT);
     char *missing_plan_source = NULL;
     size_t missing_plan_source_size = 0;
-    FILE *missing_plan_stream =
-        xr_open_memstream(&missing_plan_source, &missing_plan_source_size);
+    FILE *missing_plan_stream = xr_open_memstream(&missing_plan_source, &missing_plan_source_size);
     ASSERT_NOT_NULL(missing_plan_stream);
     xi_cgen_program(missing_plan_cgen, missing_plan_stream, module);
-    ASSERT_EQ_INT(xr_close_memstream(missing_plan_stream, &missing_plan_source,
-                                    &missing_plan_source_size), 0);
+    ASSERT_EQ_INT(
+        xr_close_memstream(missing_plan_stream, &missing_plan_source, &missing_plan_source_size),
+        0);
     ASSERT_TRUE(xi_cgen_has_error(missing_plan_cgen));
     ASSERT_EQ_UINT(missing_plan_source_size, 0);
     xr_free(missing_plan_source);
@@ -967,15 +956,13 @@ static void assert_leaf_product_aot_cgen(XiModule *module, XrTargetPlan *plan,
     ASSERT_EQ_UINT(xi_cgen_leaf_product_program_route(module, plan),
                    XI_CGEN_LEAF_PRODUCT_ROUTE_CLAIM);
 
-    XrSemanticPlan *route_semantic =
-        (XrSemanticPlan *) xr_target_plan_semantic_plan(plan);
+    XrSemanticPlan *route_semantic = (XrSemanticPlan *) xr_target_plan_semantic_plan(plan);
     uint32_t saved_route_family = route_semantic->program_provenance.program_family;
     route_semantic->program_provenance.program_family =
         XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
     ASSERT_EQ_UINT(xi_cgen_leaf_product_program_route(module, plan),
                    XI_CGEN_LEAF_PRODUCT_ROUTE_REJECT);
-    assert_leaf_product_cgen_rejected(module, &bundle,
-                                      XAOT_ARTIFACT_HOSTED_FRAGMENT, false);
+    assert_leaf_product_cgen_rejected(module, &bundle, XAOT_ARTIFACT_HOSTED_FRAGMENT, false);
     route_semantic->program_provenance.program_family = saved_route_family;
 
     XiModule nonproduct_module = *module;
@@ -995,8 +982,7 @@ static void assert_leaf_product_aot_cgen(XiModule *module, XrTargetPlan *plan,
     uint32_t value_count = 0;
     uint32_t rejected_aggregate_values = 0;
     const XrTargetValueRepRecord *aggregate_value = NULL;
-    const XrTargetValueRepRecord *values =
-        xr_target_plan_value_reps(plan, &value_count);
+    const XrTargetValueRepRecord *values = xr_target_plan_value_reps(plan, &value_count);
     ASSERT_NOT_NULL(values);
     for (uint32_t i = 0; i < value_count; i++) {
         const XrTargetMachineRepRecord *rep =
@@ -1010,8 +996,7 @@ static void assert_leaf_product_aot_cgen(XiModule *module, XrTargetPlan *plan,
     }
     ASSERT_TRUE(rejected_aggregate_values > 0u);
     ASSERT_NOT_NULL(aggregate_value);
-    XrSemanticPlan *mutable_semantic =
-        (XrSemanticPlan *) xr_target_plan_semantic_plan(plan);
+    XrSemanticPlan *mutable_semantic = (XrSemanticPlan *) xr_target_plan_semantic_plan(plan);
     XrSemanticProgramTypeBinding *product_binding = NULL;
     for (uint32_t i = 0; i < mutable_semantic->program_type_binding_count; i++)
         if (mutable_semantic->program_type_bindings[i].kind ==
@@ -1021,50 +1006,43 @@ static void assert_leaf_product_aot_cgen(XiModule *module, XrTargetPlan *plan,
     uint8_t saved_product_kind = product_binding->kind;
     product_binding->kind = XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR;
     XrCAggregateProjection corrupted_projection = {0};
-    ASSERT_FALSE(xr_c_aggregate_projection(plan, aggregate_value,
-                                           &corrupted_projection));
+    ASSERT_FALSE(xr_c_aggregate_projection(plan, aggregate_value, &corrupted_projection));
     product_binding->kind = saved_product_kind;
     XrCEmissionPlan *legacy_emission = NULL;
-    ASSERT_FALSE(xr_c_emission_plan_build(
-        plan, xr_target_profile_fingerprint(xr_target_plan_profile(plan)),
-        &legacy_emission, authority_error, sizeof(authority_error)));
+    ASSERT_FALSE(
+        xr_c_emission_plan_build(plan, xr_target_profile_fingerprint(xr_target_plan_profile(plan)),
+                                 &legacy_emission, authority_error, sizeof(authority_error)));
     ASSERT_NULL(legacy_emission);
 
     for (uint16_t i = 0; i < module->nfuncs; i++)
-        ASSERT_EQ_UINT(
-            xaot_boundary_leaf_aggregate_function_status(
-                &bundle, module->functions[i], NULL, NULL, NULL, 0),
-            XAOT_LEAF_AGGREGATE_TARGET_INVALID);
-    bundle.module_emission_plans[0] =
-        (const XrCEmissionPlan *) (uintptr_t) UINT32_C(1);
+        ASSERT_EQ_UINT(xaot_boundary_leaf_aggregate_function_status(&bundle, module->functions[i],
+                                                                    NULL, NULL, NULL, 0),
+                       XAOT_LEAF_AGGREGATE_TARGET_INVALID);
+    bundle.module_emission_plans[0] = (const XrCEmissionPlan *) (uintptr_t) UINT32_C(1);
     ASSERT_NULL(xaot_bundle_emission_plan_for_module(&bundle, 0));
     for (uint16_t i = 0; i < module->nfuncs; i++)
         ASSERT_NULL(xaot_bundle_emission_plan_for_func(&bundle, module->functions[i]));
     bundle.module_emission_plans[0] = NULL;
 
-    assert_leaf_product_cgen_rejected(module, &bundle,
-                                      XAOT_ARTIFACT_EXECUTABLE, false);
+    assert_leaf_product_cgen_rejected(module, &bundle, XAOT_ARTIFACT_EXECUTABLE, false);
     bundle.artifact_kind = XAOT_ARTIFACT_EXECUTABLE;
-    assert_leaf_product_cgen_rejected(module, &bundle,
-                                      XAOT_ARTIFACT_HOSTED_FRAGMENT, false);
+    assert_leaf_product_cgen_rejected(module, &bundle, XAOT_ARTIFACT_HOSTED_FRAGMENT, false);
     bundle.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
-    assert_leaf_product_cgen_rejected(module, &bundle,
-                                      XAOT_ARTIFACT_HOSTED_FRAGMENT, true);
+    assert_leaf_product_cgen_rejected(module, &bundle, XAOT_ARTIFACT_HOSTED_FRAGMENT, true);
 
     XaotBundle freestanding_bundle = {0};
     ASSERT_TRUE(xaot_bundle_init(&freestanding_bundle, modules, 1, 0));
     freestanding_bundle.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
-    ASSERT_TRUE(xaot_bundle_set_program_target_plan(&freestanding_bundle,
-                                                    freestanding_plan));
+    ASSERT_TRUE(xaot_bundle_set_program_target_plan(&freestanding_bundle, freestanding_plan));
     char *freestanding_direct_source = NULL;
     size_t freestanding_direct_size = 0;
     ASSERT_FALSE(xr_c_leaf_value_product_program_emit(
-        freestanding_plan, module, &freestanding_direct_source,
-        &freestanding_direct_size, authority_error, sizeof(authority_error)));
+        freestanding_plan, module, &freestanding_direct_source, &freestanding_direct_size,
+        authority_error, sizeof(authority_error)));
     ASSERT_NULL(freestanding_direct_source);
     ASSERT_EQ_UINT(freestanding_direct_size, 0);
-    assert_leaf_product_cgen_rejected(module, &freestanding_bundle,
-                                      XAOT_ARTIFACT_HOSTED_FRAGMENT, false);
+    assert_leaf_product_cgen_rejected(module, &freestanding_bundle, XAOT_ARTIFACT_HOSTED_FRAGMENT,
+                                      false);
     xaot_bundle_free(&freestanding_bundle);
 
     XiCgenCtx *cgen = xi_cgen_ctx_new();
@@ -1129,16 +1107,15 @@ static void assert_leaf_product_aot_cgen(XiModule *module, XrTargetPlan *plan,
         FILE *native = fopen(native_path, "wb");
         ASSERT_NOT_NULL(native);
         ASSERT_EQ_UINT(fwrite(source, 1, source_size, native), source_size);
-        ASSERT_TRUE(fprintf(
-                        native,
-                        "\nstatic int xr_test_equal(xr_leaf_product_tuple6 v) {\n"
-                        "    return v.field0 == 1 && v.field1 == 2 && v.field2 == 3 &&\n"
-                        "           v.field3 == 4 && v.field4 == 5 && v.field5 == 6;\n"
-                        "}\n"
-                        "int main(void) {\n"
-                        "    return xr_test_equal(%s()) && xr_test_equal(%s()) ? 0 : 1;\n"
-                        "}\n",
-                        entry_symbols[0], entry_symbols[1]) > 0);
+        ASSERT_TRUE(fprintf(native,
+                            "\nstatic int xr_test_equal(xr_leaf_product_tuple6 v) {\n"
+                            "    return v.field0 == 1 && v.field1 == 2 && v.field2 == 3 &&\n"
+                            "           v.field3 == 4 && v.field4 == 5 && v.field5 == 6;\n"
+                            "}\n"
+                            "int main(void) {\n"
+                            "    return xr_test_equal(%s()) && xr_test_equal(%s()) ? 0 : 1;\n"
+                            "}\n",
+                            entry_symbols[0], entry_symbols[1]) > 0);
         ASSERT_EQ_INT(fclose(native), 0);
     }
 
@@ -1676,8 +1653,8 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
-    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, NULL, profile, 0,
-                                                 error, sizeof(error)));
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, NULL, profile,
+                                                 0, error, sizeof(error)));
     ASSERT_NULL(closure);
     bool verified = xi_program_semantic_verify(root->module, profile, error, sizeof(error));
     ASSERT_TRUE(verified);
@@ -2077,8 +2054,8 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     ASSERT_TRUE(
         build_authorities(&fixture, profile, &second, &second_decision, error, sizeof(error)));
     XrProgramSemanticClosure *second_owner = second;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &second, &second_decision, NULL, profile,
-                                                  0, error, sizeof(error)));
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &second, &second_decision, NULL,
+                                                  profile, 0, error, sizeof(error)));
     ASSERT_TRUE(second == second_owner);
     xr_program_semantic_closure_free(second);
 
@@ -2118,9 +2095,8 @@ TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     char error[512] = {0};
-    ASSERT_TRUE(
-        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
-                                         sizeof(error)));
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
+                                                 sizeof(error)));
     ASSERT_NULL(closure);
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
 
@@ -2258,8 +2234,8 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         (XrProgramSemanticClosure *) foreign_authority_published);
     ASSERT_NOT_NULL(foreign_authority);
     XrProgramSemanticClosure *foreign_authority_owner = foreign_authority;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_authority, NULL, NULL, NULL, 0,
-                                                  error, sizeof(error)));
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_authority, NULL, NULL,
+                                                  NULL, 0, error, sizeof(error)));
     ASSERT_EQ_PTR(foreign_authority, foreign_authority_owner);
     ASSERT_NULL(root->module->program_semantic_closure);
     xr_program_semantic_closure_free(foreign_authority);
@@ -2268,15 +2244,14 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         xr_program_semantic_closure_retain((XrProgramSemanticClosure *) foreign_source_published);
     ASSERT_NOT_NULL(foreign_source);
     XrProgramSemanticClosure *foreign_source_owner = foreign_source;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_source, NULL, NULL, NULL, 0,
-                                                  error, sizeof(error)));
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_source, NULL, NULL, NULL,
+                                                  0, error, sizeof(error)));
     ASSERT_EQ_PTR(foreign_source, foreign_source_owner);
     ASSERT_NULL(root->module->program_semantic_closure);
     xr_program_semantic_closure_free(foreign_source);
 
-    ASSERT_TRUE(
-        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
-                                         sizeof(error)));
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
+                                                 sizeof(error)));
     ASSERT_NULL(closure);
     bool xi_verified = xi_program_semantic_verify(root->module, NULL, error, sizeof(error));
     ASSERT_TRUE(xi_verified);
@@ -2650,16 +2625,15 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     XrCompilerSession *session = xr_compiler_session_new(&session_config);
     ASSERT_NOT_NULL(session);
     ScalarFixture fixture;
-    ASSERT_TRUE(
-        fixture_analyze(&fixture, session, "xi-leaf-product-direct", kLeafProductXiSource));
+    ASSERT_TRUE(fixture_analyze(&fixture, session, "xi-leaf-product-direct", kLeafProductXiSource));
     ASSERT_TRUE(fixture_publish(&fixture));
     ASSERT_NULL(xa_typed_program_program_semantic_closure(fixture.typed));
 
     char error[512] = {0};
     XrProgramSemanticClosure *closure = NULL;
-    ASSERT_EQ_INT(xa_program_semantic_closure_publish_leaf_product(
-                      fixture.analyzer, fixture.spec->ast, fixture.spec, &closure, error,
-                      sizeof(error)),
+    ASSERT_EQ_INT(xa_program_semantic_closure_publish_leaf_product(fixture.analyzer,
+                                                                   fixture.spec->ast, fixture.spec,
+                                                                   &closure, error, sizeof(error)),
                   XA_PROGRAM_SEMANTIC_CLOSURE_READY);
     ASSERT_NOT_NULL(closure);
     XiProgramSemanticInput input = {.closure = closure, .decision = NULL, .module_index = 0};
@@ -2743,8 +2717,7 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
             ASSERT_NOT_NULL(entry_projects[caller][ordinal]);
             ASSERT_EQ_UINT(entry_projects[caller][ordinal]->psc_type_index,
                            ordinal == 2 ? u8_index : i64_index);
-            ASSERT_EQ_PTR(entry_constructs[caller]->args[ordinal],
-                          entry_projects[caller][ordinal]);
+            ASSERT_EQ_PTR(entry_constructs[caller]->args[ordinal], entry_projects[caller][ordinal]);
         }
     }
 
@@ -2835,25 +2808,25 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     const uint64_t freestanding_providers =
         XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
         XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
-        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
-    ASSERT_EQ_UINT(xr_runtime_target_authority_native_freestanding(
-                       freestanding_providers, &freestanding_authority),
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+    ASSERT_EQ_UINT(xr_runtime_target_authority_native_freestanding(freestanding_providers,
+                                                                   &freestanding_authority),
                    XR_RUNTIME_ABI_OK);
     XrTargetProfileBuildInput freestanding_input = {
         .machine = freestanding_authority.machine,
         .runtime_abi = &freestanding_authority.runtime_abi,
-        .object_header_materialization =
-            &freestanding_authority.object_header_materialization,
+        .object_header_materialization = &freestanding_authority.object_header_materialization,
         .string_contract = &freestanding_authority.string_contract,
         .providers = freestanding_authority.providers,
         .provider_count = freestanding_authority.provider_count,
     };
     XrTargetProfile *freestanding_profile = NULL;
-    ASSERT_TRUE(xr_target_profile_build(&freestanding_input, &freestanding_profile,
-                                        error, sizeof(error)));
+    ASSERT_TRUE(
+        xr_target_profile_build(&freestanding_input, &freestanding_profile, error, sizeof(error)));
     XrTargetPlan *freestanding_target = NULL;
-    ASSERT_MSG(xr_target_plan_build(semantic, freestanding_profile,
-                                    &freestanding_target, error, sizeof(error)),
+    ASSERT_MSG(xr_target_plan_build(semantic, freestanding_profile, &freestanding_target, error,
+                                    sizeof(error)),
                error);
     ASSERT_NOT_NULL(freestanding_target);
     ASSERT_TRUE(xr_target_plan_verify(freestanding_target, error, sizeof(error)));
@@ -2866,19 +2839,22 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
 
     uint8_t *target_encoded = NULL;
     size_t target_encoded_size = 0;
-    ASSERT_TRUE(xr_xtp_encode_plan(target, &target_encoded, &target_encoded_size, error,
-                                   sizeof(error)));
+    ASSERT_TRUE(
+        xr_xtp_encode_plan(target, &target_encoded, &target_encoded_size, error, sizeof(error)));
     ASSERT_TRUE(target_encoded_size >= XR_XTP_HEADER_SIZE);
     uint8_t saved_target_schema[4] = {
-        target_encoded[4], target_encoded[5], target_encoded[6], target_encoded[7],
+        target_encoded[4],
+        target_encoded[5],
+        target_encoded[6],
+        target_encoded[7],
     };
     target_encoded[4] = 50;
     target_encoded[5] = 0;
     target_encoded[6] = 0;
     target_encoded[7] = 0;
     XrXtpCandidate *old_target_candidate = NULL;
-    ASSERT_FALSE(xr_xtp_decode_candidate(target_encoded, target_encoded_size,
-                                         &old_target_candidate, error, sizeof(error)));
+    ASSERT_FALSE(xr_xtp_decode_candidate(target_encoded, target_encoded_size, &old_target_candidate,
+                                         error, sizeof(error)));
     ASSERT_NULL(old_target_candidate);
     memcpy(target_encoded + 4, saved_target_schema, sizeof(saved_target_schema));
     XrXtpCandidate *target_candidate = NULL;
@@ -2974,9 +2950,9 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, error, sizeof(error)));
     ASSERT_TRUE(xr_compiler_session_set_target_profile(session, profile));
     XrI64OverflowDecisionTable decisions = {0};
-    ASSERT_TRUE(xr_i64_overflow_decision_build(
-        closure, xr_program_semantic_closure_generation_id(closure), profile, &decisions, error,
-        sizeof(error)));
+    ASSERT_TRUE(xr_i64_overflow_decision_build(closure,
+                                               xr_program_semantic_closure_generation_id(closure),
+                                               profile, &decisions, error, sizeof(error)));
     XiProgramSemanticInput input = {
         .closure = closure,
         .overflow_decisions = &decisions,
@@ -2988,8 +2964,8 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
-    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, &decisions,
-                                                 profile, 0, error, sizeof(error)));
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, &decisions, profile,
+                                                 0, error, sizeof(error)));
     ASSERT_NULL(closure);
     xr_i64_overflow_decision_dispose(&decisions);
     ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
@@ -3028,14 +3004,12 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     XrSemanticPlan *semantic = NULL;
     ASSERT_MSG(xr_semantic_plan_build(root, &semantic, error, sizeof(error)), error);
     ASSERT_NOT_NULL(semantic);
-    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
-                                                sizeof(error)));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error, sizeof(error)));
     ASSERT_EQ_UINT(semantic->program_function_binding_count, 1);
     ASSERT_EQ_UINT(semantic->program_call_binding_count, 3);
     ASSERT_EQ_UINT(semantic->call_target_count, 0);
     for (uint32_t i = 0; i < semantic->program_call_binding_count; i++) {
-        const XrSemanticProgramCallBinding *binding =
-            &semantic->program_call_bindings[i];
+        const XrSemanticProgramCallBinding *binding = &semantic->program_call_bindings[i];
         ASSERT_EQ_UINT(binding->target_function, XR_SEMANTIC_INDEX_NONE);
         ASSERT_EQ_UINT(binding->program_dependency, XR_SEMANTIC_INDEX_NONE);
         ASSERT_TRUE(binding->operation < semantic->operation_count);
@@ -3049,35 +3023,29 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
         semantic->operations[semantic->program_call_bindings[1].operation].semantic_immediate;
     xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
     ASSERT_FALSE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
-    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
-                                                 sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error, sizeof(error)));
     semantic->operations[first_operation].semantic_immediate = saved_immediate;
     xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
     ASSERT_TRUE(xr_fingerprint_equal(semantic->fingerprint, original));
-    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
-                                                sizeof(error)));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error, sizeof(error)));
 
     XrStableId saved_builtin = semantic->program_call_bindings[0].callee_program_function;
     semantic->program_call_bindings[0].callee_program_function =
         semantic->program_call_bindings[1].callee_program_function;
     xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
     ASSERT_FALSE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
-    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
-                                                 sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error, sizeof(error)));
     semantic->program_call_bindings[0].callee_program_function = saved_builtin;
     xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
     ASSERT_TRUE(xr_fingerprint_equal(semantic->fingerprint, original));
-    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
-                                                sizeof(error)));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error, sizeof(error)));
 
     saved_symbol = calls[0]->aux_int;
     calls[0]->aux_int = calls[1]->aux_int;
     ASSERT_TRUE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
-    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
-                                                 sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error, sizeof(error)));
     calls[0]->aux_int = saved_symbol;
-    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
-                                                sizeof(error)));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error, sizeof(error)));
 
     uint8_t *encoded = NULL;
     size_t encoded_size = 0;
@@ -3087,8 +3055,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_TRUE(xr_xsm_decode(encoded, encoded_size, &decoded, error, sizeof(error)));
     ASSERT_NOT_NULL(decoded);
     ASSERT_TRUE(xr_semantic_plan_verify(decoded, error, sizeof(error)));
-    ASSERT_TRUE(xi_program_semantic_plan_verify(root, decoded, profile, error,
-                                                sizeof(error)));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, decoded, profile, error, sizeof(error)));
     ASSERT_EQ_UINT(decoded->program_call_binding_count, 3);
     ASSERT_EQ_UINT(decoded->call_target_count, 0);
     xr_semantic_plan_free(decoded);
@@ -3109,8 +3076,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     const XrSemanticProgramFunctionBinding *program_function =
         xr_semantic_plan_program_function_binding(semantic, 0);
     ASSERT_NOT_NULL(program_function);
-    ASSERT_TRUE(xr_target_plan_find_function(target, semantic,
-                                             program_function->semantic_function,
+    ASSERT_TRUE(xr_target_plan_find_function(target, semantic, program_function->semantic_function,
                                              &target_function));
     ASSERT_EQ_UINT(xr_target_plan_function_execution_family_mask(target, target_function),
                    XR_TARGET_EXECUTION_I64_OVERFLOW_PREDICATE);
@@ -3126,8 +3092,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
         ASSERT_TRUE(overflow_instruction_count < predicate_count);
         ASSERT_TRUE(target_instructions[i].immediate_bits < predicate_count);
         uint32_t predicate_index = (uint32_t) target_instructions[i].immediate_bits;
-        const XrTargetI64OverflowPredicateRecord *predicate =
-            &predicates[predicate_index];
+        const XrTargetI64OverflowPredicateRecord *predicate = &predicates[predicate_index];
         ASSERT_EQ_UINT(target_instructions[i].function, target_function);
         ASSERT_EQ_UINT(target_instructions[i].result_slot, predicate->result_slot);
         ASSERT_EQ_UINT(target_instructions[i].operand_slots[0], predicate->receiver_slot);
@@ -3147,16 +3112,16 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
 
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
-    ASSERT_MSG(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
-                                        error, sizeof(error)),
-               error);
+    ASSERT_MSG(
+        xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)),
+        error);
     ASSERT_NOT_NULL(emission);
-    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
-                                          error, sizeof(error)));
+    ASSERT_TRUE(
+        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
     XrAotRefinementPlan *refinement = NULL;
     XrAotRefinementDiagnostic refinement_diag = {0};
-    ASSERT_TRUE(xr_aot_representation_refinement_build_from_authority(
-        target, NULL, &refinement, &refinement_diag));
+    ASSERT_TRUE(xr_aot_representation_refinement_build_from_authority(target, NULL, &refinement,
+                                                                      &refinement_diag));
     ASSERT_NOT_NULL(refinement);
     XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(refinement);
     ASSERT_TRUE(refinement_view.verified);
@@ -3168,10 +3133,9 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
         const XrTargetSlotRecord *receiver = &target->slots[predicate->receiver_slot];
         const XrTargetSlotRecord *argument = &target->slots[predicate->argument_slot];
         XrCValueEmissionView view = {0};
-        ASSERT_TRUE(xr_c_emission_plan_value_view(
-            emission, result->semantic_value, &view, error, sizeof(error)));
-        ASSERT_EQ_UINT(view.materialization,
-                       XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE);
+        ASSERT_TRUE(xr_c_emission_plan_value_view(emission, result->semantic_value, &view, error,
+                                                  sizeof(error)));
+        ASSERT_EQ_UINT(view.materialization, XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE);
         ASSERT_EQ_UINT(view.rep, XR_C_VALUE_REP_BOOL);
         ASSERT_EQ_UINT(view.target_register_kind, XR_MACHINE_REP_I1);
         ASSERT_EQ_UINT(view.recipe_operand_value, receiver->semantic_value);
@@ -3190,18 +3154,18 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_NOT_NULL(mutable_recipe);
     uint32_t saved_recipe_operand = mutable_recipe->recipe_operand_value;
     mutable_recipe->recipe_operand_value = mutable_recipe->recipe_argument_value;
-    ASSERT_FALSE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
-                                           error, sizeof(error)));
+    ASSERT_FALSE(
+        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
     mutable_recipe->recipe_operand_value = saved_recipe_operand;
-    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
-                                          error, sizeof(error)));
+    ASSERT_TRUE(
+        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
     uint32_t saved_recipe_discriminant = mutable_recipe->recipe_discriminant;
     mutable_recipe->recipe_discriminant = XR_TARGET_I64_OVERFLOW_PREDICATE_INVALID;
-    ASSERT_FALSE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
-                                           error, sizeof(error)));
+    ASSERT_FALSE(
+        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
     mutable_recipe->recipe_discriminant = saved_recipe_discriminant;
-    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
-                                          error, sizeof(error)));
+    ASSERT_TRUE(
+        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
 
     uint32_t saved_function_flags = semantic->program_function_bindings[0].flags;
     semantic->program_function_bindings[0].flags |= XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED;
@@ -3251,8 +3215,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
         }
     }
 
-    XrTargetI64OverflowPredicateRecord *mutable_predicates =
-        target->i64_overflow_predicates;
+    XrTargetI64OverflowPredicateRecord *mutable_predicates = target->i64_overflow_predicates;
     uint8_t saved_kind = mutable_predicates[0].kind;
     mutable_predicates[0].kind = XR_TARGET_I64_OVERFLOW_PREDICATE_MUL;
     xr_target_plan_compute_fingerprint(target, &target->fingerprint);
@@ -3263,8 +3226,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_TRUE(xr_fingerprint_equal(target->fingerprint, target_fingerprint));
 
     uint32_t saved_semantic_function = target->functions[target_function].semantic_function;
-    target->functions[target_function].semantic_function =
-        target_function == 0 ? 1u : 0u;
+    target->functions[target_function].semantic_function = target_function == 0 ? 1u : 0u;
     xr_target_plan_compute_fingerprint(target, &target->fingerprint);
     ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
     target->functions[target_function].semantic_function = saved_semantic_function;
@@ -3289,8 +3251,8 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
 
     uint8_t *target_encoded = NULL;
     size_t target_encoded_size = 0;
-    ASSERT_TRUE(xr_xtp_encode_plan(target, &target_encoded, &target_encoded_size,
-                                   error, sizeof(error)));
+    ASSERT_TRUE(
+        xr_xtp_encode_plan(target, &target_encoded, &target_encoded_size, error, sizeof(error)));
     ASSERT_TRUE(target_encoded_size >= XR_XTP_HEADER_SIZE);
     XrXtpCandidate *target_candidate = NULL;
     ASSERT_TRUE(xr_xtp_decode_candidate(target_encoded, target_encoded_size, &target_candidate,
@@ -3300,8 +3262,8 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
                                                &roundtrip_target, error, sizeof(error)));
     ASSERT_NOT_NULL(roundtrip_target);
     ASSERT_TRUE(xr_target_plan_verify(roundtrip_target, error, sizeof(error)));
-    ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_fingerprint(roundtrip_target),
-                                     target_fingerprint));
+    ASSERT_TRUE(
+        xr_fingerprint_equal(xr_target_plan_fingerprint(roundtrip_target), target_fingerprint));
     xr_target_plan_free(roundtrip_target);
     xr_xtp_candidate_release(target_candidate);
     xr_xtp_encoded_free(target_encoded);
@@ -3309,50 +3271,48 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     XrVMConfig vm_config = {0};
     XrVMRuntime *vm = xray_vm_new_full(&vm_config);
     ASSERT_NOT_NULL(vm);
-    XrCompilerSession *previous_session =
-        xr_compiler_session_attach_isolate(vm, session);
+    XrCompilerSession *previous_session = xr_compiler_session_attach_isolate(vm, session);
     ASSERT_NOT_NULL(previous_session);
     XiPipelineConfig aot_config = xi_pipeline_aot_config();
     aot_config.run_canonicalize = false;
     aot_config.source_file = "scalar-binding.xr";
     aot_config.module_identity = fixture.spec->canonical;
     aot_config.module_name = "xi_i64_overflow";
-    XiPipelineResult native_result = xi_pipeline_compile_program(
-        fixture.spec->ast, fixture.analyzer, vm, &aot_config);
-    ASSERT_MSG(native_result.status == XI_PIPE_OK,
-               native_result.error.detail[0] ? native_result.error.detail
-                                             : "overflow AOT pipeline failed");
+    XiPipelineResult native_result =
+        xi_pipeline_compile_program(fixture.spec->ast, fixture.analyzer, vm, &aot_config);
+    ASSERT_MSG(native_result.status == XI_PIPE_OK, native_result.error.detail[0]
+                                                       ? native_result.error.detail
+                                                       : "overflow AOT pipeline failed");
     ASSERT_NOT_NULL(native_result.ir);
     XiModule *native_module = native_result.ir->module;
     ASSERT_NOT_NULL(native_module);
     ASSERT_EQ_UINT(native_result.ir->stage, XI_STAGE_BACKEND);
     ASSERT_NOT_NULL(native_result.ir->semantic_plan);
-    ASSERT_EQ_UINT(xr_program_semantic_closure_family(
-                       native_module->program_semantic_closure),
+    ASSERT_EQ_UINT(xr_program_semantic_closure_family(native_module->program_semantic_closure),
                    XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE);
     XiValue *native_call = find_bound_call(native_module->functions[0]);
     ASSERT_NOT_NULL(native_call);
     ASSERT_TRUE(xi_i64_overflow_call_is_exact(native_module, native_module->functions[0],
-                                               native_call, profile));
+                                              native_call, profile));
     XiValue *saved_receiver = native_call->args[0];
     native_call->args[0] = native_call->args[1];
     ASSERT_FALSE(xi_i64_overflow_call_is_exact(native_module, native_module->functions[0],
-                                                native_call, profile));
+                                               native_call, profile));
     ASSERT_FALSE(xi_program_semantic_verify(native_module, profile, error, sizeof(error)));
     native_call->args[0] = saved_receiver;
     ASSERT_TRUE(xi_i64_overflow_call_is_exact(native_module, native_module->functions[0],
-                                               native_call, profile));
+                                              native_call, profile));
     ASSERT_TRUE(xi_program_semantic_verify(native_module, profile, error, sizeof(error)));
 
     XrTargetPlan *native_target = NULL;
-    ASSERT_MSG(xr_target_plan_build(native_result.ir->semantic_plan, profile,
-                                    &native_target, error, sizeof(error)),
+    ASSERT_MSG(xr_target_plan_build(native_result.ir->semantic_plan, profile, &native_target, error,
+                                    sizeof(error)),
                error);
     ASSERT_NOT_NULL(native_target);
     ASSERT_TRUE(xr_target_plan_verify(native_target, error, sizeof(error)));
     XrCEmissionPlan *native_emission = NULL;
-    ASSERT_MSG(xr_c_emission_plan_build(native_target, profile_fingerprint,
-                                        &native_emission, error, sizeof(error)),
+    ASSERT_MSG(xr_c_emission_plan_build(native_target, profile_fingerprint, &native_emission, error,
+                                        sizeof(error)),
                error);
     ASSERT_NOT_NULL(native_emission);
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -3376,24 +3336,21 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_TRUE(xaot_bundle_set_program_target_plan(&bundle, native_target));
     ASSERT_TRUE(xaot_bundle_require_representation_refinements(&bundle));
     XgGlobalEvidence native_evidence = {0};
-    ASSERT_MSG(install_i64_overflow_global_evidence(&bundle, native_module,
-                                                     &native_evidence),
+    ASSERT_MSG(install_i64_overflow_global_evidence(&bundle, native_module, &native_evidence),
                bundle.error_msg ? bundle.error_msg
                                 : "overflow global evidence installation failed");
-    XrAotRefinementPlanView native_refinement_view =
-        xr_aot_refinement_plan_view(native_refinement);
+    XrAotRefinementPlanView native_refinement_view = xr_aot_refinement_plan_view(native_refinement);
     bool native_materialization_ok = xr_aot_representation_materialization_verify(
         &native_refinement_view, native_module->init, native_target, &policy,
         &native_refinement_diag);
     if (!native_materialization_ok)
         snprintf(error, sizeof(error), "%s value=%u operation=%u record=%u",
                  xr_aot_refinement_issue_name(native_refinement_diag.issue),
-                 native_refinement_diag.semantic_value,
-                 native_refinement_diag.semantic_operation,
+                 native_refinement_diag.semantic_value, native_refinement_diag.semantic_operation,
                  native_refinement_diag.record_index);
     ASSERT_MSG(native_materialization_ok, error);
-    ASSERT_TRUE(xaot_bundle_install_representation_refinement(&bundle, 0,
-                                                               native_refinement, &policy));
+    ASSERT_TRUE(
+        xaot_bundle_install_representation_refinement(&bundle, 0, native_refinement, &policy));
     native_refinement = NULL;
     bundle.module_emission_plans[0] = native_emission;
     ASSERT_MSG(xaot_prepare_bundle(&bundle, NULL),
@@ -3418,8 +3375,8 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
 
     const char *overflow_body_end = NULL;
     char overflow_symbol[128] = {0};
-    const char *overflow_body = find_i64_overflow_function_body(
-        c_source, &overflow_body_end, overflow_symbol);
+    const char *overflow_body =
+        find_i64_overflow_function_body(c_source, &overflow_body_end, overflow_symbol);
     ASSERT_NOT_NULL(overflow_body);
     ASSERT_NOT_NULL(overflow_body_end);
     ASSERT_TRUE(overflow_body_end > overflow_body);
@@ -3428,12 +3385,9 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_NOT_NULL(overflow_body_copy);
     memcpy(overflow_body_copy, overflow_body, overflow_body_size);
     overflow_body_copy[overflow_body_size] = '\0';
-    ASSERT_EQ_UINT(substring_count(overflow_body_copy,
-                                   "xr_arith_core_add_overflows("), 1);
-    ASSERT_EQ_UINT(substring_count(overflow_body_copy,
-                                   "xr_arith_core_sub_overflows("), 1);
-    ASSERT_EQ_UINT(substring_count(overflow_body_copy,
-                                   "xr_arith_core_mul_overflows("), 1);
+    ASSERT_EQ_UINT(substring_count(overflow_body_copy, "xr_arith_core_add_overflows("), 1);
+    ASSERT_EQ_UINT(substring_count(overflow_body_copy, "xr_arith_core_sub_overflows("), 1);
+    ASSERT_EQ_UINT(substring_count(overflow_body_copy, "xr_arith_core_mul_overflows("), 1);
     ASSERT_NULL(strstr(overflow_body_copy, "addOverflows"));
     ASSERT_NULL(strstr(overflow_body_copy, "subOverflows"));
     ASSERT_NULL(strstr(overflow_body_copy, "mulOverflows"));
@@ -3449,21 +3403,20 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
         FILE *native = fopen(native_path, "wb");
         ASSERT_NOT_NULL(native);
         ASSERT_EQ_UINT(fwrite(c_source, 1, c_source_size, native), c_source_size);
-        ASSERT_TRUE(fprintf(
-                        native,
-                        "\nint main(void) {\n"
-                        "    if (%s(INT64_MAX, INT64_C(1)) != INT64_C(1)) return 1;\n"
-                        "    if (%s(INT64_MIN, INT64_C(1)) != INT64_C(2)) return 2;\n"
-                        "    if (%s(INT64_MAX / INT64_C(2) + INT64_C(1), "
-                        "INT64_C(2)) != INT64_C(3)) return 3;\n"
-                        "    if (%s(INT64_C(1), INT64_C(2)) != INT64_C(0)) return 4;\n"
-                        "    if (%s(INT64_C(5), INT64_C(3)) != INT64_C(0)) return 5;\n"
-                        "    if (%s(INT64_C(0), INT64_MAX) != INT64_C(0)) return 6;\n"
-                        "    return 0;\n"
-                        "}\n",
-                        native_test_export.symbol, native_test_export.symbol,
-                        native_test_export.symbol, native_test_export.symbol,
-                        native_test_export.symbol, native_test_export.symbol) > 0);
+        ASSERT_TRUE(fprintf(native,
+                            "\nint main(void) {\n"
+                            "    if (%s(INT64_MAX, INT64_C(1)) != INT64_C(1)) return 1;\n"
+                            "    if (%s(INT64_MIN, INT64_C(1)) != INT64_C(2)) return 2;\n"
+                            "    if (%s(INT64_MAX / INT64_C(2) + INT64_C(1), "
+                            "INT64_C(2)) != INT64_C(3)) return 3;\n"
+                            "    if (%s(INT64_C(1), INT64_C(2)) != INT64_C(0)) return 4;\n"
+                            "    if (%s(INT64_C(5), INT64_C(3)) != INT64_C(0)) return 5;\n"
+                            "    if (%s(INT64_C(0), INT64_MAX) != INT64_C(0)) return 6;\n"
+                            "    return 0;\n"
+                            "}\n",
+                            native_test_export.symbol, native_test_export.symbol,
+                            native_test_export.symbol, native_test_export.symbol,
+                            native_test_export.symbol, native_test_export.symbol) > 0);
         ASSERT_EQ_INT(fclose(native), 0);
     }
 
