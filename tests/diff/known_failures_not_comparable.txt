@@ -586,3 +586,31 @@ tests/regression/11_coroutine/1165_result_group_native.xr  # XR_TARGET_1000 prod
 tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/regression/11_coroutine/1167_channel_explicit_transfer.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
 tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+
+# --- stdlib self-hosting walked into an AOT gap, 2026-08-28 ------------------
+# Every line below imports mem. Before 93bd84c09 that import pulled in no Xray
+# source, so the program was single-module and never reached the target layer.
+# mem.xr now has a body, and nine of its exports are the same shape: an Xray
+# module function calling its own private native leaf for effect, with no
+# return value. No exact target authority covers that shape.
+#
+# The refusal is only visible with lane 4's program-authority split applied --
+# on the self-hosting branch alone these still stop at XR_TARGET_1000, so no
+# single lane could have found it.
+#
+# DELETE THIS WHOLE BLOCK when exact target authority covers that shape. See
+# blockers/r3-6-xray-wrapper-over-private-leaf-has-no-exact-target-authority.md
+# Leaving these listed after the gap closes is what happened to
+# core_datetime.expect:14, still pinned to a symbol the time migration deleted.
+
+tests/diff/cases/semantics/ffi/extern_layout_introspection.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ffi/rawptr_static_null.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_bulk_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_fence_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_page_alloc_overloads_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_prefetch_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_volatile_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/pointer_foreign_offset_lifetime_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
