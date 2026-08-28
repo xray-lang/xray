@@ -1,93 +1,58 @@
 module time {
-  fn now {
+  fn __realtimeNanos {
     signature: "(): i64"
-    doc: "Current time in milliseconds since epoch"
+    doc: "Nanoseconds since the Unix epoch on the wall clock"
     effect: "nothrow"
-    vm: "xr_time_now"
-    aot: "xrt_time_now"
+    vm: "time_realtimeNanos"
+    aot: "xrt_time_realtime_nanos"
     argc: 0
     arg_spec: ""
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
   }
 
-  fn clock {
+  fn __monotonicNanos {
     signature: "(): i64"
-    doc: "CPU clock time in milliseconds"
+    doc: "Nanoseconds on the runtime monotonic clock"
     effect: "nothrow"
-    vm: "xr_time_clock"
-    aot: "xrt_time_clock"
+    vm: "time_monotonicNanos"
+    aot: "xrt_time_monotonic_nanos"
     argc: 0
     arg_spec: ""
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
   }
 
-  fn monotonic {
+  fn __cpuNanos {
     signature: "(): i64"
-    doc: "Monotonic time in milliseconds"
+    doc: "Nanoseconds of process CPU time consumed"
     effect: "nothrow"
-    vm: "xr_time_monotonic"
-    aot: "xrt_time_monotonic"
+    vm: "time_cpuNanos"
+    aot: "xrt_time_cpu_nanos"
     argc: 0
     arg_spec: ""
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
   }
 
-  fn nanos {
-    signature: "(): i64"
-    doc: "Monotonic time in nanoseconds"
+  fn __utcOffsetAt {
+    signature: "(seconds: i64): i64"
+    doc: "Minutes east of UTC at a Unix timestamp in seconds"
     effect: "nothrow"
-    vm: "xr_time_nanos"
-    aot: "xrt_time_nanos"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: true
-    layer: "system"
-  }
-
-  fn micros {
-    signature: "(): i64"
-    doc: "Monotonic time in microseconds"
-    effect: "nothrow"
-    vm: "xr_time_micros"
-    aot: "xrt_time_micros"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: true
-    layer: "system"
-  }
-
-  fn localOffset {
-    signature: "(): i64"
-    doc: "Local UTC offset in minutes for the current wall time"
-    effect: "nothrow"
-    vm: "xr_time_local_offset"
-    aot: "xrt_time_local_offset"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: true
-    layer: "system"
-  }
-
-  fn localOffsetAt {
-    signature: "(timestamp: i64): i64"
-    doc: "Local UTC offset in minutes at a Unix timestamp"
-    effect: "nothrow"
-    vm: "xr_time_local_offset_at"
-    aot: "xrt_time_local_offset_at"
+    vm: "time_utcOffsetAt"
+    aot: "xrt_time_utc_offset_at"
     argc: 1
     arg_spec: "v"
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
   }
 
   fn sleep {

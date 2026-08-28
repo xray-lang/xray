@@ -3663,27 +3663,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    if (cg_is_time_module_call_ctx(ctx, f, v)) {
-        const char *time_helper = cg_time_module_helper_ctx(ctx, f, v);
-        if (!time_helper) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT time method '%s'\n",
-                    v->aux ? (const char *) v->aux : "?");
-            emit_codegen_abort_aot_result(out);
-            return;
-        }
-        fprintf(out, "    XrValue _time_method_%u = %s(", v->id, time_helper);
-        if (cg_time_module_helper_has_tagged_arg(time_helper))
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_time_method_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-        }
-        return;
-    }
-
     if (v->op == XI_SCOPE_ENTER) {
         emit_value_generated_line_reset(ctx, out, v);
         emit_value_source_line(ctx, out, v);

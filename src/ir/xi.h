@@ -982,7 +982,7 @@ typedef enum {
 /* Exact module-provenance fact for `time.sleep(duration)`.  The VM emitter
  * consumes this fact to select OP_SLEEP; spelling alone is not sufficient
  * because user-defined objects may also have a method named `sleep`. */
-#define XI_LOWERING_FLAG_TIME_SLEEP (1u << 4)
+#define XI_LOWERING_FLAG_TIME_SLEEP (1u << 6)
 /* This call constructs a user class instance: the callee resolves to a class
  * symbol carrying an XrClassInfo, so the result is a freshly allocated object
  * and can never alias an argument.  ARC reads this fact to own the result and
@@ -1195,7 +1195,7 @@ typedef struct XiValue {
                                      * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
     uint8_t mem_group;              /* XiMemGroup (TBAA): memory group for alias analysis
                                      * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
-    uint16_t lowering_flags;        /* XI_LOWERING_FLAG_* (bits 0-7 were full) */
+    uint16_t lowering_flags;        /* XI_LOWERING_FLAG_*; bit 13 is the first free one */
     uint8_t param_mode;             /* XrParamMode for XI_PARAM values (the single param
                                      * contract source; default XR_PARAM_READ). Occupies
                                      * struct padding, so it costs no extra memory. */
@@ -1272,8 +1272,8 @@ static inline void xi_value_set_allocation_storage_mode(XiValue *value, uint8_t 
     if (!value)
         return;
     value->lowering_flags =
-        (uint8_t) ((value->lowering_flags & ~XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK) |
-                   ((storage_mode & 0x03u) << XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT));
+        (uint16_t) ((value->lowering_flags & ~XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK) |
+                    ((storage_mode & 0x03u) << XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT));
 }
 
 static inline uint8_t xi_value_allocation_storage_mode(const XiValue *value) {

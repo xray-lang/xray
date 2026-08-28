@@ -349,11 +349,6 @@ XR_FUNC bool xr_aot_runtime_adt_value_info(XrValue value, const char **enum_name
 XR_FUNC XrValue xr_aot_runtime_adt_payload(XrValue value, int index);
 XR_FUNC bool xr_aot_runtime_tuple_info(XrValue value, int *item_count);
 XR_FUNC XrValue xr_aot_runtime_tuple_item(XrValue value, int index);
-XR_FUNC XrValue xr_aot_time_now(void);
-XR_FUNC XrValue xr_aot_time_monotonic(void);
-XR_FUNC XrValue xr_aot_time_nanos(void);
-XR_FUNC XrValue xr_aot_time_micros(void);
-XR_FUNC XrValue xr_aot_time_clock(void);
 XR_FUNC XrValue xr_aot_coro_op(const XrAotContext *ctx, int32_t sub_op, const XrValue *args,
                                int argc);
 

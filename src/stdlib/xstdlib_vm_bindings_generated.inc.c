@@ -322,13 +322,10 @@ static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *modu
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_TIME
 static void xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "now", xr_time_now);
-    XRS_EXPORT(module, isolate, "clock", xr_time_clock);
-    XRS_EXPORT(module, isolate, "monotonic", xr_time_monotonic);
-    XRS_EXPORT(module, isolate, "nanos", xr_time_nanos);
-    XRS_EXPORT(module, isolate, "micros", xr_time_micros);
-    XRS_EXPORT(module, isolate, "localOffset", xr_time_local_offset);
-    XRS_EXPORT(module, isolate, "localOffsetAt", xr_time_local_offset_at);
+    XRS_EXPORT(module, isolate, "__realtimeNanos", time_realtimeNanos);
+    XRS_EXPORT(module, isolate, "__monotonicNanos", time_monotonicNanos);
+    XRS_EXPORT(module, isolate, "__cpuNanos", time_cpuNanos);
+    XRS_EXPORT(module, isolate, "__utcOffsetAt", time_utcOffsetAt);
     XRS_EXPORT_YIELDABLE(module, isolate, "sleep", xr_time_sleep);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_TIME */

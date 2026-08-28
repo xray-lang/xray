@@ -90,10 +90,12 @@ perf_suite = "stdlib/prelude"
 name = "time"
 public = true
 layer = "L1"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/time/time.xr"
 factory_source = "stdlib/time/time.c"
-public_native = ["clock", "localOffset", "localOffsetAt", "micros", "monotonic", "nanos", "now", "sleep"]
+public_native = ["sleep"]
+private_native_sources = ["stdlib/time/*.c"]
+private_native_reason = "Host clock reads and the yieldable timer suspension consumed by time.xr"
 perf_suite = "stdlib/time"
 
 [[module]]

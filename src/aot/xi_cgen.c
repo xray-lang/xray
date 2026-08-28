@@ -880,19 +880,18 @@ static const XiModule *cg_import_ref_target_module(const XiCgenCtx *ctx, const X
     if (ctx->program_direct_i64_required) {
         const XaotBundle *bundle = ctx->aot_bundle;
         uint32_t target_partition = UINT32_MAX;
-        if (!ctx->program_direct_i64_bound || !bundle ||
-            !ref->resolution_attempted || !ref->resolved_module ||
-            !xaot_bundle_program_partition_for_xi_module(
-                bundle, ref->resolved_module, &target_partition))
+        if (!ctx->program_direct_i64_bound || !bundle || !ref->resolution_attempted ||
+            !ref->resolved_module ||
+            !xaot_bundle_program_partition_for_xi_module(bundle, ref->resolved_module,
+                                                         &target_partition))
             return NULL;
         uint32_t matches = 0;
-        for (int module_index = 0; module_index < ctx->all_nmodules;
-             module_index++) {
+        for (int module_index = 0; module_index < ctx->all_nmodules; module_index++) {
             uint32_t candidate_partition = UINT32_MAX;
             const XiModule *candidate = ctx->all_modules[module_index];
             if (!candidate ||
-                !xaot_bundle_program_partition_for_xi_module(
-                    bundle, candidate, &candidate_partition) ||
+                !xaot_bundle_program_partition_for_xi_module(bundle, candidate,
+                                                             &candidate_partition) ||
                 candidate_partition != target_partition)
                 continue;
             module = candidate;
@@ -901,8 +900,7 @@ static const XiModule *cg_import_ref_target_module(const XiCgenCtx *ctx, const X
         if (matches != 1u)
             return NULL;
     } else {
-        if (ref->resolved_mod_index < 0 ||
-            ref->resolved_mod_index >= ctx->all_nmodules)
+        if (ref->resolved_mod_index < 0 || ref->resolved_mod_index >= ctx->all_nmodules)
             return NULL;
         module = ctx->all_modules[ref->resolved_mod_index];
     }
@@ -1424,18 +1422,15 @@ static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx) {
 
 static const XrCProgramXiFunctionBinding *
 cg_program_direct_i64_function_binding(const XiCgenCtx *ctx, const XiFunc *function) {
-    if (!ctx || !ctx->program_direct_i64_required || !ctx->program_direct_i64_bound ||
-        !function)
+    if (!ctx || !ctx->program_direct_i64_required || !ctx->program_direct_i64_bound || !function)
         return NULL;
-    return xr_c_program_direct_i64_function_binding(&ctx->program_direct_i64,
-                                                     function);
+    return xr_c_program_direct_i64_function_binding(&ctx->program_direct_i64, function);
 }
 
-static bool cg_program_direct_i64_function_is_initializer(
-    const XiCgenCtx *ctx, const XiFunc *function) {
-    if (!ctx || !function || !ctx->program_direct_i64_required ||
-        !ctx->program_direct_i64_bound || !ctx->program_direct_i64.verified ||
-        !ctx->program_direct_i64.initializers)
+static bool cg_program_direct_i64_function_is_initializer(const XiCgenCtx *ctx,
+                                                          const XiFunc *function) {
+    if (!ctx || !function || !ctx->program_direct_i64_required || !ctx->program_direct_i64_bound ||
+        !ctx->program_direct_i64.verified || !ctx->program_direct_i64.initializers)
         return false;
     for (uint32_t i = 0; i < ctx->program_direct_i64.initializer_count; i++)
         if (ctx->program_direct_i64.initializers[i].xi_function == function)
@@ -1443,19 +1438,18 @@ static bool cg_program_direct_i64_function_is_initializer(
     return false;
 }
 
-static const char *cg_program_direct_i64_symbol(const XiCgenCtx *ctx,
-                                                const XiFunc *function) {
+static const char *cg_program_direct_i64_symbol(const XiCgenCtx *ctx, const XiFunc *function) {
     const XrCProgramXiFunctionBinding *binding =
         cg_program_direct_i64_function_binding(ctx, function);
     return binding && binding->c_symbol[0] ? binding->c_symbol : NULL;
 }
 
-static bool cg_program_direct_i64_callee_operand_is_elided(
-    const XiCgenCtx *ctx, const XiFunc *function, const XiValue *value) {
-    return ctx && ctx->program_direct_i64_required &&
-           ctx->program_direct_i64_bound &&
-           xr_c_program_direct_i64_callee_operand_is_elided(
-               &ctx->program_direct_i64, function, value);
+static bool cg_program_direct_i64_callee_operand_is_elided(const XiCgenCtx *ctx,
+                                                           const XiFunc *function,
+                                                           const XiValue *value) {
+    return ctx && ctx->program_direct_i64_required && ctx->program_direct_i64_bound &&
+           xr_c_program_direct_i64_callee_operand_is_elided(&ctx->program_direct_i64, function,
+                                                            value);
 }
 
 static void cg_writer_reset(XiCgenCtx *ctx) {
@@ -1530,8 +1524,7 @@ static bool cg_mark_extern_decl_adapter_used(XiCgenCtx *ctx, const XiFunc *func,
     return true;
 }
 
-static bool emit_canonical_extern_c_name(XiCgenCtx *ctx, FILE *out,
-                                         const XaotExternDecl *decl) {
+static bool emit_canonical_extern_c_name(XiCgenCtx *ctx, FILE *out, const XaotExternDecl *decl) {
     if (!ctx || !out || !decl || !decl->link_symbol || !decl->link_symbol[0]) {
         cg_ctx_set_error(ctx);
         return false;
@@ -2011,8 +2004,7 @@ static bool cg_func_needs_external_linkage(const XiCgenCtx *ctx, const XiFunc *f
     if (!ctx || !ctx->extern_linkage || !f)
         return false;
     if (ctx->program_direct_i64_required) {
-        const XrCProgramXiFunctionBinding *binding =
-            cg_program_direct_i64_function_binding(ctx, f);
+        const XrCProgramXiFunctionBinding *binding = cg_program_direct_i64_function_binding(ctx, f);
         return binding && binding->c_symbol[0] != '\0' &&
                memchr(binding->c_symbol, '\0', sizeof(binding->c_symbol)) != NULL;
     }
@@ -2061,14 +2053,12 @@ static bool cg_func_c_name(XiCgenCtx *ctx, const char *prefix, const XiFunc *f, 
         return false;
 
     if (ctx->program_direct_i64_required) {
-        const XrCProgramXiFunctionBinding *binding =
-            cg_program_direct_i64_function_binding(ctx, f);
+        const XrCProgramXiFunctionBinding *binding = cg_program_direct_i64_function_binding(ctx, f);
         if (!binding) {
             ctx->error = true;
             return false;
         }
-        const void *terminator = memchr(binding->c_symbol, '\0',
-                                        sizeof(binding->c_symbol));
+        const void *terminator = memchr(binding->c_symbol, '\0', sizeof(binding->c_symbol));
         if (!binding->c_symbol[0] || !terminator) {
             ctx->error = true;
             return false;
@@ -2282,9 +2272,9 @@ static bool cg_static_function_value_use_is_direct_parallel_callback(const XiVal
 static bool cg_shared_static_function_slot_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
                                                            int slot, const XiFunc *target);
 static bool cg_shared_slot_has_reachable_get(XiCgenCtx *ctx, const XiModule *owner_mod, int slot);
-static XaotLeafAggregateTargetStatus cg_leaf_aggregate_direct_callee_get_status(
-    XiCgenCtx *ctx, const XiFunc *current, const XiValue *value, char *error,
-    size_t error_size);
+static XaotLeafAggregateTargetStatus
+cg_leaf_aggregate_direct_callee_get_status(XiCgenCtx *ctx, const XiFunc *current,
+                                           const XiValue *value, char *error, size_t error_size);
 
 static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
                                                             const XiValue *value,
@@ -2313,8 +2303,8 @@ static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, cons
                             break;
                         char error[256] = {0};
                         XaotLeafAggregateTargetStatus leaf_status =
-                            cg_leaf_aggregate_direct_callee_get_status(
-                                ctx, owner, value, error, sizeof(error));
+                            cg_leaf_aggregate_direct_callee_get_status(ctx, owner, value, error,
+                                                                       sizeof(error));
                         if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
                             break;
                         if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
@@ -2572,7 +2562,7 @@ static bool cg_shared_static_function_set_is_elided(XiCgenCtx *ctx, const XiFunc
 }
 
 static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const XiFunc *current,
-                                                         const XiValue *v) {
+                                                        const XiValue *v) {
     if (!ctx || !current || !v ||
         (v->op != XI_CLOSURE_NEW && !(v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)) ||
         !v->aux)
@@ -2607,9 +2597,9 @@ static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const Xi
     return saw_store;
 }
 
-static XaotLeafAggregateTargetStatus cg_leaf_aggregate_direct_callee_get_status(
-    XiCgenCtx *ctx, const XiFunc *current, const XiValue *value, char *error,
-    size_t error_size) {
+static XaotLeafAggregateTargetStatus
+cg_leaf_aggregate_direct_callee_get_status(XiCgenCtx *ctx, const XiFunc *current,
+                                           const XiValue *value, char *error, size_t error_size) {
     if (!ctx || !current || !value || value->op != XI_GET_SHARED)
         return XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED;
     const XiValue *call = NULL;
@@ -2636,10 +2626,9 @@ static XaotLeafAggregateTargetStatus cg_leaf_aggregate_direct_callee_get_status(
         cg_ctx_aot_bundle(ctx), current, call, &view, error, error_size);
     if (status != XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         return status;
-    const XiFunc *slot_target =
-        cg_shared_function_slot_target(ctx, current, (int) value->aux_int);
-    if (!view.target_plan || !view.call_instruction || !view.callee ||
-        view.callee != slot_target || view.argument_value != call->args[1]) {
+    const XiFunc *slot_target = cg_shared_function_slot_target(ctx, current, (int) value->aux_int);
+    if (!view.target_plan || !view.call_instruction || !view.callee || view.callee != slot_target ||
+        view.argument_value != call->args[1]) {
         if (error && error_size)
             snprintf(error, error_size,
                      "leaf-aggregate direct callee shared-load authority is inexact");
@@ -2649,12 +2638,12 @@ static XaotLeafAggregateTargetStatus cg_leaf_aggregate_direct_callee_get_status(
 }
 
 static bool cg_shared_static_function_get_is_elided(XiCgenCtx *ctx, const XiFunc *current,
-                                                     const XiValue *v) {
+                                                    const XiValue *v) {
     if (!ctx || !v || v->op != XI_GET_SHARED)
         return false;
     char error[256] = {0};
-    XaotLeafAggregateTargetStatus leaf_status = cg_leaf_aggregate_direct_callee_get_status(
-        ctx, current, v, error, sizeof(error));
+    XaotLeafAggregateTargetStatus leaf_status =
+        cg_leaf_aggregate_direct_callee_get_status(ctx, current, v, error, sizeof(error));
     if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         return true;
     if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
@@ -2730,18 +2719,16 @@ static CgValueEmissionStatus cg_value_emission_fail(XiCgenCtx *ctx, const char *
     return CG_VALUE_EMISSION_ERROR;
 }
 
-static CgValueEmissionStatus cg_program_direct_i64_value_emission(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static CgValueEmissionStatus cg_program_direct_i64_value_emission(XiCgenCtx *ctx,
+                                                                  const XiFunc *function,
+                                                                  const XiValue *value,
+                                                                  XrCValueEmissionView *out) {
     if (!ctx || !function || !value || !out)
-        return cg_value_emission_fail(
-            ctx, "program direct-i64 value consumer input is missing");
-    if (xr_c_program_direct_i64_value_view(
-            &ctx->program_direct_i64, function, value, out))
+        return cg_value_emission_fail(ctx, "program direct-i64 value consumer input is missing");
+    if (xr_c_program_direct_i64_value_view(&ctx->program_direct_i64, function, value, out))
         return CG_VALUE_EMISSION_FOUND;
 
-    return cg_value_emission_fail(
-        ctx, "program direct-i64 C value binding is missing");
+    return cg_value_emission_fail(ctx, "program direct-i64 C value binding is missing");
 }
 
 /* Resolve every program-owned value from the verified program binding. A
@@ -2753,30 +2740,22 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !value || !out)
-        return cg_value_emission_fail(
-            ctx, "C value emission consumer input is missing");
+        return cg_value_emission_fail(ctx, "C value emission consumer input is missing");
 
-    if (ctx->program_direct_i64_required &&
-        !ctx->program_direct_i64_bound)
-        return cg_value_emission_fail(
-            ctx, "program direct-i64 C-emission binding is missing");
+    if (ctx->program_direct_i64_required && !ctx->program_direct_i64_bound)
+        return cg_value_emission_fail(ctx, "program direct-i64 C-emission binding is missing");
     if (!function && value->block)
         function = value->block->func;
     if (ctx->program_direct_i64_required && !function)
-        return cg_value_emission_fail(
-            ctx, "program direct-i64 value has no owning Xi function");
+        return cg_value_emission_fail(ctx, "program direct-i64 value has no owning Xi function");
     if (!function)
         return CG_VALUE_EMISSION_BACKEND_ONLY;
     if (ctx->program_direct_i64_required)
-        return cg_program_direct_i64_value_emission(
-            ctx, function, value, out);
-    if (!ctx->value_emission_registry &&
-        ctx->value_emission_registry_count == 0)
+        return cg_program_direct_i64_value_emission(ctx, function, value, out);
+    if (!ctx->value_emission_registry && ctx->value_emission_registry_count == 0)
         return CG_VALUE_EMISSION_NOT_CONFIGURED;
-    if (!ctx->value_emission_registry ||
-        ctx->value_emission_registry_count == 0)
-        return cg_value_emission_fail(
-            ctx, "C value emission consumer input is missing");
+    if (!ctx->value_emission_registry || ctx->value_emission_registry_count == 0)
+        return cg_value_emission_fail(ctx, "C value emission consumer input is missing");
 
     const XrTargetPlan *leaf_target = NULL;
     uint32_t semantic_function_id = XR_SEMANTIC_INDEX_NONE;
@@ -2800,8 +2779,7 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
             if (ctx->value_emission_registry[module_index].target_plan != leaf_target)
                 continue;
             if (entry)
-                return cg_value_emission_fail(
-                    ctx, "leaf-aggregate C value authority is ambiguous");
+                return cg_value_emission_fail(ctx, "leaf-aggregate C value authority is ambiguous");
             entry = &ctx->value_emission_registry[module_index];
         }
     } else {
@@ -2830,19 +2808,16 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     const XrCEmissionPlan *emission_plan = entry->emission_plan;
 
     const XrSemanticPlan *semantic_plan = entry->semantic_plan;
-    if (!semantic_plan ||
-        (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
-             ? target_plan != leaf_target
-             : semantic_plan != function->semantic_plan))
+    if (!semantic_plan || (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
+                               ? target_plan != leaf_target
+                               : semantic_plan != function->semantic_plan))
         return cg_value_emission_fail(ctx,
                                       "Xi function does not carry the module TargetPlan authority");
 
     const XrSemanticFunctionRecord *semantic_function =
-        xr_semantic_plan_function(
-            semantic_plan,
-            leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
-                ? semantic_function_id
-                : function->semantic_plan_function_index);
+        xr_semantic_plan_function(semantic_plan, leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
+                                                     ? semantic_function_id
+                                                     : function->semantic_plan_function_index);
     if (!semantic_function)
         return cg_value_emission_fail(ctx, "C value semantic function record is missing");
     if (value->id >= semantic_function->value_count) {
@@ -2853,9 +2828,8 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     }
 
     if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
-               !xr_aot_scalar_semantic_value_id(
-                   target_plan, function, value, &semantic_function_id,
-                   &semantic_value, error, sizeof(error))) {
+        !xr_aot_scalar_semantic_value_id(target_plan, function, value, &semantic_function_id,
+                                         &semantic_value, error, sizeof(error))) {
         return cg_value_emission_fail(ctx, error[0] ? error : "C value identity lookup failed");
     }
     if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
@@ -2904,18 +2878,15 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function, const X
         return false;
     if (ctx->program_direct_i64_required) {
         if (!ctx->program_direct_i64_bound) {
-            (void) cg_value_emission_fail(
-                ctx, "program direct-i64 C-emission binding is missing");
+            (void) cg_value_emission_fail(ctx, "program direct-i64 C-emission binding is missing");
             return false;
         }
         XrCValueEmissionView view = {0};
-        if (xr_c_program_direct_i64_value_view(
-                &ctx->program_direct_i64, function, value, &view)) {
+        if (xr_c_program_direct_i64_value_view(&ctx->program_direct_i64, function, value, &view)) {
             *out = view.semantic_value;
             return true;
         }
-        (void) cg_value_emission_fail(
-            ctx, "program direct-i64 semantic value binding is missing");
+        (void) cg_value_emission_fail(ctx, "program direct-i64 semantic value binding is missing");
         return false;
     }
     if (!function->semantic_plan)
@@ -2932,20 +2903,17 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function, const X
     char error[256] = {0};
     if (!entry)
         return false;
-    bool exact = xr_aot_scalar_semantic_value_id(
-        entry->target_plan, function, value, &semantic_function, out, error,
-        sizeof(error));
+    bool exact = xr_aot_scalar_semantic_value_id(entry->target_plan, function, value,
+                                                 &semantic_function, out, error, sizeof(error));
     if (exact)
         return semantic_function == function->semantic_plan_function_index;
     const XaotValuePlan *adapter = xaot_bundle_find_value_plan(ctx->aot_bundle, value);
     if (!adapter || !xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter) ||
         value->nargs != 1 || !value->args || !value->args[0])
         return false;
-    exact = xr_aot_scalar_semantic_value_id(
-        entry->target_plan, function, value->args[0], &semantic_function, out,
-        error, sizeof(error));
-    return exact &&
-           semantic_function == function->semantic_plan_function_index;
+    exact = xr_aot_scalar_semantic_value_id(entry->target_plan, function, value->args[0],
+                                            &semantic_function, out, error, sizeof(error));
+    return exact && semantic_function == function->semantic_plan_function_index;
 }
 
 static const XrSemanticOperationRecord *
@@ -2973,26 +2941,23 @@ static bool cg_number_parse_error_namespace_is_exact(XiCgenCtx *ctx, const XiFun
                                                      const XiValue *value) {
     return function && function->semantic_plan &&
            xr_semantic_number_parse_error_namespace_is_exact(
-               function->semantic_plan,
-               cg_semantic_operation_for_value(ctx, function, value));
+               function->semantic_plan, cg_semantic_operation_for_value(ctx, function, value));
 }
 
-static bool cg_number_parse_error_member_access_is_exact(XiCgenCtx *ctx,
-                                                         const XiFunc *function,
+static bool cg_number_parse_error_member_access_is_exact(XiCgenCtx *ctx, const XiFunc *function,
                                                          const XiValue *value) {
     return function && function->semantic_plan &&
            xr_semantic_number_parse_error_member_access_is_exact(
-               function->semantic_plan,
-               cg_semantic_operation_for_value(ctx, function, value), NULL, NULL, NULL);
+               function->semantic_plan, cg_semantic_operation_for_value(ctx, function, value), NULL,
+               NULL, NULL);
 }
 
-static bool cg_number_parse_error_catch_narrow_is_exact(XiCgenCtx *ctx,
-                                                        const XiFunc *function,
+static bool cg_number_parse_error_catch_narrow_is_exact(XiCgenCtx *ctx, const XiFunc *function,
                                                         const XiValue *value) {
     return function && function->semantic_plan &&
            xr_semantic_number_parse_error_catch_narrow_is_exact(
-               function->semantic_plan,
-               cg_semantic_operation_for_value(ctx, function, value), NULL);
+               function->semantic_plan, cg_semantic_operation_for_value(ctx, function, value),
+               NULL);
 }
 
 /* Select a migrated cleanup only through the verified TargetPlan row and its
@@ -3228,9 +3193,10 @@ static const XrCEmissionPlan *cg_function_c_emission_plan(XiCgenCtx *ctx, const 
     return xaot_bundle_emission_plan_for_func(ctx->aot_bundle, function);
 }
 
-static bool cg_direct_local_tagged_ref_argument_emission(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *call, uint16_t ordinal,
-    const XiValue *argument, XrCCallArgumentEmissionView *out) {
+static bool cg_direct_local_tagged_ref_argument_emission(XiCgenCtx *ctx, const XiFunc *function,
+                                                         const XiValue *call, uint16_t ordinal,
+                                                         const XiValue *argument,
+                                                         XrCCallArgumentEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     uint32_t semantic_call = XR_SEMANTIC_INDEX_NONE;
@@ -3242,12 +3208,11 @@ static bool cg_direct_local_tagged_ref_argument_emission(
         !xr_c_emission_plan_call_argument_view(plan, semantic_call, ordinal, out, error,
                                                sizeof(error)))
         return false;
-    bool scalar_ref_v1 =
-        out->caller_register_kind == XR_MACHINE_REP_I64 &&
-        out->caller_memory_kind == XR_MACHINE_REP_I64 &&
-        out->callee_register_kind == XR_MACHINE_REP_I64 &&
-        out->callee_memory_kind == XR_MACHINE_REP_I64 && out->c_type &&
-        strcmp(out->c_type, "int64_t *") == 0;
+    bool scalar_ref_v1 = out->caller_register_kind == XR_MACHINE_REP_I64 &&
+                         out->caller_memory_kind == XR_MACHINE_REP_I64 &&
+                         out->callee_register_kind == XR_MACHINE_REP_I64 &&
+                         out->callee_memory_kind == XR_MACHINE_REP_I64 && out->c_type &&
+                         strcmp(out->c_type, "int64_t *") == 0;
     if (scalar_ref_v1)
         return false;
     if (out->semantic_call_value != semantic_call || out->semantic_value != semantic_argument ||
@@ -3267,9 +3232,10 @@ static bool cg_direct_local_tagged_ref_argument_emission(
     return true;
 }
 
-static bool cg_direct_local_scalar_ref_v1_argument_emission(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *call, uint16_t ordinal,
-    const XiValue *argument, XrCCallArgumentEmissionView *out) {
+static bool cg_direct_local_scalar_ref_v1_argument_emission(XiCgenCtx *ctx, const XiFunc *function,
+                                                            const XiValue *call, uint16_t ordinal,
+                                                            const XiValue *argument,
+                                                            XrCCallArgumentEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     uint32_t semantic_call = XR_SEMANTIC_INDEX_NONE;
@@ -3281,19 +3247,16 @@ static bool cg_direct_local_scalar_ref_v1_argument_emission(
         !xr_c_emission_plan_call_argument_view(plan, semantic_call, ordinal, out, error,
                                                sizeof(error)))
         return false;
-    if (out->semantic_call_value != semantic_call ||
-        out->semantic_value != semantic_argument || out->ordinal != ordinal ||
-        out->caller_register_kind != XR_MACHINE_REP_I64 ||
+    if (out->semantic_call_value != semantic_call || out->semantic_value != semantic_argument ||
+        out->ordinal != ordinal || out->caller_register_kind != XR_MACHINE_REP_I64 ||
         out->caller_memory_kind != XR_MACHINE_REP_I64 ||
         out->callee_register_kind != XR_MACHINE_REP_I64 ||
-        out->callee_memory_kind != XR_MACHINE_REP_I64 ||
-        out->mode != XR_TARGET_CALL_REFERENCE ||
-        out->ownership != XR_TARGET_CALL_BORROW ||
-        out->transfer_mode != XR_TRANSFER_SHARE ||
+        out->callee_memory_kind != XR_MACHINE_REP_I64 || out->mode != XR_TARGET_CALL_REFERENCE ||
+        out->ownership != XR_TARGET_CALL_BORROW || out->transfer_mode != XR_TRANSFER_SHARE ||
         out->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
-        out->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
-        out->reserved[0] != 0 || out->reserved[1] != 0 || out->reserved[2] != 0 ||
-        !out->c_type || strcmp(out->c_type, "int64_t *") != 0) {
+        out->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE || out->reserved[0] != 0 ||
+        out->reserved[1] != 0 || out->reserved[2] != 0 || !out->c_type ||
+        strcmp(out->c_type, "int64_t *") != 0) {
         ctx->error = true;
         return false;
     }
@@ -3312,8 +3275,7 @@ static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
         return view->recipe_operand_value != UINT32_MAX &&
                view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
                view->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
-               (strcmp(view->c_type, "void *") == 0 ||
-                strcmp(view->c_type, "int64_t *") == 0);
+               (strcmp(view->c_type, "void *") == 0 || strcmp(view->c_type, "int64_t *") == 0);
     return view->materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
            (strcmp(view->c_type, "const void *") == 0 || strcmp(view->c_type, "void *") == 0 ||
             strcmp(view->c_type, "const void * *") == 0 || strcmp(view->c_type, "void * *") == 0);
@@ -3581,13 +3543,12 @@ static bool cg_i64_overflow_predicate_required(const XiFunc *function) {
            provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
 }
 
-static bool cg_i64_overflow_predicate_emission_view(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    XrCValueEmissionView *out) {
+static bool cg_i64_overflow_predicate_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                                    const XiValue *value,
+                                                    XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
-    if (!ctx || !function || !value || !out ||
-        !cg_i64_overflow_predicate_required(function))
+    if (!ctx || !function || !value || !out || !cg_i64_overflow_predicate_required(function))
         return false;
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
     uint32_t argument = XR_SEMANTIC_INDEX_NONE;
@@ -3606,8 +3567,8 @@ static bool cg_i64_overflow_predicate_emission_view(
         default:
             break;
     }
-    if (status != CG_VALUE_EMISSION_FOUND || value->op != XI_CALL_METHOD ||
-        value->nargs != 2 || !value->args || !value->args[0] || !value->args[1] ||
+    if (status != CG_VALUE_EMISSION_FOUND || value->op != XI_CALL_METHOD || value->nargs != 2 ||
+        !value->args || !value->args[0] || !value->args[1] ||
         out->materialization != XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE ||
         out->rep != XR_C_VALUE_REP_BOOL || out->target_register_kind != XR_MACHINE_REP_I1 ||
         out->target_memory_kind != XR_MACHINE_REP_I1 || !out->c_type ||
@@ -3617,8 +3578,8 @@ static bool cg_i64_overflow_predicate_emission_view(
         !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
         !cg_value_semantic_id(ctx, function, value->args[1], &argument) ||
         receiver != out->recipe_operand_value || argument != out->recipe_argument_value) {
-        (void) cg_value_emission_fail(
-            ctx, "i64 overflow predicate has no exact immutable C recipe");
+        (void) cg_value_emission_fail(ctx,
+                                      "i64 overflow predicate has no exact immutable C recipe");
         return false;
     }
     return true;
@@ -3743,8 +3704,8 @@ static bool cg_rune_to_string_emission_view(XiCgenCtx *ctx, const XiFunc *functi
         out->materialization != XR_C_VALUE_MATERIALIZATION_RUNE_TO_STRING)
         return false;
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
-    if (value->nargs != 1 || !value->args || !value->args[0] ||
-        out->rep != XR_C_VALUE_REP_TAGGED || !out->recipe_symbol || !out->recipe_symbol[0] ||
+    if (value->nargs != 1 || !value->args || !value->args[0] || out->rep != XR_C_VALUE_REP_TAGGED ||
+        !out->recipe_symbol || !out->recipe_symbol[0] ||
         !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
         receiver != out->recipe_operand_value) {
         (void) cg_value_emission_fail(ctx, "rune.toString has no exact immutable C recipe");
@@ -5702,43 +5663,35 @@ static CgAssertionAdapterId cg_assertion_adapter_id(XiCgenCtx *ctx) {
         return CG_ASSERTION_ADAPTER_INVALID;
     }
     return ctx && ctx->freestanding_profile ? CG_ASSERTION_ADAPTER_FREESTANDING
-                                             : CG_ASSERTION_ADAPTER_HOSTED;
+                                            : CG_ASSERTION_ADAPTER_HOSTED;
 }
 
-static const XrTargetPlan *cg_function_target_plan(XiCgenCtx *ctx,
-                                                   const XiFunc *function) {
+static const XrTargetPlan *cg_function_target_plan(XiCgenCtx *ctx, const XiFunc *function) {
     const XrSemanticPlan *semantic =
-        ctx && function
-            ? xaot_bundle_program_semantic_for_func(ctx->aot_bundle, function, NULL)
-            : NULL;
-    const XrTargetPlan *target =
-        semantic ? xaot_bundle_program_target_plan(ctx->aot_bundle) : NULL;
+        ctx && function ? xaot_bundle_program_semantic_for_func(ctx->aot_bundle, function, NULL)
+                        : NULL;
+    const XrTargetPlan *target = semantic ? xaot_bundle_program_target_plan(ctx->aot_bundle) : NULL;
     return target && xr_target_plan_is_verified(target) &&
                    xr_target_plan_fingerprint_is_intact(target)
                ? target
                : NULL;
 }
 
-static bool cg_freestanding_assertion_authorized(
-    XiCgenCtx *ctx, const XiFunc *function, const XrAssertionPlan *assertion) {
-    if (!assertion ||
-        (assertion->kind != XR_ASSERTION_KIND_CONDITION &&
-         assertion->kind != XR_ASSERTION_KIND_EQUAL))
+static bool cg_freestanding_assertion_authorized(XiCgenCtx *ctx, const XiFunc *function,
+                                                 const XrAssertionPlan *assertion) {
+    if (!assertion || (assertion->kind != XR_ASSERTION_KIND_CONDITION &&
+                       assertion->kind != XR_ASSERTION_KIND_EQUAL))
         return false;
-    const XrTargetPlan *target_plan =
-        cg_function_target_plan(ctx, function);
+    const XrTargetPlan *target_plan = cg_function_target_plan(ctx, function);
     uint64_t capability_mask = 0;
-    if (!target_plan ||
-        !xr_target_plan_capability_mask(target_plan, &capability_mask))
+    if (!target_plan || !xr_target_plan_capability_mask(target_plan, &capability_mask))
         return false;
     const uint64_t required = XR_TARGET_FOUNDATION_CAPABILITY_MASK |
-        xr_target_capability_mask(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+                              xr_target_capability_mask(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
     return (capability_mask & required) == required &&
            (capability_mask &
-            (xr_target_capability_mask(
-                 XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY) |
-             xr_target_capability_mask(
-                 XR_TARGET_CAPABILITY_PANIC_BOUNDARY))) == 0;
+            (xr_target_capability_mask(XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY) |
+             xr_target_capability_mask(XR_TARGET_CAPABILITY_PANIC_BOUNDARY))) == 0;
 }
 
 static const char *cg_owner_forward_adapter_name(XiCgenCtx *ctx) {
@@ -5785,9 +5738,9 @@ static const char *cg_codegen_fence_adapter_name(XiCgenCtx *ctx) {
         cg_ctx_set_error(ctx);
         return NULL;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
-        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO);
+    const char *adapter =
+        xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
+                                       XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO);
     if (!adapter || strcmp(adapter, "xr_codegen_fence_plan_core") != 0) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: codegen-compiler-fence owner has no exact CGen adapter\n");
@@ -6505,8 +6458,7 @@ cg_shared_slot_reach_memo_entry(XiCgenCtx *ctx, const XiModule *module, int slot
     return entry;
 }
 
-static bool cg_func_body_gets_shared_slot(XiCgenCtx *ctx, const XiFunc *f,
-                                          int slot) {
+static bool cg_func_body_gets_shared_slot(XiCgenCtx *ctx, const XiFunc *f, int slot) {
     if (!ctx || !f || slot < 0)
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -9384,8 +9336,6 @@ static bool cg_shared_load_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f,
                 }
                 if (a == 0 && (user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
                     user->aux) {
-                    if (cg_time_module_helper_ctx(ctx, f, user))
-                        continue;
                     const char *method = (const char *) user->aux;
                     CgStaticFunctionCall call = cg_resolve_module_member_call(ctx, f, user, method);
                     if (call.func && call.func->ncaptures == 0)
@@ -11439,11 +11389,10 @@ static bool cg_rep_alias_source_relation_is_exact(XiCgenCtx *ctx, const XiValue 
     if (alias->args[0] == source)
         return true;
     const XiValue *adapter = alias->args[0];
-    bool backend_inverse =
-        (alias->op == XI_UNBOX && adapter->op == XI_BOX &&
-         adapter->backend_origin == XI_BACKEND_VALUE_REP_BOX) ||
-        (alias->op == XI_BOX && adapter->op == XI_UNBOX &&
-         adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
+    bool backend_inverse = (alias->op == XI_UNBOX && adapter->op == XI_BOX &&
+                            adapter->backend_origin == XI_BACKEND_VALUE_REP_BOX) ||
+                           (alias->op == XI_BOX && adapter->op == XI_UNBOX &&
+                            adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
     if (adapter->nargs != 1 || !adapter->args || adapter->args[0] != source)
         return false;
     if (backend_inverse) {
@@ -11456,18 +11405,16 @@ static bool cg_rep_alias_source_relation_is_exact(XiCgenCtx *ctx, const XiValue 
      * proven by its post-freeze adapter row; the BOX is proven by the exact
      * SemanticPlan operand plus its verified boundary step. */
     const XiFunc *f = alias->block ? alias->block->func : NULL;
-    if (!f || alias->op != XI_UNBOX ||
-        alias->backend_origin != XI_BACKEND_VALUE_REP_UNBOX || adapter->op != XI_BOX ||
-        adapter->backend_origin != XI_BACKEND_VALUE_NONE || adapter->type != source->type ||
-        alias->type != source->type ||
+    if (!f || alias->op != XI_UNBOX || alias->backend_origin != XI_BACKEND_VALUE_REP_UNBOX ||
+        adapter->op != XI_BOX || adapter->backend_origin != XI_BACKEND_VALUE_NONE ||
+        adapter->type != source->type || alias->type != source->type ||
         (adapter->flags & (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
                            XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT)) != 0)
         return false;
     const XaotValuePlan *alias_plan = xaot_bundle_find_value_plan(ctx->aot_bundle, alias);
     if (!alias_plan || !xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, alias_plan))
         return false;
-    const XrSemanticOperationRecord *operation =
-        cg_semantic_operation_for_value(ctx, f, adapter);
+    const XrSemanticOperationRecord *operation = cg_semantic_operation_for_value(ctx, f, adapter);
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands =
         xr_semantic_plan_operands(f->semantic_plan, &operand_count);
@@ -11665,9 +11612,8 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
  * Other consumers keep the real tagged carrier and its allocation boundary. */
 static bool cg_coalesced_semantic_box_is_elided(XiCgenCtx *ctx, const XiFunc *f,
                                                 const XiValue *box) {
-    if (!ctx || !f || !box || box->op != XI_BOX ||
-        box->backend_origin != XI_BACKEND_VALUE_NONE || box->nargs != 1 || !box->args ||
-        !box->args[0] || !f->phi_coalesce ||
+    if (!ctx || !f || !box || box->op != XI_BOX || box->backend_origin != XI_BACKEND_VALUE_NONE ||
+        box->nargs != 1 || !box->args || !box->args[0] || !f->phi_coalesce ||
         (box->flags & (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
                        XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT)) != 0)
         return false;
@@ -14840,22 +14786,19 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
      * other call in the frozen bounded family is an authority mismatch and is
      * rejected by the same program call consumer used by emission. */
     if (ctx->program_direct_i64_required) {
-        const XrCProgramDirectI64EmissionBinding *binding =
-            &ctx->program_direct_i64;
+        const XrCProgramDirectI64EmissionBinding *binding = &ctx->program_direct_i64;
         if (!ctx->program_direct_i64_bound || !binding->verified) {
             ctx->error = true;
             return false;
         }
-        if (v->op != XI_CALL && v->op != XI_TAIL_CALL &&
-            v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
+        if (v->op != XI_CALL && v->op != XI_TAIL_CALL && v->op != XI_CALL_METHOD &&
+            v->op != XI_CALL_METHOD_DIRECT)
             return false;
         XaotDirectI64TargetView direct_i64 = {0};
-        XaotDirectI64TargetStatus status =
-            cg_direct_i64_call_view(ctx, owner, v, &direct_i64);
+        XaotDirectI64TargetStatus status = cg_direct_i64_call_view(ctx, owner, v, &direct_i64);
         if (status != XAOT_DIRECT_I64_TARGET_FOUND)
             return false;
-        return owner == binding->caller.xi_function &&
-               v == binding->xi_call &&
+        return owner == binding->caller.xi_function && v == binding->xi_call &&
                direct_i64.callee == binding->callee.xi_function &&
                cg_func_reach_mark_edge(ctx, binding->callee.xi_function);
     }
@@ -14983,10 +14926,9 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
         changed |= cg_func_reach_mark_edge(
             ctx, cg_class_native_resolve_getter_field_method(ctx, owner, v, NULL, NULL));
 
-    const XiFunc *ref_target =
-        cg_program_direct_i64_callee_operand_is_elided(ctx, owner, v)
-            ? NULL
-            : cg_value_static_func_target(ctx, owner, v);
+    const XiFunc *ref_target = cg_program_direct_i64_callee_operand_is_elided(ctx, owner, v)
+                                   ? NULL
+                                   : cg_value_static_func_target(ctx, owner, v);
     if (ref_target && cg_static_func_ref_use_requires_body(ctx, owner, v, ref_target, 0))
         changed |= cg_func_reach_mark_edge(ctx, ref_target);
     return changed;
@@ -15057,16 +14999,13 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
      * only through the verified direct-call edge; seeding it here as a second
      * root would hide a missing or corrupt call binding. */
     if (ctx->program_direct_i64_required) {
-        if (!ctx->program_direct_i64_bound ||
-            !ctx->program_direct_i64.verified ||
+        if (!ctx->program_direct_i64_bound || !ctx->program_direct_i64.verified ||
             !ctx->program_direct_i64.caller.xi_function) {
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: XR_TARGET_1001: verified program graph "
-                    "reachability binding is missing or stale\n");
+            fprintf(stderr, "[xi_cgen] ERROR: XR_TARGET_1001: verified program graph "
+                            "reachability binding is missing or stale\n");
             ctx->error = true;
         } else {
-            cg_func_reach_mark_root(
-                ctx, ctx->program_direct_i64.caller.xi_function);
+            cg_func_reach_mark_root(ctx, ctx->program_direct_i64.caller.xi_function);
         }
     }
     if (!ctx->program_direct_i64_required) {
@@ -15123,8 +15062,8 @@ static void cg_report_mandatory_contract_failure(XiCgenCtx *ctx, const XiFunc *f
     fprintf(stderr,
             "[xi_cgen] ERROR: %s contract failed in function '%s' for Xi value v%u "
             "(stable_id=%u span=%u issue=%s)\n",
-            contract_kind, func && func->name ? func->name : "?", value ? value->id : 0,
-            stable_id, value ? value->line : 0, xaot_backend_contract_issue_name(issue));
+            contract_kind, func && func->name ? func->name : "?", value ? value->id : 0, stable_id,
+            value ? value->line : 0, xaot_backend_contract_issue_name(issue));
 }
 
 static bool cg_json_codec_site_kind(const XiValue *value, uint8_t *out_kind) {
@@ -15156,13 +15095,11 @@ static bool cg_json_codec_site_kind(const XiValue *value, uint8_t *out_kind) {
 static bool cg_json_codec_summary_matches_site(const XiValue *value,
                                                const XgJsonCodecSummary *summary,
                                                uint8_t expected_kind) {
-    if (!value || !summary || summary->source_node_id == 0 ||
-        summary->codec_kind != expected_kind)
+    if (!value || !summary || summary->source_node_id == 0 || summary->codec_kind != expected_kind)
         return false;
     if (expected_kind == XG_JSON_CODEC_PARSE) {
-        const bool typed_parse =
-            value->op == XI_JSON_DECODE &&
-            (value->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0;
+        const bool typed_parse = value->op == XI_JSON_DECODE &&
+                                 (value->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0;
         if (typed_parse)
             return (summary->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0 &&
                    summary->target_type_key != 0;
@@ -15203,12 +15140,11 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
     if (json_codec_site) {
         if (value->xg_json_codec_id == XG_NO_ID) {
             issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
-            cg_report_mandatory_contract_failure(ctx, func, value, "json-codec evidence",
-                                                 XG_NO_ID, issue);
+            cg_report_mandatory_contract_failure(ctx, func, value, "json-codec evidence", XG_NO_ID,
+                                                 issue);
             return false;
         }
-        const XgGlobalEvidence *evidence =
-            bundle ? bundle->global_evidence_plan.evidence : NULL;
+        const XgGlobalEvidence *evidence = bundle ? bundle->global_evidence_plan.evidence : NULL;
         if (!evidence ||
             bundle->global_evidence_plan.evidence_hash != xg_global_evidence_hash(evidence)) {
             issue = evidence ? XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH
@@ -15784,9 +15720,8 @@ static bool cg_aot_stdlib_receiver_call_is_direct(XiCgenCtx *ctx, const XiFunc *
         call->nargs < 1 || !call->aux)
         return false;
     const char *module = cg_aot_stdlib_module_of_receiver(ctx, f, call->args[0]);
-    return (module && cg_find_aot_stdlib_method(module, (const char *) call->aux,
-                                                (uint16_t) (call->nargs - 1)) != NULL) ||
-           cg_time_module_helper_ctx(ctx, f, call) != NULL;
+    return module && cg_find_aot_stdlib_method(module, (const char *) call->aux,
+                                               (uint16_t) (call->nargs - 1)) != NULL;
 }
 
 static bool cg_aot_stdlib_import_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,

@@ -557,14 +557,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
-    {"now", XLSP_SYM_FUNCTION, "fn(): i64", "Current time in milliseconds since epoch", NULL, 0},
-    {"clock", XLSP_SYM_FUNCTION, "fn(): i64", "CPU clock time in milliseconds", NULL, 0},
-    {"monotonic", XLSP_SYM_FUNCTION, "fn(): i64", "Monotonic time in milliseconds", NULL, 0},
-    {"nanos", XLSP_SYM_FUNCTION, "fn(): i64", "Monotonic time in nanoseconds", NULL, 0},
-    {"micros", XLSP_SYM_FUNCTION, "fn(): i64", "Monotonic time in microseconds", NULL, 0},
-    {"localOffset", XLSP_SYM_FUNCTION, "fn(): i64", "Local UTC offset in minutes for the current wall time", NULL, 0},
-    {"localOffsetAt", XLSP_SYM_FUNCTION, "fn(timestamp: i64): i64", "Local UTC offset in minutes at a Unix timestamp", NULL, 0},
     {"sleep", XLSP_SYM_FUNCTION, "fn(ms: i64): ()", "Sleep for milliseconds", NULL, 0},
+    {"now", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"clock", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"monotonic", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"micros", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"nanos", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"localOffsetAt", XLSP_SYM_FUNCTION, "fn(timestamp: i64): i64", "", NULL, 0},
+    {"localOffset", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT 8
 

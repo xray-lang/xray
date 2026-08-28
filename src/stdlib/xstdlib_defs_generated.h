@@ -144,13 +144,10 @@ typedef struct XrStdlibClassFieldDefEntry {
 } XrStdlibClassFieldDefEntry;
 
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
-    {"time", "now", "(): i64", "Current time in milliseconds since epoch", "xr_time_now", "normal", "", "xrt_time_now", "", "value", "", "time.now", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"time", "clock", "(): i64", "CPU clock time in milliseconds", "xr_time_clock", "normal", "", "xrt_time_clock", "", "value", "", "time.clock", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"time", "monotonic", "(): i64", "Monotonic time in milliseconds", "xr_time_monotonic", "normal", "", "xrt_time_monotonic", "", "value", "", "time.monotonic", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"time", "nanos", "(): i64", "Monotonic time in nanoseconds", "xr_time_nanos", "normal", "", "xrt_time_nanos", "", "value", "", "time.nanos", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"time", "micros", "(): i64", "Monotonic time in microseconds", "xr_time_micros", "normal", "", "xrt_time_micros", "", "value", "", "time.micros", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"time", "localOffset", "(): i64", "Local UTC offset in minutes for the current wall time", "xr_time_local_offset", "normal", "", "xrt_time_local_offset", "", "value", "", "time.localOffset", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"time", "localOffsetAt", "(timestamp: i64): i64", "Local UTC offset in minutes at a Unix timestamp", "xr_time_local_offset_at", "normal", "", "xrt_time_local_offset_at", "v", "value", "", "time.localOffsetAt", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"time", "__realtimeNanos", "(): i64", "Nanoseconds since the Unix epoch on the wall clock", "time_realtimeNanos", "normal", "", "xrt_time_realtime_nanos", "", "value", "", "time.__realtimeNanos", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"time", "__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", "time_monotonicNanos", "normal", "", "xrt_time_monotonic_nanos", "", "value", "", "time.__monotonicNanos", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"time", "__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", "time_cpuNanos", "normal", "", "xrt_time_cpu_nanos", "", "value", "", "time.__cpuNanos", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"time", "__utcOffsetAt", "(seconds: i64): i64", "Minutes east of UTC at a Unix timestamp in seconds", "time_utcOffsetAt", "normal", "", "xrt_time_utc_offset_at", "v", "value", "", "time.__utcOffsetAt", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"time", "sleep", "(ms: i64): ()", "Sleep for milliseconds", "xr_time_sleep", "yieldable", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_TIMER, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"math", "abs", "(x: f64): f64", "Absolute value", "math_abs", "normal", "", "builtin", "", "value", "", "", "", "core", "builtin", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"math", "floor", "(x: f64): i64", "Floor to integer", "math_floor", "normal", "", "builtin", "", "value", "", "", "", "core", "builtin", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},

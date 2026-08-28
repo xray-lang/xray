@@ -30,13 +30,10 @@ static const char *const g_aot_stdlib_cluster___send_enum_variants[] = {
 };
 
 static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
-    {"time", "now", 0, "xrt_time_now", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "clock", 0, "xrt_time_clock", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "monotonic", 0, "xrt_time_monotonic", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "nanos", 0, "xrt_time_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "micros", 0, "xrt_time_micros", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "localOffset", 0, "xrt_time_local_offset", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "localOffsetAt", 1, "xrt_time_local_offset_at", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"time", "__realtimeNanos", 0, "xrt_time_realtime_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"time", "__monotonicNanos", 0, "xrt_time_monotonic_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"time", "__cpuNanos", 0, "xrt_time_cpu_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"time", "__utcOffsetAt", 1, "xrt_time_utc_offset_at", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"math", "random", 0, "xrt_math_random", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"math", "randomInt", 2, "xrt_math_random_int", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"compress", "crc32", 1, "xrt_compress_crc32", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

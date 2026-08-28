@@ -26,20 +26,14 @@ enum {
 static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
     if (!symbol)
         return NULL;
-    if (strcmp(symbol, "time.now") == 0)
-        return "time.now";
-    if (strcmp(symbol, "time.clock") == 0)
-        return "time.clock";
-    if (strcmp(symbol, "time.monotonic") == 0)
-        return "time.monotonic";
-    if (strcmp(symbol, "time.nanos") == 0)
-        return "time.nanos";
-    if (strcmp(symbol, "time.micros") == 0)
-        return "time.micros";
-    if (strcmp(symbol, "time.localOffset") == 0)
-        return "time.localOffset";
-    if (strcmp(symbol, "time.localOffsetAt") == 0)
-        return "time.localOffsetAt";
+    if (strcmp(symbol, "time.__realtimeNanos") == 0)
+        return "time.__realtimeNanos";
+    if (strcmp(symbol, "time.__monotonicNanos") == 0)
+        return "time.__monotonicNanos";
+    if (strcmp(symbol, "time.__cpuNanos") == 0)
+        return "time.__cpuNanos";
+    if (strcmp(symbol, "time.__utcOffsetAt") == 0)
+        return "time.__utcOffsetAt";
     if (strcmp(symbol, "math.random") == 0)
         return "math.random";
     if (strcmp(symbol, "math.randomInt") == 0)
