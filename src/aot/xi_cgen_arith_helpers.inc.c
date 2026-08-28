@@ -126,7 +126,7 @@ static bool cg_divmod_uses_unsigned(const XiValue *v) {
     bool left_int = left && left->kind == XR_KIND_INT;
     bool right_int = right && right->kind == XR_KIND_INT;
     return left_int && right_int &&
-           (cg_type_is_unsigned_int(left) || cg_type_is_unsigned_int(right));
+           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
 }
 
 /* Emit unsigned div/mod via xrt_uint_div / xrt_uint_mod (same divide-by-zero
@@ -169,7 +169,7 @@ static bool emit_native_unsigned_wrap_arith_expr(XiCgenCtx *ctx, FILE *out, cons
         cg_value_plan_storage_rep(ctx, v->args[0]) != XR_REP_I64 ||
         cg_value_plan_storage_rep(ctx, v->args[1]) != XR_REP_I64)
         return false;
-    if (!cg_type_is_unsigned_int(v->type))
+    if (!xr_type_is_exact_unsigned_integer(v->type))
         return false;
 
     const char *ctype = NULL;
