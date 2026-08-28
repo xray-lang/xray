@@ -4161,7 +4161,7 @@ static void test_native_module_scalar_call_authority(void) {
      * module namespace, so the receiver it stores is a different value even
      * though the module path and selector read the same. */
     expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
-        "mem", "cacheLineSize", "cacheLineSize", 0,
+        "mem", "__cacheLineSize", "__cacheLineSize", 0,
         NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64));
     /* An integer whose representation is still open has not said what the shim
      * would move.  Module path, selector and arity are the baseline's, so the
@@ -4252,11 +4252,11 @@ static void test_native_module_pointer_boundary_authority(void) {
      * position here and the two halves stay separately demonstrated. */
     XrType *ptr_and_bytes[] = {&stub_mut_ptr_u8, &stub_i64};
     XrSemanticPlan *release = build_native_module_member_call_plan(
-        "mem", NULL, "pageFree", 2, ptr_and_bytes, immediate, &stub_exact_bool);
+        "mem", NULL, "__pageFree", 2, ptr_and_bytes, immediate, &stub_exact_bool);
     XrSemanticOperationRecord *release_call = native_module_call_operation(release);
     REQUIRE(release_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
             release_call->operand_count == 3 && release_call->metadata_count == 1);
-    REQUIRE(strcmp(release->metadata[release_call->metadata_begin], "pageFree") == 0);
+    REQUIRE(strcmp(release->metadata[release_call->metadata_begin], "__pageFree") == 0);
     const XrSemanticOperandRecord *operands = &release->operands[release_call->operand_begin];
     REQUIRE(operands[0].role == XR_SEM_OPERAND_RECEIVER &&
             operands[1].role == XR_SEM_OPERAND_ARGUMENT && operands[1].parameter == 0 &&
@@ -4294,7 +4294,7 @@ static void test_native_module_pointer_boundary_authority(void) {
      * not to the one-record question of whether a type can cross at all. */
     XrType *const_ptr_and_bytes[] = {&stub_const_ptr_u8, &stub_i64};
     XrSemanticPlan *const_release = build_native_module_member_call_plan(
-        "mem", NULL, "pageFree", 2, const_ptr_and_bytes, immediate, &stub_exact_bool);
+        "mem", NULL, "__pageFree", 2, const_ptr_and_bytes, immediate, &stub_exact_bool);
     const XrSemanticOperationRecord *const_call = native_module_call_operation(const_release);
     REQUIRE(const_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
     expect_exact_raw_pointer_type(const_release,
@@ -4313,7 +4313,7 @@ static void test_native_module_pointer_boundary_authority(void) {
         "mem", NULL, "pageAlloc", 1, nullable_result, immediate, &stub_nullable_mut_ptr_u8));
     XrType *nullable_argument[] = {&stub_nullable_mut_ptr_u8, &stub_i64};
     expect_no_native_module_scalar_call(build_native_module_member_call_plan(
-        "mem", NULL, "pageFree", 2, nullable_argument, immediate, &stub_exact_bool));
+        "mem", NULL, "__pageFree", 2, nullable_argument, immediate, &stub_exact_bool));
 }
 
 static void test_native_namespace_yieldable_authority(void) {
