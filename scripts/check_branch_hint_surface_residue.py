@@ -21,6 +21,17 @@ TOMBSTONE_ROW = (
 )
 NEGATIVE_FIXTURE = Path("tests/compile_errors/type/branch_hint_builtins_removed.xr")
 NEGATIVE_EXPECTED = Path(str(NEGATIVE_FIXTURE) + ".expected")
+# The oracle is written in the compile-error suite's expected-file grammar
+# (tests/compile_errors/expected_format.py): each `-->` line pins where the
+# diagnostic points, so a rename that also moved the caret would be caught here
+# rather than silently accepted.
+BRANCH_HINT_ORACLE = (
+    "--> 1:11 E0351\n"
+    "Undeclared variable 'likely'\n"
+    "\n"
+    "--> 2:12 E0351\n"
+    "Undeclared variable 'unlikely'\n"
+)
 
 SEMANTIC_RESIDUE = (
     "XI_COPY_KIND_LIKELY",
@@ -94,7 +105,7 @@ def _check_tombstone(root: Path, errors: list[str]) -> None:
         errors.append("removed source branch-hint fixture is missing or drifted")
     if not expected.is_file():
         errors.append("removed source branch-hint diagnostic oracle is missing")
-    elif _read(expected) != "Undeclared variable 'likely'\nUndeclared variable 'unlikely'\n":
+    elif _read(expected) != BRANCH_HINT_ORACLE:
         errors.append("removed source branch-hint diagnostic oracle drifted")
 
 
@@ -163,7 +174,7 @@ def self_test() -> int:
         _write(root / "contracts/capability-deletions.tsv", TOMBSTONE_HEADER + "\n" + TOMBSTONE_ROW + "\n")
         _write(root / NEGATIVE_FIXTURE, "var hot = likely(true)\nvar cold = unlikely(false)\n")
         _write(root / NEGATIVE_EXPECTED,
-               "Undeclared variable 'likely'\nUndeclared variable 'unlikely'\n")
+               BRANCH_HINT_ORACLE)
         for rel in INTERNAL_HEADERS:
             _write(root / rel, "#define XR_LIKELY(x) (x)\n#define XR_UNLIKELY(x) (x)\n")
         for rel, _ in PUBLIC_BINDING_PATTERNS:

@@ -3697,6 +3697,53 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # The matcher every compile-error case is judged by. A regression in it
+    # would not turn one case red -- it would turn all of them silently green,
+    # so its own rejections are asserted directly.
+    add_test(
+        NAME expected_format_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/test_expected_format.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(expected_format_self_test PROPERTIES
+        LABELS "frontend;negative;regression"
+        TIMEOUT 60
+    )
+
+    # Three-way reconciliation between the spec's error-code table, the code
+    # registry, and the codes compile-error cases actually assert.  Every code
+    # left uncovered needs a written reason, the same discipline the
+    # known_failures lists carry.
+    add_test(
+        NAME error_code_coverage
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/check_error_code_coverage.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(error_code_coverage PROPERTIES
+        LABELS "frontend;negative;regression"
+        TIMEOUT 60
+    )
+
+    # Ratchet on diagnostics that never computed a position.  It reads raw
+    # spans through `xray check`, because the rendering path clamps an unset
+    # column to 1 and so hides exactly what this gate measures.
+    add_test(
+        NAME diagnostic_position_census
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY=$<TARGET_FILE:xray>
+                ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/check_diagnostic_positions.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    math(EXPR DIAGNOSTIC_POSITION_TIMEOUT "60 * ${XR_TEST_TIMEOUT_SCALE}")
+    set_tests_properties(diagnostic_position_census PROPERTIES
+        LABELS "frontend;negative;regression"
+        PROCESSORS 2
+        TIMEOUT ${DIAGNOSTIC_POSITION_TIMEOUT}
+    )
+
     add_test(
         NAME verify_contract_cli
         COMMAND ${XRAY_PYTHON}
