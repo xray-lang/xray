@@ -158,18 +158,20 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
         int index = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[index];
 
-        if (spec->kind == XR_MOD_STDLIB) {
-            /* A stdlib entry carries no bytecode: the loader resolves it by
-             * name against the native factory table and the embedded sources.
-             * Those are keyed by the bare module name, which is exactly the
-             * identity authority's namespace id -- the durable identity string
-             * is a different thing and no loader looks anything up by it. */
-            if (!bundle_add_entry(bundle, spec->authority.namespace_id, NULL, 0, spec->kind))
+        /* An external module occupies its topological slot without carrying
+         * bytecode: the runtime supplies its body, and the entry only has to
+         * name it well enough for xr_module_import to find it again. That name
+         * is the import specifier, never the canonical identity. */
+        bool external = spec->kind == XR_MOD_STDLIB ||
+                        (spec->kind == XR_MOD_PACKAGE && !(flags & XR_BUNDLE_STATIC_PACKAGES));
+        if (external) {
+            const char *import_name = xr_module_spec_import_name(spec);
+            if (!import_name) {
+                xr_log_warning("bundle", "external module has no import name: %s",
+                               spec->canonical ? spec->canonical : "?");
                 goto cleanup;
-            continue;
-        }
-        if (spec->kind == XR_MOD_PACKAGE && !(flags & XR_BUNDLE_STATIC_PACKAGES)) {
-            if (!bundle_add_entry(bundle, spec->canonical, NULL, 0, spec->kind))
+            }
+            if (!bundle_add_entry(bundle, import_name, NULL, 0, spec->kind))
                 goto cleanup;
             continue;
         }

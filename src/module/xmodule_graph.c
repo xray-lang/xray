@@ -803,6 +803,14 @@ XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g) {
     return g->has_cycle ? -1 : 0;
 }
 
+const char *xr_module_spec_import_name(const XrModuleSpec *spec) {
+    if (!spec)
+        return NULL;
+    if (spec->kind == XR_MOD_STDLIB)
+        return spec->authority.namespace_id;
+    return spec->source_path;
+}
+
 bool xr_module_graph_preload(XrVMRuntime *X, const XrModuleGraph *g, XrModule ***out_table) {
     if (out_table)
         *out_table = NULL;
@@ -820,9 +828,11 @@ bool xr_module_graph_preload(XrVMRuntime *X, const XrModuleGraph *g, XrModule **
         const XrModuleSpec *spec = &g->specs[idx];
         if (!spec->source_path)
             continue;
-        const char *import_name = (spec->kind == XR_MOD_STDLIB && spec->authority.namespace_id)
-                                      ? spec->authority.namespace_id
-                                      : spec->source_path;
+        const char *import_name = xr_module_spec_import_name(spec);
+        if (!import_name) {
+            xr_free(table);
+            return false;
+        }
         XrValue value = xr_module_import(X, import_name);
         if (XR_IS_NULL(value)) {
             xr_free(table);
