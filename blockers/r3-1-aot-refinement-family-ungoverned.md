@@ -236,7 +236,7 @@ message = "materialized AOT value representation does not match verified refinem
 
 **是两条路径，但切分点不在 82 / 5 那里。** 真正的结构是：两条发出路径 + 其中一条上的一个
 单码条件前缀。两条路径都在同一个函数
-`xaot_install_module_representation_refinements()`（`src/aot/xaot_driver.c:1926-1974`）里：
+`xaot_install_module_representation_refinements()`（`src/aot/xaot_driver.c:1927-1975`）里：
 
 **路径一 —— 构建期（`src/aot/xaot_driver.c:1939-1950`），无论如何都不带码：**
 
