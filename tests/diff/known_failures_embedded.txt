@@ -16,3 +16,31 @@
 # would restate the same blind spot in a file instead of a missing lane, so the
 # failures stay visible until they are fixed. Add a line only with a written
 # reason, and never to make an unrelated change go green.
+#
+# --- what this lane is red on, re-measured 2026-08-28 -----------------------
+#
+# Re-verified the 68 entries of known_failures_embedded_not_comparable.txt on
+# 00f665c5c: 48 are still refused, 18 now build and agree, and two build and
+# disagree. Deleting the 20 lines is what made the two visible:
+#
+#   tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr
+#   tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr
+#
+# Both reproduce 3/3. `xray run` completes with the right output; the binary
+# from the default `xray build` starts and then fails at run time with
+# "Package 'stdlib-module-v1:module=4:time:path=12:time/time.xr' not found".
+#
+# Chasing those two found something much larger, and the number this lane is
+# red on is not two. src/module/xbundle.c:162 writes a stdlib bundle entry
+# under its identity string instead of its plain namespace name, and
+# src/module/xproto_codec.c:2439 then hands that string to xr_module_import,
+# which indexes by plain name and cannot match. Eight stdlib modules with an
+# .xr layer reproduce it 8/8 from a two-line program (time io os sys text
+# base64 log path). Of the corpus's 97 stdlib-importing cases, 86 fail this
+# way and were never in the coverage list at all -- they were already red on
+# the frozen base, before anything in this change. The lane is red on 88, not
+# on 2. Filed as blockers/r3-1-embed-lane-stdlib-module-not-bundled.md.
+#
+# None of the 88 is baselined here, which is the policy above and also the
+# lesson: listing the two coro cases as not-comparable is exactly what kept
+# this defect out of sight for three weeks.
