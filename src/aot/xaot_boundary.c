@@ -68,10 +68,15 @@ static XaotDirectI64TargetStatus direct_i64_exclude_native_target_leaf(
         return direct_i64_error(errbuf, errbuf_len,
                                 "native target leaf exclusion input is incomplete");
 
+    uint32_t partition = UINT32_MAX;
+    const XrSemanticPlan *semantic =
+        xaot_bundle_program_semantic_for_func(bundle, caller, &partition);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-    if (!xr_aot_scalar_semantic_value_id(target, caller, call, &semantic_function,
-                                         &semantic_value, NULL, 0))
+    if (!semantic ||
+        !xr_aot_scalar_program_semantic_value_id(
+            target, partition, caller_row->id, caller, call,
+            &semantic_function, &semantic_value, NULL, 0))
         return XAOT_DIRECT_I64_TARGET_UNCOVERED;
 
     uint32_t call_count = 0;
@@ -93,8 +98,6 @@ static XaotDirectI64TargetStatus direct_i64_exclude_native_target_leaf(
     if (!match)
         return XAOT_DIRECT_I64_TARGET_UNCOVERED;
 
-    const XrSemanticPlan *semantic =
-        xaot_bundle_program_semantic_for_func(bundle, caller, NULL);
     const XrSemanticOperationRecord *operation =
         semantic ? xr_semantic_plan_operation(semantic, match->semantic_operation) : NULL;
     const XrStdlibDefEntry *entry = NULL;
@@ -119,8 +122,9 @@ static XaotDirectI64TargetStatus direct_i64_exclude_native_target_leaf(
                  call->nargs == 1 && callee && ref && ref->module_path &&
                  ref->member_name && entry && strcmp(ref->module_path, entry->module) == 0 &&
                  strcmp(ref->member_name, entry->name) == 0 &&
-                 xr_aot_scalar_semantic_value_id(target, caller, callee, &callee_function,
-                                                 &callee_value, NULL, 0) &&
+                 xr_aot_scalar_program_semantic_value_id(
+                     target, partition, caller_row->id, caller, callee,
+                     &callee_function, &callee_value, NULL, 0) &&
                  callee_function == semantic_function &&
                  callee_value == operands[operation->operand_begin].value &&
                  match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
@@ -210,6 +214,17 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
             bound ? xr_c_program_direct_i64_function_binding(&binding,
                                                               function)
                   : NULL;
+        if (!bound) {
+            xr_c_program_direct_i64_emission_release(&binding);
+            return direct_i64_error(
+                errbuf, errbuf_len,
+                error[0] ? error
+                         : "program direct-i64 ABI has no exact global binding");
+        }
+        if (!function_binding) {
+            xr_c_program_direct_i64_emission_release(&binding);
+            return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+        }
         bool exact = function_binding && functions &&
                      function_binding->target_partition == partition &&
                      function_binding->target_function < function_count &&
@@ -226,8 +241,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
         if (!exact)
             return direct_i64_error(
                 errbuf, errbuf_len,
-                error[0] ? error
-                         : "program direct-i64 ABI has no exact global binding");
+                "program direct-i64 ABI has no exact function binding");
         if (boundary_out)
             *boundary_out = return_abi.boundary_kind;
         return XAOT_DIRECT_I64_TARGET_FOUND;

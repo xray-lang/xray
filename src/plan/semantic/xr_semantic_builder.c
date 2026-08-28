@@ -192,12 +192,14 @@ static bool prepare_program_authority(XrSemanticBuildContext *ctx, const XiFunc 
     bool aggregate = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
     bool product = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     bool graph = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    bool private_leaf =
+        family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
     bool overflow = family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     bool overflow_decisions = module->i64_overflow_decisions != NULL;
-    if ((!scalar && !aggregate && !product && !graph && !overflow) ||
+    if ((!scalar && !aggregate && !product && !graph && !private_leaf && !overflow) ||
         (scalar && (!decision || !profile)) ||
         (overflow && (decision || !overflow_decisions || !profile)) ||
-        ((aggregate || product || graph) && (decision || profile)) ||
+        ((aggregate || product || graph || private_leaf) && (decision || profile)) ||
         !xi_program_semantic_verify_partition(
             module, scalar || overflow ? module->scalar_target_profile : NULL, ctx->error,
             ctx->error_size))
@@ -671,12 +673,43 @@ static bool program_type_annotation_is_exact(const XrSemanticBuildContext *ctx, 
     return program_type_row_for_source(ctx, type) == annotation;
 }
 
+static bool program_type_annotations_are_empty(const XiFunc *function) {
+    if (!function || function->psc_return_type_index != XI_PSC_ROW_NONE)
+        return false;
+    for (uint16_t p = 0; p < function->nparams; p++)
+        if (!function->params[p] || function->params[p]->psc_type_index != XI_PSC_ROW_NONE)
+            return false;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        const XiBlock *block = function->blocks[b];
+        if (!block)
+            return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            if (phi->value.psc_type_index != XI_PSC_ROW_NONE)
+                return false;
+        for (uint32_t v = 0; v < block->nvalues; v++)
+            if (!block->values[v] || block->values[v]->psc_type_index != XI_PSC_ROW_NONE)
+                return false;
+    }
+    return true;
+}
+
 /* Xi annotations are evidence to verify, not a second type-identity owner. */
 static bool verify_program_type_annotations(XrSemanticBuildContext *ctx) {
     if (!ctx->program_closure)
         return true;
+    bool private_leaf = xr_program_semantic_closure_family(ctx->program_closure) ==
+                        XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
     for (uint32_t f = 0; f < ctx->function_count; f++) {
         const XiFunc *function = ctx->functions[f].source;
+        /* This family binds one exact source wrapper in each participating module.
+         * Other functions remain outside the capability even when they happen to use
+         * the same scalar XrType, so they must carry no PSC type annotations at all. */
+        if (private_leaf && function && function->psc_function_index == XI_PSC_ROW_NONE) {
+            if (!program_type_annotations_are_empty(function))
+                return fail(ctx, "XR_SEM_0019",
+                            "Xi function outside private-leaf capability carries PSC type annotation");
+            continue;
+        }
         if (!function || !program_type_annotation_is_exact(ctx, function->return_type,
                                                            function->psc_return_type_index))
             return fail(ctx, "XR_SEM_0019", "Xi return type PSC annotation is not exact");
@@ -3595,7 +3628,19 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     bool graph_program =
         program_bound && xr_program_semantic_closure_family(ctx->program_closure) ==
                              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
-    if (graph_program) {
+    bool private_leaf_program =
+        program_bound && xr_program_semantic_closure_family(ctx->program_closure) ==
+                             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
+    const XrProgramSemanticCallRecord *program_call =
+        private_leaf_program
+            ? xr_program_semantic_closure_call(ctx->program_closure, value->psc_call_index)
+            : NULL;
+    static const XrStableId zero = {{0}};
+    bool private_leaf_source_call =
+        program_call && !xr_stable_id_equal(program_call->resolver_binding, zero);
+    bool private_native_leaf_call =
+        program_call && xr_stable_id_equal(program_call->resolver_binding, zero);
+    if (graph_program || private_leaf_source_call) {
         if (value->op != XI_CALL || !append_source_export_call_target(ctx, value, operation) ||
             ctx->plan->call_target_count != before + 1u ||
             ctx->plan->call_targets[before].kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
@@ -3603,7 +3648,8 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
                         "graph program call has no exact source-export target");
         return true;
     }
-    if (!program_bound) {
+    bool local_program_bound = program_bound && !private_native_leaf_call;
+    if (!local_program_bound) {
         if (!append_source_export_call_target(ctx, value, operation))
             return false;
         if (ctx->plan->call_target_count != before)
@@ -3617,24 +3663,24 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
      * ordinary direct-local row, so a self-call is admitted on exactly the
      * signature, argument and result terms any other local call must meet. */
     uint32_t program_function = XR_SEMANTIC_INDEX_NONE;
-    if (program_bound && !program_direct_local_callee(ctx, caller, value, &program_function))
+    if (local_program_bound && !program_direct_local_callee(ctx, caller, value, &program_function))
         return false;
-    int function = program_bound ? (int) program_function
+    int function = local_program_bound ? (int) program_function
                                  : (xi_call_targets_own_frame(value->op, value->aux_int)
                                         ? (int) caller
                                         : resolve_direct_local_callee(
                                               ctx, ctx->functions[caller].source, value->args[0]));
     const char *native_module = NULL;
     const char *native_member = NULL;
-    bool native_yieldable = !program_bound && function < 0 &&
+    bool native_yieldable = !local_program_bound && function < 0 &&
                             resolve_native_yieldable_callee(ctx->functions[caller].source, value,
                                                             &native_module, &native_member);
-    const XiValue *indirect_callee = program_bound ? NULL : value->args[0];
-    while (!program_bound && indirect_callee && xi_copy_is_identity_alias(indirect_callee) &&
+    const XiValue *indirect_callee = local_program_bound ? NULL : value->args[0];
+    while (!local_program_bound && indirect_callee && xi_copy_is_identity_alias(indirect_callee) &&
            indirect_callee->nargs == 1)
         indirect_callee = indirect_callee->args[0];
     bool indirect_callable =
-        !program_bound && function < 0 && !native_yieldable && value->op == XI_CALL &&
+        !local_program_bound && function < 0 && !native_yieldable && value->op == XI_CALL &&
         value->args[0] && value->args[0]->type && value->args[0]->type->kind == XR_KIND_FUNCTION &&
         indirect_callee && indirect_callee->op != XI_IMPORT_REF &&
         indirect_callee->op != XI_GET_BUILTIN &&
@@ -3642,7 +3688,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
          call_has_coroutine_state(ctx->functions[caller].source, value)) &&
         indirect_callee->op != XI_CLOSURE_NEW &&
         !(indirect_callee->op == XI_STACK_ALLOC && indirect_callee->aux_int == XI_CLOSURE_NEW);
-    if (!program_bound && function < 0 && !native_yieldable && !indirect_callable)
+    if (!local_program_bound && function < 0 && !native_yieldable && !indirect_callable)
         return append_source_class_constructor_call_target(ctx, value, operation);
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
@@ -5174,7 +5220,15 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
                         ctx->program_closure, value->psc_call_index);
                     uint32_t target = XR_SEMANTIC_INDEX_NONE;
                     bool graph = xr_program_semantic_closure_family(ctx->program_closure) ==
-                                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+                                  XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+                    bool private_leaf =
+                        xr_program_semantic_closure_family(ctx->program_closure) ==
+                        XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
+                    static const XrStableId zero = {{0}};
+                    bool private_leaf_source_call =
+                        private_leaf && !xr_stable_id_equal(row->resolver_binding, zero);
+                    bool private_native_leaf_call =
+                        private_leaf && xr_stable_id_equal(row->resolver_binding, zero);
                     uint32_t program_dependency = XR_SEMANTIC_INDEX_NONE;
                     XrStableId resolver = {{0}};
                     if (!row || ctx->program_call_binding_count >= call_count)
@@ -5203,10 +5257,10 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
                             !xr_stable_id_equal(caller_row->id, row->caller_function))
                             return fail(ctx, "XR_SEM_0019",
                                         "overflow program call binding is not exact");
-                    } else if (!graph) {
+                    } else if (!graph && !private_leaf) {
                         if (!program_direct_local_callee(ctx, f, value, &target))
                             return false;
-                    } else {
+                    } else if (graph || private_leaf_source_call) {
                         const XiImportRef *ref = value->nargs > 0 && value->args
                                                      ? resolve_source_import_callee(
                                                            ctx, function, value->args[0])
@@ -5245,6 +5299,20 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
                                 .program_row = ref->psc_dependency_index,
                                 .semantic_dependency = source_target->dependency,
                             };
+                    } else if (private_native_leaf_call) {
+                        const XrSemanticOperationRecord *native =
+                            operation < ctx->plan->operation_count
+                                ? &ctx->plan->operations[operation]
+                                : NULL;
+                        XrStableId native_identity = {{0}};
+                        if (!native || !xr_semantic_native_target_leaf_call_is_exact(
+                                           ctx->plan, native, NULL, &native_identity) ||
+                            !xr_stable_id_equal(native_identity, row->callee_function))
+                            return fail(ctx, "XR_SEM_0019",
+                                        "private native leaf program call is not exact");
+                    } else {
+                        return fail(ctx, "XR_SEM_0019",
+                                    "private-leaf program call kind is unsupported");
                     }
                     ctx->program_call_bindings[ctx->program_call_binding_count++] =
                         (XrSemanticProgramCallBinding) {

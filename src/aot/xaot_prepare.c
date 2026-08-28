@@ -9,6 +9,7 @@
  */
 
 #include "xaot_prepare.h"
+#include "emit_c/xr_c_program_emission.h"
 #include "emit_c/xr_c_emission_plan.h"
 #include "xaot_boundary.h"
 #include "xaot_class_native.h"
@@ -127,6 +128,37 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
     (void) semantic_function;
     *out_binding =
         xr_target_plan_value_rep_for_module(target_plan, partition, semantic_value);
+    return true;
+}
+
+static bool prepare_program_callee_operand_elision(
+    XaotBundle *bundle, const XiFunc *func, const XiValue *value,
+    bool *out_elided) {
+    if (out_elided)
+        *out_elided = false;
+    if (!bundle || !func || !value || !out_elided)
+        return false;
+    if (value->op != XI_IMPORT_REF && value->op != XI_GET_SHARED)
+        return true;
+    const XrTargetPlan *target = xaot_bundle_program_target_plan(bundle);
+    uint32_t graph_count = 0;
+    if (!target)
+        return true;
+    (void) xr_target_plan_program_graphs(target, &graph_count);
+    if (graph_count == 0u)
+        return true;
+    XrCProgramDirectI64EmissionBinding binding = {0};
+    char error[256] = {0};
+    if (!xr_c_program_direct_i64_emission_bind(
+            target, bundle->modules, bundle->nmodules, &binding, error,
+            sizeof(error))) {
+        bundle->error_msg =
+            "AOT callee elision has no exact program C-emission binding";
+        return false;
+    }
+    *out_elided = xr_c_program_direct_i64_callee_operand_is_elided(
+        &binding, func, value);
+    xr_c_program_direct_i64_emission_release(&binding);
     return true;
 }
 
@@ -4360,6 +4392,12 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                     return false;
                 continue;
             }
+            bool elided = false;
+            if (!prepare_program_callee_operand_elision(
+                    bundle, func, &phi->value, &elided))
+                return false;
+            if (elided)
+                continue;
             XaotValuePlan *vp = xaot_bundle_add_value_plan(bundle, func, &phi->value);
             if (!vp) {
                 bundle->error_msg = "failed to allocate AOT value plan";
@@ -4404,6 +4442,12 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                     return false;
                 continue;
             }
+            bool elided = false;
+            if (!prepare_program_callee_operand_elision(
+                    bundle, func, blk->values[vi], &elided))
+                return false;
+            if (elided)
+                continue;
             XaotValuePlan *vp = xaot_bundle_add_value_plan(bundle, func, blk->values[vi]);
             if (!vp) {
                 bundle->error_msg = "failed to allocate AOT value plan";
@@ -5771,8 +5815,10 @@ static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
     return true;
 }
 
-static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t module_index,
-                                   uint16_t depth, bool is_module_init) {
+static bool prepare_func_recursive(
+    XaotBundle *bundle, XiFunc *func, uint32_t module_index, uint16_t depth,
+    bool is_module_init,
+    const XrCProgramDirectI64EmissionBinding *program_scope) {
     XaotFuncPlan *plan;
     const XgBodySummary *body;
     uint16_t ci;
@@ -5780,6 +5826,16 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
 
     if (!bundle || !func)
         return false;
+    if (program_scope &&
+        !xr_c_program_direct_i64_function_binding(program_scope, func)) {
+        for (ci = 0; ci < func->nchildren; ci++) {
+            if (!prepare_func_recursive(
+                    bundle, func->children[ci], module_index,
+                    (uint16_t) (depth + 1u), false, program_scope))
+                return false;
+        }
+        return true;
+    }
     plan = xaot_bundle_add_func_plan(bundle, func, module_index, depth);
     if (!plan) {
         bundle->error_msg = "failed to allocate AOT function plan";
@@ -5796,7 +5852,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     XaotDirectI64TargetStatus direct_i64_status =
         leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED
             ? xaot_boundary_direct_i64_abi_status(bundle, func,
-                                                  &direct_i64_boundary, NULL, 0)
+                                                  &direct_i64_boundary,
+                                                  NULL, 0)
             : XAOT_DIRECT_I64_TARGET_UNCOVERED;
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
         bundle->error_msg = "AOT function has invalid direct-i64 TargetPlan authority";
@@ -5873,7 +5930,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
 
     for (ci = 0; ci < func->nchildren; ci++) {
         if (!prepare_func_recursive(bundle, func->children[ci], module_index,
-                                    (uint16_t) (depth + 1), false))
+                                    (uint16_t) (depth + 1), false,
+                                    program_scope))
             return false;
     }
     if (!prepare_apply_aggregate_value_plans(bundle, func))
@@ -5984,6 +6042,42 @@ static bool prepare_extern_c_bindings(XaotBundle *bundle) {
     return true;
 }
 
+static bool prepare_program_function_plans(XaotBundle *bundle) {
+    const XrTargetPlan *target = xaot_bundle_program_target_plan(bundle);
+    uint32_t graph_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        target ? xr_target_plan_program_graphs(target, &graph_count) : NULL;
+    XrCProgramDirectI64EmissionBinding program_scope = {0};
+    const XrCProgramDirectI64EmissionBinding *scope = NULL;
+    char error[256] = {0};
+    if (graph_count != 0u) {
+        if (!graphs || graph_count != 1u ||
+            !xr_c_program_direct_i64_emission_bind(
+                target, bundle->modules, bundle->nmodules, &program_scope,
+                error, sizeof(error))) {
+            bundle->error_msg =
+                "AOT prepare has no exact program C-emission scope";
+            return false;
+        }
+        scope = &program_scope;
+    }
+
+    bool prepared = true;
+    for (uint32_t module_index = 0;
+         prepared && module_index < bundle->nmodules; module_index++) {
+        XiModule *module = bundle->modules[module_index];
+        if (!module || !module->init) {
+            bundle->error_msg = "module has no Xi init function";
+            prepared = false;
+            break;
+        }
+        prepared = prepare_func_recursive(bundle, module->init, module_index, 0,
+                                          true, scope);
+    }
+    xr_c_program_direct_i64_emission_release(&program_scope);
+    return prepared;
+}
+
 XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats) {
     uint32_t mi;
     if (!bundle || !bundle->modules)
@@ -5994,15 +6088,8 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
     if (!prepare_require_target_plan(bundle))
         return false;
 
-    for (mi = 0; mi < bundle->nmodules; mi++) {
-        XiModule *mod = bundle->modules[mi];
-        if (!mod || !mod->init) {
-            bundle->error_msg = "module has no Xi init function";
-            return false;
-        }
-        if (!prepare_func_recursive(bundle, mod->init, mi, 0, true))
-            return false;
-    }
+    if (!prepare_program_function_plans(bundle))
+        return false;
     /* Function-value flow is whole-program: function/ABI rows for every
      * module must exist before argument/return/storage edges can converge. */
     if (!xaot_callable_plans_build(bundle)) {

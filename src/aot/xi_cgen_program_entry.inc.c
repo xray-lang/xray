@@ -1346,18 +1346,29 @@ static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
     if (!callee->xi_function || !callee->c_symbol[0] || !symbol_end ||
         !xr_c_program_direct_i64_function_abi_view(
             &ctx->program_direct_i64, callee->xi_function, 0u, &return_view) ||
-        !xr_c_program_direct_i64_function_abi_view(
-            &ctx->program_direct_i64, callee->xi_function, 1u, &parameter_view) ||
         return_view.boundary_kind != (uint8_t) XR_C_ABI_BOUNDARY_NATIVE ||
-        parameter_view.boundary_kind != (uint8_t) XR_C_ABI_BOUNDARY_NATIVE ||
-        return_view.parameter_count != 1u || parameter_view.parameter_count != 1u ||
+        return_view.parameter_count > 1u ||
         return_view.rep != (uint8_t) XR_C_VALUE_REP_I64 ||
-        parameter_view.rep != (uint8_t) XR_C_VALUE_REP_I64 ||
-        !return_view.c_type || !parameter_view.c_type) {
+        !return_view.c_type) {
         ctx->error = true;
         return false;
     }
-
+    if (return_view.parameter_count == 0u) {
+        fprintf(out, "XRT_INTERNAL %s %s(xrt_closure_t *_cl);\n",
+                return_view.c_type, callee->c_symbol);
+        return true;
+    }
+    if (!xr_c_program_direct_i64_function_abi_view(
+            &ctx->program_direct_i64, callee->xi_function, 1u,
+            &parameter_view) ||
+        parameter_view.boundary_kind !=
+            (uint8_t) XR_C_ABI_BOUNDARY_NATIVE ||
+        parameter_view.parameter_count != 1u ||
+        parameter_view.rep != (uint8_t) XR_C_VALUE_REP_I64 ||
+        !parameter_view.c_type) {
+        ctx->error = true;
+        return false;
+    }
     fprintf(out, "XRT_INTERNAL %s %s(xrt_closure_t *_cl, %s p0);\n",
             return_view.c_type, callee->c_symbol, parameter_view.c_type);
     return true;

@@ -11,6 +11,7 @@
 #include "os/os_fs.h"
 #include "os/os_temp.h"
 #include "plan/semantic/xr_semantic_plan.h"
+#include "plan/semantic/xr_semantic_plan_internal.h"
 #include "plan/target/xr_target_plan.h"
 #include "program_plan_cache_fixture.h"
 #include "../plan/target_profile_test_fixture.h"
@@ -184,8 +185,44 @@ TEST(wrong_program_authority_is_rejected_before_build_or_cache) {
     xr_test_program_plan_store_remove(root);
 }
 
+TEST(forged_private_leaf_family_is_rejected_before_cache) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-program-target-private-leaf", root,
+                                     sizeof(root)), 0);
+    XrCacheStore *store = open_store(root);
+    ASSERT_NOT_NULL(store);
+    XrSemanticPlan *semantic = xr_test_program_plan_semantic(505u);
+    ASSERT_NOT_NULL(semantic);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(profile);
+
+    semantic->program_provenance.schema =
+        XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION;
+    semantic->program_provenance.program_family =
+        XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
+
+    XrProgramTargetPlanBuildResult result = {0};
+    char error[512] = {0};
+    ASSERT_FALSE(run_build(semantic, NULL, 0u, profile, store, false, NULL,
+                           &result, error));
+    ASSERT_TRUE(result.cache_enabled);
+    ASSERT_NULL(result.plan);
+    ASSERT_FALSE(result.built);
+    ASSERT_FALSE(result.cache_load_attempted);
+    ASSERT_FALSE(result.cache_publish_attempted);
+    ASSERT_STR_EQ(error, "program TargetPlan build received wrong semantic authority");
+
+    xr_program_target_plan_build_result_release(&result);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_cache_store_close(store);
+    xr_test_program_plan_store_remove(root);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST(cold_warm_and_rebuild_preserve_one_program_plan);
 RUN_TEST(cancel_is_fail_closed_and_preserves_the_warm_entry);
 RUN_TEST(wrong_program_authority_is_rejected_before_build_or_cache);
+ RUN_TEST(forged_private_leaf_family_is_rejected_before_cache);
 TEST_MAIN_END()

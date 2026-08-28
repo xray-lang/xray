@@ -122,7 +122,7 @@ invalidation, compiler-session ownership, or any compatibility reader.
     every live module, function, import/export, resolver, call, attachment, and
     dependency join. Producer and entry XSM bytes are deterministic; entry
     decode requires the exact ordered producer plan. The driver then constructs
-    one independently verified schema-54 program TargetPlan from the full
+    one independently verified schema-55 program TargetPlan from the full
     canonical SemanticPlan module set. Its single graph row, two pointer-free
     module partitions, aggregate semantic fingerprint, global Target rows, and
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge must all verify before
@@ -171,24 +171,24 @@ exclusion, or mandatory verification is a contract change.
 ## Digest anchors
 
 anchor-sha256: src/incremental/xr_cache_artifact_verify.h 44f7e54519854bf0290c92209525919c6668264ef79bc80a39f247c21cb8c6b8
-anchor-sha256: src/incremental/xr_cache_artifact_verify.c dd39589de93c9771b5da9344f86e3633cfd142d0bcdb4df45dc91a1d2480c292
+anchor-sha256: src/incremental/xr_cache_artifact_verify.c 04345aceda18f8687dc85ee68490ea5c2104c68be8512acc4d3b3d6f3162ded0
 anchor-sha256: src/incremental/xr_cache_store.h f34e4f86ba65f44cbc29356488f32cbc52088c8dda6848ff756a571c78c9b1d9
 anchor-sha256: src/incremental/xr_cache_store.c bb726097541fb71d58d463f106bc7f103c21295ffee344425221b67a094d305b
 anchor-sha256: src/incremental/xr_program_target_plan_build.h 5ed34d49b3c9341ce93eb10ffd1b06a8bac01ee2be1163d357ceb89de27a9399
-anchor-sha256: src/incremental/xr_program_target_plan_build.c 8b5b583c6427984418a670653e02030380e215f76a917e3c6702b7d047e10059
+anchor-sha256: src/incremental/xr_program_target_plan_build.c 94c361665608172513ad2db9614fcf7b982c04c891ad97aa641373e306cb1cd4
 anchor-sha256: src/incremental/xr_module_summary_build.h 1d387ea9e943fa0fcebeba7222105b8d0677bdecf05cda3677dc0d400868279b
 anchor-sha256: src/incremental/xr_module_summary_build.c 0a58ea617bb715b7448fc57c51780e1ddb99dfe8e9bfbb38001abfb28ed29cc2
 anchor-sha256: src/aot/xaot_module_summary.h ab160517cfb59565b24f75f1273afb08e0c5d6c2370f282a1c09c7f45846adcc
 anchor-sha256: src/aot/xaot_module_summary.c c618aecfcbadf2cd1b0c6d17d4e05760dcd5111f63d823d7fe672a104f32dc31
 anchor-sha256: src/aot/xaot_driver.h bbf2dba4ad268d09cf45c32080a79202e85355600a793ea3571462822719e88d
-anchor-sha256: src/aot/xaot_driver.c 746df6c24a0745b8dbaeb5202d9431c102b16f127f1a5abd60086914df4efac6
+anchor-sha256: src/aot/xaot_driver.c f6dbd411dd1aa551381cfb95110453837f2d399b5fbe64abe63c80a6aaec7480
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
 anchor-sha256: tests/unit/CMakeLists.txt 2fe46be4b0de97780996ab1d9d2ae8772dded7a680ed9d9406b9144648aed314
 anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 31c1a7482c97bdc17549c01257710dbfd70142d02b308a61d32b81559f63148d
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
-anchor-sha256: tests/unit/incremental/test_program_target_plan_build.c 50c334c80c685846c4a20ca37d580f6a1363ece8a689570792319976a52fc636
+anchor-sha256: tests/unit/incremental/test_program_target_plan_build.c f5bb100d17faf101757077ad5c107ee93b422c6aa8867178fa7f992eb2aef573
 anchor-sha256: tests/unit/incremental/program_plan_cache_fixture.h dd6b9c2bcf20ec962f82cd903c98142c7794e6fad9a9fb04441db9d714cc1b4e
 anchor-sha256: tests/unit/incremental/program_plan_cache_fixture.c 212fb025b7be38ff15a089f203df9b11457843a367f81a0485d8d4cb805fb685
 anchor-sha256: tests/unit/incremental/test_program_plan_cache_qualification.c 27b504e4965d7a3808f318d9e4796680b9192c1891f6c7c10eba2ba9a2588fb3

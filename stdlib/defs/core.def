@@ -1950,6 +1950,8 @@ module os {
   fn __getpid {
     signature: "(): i64"
     doc: "Get process ID"
+    effect: "nothrow"
+    allocation: "no_heap"
     vm: "os_getpid"
     aot: "xrt_os_getpid"
     argc: 0

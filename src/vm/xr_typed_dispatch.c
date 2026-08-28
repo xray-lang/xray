@@ -52,7 +52,7 @@ _Static_assert(offsetof(XrTypedLeafValueProductTuple6, field0) == 0u &&
                    offsetof(XrTypedLeafValueProductTuple6, field3) == 24u &&
                    offsetof(XrTypedLeafValueProductTuple6, field4) == 32u &&
                    offsetof(XrTypedLeafValueProductTuple6, field5) == 40u,
-               "leaf value product carrier offsets must match schema-54 x64 layout");
+               "leaf value product carrier offsets must match schema-55 x64 layout");
 
 typedef union XrTypedAggregateValue {
     XrTypedLeafAggregateI64x2 pair;

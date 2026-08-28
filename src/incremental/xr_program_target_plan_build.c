@@ -69,6 +69,16 @@ static void set_error(char *error, size_t error_size, const char *format, ...) {
     error[error_size - 1u] = '\0';
 }
 
+static bool program_graph_family_is_supported(const XrSemanticPlan *semantic_plan) {
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(semantic_plan);
+    return program &&
+           (program->program_family ==
+                XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+            program->program_family ==
+                XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL);
+}
+
 static bool rejected_load_status(XrCacheLoadStatus status) {
     return status == XR_CACHE_LOAD_REJECTED || status == XR_CACHE_LOAD_CORRUPT ||
            status == XR_CACHE_LOAD_TOO_LARGE;
@@ -107,8 +117,7 @@ static bool collect_program_graph_semantics(
         return false;
     const XrSemanticProgramProvenance *entry =
         xr_semantic_plan_program_provenance(request->semantic_plan);
-    if (!entry || entry->program_family !=
-                      XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+    if (!program_graph_family_is_supported(request->semantic_plan))
         return true;
     if (entry->module_count != 2u || request->semantic_dependency_count != 1u ||
         !request->semantic_dependencies) {

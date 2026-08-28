@@ -117,7 +117,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     operations. The independent Xi verifier rechecks all six ordinals, the `u8`
     member, both caller/callee joins, exact operation coverage, and an
     authority-free module initializer. Ordinary TypedProgram publication and
-    SemanticPlan and schema-54 TargetPlan preserve the exact six-member layout,
+    SemanticPlan and schema-55 TargetPlan preserve the exact six-member layout,
     two caller-storage calls, and ordinal-bound instructions. Typed VM and the
     hosted-fragment C projection execute only after independent TargetPlan
     verification grants the leaf-value-product family. Ordinary product
@@ -209,7 +209,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
-    then builds one schema-54 program TargetPlan from the complete canonical
+    then builds one schema-55 program TargetPlan from the complete canonical
     SemanticPlan module set. The plan has one program-graph row, two module
     partitions over global rows, one aggregate semantic fingerprint, and the
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` call and argument authority. Only
@@ -286,7 +286,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     and their XSM round-trips close the same graph authority. Target construction
     consumes the full canonical plan set in `program_module_row` order while the
     entry fragment separately carries only its ordered direct dependency.
-    It emits one verified schema-54 TargetPlan with global functions, slots,
+    It emits one verified schema-55 TargetPlan with global functions, slots,
     values, instructions, calls, arguments, debug facts, layouts, extents, and
     capabilities; module partitions are bounded pointer-free views and are not
     independent plans. The cross-partition edge is exactly one
@@ -339,7 +339,7 @@ require the independently verified program authority frozen above.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 97a31187825a707045cfb11cfbf2637923351662d6f65a2c1c48a7b3743f8092
+anchor-sha256: CMakeLists.txt de05d8128ee3b9fe6ad24def5f178484873ea7ae07bf29f5c3c1e88da3bd2181
 anchor-sha256: src/module/xmodule_graph.h feb99f1e6afea7a84a38379fe7ebddeec4338998ade7753489d2313dff2fc0d2
 anchor-sha256: src/module/xmodule_graph.c 1e6cd17cde6de2031f99308217f02c6c43a0f0df0ba4d3f461b83c87e1d3d6ed
 anchor-sha256: src/frontend/parser/xparse.c f3a9f5e4699fa00ef5653399e17754f71dac3cb2ca27e6029f89f62da75f0365
@@ -354,12 +354,12 @@ anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.h beff336ef2725
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_internal.h d26adf137848c56d923d52b7bd85439105bcae1a48de736f989fc64685bcea17
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c 57e0d760a7d12f1cc5763ba3768eba48ae6859356018c37b9353d3d1e329113a
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c 19d2eab8e1b2b36e6ef2bdc6452e246a63a056704d7785cec8c5d25274900f40
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h c8f76fb52a3467a34338899c83773473cf92b9d51f4874eada3fe9ae7a9d19ed
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c dfbf493afe4a182cfbccd0df01bf7bb6df2fda3fdd7fab11cbb47acec709c4d6
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h b3c9ab8518c1d9ff5f0e55d710d98b76626c26002f226bd891c96c75994a7341
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h a25c554ab9571613a8fd26185147595375490c1cc1c02ff26a831d99cd751c85
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 5ae18976177eebe503e643644649517fa0c23d8c57aa38a0a5e3b131ce2382e2
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h a7b9d78946d077e7d7563f6f896b3fedcf0f781bf0182d94f0353d9a99fe2a41
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 006da5f6b47f362c7e0296f648638bb396db27d6bcd9df65f58ae9cde1d5b03e
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c b42ede6520dc2146cf6ffc2539b6ca70ad5cdff5247b2fb2f929744f8bd71032
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c b1e27c0668a30873e084d42fec39117b7144c1d272a9ee44ace0b17ac78ba886
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 4443024edf4523d6c676147a77aa365bbe7ac96852eea1941038d1c5b24e165a
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 3120c7a0a497ef3e2cade1e5c2025fc9cc959eb0084ab4719719edef5c2f81e1
 anchor-sha256: src/plan/semantic/xr_source_semantic_identity.h 5153e5d6a791b9d4b6ed83e914f380003a0c813128b1bc4fe890d606b8f4d2d3
 anchor-sha256: src/plan/semantic/xr_source_semantic_identity.c 833ecf4f6e42ebe14fe6c17eae216118a482418e38e8ef2f82f3726ab622990c
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.h ea50939c04efe67bdd8c885f002275e12ecfb2863acf7bfe4596e6fe28d9a99c
@@ -367,12 +367,12 @@ anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c f76347a5fca3415f4f43102f1a864d92904dfdec76570f029f7dadc445e9767c
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h 0940af8bed7477c4974f094eed12d77e65f5369830a1425c3c49ccd1fc61f150
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 998f088c36832290a4230c562eea6d1b530f26e4f9dbd036bd9df636cbbd263d
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h 86c48ef09925169c2a5ef4b1da71175285708cc3d2cb51c7b2163b99b43627d9
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c aeaad12aee601f2bfb982fbaa72484a3845b8382874fe84a86c88c1594458eb1
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 08b2b09c090a93214eb927deaed17534b360d427b68cced2db433d2fdd2d32dd
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h aa84b62300015820a6c208381d6ac17d2e8f83c3edde4a2b7af7c2a33d7d72e4
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fbe1eb29e08425a629dda4c281f7a681ab48512c599cae9b63b379f4db338d2e
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 1637430f1abcbf408d707f224c1a589c6317dd99431ec898d6df148fc219e7e9
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c a99cb10c2bda0bc1a8285249fde9504a99bb992a91ba3d895b6983aa6439c946
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 642eff61fb0b06185d2aec4c0ce8d91919148de3d29d74a17e68bd1a5016b3fa
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 838f7adc60c3de52fda23ed25c07edb678a6274eb87d0deec2da033e701dca10
@@ -381,26 +381,26 @@ anchor-sha256: src/ir/xi.c 26d3ceab5e7653af4dde2c3af459dd68fc59b65d9824c667acf96
 anchor-sha256: src/ir/xi_module.h 2ee8794e21ef18162b5c045e795a62a952762829c19af775a7bb7de73a873eb7
 anchor-sha256: src/ir/xi_lower.h 297d6165a47ac164a12df522091e970093fcc2ce35153378d5fd717019a8da72
 anchor-sha256: src/ir/xi_lower.c 5c83d887833b6197c71328aa2f126d4a18bd8dfc318f73cdc9e745fd2b4408e7
-anchor-sha256: src/ir/xi_lower_expr.c b8421b194a9519fe9947ee517810a607001000c0a9c36c0027b736d997bc1c4a
+anchor-sha256: src/ir/xi_lower_expr.c cde6cab94a9c5bf7a74a22b72615f16125de00d0d00b46074fd5cb42e1bc6faf
 anchor-sha256: src/ir/xi_lower_stmt.c 063e8ead6151fd583b84554e1e4d8c23892d53c537f1b287d541337b72845c32
-anchor-sha256: src/ir/xi_pipeline.c 385756c5c598a45b7caa4ebef4b88f2fcc744133dc72ecb390975d8edbd4b4db
+anchor-sha256: src/ir/xi_pipeline.c 332cd47d16910c775b091d718f2fe682b4e93690d6238506836cfe7925491569
 anchor-sha256: src/ir/xi_program_semantic.h 090db1d96c7fe1d2102c24293669ea1bee060a390fa8bfcb9cc63985a8c4955e
-anchor-sha256: src/ir/xi_program_semantic.c b947ea8fa41983f54a5213a5bef0ff3f3dfc622450f92ecf036a547e422e31f2
-anchor-sha256: src/ir/xi_program_semantic_verify.c 56c681ea7c465c63f90568bdabded921c12e4fe1d2d2ae9d3d1c72ffbb881d8f
+anchor-sha256: src/ir/xi_program_semantic.c c31bd64d20c470df18e1a52f2ed19ee8bd0b778f5bc747e28cf7af1bb836f8ae
+anchor-sha256: src/ir/xi_program_semantic_verify.c 0de956d180198ede7286f78e8eed70ec031b364b9e53f38ea19d26199fabaa6d
 anchor-sha256: src/ir/xi_own.c d36d0c84c81224d366afa7971390af9b2a58e65f06fc95e29a25a38c74979d7d
 anchor-sha256: src/ir/xi_program_semantic_plan.h c516db30bd0b7ec8fe0749bfd6fac4aecb8cfac217dad32f1954a7a66a7ee7ae
-anchor-sha256: src/ir/xi_program_semantic_plan.c b0220814034c6e5a7ec8ba543eff272f6e059c9420d1287cb22be021cc21d139
-anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
-anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
-anchor-sha256: tests/unit/plan/test_program_semantic_closure.c d302aa9504e4e2f8c362810d7e229b3cae95b8eb7f989be2bb8ce36dc45ba84e
+anchor-sha256: src/ir/xi_program_semantic_plan.c 4fbab5834aea89beebef20edd7607afc2f8e5c3c711e99f2a41d4d2c4f369eba
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 4668c1afc4791eb36f23eb585f6de9ce4a1311a20deebe8ae2ca355a90ac985e
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.c b21cb6814dad7e5d808cb97046dfa514d4242c6b6563c32cc2ac89c82734b076
+anchor-sha256: tests/unit/plan/test_program_semantic_closure.c dd2818bab1ed859e62c5fcf6d5cec0a529b0b00a8851266a9fd8aec8053aa227
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
-anchor-sha256: tests/unit/plan/test_semantic_plan.c c017de5a63589b61081c337668d61fb1c6cac394370919eaa6c5a9bdd8f4921c
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c b0081b37ed5f669d0c0746b8feefcd586b52e22146c749405b76ef5111917045
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 8d1d58f5ffeae839913244be1f90d43bdbc8fefd3884ed7ce5fd46fd89de4ba6
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 149c7fccc99fff701e1eb7af9a6b680884928941486ee08180af77f004d42af9
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c c9d37c4d50433ad4fbdbf54a69e7431554703c6bb719b6c52b9401e28c7389c5
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 5b51fddb4b3582c93ddaad0f95d4f7557c3a068a16f578bc82b6e517861adb3d
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 238976d247a3099fcc85c60a43f33c420075e75e599ae89bd5d083bd875b5f48
 anchor-sha256: tests/unit/CMakeLists.txt 2fe46be4b0de97780996ab1d9d2ae8772dded7a680ed9d9406b9144648aed314
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
-anchor-sha256: src/aot/xaot_boundary.c f12690bc5c41ec4989fc3a7465ecf3a5d0c6304eaaadc509e5b1d7a410076472
+anchor-sha256: src/aot/xaot_boundary.c 8cceda9604018924c56c0eedd37d1b179fcff681e66c194bbe878dde778be041
 anchor-sha256: src/aot/xaot_bundle.c a0a7aa48ca258b12f08ff52060ce393e6a0de3f71db3e8443bcb917f7eb24a78

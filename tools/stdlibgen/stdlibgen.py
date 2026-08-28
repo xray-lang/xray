@@ -92,6 +92,39 @@ TARGET_LEAF_KINDS = {
 }
 
 
+def validate_target_leaf_source_owner(
+    root: Path,
+    module: str,
+    name: str,
+    target_leaf: str,
+    visibility: str,
+    effect: str,
+    allocation: str,
+    owners: dict[str, str],
+) -> None:
+    """Require each target leaf to be one audited private source-owned row."""
+    if not target_leaf:
+        return
+    symbol = f"{module}.{name}"
+    if visibility != "internal":
+        raise SystemExit(f"{symbol} target_leaf must have internal visibility")
+    if effect != "nothrow":
+        raise SystemExit(f"{symbol} target_leaf must declare effect = nothrow")
+    if allocation != "no_heap":
+        raise SystemExit(f"{symbol} target_leaf must declare allocation = no_heap")
+    canonical_source = root / "stdlib" / module / f"{module}.xr"
+    if not canonical_source.is_file():
+        raise SystemExit(
+            f"{symbol} target_leaf requires canonical source module {canonical_source}"
+        )
+    previous = owners.get(target_leaf)
+    if previous is not None:
+        raise SystemExit(
+            f"target_leaf {target_leaf} has duplicate providers: {previous}, {symbol}"
+        )
+    owners[target_leaf] = symbol
+
+
 @dataclasses.dataclass(frozen=True)
 class StdlibEntry:
     module: str
@@ -514,6 +547,7 @@ def parse_def_metadata(
     classes: list[StdlibClassEntry] = []
     class_methods: list[StdlibClassMethodEntry] = []
     class_fields: list[StdlibClassFieldEntry] = []
+    target_leaf_owners: dict[str, str] = {}
     if not defs_dir.exists():
         raise SystemExit(f"missing stdlib defs directory: {defs_dir}")
 
@@ -672,6 +706,7 @@ def parse_def_metadata(
                     f"type {signature_return!r} and requires explicit return_ownership"
                 )
             target_leaf = str(props.get("target_leaf", ""))
+            effect = str(props.get("effect", ""))
             if target_leaf not in TARGET_LEAF_KINDS:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported target_leaf for "
@@ -694,6 +729,16 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} target_leaf "
                     "requires one unconditional direct `(): i64` scalar member"
                 )
+            validate_target_leaf_source_owner(
+                root,
+                current_module,
+                current_name,
+                target_leaf,
+                visibility,
+                effect,
+                allocation,
+                target_leaf_owners,
+            )
 
             entries.append(
                 StdlibEntry(
@@ -715,7 +760,7 @@ def parse_def_metadata(
                     define=str(props.get("define", "")),
                     layer=str(props.get("layer", "")),
                     visibility=visibility,
-                    effect=str(props.get("effect", "")),
+                    effect=effect,
                     allocation=allocation,
                     return_ownership=return_ownership,
                     semantic_intrinsic=semantic_intrinsic,

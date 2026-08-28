@@ -2325,8 +2325,11 @@ static void test_plan_snapshot_and_determinism(void) {
                                  xr_semantic_plan_fingerprint(semantic)));
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
+    if (strcmp(target_hex,
+               "06c0e8863251c3c02fdb12824cbc950c1a6ab86d58f1977289529a636b689050") != 0)
+        fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "6bb08421f8bd5f4e5da317a73969d4a850aabd14dcf62c7bdc7b58570c9f9449") == 0);
+                   "06c0e8863251c3c02fdb12824cbc950c1a6ab86d58f1977289529a636b689050") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4256,7 +4259,7 @@ static void test_imported_source_class_constructor_authority(void) {
             semantic_target->function == XR_SEMANTIC_INDEX_NONE &&
             semantic_target->callable_type == operation->result_type &&
             xr_stable_id_equal(semantic_target->export_identity, source_export->id) &&
-            strstr(semantic_target->canonical_key, "call-target-v10:schema=44:") != NULL &&
+            strstr(semantic_target->canonical_key, "call-target-v10:schema=45:") != NULL &&
             xr_semantic_imported_class_construction_authority_source_class(
                 semantic, dependency, &semantic->dependencies[0], source_export, operation,
                 &constructor) == 0 &&
@@ -4484,7 +4487,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "05908994af813466000396412379c2469152492491846d4a7a453779f6f8b04a") == 0);
+                   "bb63b1cf924846cce4c4e6269273f018363e1e15f79b8661b862f502910acdf4") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};
@@ -5235,7 +5238,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "265f2502123e0742fe4ddfa30d0082d756a82ef4da0369becf914f64dbcfe879") == 0);
+                   "a47fb6fcfa71c1a9e6cb97dcb1918b0d40ff47645d1719a6c62540df145be6b3") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -5759,7 +5762,7 @@ static void test_tail_coroutine_chain_fingerprint(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "63f0a52e08113016150410c06409cc8fc0a17694b4a601f8da63e62ba3471def") == 0);
+                   "cee535f11b742afc2571932949437cd53617cc12c82cb7af445cc15f4036f4cc") == 0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;
     expect_verify_failure(plan, "XR_TARGET_1003");
@@ -8299,6 +8302,9 @@ static void test_structural_mutations_fail_closed(void) {
     XrSemanticPlan *semantic = build_semantic_plan();
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = build_target_plan(semantic, profile);
+    plan->schema_version = XR_TARGET_PLAN_SCHEMA_VERSION - UINT32_C(1);
+    expect_verify_failure(plan, "XR_ARTIFACT_2000");
+    plan->schema_version = XR_TARGET_PLAN_SCHEMA_VERSION;
     plan->schema_version++;
     expect_verify_failure(plan, "XR_ARTIFACT_2000");
     plan->schema_version--;

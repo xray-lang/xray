@@ -870,11 +870,9 @@ static const XiImportRef *cg_shared_slot_import_ref_ctx(const XiCgenCtx *ctx, co
     return ref;
 }
 
-static const XiModule *cg_import_ref_target_module(const XiCgenCtx *ctx, const XiImportRef *ref,
-                                                   int64_t *out_slot) {
-    if (out_slot)
-        *out_slot = -1;
-    if (!ctx || !ref || ref->resolved_shared_slot < 0 || !ctx->all_modules)
+static const XiModule *cg_import_ref_resolved_module(
+    const XiCgenCtx *ctx, const XiImportRef *ref) {
+    if (!ctx || !ref || !ctx->all_modules)
         return NULL;
     const XiModule *module = NULL;
     if (ctx->program_direct_i64_required) {
@@ -906,6 +904,16 @@ static const XiModule *cg_import_ref_target_module(const XiCgenCtx *ctx, const X
             return NULL;
         module = ctx->all_modules[ref->resolved_mod_index];
     }
+    return module;
+}
+
+static const XiModule *cg_import_ref_target_module(const XiCgenCtx *ctx, const XiImportRef *ref,
+                                                   int64_t *out_slot) {
+    if (out_slot)
+        *out_slot = -1;
+    if (!ref || ref->resolved_shared_slot < 0)
+        return NULL;
+    const XiModule *module = cg_import_ref_resolved_module(ctx, ref);
     if (!module || ref->resolved_shared_slot >= module->nslots)
         return NULL;
     if (out_slot)
@@ -2914,6 +2922,37 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function, const X
             *out = view.semantic_value;
             return true;
         }
+        /* A verified direct-call callee carrier has semantic identity but no
+         * runtime C value. Resolve that identity through the same program
+         * TargetPlan binding without manufacturing a projection row. */
+        if (cg_program_direct_i64_callee_operand_is_elided(ctx, function, value)) {
+            const XrCProgramXiFunctionBinding *function_binding =
+                cg_program_direct_i64_function_binding(ctx, function);
+            const XrTargetPlan *target =
+                xaot_bundle_program_target_plan(ctx->aot_bundle);
+            uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+            uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+            char error[256] = {0};
+            if (!ctx->program_direct_i64.verified || !function_binding || !target ||
+                !xr_target_plan_is_verified(target) ||
+                !xr_target_plan_fingerprint_is_intact(target) ||
+                !xr_fingerprint_equal(
+                    ctx->program_direct_i64.target_fingerprint,
+                    xr_target_plan_fingerprint(target)) ||
+                !xr_aot_scalar_program_semantic_value_id(
+                    target, function_binding->target_partition,
+                    function_binding->target_function, function, value,
+                    &semantic_function, &semantic_value, error,
+                    sizeof(error)) ||
+                semantic_function != function_binding->semantic_function) {
+                (void) cg_value_emission_fail(
+                    ctx, error[0] ? error
+                                  : "elided program callee semantic identity is invalid");
+                return false;
+            }
+            *out = semantic_value;
+            return true;
+        }
         (void) cg_value_emission_fail(
             ctx, "program direct-i64 semantic value binding is missing");
         return false;
@@ -2967,6 +3006,89 @@ cg_semantic_operation_for_value(XiCgenCtx *ctx, const XiFunc *function, const Xi
         match = candidate;
     }
     return match;
+}
+
+/* Source-module namespace imports are compile-time carrier tokens in a closed
+ * program graph. Their tagged C spelling is null, but only after the verified
+ * C row, SemanticPlan dependency, resolved Xi module, and TargetPlan partition
+ * all identify the same module. */
+static bool cg_program_source_namespace_import_is_exact(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value) {
+    if (!ctx || !ctx->program_direct_i64_required ||
+        !ctx->program_direct_i64_bound || !ctx->program_direct_i64.verified ||
+        !function || !value || value->op != XI_IMPORT_REF || !value->aux ||
+        !function->semantic_plan)
+        return false;
+    XrCValueEmissionView emission = {0};
+    if (cg_value_emission_view(ctx, function, value, &emission) !=
+            CG_VALUE_EMISSION_FOUND ||
+        emission.rep != XR_C_VALUE_REP_TAGGED ||
+        emission.target_register_kind != XR_MACHINE_REP_DYN_VALUE ||
+        emission.target_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
+        emission.materialization != XR_C_VALUE_MATERIALIZATION_NONE ||
+        !emission.c_type || strcmp(emission.c_type, "XrValue") != 0)
+        return false;
+    const XrSemanticOperationRecord *operation =
+        cg_semantic_operation_for_value(ctx, function, value);
+    uint32_t metadata_count = 0;
+    const char *const *metadata =
+        xr_semantic_plan_metadata(function->semantic_plan, &metadata_count);
+    const XiImportRef *ref = (const XiImportRef *) value->aux;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(function->semantic_plan,
+                                  function->semantic_plan_function_index);
+    if (!operation || !metadata || operation->opcode != XI_IMPORT_REF ||
+        operation->function != function->semantic_plan_function_index ||
+        !semantic_function || !semantic_function->is_module_initializer ||
+        operation->operand_count != 0u ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+        operation->metadata_count != 2u ||
+        operation->metadata_begin + 1u >= metadata_count)
+        return false;
+    const char *module_path = metadata[operation->metadata_begin];
+    const char *member = metadata[operation->metadata_begin + 1u];
+    if (!module_path || !module_path[0] || !member || member[0] != '\0' ||
+        !ref->module_path || !ref->module_path[0] ||
+        (ref->member_name && ref->member_name[0] != '\0') ||
+        !ref->resolution_attempted || !ref->resolved_module ||
+        ref->resolved_func || ref->resolved_shared_slot != -1 ||
+        ref->resolved_export_slot != -1)
+        return false;
+    uint32_t dependency_index = XR_SEMANTIC_INDEX_NONE;
+    size_t dependency_count =
+        xr_semantic_plan_dependency_count(function->semantic_plan);
+    if (dependency_count > UINT32_MAX)
+        return false;
+    for (size_t i = 0; i < dependency_count; i++) {
+        const XrSemanticDependencyRecord *candidate =
+            xr_semantic_plan_dependency(function->semantic_plan, (uint32_t) i);
+        if (!candidate || !candidate->module_path ||
+            strcmp(candidate->module_path, module_path) != 0)
+            continue;
+        if (dependency_index != XR_SEMANTIC_INDEX_NONE)
+            return false;
+        dependency_index = (uint32_t) i;
+    }
+    uint32_t target_partition = UINT32_MAX;
+    const XrTargetPlan *target =
+        xaot_bundle_program_target_plan(ctx->aot_bundle);
+    const XrSemanticDependencyRecord *dependency =
+        dependency_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_dependency(function->semantic_plan,
+                                          dependency_index)
+            : NULL;
+    const XrSemanticPlan *target_semantic =
+        target && xaot_bundle_program_partition_for_xi_module(
+                      ctx->aot_bundle, ref->resolved_module, &target_partition)
+            ? xr_target_plan_semantic_module(target, target_partition)
+            : NULL;
+    return dependency && ref->psc_dependency_index == XI_PSC_ROW_NONE &&
+           target_semantic && xr_target_plan_is_verified(target) &&
+           xr_target_plan_fingerprint_is_intact(target) &&
+           xr_fingerprint_equal(ctx->program_direct_i64.target_fingerprint,
+                                xr_target_plan_fingerprint(target)) &&
+           xr_fingerprint_equal(dependency->semantic_fingerprint,
+                                xr_semantic_plan_fingerprint(target_semantic));
 }
 
 static bool cg_number_parse_error_namespace_is_exact(XiCgenCtx *ctx, const XiFunc *function,
@@ -10007,6 +10129,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
     emit_value_source_line(ctx, out, v);
 
+    if (cg_program_direct_i64_callee_operand_is_elided(ctx, f, v))
+        return;
+
     if (xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v))
         return;
     if (cg_await_all_inline_literal_value_is_elided(f, v))
@@ -11227,6 +11352,8 @@ static bool cg_has_exception_handling(const XiFunc *f) {
  * skipped here but assigned there is a use-before-declaration C error. */
 static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!v)
+        return true;
+    if (cg_program_direct_i64_callee_operand_is_elided(ctx, f, v))
         return true;
     if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
         return true;
@@ -14472,12 +14599,13 @@ static const XiFunc *cg_value_static_func_target(XiCgenCtx *ctx, const XiFunc *o
         return cg_shared_function_slot_target_for_func(ctx, owner, (int) v->aux_int);
     if (v->op == XI_IMPORT_REF && v->aux) {
         const XiImportRef *ref = (const XiImportRef *) v->aux;
-        if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules &&
-            ref->resolved_shared_slot >= 0) {
-            const XiModule *mod = ctx->all_modules[ref->resolved_mod_index];
-            if (mod && mod->slot_funcs && ref->resolved_shared_slot < (int) mod->nslots &&
-                mod->slot_funcs[ref->resolved_shared_slot])
-                return mod->slot_funcs[ref->resolved_shared_slot];
+        int64_t resolved_slot = -1;
+        const XiModule *mod =
+            cg_import_ref_target_module(ctx, ref, &resolved_slot);
+        if (mod && mod->slot_funcs && resolved_slot >= 0 &&
+            resolved_slot < (int64_t) mod->nslots &&
+            mod->slot_funcs[resolved_slot]) {
+            return mod->slot_funcs[resolved_slot];
         }
         CgStaticFunctionCall call = cg_resolve_import_function_call(ctx, ref);
         return call.is_class_constructor ? NULL : call.func;
@@ -15299,7 +15427,8 @@ static bool cg_mandatory_plans_preflight_func_tree(XiCgenCtx *ctx, const XiFunc 
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
-    if (!cg_mark_func_emitted(ctx, f, prefix))
+    if (!ctx->program_direct_i64_required &&
+        !cg_mark_func_emitted(ctx, f, prefix))
         return;
     /* Emit nested children first. A parent function can become unreachable
      * after inlining while one of its nested closure bodies is still referenced
@@ -15314,6 +15443,9 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     if (f->is_extern)
         return;
     if (!cg_func_body_is_reachable_from_roots(ctx, f, 0))
+        return;
+    if (ctx->program_direct_i64_required &&
+        !cg_mark_func_emitted(ctx, f, prefix))
         return;
     bool error_before_function = ctx->error;
     xicgen_emit_par_for_range_wrappers(ctx, out, f, prefix);

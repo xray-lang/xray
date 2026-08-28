@@ -71,6 +71,7 @@ static const char *g_native_target_leaf_c_output = NULL;
 typedef struct TestAotPlan {
     XaotBundle bundle;
     XgGlobalEvidence evidence;
+    XrCEmissionPlan *emission_plan;
     bool initialized;
     bool evidence_initialized;
 } TestAotPlan;
@@ -808,6 +809,20 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules,
         xr_target_profile_free(target_profile);
         return false;
     }
+    const XrTargetPlan *installed_target =
+        xaot_bundle_program_target_plan(&plan->bundle);
+    if (!installed_target ||
+        !xr_c_emission_plan_build(
+            installed_target, xr_target_profile_fingerprint(target_profile),
+            &plan->emission_plan, target_error, sizeof(target_error)) ||
+        !xr_c_emission_plan_is_verified(plan->emission_plan)) {
+        fprintf(stderr, "  CEmission fixture error: %s\n",
+                target_error[0] ? target_error : "unverified CEmission plan");
+        xr_target_plan_free(target_plan);
+        xr_target_profile_free(target_profile);
+        return false;
+    }
+    plan->bundle.module_emission_plans[0] = plan->emission_plan;
     xr_target_plan_free(target_plan);
     xr_target_profile_free(target_profile);
     if (!xaot_prepare_bundle(&plan->bundle, NULL))
@@ -835,6 +850,10 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
 }
 
 static void test_aot_plan_free(TestAotPlan *plan) {
+    if (plan && plan->emission_plan) {
+        xr_c_emission_plan_free(plan->emission_plan);
+        plan->emission_plan = NULL;
+    }
     if (plan && plan->initialized)
         xaot_bundle_free(&plan->bundle);
     if (plan && plan->evidence_initialized)
@@ -2014,6 +2033,12 @@ TEST(cgen_fixed_array_alias_address_projection_shares_backing_c_local) {
 
 TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 928, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType *parameter_types[] = {&int_type};
+    XrType *function_type =
+        xr_type_new_function(g_iso, parameter_types, 1, &int_type, false);
+    TEST_REQUIRE(function_type != NULL &&
+                     xr_type_function_set_param_mode(function_type, 0, XR_PARAM_REF),
+                 "addressed C-alias ref function type allocated");
     XiFunc *ir = xi_func_new("manual_c_addressed_alias", &int_type);
     TEST_REQUIRE(ir != NULL, "addressed C-alias function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2027,12 +2052,82 @@ TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
     XiValue *source = xi_param(ir, entry, 0, &int_type);
     TEST_REQUIRE(source != NULL, "addressed C-alias source allocated");
     ir->params[0] = source;
+    ir->source_var_count = 2;
+    ir->source_var_names =
+        (const char **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_names));
+    ir->source_var_types =
+        (XrType **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_types));
+    TEST_REQUIRE(ir->source_var_names && ir->source_var_types,
+                 "addressed C-alias source-variable tables allocated");
+    ir->source_var_names[0] = "source";
+    ir->source_var_names[1] = "alias";
+    ir->source_var_types[0] = &int_type;
+    ir->source_var_types[1] = &int_type;
+    source->var_id = 0;
     XiValue *alias = xi_value_new(ir, entry, XI_UNBOX, &int_type, 1);
     TEST_REQUIRE(alias != NULL, "addressed C-alias boundary allocated");
     alias->args[0] = source;
+    alias->var_id = 1;
     XiValue *place = xi_value_new(ir, entry, XI_LOCAL_ADDR, &int_type, 1);
     TEST_REQUIRE(place != NULL, "addressed C-alias place allocated");
     place->args[0] = alias;
+    XiFunc *callee = xi_func_new("manual_ref_reader", &int_type);
+    XiBlock *callee_entry = callee ? xi_block_new(callee) : NULL;
+    TEST_REQUIRE(callee != NULL && callee_entry != NULL,
+                 "addressed C-alias ref callee allocated");
+    callee_entry->sealed = true;
+    callee->nparams = callee->min_params = 1;
+    callee->params = (XiValue **) xr_calloc(1, sizeof(*callee->params));
+    TEST_REQUIRE(callee->params != NULL, "addressed C-alias ref parameter table allocated");
+    callee->params[0] = xi_param(callee, callee_entry, 0, &int_type);
+    TEST_REQUIRE(callee->params[0] != NULL &&
+                     xi_func_set_param_passing_mode(callee, 0, XR_PARAM_REF),
+                 "addressed C-alias ref parameter allocated");
+    callee->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(callee, (uint32_t) sizeof(*callee->arc_borrow_sig));
+    TEST_REQUIRE(callee->arc_borrow_sig != NULL,
+                 "addressed C-alias ref ownership contract allocated");
+    callee->arc_borrow_sig->nparams = 1;
+    callee->arc_borrow_sig->param_own[0] = XI_OWN_NONE;
+    callee->arc_borrow_sig->valid = true;
+    XiValue *callee_load = xi_value_new(callee, callee_entry, XI_PLACE_LOAD, &int_type, 1);
+    TEST_REQUIRE(callee_load != NULL, "addressed C-alias ref load allocated");
+    callee_load->args[0] = callee->params[0];
+    xi_block_set_return(callee_entry, callee_load);
+    ir->children = (XiFunc **) xr_calloc(1, sizeof(*ir->children));
+    TEST_REQUIRE(ir->children != NULL, "addressed C-alias child table allocated");
+    ir->children[0] = callee;
+    ir->nchildren = ir->children_cap = 1;
+    callee->parent_func = ir;
+
+    XiValue *closure = xi_value_new(ir, entry, XI_STACK_ALLOC, function_type, 0);
+    XiValue *call = xi_value_new(ir, entry, XI_CALL, &int_type, 2);
+    TEST_REQUIRE(closure != NULL && call != NULL,
+                 "addressed C-alias direct ref call allocated");
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = callee;
+    call->args[0] = closure;
+    call->args[1] = place;
+    XiCallPlan *call_plan =
+        (XiCallPlan *) xi_func_arena_alloc(ir, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan =
+        (XiCallArgPlan *) xi_func_arena_alloc(ir, (uint32_t) sizeof(*argument_plan));
+    TEST_REQUIRE(call_plan != NULL && argument_plan != NULL,
+                 "addressed C-alias ref call contract allocated");
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, sizeof(*argument_plan));
+    argument_plan->param_mode = XR_PARAM_REF;
+    argument_plan->access = XR_CALL_ARG_REF;
+    argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    argument_plan->escape = XI_PLACE_ESCAPE_NONE;
+    argument_plan->addressable = true;
+    argument_plan->origin_var_id = 1;
+    argument_plan->place = place;
+    call_plan->args = argument_plan;
+    call_plan->nargs = 1;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
     XiValue *load = xi_value_new(ir, entry, XI_PLACE_LOAD, &int_type, 1);
     TEST_REQUIRE(load != NULL, "addressed C-alias load allocated");
     load->args[0] = place;
@@ -2048,7 +2143,7 @@ TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
     TEST_REQUIRE(fn_end != NULL, "addressed C-alias function end emitted");
     TEST_REQUIRE(contains_between(fn, fn_end, "int64_t v1 = v0;"),
                  "a scalar alias whose C address is taken must remain materialized");
-    TEST_REQUIRE(contains_between(fn, fn_end, "(void *)(&v1)"),
+    TEST_REQUIRE(contains_between(fn, fn_end, "int64_t * v2 = (int64_t *)(&v1);"),
                  "the scalar place must address the materialized alias local");
 
     printf("  Kept addressed scalar alias in %zu bytes of C code\n", strlen(code));
@@ -2649,8 +2744,8 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                        semantic_hex);
     TEST_REQUIRE(strcmp(
                      semantic_hex,
-                     "2c8996046d7c9540f212e6e270b3c8dc8d7c0f9b1442591feaa2b3a3201b6f43") == 0,
-                 "native unsigned interpolation preserves the frozen SemanticPlan v39 KAT");
+                     "27da2bb15e9ecaf455b1f1d95c64a6a275dd3e08ac1e1430d0b653dbf00300f2") == 0,
+                 "native unsigned interpolation preserves the frozen SemanticPlan v45 KAT");
 
     XiFunc *label = NULL;
     for (uint16_t i = 0; i < ir->nchildren; i++) {
@@ -2938,9 +3033,24 @@ TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
 }
 
 TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
-    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 159, .frozen = true};
-    XrType int_type = {.kind = XR_KIND_INT, .id = 160, .frozen = true};
-    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 161, .frozen = true};
+    XrType bool_type = {
+        .kind = XR_KIND_BOOL,
+        .id = 159,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+    };
+    XrType int_type = {
+        .kind = XR_KIND_INT,
+        .id = 160,
+        .scalar_rep = XR_NATIVE_I64,
+        .frozen = true,
+    };
+    XrType func_type = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 161,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+    };
     XrFunctionParam func_params[1] = {{.type = &int_type, .mode = XR_PARAM_READ}};
     func_type.function.params = func_params;
     func_type.function.param_count = 1;

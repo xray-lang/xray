@@ -61,6 +61,7 @@ typedef struct XrCProgramDirectI64EmissionBinding {
     const struct XiValue *xi_call;
     const struct XiValue *xi_argument;
     const struct XiValue *xi_callee_operand;
+    const struct XiValue *xi_native_leaf_callee_operand;
     const XrTargetFunctionRecord *caller_target_row;
     const XrTargetFunctionRecord *callee_target_row;
     const XrTargetCallRecord *call_row;
@@ -79,7 +80,7 @@ typedef struct XrCProgramDirectI64EmissionBinding {
     bool verified;
 } XrCProgramDirectI64EmissionBinding;
 
-#define XR_C_PROGRAM_DIRECT_I64_EMISSION_SCHEMA_VERSION 2u
+#define XR_C_PROGRAM_DIRECT_I64_EMISSION_SCHEMA_VERSION 3u
 
 XR_FUNC bool xr_c_program_initializer_symbol_identity(
     XrStableId module_identity, XrStableId semantic_function_identity,

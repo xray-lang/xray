@@ -17,8 +17,13 @@ static XaotDirectI64TargetStatus cg_direct_i64_call_view(XiCgenCtx *ctx, const X
         const XrCProgramDirectI64EmissionBinding *binding = &ctx->program_direct_i64;
         if (!ctx->program_direct_i64_bound)
             goto invalid_program_binding;
-        if (current == binding->callee.xi_function)
+        if (current == binding->callee.xi_function) {
+            if (call && call->op == XI_CALL && call->nargs == 1u &&
+                call->args &&
+                call->args[0] == binding->xi_native_leaf_callee_operand)
+                return XAOT_DIRECT_I64_TARGET_UNCOVERED;
             goto invalid_program_binding;
+        }
         if (current != binding->caller.xi_function)
             goto invalid_program_binding;
         const XrTargetPlan *target = xaot_bundle_program_target_plan(ctx->aot_bundle);
@@ -127,9 +132,11 @@ static CgStaticFunctionCall cg_resolve_module_export_static_call(XiCgenCtx *ctx,
                                                                  const char *member_name) {
     if (!ctx || !module_ref || !member_name)
         return cg_no_static_function_call();
-    if (module_ref->resolved_mod_index >= 0 && module_ref->resolved_mod_index < ctx->all_nmodules) {
-        CgStaticFunctionCall call = cg_module_export_static_call(
-            ctx->all_modules[module_ref->resolved_mod_index], member_name);
+    const XiModule *resolved_module =
+        cg_import_ref_resolved_module(ctx, module_ref);
+    if (resolved_module) {
+        CgStaticFunctionCall call =
+            cg_module_export_static_call(resolved_module, member_name);
         if (call.func || call.is_class_constructor)
             return call;
     }

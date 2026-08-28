@@ -384,9 +384,19 @@ static bool verifier_typed_generation_eligible(const XrLoadedModuleGeneration *g
                    XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
                verifier_has_no_non_scalar_execution_authority(plan, 0u, 0u);
     }
+    bool private_leaf =
+        graphs && graph_count == 1u &&
+        graphs[0].family ==
+            XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
+    bool family_shape =
+        graphs && graph_count == 1u &&
+        ((graphs[0].family ==
+              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+          graphs[0].argument_count == 1u) ||
+         (private_leaf && graphs[0].argument_count == 0u));
     if (!graphs || graph_count != 1u || !partitions || partition_count != 2u ||
         graphs[0].module_count != 2u || graphs[0].function_count != 2u ||
-        graphs[0].call_count != 1u || graphs[0].argument_count != 1u ||
+        graphs[0].call_count != 1u || !family_shape ||
         graphs[0].flags !=
             (XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN | XR_TARGET_PROGRAM_GRAPH_DIRECT_I64) ||
         !functions || function_count < 2u || graphs[0].entry_target_function >= function_count ||
@@ -396,6 +406,31 @@ static bool verifier_typed_generation_eligible(const XrLoadedModuleGeneration *g
     uint32_t expectation_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
     (void) xr_target_plan_entry_expectations(plan, &expectation_count);
+    uint32_t program_direct_calls = 0u;
+    uint32_t native_leaf_calls = 0u;
+    bool calls_exact = calls != NULL;
+    for (uint32_t i = 0u; calls_exact && i < call_count; i++) {
+        if (calls[i].target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
+            calls[i].calling_convention ==
+                XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT) {
+            program_direct_calls++;
+            calls_exact = calls[i].id == graphs[0].target_call &&
+                          calls[i].callee_function ==
+                              graphs[0].producer_target_function;
+        } else if (
+            private_leaf &&
+            calls[i].target_kind ==
+                XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR &&
+            calls[i].calling_convention ==
+                XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR) {
+            native_leaf_calls++;
+            calls_exact = calls[i].caller_function ==
+                              graphs[0].producer_target_function &&
+                          calls[i].argument_count == 0u;
+        } else {
+            calls_exact = false;
+        }
+    }
     bool only_graph_functions_execute = true;
     for (uint32_t i = 0; i < function_count; i++) {
         uint64_t family = xr_target_plan_function_execution_family_mask(plan, i);
@@ -405,16 +440,18 @@ static bool verifier_typed_generation_eligible(const XrLoadedModuleGeneration *g
         else
             only_graph_functions_execute = only_graph_functions_execute && family == 0u;
     }
-    return only_graph_functions_execute && calls && call_count == 1u && expectation_count == 0u &&
-           graphs[0].target_call == 0u &&
-           calls[0].calling_convention == XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT &&
-           calls[0].target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
-           calls[0].callee_function == graphs[0].producer_target_function &&
+    uint32_t expected_call_count = private_leaf ? 2u : 1u;
+    uint32_t expected_argument_count = private_leaf ? 0u : 1u;
+    return only_graph_functions_execute && calls_exact &&
+           call_count == expected_call_count && expectation_count == 0u &&
+           program_direct_calls == 1u &&
+           native_leaf_calls == (private_leaf ? 1u : 0u) &&
            xr_target_plan_function_execution_family_mask(plan, graphs[0].entry_target_function) ==
                XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
            xr_target_plan_function_execution_family_mask(
                plan, graphs[0].producer_target_function) == XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
-           verifier_has_no_non_scalar_execution_authority(plan, 1u, 1u);
+           verifier_has_no_non_scalar_execution_authority(
+               plan, expected_call_count, expected_argument_count);
 }
 
 XRAY_API bool xr_module_generation_verify(

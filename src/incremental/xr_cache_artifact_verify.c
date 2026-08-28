@@ -47,8 +47,11 @@ static bool verified_authorities(const XrCacheXtpArtifactVerifyContext *context,
     const XrSemanticProgramProvenance *program =
         xr_semantic_plan_program_provenance(context->semantic_plan);
     bool graph_authority =
-        program && program->program_family ==
-                       XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+        program &&
+        (program->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+         program->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL);
     if (!xr_semantic_plan_is_verified(context->semantic_plan) ||
         graph != graph_authority ||
         !xr_semantic_plan_verify_module_set(

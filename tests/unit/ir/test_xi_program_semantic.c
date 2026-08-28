@@ -1264,7 +1264,7 @@ static void assert_leaf_aggregate_target_shape(XrSemanticPlan *semantic, XrTarge
     ASSERT_NOT_NULL(semantic);
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(xr_target_plan_schema_version(plan), XR_TARGET_PLAN_SCHEMA_VERSION);
-    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 54);
+    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 55);
     ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
     ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(plan));
     ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_semantic_fingerprint(plan),
@@ -3097,7 +3097,7 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     XrTargetPlan *target = NULL;
     ASSERT_MSG(xr_target_plan_build(semantic, profile, &target, error, sizeof(error)), error);
     ASSERT_NOT_NULL(target);
-    ASSERT_EQ_UINT(xr_target_plan_schema_version(target), 54);
+    ASSERT_EQ_UINT(xr_target_plan_schema_version(target), 55);
     ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
     ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(target));
     uint32_t predicate_count = 0;

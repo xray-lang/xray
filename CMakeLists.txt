@@ -2071,6 +2071,25 @@ if(BUILD_TESTS)
             RUN_SERIAL TRUE
             TIMEOUT 30
         )
+
+        add_test(
+            NAME aot_private_leaf_public_native_msvc
+            COMMAND ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_private_leaf_public_native.py
+                    --root ${CMAKE_CURRENT_SOURCE_DIR}
+                    --build-dir ${CMAKE_BINARY_DIR}
+                    --xray $<TARGET_FILE:xray>
+                    --source ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/stdlib/os_private_leaf_generic_module.xr
+                    --compiler ${CMAKE_C_COMPILER}
+                    --core $<TARGET_FILE:xray_core>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(aot_private_leaf_public_native_msvc PROPERTIES
+            LABELS "aot;cgen;native;msvc;target-machine;stdlib"
+            PROCESSORS 1
+            RUN_SERIAL TRUE
+            TIMEOUT 120
+        )
     endif()
 
     # No Bash is required to run the test suite: every registered gate is a

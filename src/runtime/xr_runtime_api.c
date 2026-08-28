@@ -342,11 +342,19 @@ static bool bounded_program_plan_is_exact(
         xr_target_plan_program_graphs(plan, &graph_count);
     (void) xr_target_plan_module_partitions(plan, &partition_count);
     (void) xr_target_plan_functions(plan, &function_count);
+    bool family_shape =
+        graphs && graph_count == 1u &&
+        ((graphs[0].family ==
+              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+          graphs[0].argument_count == 1u) ||
+         (graphs[0].family ==
+              XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
+          graphs[0].argument_count == 0u));
     return graphs && graph_count == 1u && partition_count == 2u &&
            partition_count == semantic_module_count &&
            graphs[0].module_count == partition_count &&
            graphs[0].function_count == 2u && graphs[0].call_count == 1u &&
-           graphs[0].argument_count == 1u &&
+           family_shape &&
            graphs[0].flags ==
                (XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN |
                 XR_TARGET_PROGRAM_GRAPH_DIRECT_I64) &&

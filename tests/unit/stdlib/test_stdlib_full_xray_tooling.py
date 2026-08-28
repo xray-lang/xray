@@ -39,10 +39,10 @@ def valid_authority() -> dict[str, object]:
 def valid_plan() -> completion.PlanIdentity:
     identity, errors = completion.PlanIdentity.parse(
         {
-            "psc_schema": 8,
-            "semantic_schema": 44,
-            "target_schema": 54,
-            "xtp_schema": 54,
+            "psc_schema": 9,
+            "semantic_schema": 45,
+            "target_schema": 55,
+            "xtp_schema": 55,
             "module_count": 3,
             "dependency_count": 2,
             "program_fingerprint": "1" * 64,
@@ -64,7 +64,7 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
         schemas, errors = probe.source_schema_authority(ROOT)
         self.assertEqual([], errors)
         self.assertEqual(
-            (8, 44, 54, 54),
+            (9, 45, 55, 55),
             (
                 schemas.psc_schema,
                 schemas.semantic_schema,
@@ -84,14 +84,14 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
                     f"psc={'1' * 64} gci={'3' * 32}"
                 ),
                 *(
-                    f"target-plan module={index} schema=54 fingerprint={target} "
+                    f"target-plan module={index} schema=55 fingerprint={target} "
                     f"semantic={semantic} profile={'7' * 64}"
                     for index in range(3)
                 ),
             ]
         )
         observation = probe.parse_aot_plan_observation(
-            stdout, probe.SchemaAuthority(8, 44, 54, 54)
+            stdout, probe.SchemaAuthority(9, 45, 55, 55)
         )
         self.assertEqual(3, observation.module_count)
         self.assertEqual(2, observation.dependency_count)
@@ -175,7 +175,7 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
         payload["psc_schema"] = 7
         payload["xtp_verified"] = False
         _identity, errors = completion.PlanIdentity.parse(payload)
-        self.assertTrue(any("expected 8" in item for item in errors))
+        self.assertTrue(any("expected 9" in item for item in errors))
         self.assertTrue(any("not independently verified" in item for item in errors))
 
 

@@ -90,6 +90,34 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "duplicate VM binding rows disagree"):
             stdlibgen.unique_vm_binding_entries([original, divergent])
 
+    def test_target_leaf_source_owner_is_private_unique_and_canonical(self) -> None:
+        stdlibgen = load_stdlibgen(ROOT)
+        owners: dict[str, str] = {}
+        stdlibgen.validate_target_leaf_source_owner(
+            ROOT, "os", "__getpid", "i64-getpid", "internal", "nothrow", "no_heap", owners
+        )
+        self.assertEqual({"i64-getpid": "os.__getpid"}, owners)
+        with self.assertRaisesRegex(SystemExit, "must have internal visibility"):
+            stdlibgen.validate_target_leaf_source_owner(
+                ROOT, "os", "publicLeaf", "i64-public", "public", "nothrow", "no_heap", {}
+            )
+        with self.assertRaisesRegex(SystemExit, "must declare effect = nothrow"):
+            stdlibgen.validate_target_leaf_source_owner(
+                ROOT, "os", "__missingEffect", "i64-missing-effect", "internal", "", "no_heap", {}
+            )
+        with self.assertRaisesRegex(SystemExit, "must declare allocation = no_heap"):
+            stdlibgen.validate_target_leaf_source_owner(
+                ROOT, "os", "__missingAllocation", "i64-missing-allocation", "internal", "nothrow", "", {}
+            )
+        with self.assertRaisesRegex(SystemExit, "duplicate providers"):
+            stdlibgen.validate_target_leaf_source_owner(
+                ROOT, "os", "anotherPrivateLeaf", "i64-getpid", "internal", "nothrow", "no_heap", owners
+            )
+        with self.assertRaisesRegex(SystemExit, "requires canonical source module"):
+            stdlibgen.validate_target_leaf_source_owner(
+                ROOT, "missing_source_module", "__leaf", "i64-missing", "internal", "nothrow", "no_heap", {}
+            )
+
     def test_semantic_native_and_fastpath_contracts_are_source_derived(self) -> None:
         self.assertEqual([], check_semantic_owners(ROOT))
         self.assertEqual([], check_fastpaths(ROOT))

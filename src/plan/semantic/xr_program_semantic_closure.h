@@ -24,7 +24,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(8)
+#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(9)
 
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES UINT32_C(256)
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES UINT32_C(4096)
@@ -49,6 +49,10 @@ typedef enum XrProgramSemanticFamily {
      * module and dependency authority only; it grants no executable function,
      * Xi, TargetPlan, VM, or AOT authority by itself. */
     XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH,
+    /* Source-derived executable slice consisting of one nullary scalar entry,
+     * one source-exported nullary scalar wrapper, and one generated private
+     * native leaf. SOURCE_MODULE_GRAPH remains topology-only. */
+    XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL,
     XR_PROGRAM_SEMANTIC_FAMILY_COUNT,
 } XrProgramSemanticFamily;
 

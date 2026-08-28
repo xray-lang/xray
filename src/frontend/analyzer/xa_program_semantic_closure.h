@@ -57,6 +57,15 @@ xa_program_semantic_closure_publish_scalar_module_graph(
     struct XaAnalyzer *analyzer, const struct XrModuleGraph *graph,
     XrProgramSemanticClosure **out, char *error, size_t error_size);
 
+/* Publish one source-derived namespace-import call through an exported
+ * nullary i64 wrapper to one generated private native target leaf. The
+ * complete source graph remains topology authority; only the two selected
+ * source functions and their two resolved calls become executable authority. */
+XR_FUNC XaProgramSemanticClosurePublishStatus
+xa_program_semantic_closure_publish_source_module_scalar_private_leaf_call(
+    struct XaAnalyzer *analyzer, const struct XrModuleGraph *graph,
+    XrProgramSemanticClosure **out, char *error, size_t error_size);
+
 /* Freeze the complete bounded acyclic source-module graph reachable from the
  * graph entry. This publication carries modules and exact resolved source
  * edges only; downstream executable authority must be added by a later slice. */

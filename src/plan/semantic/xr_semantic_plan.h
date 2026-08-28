@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 #define XR_SEMANTIC_INDEX_NONE UINT32_MAX
-#define XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION UINT32_C(4)
+#define XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION UINT32_C(5)
 
 typedef struct XrSemanticPlan XrSemanticPlan;
 typedef struct XrOwnershipCertificate XrOwnershipCertificate;

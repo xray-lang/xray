@@ -71,7 +71,7 @@ managed String-concat cleanup partition described below.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 97a31187825a707045cfb11cfbf2637923351662d6f65a2c1c48a7b3743f8092
+anchor-sha256: CMakeLists.txt de05d8128ee3b9fe6ad24def5f178484873ea7ae07bf29f5c3c1e88da3bd2181
 anchor-sha256: src/shared/xr_ownership_event.h 4ee731782643616d5df34ead901ae39cd995fc91113774eabbe8dd95f982d90d
 anchor-sha256: src/plan/ownership/xr_ownership_certificate.h 33de50d0b6bb3a654628ffee0890fa80476e9d85234d8e751bd952e06ed08d07
 anchor-sha256: src/runtime/ownership/xr_ownership_audit.h 524251f129b91b7f6de71081b9514528748ebab1264e25803b547d12a1c39309

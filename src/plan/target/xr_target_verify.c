@@ -8634,6 +8634,11 @@ static bool accumulate_semantic_capability_requirements(
 static bool verify_program_graph_machine_rep_set(const XrTargetPlan *plan,
                                                  char *error,
                                                  size_t error_size) {
+    const XrSemanticProgramProvenance *program =
+        plan ? xr_semantic_plan_program_provenance(plan->semantic_plan) : NULL;
+    if (program && program->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL)
+        return true;
     if (!plan || plan->machine_reps_count != 4u ||
         plan->machine_reps[0].kind != XR_MACHINE_REP_VOID ||
         plan->machine_reps[1].kind != XR_MACHINE_REP_I64 ||
@@ -9545,6 +9550,48 @@ static bool graph_semantic_value_storage_kind(
     return true;
 }
 
+static bool graph_private_leaf_compile_time_callee_value(
+    const XrSemanticPlan *semantic, uint32_t semantic_value) {
+    const XrSemanticProgramProvenance *program =
+        semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+    if (!program ||
+        program->program_family !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_program_call_binding_count(semantic); i++) {
+        const XrSemanticProgramCallBinding *binding =
+            xr_semantic_plan_program_call_binding(semantic, i);
+        const XrSemanticOperationRecord *call =
+            binding ? xr_semantic_plan_operation(semantic, binding->operation)
+                    : NULL;
+        if (!call || call->opcode != XI_CALL || call->operand_count == 0u ||
+            call->operand_begin >= operand_count)
+            continue;
+        const XrSemanticOperandRecord *callee =
+            &operands[call->operand_begin];
+        if (callee->role == XR_SEM_OPERAND_CALLEE &&
+            callee->value == semantic_value)
+            return true;
+    }
+    return false;
+}
+
+static bool graph_private_leaf_function_has_storage(
+    const XrSemanticPlan *semantic, uint32_t semantic_function) {
+    const XrSemanticFunctionRecord *function =
+        semantic && semantic_function < xr_semantic_plan_function_count(semantic)
+            ? xr_semantic_plan_function(semantic, semantic_function)
+            : NULL;
+    return function &&
+           (function->is_module_initializer ||
+            xr_semantic_plan_program_function_for_semantic_function(
+                semantic, semantic_function));
+}
+
 static const XrTargetValueRepRecord *graph_value_rep_for_semantic_value(
     const XrTargetPlan *plan, const XrTargetModulePartitionRecord *partition,
     uint32_t semantic_value) {
@@ -9642,16 +9689,22 @@ static bool verify_program_graph_instruction_semantics(
                               "program graph add instruction is invalid");
             continue;
         }
-        if (instruction->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64) {
+        if (instruction->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+            instruction->opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64) {
             const XrTargetCallRecord *call =
                 instruction->immediate_bits < plan->calls_count
                     ? &plan->calls[(uint32_t) instruction->immediate_bits]
                     : NULL;
             const XrSemanticOperationRecord *operation =
                 call ? xr_semantic_plan_operation(semantic, call->semantic_operation) : NULL;
+            bool native_leaf =
+                instruction->opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64;
             if (!call || !result || !operation || operation->function != semantic_function ||
                 operation->result_value != result->semantic_value ||
-                call->result_slot != result->id)
+                call->result_slot != result->id ||
+                (native_leaf &&
+                 !xr_semantic_native_target_leaf_call_is_exact(semantic, operation,
+                                                               NULL, NULL)))
                 return report(error, error_size, "XR_TARGET_1003",
                               "program graph call instruction is invalid");
             continue;
@@ -9679,12 +9732,21 @@ static bool verify_program_graph_instruction_semantics(
 static bool verify_program_graph_instruction_coverage(
     const XrTargetPlan *plan, const XrTargetModulePartitionRecord *partition,
     const XrSemanticPlan *semantic, char *error, size_t error_size) {
+    const XrSemanticProgramProvenance *program =
+        semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+    bool private_leaf_program =
+        program && program->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
     uint32_t required = 0u;
     for (uint32_t parameter_index = 0;
          parameter_index < xr_semantic_plan_parameter_count(semantic);
          parameter_index++) {
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(semantic, parameter_index);
+        if (private_leaf_program && parameter &&
+            !xr_semantic_plan_program_function_for_semantic_function(
+                semantic, parameter->function))
+            continue;
         uint16_t kind = XR_MACHINE_REP_COUNT;
         if (!parameter || !graph_semantic_value_storage_kind(
                               semantic, parameter->value, NULL, NULL, NULL,
@@ -9720,13 +9782,20 @@ static bool verify_program_graph_instruction_coverage(
          operation_index++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(semantic, operation_index);
+        if (private_leaf_program && operation &&
+            !xr_semantic_plan_program_function_for_semantic_function(
+                semantic, operation->function))
+            continue;
         uint16_t target_opcode = XR_TARGET_INSTRUCTION_COUNT;
         if (operation && operation->opcode == XI_CONST)
             target_opcode = XR_TARGET_INSTRUCTION_CONST_I64;
         else if (operation && operation->opcode == XI_ADD)
             target_opcode = XR_TARGET_INSTRUCTION_ADD_WRAP_I64;
         else if (operation && operation->opcode == XI_CALL)
-            target_opcode = XR_TARGET_INSTRUCTION_CALL_DIRECT_I64;
+            target_opcode = xr_semantic_native_target_leaf_call_is_exact(
+                                semantic, operation, NULL, NULL)
+                                ? XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64
+                                : XR_TARGET_INSTRUCTION_CALL_DIRECT_I64;
         else
             continue;
         uint16_t kind = XR_MACHINE_REP_COUNT;
@@ -9761,6 +9830,10 @@ static bool verify_program_graph_instruction_coverage(
          block_index < xr_semantic_plan_block_count(semantic); block_index++) {
         const XrSemanticBlockRecord *block =
             xr_semantic_plan_block(semantic, block_index);
+        if (private_leaf_program && block &&
+            !xr_semantic_plan_program_function_for_semantic_function(
+                semantic, block->function))
+            continue;
         uint16_t kind = XR_MACHINE_REP_COUNT;
         if (!block || block->control_value == XR_SEMANTIC_INDEX_NONE)
             continue;
@@ -9855,6 +9928,11 @@ static bool verify_program_graph_rows(const XrTargetPlan *plan, char *error,
         const XrTargetModulePartitionRecord *partition =
             &plan->module_partitions[partition_index];
         const XrSemanticPlan *semantic = graph_partition_semantic(plan, partition_index);
+        const XrSemanticProgramProvenance *program =
+            semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+        bool private_leaf_program =
+            program && program->program_family ==
+                           XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
         uint32_t semantic_value_count = 0;
         if (!semantic ||
             partition->functions_count != xr_semantic_plan_function_count(semantic) ||
@@ -9938,11 +10016,19 @@ static bool verify_program_graph_rows(const XrTargetPlan *plan, char *error,
         uint32_t required_value_count = 0u;
         uint32_t required_layout_count = 0u;
         for (uint32_t value = 0; value < semantic_value_count; value++) {
+            uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
             uint32_t semantic_type = XR_SEMANTIC_INDEX_NONE;
             uint16_t machine_kind = XR_MACHINE_REP_COUNT;
             if (!graph_semantic_value_storage_kind(
-                    semantic, value, NULL, &semantic_type, NULL, NULL,
+                    semantic, value, &semantic_function, &semantic_type, NULL, NULL,
                     &machine_kind))
+                continue;
+            if (private_leaf_program &&
+                graph_private_leaf_compile_time_callee_value(semantic, value))
+                continue;
+            if (private_leaf_program &&
+                !graph_private_leaf_function_has_storage(semantic,
+                                                         semantic_function))
                 continue;
             required_value_count++;
             if (!graph_value_rep_for_semantic_value(plan, partition, value))
@@ -9952,12 +10038,18 @@ static bool verify_program_graph_rows(const XrTargetPlan *plan, char *error,
                 continue;
             bool first_type = true;
             for (uint32_t prior = 0; prior < value; prior++) {
+                uint32_t prior_function = XR_SEMANTIC_INDEX_NONE;
                 uint32_t prior_type = XR_SEMANTIC_INDEX_NONE;
                 uint16_t prior_kind = XR_MACHINE_REP_COUNT;
                 if (graph_semantic_value_storage_kind(
-                        semantic, prior, NULL, &prior_type, NULL, NULL,
-                        &prior_kind) && prior_kind != XR_MACHINE_REP_VOID &&
-                    prior_type == semantic_type) {
+                        semantic, prior, &prior_function, &prior_type, NULL, NULL,
+                        &prior_kind) &&
+                    (!private_leaf_program ||
+                     (!graph_private_leaf_compile_time_callee_value(
+                          semantic, prior) &&
+                      graph_private_leaf_function_has_storage(
+                          semantic, prior_function))) &&
+                    prior_kind != XR_MACHINE_REP_VOID && prior_type == semantic_type) {
                     first_type = false;
                     break;
                 }
@@ -9974,9 +10066,11 @@ static bool verify_program_graph_rows(const XrTargetPlan *plan, char *error,
                 return report(error, error_size, "XR_TARGET_1002",
                               "program graph required layout row is missing or ambiguous");
         }
-        if (partition->value_reps_count != required_value_count ||
-            partition->layouts_count != required_layout_count ||
-            partition->extents_count != required_layout_count)
+        bool derived_row_counts_exact =
+            partition->value_reps_count == required_value_count &&
+            partition->layouts_count == required_layout_count &&
+            partition->extents_count == required_layout_count;
+        if (!derived_row_counts_exact)
             return report(error, error_size, "XR_TARGET_1002",
                           "program graph derived target row coverage is incomplete");
         uint32_t previous_layout_type = XR_SEMANTIC_INDEX_NONE;
@@ -10143,6 +10237,293 @@ static bool verify_program_graph_rows(const XrTargetPlan *plan, char *error,
     return true;
 }
 
+static bool verify_private_leaf_program_graph_plan(
+    const XrTargetPlan *plan, uint32_t entry_partition,
+    uint32_t producer_partition, char *error, size_t error_size) {
+    if (!plan || plan->program_graphs_count != 1u || !plan->program_graphs ||
+        plan->calls_count != 2u || !plan->calls ||
+        plan->call_arguments_count != 0u || plan->call_arguments ||
+        plan->entry_expectations_count != 0u || plan->fields_count != 0u ||
+        plan->storage_count != 0u || plan->allocations_count != 0u ||
+        plan->extent_operands_count != 0u || plan->root_maps_count != 0u ||
+        plan->root_slots_count != 0u || plan->cleanups_count != 0u ||
+        plan->adapters_count != 0u || plan->coroutines_count != 0u)
+        return report(error, error_size, "XR_TARGET_1001",
+                      "private-leaf program graph bounded target tables are not exact");
+
+    const XrTargetProgramGraphRecord *graph = &plan->program_graphs[0];
+    const XrSemanticPlan *entry = graph_partition_semantic(plan, entry_partition);
+    const XrSemanticPlan *producer = graph_partition_semantic(plan, producer_partition);
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(entry);
+    const XrSemanticProgramFunctionBinding *entry_function =
+        verify_graph_function_binding(entry, XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY);
+    const XrSemanticProgramFunctionBinding *producer_function =
+        verify_graph_function_binding(producer, XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED);
+    const XrSemanticProgramCallBinding *entry_call_binding =
+        xr_semantic_plan_program_call_binding_count(entry) == 1u
+            ? xr_semantic_plan_program_call_binding(entry, 0u)
+            : NULL;
+    const XrSemanticProgramCallBinding *leaf_call_binding =
+        xr_semantic_plan_program_call_binding_count(producer) == 1u
+            ? xr_semantic_plan_program_call_binding(producer, 0u)
+            : NULL;
+    const XrSemanticOperationRecord *entry_operation =
+        entry_call_binding
+            ? xr_semantic_plan_operation(entry, entry_call_binding->operation)
+            : NULL;
+    const XrSemanticOperationRecord *leaf_operation =
+        leaf_call_binding
+            ? xr_semantic_plan_operation(producer, leaf_call_binding->operation)
+            : NULL;
+    const XrTargetCallRecord *direct =
+        graph->target_call < plan->calls_count
+            ? &plan->calls[graph->target_call]
+            : NULL;
+    const XrSemanticCallTargetRecord *source_target =
+        direct && direct->semantic_call_target <
+                      xr_semantic_plan_call_target_count(entry)
+            ? xr_semantic_plan_call_target(entry, direct->semantic_call_target)
+            : NULL;
+    const XrSemanticSourceExportRecord *source_export =
+        source_target && source_target->source_export <
+                             xr_semantic_plan_source_export_count(producer)
+            ? xr_semantic_plan_source_export(producer,
+                                             source_target->source_export)
+            : NULL;
+    const XrSemanticFunctionRecord *entry_semantic_function =
+        entry_function
+            ? xr_semantic_plan_function(entry, entry_function->semantic_function)
+            : NULL;
+    const XrSemanticFunctionRecord *producer_semantic_function =
+        producer_function
+            ? xr_semantic_plan_function(producer,
+                                        producer_function->semantic_function)
+            : NULL;
+    const XrTargetFunctionRecord *entry_target_function =
+        graph->entry_target_function < plan->functions_count
+            ? &plan->functions[graph->entry_target_function]
+            : NULL;
+    const XrTargetFunctionRecord *producer_target_function =
+        graph->producer_target_function < plan->functions_count
+            ? &plan->functions[graph->producer_target_function]
+            : NULL;
+    const XrTargetValueRepRecord *direct_result =
+        entry_operation
+            ? graph_value_rep_for_semantic_value(
+                  plan, &plan->module_partitions[entry_partition],
+                  entry_operation->result_value)
+            : NULL;
+    const XrTargetValueRepRecord *leaf_result =
+        leaf_operation
+            ? graph_value_rep_for_semantic_value(
+                  plan, &plan->module_partitions[producer_partition],
+                  leaf_operation->result_value)
+            : NULL;
+    const XrStdlibDefEntry *leaf_entry = NULL;
+    XrStableId leaf_identity = {{0}};
+    bool leaf_semantics =
+        leaf_operation && xr_semantic_native_target_leaf_call_is_exact(
+                              producer, leaf_operation, &leaf_entry,
+                              &leaf_identity);
+    uint32_t leaf_target_call = graph->target_call == 0u ? 1u : 0u;
+    const XrTargetCallRecord *leaf =
+        leaf_target_call < plan->calls_count ? &plan->calls[leaf_target_call]
+                                             : NULL;
+    XrStableId expected_direct_identity = {{0}};
+    XrStableId expected_leaf_identity = {{0}};
+    bool direct_identity_exact =
+        source_target && entry_operation &&
+        reconstruct_call_identity("xray-target-call-v5", source_target->id,
+                                  entry_operation->id, 0u,
+                                  &expected_direct_identity);
+    bool leaf_identity_exact =
+        leaf_entry && leaf_operation &&
+        reconstruct_call_identity(
+            "xray-target-native-target-leaf-scalar-v1", leaf_operation->id,
+            leaf_identity, leaf_entry->target_leaf, &expected_leaf_identity);
+    const XrTargetProfileDraft *profile_facts =
+        xr_target_profile_facts(plan->profile);
+
+    if (!program || !entry_function || !producer_function ||
+        !entry_call_binding || !leaf_call_binding || !entry_operation ||
+        !leaf_operation || !direct || !leaf || !source_target ||
+        !source_export || !entry_semantic_function ||
+        !producer_semantic_function || !entry_target_function ||
+        !producer_target_function || !direct_result || !leaf_result ||
+        !leaf_semantics || !direct_identity_exact || !leaf_identity_exact ||
+        graph->schema != XR_TARGET_PROGRAM_GRAPH_SCHEMA_VERSION ||
+        graph->family !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL ||
+        graph->module_count != 2u ||
+        graph->function_count != program->function_count ||
+        graph->export_count != 1u || graph->entry_count != 1u ||
+        graph->call_count != 1u || graph->argument_count != 0u ||
+        graph->entry_partition != entry_partition ||
+        graph->producer_partition != producer_partition ||
+        graph->entry_semantic_function != entry_function->semantic_function ||
+        graph->producer_semantic_function !=
+            producer_function->semantic_function ||
+        graph->entry_semantic_operation != entry_call_binding->operation ||
+        graph->producer_semantic_export != source_target->source_export ||
+        graph->entry_semantic_dependency != source_target->dependency ||
+        graph->target_argument != XR_SEMANTIC_INDEX_NONE ||
+        graph->producer_semantic_parameter != XR_SEMANTIC_INDEX_NONE ||
+        graph->caller_slot != XR_SEMANTIC_INDEX_NONE ||
+        graph->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+        graph->argument_ordinal != XR_SEMANTIC_INDEX_NONE ||
+        graph->flags != (XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN |
+                         XR_TARGET_PROGRAM_GRAPH_DIRECT_I64) ||
+        !xr_fingerprint_equal(graph->program_fingerprint,
+                              program->program_fingerprint) ||
+        !xr_stable_id_equal(graph->generation_identity,
+                            program->generation_identity) ||
+        !xr_fingerprint_equal(graph->target_profile_fingerprint,
+                              xr_target_profile_fingerprint(plan->profile)) ||
+        !xr_stable_id_equal(graph->entry_function_identity,
+                            entry_function->program_function) ||
+        !xr_stable_id_equal(graph->producer_function_identity,
+                            producer_function->program_function) ||
+        graph->entry_function_flags != entry_function->flags ||
+        graph->producer_function_flags != producer_function->flags ||
+        graph->reserved16 != 0u ||
+        !xr_stable_id_equal(graph->export_identity, source_export->id) ||
+        !xr_stable_id_equal(graph->exported_function_identity,
+                            source_export->exported_entity) ||
+        !xr_stable_id_equal(graph->entry_identity,
+                            entry_semantic_function->id) ||
+        !xr_stable_id_equal(graph->call_identity,
+                            entry_call_binding->program_call) ||
+        !xr_stable_id_equal(graph->callsite_identity,
+                            entry_call_binding->callsite) ||
+        !xr_stable_id_equal(graph->resolver_binding,
+                            entry_call_binding->resolver_binding) ||
+        !stable_id_is_zero(graph->argument_identity) ||
+        !stable_id_is_zero(graph->parameter_identity))
+        return report(error, error_size, "XR_TARGET_1001",
+                      "private-leaf program graph stable witness is not exact");
+
+    if (!graph_function_in_partition(&plan->module_partitions[entry_partition],
+                                     graph->entry_target_function) ||
+        !graph_function_in_partition(
+            &plan->module_partitions[producer_partition],
+            graph->producer_target_function) ||
+        entry_target_function->semantic_function !=
+            entry_function->semantic_function ||
+        producer_target_function->semantic_function !=
+            producer_function->semantic_function ||
+        entry_semantic_function->parameter_count != 0u ||
+        producer_semantic_function->parameter_count != 0u ||
+        entry_operation->opcode != XI_CALL ||
+        entry_operation->operand_count != 1u ||
+        source_target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
+        source_target->dependency != 0u ||
+        source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION ||
+        source_export->function != producer_function->semantic_function ||
+        direct->id != graph->target_call ||
+        direct->caller_function != graph->entry_target_function ||
+        direct->callee_function != graph->producer_target_function ||
+        direct->calling_convention != XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT ||
+        direct->target_kind != XR_TARGET_CALL_TARGET_PROGRAM_DIRECT ||
+        direct->semantic_operation != entry_call_binding->operation ||
+        direct->source_dependency != source_target->dependency ||
+        direct->source_export != source_target->source_export ||
+        !xr_stable_id_equal(direct->identity, expected_direct_identity) ||
+        !xr_stable_id_equal(direct->source_export_identity,
+                            source_target->export_identity) ||
+        !xr_stable_id_equal(direct->source_callee_identity,
+                            source_target->callee_function) ||
+        direct->result_value != entry_operation->result_value ||
+        direct->result_slot != direct_result->slot ||
+        direct->result_register_rep != direct_result->register_rep ||
+        direct->result_memory_rep != direct_result->memory_rep ||
+        direct->argument_count != 0u || direct->adapter_count != 0u ||
+        direct->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        direct->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        direct->result_mode != XR_TARGET_CALL_VALUE ||
+        direct->result_ownership != XR_TARGET_CALL_NONE ||
+        direct->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        !profile_facts || direct->native_abi != profile_facts->machine.native_abi ||
+        direct->flags != 0u)
+        return report(error, error_size, "XR_TARGET_1003",
+                      "private-leaf program direct call join is not exact");
+
+    if (leaf->id != leaf_target_call ||
+        leaf->caller_function != graph->producer_target_function ||
+        leaf->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        leaf->semantic_operation != leaf_call_binding->operation ||
+        leaf->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        leaf->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        leaf->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !stable_id_is_zero(leaf->source_export_identity) ||
+        !stable_id_is_zero(leaf->source_callee_identity) ||
+        !xr_stable_id_equal(leaf->identity, expected_leaf_identity) ||
+        !xr_stable_id_equal(leaf->native_callee_identity, leaf_identity) ||
+        leaf->native_leaf != leaf_entry->target_leaf ||
+        leaf->calling_convention !=
+            XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR ||
+        leaf->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
+        leaf->result_value != leaf_operation->result_value ||
+        leaf->result_slot != leaf_result->slot ||
+        leaf->result_register_rep != leaf_result->register_rep ||
+        leaf->result_memory_rep != leaf_result->memory_rep ||
+        leaf->argument_count != 0u || leaf->adapter_count != 0u ||
+        leaf->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        leaf->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        leaf->result_mode != XR_TARGET_CALL_VALUE ||
+        leaf->result_ownership != XR_TARGET_CALL_NONE ||
+        leaf->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        leaf->flags != 0u)
+        return report(error, error_size, "XR_TARGET_1003",
+                      "private-leaf native call join is not exact");
+
+    uint32_t direct_instructions = 0u, leaf_instructions = 0u,
+             entry_instructions = 0u;
+    for (uint32_t i = 0; i < plan->instructions_count; i++) {
+        const XrTargetInstructionRecord *instruction = &plan->instructions[i];
+        entry_instructions +=
+            instruction->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64;
+        if (instruction->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64) {
+            direct_instructions++;
+            if (instruction->function != graph->entry_target_function ||
+                instruction->result_slot != direct->result_slot ||
+                instruction->immediate_bits != graph->target_call)
+                return report(error, error_size, "XR_TARGET_1003",
+                              "private-leaf direct instruction is invalid");
+        } else if (instruction->opcode ==
+                   XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64) {
+            leaf_instructions++;
+            if (instruction->function != graph->producer_target_function ||
+                instruction->result_slot != leaf->result_slot ||
+                instruction->immediate_bits != leaf_target_call)
+                return report(error, error_size, "XR_TARGET_1003",
+                              "private-leaf native instruction is invalid");
+        }
+    }
+    if (direct_instructions != 1u || leaf_instructions != 1u ||
+        entry_instructions != 0u ||
+        !verify_extents(plan, error, error_size) ||
+        !verify_program_graph_rows(plan, error, error_size) ||
+        !verify_extent_references(plan, error, error_size) ||
+        !xr_target_instruction_program_verify(plan, error, error_size) ||
+        !verify_adapters_and_capabilities(plan, error, error_size))
+        return false;
+    XrFingerprint direct_fingerprint = {{0}};
+    XrFingerprint leaf_fingerprint = {{0}};
+    XrFingerprint plan_fingerprint = {{0}};
+    xr_target_call_compute_fingerprint(plan, graph->target_call,
+                                       &direct_fingerprint);
+    xr_target_call_compute_fingerprint(plan, leaf_target_call,
+                                       &leaf_fingerprint);
+    xr_target_plan_compute_fingerprint(plan, &plan_fingerprint);
+    if (!xr_fingerprint_equal(direct->fingerprint, direct_fingerprint) ||
+        !xr_fingerprint_equal(leaf->fingerprint, leaf_fingerprint) ||
+        !xr_fingerprint_equal(plan->fingerprint, plan_fingerprint))
+        return report(error, error_size, "XR_TARGET_1005",
+                      "private-leaf target fingerprint changed after freeze");
+    return true;
+}
+
 static bool verify_program_graph_plan(const XrTargetPlan *plan, char *error,
                                       size_t error_size) {
     char nested_error[512] = {0};
@@ -10167,6 +10548,13 @@ static bool verify_program_graph_plan(const XrTargetPlan *plan, char *error,
     if (!verify_program_graph_partitions(plan, &entry_partition, &producer_partition, error,
                                          error_size))
         return false;
+    const XrSemanticProgramProvenance *root_program =
+        xr_semantic_plan_program_provenance(plan->semantic_plan);
+    if (root_program &&
+        root_program->program_family ==
+            XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL)
+        return verify_private_leaf_program_graph_plan(
+            plan, entry_partition, producer_partition, error, error_size);
     if (plan->program_graphs_count != 1u || !plan->program_graphs ||
         plan->entry_expectations_count != 0u || plan->fields_count != 0u ||
         plan->storage_count != 0u ||
@@ -10436,8 +10824,11 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
                       "TargetPlan family coverage is incomplete or unsupported");
     const XrSemanticProgramProvenance *program =
         xr_semantic_plan_program_provenance(plan->semantic_plan);
-    if (program && program->program_family ==
-                       XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+    if (program &&
+        (program->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+         program->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL))
         return verify_program_graph_plan(plan, error, error_size);
     if (plan->program_graphs_count || plan->module_partitions_count ||
         plan->semantic_module_count || plan->semantic_modules)

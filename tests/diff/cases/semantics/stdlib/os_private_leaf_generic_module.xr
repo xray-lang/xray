@@ -1,0 +1,6 @@
+// A source-owned stdlib wrapper reaches one private native leaf through the
+// same verified program plan on the VM and AOT backends.  A dedicated harness
+// invokes root and checks that its process id is positive.
+import os
+
+fn root() -> i64 { return os.getpid() }

@@ -213,6 +213,7 @@ typedef struct XrDirectLocalGoCalleeStorageAnalysis {
 
 typedef struct XrSourceNamespaceStorageAnalysis {
     uint8_t *exact_value;
+    uint8_t *direct_callee_value;
     uint32_t *dependency_by_value;
     uint32_t value_count;
 } XrSourceNamespaceStorageAnalysis;
@@ -856,6 +857,53 @@ static int compare_slot_intent(const void *left, const void *right) {
     return xr_stable_id_compare(a->identity, b->identity);
 }
 
+static bool private_leaf_program_excludes_function(const XrTargetPlanBuilder *builder,
+                                                   uint32_t semantic_function) {
+    const XrSemanticPlan *semantic = builder ? builder->semantic_plan : NULL;
+    const XrSemanticProgramProvenance *program =
+        semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+    const XrSemanticFunctionRecord *function =
+        semantic && semantic_function < xr_semantic_plan_function_count(semantic)
+            ? xr_semantic_plan_function(semantic, semantic_function)
+            : NULL;
+    return program &&
+           program->program_family ==
+               XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
+           function && !function->is_module_initializer &&
+           !xr_semantic_plan_program_function_for_semantic_function(
+               semantic, semantic_function);
+}
+
+static bool private_leaf_program_compile_time_callee_value(
+    const XrSemanticPlan *semantic, uint32_t semantic_value) {
+    const XrSemanticProgramProvenance *program =
+        semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+    if (!program ||
+        program->program_family !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_program_call_binding_count(semantic); i++) {
+        const XrSemanticProgramCallBinding *binding =
+            xr_semantic_plan_program_call_binding(semantic, i);
+        const XrSemanticOperationRecord *call =
+            binding ? xr_semantic_plan_operation(semantic, binding->operation)
+                    : NULL;
+        if (!call || call->opcode != XI_CALL || call->operand_count == 0u ||
+            call->operand_begin >= operand_count)
+            continue;
+        const XrSemanticOperandRecord *callee =
+            &operands[call->operand_begin];
+        if (callee->role == XR_SEM_OPERAND_CALLEE &&
+            callee->value == semantic_value)
+            return true;
+    }
+    return false;
+}
+
 static bool append_rep_intent(XrTargetPlanBuilder *builder, const XrTargetMachineRepRecord *record,
                               char *error, size_t error_size) {
     for (uint32_t i = 0; i < builder->rep_intent_count; i++)
@@ -915,6 +963,11 @@ static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic
 
 static bool append_value_intent(XrTargetPlanBuilder *builder, const XrTargetValueIntent *intent,
                                 char *error, size_t error_size) {
+    if (intent &&
+        (private_leaf_program_excludes_function(builder, intent->semantic_function) ||
+         private_leaf_program_compile_time_callee_value(
+             builder ? builder->semantic_plan : NULL, intent->semantic_value)))
+        return true;
     if (!reserve_records((void **) &builder->value_intents, &builder->value_intent_capacity,
                          builder->value_intent_count + 1u, 40000000u,
                          sizeof(*builder->value_intents)))
@@ -927,6 +980,11 @@ static bool append_value_intent(XrTargetPlanBuilder *builder, const XrTargetValu
 
 static bool append_slot_intent(XrTargetPlanBuilder *builder, const XrTargetSlotIntent *intent,
                                char *error, size_t error_size) {
+    if (intent &&
+        (private_leaf_program_excludes_function(builder, intent->function) ||
+         private_leaf_program_compile_time_callee_value(
+             builder ? builder->semantic_plan : NULL, intent->semantic_value)))
+        return true;
     if (!reserve_records((void **) &builder->slot_intents, &builder->slot_intent_capacity,
                          builder->slot_intent_count + 1u, 16000000u,
                          sizeof(*builder->slot_intents)))
@@ -8074,6 +8132,7 @@ static void source_namespace_storage_analysis_dispose(XrSourceNamespaceStorageAn
     if (!analysis)
         return;
     xr_free(analysis->exact_value);
+    xr_free(analysis->direct_callee_value);
     xr_free(analysis->dependency_by_value);
     memset(analysis, 0, sizeof(*analysis));
 }
@@ -8087,6 +8146,9 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
     analysis->value_count = values->total_values;
     analysis->exact_value =
         (uint8_t *) allocate_records(analysis->value_count, sizeof(*analysis->exact_value));
+    analysis->direct_callee_value =
+        (uint8_t *) allocate_records(analysis->value_count,
+                                     sizeof(*analysis->direct_callee_value));
     analysis->dependency_by_value = (uint32_t *) allocate_records(
         analysis->value_count, sizeof(*analysis->dependency_by_value));
     uint32_t *source_target_by_operation =
@@ -8102,7 +8164,9 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
     uint8_t *candidate = (uint8_t *) allocate_records(analysis->value_count, sizeof(*candidate));
     uint8_t *standalone_import =
         (uint8_t *) allocate_records(analysis->value_count, sizeof(*standalone_import));
-    if ((analysis->value_count && (!analysis->exact_value || !analysis->dependency_by_value ||
+    if ((analysis->value_count && (!analysis->exact_value ||
+                                   !analysis->direct_callee_value ||
+                                   !analysis->dependency_by_value ||
                                    !expected_uses || !retain_uses || !consumer_by_value ||
                                    !visit_epoch || !candidate || !standalone_import)) ||
         (operation_count && !source_target_by_operation)) {
@@ -8158,6 +8222,80 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
             receiver->parameter_mode != XR_PARAM_READ || receiver->access != XR_CALL_ARG_PLAIN ||
             receiver->flags != (named_export ? 0u : XR_SEM_OPERAND_CALL_CONTRACT))
             goto invalid;
+        const XrSemanticProgramProvenance *program =
+            xr_semantic_plan_program_provenance(plan);
+        uint32_t direct_definition_index =
+            receiver->value < values->total_values
+                ? values->value_operations[receiver->value]
+                : XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *direct_import =
+            direct_definition_index != XR_SEMANTIC_INDEX_NONE
+                ? xr_semantic_plan_operation(plan, direct_definition_index)
+                : NULL;
+        if (named_export && program &&
+            program->program_family ==
+                XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
+            direct_import && direct_import->opcode == XI_IMPORT_REF &&
+            direct_import->operand_count == 0u &&
+            direct_import->result_value == receiver->value &&
+            direct_import->result_type == receiver->type &&
+            direct_import->semantic_immediate >= -1 &&
+            direct_import->semantic_immediate <= UINT16_MAX &&
+            direct_import->metadata_count == 2u &&
+            !direct_import->allocation_key &&
+            stable_id_is_zero(direct_import->allocation_id) &&
+            direct_import->constant == XR_SEMANTIC_INDEX_NONE &&
+            direct_import->callable_function == XR_SEMANTIC_INDEX_NONE &&
+            direct_import->auxiliary_kind == 0u &&
+            direct_import->effects == xi_generated_op_effects(XI_IMPORT_REF) &&
+            direct_import->flags == xi_generated_op_default_flags(XI_IMPORT_REF) &&
+            direct_import->ownership_use == xi_generated_op_own_use(XI_IMPORT_REF) &&
+            direct_import->result_alias_operand == -1 &&
+            direct_import->function == call->function &&
+            direct_import->import_resolution == XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
+            direct_import->metadata_begin + 1u < metadata_count && metadata &&
+            metadata[direct_import->metadata_begin] &&
+            metadata[direct_import->metadata_begin + 1u] &&
+            metadata[direct_import->metadata_begin + 1u][0] != '\0') {
+            uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
+            for (uint32_t row = 0;
+                 row < xr_semantic_plan_dependency_count(plan); row++) {
+                const XrSemanticDependencyRecord *candidate_dependency =
+                    xr_semantic_plan_dependency(plan, row);
+                if (!candidate_dependency ||
+                    !candidate_dependency->module_path ||
+                    strcmp(candidate_dependency->module_path,
+                           metadata[direct_import->metadata_begin]) != 0)
+                    continue;
+                if (dependency != XR_SEMANTIC_INDEX_NONE)
+                    goto invalid;
+                dependency = row;
+            }
+            if (dependency == XR_SEMANTIC_INDEX_NONE ||
+                dependency != target->dependency ||
+                receiver->value >= analysis->value_count ||
+                analysis->direct_callee_value[receiver->value])
+                goto invalid;
+            for (uint32_t use_index = 0; use_index < operation_count;
+                 use_index++) {
+                const XrSemanticOperationRecord *use =
+                    xr_semantic_plan_operation(plan, use_index);
+                if (!use || use->operand_begin > operand_count ||
+                    use->operand_count > operand_count - use->operand_begin)
+                    goto invalid;
+                for (uint16_t ordinal = 0; ordinal < use->operand_count;
+                     ordinal++) {
+                    const XrSemanticOperandRecord *operand =
+                        &operands[use->operand_begin + ordinal];
+                    if (operand->value == receiver->value &&
+                        (use_index != i || ordinal != 0u))
+                        goto invalid;
+                }
+            }
+            analysis->direct_callee_value[receiver->value] = 1u;
+            analysis->dependency_by_value[receiver->value] = dependency;
+            continue;
+        }
         const XrSemanticOperationRecord *load = NULL;
         uint32_t current_value = receiver->value;
         uint32_t consumer_index = i;
@@ -10801,6 +10939,11 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_CALL_ADAPTER, error, error_size))
         return false;
     const XrSemanticPlan *plan = builder->semantic_plan;
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(plan);
+    bool private_leaf_program =
+        program && program->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
     size_t operation_count = xr_semantic_plan_operation_count(plan);
     size_t call_target_count = xr_semantic_plan_call_target_count(plan);
     if (operation_count > 10000000u || call_target_count > operation_count) {
@@ -10887,6 +11030,10 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             target && target->operation < operation_count
                 ? xr_semantic_plan_operation(plan, target->operation)
                 : NULL;
+        if (private_leaf_program && operation &&
+            !xr_semantic_plan_program_function_for_semantic_function(
+                plan, operation->function))
+            continue;
         bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
@@ -11029,6 +11176,10 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
     }
     for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
+        if (private_leaf_program && operation &&
+            !xr_semantic_plan_program_function_for_semantic_function(
+                plan, operation->function))
+            continue;
         uint32_t target_index = target_by_operation[i];
         if (target_index != XR_SEMANTIC_INDEX_NONE) {
             const XrSemanticCallTargetRecord *target =
@@ -12896,7 +13047,9 @@ static bool scalar_instruction_analysis_init(const XrTargetPlanBuilder *builder,
                 value = operands[producer->operand_begin].value;
                 continue;
             }
-            if (dynamic && value < namespaces.value_count && namespaces.exact_value[value] &&
+            if (dynamic && value < namespaces.value_count &&
+                (namespaces.exact_value[value] ||
+                 namespaces.direct_callee_value[value]) &&
                 namespaces.dependency_by_value[value] == call->source_dependency) {
                 exact = true;
                 break;
@@ -15006,6 +15159,11 @@ static bool materialize_coroutine_state_calls(const XrTargetPlanBuilder *builder
                                               XrTargetMaterializedPlan *materialized, char *error,
                                               size_t error_size) {
     const XrSemanticPlan *semantic = builder->semantic_plan;
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(semantic);
+    bool private_leaf_program =
+        program && program->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
     uint32_t function_count = materialized->function_count;
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
     uint32_t entity_count = (uint32_t) xr_semantic_plan_entity_count(semantic);
@@ -15057,6 +15215,10 @@ static bool materialize_coroutine_state_calls(const XrTargetPlanBuilder *builder
             continue;
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(semantic, entity->subject);
+        if (private_leaf_program && operation &&
+            !xr_semantic_plan_program_function_for_semantic_function(
+                semantic, operation->function))
+            continue;
         if (entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION || !operation ||
             operation->function >= function_count ||
             materialized->functions[operation->function].coroutine_count == UINT32_MAX) {
@@ -15103,6 +15265,10 @@ static bool materialize_coroutine_state_calls(const XrTargetPlanBuilder *builder
             continue;
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(semantic, entity->subject);
+        if (private_leaf_program && operation &&
+            !xr_semantic_plan_program_function_for_semantic_function(
+                semantic, operation->function))
+            continue;
         XrTargetFunctionRecord *function = operation && operation->function < function_count
                                                ? &materialized->functions[operation->function]
                                                : NULL;
@@ -15442,6 +15608,34 @@ static bool materialize_capabilities(const XrTargetPlanBuilder *builder,
     return true;
 }
 
+static void prune_private_leaf_program_layout_intents(
+    XrTargetPlanBuilder *builder) {
+    const XrSemanticProgramProvenance *program =
+        builder ? xr_semantic_plan_program_provenance(builder->semantic_plan)
+                : NULL;
+    if (!program ||
+        program->program_family !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL)
+        return;
+    uint32_t next = 0;
+    for (uint32_t i = 0; i < builder->layout_intent_count; i++) {
+        bool used = false;
+        for (uint32_t value = 0; value < builder->value_intent_count; value++) {
+            if (builder->value_intents[value].semantic_type ==
+                builder->layout_intents[i].semantic_type) {
+                used = true;
+                break;
+            }
+        }
+        if (!used)
+            continue;
+        if (next != i)
+            builder->layout_intents[next] = builder->layout_intents[i];
+        next++;
+    }
+    builder->layout_intent_count = next;
+}
+
 static bool builder_materialize(XrTargetPlanBuilder *builder,
                                 XrTargetMaterializedPlan *materialized, char *error,
                                 size_t error_size) {
@@ -15450,6 +15644,7 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         builder->completed_family_mask != XR_TARGET_REQUIRED_FAMILIES)
         return fail(error, error_size, "XR_TARGET_1001",
                     "target builder family coverage is incomplete");
+    prune_private_leaf_program_layout_intents(builder);
     if (!materialize_layouts(builder, materialized, error, error_size) ||
         !materialize_machine_reps(builder, materialized, error, error_size) ||
         !materialize_field_representations(builder, materialized, error, error_size) ||
@@ -15481,8 +15676,11 @@ static bool builder_new(const XrSemanticPlan *semantic_plan, XrTargetProfile *pr
         return fail(error, error_size, "XR_TARGET_1000", "target builder input is missing");
     const XrSemanticProgramProvenance *program =
         xr_semantic_plan_program_provenance(semantic_plan);
-    if (!allow_program_graph && program && program->program_family ==
-                       XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+    if (!allow_program_graph && program &&
+        (program->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+         program->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL))
         return fail(error, error_size, "XR_TARGET_1001",
                     "graph SemanticPlan execution is outside TargetPlan coverage");
     if (dependency_count > XR_TARGET_MAX_SEMANTIC_DEPENDENCIES ||
@@ -16083,6 +16281,10 @@ static bool graph_bind_direct_call(
         producer_function
             ? xr_semantic_plan_function(producer, producer_function->semantic_function)
             : NULL;
+    bool private_leaf =
+        program && program->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
+    uint16_t expected_parameter_count = private_leaf ? 0u : 1u;
     const XrSemanticParameterRecord *parameter =
         producer_semantic_function && producer_semantic_function->parameter_count == 1u
             ? xr_semantic_plan_parameter(producer,
@@ -16090,7 +16292,9 @@ static bool graph_bind_direct_call(
             : NULL;
     uint32_t entry_target_function = UINT32_MAX, producer_target_function = UINT32_MAX;
     if (!program || !entry_function || !producer_function || !call_binding || !operation ||
-        !semantic_target || !source_export || !producer_semantic_function || !parameter ||
+        !semantic_target || !source_export || !producer_semantic_function ||
+        producer_semantic_function->parameter_count != expected_parameter_count ||
+        (!private_leaf && !parameter) ||
         semantic_target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
         semantic_target->dependency != 0u || source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION ||
         source_export->function != producer_function->semantic_function ||
@@ -16117,17 +16321,20 @@ static bool graph_bind_direct_call(
         call = candidate;
         target_call = row;
     }
-    if (!call || call->argument_count != 1u ||
-        call->argument_begin >= target->call_argument_count)
+    if (!call || call->argument_count != expected_parameter_count ||
+        call->argument_begin > target->call_argument_count ||
+        call->argument_count > target->call_argument_count - call->argument_begin)
         return fail(error, error_size, "XR_TARGET_1001",
-                    "program graph target call/argument is missing");
-    XrTargetCallArgumentRecord *argument = &target->call_arguments[call->argument_begin];
-    uint32_t callee_slot = UINT32_MAX;
+                    "program graph target call/argument shape is not exact");
+    XrTargetCallArgumentRecord *argument =
+        private_leaf ? NULL : &target->call_arguments[call->argument_begin];
+    uint32_t callee_slot = XR_SEMANTIC_INDEX_NONE;
     uint16_t callee_register_rep = 0, callee_memory_rep = 0;
-    if (argument->call != target_call || argument->ordinal != 0u ||
+    if (!private_leaf &&
+        (argument->call != target_call || argument->ordinal != 0u ||
         argument->callee_parameter != producer_semantic_function->parameter_begin ||
         !graph_target_value_slot(target, producer_partition, parameter->value, &callee_slot,
-                                 &callee_register_rep, &callee_memory_rep))
+                                 &callee_register_rep, &callee_memory_rep)))
         return fail(error, error_size, "XR_TARGET_1001",
                     "program graph argument slot join is not exact");
 
@@ -16151,9 +16358,11 @@ static bool graph_bind_direct_call(
     call->callee_function = producer_target_function;
     call->calling_convention = XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT;
     call->target_kind = XR_TARGET_CALL_TARGET_PROGRAM_DIRECT;
-    argument->callee_slot = callee_slot;
-    argument->callee_register_rep = callee_register_rep;
-    argument->callee_memory_rep = callee_memory_rep;
+    if (argument) {
+        argument->callee_slot = callee_slot;
+        argument->callee_register_rep = callee_register_rep;
+        argument->callee_memory_rep = callee_memory_rep;
+    }
     target->instructions[direct_instruction].opcode = XR_TARGET_INSTRUCTION_CALL_DIRECT_I64;
     target->instructions[direct_instruction].immediate_bits = target_call;
 
@@ -16162,8 +16371,11 @@ static bool graph_bind_direct_call(
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(entry, &operand_count);
     uint32_t argument_operand = operation->operand_begin + 1u;
-    if (!entry_semantic_function || !operands || operation->operand_count != 2u ||
-        argument_operand >= operand_count || argument->semantic_operand != argument_operand)
+    if (!entry_semantic_function || !operands ||
+        operation->operand_count != (uint16_t) (expected_parameter_count + 1u) ||
+        (!private_leaf &&
+         (argument_operand >= operand_count ||
+          argument->semantic_operand != argument_operand)))
         return fail(error, error_size, "XR_TARGET_1001",
                     "program graph semantic argument identity is missing");
 
@@ -16175,7 +16387,7 @@ static bool graph_bind_direct_call(
         .export_count = 1u,
         .entry_count = 1u,
         .call_count = 1u,
-        .argument_count = 1u,
+        .argument_count = expected_parameter_count,
         .entry_partition = entry_partition->program_module_row,
         .producer_partition = producer_partition->program_module_row,
         .entry_target_function = entry_target_function,
@@ -16183,14 +16395,16 @@ static bool graph_bind_direct_call(
         .entry_semantic_function = entry_function->semantic_function,
         .producer_semantic_function = producer_function->semantic_function,
         .target_call = target_call,
-        .target_argument = call->argument_begin,
+        .target_argument = private_leaf ? XR_SEMANTIC_INDEX_NONE : call->argument_begin,
         .entry_semantic_operation = call_binding->operation,
         .producer_semantic_export = semantic_target->source_export,
         .entry_semantic_dependency = semantic_target->dependency,
-        .producer_semantic_parameter = producer_semantic_function->parameter_begin,
-        .caller_slot = argument->caller_slot,
-        .callee_slot = argument->callee_slot,
-        .argument_ordinal = argument->ordinal,
+        .producer_semantic_parameter =
+            private_leaf ? XR_SEMANTIC_INDEX_NONE
+                         : producer_semantic_function->parameter_begin,
+        .caller_slot = private_leaf ? XR_SEMANTIC_INDEX_NONE : argument->caller_slot,
+        .callee_slot = private_leaf ? XR_SEMANTIC_INDEX_NONE : argument->callee_slot,
+        .argument_ordinal = private_leaf ? XR_SEMANTIC_INDEX_NONE : argument->ordinal,
         .flags = XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN | XR_TARGET_PROGRAM_GRAPH_DIRECT_I64,
         .program_fingerprint = program->program_fingerprint,
         .generation_identity = program->generation_identity,
@@ -16205,8 +16419,8 @@ static bool graph_bind_direct_call(
         .call_identity = call_binding->program_call,
         .callsite_identity = call_binding->callsite,
         .resolver_binding = call_binding->resolver_binding,
-        .argument_identity = argument->identity,
-        .parameter_identity = parameter->id,
+        .argument_identity = argument ? argument->identity : (XrStableId) {{0}},
+        .parameter_identity = parameter ? parameter->id : (XrStableId) {{0}},
     };
     return true;
 }
@@ -16245,8 +16459,10 @@ bool xr_target_plan_build_program_graph(const XrSemanticPlan *const *semantic_mo
     const XrSemanticProgramProvenance *producer_program =
         xr_semantic_plan_program_provenance(producer);
     if (!entry || !producer || !entry_program || !producer_program ||
-        entry_program->program_family !=
-            XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+        (entry_program->program_family !=
+             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+         entry_program->program_family !=
+             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL) ||
         producer_program->program_family != entry_program->program_family ||
         entry_program->module_count != 2u || producer_program->module_count != 2u ||
         entry_program->program_module_row >= 2u || producer_program->program_module_row >= 2u ||

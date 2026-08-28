@@ -18,6 +18,7 @@
 #include "xr_source_semantic_identity.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include "../../runtime/value/xtype.h"
 #include <limits.h>
@@ -499,7 +500,10 @@ bool xr_program_semantic_closure_add_dependency(XrProgramSemanticClosure *closur
     bool selective =
         closure && closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
     bool source_graph =
-        closure && closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH;
+        closure &&
+        (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH ||
+         closure->family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL);
     bool selective_input =
         input && input->kind == XR_PROGRAM_SEMANTIC_DEPENDENCY_SELECTIVE_FUNCTION_IMPORT &&
         locator_is_valid(input->import_locator) &&
@@ -649,11 +653,17 @@ bool xr_program_semantic_closure_add_function(XrProgramSemanticClosure *closure,
         ((closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
           closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
           closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+          closure->family ==
+              XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL ||
           closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE)
              ? (stable_id_is_zero(input->return_type) ||
                 input->parameter_count >
-                    (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE ? 2u
-                                                                                         : 1u) ||
+                    (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE
+                         ? 2u
+                         : closure->family ==
+                                   XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL
+                               ? 0u
+                               : 1u) ||
                 input->parameter_count > closure->limits.max_function_parameters ||
                 (input->parameter_count && !input->parameters))
              : (!stable_id_is_zero(input->return_type) || input->parameter_count != 0 ||
@@ -738,13 +748,17 @@ bool xr_program_semantic_closure_add_call(XrProgramSemanticClosure *closure,
         fingerprint_is_zero(input->contract_fingerprint) ||
         (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL
              ? stable_id_is_zero(input->resolver_binding)
-             : !stable_id_is_zero(input->resolver_binding)))
+             : closure->family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL
+                   ? false
+                   : !stable_id_is_zero(input->resolver_binding)))
         return fail(error, error_size, "XR_SEM_0019", "resolved call authority is incomplete");
     const XrProgramSemanticFunctionRecord *caller =
         find_function_record(closure, input->caller_function);
     const XrProgramSemanticFunctionRecord *callee =
         find_function_record(closure, input->callee_function);
     bool overflow_builtin = false;
+    bool private_leaf = false;
     if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) {
         for (uint32_t kind = XR_I64_OVERFLOW_PREDICATE_ADD;
              kind < XR_I64_OVERFLOW_PREDICATE_COUNT; kind++) {
@@ -757,9 +771,30 @@ bool xr_program_semantic_closure_add_call(XrProgramSemanticClosure *closure,
             }
         }
     }
+    if (closure->family ==
+        XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL) {
+        for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
+            const XrStdlibDefEntry *entry = &xr_stdlib_def_entries[i];
+            if (entry->target_leaf <= XR_STDLIB_TARGET_LEAF_NONE ||
+                entry->target_leaf >= XR_STDLIB_TARGET_LEAF_COUNT)
+                continue;
+            char key[512];
+            int written = snprintf(key, sizeof(key), "stdlib-target-leaf-v1:%u:%s.%s:%s",
+                                   (unsigned) entry->target_leaf, entry->module, entry->name,
+                                   entry->signature);
+            XrStableId candidate = {{0}};
+            XrFingerprint digest = {{0}};
+            if (written > 0 && (size_t) written < sizeof(key) &&
+                xr_stable_id_from_key(key, &candidate, &digest) &&
+                stable_id_equal(candidate, input->callee_function)) {
+                private_leaf = true;
+                break;
+            }
+        }
+    }
     const XrProgramSemanticModuleRecord *module =
         caller ? find_module_record(closure, caller->module_identity) : NULL;
-    if (!caller || (!callee && !overflow_builtin) || !module ||
+    if (!caller || (!callee && !overflow_builtin && !private_leaf) || !module ||
         !stable_id_equal(input->callsite_identity,
                          derive_source_callsite_identity(module, caller, input->locator)))
         return fail(error, error_size, "XR_SEM_0019",
@@ -896,7 +931,7 @@ static void canonicalize_tables(XrProgramSemanticClosure *closure) {
 
 static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v8\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v9\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);

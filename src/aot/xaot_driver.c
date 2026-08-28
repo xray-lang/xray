@@ -2380,13 +2380,19 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     {
         char closure_error[512] = {0};
         XaProgramSemanticClosurePublishStatus closure_status =
-            xa_program_semantic_closure_publish_scalar_module_graph(
+            xa_program_semantic_closure_publish_source_module_scalar_private_leaf_call(
                 shared_analyzer, graph, &source_program_closure, closure_error,
                 sizeof(closure_error));
+        if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED) {
+            memset(closure_error, 0, sizeof(closure_error));
+            closure_status = xa_program_semantic_closure_publish_scalar_module_graph(
+                shared_analyzer, graph, &source_program_closure, closure_error,
+                sizeof(closure_error));
+        }
         if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_INVALID ||
             closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE) {
-            fprintf(stderr, "Error: product program closure publication failed: %s\n",
-                    closure_error[0] ? closure_error : "incomplete two-module scalar authority");
+            fprintf(stderr, "Error: source program closure publication failed: %s\n",
+                    closure_error[0] ? closure_error : "incomplete source program authority");
             goto fail_free_analyzer;
         }
     }

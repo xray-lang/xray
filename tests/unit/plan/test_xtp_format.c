@@ -954,7 +954,8 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
                                          UINT32_C(28), UINT32_C(41), UINT32_C(42),
                                          UINT32_C(43), UINT32_C(44), UINT32_C(45),
                                          UINT32_C(46), UINT32_C(47), UINT32_C(48),
-                                         UINT32_C(49), UINT32_C(50), UINT32_C(51)};
+                                         UINT32_C(49), UINT32_C(50), UINT32_C(51),
+                                         UINT32_C(52), UINT32_C(53), UINT32_C(54)};
     for (size_t i = 0;
          i < sizeof(rejected_schemas) / sizeof(rejected_schemas[0]); i++) {
         uint8_t *old_schema = copy_artifact(&fixture);
@@ -976,6 +977,14 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     resign_artifact(mutated_profile, fixture.size);
     expect_materialize_failure(&fixture, mutated_profile);
     xr_free(mutated_profile);
+    dispose_fixture(&fixture);
+}
+
+static void test_previous_schema_is_rejected(void) {
+    XtpFixture fixture = make_fixture();
+    xr_xtp_put_u32(fixture.bytes + 4, XR_XTP_SCHEMA_VERSION - UINT32_C(1));
+    resign_artifact(fixture.bytes, fixture.size);
+    expect_decode_failure(fixture.bytes, fixture.size);
     dispose_fixture(&fixture);
 }
 
@@ -2332,9 +2341,10 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-54-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-55-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
-        puts("XTP schema 54 cutover tests passed");
+        test_previous_schema_is_rejected();
+        puts("XTP schema 55 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();
@@ -2342,6 +2352,7 @@ int main(int argc, char **argv) {
     test_every_typed_row_codec();
     test_compact_instruction_stream_kat_and_mutations();
     test_exact_roundtrip_and_owned_candidate();
+    test_previous_schema_is_rejected();
     test_concurrent_candidate_materialization();
     test_direct_call_rows_roundtrip_and_mutate();
     test_channel_close_row_roundtrip_and_mutate();

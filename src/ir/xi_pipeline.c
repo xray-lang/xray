@@ -1173,8 +1173,10 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (cfg->program_semantic_closure) {
         if (!cfg->module_name || !cfg->module_name[0] ||
             xa_typed_program_scalar_authority(typed.program) || published ||
-            xr_program_semantic_closure_family(cfg->program_semantic_closure) !=
-                XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+            (xr_program_semantic_closure_family(cfg->program_semantic_closure) !=
+                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+             xr_program_semantic_closure_family(cfg->program_semantic_closure) !=
+                 XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL) ||
             !xr_program_semantic_closure_verify(cfg->program_semantic_closure, scalar_error,
                                                 sizeof(scalar_error))) {
             xa_typed_program_free(typed.program);

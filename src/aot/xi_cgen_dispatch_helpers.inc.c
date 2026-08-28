@@ -3986,9 +3986,33 @@ static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *ou
 
 static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
-    (void) f;
     (void) prefix;
     const XiImportRef *ref = (const XiImportRef *) v->aux;
+    if (ctx && ctx->program_direct_i64_required) {
+        const XrSemanticProgramProvenance *provenance =
+            f ? xr_semantic_plan_program_provenance(f->semantic_plan) : NULL;
+        if (!provenance) {
+            ctx->error = true;
+            fputs("XR_NULL_VAL", out);
+            return;
+        }
+        if (provenance->program_family ==
+                XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL) {
+            if (cg_program_source_namespace_import_is_exact(ctx, f, v)) {
+                fputs("XR_NULL_VAL", out);
+                return;
+            }
+            ctx->error = true;
+            fputs("XR_NULL_VAL", out);
+            return;
+        }
+        if (provenance->program_family !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL) {
+            ctx->error = true;
+            fputs("XR_NULL_VAL", out);
+            return;
+        }
+    }
     const XiModule *import_const_module = NULL;
     int64_t import_const_slot = -1;
     const XiConstLiteral *import_lit =
@@ -4031,11 +4055,6 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, "xrt_shared_%s[%lld]", tname ? tname : "mod",
                 (long long) resolved_slot);
         found = true;
-    }
-    if (!found && ctx && ctx->program_direct_i64_required) {
-        ctx->error = true;
-        fputs("XR_NULL_VAL", out);
-        return;
     }
     if (!found && ref) {
         for (int ii = 0; ii < ctx->nimports; ii++) {
@@ -5468,39 +5487,56 @@ static bool xicgen_emit_program_direct_i64_call(
     XrCFunctionAbiEmissionView parameter_abi = {0};
     XrCValueEmissionView result_emission = {0};
     XrCValueEmissionView argument_emission = {0};
-    const XiValue *argument = call && call->nargs == 2u ? call->args[1] : NULL;
+    uint32_t argument_count =
+        direct_i64 && direct_i64->call ? direct_i64->call->argument_count
+                                      : UINT32_MAX;
+    const XiValue *argument =
+        call && argument_count == 1u && call->nargs == 2u && call->args
+            ? call->args[1]
+            : NULL;
     bool exact = ctx && ctx->program_direct_i64_required &&
                  ctx->program_direct_i64_bound && out && caller && call &&
-                 direct_i64 && direct_i64->callee && argument &&
-                 direct_i64->argument_value == argument && callee_symbol &&
+                 direct_i64 && direct_i64->callee && argument_count <= 1u &&
+                 call->nargs == (uint16_t) (argument_count + 1u) &&
+                 call->args &&
+                 (argument_count == 0u
+                      ? direct_i64->argument == NULL &&
+                            direct_i64->argument_value == NULL
+                      : direct_i64->argument != NULL && argument &&
+                            direct_i64->argument_value == argument) &&
+                 callee_symbol &&
                  callee_symbol[0] != '\0' &&
                  cg_program_direct_i64_abi_emission(
                      ctx, direct_i64->callee, 0u, &return_abi) &&
-                 cg_program_direct_i64_abi_emission(
-                     ctx, direct_i64->callee, 1u, &parameter_abi) &&
+                 (argument_count == 0u ||
+                  cg_program_direct_i64_abi_emission(
+                      ctx, direct_i64->callee, 1u, &parameter_abi)) &&
                  cg_value_emission_view(ctx, caller, call, &result_emission) ==
                      CG_VALUE_EMISSION_FOUND &&
-                 cg_value_emission_view(ctx, caller, argument,
-                                        &argument_emission) ==
-                     CG_VALUE_EMISSION_FOUND &&
-                 return_abi.ordinal == 0u && return_abi.parameter_count == 1u &&
+                 (argument_count == 0u ||
+                  cg_value_emission_view(ctx, caller, argument,
+                                         &argument_emission) ==
+                      CG_VALUE_EMISSION_FOUND) &&
+                 return_abi.ordinal == 0u &&
+                 return_abi.parameter_count == argument_count &&
                  return_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
                  return_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
                  return_abi.rep == XR_C_VALUE_REP_I64 && return_abi.c_type &&
                  strcmp(return_abi.c_type, "int64_t") == 0 &&
-                 parameter_abi.ordinal == 1u &&
-                 parameter_abi.parameter_count == 1u &&
-                 parameter_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
-                 parameter_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
-                 parameter_abi.rep == XR_C_VALUE_REP_I64 &&
-                 parameter_abi.c_type &&
-                 strcmp(parameter_abi.c_type, "int64_t") == 0 &&
                  result_emission.rep == XR_C_VALUE_REP_I64 &&
                  result_emission.c_type &&
                  strcmp(result_emission.c_type, "int64_t") == 0 &&
-                 argument_emission.rep == XR_C_VALUE_REP_I64 &&
-                 argument_emission.c_type &&
-                 strcmp(argument_emission.c_type, "int64_t") == 0;
+                 (argument_count == 0u ||
+                  (parameter_abi.ordinal == 1u &&
+                   parameter_abi.parameter_count == 1u &&
+                   parameter_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
+                   parameter_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
+                   parameter_abi.rep == XR_C_VALUE_REP_I64 &&
+                   parameter_abi.c_type &&
+                   strcmp(parameter_abi.c_type, "int64_t") == 0 &&
+                   argument_emission.rep == XR_C_VALUE_REP_I64 &&
+                   argument_emission.c_type &&
+                   strcmp(argument_emission.c_type, "int64_t") == 0));
     if (!exact) {
         if (ctx)
             ctx->error = true;
@@ -5510,9 +5546,13 @@ static bool xicgen_emit_program_direct_i64_call(
         emit_codegen_abort_expr(out);
         return false;
     }
-    fprintf(out, "%s(NULL, ", callee_symbol);
-    emit_vref(out, argument);
-    fprintf(out, ")");
+    if (argument_count == 0u) {
+        fprintf(out, "%s(NULL)", callee_symbol);
+    } else {
+        fprintf(out, "%s(NULL, ", callee_symbol);
+        emit_vref(out, argument);
+        fprintf(out, ")");
+    }
     return true;
 }
 
@@ -5535,15 +5575,26 @@ static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(
         value->nargs != 1 || !value->args || !value->args[0])
         return CG_NATIVE_TARGET_LEAF_UNCOVERED;
     const XrTargetPlan *target = cg_function_target_plan(ctx, function);
+    uint32_t partition = UINT32_MAX;
+    const XrSemanticPlan *semantic =
+        ctx && ctx->aot_bundle
+            ? xaot_bundle_program_semantic_for_func(ctx->aot_bundle, function,
+                                                    &partition)
+            : NULL;
+    uint32_t target_function = UINT32_MAX;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-    if (!target || !cg_value_semantic_id(ctx, function, value, &semantic_value))
+    if (!target || !semantic ||
+        !xr_target_plan_find_function(
+            target, semantic, function->semantic_plan_function_index,
+            &target_function) ||
+        !cg_value_semantic_id(ctx, function, value, &semantic_value))
         return CG_NATIVE_TARGET_LEAF_UNCOVERED;
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
     const XrTargetCallRecord *match = NULL;
     for (uint32_t i = 0; i < call_count; i++) {
         const XrTargetCallRecord *candidate = &calls[i];
-        if (candidate->caller_function != function->semantic_plan_function_index ||
+        if (candidate->caller_function != target_function ||
             candidate->result_value != semantic_value ||
             candidate->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
             candidate->calling_convention !=
@@ -5556,14 +5607,14 @@ static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(
     if (!match)
         return CG_NATIVE_TARGET_LEAF_UNCOVERED;
     const XrTargetValueRepRecord *result =
-        xr_target_plan_value_rep(target, semantic_value);
+        xr_target_plan_value_rep_for_module(target, partition, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         result ? xr_target_plan_machine_rep(target, result->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
         result ? xr_target_plan_machine_rep(target, result->memory_rep) : NULL;
     uint32_t instruction_count = 0;
     const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
-        target, function->semantic_plan_function_index, &instruction_count);
+        target, target_function, &instruction_count);
     uint32_t matching_instructions = 0;
     for (uint32_t i = 0; i < instruction_count; i++)
         if (instructions[i].opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64 &&

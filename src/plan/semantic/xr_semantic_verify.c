@@ -3310,11 +3310,13 @@ static bool resolve_frozen_source_import(const XrSemanticPlan *plan, const uint3
     return false;
 }
 
+static bool stable_id_zero(XrStableId id);
+
 static bool
 resolve_frozen_source_namespace_target(const XrSemanticPlan *plan, const uint32_t *definitions,
                                        uint32_t value_count, const XrFrozenSharedStoreIndex *stores,
                                        uint32_t operation_index, const char **module_path,
-                                       const char **selector) {
+                                       const char **selector, bool allow_direct_program_import) {
     const XrSemanticOperationRecord *call = &plan->operations[operation_index];
     if (call->operand_count == 0)
         return false;
@@ -3334,9 +3336,59 @@ resolve_frozen_source_namespace_target(const XrSemanticPlan *plan, const uint32_
     if (call->opcode != XI_CALL || call->metadata_count != 0 ||
         plan->operands[call->operand_begin].role != XR_SEM_OPERAND_CALLEE)
         return false;
-    return resolve_frozen_source_import(plan, definitions, value_count, stores, call->function,
-                                        plan->operands[call->operand_begin].value, false,
-                                        module_path, selector);
+    uint32_t callee_value = plan->operands[call->operand_begin].value;
+    if (resolve_frozen_source_import(plan, definitions, value_count, stores, call->function,
+                                     callee_value, false, module_path, selector))
+        return true;
+    /* The private-leaf capability may project `module.member()` to a direct
+     * named import in the bound function.  This shape is admitted only when the
+     * caller already proved the exact PSC program binding; ordinary calls still
+     * require the root initializer's unique import store above. */
+    if (!allow_direct_program_import)
+        return false;
+    for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
+        if (callee_value >= value_count || definitions[callee_value] >= plan->operation_count)
+            return false;
+        const XrSemanticOperationRecord *producer = &plan->operations[definitions[callee_value]];
+        if (producer->function != call->function)
+            return false;
+        if (producer->opcode == XI_IMPORT_REF) {
+            if (producer->metadata_count != 2 ||
+                producer->metadata_begin > plan->metadata_count ||
+                producer->metadata_count > plan->metadata_count - producer->metadata_begin ||
+                producer->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+                plan->metadata[producer->metadata_begin][0] == '\0' ||
+                plan->metadata[producer->metadata_begin + 1][0] == '\0')
+                return false;
+            *module_path = plan->metadata[producer->metadata_begin];
+            *selector = plan->metadata[producer->metadata_begin + 1];
+            return true;
+        }
+        if (producer->opcode != XI_COPY || producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+            producer->operand_count != 1 || producer->result_alias_operand != 0)
+            return false;
+        callee_value = plan->operands[producer->operand_begin].value;
+    }
+    return false;
+}
+
+static bool private_leaf_source_program_operation(const XrSemanticPlan *plan,
+                                                  uint32_t operation) {
+    if (!plan || plan->program_provenance.program_family !=
+                     XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL)
+        return false;
+    const XrSemanticProgramCallBinding *match = NULL;
+    for (uint32_t i = 0; i < plan->program_call_binding_count; i++) {
+        const XrSemanticProgramCallBinding *candidate = &plan->program_call_bindings[i];
+        if (candidate->operation != operation)
+            continue;
+        if (match)
+            return false;
+        match = candidate;
+    }
+    return match && match->program_dependency != XR_SEMANTIC_INDEX_NONE &&
+           match->target_function == XR_SEMANTIC_INDEX_NONE &&
+           !stable_id_zero(match->resolver_binding);
 }
 
 static bool resolve_frozen_native_namespace_yieldable_target(
@@ -3797,7 +3849,10 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         bool source_namespace =
             (!program_bound || program_external) &&
             resolve_frozen_source_namespace_target(plan, definitions, value_count, &stores,
-                                                    operation, &source_module, &source_selector);
+                                                    operation, &source_module, &source_selector,
+                                                    program_external &&
+                                                        private_leaf_source_program_operation(
+                                                            plan, operation));
         const char *native_namespace_module = NULL;
         const char *native_namespace_selector = NULL;
         bool native_namespace =
@@ -3820,6 +3875,12 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         bool program_overflow =
             program_bound && plan->program_provenance.program_family ==
                                  XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+        bool program_private_leaf_native =
+            program_bound && plan->program_provenance.program_family ==
+                                 XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
+            program_binding->program_dependency == XR_SEMANTIC_INDEX_NONE &&
+            program_binding->target_function == XR_SEMANTIC_INDEX_NONE &&
+            stable_id_zero(program_binding->resolver_binding);
         if (!program_bound && source_call->opcode == XI_CALL_METHOD &&
             (source_call->semantic_immediate & 1) == 0 && source_call->metadata_count == 1 &&
             source_call->operand_count > 0 && source_call->function < plan->function_count) {
@@ -3919,7 +3980,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             program_cursor++;
             continue;
         }
-        if (program_bound && !target) {
+        if (program_bound && !target && !program_private_leaf_native) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
                           "bound program call has no call-target authority");
@@ -3949,8 +4010,11 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019", detail);
         }
-        if (!target)
+        if (!target) {
+            if (program_private_leaf_native)
+                program_cursor++;
             continue;
+        }
         bool direct =
             direct_function != XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
             target->function == direct_function && target->function < plan->function_count &&
@@ -4284,7 +4348,9 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
          provenance->program_family !=
              XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
          provenance->program_family !=
-             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+         provenance->program_family !=
+              XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
          provenance->program_family !=
              XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) ||
         fingerprint_zero(provenance->program_fingerprint) ||
@@ -4333,14 +4399,23 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
           plan->program_function_binding_count != 3 || plan->program_call_binding_count != 2 ||
           plan->program_dependency_binding_count != 0)) ||
         (provenance->program_family ==
-             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
          (provenance->type_count != 1 || provenance->type_field_count != 0 ||
           provenance->function_count != 2 || provenance->call_count != 1 ||
           provenance->module_count != 2 || provenance->dependency_count != 1 ||
           plan->program_function_binding_count != 1 ||
           plan->program_call_binding_count > 1 ||
           plan->program_dependency_binding_count != plan->program_call_binding_count ||
-          plan->program_dependency_binding_count != plan->dependency_count)) ||
+           plan->program_dependency_binding_count != plan->dependency_count)) ||
+        (provenance->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
+         (provenance->type_count != 1 || provenance->type_field_count != 0 ||
+          provenance->function_count != 2 || provenance->call_count != 2 ||
+          provenance->module_count != 2 || provenance->dependency_count != 1 ||
+          plan->program_function_binding_count != 1 ||
+          plan->program_call_binding_count != 1 ||
+          plan->program_dependency_binding_count != plan->dependency_count ||
+          plan->program_dependency_binding_count > 1)) ||
         (provenance->program_family ==
              XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE &&
          (provenance->type_count != 1 || provenance->type_field_count != 0 ||
@@ -4519,9 +4594,16 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
             seen_function_rows[binding->program_row] = 1;
     }
     if (valid && provenance->program_family ==
-                     XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL) {
+                      XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL) {
         const XrSemanticProgramFunctionBinding *local = &plan->program_function_bindings[0];
         valid = plan->program_call_binding_count == 0
+                    ? local->flags == XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED
+                    : local->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY;
+    }
+    if (valid && provenance->program_family ==
+                     XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL) {
+        const XrSemanticProgramFunctionBinding *local = &plan->program_function_bindings[0];
+        valid = plan->program_dependency_binding_count == 0
                     ? local->flags == XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED
                     : local->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY;
     }
@@ -4593,7 +4675,15 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
             source_target = candidate;
         }
         bool overflow = provenance->program_family ==
-                        XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+                         XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+        XrStableId native_leaf_identity = {{0}};
+        bool private_native_leaf =
+            provenance->program_family ==
+                XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
+            !external && !callee &&
+            xr_semantic_native_target_leaf_call_is_exact(plan, operation, NULL,
+                                                         &native_leaf_identity) &&
+            xr_stable_id_equal(native_leaf_identity, binding->callee_program_function);
         valid = operation &&
                 (overflow ? operation->opcode == XI_CALL_METHOD
                           : operation->opcode == XI_CALL) &&
@@ -4603,7 +4693,10 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
                 !stable_id_zero(binding->program_call) && !stable_id_zero(binding->callsite) &&
                 caller &&
                 xr_stable_id_equal(caller->program_function, binding->caller_program_function) &&
-                ((overflow && !external && !callee &&
+                 ((private_native_leaf && stable_id_zero(binding->resolver_binding) &&
+                   binding->program_dependency == XR_SEMANTIC_INDEX_NONE &&
+                   binding->target_function == XR_SEMANTIC_INDEX_NONE) ||
+                  (overflow && !external && !callee &&
                   stable_id_zero(binding->resolver_binding) &&
                   binding->program_dependency == XR_SEMANTIC_INDEX_NONE &&
                   binding->target_function == XR_SEMANTIC_INDEX_NONE &&
@@ -5666,6 +5759,158 @@ static bool verify_graph_program_module_set(const XrSemanticPlan *plan,
                            "graph program module-set authority is not exact");
 }
 
+static const XrSemanticSourceExportRecord *private_leaf_export_for_function(
+    const XrSemanticPlan *plan, uint32_t function) {
+    const XrSemanticSourceExportRecord *match = NULL;
+    for (uint32_t i = 0; plan && i < plan->source_export_count; i++) {
+        const XrSemanticSourceExportRecord *candidate = &plan->source_exports[i];
+        if (candidate->kind != XR_SEM_SOURCE_EXPORT_FUNCTION ||
+            candidate->function != function)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static bool private_leaf_call_inventory_is_exact(
+    const XrSemanticPlan *plan, uint32_t function,
+    const XrSemanticProgramCallBinding *binding) {
+    uint32_t count = 0;
+    for (uint32_t i = 0; plan && i < plan->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &plan->operations[i];
+        if (operation->function != function ||
+            xi_generated_op_class(operation->opcode) != XI_GEN_CLASS_CALL)
+            continue;
+        count++;
+        if (!binding || operation->opcode != XI_CALL || binding->operation != i)
+            return false;
+    }
+    return count == 1;
+}
+
+static bool verify_private_leaf_program_module_set(
+    const XrSemanticPlan *plan, const XrSemanticPlan *const *dependencies,
+    uint32_t dependency_count, char *error, size_t error_size) {
+    const XrSemanticProgramProvenance *entry =
+        plan ? xr_semantic_plan_program_provenance(plan) : NULL;
+    if (!entry || entry->program_family !=
+                      XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL)
+        return true;
+    const XrSemanticProgramTypeBinding *local_type =
+        plan->program_type_binding_count == 1 ? &plan->program_type_bindings[0] : NULL;
+    const XrSemanticProgramFunctionBinding *local_function =
+        plan->program_function_binding_count == 1 ? &plan->program_function_bindings[0] : NULL;
+    const XrSemanticProgramCallBinding *local_call =
+        plan->program_call_binding_count == 1 ? &plan->program_call_bindings[0] : NULL;
+    const XrSemanticOperationRecord *local_operation =
+        local_call && local_call->operation < plan->operation_count
+            ? &plan->operations[local_call->operation]
+            : NULL;
+    bool local_i64 = local_type && local_type->program_row == 0 &&
+                     local_type->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR &&
+                     local_type->exact_scalar == XR_EXACT_SCALAR_I64;
+    bool local_calls_exact =
+        local_function && private_leaf_call_inventory_is_exact(
+                              plan, local_function->semantic_function, local_call);
+    if (dependency_count == 0) {
+        XrStableId native_identity = {{0}};
+        const XrSemanticSourceExportRecord *source_export =
+            local_function
+                ? private_leaf_export_for_function(plan, local_function->semantic_function)
+                : NULL;
+        bool native_exact = xr_semantic_native_target_leaf_call_is_exact(
+            plan, local_operation, NULL, &native_identity);
+        return local_i64 && local_calls_exact && local_function && local_call && local_operation &&
+                       source_export &&
+                       local_function->flags == XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED &&
+                       local_call->program_dependency == XR_SEMANTIC_INDEX_NONE &&
+                       local_call->target_function == XR_SEMANTIC_INDEX_NONE &&
+                       stable_id_zero(local_call->resolver_binding) &&
+                       xr_stable_id_equal(local_function->program_function,
+                                          local_call->caller_program_function) &&
+                       xr_stable_id_equal(native_identity,
+                                          local_call->callee_program_function) &&
+                       native_exact && plan->program_dependency_binding_count == 0
+                   ? true
+                   : report(error, error_size, "XR_SEM_0019",
+                            "private-leaf producer program partition is not exact");
+    }
+    if (dependency_count != 1 || !dependencies || !dependencies[0] || !local_i64 ||
+        !local_calls_exact || !local_function || !local_call || !local_operation ||
+        local_function->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
+        plan->program_dependency_binding_count != 1 ||
+        local_call->program_dependency != 0 ||
+        local_call->target_function != XR_SEMANTIC_INDEX_NONE)
+        return report(error, error_size, "XR_SEM_0019",
+                      "private-leaf entry program partition is not exact");
+    const XrSemanticPlan *producer_plan = dependencies[0];
+    if (!verify_private_leaf_program_module_set(producer_plan, NULL, 0, error, error_size))
+        return false;
+    const XrSemanticProgramProvenance *producer =
+        xr_semantic_plan_program_provenance(producer_plan);
+    const XrSemanticProgramFunctionBinding *producer_function =
+        producer_plan->program_function_binding_count == 1
+            ? &producer_plan->program_function_bindings[0]
+            : NULL;
+    const XrSemanticProgramTypeBinding *producer_type =
+        producer_plan->program_type_binding_count == 1
+            ? &producer_plan->program_type_bindings[0]
+            : NULL;
+    const XrSemanticProgramCallBinding *producer_call =
+        producer_plan->program_call_binding_count == 1
+            ? &producer_plan->program_call_bindings[0]
+            : NULL;
+    const XrSemanticProgramDependencyBinding *program_dependency =
+        &plan->program_dependency_bindings[0];
+    const XrSemanticCallTargetRecord *target = NULL;
+    for (uint32_t i = 0; i < plan->call_target_count; i++) {
+        const XrSemanticCallTargetRecord *candidate = &plan->call_targets[i];
+        if (candidate->operation != local_call->operation ||
+            candidate->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            continue;
+        if (target)
+            return report(error, error_size, "XR_SEM_0019",
+                          "private-leaf source target is ambiguous");
+        target = candidate;
+    }
+    const XrSemanticSourceExportRecord *source_export =
+        target && target->source_export < producer_plan->source_export_count
+            ? &producer_plan->source_exports[target->source_export]
+            : NULL;
+    bool same_provenance =
+        producer && producer->program_family == entry->program_family &&
+        producer->schema == entry->schema && producer->program_schema == entry->program_schema &&
+        producer->type_count == entry->type_count &&
+        producer->type_field_count == entry->type_field_count &&
+        producer->function_count == entry->function_count &&
+        producer->call_count == entry->call_count && producer->module_count == entry->module_count &&
+        producer->dependency_count == entry->dependency_count &&
+        xr_fingerprint_equal(producer->program_fingerprint, entry->program_fingerprint) &&
+        xr_stable_id_equal(producer->generation_identity, entry->generation_identity) &&
+        producer->program_module_row != entry->program_module_row &&
+        !xr_stable_id_equal(producer->program_module, entry->program_module);
+    return (same_provenance && producer_function && producer_type && producer_call &&
+            source_export && source_export->kind == XR_SEM_SOURCE_EXPORT_FUNCTION && target &&
+            source_export->function == producer_function->semantic_function &&
+            local_function->program_row != producer_function->program_row &&
+            !xr_stable_id_equal(local_function->program_function,
+                                producer_function->program_function) &&
+            local_call->program_row != producer_call->program_row &&
+            !xr_stable_id_equal(local_call->program_call, producer_call->program_call) &&
+            xr_stable_id_equal(local_type->program_type, producer_type->program_type) &&
+            xr_stable_id_equal(local_function->program_function,
+                               local_call->caller_program_function) &&
+            xr_stable_id_equal(producer_function->program_function,
+                               local_call->callee_program_function) &&
+            program_dependency->semantic_dependency == 0 && target->dependency == 0 &&
+            xr_stable_id_equal(program_dependency->resolver_binding,
+                               local_call->resolver_binding)) ||
+           report(error, error_size, "XR_SEM_0019",
+                  "private-leaf program module-set authority is not exact");
+}
+
 bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
                                         const XrSemanticPlan *const *dependencies,
                                         uint32_t dependency_count, char *error, size_t error_size) {
@@ -5674,9 +5919,13 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
     if (dependency_count != plan->dependency_count || (dependency_count != 0 && !dependencies))
         return report(error, error_size, "XR_SEM_0019",
                       "source dependency vector does not exactly cover the plan");
-    if (dependency_count == 0)
-        return verify_graph_program_module_set(plan, dependencies, dependency_count, error,
-                                               error_size);
+    if (dependency_count == 0) {
+        if (!verify_graph_program_module_set(plan, dependencies, dependency_count, error,
+                                             error_size))
+            return false;
+        return verify_private_leaf_program_module_set(plan, dependencies, dependency_count, error,
+                                                      error_size);
+    }
 
     uint8_t *used = (uint8_t *) xr_calloc(dependency_count, sizeof(*used));
     uint8_t **suspendable = (uint8_t **) xr_calloc(dependency_count, sizeof(*suspendable));
@@ -5883,7 +6132,9 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
         const char *selector = NULL;
         bool exact_source_call = operation && resolve_frozen_source_namespace_target(
                                                   plan, definitions, value_count, &stores,
-                                                  target->operation, &source_module, &selector);
+                                                  target->operation, &source_module, &selector,
+                                                  private_leaf_source_program_operation(
+                                                      plan, target->operation));
         if (!source_export || source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION || !operation ||
             !callee || !xr_stable_id_equal(source_export->exported_entity, callee->id) ||
             !exact_source_call || !source_module || !selector ||
@@ -6033,7 +6284,10 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
     xr_free(suspendable);
     xr_free(used);
     if (valid && !verify_graph_program_module_set(plan, dependencies, dependency_count, error,
-                                                  error_size))
+                                                   error_size))
+        return false;
+    if (valid && !verify_private_leaf_program_module_set(
+                     plan, dependencies, dependency_count, error, error_size))
         return false;
     if (!valid)
         return report(error, error_size, "XR_SEM_0019",
