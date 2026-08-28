@@ -54,6 +54,18 @@ static void setup_pool(void) {
         g_isolate = xray_vm_new_full(&p);
         g_session = xr_compiler_session_current_for_isolate(g_isolate);
         assert(g_session != NULL);
+        /* The analyzer names an enum's nominal owner after the compilation
+         * unit identity of the session it runs in, and enum metadata
+         * fail-closes when that owner is absent: every user-declared enum
+         * loses its variant layout and E.Member types as <error>. A bare
+         * session installs no identity, so these tests have to name one. */
+        const XrCompileUnitIdentity identity = {
+            .kind = XR_COMPILE_UNIT_MEMORY,
+            .module_identity = "memory-module-v1:id=19:analyzer-fixture-v1",
+        };
+        bool identity_set = xr_compiler_session_set_compile_unit_identity(g_session, &identity);
+        assert(identity_set);
+        (void) identity_set;
     }
     if (!g_analyzer) {
         g_analyzer = xa_analyzer_new(g_session);
@@ -151,9 +163,8 @@ TEST(type_scalar_alias_identity) {
     ASSERT(xr_type_from_name("byte") == -1);
     ASSERT(xr_type_from_name("u8") == XR_TID_U8);
     static const char *retired[] = {
-        "int",    "byte",   "float",   "int8",    "int16",   "int32", "int64",
-        "uint8",  "uint16",
-        "uint32", "uint64", "float32", "float64", "intsize", "uintsize",
+        "int",    "byte",   "float",  "int8",    "int16",   "int32",   "int64",    "uint8",
+        "uint16", "uint32", "uint64", "float32", "float64", "intsize", "uintsize",
     };
     for (size_t i = 0; i < sizeof(retired) / sizeof(retired[0]); i++)
         ASSERT(xr_type_from_name(retired[i]) == -1);
@@ -1068,14 +1079,13 @@ TEST(analyzer_ordinary_bool_control_has_no_branch_hint_builtins) {
     ASSERT(xa_analyzer_lookup(a, "likely") == NULL);
     ASSERT(xa_analyzer_lookup(a, "unlikely") == NULL);
 
-    AstNode *program = xr_parse(g_session,
-                                "fn likely(value: bool) -> bool { return value }\n"
-                                "fn unlikely(value: bool) -> bool { return value }\n"
-                                "fn choose(flag: bool) -> bool {\n"
-                                "    if (likely(flag)) { return unlikely(true) }\n"
-                                "    return false\n"
-                                "}\n"
-                                "var selected = choose(true)\n");
+    AstNode *program = xr_parse(g_session, "fn likely(value: bool) -> bool { return value }\n"
+                                           "fn unlikely(value: bool) -> bool { return value }\n"
+                                           "fn choose(flag: bool) -> bool {\n"
+                                           "    if (likely(flag)) { return unlikely(true) }\n"
+                                           "    return false\n"
+                                           "}\n"
+                                           "var selected = choose(true)\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "ordinary_bool_control.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -3309,9 +3319,15 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(entry_program != NULL);
 
     XrModuleResolverConfig cfg = {0};
+    /* The resolver canonicalizes every source path it probes and the identity
+     * authority compares the two byte for byte, so the root has to be
+     * canonical too. On Darwin /tmp is a symlink to private/tmp, which makes
+     * an uncanonicalized root escape itself. */
+    char *canonical_root = xr_test_realpath_alloc(tmpdir);
+    ASSERT(canonical_root != NULL);
     XrModuleIdentityAuthority authority = {
         .kind = XR_MODULE_IDENTITY_SCRIPT,
-        .physical_root = tmpdir,
+        .physical_root = canonical_root,
     };
     XrModuleResolver *resolver = xr_module_resolver_new(&cfg);
     ASSERT(resolver != NULL);
@@ -3320,20 +3336,20 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     XrModuleId star_id;
     XrModuleId callback_id;
     char *resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", entry_path,
-                                      &authority, &lib_id, &resolve_err) == 0);
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", entry_path, &authority,
+                                      &lib_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", entry_path,
-                                      &authority, &reexport_id, &resolve_err) == 0);
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", entry_path, &authority,
+                                      &reexport_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_path,
-                                      &authority, &star_id, &resolve_err) == 0);
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_path, &authority,
+                                      &star_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", entry_path,
-                                      &authority, &callback_id, &resolve_err) == 0);
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", entry_path, &authority,
+                                      &callback_id, &resolve_err) == 0);
     xr_free(resolve_err);
     char *entry_realpath = xr_test_realpath_alloc(entry_path);
     char *entry_canonical = NULL;
@@ -3619,6 +3635,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     xr_free(entry_canonical);
     xr_free(entry_logical);
     free(entry_realpath);
+    free(canonical_root);
     xr_test_unlink(lib_path);
     xr_test_unlink(reexport_path);
     xr_test_unlink(star_path);

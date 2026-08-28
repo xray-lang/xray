@@ -494,11 +494,10 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
         xr_free(abs_path);
         return -1;
     }
-    XrModuleKind entry_kind = entry_authority->kind == XR_MODULE_IDENTITY_STDLIB
-                                  ? XR_MOD_STDLIB
-                                  : (entry_authority->kind == XR_MODULE_IDENTITY_PACKAGE
-                                         ? XR_MOD_PACKAGE
-                                         : XR_MOD_FILE);
+    XrModuleKind entry_kind =
+        entry_authority->kind == XR_MODULE_IDENTITY_STDLIB
+            ? XR_MOD_STDLIB
+            : (entry_authority->kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE : XR_MOD_FILE);
     int rc = graph_build_from_entry(g, entry_identity, entry_logical_path, abs_path, entry_kind,
                                     entry_authority, NULL, out_err);
     xr_free(entry_identity);
@@ -603,7 +602,14 @@ static void graph_tarjan_strongconnect(GraphTarjanCtx *tc, int v) {
     }
 }
 
+/* The authority-root-relative logical path is the short, stable name a reader
+ * recognizes in a cycle. Canonical used to be an absolute path, so taking its
+ * basename gave the same thing; a typed identity carries length framing and no
+ * path separator, so that heuristic now prints the whole machine-facing string
+ * back at the user. An in-memory module has no logical path and keeps it. */
 static const char *cycle_display_name(const XrModuleSpec *spec) {
+    if (spec && spec->logical_path && spec->logical_path[0])
+        return spec->logical_path;
     const char *name = (spec && spec->canonical) ? spec->canonical : "?";
     const char *slash = strrchr(name, '/');
     return slash ? slash + 1 : name;
@@ -814,10 +820,9 @@ bool xr_module_graph_preload(XrVMRuntime *X, const XrModuleGraph *g, XrModule **
         const XrModuleSpec *spec = &g->specs[idx];
         if (!spec->source_path)
             continue;
-        const char *import_name =
-            (spec->kind == XR_MOD_STDLIB && spec->authority.namespace_id)
-                ? spec->authority.namespace_id
-                : spec->source_path;
+        const char *import_name = (spec->kind == XR_MOD_STDLIB && spec->authority.namespace_id)
+                                      ? spec->authority.namespace_id
+                                      : spec->source_path;
         XrValue value = xr_module_import(X, import_name);
         if (XR_IS_NULL(value)) {
             xr_free(table);

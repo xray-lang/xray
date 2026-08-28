@@ -66,10 +66,8 @@ static XrType stub_set = {
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 7, .frozen = true};
 static XrType stub_function = {
     .kind = XR_KIND_FUNCTION, .id = 8, .frozen = true, .function = {.return_type = &stub_int}};
-static XrType stub_string_builder = {.kind = XR_KIND_INSTANCE,
-                                     .id = 9,
-                                     .frozen = true,
-                                     .instance = {.class_name = "StringBuilder"}};
+static XrType stub_string_builder = {
+    .kind = XR_KIND_INSTANCE, .id = 9, .frozen = true, .instance = {.class_name = "StringBuilder"}};
 static XrType stub_shadow_string_builder = {
     .kind = XR_KIND_INSTANCE,
     .id = 10,
@@ -94,8 +92,7 @@ static XiCoroLoweredProgram *advance_to_coro_lowered(XiFunc *f) {
     assert(owned != NULL);
     XiSemanticLoweredProgram *semantic = xi_program_lower_semantics(owned, error, sizeof(error));
     assert(semantic != NULL);
-    XiCoroLoweredProgram *coro =
-        xi_program_lower_coroutines(semantic, NULL, error, sizeof(error));
+    XiCoroLoweredProgram *coro = xi_program_lower_coroutines(semantic, NULL, error, sizeof(error));
     assert(coro != NULL);
     return coro;
 }
@@ -105,6 +102,15 @@ static XiReppedProgram *advance_to_repped(XiFunc *f) {
     XiCoroLoweredProgram *lowered = advance_to_coro_lowered(f);
     XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
     assert(optimized != NULL);
+    /* The SemanticPlan builder requires a lowered graph to carry a typed
+     * durable module identity and synthesizes none, so this fixture names its
+     * own memory-namespace identity. xi_func_free owns the module it is
+     * attached to and releases it with the function. */
+    if (!f->module) {
+        f->module = xi_module_new("xi_stage_fixture.xr", "xi_stage_fixture", f);
+        assert(f->module != NULL);
+        assert(xi_module_set_identity(f->module, "memory-module-v1:id=19:xi-stage-fixture-v1"));
+    }
     bool planned = xr_semantic_plan_build_and_attach(f, error, sizeof(error));
     if (!planned)
         fprintf(stderr, "semantic plan attachment failed: %s\n", error);
@@ -693,8 +699,7 @@ static void test_semantic_stage_cannot_skip_coroutine_lowering(void) {
     assert(f->stage == XI_STAGE_SEMANTIC_LOWERED);
 
     uint32_t blocks_before = f->nblocks;
-    XiCoroLoweredProgram *coro =
-        xi_program_lower_coroutines(semantic, NULL, error, sizeof(error));
+    XiCoroLoweredProgram *coro = xi_program_lower_coroutines(semantic, NULL, error, sizeof(error));
     assert(coro != NULL);
     assert(f->stage == XI_STAGE_CORO_LOWERED);
     assert(f->coro_plan != NULL && f->coro_plan->cfg_rewritten);
@@ -755,8 +760,7 @@ static void test_coroutine_transition_accepts_open_callable(void) {
 
 static XiSemanticLoweredProgram *make_string_builder_call_program(XrType *receiver_type,
                                                                   bool with_yield,
-                                                                  XiFunc **out_func,
-                                                                  char *error,
+                                                                  XiFunc **out_func, char *error,
                                                                   size_t error_size) {
     XiFunc *f = xi_func_new("string_builder_coro_transition", &stub_void);
     XiBlock *entry = xi_block_new(f);
@@ -825,8 +829,8 @@ static void test_coroutine_transition_keeps_known_builtin_sync(void) {
 
     char error[256] = {0};
     XiFunc *func = NULL;
-    XiSemanticLoweredProgram *semantic = make_string_builder_call_program(
-        &stub_string_builder, false, &func, error, sizeof(error));
+    XiSemanticLoweredProgram *semantic =
+        make_string_builder_call_program(&stub_string_builder, false, &func, error, sizeof(error));
     XiCoroResolver resolver = {0};
     resolver.call_suspendability = unknown_call_suspendability;
     XiCoroLoweredProgram *lowered =
@@ -989,8 +993,7 @@ static void attach_only_child(XiFunc *parent, XiFunc *child) {
 static void set_single_source_var(XiFunc *func, const char *name, XrType *type) {
     func->source_var_names =
         (const char **) xi_func_arena_alloc(func, sizeof(*func->source_var_names));
-    func->source_var_types =
-        (XrType **) xi_func_arena_alloc(func, sizeof(*func->source_var_types));
+    func->source_var_types = (XrType **) xi_func_arena_alloc(func, sizeof(*func->source_var_types));
     assert(func->source_var_names && func->source_var_types);
     func->source_var_count = 1;
     func->source_var_names[0] = name;

@@ -19,6 +19,7 @@
 
 #include "../../src/base/xmalloc.h"
 #include "../../src/ir/xi.h"
+#include "../../src/ir/xi_module.h"
 #include "../../src/plan/format/xr_xsm_schema.h"
 #include "../../src/plan/format/xr_xtp_schema.h"
 #include "../../src/plan/semantic/xr_semantic_builder.h"
@@ -32,7 +33,7 @@
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
         if (!(condition)) {                                                                        \
-            fprintf(stderr, "requirement failed at %s:%d: %s\n", __FILE__, __LINE__, #condition);   \
+            fprintf(stderr, "requirement failed at %s:%d: %s\n", __FILE__, __LINE__, #condition);  \
             return 1;                                                                              \
         }                                                                                          \
     } while (0)
@@ -51,6 +52,21 @@ static XrSemanticPlan *build_semantic(const char *name, int64_t value) {
     }
     xi_block_set_return(entry, constant);
     function->stage = XI_STAGE_OPTIMIZED;
+    /* The SemanticPlan builder requires a lowered graph to carry a typed
+     * durable module identity and synthesizes none, so this fixture names its
+     * own memory-namespace identity derived from the function it writes.
+     * xi_func_free owns the module and releases it with the function. */
+    char identity[256];
+    int written =
+        snprintf(identity, sizeof(identity), "memory-module-v1:id=%zu:%s", strlen(name), name);
+    function->module = written > 0 && (size_t) written < sizeof(identity)
+                           ? xi_module_new("plan_fixture.xr", name, function)
+                           : NULL;
+    if (!function->module || !xi_module_set_identity(function->module, identity)) {
+        fprintf(stderr, "plan fixture module identity failed for '%s'\n", name);
+        xi_func_free(function);
+        return NULL;
+    }
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
     bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
@@ -121,8 +137,8 @@ int main(int argc, char **argv) {
     size_t xsm_size = 0;
     REQUIRE(xr_xsm_encode(semantic, &xsm_bytes, &xsm_size, error, sizeof(error)));
 
-    bool written = write_bytes(xsm_path, xsm_bytes, xsm_size) &&
-                   write_bytes(xtp_path, xtp_bytes, xtp_size);
+    bool written =
+        write_bytes(xsm_path, xsm_bytes, xsm_size) && write_bytes(xtp_path, xtp_bytes, xtp_size);
 
     xr_free(xsm_bytes);
     xr_xtp_encoded_free(xtp_bytes);

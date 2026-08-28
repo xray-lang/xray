@@ -86,39 +86,42 @@ static XrType stub_hof_map_callback = {
     .id = 123,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
-    .function = {
-        .params = stub_hof_unary_int_params,
-        .param_count = 1,
-        .min_params = 1,
-        .return_type = &stub_hof_int,
-        .throw_effect = XR_FN_EFFECT_NO_THROW,
-    },
+    .function =
+        {
+            .params = stub_hof_unary_int_params,
+            .param_count = 1,
+            .min_params = 1,
+            .return_type = &stub_hof_int,
+            .throw_effect = XR_FN_EFFECT_NO_THROW,
+        },
 };
 static XrType stub_hof_filter_callback = {
     .kind = XR_KIND_FUNCTION,
     .id = 125,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
-    .function = {
-        .params = stub_hof_unary_int_params,
-        .param_count = 1,
-        .min_params = 1,
-        .return_type = &stub_hof_bool,
-        .throw_effect = XR_FN_EFFECT_NO_THROW,
-    },
+    .function =
+        {
+            .params = stub_hof_unary_int_params,
+            .param_count = 1,
+            .min_params = 1,
+            .return_type = &stub_hof_bool,
+            .throw_effect = XR_FN_EFFECT_NO_THROW,
+        },
 };
 static XrType stub_hof_reduce_callback = {
     .kind = XR_KIND_FUNCTION,
     .id = 126,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
-    .function = {
-        .params = stub_hof_reduce_params,
-        .param_count = 2,
-        .min_params = 2,
-        .return_type = &stub_hof_int,
-        .throw_effect = XR_FN_EFFECT_NO_THROW,
-    },
+    .function =
+        {
+            .params = stub_hof_reduce_params,
+            .param_count = 2,
+            .min_params = 2,
+            .return_type = &stub_hof_int,
+            .throw_effect = XR_FN_EFFECT_NO_THROW,
+        },
 };
 static XrType stub_hof_int_array = {
     .kind = XR_KIND_ARRAY,
@@ -132,6 +135,29 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 
 /* Create function with sealed entry block. */
+/* The SemanticPlan builder requires a lowered graph to carry a typed durable
+ * module identity and synthesizes none, so each fixture names its own
+ * memory-namespace identity derived from the function it wraps. xi_func_free
+ * owns the module it is attached to and releases it with the function. */
+static void attach_fixture_module(XiFunc *root) {
+    if (root->module && root->module->identity)
+        return;
+    const char *name = root->name ? root->name : "xi_opt_fixture";
+    char identity[256];
+    int written =
+        snprintf(identity, sizeof(identity), "memory-module-v1:id=%zu:%s", strlen(name), name);
+    /* This translation unit builds with NDEBUG, so assert evaluates nothing:
+     * every call here has to happen outside one. */
+    bool formatted = written > 0 && (size_t) written < sizeof(identity);
+    assert(formatted);
+    (void) formatted;
+    if (!root->module)
+        root->module = xi_module_new("xi_opt_fixture.xr", "xi_opt_fixture", root);
+    bool named = root->module && xi_module_set_identity(root->module, identity);
+    assert(named);
+    (void) named;
+}
+
 static XiFunc *make_func(const char *name, XrType *ret_type) {
     XiFunc *f = xi_func_new(name, ret_type);
     XiBlock *entry = xi_block_new(f);
@@ -614,8 +640,7 @@ TEST(const_fold_shift) {
     assert(shr->op == XI_CONST && shr->aux_int == 8);
     assert(shl_neg_count->op == XI_CONST && shl_neg_count->aux_int == INT64_MIN);
     assert(shr_signed->op == XI_CONST && shr_signed->aux_int == -1);
-    assert(shr_unsigned->op == XI_CONST &&
-           shr_unsigned->aux_int == INT64_C(4611686018427387904));
+    assert(shr_unsigned->op == XI_CONST && shr_unsigned->aux_int == INT64_C(4611686018427387904));
     xi_func_free(f);
 }
 
@@ -1474,37 +1499,32 @@ typedef struct ArrayHofRepFixture {
     XrSemanticOperationRecord *operation;
 } ArrayHofRepFixture;
 
-static uint32_t semantic_value_for_xi(const ArrayHofRepFixture *fixture,
-                                      const XiValue *value) {
+static uint32_t semantic_value_for_xi(const ArrayHofRepFixture *fixture, const XiValue *value) {
     if (!fixture || !fixture->root || !fixture->root->semantic_plan || !value)
         return XR_SEMANTIC_INDEX_NONE;
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(
-        fixture->root->semantic_plan,
-        fixture->root->semantic_plan_function_index);
+        fixture->root->semantic_plan, fixture->root->semantic_plan_function_index);
     if (!function || value->id >= function->value_count ||
         function->value_begin > UINT32_MAX - value->id)
         return XR_SEMANTIC_INDEX_NONE;
     return function->value_begin + value->id;
 }
 
-static bool build_array_hof_rep_fixture(uint8_t kind,
-                                        ArrayHofRepFixture *out,
-                                        char *error, size_t error_size) {
+static bool build_array_hof_rep_fixture(uint8_t kind, ArrayHofRepFixture *out, char *error,
+                                        size_t error_size) {
     bool reduce = kind == XI_ARRAY_HOF_REDUCE;
     bool filter = kind == XI_ARRAY_HOF_FILTER;
-    XrType *callback_type = reduce ? &stub_hof_reduce_callback
+    XrType *callback_type = reduce   ? &stub_hof_reduce_callback
                             : filter ? &stub_hof_filter_callback
                                      : &stub_hof_map_callback;
     XrType *callback_result = filter ? &stub_hof_bool : &stub_hof_int;
-    if (!out || (kind != XI_ARRAY_HOF_MAP &&
-                 kind != XI_ARRAY_HOF_FILTER &&
-                 kind != XI_ARRAY_HOF_REDUCE))
+    if (!out ||
+        (kind != XI_ARRAY_HOF_MAP && kind != XI_ARRAY_HOF_FILTER && kind != XI_ARRAY_HOF_REDUCE))
         return false;
     memset(out, 0, sizeof(*out));
 
     XiFunc *root = xi_func_new("array_hof_rep", &stub_hof_int);
-    XiFunc *callback = xi_func_new("array_hof_rep_callback",
-                                   callback_result);
+    XiFunc *callback = xi_func_new("array_hof_rep_callback", callback_result);
     if (!root || !callback)
         return false;
     XiBlock *entry = xi_block_new(root);
@@ -1513,26 +1533,22 @@ static bool build_array_hof_rep_fixture(uint8_t kind,
         return false;
 
     callback->nparams = callback->min_params = reduce ? 2 : 1;
-    callback->params = (XiValue **) xr_calloc(
-        callback->nparams, sizeof(*callback->params));
+    callback->params = (XiValue **) xr_calloc(callback->nparams, sizeof(*callback->params));
     if (!callback->params)
         return false;
     for (uint16_t i = 0; i < callback->nparams; i++) {
-        callback->params[i] =
-            xi_param(callback, callback_entry, i, &stub_hof_int);
+        callback->params[i] = xi_param(callback, callback_entry, i, &stub_hof_int);
         if (!callback->params[i])
             return false;
     }
     if (filter) {
-        XiValue *accepted =
-            xi_const_bool(callback, callback_entry, true, &stub_hof_bool);
+        XiValue *accepted = xi_const_bool(callback, callback_entry, true, &stub_hof_bool);
         if (!accepted)
             return false;
         xi_block_set_return(callback_entry, accepted);
     } else if (reduce) {
-        XiValue *sum = xi_binary(callback, callback_entry, XI_ADD,
-                                 &stub_hof_int, callback->params[0],
-                                 callback->params[1]);
+        XiValue *sum = xi_binary(callback, callback_entry, XI_ADD, &stub_hof_int,
+                                 callback->params[0], callback->params[1]);
         if (!sum)
             return false;
         xi_block_set_return(callback_entry, sum);
@@ -1548,15 +1564,11 @@ static bool build_array_hof_rep_fixture(uint8_t kind,
     callback->parent_func = root;
 
     XiValue *capacity = xi_const_int(root, entry, 4, &stub_hof_int);
-    XiValue *array = xi_value_new(root, entry, XI_ARRAY_NEW,
-                                  &stub_hof_int_array, 1);
-    XiValue *closure =
-        xi_value_new(root, entry, XI_CLOSURE_NEW, callback_type, 0);
-    XiValue *initial =
-        reduce ? xi_const_int(root, entry, 0, &stub_hof_int) : NULL;
+    XiValue *array = xi_value_new(root, entry, XI_ARRAY_NEW, &stub_hof_int_array, 1);
+    XiValue *closure = xi_value_new(root, entry, XI_CLOSURE_NEW, callback_type, 0);
+    XiValue *initial = reduce ? xi_const_int(root, entry, 0, &stub_hof_int) : NULL;
     XiValue *hof = xi_value_new(root, entry, XI_CALL_METHOD,
-                                reduce ? &stub_hof_int : &stub_hof_int_array,
-                                reduce ? 3 : 2);
+                                reduce ? &stub_hof_int : &stub_hof_int_array, reduce ? 3 : 2);
     if (!capacity || !array || !closure || !hof || (reduce && !initial))
         return false;
     array->args[0] = capacity;
@@ -1576,23 +1588,21 @@ static bool build_array_hof_rep_fixture(uint8_t kind,
             .param_index = -1,
             .complete = true,
         };
-        XiValue *release_result =
-            xi_value_new(root, entry, XI_RELEASE, &stub_void, 1);
+        XiValue *release_result = xi_value_new(root, entry, XI_RELEASE, &stub_void, 1);
         if (!release_result)
             return false;
         release_result->args[0] = hof;
     }
-    XiValue *release_array =
-        xi_value_new(root, entry, XI_RELEASE, &stub_void, 1);
+    XiValue *release_array = xi_value_new(root, entry, XI_RELEASE, &stub_void, 1);
     if (!release_array)
         return false;
     release_array->args[0] = array;
     if (reduce)
         xi_block_set_return(entry, hof);
     else
-        xi_block_set_return(entry,
-                            xi_const_int(root, entry, 0, &stub_hof_int));
+        xi_block_set_return(entry, xi_const_int(root, entry, 0, &stub_hof_int));
     root->stage = callback->stage = XI_STAGE_OPTIMIZED;
+    attach_fixture_module(root);
     if (!xr_semantic_plan_build_and_attach(root, error, error_size)) {
         xi_func_free(root);
         return false;
@@ -1605,20 +1615,17 @@ static bool build_array_hof_rep_fixture(uint8_t kind,
     uint32_t semantic_value = semantic_value_for_xi(out, hof);
     XrSemanticPlan *plan = root->semantic_plan;
     for (uint32_t i = 0; i < plan->operation_count; i++) {
-        if (plan->operations[i].function ==
-                root->semantic_plan_function_index &&
+        if (plan->operations[i].function == root->semantic_plan_function_index &&
             plan->operations[i].result_value == semantic_value) {
             if (out->operation)
                 return false;
             out->operation = &plan->operations[i];
         }
     }
-    return out->operation &&
-           out->operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF;
+    return out->operation && out->operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF;
 }
 
-static uint32_t count_rep_adapter(const XiFunc *function, XiOp op,
-                                  const XiValue *source) {
+static uint32_t count_rep_adapter(const XiFunc *function, XiOp op, const XiValue *source) {
     uint32_t count = 0;
     for (uint32_t bi = 0; bi < function->nblocks; bi++) {
         const XiBlock *block = function->blocks[bi];
@@ -1626,8 +1633,8 @@ static uint32_t count_rep_adapter(const XiFunc *function, XiOp op,
             continue;
         for (uint32_t vi = 0; vi < block->nvalues; vi++) {
             const XiValue *value = block->values[vi];
-            if (value && value->op == op && value->nargs == 1 &&
-                value->args && value->args[0] == source)
+            if (value && value->op == op && value->nargs == 1 && value->args &&
+                value->args[0] == source)
                 count++;
         }
     }
@@ -1635,12 +1642,10 @@ static uint32_t count_rep_adapter(const XiFunc *function, XiOp op,
 }
 
 TEST(select_rep_array_hof_exact_uses_native_contract) {
-    for (uint8_t kind = XI_ARRAY_HOF_MAP;
-         kind <= XI_ARRAY_HOF_REDUCE; kind++) {
+    for (uint8_t kind = XI_ARRAY_HOF_MAP; kind <= XI_ARRAY_HOF_REDUCE; kind++) {
         ArrayHofRepFixture fixture = {0};
         char error[512] = {0};
-        bool built = build_array_hof_rep_fixture(kind, &fixture, error,
-                                                 sizeof(error));
+        bool built = build_array_hof_rep_fixture(kind, &fixture, error, sizeof(error));
         if (!built)
             printf("  Array HOF fixture failed: %s\n", error);
         REQUIRE(built);
@@ -1649,18 +1654,15 @@ TEST(select_rep_array_hof_exact_uses_native_contract) {
 
         REQUIRE(fixture.closure->rep == XR_REP_TAGGED);
         REQUIRE(fixture.hof->args[1] == fixture.closure);
-        REQUIRE(count_rep_adapter(fixture.root, XI_UNBOX,
-                                  fixture.closure) == 0);
+        REQUIRE(count_rep_adapter(fixture.root, XI_UNBOX, fixture.closure) == 0);
         if (kind == XI_ARRAY_HOF_REDUCE) {
             REQUIRE(fixture.hof->rep == XR_REP_I64);
             REQUIRE(fixture.initial->rep == XR_REP_I64);
             REQUIRE(fixture.hof->args[2] == fixture.initial);
-            REQUIRE(count_rep_adapter(fixture.root, XI_BOX,
-                                      fixture.initial) == 0);
+            REQUIRE(count_rep_adapter(fixture.root, XI_BOX, fixture.initial) == 0);
         } else {
             REQUIRE(fixture.hof->rep == XR_REP_TAGGED);
-            REQUIRE(count_rep_adapter(fixture.root, XI_BOX,
-                                      fixture.hof) == 0);
+            REQUIRE(count_rep_adapter(fixture.root, XI_BOX, fixture.hof) == 0);
         }
         xi_func_free(fixture.root);
     }
@@ -1675,12 +1677,11 @@ typedef enum ArrayHofRepMutation {
 } ArrayHofRepMutation;
 
 TEST(select_rep_array_hof_mutation_cannot_authorize_native_seed) {
-    for (uint8_t mutation = 0; mutation < ARRAY_HOF_REP_MUTATION_COUNT;
-         mutation++) {
+    for (uint8_t mutation = 0; mutation < ARRAY_HOF_REP_MUTATION_COUNT; mutation++) {
         ArrayHofRepFixture fixture = {0};
         char error[512] = {0};
-        bool built = build_array_hof_rep_fixture(
-            XI_ARRAY_HOF_REDUCE, &fixture, error, sizeof(error));
+        bool built =
+            build_array_hof_rep_fixture(XI_ARRAY_HOF_REDUCE, &fixture, error, sizeof(error));
         if (!built)
             printf("  Array HOF mutation fixture failed: %s\n", error);
         REQUIRE(built);
@@ -1690,19 +1691,29 @@ TEST(select_rep_array_hof_mutation_cannot_authorize_native_seed) {
             operation->array_hof_kind = XR_SEM_ARRAY_HOF_MAP;
             REQUIRE(!xr_semantic_plan_verify(plan, error, sizeof(error)));
         } else if (mutation == ARRAY_HOF_REP_MUTATE_SEMANTIC_RESULT) {
-            operation->result_value =
-                semantic_value_for_xi(&fixture, fixture.initial);
+            operation->result_value = semantic_value_for_xi(&fixture, fixture.initial);
             REQUIRE(!xr_semantic_plan_verify(plan, error, sizeof(error)));
         } else if (mutation == ARRAY_HOF_REP_MUTATE_SEMANTIC_OPERAND) {
             plan->operands[operation->operand_begin + 1u].value =
                 plan->operands[operation->operand_begin].value;
             REQUIRE(!xr_semantic_plan_verify(plan, error, sizeof(error)));
         } else {
+            /* Lowering marks a higher-order call before captures are known,
+             * so the mark is a candidate the plan may decline. Declining it
+             * records no higher-order row; it does not refuse the function,
+             * because that would reject every capturing arr.map in the
+             * program. A map kind over three reduce operands is exactly such a
+             * declined candidate. */
             fixture.hof->array_hof_kind = XI_ARRAY_HOF_MAP;
             XrSemanticPlan *rebuilt = NULL;
-            REQUIRE(!xr_semantic_plan_build(fixture.root, &rebuilt, error,
-                                            sizeof(error)));
-            REQUIRE(rebuilt == NULL);
+            REQUIRE(xr_semantic_plan_build(fixture.root, &rebuilt, error, sizeof(error)));
+            REQUIRE(rebuilt != NULL);
+            bool granted = false;
+            for (uint32_t op = 0; op < rebuilt->operation_count; op++)
+                granted =
+                    granted || rebuilt->operations[op].intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF;
+            REQUIRE(!granted);
+            xr_semantic_plan_free(rebuilt);
         }
 
         XiRepPolicy policy = xi_rep_policy_tagged_boundary();
@@ -1710,8 +1721,7 @@ TEST(select_rep_array_hof_mutation_cannot_authorize_native_seed) {
         REQUIRE(fixture.hof->args[2] != fixture.initial);
         REQUIRE(fixture.hof->args[2]->op == XI_BOX);
         REQUIRE(fixture.hof->args[2]->args[0] == fixture.initial);
-        REQUIRE(count_rep_adapter(fixture.root, XI_BOX,
-                                  fixture.initial) == 1);
+        REQUIRE(count_rep_adapter(fixture.root, XI_BOX, fixture.initial) == 1);
         xi_func_free(fixture.root);
     }
 }
@@ -1952,6 +1962,7 @@ TEST(select_rep_advances_empty_func_tree) {
     assert(coro != NULL);
     XiOptimizedProgram *optimized = xi_program_finish_optimization(coro, error, sizeof(error));
     assert(optimized != NULL);
+    attach_fixture_module(root);
     assert(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
     XiSemanticPlannedProgram *semantic =
         xi_program_freeze_semantics(optimized, error, sizeof(error));
@@ -2093,9 +2104,8 @@ TEST(statistics_say_which_passes_do_not_count_values) {
 
     /* These rewrite the function without the counters moving. Reporting their
      * zero as a count is what let a reader conclude they had not fired. */
-    static const char *const uncounted[] = {"constfold", "strength_reduce", "copy_prop",
-                                            "licm",      "loop_split",      "inline",
-                                            "tail_call", "ifconv"};
+    static const char *const uncounted[] = {"constfold",  "strength_reduce", "copy_prop", "licm",
+                                            "loop_split", "inline",          "tail_call", "ifconv"};
     for (size_t i = 0; i < sizeof(uncounted) / sizeof(uncounted[0]); i++) {
         const XiPassStats *ps = stats_for(&stats, uncounted[i]);
         REQUIRE(ps && ps->invocations > 0);
@@ -2297,6 +2307,7 @@ TEST(box_elim_preserves_frozen_semantic_operation_identity) {
     f->stage = XI_STAGE_OPTIMIZED;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_OPTIMIZED);
     char error[256] = {0};
+    attach_fixture_module(f);
     assert(xr_semantic_plan_build_and_attach(f, error, sizeof(error)));
 
     xi_opt_box_elim(f);
@@ -2319,6 +2330,7 @@ TEST(box_elim_preserves_backend_adapter_over_frozen_semantic_identity) {
     f->stage = XI_STAGE_OPTIMIZED;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_OPTIMIZED);
     char error[256] = {0};
+    attach_fixture_module(f);
     assert(xr_semantic_plan_build_and_attach(f, error, sizeof(error)));
 
     XiValue *unbox = xi_value_new(f, blk, XI_UNBOX, &stub_int, 1);
@@ -2331,8 +2343,7 @@ TEST(box_elim_preserves_backend_adapter_over_frozen_semantic_identity) {
 
     assert(unbox->op == XI_UNBOX &&
            "late cleanup must preserve an adapter over a frozen semantic opcode");
-    assert(unbox->args[0] == box &&
-           "the adapter must retain its exact frozen semantic source");
+    assert(unbox->args[0] == box && "the adapter must retain its exact frozen semantic source");
     assert(unbox->backend_origin == XI_BACKEND_VALUE_REP_UNBOX &&
            "the preserved adapter must retain exact backend provenance");
     xi_func_free(f);

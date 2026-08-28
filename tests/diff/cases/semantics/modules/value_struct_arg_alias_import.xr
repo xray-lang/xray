@@ -1,0 +1,12 @@
+// The type is imported under a different name, so a lookup keyed on the
+// declared class name finds nothing even though the type is plainly in scope.
+// The aggregate layout is reached through the type itself and does not care
+// what this module calls it.
+import { Pair as Coords, take, make } from "./_value_struct_arg_lib"
+
+fn aliased() -> i64 {
+    var p: Coords = make(3)
+    return take(p)
+}
+
+print(aliased())

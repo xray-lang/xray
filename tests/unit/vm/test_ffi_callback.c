@@ -165,7 +165,18 @@ static void assert_extern_dispatch_fails_closed(OpCode call_opcode, uint8_t resu
     XrProto *root = make_extern_dispatch_root(call_opcode, result_count);
     ASSERT_NOT_NULL(root);
 
-    ASSERT_EQ_INT(xr_vm_interpret_proto(iso, root), XR_VM_RUNTIME_ERROR);
+    /* Interpreting a proto allocates its entry closure from the caller's
+     * execution context before dispatch begins, so the logical root has to be
+     * installed exactly as xr_execute does for an elided root. Without it the
+     * allocation fails, the closure comes back NULL, and the interpreter
+     * returns the error this case expects before reaching a single foreign
+     * call - the assertion holds for the wrong reason. Restore before the
+     * assertion: a failing assertion returns, and a leaked context would
+     * follow into the next case. */
+    XrExecutionContext *previous = xr_exec_context_enter(xr_runtime_core_root_exec(iso->core_rt));
+    XrVMResult result = xr_vm_interpret_proto(iso, root);
+    xr_exec_context_restore(previous);
+    ASSERT_EQ_INT(result, XR_VM_RUNTIME_ERROR);
 
     xr_instruction_unit_free(root);
     xray_vm_delete(iso);

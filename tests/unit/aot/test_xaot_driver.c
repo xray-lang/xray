@@ -25,13 +25,12 @@
 static int passed;
 static int failed;
 
-static bool install_native_target_profile(XaotBuildOptions *options,
-                                          const XaotTarget *target) {
+static bool install_native_target_profile(XaotBuildOptions *options, const XaotTarget *target) {
     XrTargetCodegenFacts codegen;
     char error[256];
     return options && xaot_target_profile_codegen_facts(target, &codegen) &&
-           xtc_target_profile_build_current_native_hosted(
-               &codegen, &options->target_profile, error, sizeof(error));
+           xtc_target_profile_build_current_native_hosted(&codegen, &options->target_profile, error,
+                                                          sizeof(error));
 }
 
 static void release_target_profile(XaotBuildOptions *options) {
@@ -46,8 +45,7 @@ static int xaot_build_script(const char *source_path, XaotBuildOptions *options,
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
     if (!options ||
-        !xr_module_identity_script_authority_from_source(
-            source_path, &authority, &authority_root))
+        !xr_module_identity_script_authority_from_source(source_path, &authority, &authority_root))
         return 1;
     options->entry_module_authority = authority;
     int rc = xaot_build(source_path, options, result);
@@ -107,8 +105,8 @@ static bool corrupt_first_xtp_cache_object(const char *root) {
             break;
         if (fseek(file, -1L, SEEK_END) == 0) {
             int byte = fgetc(file);
-            if (byte != EOF && fseek(file, -1L, SEEK_END) == 0 &&
-                fputc(byte ^ 1, file) != EOF && fclose(file) == 0) {
+            if (byte != EOF && fseek(file, -1L, SEEK_END) == 0 && fputc(byte ^ 1, file) != EOF &&
+                fclose(file) == 0) {
                 corrupted = true;
                 break;
             }
@@ -280,8 +278,8 @@ static bool mkdir_p(const char *path) {
     return mkdir_one(buf);
 }
 
-static XrLockfile *make_package_lockfile(const char *home_dir,
-                                         const char *const *coordinates, uint32_t count) {
+static XrLockfile *make_package_lockfile(const char *home_dir, const char *const *coordinates,
+                                         uint32_t count) {
     XrLockfile *lockfile = NULL;
     char cache_dir[XR_TEST_PATH_MAX];
     int n;
@@ -306,8 +304,7 @@ static XrLockfile *make_package_lockfile(const char *home_dir,
         if (n < 0 || (size_t) n >= sizeof(archive_path) ||
             !write_file_text(archive_path, coordinate) ||
             !xr_lockfile_checksum_file(archive_path, checksum) ||
-            !xr_lockfile_add_package(lockfile, coordinate, "1.0.0", "fixture://package",
-                                     checksum))
+            !xr_lockfile_add_package(lockfile, coordinate, "1.0.0", "fixture://package", checksum))
             goto fail;
     }
     return lockfile;
@@ -348,6 +345,16 @@ static bool package_module_spec_fixture_init(PackageModuleSpecFixture *fixture,
     n = snprintf(fixture->physical_root, sizeof(fixture->physical_root),
                  "%s/.xray/packages/%.*s/%s/1.0.0", home_dir, (int) owner_len, coordinate,
                  slash + 1);
+    if (n < 0 || (size_t) n >= sizeof(fixture->physical_root))
+        return false;
+    /* The source path this root is compared against has already been through
+     * realpath, and identity containment is a byte comparison, so the root has
+     * to be canonical too. On Darwin the temporary tree reaches us through the
+     * /var symlink, which would make the package escape its own root. */
+    char canonical_root[XR_TEST_PATH_MAX];
+    if (!xr_test_realpath_buf(fixture->physical_root, canonical_root, sizeof(canonical_root)))
+        return false;
+    n = snprintf(fixture->physical_root, sizeof(fixture->physical_root), "%s", canonical_root);
     if (n < 0 || (size_t) n >= sizeof(fixture->physical_root))
         return false;
     n = snprintf(fixture->namespace_id, sizeof(fixture->namespace_id), "%s@1.0.0", coordinate);
@@ -698,8 +705,8 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
 
     memset(&result, 0, sizeof(result));
     ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
-    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-target-plan-cache", cache_dir,
-                                   sizeof(cache_dir)) == 0);
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-target-plan-cache", cache_dir, sizeof(cache_dir)) ==
+                0);
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     payload = make_package_payload();
     ASSERT_TRUE(payload != NULL);
@@ -749,19 +756,14 @@ static void test_driver_program_graph_uses_one_target_plan_cache_route(void) {
     XaotBuildOptions options = {0};
     XaotBuildResult result = {0};
 
-    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-program-graph-cache", root,
-                                   sizeof(root)) == 0);
-    ASSERT_TRUE(snprintf(producer_source, sizeof(producer_source),
-                         "%s/producer.xr", root) > 0);
-    ASSERT_TRUE(snprintf(entry_source, sizeof(entry_source), "%s/entry.xr",
-                         root) > 0);
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-program-graph-cache", root, sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(producer_source, sizeof(producer_source), "%s/producer.xr", root) > 0);
+    ASSERT_TRUE(snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root) > 0);
     ASSERT_TRUE(snprintf(cache_dir, sizeof(cache_dir), "%s/cache", root) > 0);
-    ASSERT_TRUE(write_file_text(
-        producer_source,
-        "export fn add1(value: i64) -> i64 { return value + 1 }\n"));
-    ASSERT_TRUE(write_file_text(
-        entry_source, "import { add1 } from \"./producer\"\n"
-                      "fn root() -> i64 { return add1(41) }\n"));
+    ASSERT_TRUE(write_file_text(producer_source,
+                                "export fn add1(value: i64) -> i64 { return value + 1 }\n"));
+    ASSERT_TRUE(write_file_text(entry_source, "import { add1 } from \"./producer\"\n"
+                                              "fn root() -> i64 { return add1(41) }\n"));
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
@@ -1296,8 +1298,8 @@ static void test_driver_requires_exact_typed_entry_authority(void) {
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     ASSERT_TRUE(install_native_target_profile(&options, &target));
-    ASSERT_TRUE(xr_module_identity_script_authority_from_source(
-        source_path, &script_authority, &physical_root));
+    ASSERT_TRUE(xr_module_identity_script_authority_from_source(source_path, &script_authority,
+                                                                &physical_root));
 
     options.entry_module_authority = script_authority;
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
@@ -1385,10 +1387,9 @@ static void test_driver_direct_i64_call_consumes_target_plan(void) {
     XaotBuildResult result = {0};
     snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-direct-i64-%ld.xr",
              (long) xr_test_getpid());
-    ASSERT_TRUE(write_file_text(source_path,
-                                "fn add1(value: i64) -> i64 { return value + 1 }\n"
-                                "fn root() -> i64 { return add1(41) }\n"
-                                "print(root())\n"));
+    ASSERT_TRUE(write_file_text(source_path, "fn add1(value: i64) -> i64 { return value + 1 }\n"
+                                             "fn root() -> i64 { return add1(41) }\n"
+                                             "print(root())\n"));
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
@@ -1402,8 +1403,7 @@ static void test_driver_direct_i64_call_consumes_target_plan(void) {
     ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "abi_owner=legacy"));
     ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "legacy_values=0"));
     ASSERT_TRUE(dump_line_contains(result.plan_dump, "value v1 op=GET_SHARED", "authority=target"));
-    ASSERT_TRUE(dump_line_contains(result.plan_dump, "value v1 op=GET_SHARED",
-                                   "slot=4294967295"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "value v1 op=GET_SHARED", "slot=4294967295"));
     ASSERT_TRUE(!dump_line_contains(result.plan_dump, "kind=value-rep func=root", "value=v1"));
 
     const char *source = result.sources[0].c_source;
@@ -1420,10 +1420,9 @@ static void test_driver_direct_i64_call_consumes_target_plan(void) {
                 !span_contains(call_site, call_line_end, "XR_FROM_INT") &&
                 !span_contains(call_site, call_line_end, "XR_TO_INT") &&
                 !span_contains(call_site, call_line_end, "xrt_call"));
-    ASSERT_TRUE(!span_contains(root, root_end, "_boxed") &&
-                !span_contains(root, root_end, "XR_FROM_INT") &&
-                !span_contains(root, root_end, "XR_TO_INT") &&
-                !span_contains(root, root_end, "xrt_call"));
+    ASSERT_TRUE(
+        !span_contains(root, root_end, "_boxed") && !span_contains(root, root_end, "XR_FROM_INT") &&
+        !span_contains(root, root_end, "XR_TO_INT") && !span_contains(root, root_end, "xrt_call"));
 
     xaot_build_result_free(&result);
     release_target_profile(&options);

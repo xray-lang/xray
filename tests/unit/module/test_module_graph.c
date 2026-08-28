@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
+#include "base/xfileio.h"
 #include "base/xhashmap.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
@@ -38,6 +39,14 @@ static void setup(void) {
     char *d = mkdtemp(g_tmpdir);
     if (!d)
         abort();
+    /* Same canonical-root requirement as the resolver suite: the graph
+     * canonicalizes the entry it is handed, and the identity authority
+     * compares that against this root byte for byte. */
+    char *canonical = xr_realpath(g_tmpdir);
+    if (!canonical)
+        abort();
+    snprintf(g_tmpdir, sizeof(g_tmpdir), "%s", canonical);
+    xr_free(canonical);
 }
 
 static void teardown(void) {

@@ -221,8 +221,7 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
     bool has_embedded_source = xr_get_embedded_stdlib(name) != NULL;
     if (has_native_factory || has_embedded_source) {
         char logical_path[XR_PATH_MAX];
-        int logical_length =
-            snprintf(logical_path, sizeof(logical_path), "%s/%s.xr", name, name);
+        int logical_length = snprintf(logical_path, sizeof(logical_path), "%s/%s.xr", name, name);
         if (logical_length <= 0 || (size_t) logical_length >= sizeof(logical_path)) {
             if (err_buf)
                 *err_buf = make_error("stdlib module '%s' has an invalid logical identity", name);
@@ -247,8 +246,7 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
             .namespace_id = name,
             .physical_root = stdlib_root,
         };
-        bool valid = xr_module_identity_from_logical(&authority, logical_path,
-                                                     &out_id->canonical);
+        bool valid = xr_module_identity_from_logical(&authority, logical_path, &out_id->canonical);
         out_id->logical_path = valid ? xr_strdup(logical_path) : NULL;
         out_id->authority.kind = XR_MODULE_IDENTITY_STDLIB;
         out_id->authority.namespace_id = valid ? xr_strdup(name) : NULL;
@@ -257,8 +255,8 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
             (out_id->source_path && !out_id->authority.physical_root)) {
             xr_module_id_cleanup(out_id);
             if (err_buf)
-                *err_buf = make_error("stdlib module '%s' has an incomplete identity authority",
-                                      name);
+                *err_buf =
+                    make_error("stdlib module '%s' has an incomplete identity authority", name);
             return -1;
         }
         return 0;
@@ -273,16 +271,16 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
 /* ========== Resolution: relative file/directory ========== */
 
 static int resolve_relative(const char *specifier, const char *importer_path,
-                            const XrModuleIdentityAuthority *importer_authority,
-                            XrModuleId *out_id, char **err_buf) {
+                            const XrModuleIdentityAuthority *importer_authority, XrModuleId *out_id,
+                            char **err_buf) {
     const XrModuleIdentityAuthority *authority = importer_authority;
     if (!xr_module_identity_authority_valid(authority) ||
         (authority->kind != XR_MODULE_IDENTITY_PROJECT &&
          authority->kind != XR_MODULE_IDENTITY_SCRIPT &&
          authority->kind != XR_MODULE_IDENTITY_PACKAGE)) {
         if (err_buf)
-            *err_buf = make_error("relative import '%s' requires explicit source authority",
-                                  specifier);
+            *err_buf =
+                make_error("relative import '%s' requires explicit source authority", specifier);
         return -1;
     }
     /* Determine base directory from importer path */
@@ -317,16 +315,14 @@ static int resolve_relative(const char *specifier, const char *importer_path,
     if (!xr_module_identity_from_source(authority, resolved, &out_id->canonical,
                                         &out_id->logical_path)) {
         if (err_buf)
-            *err_buf = make_error("module '%s' escapes or lacks its identity authority",
-                                  specifier);
+            *err_buf = make_error("module '%s' escapes or lacks its identity authority", specifier);
         xr_free(resolved);
         return -1;
     }
     out_id->source_path = resolved;
     out_id->authority.kind = authority->kind;
-    out_id->authority.namespace_id = authority->namespace_id
-                                         ? xr_strdup(authority->namespace_id)
-                                         : NULL;
+    out_id->authority.namespace_id =
+        authority->namespace_id ? xr_strdup(authority->namespace_id) : NULL;
     out_id->authority.physical_root = xr_strdup(authority->physical_root);
     if (!out_id->source_path || !out_id->authority.physical_root ||
         (authority->namespace_id && !out_id->authority.namespace_id)) {
@@ -406,6 +402,19 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
     char package_root[XR_PATH_MAX];
     int root_length = snprintf(package_root, sizeof(package_root), "%s/.xray/packages/%s/%s/%s",
                                home, owner, name, version);
+    /* Every source path below is canonicalized before the identity authority
+     * sees it, and containment is a byte comparison, so a root reached through
+     * a symlinked home would make the package escape a root that is its own.
+     * A root that does not resolve is left alone: the entry probe below
+     * reports a missing package far better than a path error would. */
+    if (root_length > 0 && (size_t) root_length < sizeof(package_root)) {
+        char *canonical_root = xr_realpath(package_root);
+        if (canonical_root) {
+            int copied = snprintf(package_root, sizeof(package_root), "%s", canonical_root);
+            xr_free(canonical_root);
+            root_length = copied;
+        }
+    }
     char namespace_id[256];
     int namespace_length =
         snprintf(namespace_id, sizeof(namespace_id), "%s@%s", specifier, version);
@@ -431,8 +440,8 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
             out_id->kind = XR_MOD_PACKAGE;
             out_id->source_path = real ? real : xr_strdup(path);
             if (out_id->source_path &&
-                xr_module_identity_from_source(&authority, out_id->source_path,
-                                               &out_id->canonical, &out_id->logical_path)) {
+                xr_module_identity_from_source(&authority, out_id->source_path, &out_id->canonical,
+                                               &out_id->logical_path)) {
                 out_id->authority.kind = authority.kind;
                 out_id->authority.namespace_id = xr_strdup(namespace_id);
                 out_id->authority.physical_root = xr_strdup(package_root);

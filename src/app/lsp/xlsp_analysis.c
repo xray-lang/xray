@@ -477,11 +477,16 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             // Document is open - check if it needs re-analysis (dirty = has unsaved changes)
             if (open_doc->dirty && open_doc->ast) {
                 lsp_log("import: %s is open and dirty, re-analyzing", full_path);
+                /* The analyzer borrows the file path it is handed and stores
+                 * it on every symbol it records, so the path has to outlive
+                 * those symbols. import_uri is this frame's buffer; the open
+                 * document owns an identical string for as long as it is
+                 * open, which is exactly the lifetime the symbols need. */
                 XlspAnalysisIdentity import_identity;
                 xlsp_analysis_identity_push(
                     &import_identity, xr_compiler_session_current_for_isolate(server->isolate),
-                    server->module_graph, import_uri);
-                xa_analyzer_refresh_file(server->workspace_analyzer, import_uri,
+                    server->module_graph, open_doc->uri);
+                xa_analyzer_refresh_file(server->workspace_analyzer, open_doc->uri,
                                          (XrAstNode *) open_doc->ast, open_doc->content_hash);
                 xlsp_analysis_identity_pop(&import_identity);
                 open_doc->dirty = false;
@@ -633,8 +638,8 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     if (ast) {
         lsp_rebuild_module_graph(server, doc);
         XrModuleGraph *graph = server->module_graph;
-        bool graph_read_entry = graph && graph->entry_index >= 0 &&
-                                graph->specs[graph->entry_index].ast;
+        bool graph_read_entry =
+            graph && graph->entry_index >= 0 && graph->specs[graph->entry_index].ast;
         if (!graph_read_entry)
             index_imports_on_demand(server, ast, doc->uri);
     }
@@ -646,8 +651,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
                 doc->parse_error ? " (with parse errors)" : "");
         // Use incremental update with content hash for true change detection
         XlspAnalysisIdentity doc_identity;
-        xlsp_analysis_identity_push(&doc_identity,
-                                    xr_compiler_session_current_for_isolate(isolate),
+        xlsp_analysis_identity_push(&doc_identity, xr_compiler_session_current_for_isolate(isolate),
                                     server->module_graph, doc->uri);
         xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri, (XrAstNode *) ast,
                                  doc->content_hash);

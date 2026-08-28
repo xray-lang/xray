@@ -3,6 +3,7 @@
  */
 
 #include "../../src/ir/xi.h"
+#include "../../src/ir/xi_module.h"
 #include "../../src/plan/format/xr_xsm_schema.h"
 #include "../../src/plan/format/xr_xtp_internal.h"
 #include "../../src/plan/semantic/xr_semantic_builder.h"
@@ -35,22 +36,20 @@ typedef struct XtpMutationArtifact {
     size_t size;
 } XtpMutationArtifact;
 
-static void *fuzz_activation_allocate(void *context, size_t size,
-                                      size_t alignment) {
+static void *fuzz_activation_allocate(void *context, size_t size, size_t alignment) {
     (void) context;
     return size && alignment <= _Alignof(void *) ? xr_malloc(size) : NULL;
 }
 
-static void fuzz_activation_deallocate(void *context, void *allocation,
-                                       size_t size, size_t alignment) {
+static void fuzz_activation_deallocate(void *context, void *allocation, size_t size,
+                                       size_t alignment) {
     (void) context;
     (void) size;
     (void) alignment;
     xr_free(allocation);
 }
 
-static void fuzz_activation_panic(void *context, const char *message,
-                                  size_t message_size) {
+static void fuzz_activation_panic(void *context, const char *message, size_t message_size) {
     (void) context;
     (void) message;
     (void) message_size;
@@ -105,47 +104,31 @@ static const XtpMutationCase mutation_cases[] = {
     {'V', XTP_MUTATION_VALID, XTP_EXPECT_VALID, "valid"},
     {'S', XTP_MUTATION_SCHEMA_VERSION, XTP_EXPECT_DECODE_REJECTION, "schema-version"},
     {'D', XTP_MUTATION_FULL_DIGEST, XTP_EXPECT_DECODE_REJECTION, "full-digest"},
-    {'I', XTP_MUTATION_SEMANTIC_IDENTITY, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "semantic-identity"},
-    {'P', XTP_MUTATION_PLAN_FINGERPRINT, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "plan-fingerprint"},
+    {'I', XTP_MUTATION_SEMANTIC_IDENTITY, XTP_EXPECT_MATERIALIZE_REJECTION, "semantic-identity"},
+    {'P', XTP_MUTATION_PLAN_FINGERPRINT, XTP_EXPECT_MATERIALIZE_REJECTION, "plan-fingerprint"},
     {'B', XTP_MUTATION_SECTION_BOUNDS, XTP_EXPECT_DECODE_REJECTION, "section-bounds"},
     {'L', XTP_MUTATION_SECTION_LENGTH, XTP_EXPECT_DECODE_REJECTION, "section-length"},
     {'C', XTP_MUTATION_SECTION_COUNT, XTP_EXPECT_DECODE_REJECTION, "section-count"},
     {'Q', XTP_MUTATION_SECTION_ORDER, XTP_EXPECT_DECODE_REJECTION, "section-order"},
     {'G', XTP_MUTATION_SECTION_DIGEST, XTP_EXPECT_DECODE_REJECTION, "section-digest"},
-    {'O', XTP_MUTATION_UNKNOWN_OPCODE, XTP_EXPECT_DECODE_REJECTION,
-     "unknown-opcode"},
+    {'O', XTP_MUTATION_UNKNOWN_OPCODE, XTP_EXPECT_DECODE_REJECTION, "unknown-opcode"},
     {'T', XTP_MUTATION_UNKNOWN_RUNTIME_TAG, XTP_EXPECT_MATERIALIZE_REJECTION,
      "unknown-runtime-tag"},
-    {'K', XTP_MUTATION_UNKNOWN_CONSTANT_FORM, XTP_EXPECT_DECODE_REJECTION,
-     "unknown-constant-form"},
-    {'R', XTP_MUTATION_TOTAL_ROWS_BUDGET, XTP_EXPECT_DECODE_REJECTION,
-     "total-rows-budget"},
-    {'W', XTP_MUTATION_VERIFY_WORK_BUDGET, XTP_EXPECT_DECODE_REJECTION,
-     "verify-work-budget"},
-    {'Y', XTP_MUTATION_WRONG_TYPE, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-type"},
-    {'N', XTP_MUTATION_WRONG_SLOT, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-slot"},
-    {'F', XTP_MUTATION_WRONG_OFFSET, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-offset"},
-    {'E', XTP_MUTATION_WRONG_EXTENT, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-extent"},
-    {'H', XTP_MUTATION_WRONG_ROOT, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-root"},
-    {'A', XTP_MUTATION_WRONG_CALL, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-call"},
-    {'U', XTP_MUTATION_WRONG_OWNERSHIP, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-ownership"},
-    {'J', XTP_MUTATION_WRONG_COROUTINE, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-coroutine"},
-    {'X', XTP_MUTATION_WRONG_CAPABILITY, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-capability"},
-    {'Z', XTP_MUTATION_WRONG_DEBUG, XTP_EXPECT_MATERIALIZE_REJECTION,
-     "wrong-debug"},
-    {'M', XTP_MUTATION_GENERATION_PIN_OMITTED,
-     XTP_EXPECT_MATERIALIZE_REJECTION, "generation-pin-omitted"},
+    {'K', XTP_MUTATION_UNKNOWN_CONSTANT_FORM, XTP_EXPECT_DECODE_REJECTION, "unknown-constant-form"},
+    {'R', XTP_MUTATION_TOTAL_ROWS_BUDGET, XTP_EXPECT_DECODE_REJECTION, "total-rows-budget"},
+    {'W', XTP_MUTATION_VERIFY_WORK_BUDGET, XTP_EXPECT_DECODE_REJECTION, "verify-work-budget"},
+    {'Y', XTP_MUTATION_WRONG_TYPE, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-type"},
+    {'N', XTP_MUTATION_WRONG_SLOT, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-slot"},
+    {'F', XTP_MUTATION_WRONG_OFFSET, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-offset"},
+    {'E', XTP_MUTATION_WRONG_EXTENT, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-extent"},
+    {'H', XTP_MUTATION_WRONG_ROOT, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-root"},
+    {'A', XTP_MUTATION_WRONG_CALL, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-call"},
+    {'U', XTP_MUTATION_WRONG_OWNERSHIP, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-ownership"},
+    {'J', XTP_MUTATION_WRONG_COROUTINE, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-coroutine"},
+    {'X', XTP_MUTATION_WRONG_CAPABILITY, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-capability"},
+    {'Z', XTP_MUTATION_WRONG_DEBUG, XTP_EXPECT_MATERIALIZE_REJECTION, "wrong-debug"},
+    {'M', XTP_MUTATION_GENERATION_PIN_OMITTED, XTP_EXPECT_MATERIALIZE_REJECTION,
+     "generation-pin-omitted"},
 };
 
 enum {
@@ -190,23 +173,31 @@ static bool initialize_fixture(void) {
     }
     xi_block_set_return(entry, result);
     function->stage = XI_STAGE_OPTIMIZED;
+    /* The SemanticPlan builder requires a lowered graph to carry a typed
+     * durable module identity and synthesizes none, so this fixture names its
+     * own memory-namespace identity. xi_func_free owns the module it is
+     * attached to and releases it with the function. */
+    function->module = xi_module_new("fixtures/xtp_fuzz.xr", "xtp_fuzz", function);
+    if (!function->module ||
+        !xi_module_set_identity(function->module, "memory-module-v1:id=19:xtp-fuzz-fixture-v1")) {
+        xi_func_free(function);
+        return false;
+    }
     char error[512] = {0};
     if (!xr_semantic_plan_build(function, &fixture.semantic, error, sizeof(error))) {
         xi_func_free(function);
         return false;
     }
     xi_func_free(function);
-    fixture.profile = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    fixture.profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     if (!fixture.profile ||
         !xr_target_plan_build(fixture.semantic, fixture.profile, &fixture.plan, error,
                               sizeof(error)) ||
-        !xr_xsm_encode(fixture.semantic, &fixture.semantic_bytes,
-                       &fixture.semantic_size, error, sizeof(error)) ||
-        !xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size, error,
-                            sizeof(error)) ||
-        !xr_runtime_artifact_authority_create_internal(
-            fixture.semantic, &fixture.authority, error, sizeof(error))) {
+        !xr_xsm_encode(fixture.semantic, &fixture.semantic_bytes, &fixture.semantic_size, error,
+                       sizeof(error)) ||
+        !xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size, error, sizeof(error)) ||
+        !xr_runtime_artifact_authority_create_internal(fixture.semantic, &fixture.authority, error,
+                                                       sizeof(error))) {
         dispose_fixture();
         return false;
     }
@@ -215,8 +206,7 @@ static bool initialize_fixture(void) {
 }
 
 static uint8_t *directory_entry(uint8_t *bytes, XrXtpSectionKind kind) {
-    return bytes + XR_XTP_HEADER_SIZE +
-           ((size_t) kind - 1u) * XR_XTP_DIRECTORY_ENTRY_SIZE;
+    return bytes + XR_XTP_HEADER_SIZE + ((size_t) kind - 1u) * XR_XTP_DIRECTORY_ENTRY_SIZE;
 }
 
 static void resign_artifact(uint8_t *bytes, size_t size) {
@@ -241,14 +231,12 @@ static uint8_t *section_bytes(uint8_t *bytes, XrXtpSectionKind kind) {
     return bytes + (size_t) xr_xtp_take_u64(directory_entry(bytes, kind) + 8);
 }
 
-static void resign_section_and_artifact(uint8_t *bytes, size_t size,
-                                        XrXtpSectionKind kind) {
+static void resign_section_and_artifact(uint8_t *bytes, size_t size, XrXtpSectionKind kind) {
     resign_section(bytes, kind);
     resign_artifact(bytes, size);
 }
 
-static bool insert_zero_row(XtpMutationArtifact *artifact,
-                            XrXtpSectionKind kind) {
+static bool insert_zero_row(XtpMutationArtifact *artifact, XrXtpSectionKind kind) {
     uint8_t *entry = directory_entry(artifact->bytes, kind);
     uint64_t raw_offset = xr_xtp_take_u64(entry + 8);
     uint64_t raw_length = xr_xtp_take_u64(entry + 16);
@@ -267,8 +255,7 @@ static bool insert_zero_row(XtpMutationArtifact *artifact,
         return false;
     size_t offset = (size_t) raw_offset;
     memcpy(expanded, artifact->bytes, offset);
-    memcpy(expanded + offset + padding, artifact->bytes + offset,
-           artifact->size - offset);
+    memcpy(expanded + offset + padding, artifact->bytes + offset, artifact->size - offset);
     xr_free(artifact->bytes);
     artifact->bytes = expanded;
     artifact->size = new_size;
@@ -277,16 +264,12 @@ static bool insert_zero_row(XtpMutationArtifact *artifact,
     xr_xtp_put_u64(expanded + 24, new_size);
     xr_xtp_put_u64(entry + 16, row_size);
     xr_xtp_put_u64(entry + 24, 1);
-    for (uint32_t later = (uint32_t) kind + 1u;
-         later < (uint32_t) XR_XTP_SECTION_COUNT; later++) {
-        uint8_t *later_entry =
-            directory_entry(expanded, (XrXtpSectionKind) later);
-        xr_xtp_put_u64(later_entry + 8,
-                       xr_xtp_take_u64(later_entry + 8) + padding);
+    for (uint32_t later = (uint32_t) kind + 1u; later < (uint32_t) XR_XTP_SECTION_COUNT; later++) {
+        uint8_t *later_entry = directory_entry(expanded, (XrXtpSectionKind) later);
+        xr_xtp_put_u64(later_entry + 8, xr_xtp_take_u64(later_entry + 8) + padding);
     }
     xr_xtp_put_u64(expanded + 296, xr_xtp_take_u64(expanded + 296) + 1u);
-    xr_xtp_put_u64(expanded + 304,
-                   xr_xtp_take_u64(expanded + 304) + row_size);
+    xr_xtp_put_u64(expanded + 304, xr_xtp_take_u64(expanded + 304) + row_size);
     xr_xtp_put_u64(expanded + 320, xr_xtp_take_u64(expanded + 320) + 1u);
     resign_section_and_artifact(expanded, new_size, kind);
     return true;
@@ -295,8 +278,7 @@ static bool insert_zero_row(XtpMutationArtifact *artifact,
 static void exercise_runtime_boundary(const uint8_t *bytes, size_t size,
                                       XtpMutationExpectation expectation) {
     XrTargetPlan *loaded = (XrTargetPlan *) (uintptr_t) 1;
-    bool accepted = xr_runtime_target_plan_load(
-        bytes, size, fixture.authority, &loaded, NULL, 0);
+    bool accepted = xr_runtime_target_plan_load(bytes, size, fixture.authority, &loaded, NULL, 0);
     if (expectation == XTP_EXPECT_VALID) {
         require_fuzz(accepted && loaded && xr_target_plan_is_verified(loaded));
         xr_target_plan_free(loaded);
@@ -310,32 +292,33 @@ static void exercise_runtime_boundary(const uint8_t *bytes, size_t size,
 
     XrRuntimeConfig config = {
         .schema_version = XR_RUNTIME_CONFIG_SCHEMA_VERSION,
-        .generation = {
-            .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
-            .max_loaded_generations = 1,
-            .max_total_pins = 4,
-            .max_pins_per_generation = 4,
-            .max_pins_by_kind = {4, 4, 4, 4, 4},
-        },
-        .activation = {
-            .max_active_entries = 4,
-            .max_active_provider_registrations = 4,
-            .max_active_finalizer_registrations = 2,
-        },
-        .providers = {
-            .allocate = fuzz_activation_allocate,
-            .deallocate = fuzz_activation_deallocate,
-            .panic = fuzz_activation_panic,
-        },
+        .generation =
+            {
+                .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
+                .max_loaded_generations = 1,
+                .max_total_pins = 4,
+                .max_pins_per_generation = 4,
+                .max_pins_by_kind = {4, 4, 4, 4, 4},
+            },
+        .activation =
+            {
+                .max_active_entries = 4,
+                .max_active_provider_registrations = 4,
+                .max_active_finalizer_registrations = 2,
+            },
+        .providers =
+            {
+                .allocate = fuzz_activation_allocate,
+                .deallocate = fuzz_activation_deallocate,
+                .panic = fuzz_activation_panic,
+            },
     };
     XrRuntime *runtime = NULL;
     XrModule *module = (XrModule *) (uintptr_t) 1;
     char diagnostic[512] = {0};
-    require_fuzz(xr_runtime_create(&config, &runtime, diagnostic,
-                                   sizeof(diagnostic)));
-    require_fuzz(!xr_module_load_target_plan(
-        runtime, fixture.semantic_bytes, fixture.semantic_size, bytes, size,
-        &module, diagnostic, sizeof(diagnostic)));
+    require_fuzz(xr_runtime_create(&config, &runtime, diagnostic, sizeof(diagnostic)));
+    require_fuzz(!xr_module_load_target_plan(runtime, fixture.semantic_bytes, fixture.semantic_size,
+                                             bytes, size, &module, diagnostic, sizeof(diagnostic)));
     require_fuzz(module == NULL);
     /* Destroy succeeds only when the facade owns no module and its generation
      * authority owns neither a generation nor a pin. With no returned module,
@@ -349,16 +332,15 @@ static void exercise_artifact(const uint8_t *bytes, size_t size,
     XrXtpCandidate *candidate = NULL;
     if (!xr_xtp_decode_candidate(bytes, size, &candidate, NULL, 0)) {
         require_fuzz(candidate == NULL);
-        require_fuzz(expectation == XTP_EXPECT_ANY ||
-                     expectation == XTP_EXPECT_DECODE_REJECTION);
+        require_fuzz(expectation == XTP_EXPECT_ANY || expectation == XTP_EXPECT_DECODE_REJECTION);
         if (expectation != XTP_EXPECT_ANY)
             exercise_runtime_boundary(bytes, size, expectation);
         return;
     }
     require_fuzz(expectation != XTP_EXPECT_DECODE_REJECTION);
     XrTargetPlan *plan = NULL;
-    if (xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &plan,
-                                        NULL, 0)) {
+    if (xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &plan, NULL,
+                                       0)) {
         uint8_t *roundtrip = NULL;
         size_t roundtrip_size = 0;
         require_fuzz(xr_target_plan_is_verified(plan));
@@ -366,8 +348,7 @@ static void exercise_artifact(const uint8_t *bytes, size_t size,
         require_fuzz(roundtrip_size == size && memcmp(roundtrip, bytes, size) == 0);
         xr_xtp_encoded_free(roundtrip);
         xr_target_plan_free(plan);
-        require_fuzz(expectation == XTP_EXPECT_ANY ||
-                     expectation == XTP_EXPECT_VALID);
+        require_fuzz(expectation == XTP_EXPECT_ANY || expectation == XTP_EXPECT_VALID);
     } else {
         require_fuzz(plan == NULL);
         require_fuzz(expectation == XTP_EXPECT_ANY ||
@@ -379,8 +360,7 @@ static void exercise_artifact(const uint8_t *bytes, size_t size,
 }
 
 static const XtpMutationCase *select_mutation(const uint8_t *data, size_t size) {
-    require_fuzz(sizeof(mutation_cases) / sizeof(mutation_cases[0]) ==
-                 XTP_MUTATION_COUNT);
+    require_fuzz(sizeof(mutation_cases) / sizeof(mutation_cases[0]) == XTP_MUTATION_COUNT);
     if (!size)
         return &mutation_cases[XTP_MUTATION_VALID];
     for (size_t i = 0; i < (size_t) XTP_MUTATION_COUNT; i++) {
@@ -390,13 +370,13 @@ static const XtpMutationCase *select_mutation(const uint8_t *data, size_t size) 
     return &mutation_cases[data[0] % XTP_MUTATION_COUNT];
 }
 
-static bool apply_mutation(XtpMutationArtifact *artifact,
-                           XtpMutation mutation) {
+static bool apply_mutation(XtpMutationArtifact *artifact, XtpMutation mutation) {
     uint8_t *bytes = artifact->bytes;
     uint8_t *entry = NULL;
     uint8_t *rows = NULL;
     switch (mutation) {
-        case XTP_MUTATION_VALID: return true;
+        case XTP_MUTATION_VALID:
+            return true;
         case XTP_MUTATION_SCHEMA_VERSION:
             xr_xtp_put_u32(bytes + 4, 0);
             resign_artifact(bytes, artifact->size);
@@ -424,8 +404,7 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
             return true;
         case XTP_MUTATION_SECTION_COUNT:
             entry = directory_entry(bytes, XR_XTP_SECTION_FUNCTIONS);
-            xr_xtp_put_u64(entry + 24,
-                           xr_xtp_table_count_limit(XR_XTP_SECTION_FUNCTIONS) + 1u);
+            xr_xtp_put_u64(entry + 24, xr_xtp_table_count_limit(XR_XTP_SECTION_FUNCTIONS) + 1u);
             resign_artifact(bytes, artifact->size);
             return true;
         case XTP_MUTATION_SECTION_ORDER:
@@ -446,14 +425,12 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
             rows[1] = UINT8_C(0xff);
             rows[2] = UINT8_C(0xff);
             rows[3] = UINT8_C(0x03);
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_INSTRUCTIONS);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_INSTRUCTIONS);
             return true;
         case XTP_MUTATION_UNKNOWN_RUNTIME_TAG:
             rows = section_bytes(bytes, XR_XTP_SECTION_TARGET_PROFILE);
             rows[296] = UINT8_MAX;
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_TARGET_PROFILE);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_TARGET_PROFILE);
             return true;
         case XTP_MUTATION_UNKNOWN_CONSTANT_FORM:
             entry = directory_entry(bytes, XR_XTP_SECTION_INSTRUCTIONS);
@@ -462,8 +439,7 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
             /* A CONST+RETURN token requires a material result slot. Encoding
              * the reserved no-slot sentinel is a malformed compact form. */
             rows[2] = 0u;
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_INSTRUCTIONS);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_INSTRUCTIONS);
             return true;
         case XTP_MUTATION_TOTAL_ROWS_BUDGET:
             xr_xtp_put_u64(bytes + 296, XR_XTP_MAX_TOTAL_ROWS + 1u);
@@ -476,32 +452,27 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
         case XTP_MUTATION_WRONG_TYPE:
             rows = section_bytes(bytes, XR_XTP_SECTION_SLOTS);
             xr_xtp_put_u16(rows + XTP_SLOT_REGISTER_REP_OFFSET, UINT16_MAX);
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_SLOTS);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_SLOTS);
             return true;
         case XTP_MUTATION_WRONG_SLOT:
             entry = directory_entry(bytes, XR_XTP_SECTION_INSTRUCTIONS);
             rows = section_bytes(bytes, XR_XTP_SECTION_INSTRUCTIONS);
-            require_fuzz(xr_xtp_take_u64(entry + 16) == 4u && rows[0] == 1u &&
-                         rows[2] > 0u && rows[2] < UINT8_C(0x7f));
+            require_fuzz(xr_xtp_take_u64(entry + 16) == 4u && rows[0] == 1u && rows[2] > 0u &&
+                         rows[2] < UINT8_C(0x7f));
             rows[2]++;
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_INSTRUCTIONS);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_INSTRUCTIONS);
             return true;
         case XTP_MUTATION_WRONG_OFFSET:
             rows = section_bytes(bytes, XR_XTP_SECTION_SLOTS);
             xr_xtp_put_u32(rows + XTP_SLOT_OFFSET_OFFSET,
                            xr_xtp_take_u32(rows + XTP_SLOT_OFFSET_OFFSET) + 1u);
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_SLOTS);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_SLOTS);
             return true;
         case XTP_MUTATION_WRONG_EXTENT:
             rows = section_bytes(bytes, XR_XTP_SECTION_EXTENTS);
             xr_xtp_put_u32(rows + XTP_EXTENT_STRIDE_OFFSET,
-                           xr_xtp_take_u32(rows + XTP_EXTENT_STRIDE_OFFSET) +
-                               1u);
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_EXTENTS);
+                           xr_xtp_take_u32(rows + XTP_EXTENT_STRIDE_OFFSET) + 1u);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_EXTENTS);
             return true;
         case XTP_MUTATION_WRONG_ROOT:
             /* This schema admits no root rows without semantic liveness facts:
@@ -512,8 +483,7 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
         case XTP_MUTATION_WRONG_OWNERSHIP:
             rows = section_bytes(bytes, XR_XTP_SECTION_SLOTS);
             rows[XTP_SLOT_OWNERSHIP_OFFSET] = XR_TARGET_OWNERSHIP_OWNED;
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_SLOTS);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_SLOTS);
             return true;
         case XTP_MUTATION_WRONG_COROUTINE:
             /* A scalar semantic plan has no coroutine entity to authorize a
@@ -521,16 +491,13 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
             return insert_zero_row(artifact, XR_XTP_SECTION_COROUTINES);
         case XTP_MUTATION_WRONG_CAPABILITY:
             rows = section_bytes(bytes, XR_XTP_SECTION_CAPABILITIES);
-            xr_xtp_put_u16(rows + XTP_CAPABILITY_PROVIDER_OFFSET,
-                           XR_TARGET_PROVIDER_INVALID);
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_CAPABILITIES);
+            xr_xtp_put_u16(rows + XTP_CAPABILITY_PROVIDER_OFFSET, XR_TARGET_PROVIDER_INVALID);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_CAPABILITIES);
             return true;
         case XTP_MUTATION_WRONG_DEBUG:
             rows = section_bytes(bytes, XR_XTP_SECTION_SLOTS);
             xr_xtp_put_u32(rows + XTP_SLOT_DEBUG_VARIABLE_OFFSET, 0);
-            resign_section_and_artifact(bytes, artifact->size,
-                                        XR_XTP_SECTION_SLOTS);
+            resign_section_and_artifact(bytes, artifact->size, XR_XTP_SECTION_SLOTS);
             return true;
         case XTP_MUTATION_GENERATION_PIN_OMITTED:
             if (!insert_zero_row(artifact, XR_XTP_SECTION_CLEANUPS))
@@ -539,10 +506,10 @@ static bool apply_mutation(XtpMutationArtifact *artifact,
             /* UNPIN without a matching generation-pin fact is represented by
              * a real cleanup row, never by fabricating a valid pair. */
             rows[XTP_CLEANUP_ACTION_OFFSET] = XR_TARGET_CLEANUP_UNPIN;
-            resign_section_and_artifact(artifact->bytes, artifact->size,
-                                        XR_XTP_SECTION_CLEANUPS);
+            resign_section_and_artifact(artifact->bytes, artifact->size, XR_XTP_SECTION_CLEANUPS);
             return true;
-        case XTP_MUTATION_COUNT: break;
+        case XTP_MUTATION_COUNT:
+            break;
     }
     require_fuzz(false);
     return false;
@@ -576,8 +543,7 @@ int main(void) {
     size_t executed = 0;
     for (size_t i = 0; i < (size_t) XTP_MUTATION_COUNT; i++) {
         uint8_t selector = mutation_cases[i].seed_code;
-        fprintf(stderr, "checking deterministic XTP mutation: %s\n",
-                mutation_cases[i].name);
+        fprintf(stderr, "checking deterministic XTP mutation: %s\n", mutation_cases[i].name);
         structured_mutation(&selector, 1);
         executed++;
     }

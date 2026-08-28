@@ -7941,6 +7941,18 @@ static bool verify_leaf_scalar_machine_rep(const XrTargetPlan *plan, uint16_t re
            rep->lane_count == 0 && rep->reserved == 0;
 }
 
+/* Both program projections below pin concrete aggregate sizes and field offsets
+ * rather than deriving them, so they hold only where the data layout produces
+ * those numbers. The admitted architectures are named for that reason: the
+ * sizes are the projection's own frozen facts, and an architecture is added
+ * here only once its layout has been verified against them end to end. */
+static bool verify_program_projection_machine(const XrTargetMachineFacts *machine) {
+    return machine &&
+           (machine->architecture == XR_TARGET_ARCH_X86_64 ||
+            machine->architecture == XR_TARGET_ARCH_AARCH64) &&
+           machine->data_layout.i64.size == 8 && machine->data_layout.i64.align == 8;
+}
+
 static bool verify_leaf_program_target_layout(const XrTargetPlan *plan,
                                               const XrVerifyLeafProgramShape *shape,
                                               uint32_t *out_layout, uint16_t *out_rep) {

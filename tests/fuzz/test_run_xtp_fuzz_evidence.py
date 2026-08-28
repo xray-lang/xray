@@ -27,6 +27,9 @@ class XtpFuzzEvidenceTests(unittest.TestCase):
         (self.corpus / "valid.xtpseed").write_bytes(b"V\n")
         for path in (self.runtime, self.fuzzer, self.resource):
             path.write_text("fixture", encoding="utf-8")
+            # The runner refuses a non-executable stand-in, so every negative
+            # case below reported that instead of the condition it names.
+            path.chmod(0o700)
 
     def tearDown(self) -> None:
         self.tmp.cleanup()

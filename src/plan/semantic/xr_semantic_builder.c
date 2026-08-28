@@ -100,6 +100,10 @@ typedef struct XrSuspendabilityCacheEntry {
 typedef struct XrSemanticBuildContext {
     XrSemanticPlan *plan;
     const char *module_identity;
+    /* The module being built. Its lowered class descriptors are the record of
+     * what this module declares, which is a different question from whether a
+     * type is a value aggregate. */
+    const XiModule *module;
     XrTypeMapEntry *types;
     uint32_t type_count;
     uint32_t type_capacity;
@@ -824,6 +828,28 @@ static const XiClassData *value_aggregate_class_data(const XrSemanticBuildContex
             }
         }
     }
+    /* A module that only imports the aggregate never constructs it, so there is
+     * no construction site here to read the field types off. The module that
+     * declared it lowered a descriptor carrying exactly those types, and an
+     * imported type is the same type: same class info, same layout, same id.
+     * The field identity has to come from the declaration either way. */
+    if (!match) {
+        for (uint32_t m = 0; m < ctx->dependency_module_count; m++) {
+            const XiModule *module = ctx->dependency_modules ? ctx->dependency_modules[m] : NULL;
+            if (!module || !module->classes)
+                continue;
+            for (uint16_t c = 0; c < module->nclasses; c++) {
+                const XiClassData *data = module->classes[c];
+                if (!data || (data->class_info != type->instance.class_ref &&
+                              data->struct_layout != layout &&
+                              (class_id == 0 || data->xg_class_id != class_id)))
+                    continue;
+                if (match && match != data)
+                    return NULL;
+                match = data;
+            }
+        }
+    }
     /* A packed struct differs from an ordinary one only in that the layout
      * leaves out the padding: the fields are the same fields, in the same
      * order, with the same names and types, so every answer this record
@@ -933,6 +959,21 @@ static bool program_aggregate_source_is_exact(const XrSemanticBuildContext *ctx,
     return true;
 }
 
+/* A class this module lowered is one this module declares. The descriptor list
+ * is built from the module's own declarations, so membership answers the
+ * question directly rather than through a property of the type. */
+static bool module_declares_aggregate(const XrSemanticBuildContext *ctx, const XrClassInfo *info) {
+    if (!ctx || !ctx->module || !ctx->module->classes || !info)
+        return false;
+    for (uint16_t c = 0; c < ctx->module->nclasses; c++) {
+        const XiClassData *data = ctx->module->classes[c];
+        if (data && (data->class_info == info ||
+                     (info->struct_layout && data->struct_layout == info->struct_layout)))
+            return true;
+    }
+    return false;
+}
+
 static bool refine_value_aggregate_types(XrSemanticBuildContext *ctx) {
     for (uint32_t semantic_type = 0; semantic_type < ctx->plan->type_count; semantic_type++) {
         XrSemanticTypeRecord *record = &ctx->plan->types[semantic_type];
@@ -1020,20 +1061,19 @@ static bool refine_value_aggregate_types(XrSemanticBuildContext *ctx) {
             xr_free(indices);
             continue;
         }
+        /* Only a module that declares the aggregate holds its declaration
+         * facts, so only it can be asked for them. The lowered class
+         * descriptors of this module are that record; a type reached through
+         * an import is the same type with the same layout, and no bit on it
+         * says which module wrote it down. */
         bool declared_aggregate = false;
-        for (uint32_t i = 0; i < ctx->type_count; i++) {
+        for (uint32_t i = 0; i < ctx->type_count && !declared_aggregate; i++) {
             const XrType *source = ctx->types[i].source;
-            /* The raw bit, deliberately: this asks whether *this* module declares
-             * the aggregate, and the front end sets it exactly where the
-             * declaration is used to build one. Asking the shared judgement here
-             * would count a type merely imported and referenced as declared, and
-             * then demand declaration facts no module in this plan holds. */
-            if (ctx->types[i].index == semantic_type && source &&
-                source->kind == XR_KIND_INSTANCE && source->is_value_type &&
-                source->instance.class_ref && source->instance.class_ref->struct_layout) {
-                declared_aggregate = true;
-                break;
-            }
+            if (ctx->types[i].index != semantic_type || !source ||
+                source->kind != XR_KIND_INSTANCE || !source->instance.class_ref ||
+                !source->instance.class_ref->struct_layout)
+                continue;
+            declared_aggregate = module_declares_aggregate(ctx, source->instance.class_ref);
         }
         const XiClassData *aggregate = value_aggregate_data_for_type(ctx, semantic_type, NULL);
         if (!aggregate) {
@@ -6263,6 +6303,7 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
         return false;
     }
     ctx.module_identity = root->module->identity;
+    ctx.module = root->module;
     ctx.error = error;
     ctx.error_size = error_size;
     ctx.dependency_modules = dependencies;
