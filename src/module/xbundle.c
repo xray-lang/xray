@@ -159,7 +159,12 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
         XrModuleSpec *spec = &graph->specs[index];
 
         if (spec->kind == XR_MOD_STDLIB) {
-            if (!bundle_add_entry(bundle, spec->canonical, NULL, 0, spec->kind))
+            /* A stdlib entry carries no bytecode: the loader resolves it by
+             * name against the native factory table and the embedded sources.
+             * Those are keyed by the bare module name, which is exactly the
+             * identity authority's namespace id -- the durable identity string
+             * is a different thing and no loader looks anything up by it. */
+            if (!bundle_add_entry(bundle, spec->authority.namespace_id, NULL, 0, spec->kind))
                 goto cleanup;
             continue;
         }
