@@ -558,3 +558,14 @@ tests/regression/11_coroutine/1165_result_group_native.xr
 tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr
 tests/regression/11_coroutine/1167_channel_explicit_transfer.xr
 tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr
+
+# The two print-atomicity cases need a user `toString` to make a formatter fail
+# partway through a group, and a user class method call has no exact target
+# authority yet. Both refuse at build with
+#   XR_TARGET_1003: call-shaped operation has no exact target authority
+#     (opcode=116, receiver-type kind 14)
+# followed by XR_TARGET_1000. The VM leg verifies the property today; the AOT
+# leg is covered by a code-shape assertion on the emitted C instead, because a
+# group that renders into a buffer and writes once is visible there.
+tests/diff/cases/semantics/output/print_group_atomic_on_panic.xr
+tests/diff/cases/semantics/output/print_group_atomic_on_fatal.xr

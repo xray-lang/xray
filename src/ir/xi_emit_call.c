@@ -1308,12 +1308,20 @@ static bool xi_print_operand_is_unsigned(const XiValue *operand) {
  * that group: separator placement and termination are derived here from the
  * plan and the operand ordinal, so no earlier stage encodes them per operand
  * and the two cannot disagree. A zero-operand group is still a group and emits
- * its terminator alone.
+ * the buffer that frames it.
  *
  * The group stays several instructions because rendering an operand may call
- * back into the interpreter (a user `toString`), which leaves this dispatch;
- * a single instruction would have nowhere to keep the partially rendered group
- * across that call. */
+ * back into the interpreter (a user `toString`), which leaves the dispatch; a
+ * single instruction would have nowhere to keep the partially rendered group
+ * across that call. The buffer is that place, and PRINT_GROUP_FLUSH is the one
+ * instruction of the three that reaches the output capability: a group that
+ * never gets there — a panic unwinding past it, a coroutine collected while
+ * suspended inside a formatter — publishes nothing.
+ *
+ * The buffer needs its own registers because a `toString` frame is built on top
+ * of them: the window is [group, toString return slot, toString callee base].
+ * Reusing an operand's register the way a value-addressed print would means the
+ * callee frame lands on the operands that have not rendered yet. */
 XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     const XrPrintPlan *plan = xi_print_plan(v);
@@ -1321,20 +1329,48 @@ XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t terminates = plan->terminator != XR_PRINT_TERMINATOR_NONE ? 1u : 0u;
-    if (v->nargs == 0) {
-        /* Nothing to render; the group still writes what frames it. */
-        emit_inst(ctx, CREATE_ABC(OP_PRINT, 0, 0, (uint8_t) (terminates | XR_PRINT_BC_NO_OPERAND)));
+
+    /* Resolve every operand before the window is carved, so no register the
+     * group depends on is allocated between PRINT_GROUP_NEW and the flush. */
+    XiEmitReg stack_ops[16];
+    XiEmitReg *ops = stack_ops;
+    uint16_t n = v->nargs;
+    if (n > (uint16_t) (sizeof(stack_ops) / sizeof(stack_ops[0]))) {
+        ops = (XiEmitReg *) xr_malloc((size_t) n * sizeof(XiEmitReg));
+        if (!ops) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+    }
+    for (uint16_t a = 0; a < n; a++) {
+        ops[a] = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK) {
+            if (ops != stack_ops)
+                xr_free(ops);
+            return;
+        }
+    }
+
+    XiEmitReg group = 0;
+    bool have_window = emit_call_scratch_window(ctx, XI_PRINT_GROUP_WINDOW, &group);
+    if (!have_window) {
+        if (ops != stack_ops)
+            xr_free(ops);
         return;
     }
-    for (uint16_t a = 0; a < v->nargs; a++) {
-        XiEmitReg src = reg_of(ctx, v->args[a]);
-        if (ctx->status != XI_EMIT_OK)
-            return;
-        uint8_t separates = xr_print_plan_operand_needs_separator(plan, a) ? 1u : 0u;
-        uint8_t flags = (uint16_t) (a + 1u) == v->nargs ? terminates : 0u;
+
+    /* The operand fields are 16 bits wide; the flag words are not narrowed here
+     * so a later flag has room without a second encoding. */
+    emit_inst(ctx, CREATE_ABC(OP_PRINT_GROUP_NEW, group, 0, 0));
+    for (uint16_t a = 0; a < n; a++) {
+        uint16_t flags = xr_print_plan_operand_needs_separator(plan, a) ? XR_PRINT_BC_SEPARATE : 0u;
         if (xi_print_operand_is_unsigned(v->args[a]))
             flags |= XR_PRINT_BC_UNSIGNED;
-        emit_inst(ctx, CREATE_ABC(OP_PRINT, src, separates, flags));
+        emit_inst(ctx, CREATE_ABC(OP_PRINT_GROUP_APPEND, group, ops[a], flags));
     }
+    uint16_t terminates = plan->terminator != XR_PRINT_TERMINATOR_NONE ? XR_PRINT_BC_TERMINATE : 0u;
+    emit_inst(ctx, CREATE_ABC(OP_PRINT_GROUP_FLUSH, group, terminates, 0));
+
+    if (ops != stack_ops)
+        xr_free(ops);
 }

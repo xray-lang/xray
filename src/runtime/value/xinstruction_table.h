@@ -86,7 +86,9 @@
 #define KOP_ABC_INPLACE_SYM XR_OPF_REG_INOUT, XR_OPF_SYMBOL_IDX, XR_OPF_REG_IN
 #define KOP_AB_K XR_OPF_REG_IN, XR_OPF_K_IDX, XR_OPF_NONE
 #define KOP_AB_FLAG XR_OPF_REG_IN, XR_OPF_LIT_FLAG, XR_OPF_NONE
-#define KOP_PRINT XR_OPF_REG_IN, XR_OPF_LIT_FLAG, XR_OPF_LIT
+/* A is a three-register window: the group buffer, the toString return slot,
+ * and the toString callee base. */
+#define KOP_PRINT_GROUP_APPEND XR_OPF_REG_BASE, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_INVOKE_DIRECT XR_OPF_REG_BASE, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_DUMP XR_OPF_REG_IN, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_AB_UNARY_HINT XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT
@@ -191,31 +193,31 @@
     _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
     _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
     _(BYTE_SLICE_LOAD_U16, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<u8>.load<uint16>(R[A+1], R[A+2], R[A+3])")                                   \
+      "R[A] = Slice<u8>.load<uint16>(R[A+1], R[A+2], R[A+3])")                                     \
     _(BYTE_SLICE_LOAD_U32, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<u8>.load<uint32>(R[A+1], R[A+2], R[A+3])")                                   \
+      "R[A] = Slice<u8>.load<uint32>(R[A+1], R[A+2], R[A+3])")                                     \
     _(BYTE_SLICE_LOAD_U64, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<u8>.load<uint64>(R[A+1], R[A+2], R[A+3])")                                   \
+      "R[A] = Slice<u8>.load<uint64>(R[A+1], R[A+2], R[A+3])")                                     \
     _(BYTE_SLICE_LOAD_F32, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<u8>.load<float32>(R[A+1], R[A+2], R[A+3])")                                  \
+      "R[A] = Slice<u8>.load<float32>(R[A+1], R[A+2], R[A+3])")                                    \
     _(BYTE_SLICE_LOAD_F64, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<u8>.load<float64>(R[A+1], R[A+2], R[A+3])")                                  \
+      "R[A] = Slice<u8>.load<float64>(R[A+1], R[A+2], R[A+3])")                                    \
     _(BYTE_SLICE_STORE_U16, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<u8>.store<uint16>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
+      "Slice<u8>.store<uint16>(R[A+1], R[A+2], R[A+3], R[A+4])")                                   \
     _(BYTE_SLICE_STORE_U32, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<u8>.store<uint32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
+      "Slice<u8>.store<uint32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                   \
     _(BYTE_SLICE_STORE_U64, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<u8>.store<uint64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
+      "Slice<u8>.store<uint64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                   \
     _(BYTE_SLICE_STORE_F32, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<u8>.store<float32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                \
+      "Slice<u8>.store<float32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                  \
     _(BYTE_SLICE_STORE_F64, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<u8>.store<float64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                \
+      "Slice<u8>.store<float64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                  \
     _(BYTE_SLICE_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                    \
     _(BYTE_SLICE_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                \
     _(BYTE_SLICE_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                         \
     _(BYTE_SLICE_COMMON_PREFIX, FMT_A, KOP_A_USE, "R[A] = R[A].commonPrefix(R[A+1])")              \
     _(BYTE_SLICE_REPEAT, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \
-    _(SLICE_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asArray<u8>(), C=slot")                 \
+    _(SLICE_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asArray<u8>(), C=slot")                   \
     _(SLICE_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                         \
     _(SLICE_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                     \
     _(SLICE_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                              \
@@ -225,7 +227,7 @@
     _(PLACE_LOAD, FMT_AB, KOP_AB_UNARY, "R[A] = load call-bound place R[B]")                       \
     _(PLACE_STORE, FMT_AB, KOP_AB_STORE, "store R[B] through call-bound place R[A]")               \
     _(STRING_BYTES_SLICE, FMT_ABC, KOP_ABC_BIN,                                                    \
-      "R[A] = borrowed Slice<u8> of string R[B], C=slot")                                        \
+      "R[A] = borrowed Slice<u8> of string R[B], C=slot")                                          \
     _(BYTE_ARRAY_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")       \
     _(BYTE_ARRAY_COPY_FROM, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1], R[A+2], R[A+3], R[A+4])")   \
     _(BYTE_ARRAY_APPEND_FROM, FMT_A, KOP_A_INOUT, "R[A].appendFrom(R[A+1])")                       \
@@ -276,7 +278,12 @@
     _(JSON_PARSE_WITH_REST_IGNORE, FMT_ABC, KOP_ABC_BIN_LIT,                                       \
       "R[A] = parse_with_rest_ignore(R[B]:string, K[C]:WithRestShape)")                            \
     _(GETBUILTIN, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = builtins[Bx]")                               \
-    _(PRINT, FMT_A, KOP_PRINT, "print(R[A], add_space=B, packed=C)")                               \
+    /* One print group: NEW opens the buffer, APPEND renders one operand into                      \
+     * it, FLUSH is the only instruction that touches the output capability. */                    \
+    _(PRINT_GROUP_NEW, FMT_A, KOP_A_LOAD, "R[A] = new print group buffer")                         \
+    _(PRINT_GROUP_APPEND, FMT_ABC, KOP_PRINT_GROUP_APPEND,                                         \
+      "group(R[A]).append(render(R[B])), flags=C")                                                 \
+    _(PRINT_GROUP_FLUSH, FMT_AB, KOP_AB_FLAG, "write group(R[A]) out, terminate=B")                \
     _(TYPEOF, FMT_AB, KOP_AB_UNARY_HINT, "R[A] = typeof(R[B]) -> int")                             \
     _(TYPENAME, FMT_AB, KOP_AB_UNARY_HINT, "R[A] = typename(R[B]) -> string")                      \
     _(DUMP, FMT_AB, KOP_DUMP, "dump(R[A], indent=B)")                                              \
@@ -342,9 +349,8 @@
     _(ASSERTION, FMT_ABC, KOP_SPECIAL, "typed assertion: base=R[A], failure=B, plan-kind=C")       \
     _(ASSERTION_FILE, FMT_ABx, KOP_SPECIAL, "assertion metadata: schema=A, source-file=K[Bx]")     \
     _(ASSERTION_SPAN_START, FMT_SPECIAL, KOP_SPECIAL,                                              \
-      "assertion metadata: packed start line/column")                                             \
-    _(ASSERTION_SPAN_END, FMT_SPECIAL, KOP_SPECIAL,                                                \
-      "assertion metadata: packed end line/column")                                               \
+      "assertion metadata: packed start line/column")                                              \
+    _(ASSERTION_SPAN_END, FMT_SPECIAL, KOP_SPECIAL, "assertion metadata: packed end line/column")  \
     _(REGEX_COMPILE, FMT_ABC, KOP_ABC_BIN_K, "R[A] = regex.compile(K[B], K[C])")                   \
     _(GO, FMT_ABC, KOP_ABC_BIN_LIT,                                                                \
       "R[A]=task = go R[B](R[B+1]..R[B+C&0x7F]), C bit7=fire-and-forget")                          \

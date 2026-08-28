@@ -1838,12 +1838,18 @@ TEST(cgen_simple_arith) {
     char *code = generate_c(ir, "test");
     assert(code != NULL && "C code generation failed");
 
-    assert(contains(code, "printf(\"%lld\", (long long)") &&
-           "native i64 print should use direct printf");
+    /* One source print is one buffered group reaching stdout exactly once, so
+     * the operand renders into the group rather than through its own writer. */
+    assert(count_between(code, code + strlen(code), "xrt_print_group_begin(") == 1 &&
+           "one group buffer per source print");
+    assert(count_between(code, code + strlen(code), "xrt_print_group_flush(") == 1 &&
+           "one write per source print");
+    assert(count_between(code, code + strlen(code), "xrt_print_group_append(") == 1 &&
+           "one append per operand");
     assert(!contains(code, "xrt_println(") && !contains(code, "xrt_print(") &&
-           "native i64 print should not call the generic tagged printer");
-    assert(!contains(code, "XR_FROM_INT(v") &&
-           "print-only i64 boxes should be elided from generated C");
+           "a print operand must not call the unbuffered printer");
+    assert(!contains(code, "printf(\"%lld\"") && !contains(code, "putchar(") &&
+           "nothing but the group flush may write the group's bytes");
     /* The native process entry point follows the host C ABI. Source-language
      * exact scalar names must never leak into this generated signature. */
     assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
@@ -4283,10 +4289,14 @@ TEST(cgen_variable_and_print) {
 
     /* Should contain the constant 42 */
     assert(contains(code, "42") && "should contain constant 42");
-    assert(contains(code, "printf(\"%lld\", (long long)") && contains(code, "putchar('\\n')") &&
-           "native i64 print should use direct printf/putchar");
+    /* The terminator joins the buffer instead of being a second write, so the
+     * group leaves as one call and cannot be split by a concurrent group. */
+    assert(contains(code, "xrt_print_group_flush(&_xprint_group_") &&
+           "print must terminate through the group flush");
+    assert(!contains(code, "putchar('\\n')") &&
+           "the terminator must ride the group, not a separate write");
     assert(!contains(code, "xrt_println(") && !contains(code, "xrt_print(") &&
-           "native i64 print should not call the generic tagged printer");
+           "a print operand must not call the unbuffered printer");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4373,8 +4383,8 @@ TEST(cgen_multi_print) {
     assert(contains(code, "10") && "should contain 10");
     assert(contains(code, "20") && "should contain 20");
     assert(contains(code, "+") && "should contain addition");
-    assert(contains(code, "printf(\"%lld\", (long long)") &&
-           "native i64 print should use direct printf");
+    assert(contains(code, "xrt_print_group_append(&_xprint_group_") &&
+           "the summed operand renders into the group buffer");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);

@@ -351,7 +351,8 @@ bool xr_print_plan_validate(const XrPrintPlan *plan) {
         plan->separator != XR_PRINT_SEPARATOR_SPACE ||
         plan->terminator != XR_PRINT_TERMINATOR_NEWLINE ||
         plan->effect <= XR_CORE_INTRINSIC_EFFECT_NONE ||
-        plan->effect >= XR_CORE_INTRINSIC_EFFECT_COUNT || plan->flags != XR_PRINT_PLAN_FLAG_NONE ||
+        plan->effect >= XR_CORE_INTRINSIC_EFFECT_COUNT ||
+        plan->flags != XR_PRINT_PLAN_FLAG_ATOMIC_GROUP ||
         (plan->required_capabilities & ~XR_PRINT_CAPABILITY_ALL) != 0 ||
         plan->required_capabilities != XR_PRINT_CAPABILITY_OUTPUT_WRITE)
         return false;
@@ -394,7 +395,9 @@ XrPrintPlanStatus xr_print_plan_build(XrCoreBuiltinId builtin_id, uint16_t arity
     out->effect = desc->effect;
     out->target = target;
     out->required_capabilities = XR_PRINT_CAPABILITY_OUTPUT_WRITE;
-    out->flags = XR_PRINT_PLAN_FLAG_NONE;
+    /* Every executor renders the whole group before it writes, so the plan
+     * states that rather than leaving each backend to promise it separately. */
+    out->flags = XR_PRINT_PLAN_FLAG_ATOMIC_GROUP;
     out->arity = arity;
     return xr_print_plan_validate(out) ? XR_PRINT_PLAN_OK : XR_PRINT_PLAN_INVALID_SCHEMA;
 }

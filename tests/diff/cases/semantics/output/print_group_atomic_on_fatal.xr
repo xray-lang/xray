@@ -1,0 +1,27 @@
+// anchor: print-group-atomic-fatal-formatter
+// The companion to the recovering case: here the formatter's panic is never
+// caught, so the program ends inside the group. What reached the stream before
+// it ended is the whole question, and the answer must be nothing -- the two
+// operands that had already rendered stay in the discarded buffer.
+//
+// This variant carries no closure, so both backends can build it. The
+// recovering case needs assertPanics, whose closure call the AOT target layer
+// cannot yet express.
+
+class Explodes {
+    label: string
+
+    constructor(label) {
+        this.label = label
+    }
+
+    toString() -> string {
+        var zero = 0
+        var ignored = 1 / zero
+        return this.label
+    }
+}
+
+print("-- before --")
+print("head", "middle", Explodes("x"))
+print("-- unreachable --")
