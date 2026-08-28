@@ -66,12 +66,26 @@
 它既不超时也不报诊断，就是安静地多出一条"这个用例不能构建"。
 
 本 lane 实际踩到：pkill 掉超时的 `backend_diff_embedded` 后重跑，13 个残留锁让 runner
-空转三分半。清理（只清自己 worktree 的，注意 `-type d`，同目录下的 `.cache-root.lock`
-是普通文件不该删）：
+空转三分半。
+
+清理有**两条**限定，缺一条都会出事。先看，再删：
 
 ```bash
-find .cache/xray-test -name "*.lock" -type d -exec rmdir {} \; 2>/dev/null
+find .cache/xray-test -name "*.lock" -type d -exec ls -ld {} \;
 ```
+
+```bash
+find .cache/xray-test -name "*.lock" -type d \
+     -not -newermt "<你上次启动测试的时刻>" -exec rmdir {} \;
+```
+
+- `-type d`：`DirLock` 的锁是**目录**；同一片缓存下的
+  `aot-objects/<tag>/O0/aot/<triple>/.cache-root.lock` 是**普通文件**，不该一起删。
+- `-not -newermt <时刻>`：**只清死锁**。`rmdir` 删得掉活锁（`DirLock` 建的是空目录），
+  删掉就等于拆掉正在跑的测试的互斥保护，两个进程会同时构建同一个二进制。
+  10 号在自己的树上实测：11 个锁里只有 3 个是死的，无限定的命令会连删 8 个活锁。
+
+**只清自己 worktree 的，且只清自己的死的。**
 
 **归因纪律**：凡是 kill 过 diff lane 的树，重跑前必须先清锁；重跑结果里出现
 `cannot lock binary cache` 的用例一律不可归因。
@@ -190,6 +204,24 @@ tests/diff/cases/semantics/types/object_optional_sparse_fields.xr
 执行要动 `diagnostic-codes.toml` 与 `src/aot/refine/xr_aot_refinement.h`，
 超出本 lane 的 `tests/diff/` 范围，记为独立工作项。
 
+**但裁决要落地还差一个条件，写阻塞单时才挖出来**：
+`unknown_code = "error"` **在 AOT 上从未生效过**。执行它的
+`scripts/target_machine_phase0.py:601-625` 的 `unregistered_emitted_codes()` 是**闭世界**扫描——
+它的正则 alternation 只由 toml 已注册的 6 个族前缀拼出，`XR_AOT_` 从不在内，
+而且要求前缀后紧跟 4 位数字，这些枚举名根本没有编号。
+所以不是这一族溜过去了，是**闸看不见它这一类**：实测把该函数原样跑一遍，
+它在 `src/` 里只看得见 54 个码、全部已注册、**闸是绿的**，
+同时 28 个枚举名正流向用户终端。
+
+规模也不止一族。AOT 下有**三族共 54 个裸标识符**在注册表之外
+（`XrAotRefinementIssue` 28 + `XaotBackendContractIssue` 15 + `XrAotTailCallConformanceIssue` 11），
+而 toml 注册总数是 55——**一套和注册表等体量的影子诊断词表**。
+更糟的是 `contracts/target-machine/baseline-manifest.json:184` 已经在拿其中一个枚举名当
+finding 标识，**契约语料已经在依赖一个没有任何东西保证其稳定的名字**。
+
+因此建议把"phase0 改成开世界扫描"并进那个工作项的验收条件：
+不改它，注册完这一族之后，下一族裸标识符会以同样方式再长出来，而且照样没人看得见。
+
 **一条待坐实的线索**：10 号在
 `xray-docs/analysis/parallel-round-3-integration-decisions-2026-08-28-cn.md` §5.1 记录了
 `representation_recipe`（`xr_aot_refinement.c:367-395`）与 `oracle_representation_recipe`
@@ -199,10 +231,19 @@ tests/diff/cases/semantics/types/object_optional_sparse_fields.xr
 他标注"疑与 `SCHEMA_UNAVAILABLE` 那一族现存失败有关，待坐实"。
 
 本 lane 尝试用操作数坐实，**结论是操作数坐实不了**：67 条的 `operation=` 有 36 个不同值、
-`value=` 有 37 个，最大的一组只有 4 条——这两个数字是**用例内的操作序号**，不是操作种类，
-按它们分组没有结构意义。要连上 §5.1 需要 `XRAY_AOT_REFINE_TRACE=1` 级别的探针，
-不是日志文本能给的。这条已写进
-`blockers/r3-1-aot-refinement-family-ungoverned.md` 作为下一步。
+`value=` 有 37 个，最大的一组只有 4 条。原因是 `rep_trace_refusal()` 自己印明的：
+`operation=` 是**使用点的语义 operation 索引**，不是 opcode、不是定义点，
+trace 甚至专门印一行 "the two indexes are unrelated" 防误读；
+那 12 条整齐的 `4294967295` 是 `XR_SEMANTIC_INDEX_NONE` 哨兵。
+36 只是"67 个程序里第一个炸掉的语句各自排第几"。
+
+**换用仓库已有的两个开关（`XRAY_AOT_REFINE_TRACE` / `XRAY_COLLECT_ALL_REFUSALS`，
+没为取数改过一行代码）测出了真正的轴**：67 条构建期用例共 **614 个被拒 operand**，
+其中 **613 条的 `required rep` 是 `unnamed`**——pass 绝大多数时候根本没走到"选 representation"
+那一步。分组单位是 **(拒绝阶段, opcode 分支)**，共 **55 个**，长尾极平：
+贪心最优也要 **26 个分支才过半**（39/67），单个分支最高只能独立清零 2 条。
+**这一族既不是一个缺口，也不是几十个高价值缺口**——它是 55 个各值 1–2 条的分支。
+细节与 §5.1 的下一步都在 `blockers/r3-1-aot-refinement-family-ungoverned.md`。
 
 ### 3.4 51 条不是 AOT 覆盖缺口
 
@@ -314,6 +355,33 @@ A lane 把 `time` 迁成 `.xr` 源，这个用例就从"单模块"变成"两模�
 
 **按纪律不把这四条加进清单。** 规则明写"不许为让改动变绿而加行"，而且加进去等于把
 "stdlib 迁移正在扩大 AOT 覆盖缺口"这条事实盖住。它们属于 4 号的 `XR_TARGET_1000`。
+
+### 3.8 落盘后的 gate 实测
+
+改动落盘后跑了一次完整 `backend_diff`（直跑 runner，绕开 ctest 在有负载的机器上必撞的
+900s 上限；`XRAY_DIFF_JOBS=3`、`XRAY_TOOLCHAIN_PROBE_SCALE=16`、`XRAY_TEST_CASE_TIMEOUT=900`）：
+
+```
+=== Results: 161 passed, 0 failed, 514 refused, 1 skipped ===
+Ratchet: 0 diverging, 0 baselined.
+
+=== Cases that stopped building (not in tests/diff/known_failures_not_comparable.txt) ===
+  tests/diff/cases/semantics/modules/value_struct_arg_alias_import.xr
+  tests/diff/cases/semantics/modules/value_struct_arg_without_type_import.xr
+  tests/diff/cases/semantics/modules/value_struct_copy_without_type_import.xr
+  tests/diff/cases/semantics/stdlib/time_query_system_direct.xr
+Coverage: 514 not comparable, 510 listed.
+```
+
+三件事由此坐实：
+
+1. **`=== Listed cases now build ===` 这一段没有出现**——510 条里没有一条现在能构建，
+   说明删掉的 5 条删对了，一条不多一条不少。
+2. **`0 failed` / `0 diverging`**——native lane 上没有 VM/AOT 输出分歧。
+3. **唯一红点是 §3.7 那四条清单外的用例**（`514 - 510 = 4`）。
+
+伪影检索在这次运行上同样是三个零（`cannot lock binary cache` / `no provider reached READY` /
+`timed out after`），而这次是在 load 55–97 下跑的——`PROBE_SCALE` 从 4 提到 16 顶住了。
 
 ---
 
@@ -464,7 +532,8 @@ XRAY_TOOLCHAIN_PROBE_SCALE=16 XRAY_TEST_CASE_TIMEOUT=900 XRAY_DIFF_JOBS=6 \
 **3. 归因之前先排除三种伪造拒绝。** 全部在 §2 有实证：`***Timeout`（一眼可见）、
 `no provider reached READY`（长得像真诊断，是探针在负载下超时）、
 `cannot lock binary cache`（最阴，来自被 kill 的 lane 留下的残留锁，静默多出一条"不能构建"）。
-kill 过 diff lane 的树，重跑前先清锁。
+kill 过 diff lane 的树，重跑前先清锁——**只清自己 worktree 的死锁**，
+两条限定（`-type d` 与 `-not -newermt`）见 §2，无限定的清理会删掉别的测试正在持有的活锁。
 
 **4. 分布对照的键必须是 `(诊断码, 归一化消息)` 二元组，不能只用码。** §3.2 给了理由，
 本轮另有两条独立验证：同一个 `XR_SEM_0019` 在两条线上分别是
@@ -472,3 +541,26 @@ kill 过 diff lane 的树，重跑前先清锁。
 "native module scalar call authority is not exact"，是完全不同的缺陷；
 `XR_AOT_REFINEMENT_REPRESENTATION` 与 `..._SCHEMA_UNAVAILABLE` 是相邻的两个 `return`，
 只看码会当成同一族。清单的行内注释存的正是这个二元组，`grep` 即可，不必解析 JSON。
+
+---
+
+## 11. 这份普查的时效性：`XR_TARGET_1000` 那 90 条会整体移动
+
+本普查是 `00f665c5c` 的快照。写完时 4 号的 L1 已经合进集成候选分支（merge `3d094161c`），
+它做的正是拆开本文 §3.1.1 那条 guard 背后的根因：
+
+> 拓扑权威（这个模块集合是否规范）与可执行切片权威（这些函数能否直接调用）原本是**一个指针**。
+> 第二个只对两个非常窄的族成立，于是第一个被拖下水，每个多模块程序都被拒绝。
+
+所以合并后**必须重跑**，而且预期不是"90 条解封"，是"90 条换一个首次拒绝"——
+guard 是浅层的，它挡在真正的能力判据前面（§3.7 对四条 `value_struct` 用例给出了同一结论）。
+重跑用 §10 第 2 条那一条命令，runner 自己报
+`=== Listed cases now build; delete these entries ===`。
+
+**度量 L1 价值时的一个陷阱**：那一段的行数是"相对于清单"的，而清单是在 `00f665c5c` 上测的。
+集成候选分支上除 L1 外还有 7 号的等价抽取（`f36a2e41e`）。要把贡献归干净，
+应当在**合并前的树上先跑一次同样的命令做对照**，取差值。
+
+四条 §3.7 的 `value_struct` / `time_query` 用例在 L1 后停在哪一层，是另一件值得单独看的事：
+它们会露出下一层，而下一层可能就是上一轮 E lane 记录的
+`is_value_type` 两层分歧——那个缺陷一直被这条 guard 挡在视线之外。
