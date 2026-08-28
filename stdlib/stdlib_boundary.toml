@@ -157,7 +157,7 @@ policy = "xray_semantic"
 semantic_source = "stdlib/regex/regex.xr"
 factory_source = "stdlib/regex/xregex_binding.c"
 factory_symbol = "regex"
-public_native = ["Regex", "Regex.find", "Regex.findAll", "Regex.findGroup", "Regex.findText", "Regex.replace", "Regex.split", "Regex.test", "RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text", "find", "findAll", "fullFind"]
+public_native = ["RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text", "find", "findAll", "fullFind"]
 private_native_sources = ["stdlib/regex/*.c"]
 private_native_reason = "Mature regex automata implementation with bounded native data structures"
 perf_suite = "stdlib/regex"
@@ -176,7 +176,7 @@ factory_source = "stdlib/mem/mem.c"
 # lower to backend ops rather than calls, and pageAlloc declares two arities
 # that select two AOT entry points, which Xray cannot express without function
 # overloading.
-public_native = ["Buffer", "Buffer.asBytes", "Buffer.asMutBytes", "Buffer.borrowPtr", "Buffer.resize", "addr", "alignOf", "assumeInitialized", "load", "mutPtr", "offsetOf", "pageAlloc", "ptr", "sizeOf", "slice", "store", "withSliceMut"]
+public_native = ["addr", "alignOf", "assumeInitialized", "load", "mutPtr", "offsetOf", "pageAlloc", "ptr", "sizeOf", "slice", "store", "withSliceMut"]
 private_native_sources = ["stdlib/mem/mem.c"]
 private_native_reason = "Private fence, cache, allocation, page, address and bulk-byte leaves consumed by mem.xr"
 perf_suite = "stdlib/mem"
@@ -355,7 +355,7 @@ layer = "L2"
 policy = "xray_semantic"
 semantic_source = "stdlib/net/net.xr"
 factory_source = "stdlib/net/net.c"
-public_native = ["NetConn", "NetConn.close", "NetConn.fd", "NetConn.isClosed", "NetConn.isTLS", "NetError", "NetListener", "NetListener.close", "NetListener.fd", "NetListener.isClosed", "NetListener.port"]
+public_native = ["NetError"]
 private_native_sources = ["stdlib/net/*.c"]
 private_native_reason = "Private socket, TLS, deadline and netpoll primitives consumed by net.xr"
 perf_suite = "stdlib/net"

@@ -845,9 +845,18 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                 continue
             vm = str(getattr(entry, "vm", "") or "")
             aot = str(getattr(entry, "aot", "") or "")
-            is_leaf = symbol.startswith("__") or str(
-                getattr(entry, "visibility", "")
-            ) == "internal"
+            # A leaf is a `fn` row that reaches C with an ownership and an
+            # effect to record. Every declaration kind carries a visibility
+            # now, but a class declaration, a method binding or a field is not
+            # a call into C, and the allowlist schema has no shape for one:
+            # classify_leaf checks a record's ownership against the row's
+            # return_ownership, which only a fn row declares. Reading
+            # visibility off any entry would file each internal class and
+            # method as an unclassified leaf and turn the allowlist gate red
+            # for rows it cannot describe.
+            is_leaf = symbol.startswith("__") or (
+                type(entry).__name__ == "StdlibEntry" and entry.is_internal
+            )
             c_body = c_by_name.get(vm, "")
             if vm and vm in c_by_name:
                 attributed_c[name].add(vm)

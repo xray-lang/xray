@@ -26,19 +26,7 @@ TERMINAL_STDLIB_MODULE_COUNT = 33
 L2_PUBLIC_NATIVE = {
     "io": set(),
     "os": set(),
-    "net": {
-        "NetConn",
-        "NetConn.close",
-        "NetConn.fd",
-        "NetConn.isClosed",
-        "NetConn.isTLS",
-        "NetError",
-        "NetListener",
-        "NetListener.close",
-        "NetListener.fd",
-        "NetListener.isClosed",
-        "NetListener.port",
-    },
+    "net": {"NetError"},
 }
 CONTRACT_FILES = ("contract.toml", "cases.jsonl", "diff_cases.txt")
 ABI_EVIDENCE = {
