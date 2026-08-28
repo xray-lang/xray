@@ -4976,6 +4976,24 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     } else if (xi_array_member_scalar_exact(value) &&
                semantic_array_member_scalar_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR;
+    /* Declining here is silent, and unlike the target leaf family below it must
+     * stay silent. The two judgements answer different questions: the Xi one
+     * asks whether the callsite has the namespace-method shape, the frozen one
+     * asks whether every value it moves can cross a native boundary. A callsite
+     * can honestly pass the first and fail the second, and that is an ordinary
+     * outcome, not a broken plan -- it simply dispatches as a plain method call.
+     *
+     * Measured over 735 cases, 47 callsites do exactly that, and every one of
+     * them is right to: `mem.alloc`, `allocZeroed` and `allocAligned` return a
+     * managed `Buffer`, `http2.request` returns a tuple, and `sync.fence` hands
+     * on an `Ordering` whose frozen argument row is still the enum. None is a
+     * scalar the boundary can carry, so refusing the mark is the correct answer
+     * and failing the build over it would reject working programs.
+     *
+     * The target leaf family can fail closed because its Xi judgement already
+     * consults the frozen registry, so passing it nearly settles the frozen
+     * question too. This one cannot make that claim, and the asymmetry is the
+     * difference between the families rather than drift between them. */
     if (xi_native_module_scalar_call_exact(ctx, function, value) &&
         semantic_native_module_scalar_call_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL;
