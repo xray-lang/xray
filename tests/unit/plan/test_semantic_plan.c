@@ -2794,7 +2794,7 @@ static void test_xsm_roundtrip_and_determinism(void) {
 
 static void test_xsm_program_provenance_roundtrip(void) {
     REQUIRE(XR_SEMANTIC_SCHEMA_VERSION == UINT32_C(43));
-    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(6));
+    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(7));
     REQUIRE(XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION == UINT32_C(4));
     XrSemanticPlan *plan = build_xsm_scalar_program_plan();
     const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(plan);
@@ -3119,10 +3119,8 @@ static void test_xsm_program_provenance_codec_budgets(void) {
     char error[512] = {0};
     REQUIRE(xr_xsm_encode(plan, &bytes, &size, error, sizeof(error)));
     const uint32_t limits[5] = {
-        XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPES,
-        XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPE_FIELDS,
-        XR_PROGRAM_SEMANTIC_CLOSURE_MAX_FUNCTIONS,
-        XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES,
+        XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPES,     XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPE_FIELDS,
+        XR_PROGRAM_SEMANTIC_CLOSURE_MAX_FUNCTIONS, XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES,
         XR_PROGRAM_SEMANTIC_CLOSURE_MAX_CALLS,
     };
     for (uint32_t i = 0; i < 5; i++) {
