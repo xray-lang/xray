@@ -59,9 +59,15 @@ static void xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule 
 #endif  /* XR_STDLIB_VM_BIND_MODULE_COMPRESS */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_CRYPTO
-static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
     XRS_EXPORT(module, isolate, "__randomBytes", crypto_random_bytes_raw);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__timingSafeEqualBytes", crypto_timing_safe_equal_bytes);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 
@@ -333,7 +339,7 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT(module, isolate, "__systemUsername", os_system_username);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__homedir", os_homedir);
+    XRS_EXPORT(module, isolate, "__systemHomedir", os_system_homedir);
     expected_count++;
     XRS_EXPORT(module, isolate, "__uid", os_uid);
     expected_count++;
@@ -384,12 +390,21 @@ static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *mo
 #endif  /* XR_STDLIB_VM_BIND_MODULE_REGEX */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_RUNTIME
-static void xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
     XRS_EXPORT(module, isolate, "__stats", runtime_stats);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__liveBytes", runtime_live_bytes);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__liveObjects", runtime_live_objects);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__sharedLiveBytes", runtime_shared_bytes);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__staticAllocBytes", runtime_static_bytes);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_RUNTIME */
 

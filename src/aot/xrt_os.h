@@ -288,14 +288,13 @@ static inline XrValue xrt_os_system_username(void) {
 #endif
 }
 
-static inline XrValue xrt_os_homedir(void) {
-#ifdef _WIN32
-    const char *home = xr_os_core_homedir(xrt_os_core_getenv, NULL, NULL, NULL);
+static inline XrValue xrt_os_system_homedir(void) {
+#if defined(XR_OS_WINDOWS)
+    return XR_NULL_VAL;
 #else
-    const char *home =
-        xr_os_core_homedir(xrt_os_core_getenv, NULL, xrt_os_core_system_homedir, NULL);
+    struct passwd *pw = getpwuid(getuid());
+    return (pw && pw->pw_dir) ? xrt_os_cstr_value(pw->pw_dir) : XR_NULL_VAL;
 #endif
-    return xrt_os_cstr_value(home);
 }
 
 static inline XrValue xrt_os_ppid(void) {

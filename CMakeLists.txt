@@ -2544,14 +2544,51 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    add_custom_target(stdlib-self-hosting-complete
+    add_custom_target(stdlib-governance-agreement
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/report_stdlib_self_hosting.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 --require-complete
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         VERBATIM
-        COMMENT "Checking final task-196 stdlib self-hosting completion criteria"
+        COMMENT "Checking every stdlib module agrees with its recorded policy"
+    )
+
+    # The per-symbol gates below are custom targets rather than tests: they
+    # report residue the standard library still carries, so they fail on
+    # purpose today and would make an ordinary test run red for a state
+    # everyone already knows about.
+    add_custom_target(stdlib-symbol-inventory
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stdlib_symbol_inventory.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --check
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+        COMMENT "Checking every stdlib symbol and C function reaches an inventory row"
+    )
+
+    add_custom_target(stdlib-backend-probe
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/probe_stdlib_backends.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --xray $<TARGET_FILE:xray>
+                --json ${CMAKE_CURRENT_BINARY_DIR}/stdlib-backend-probe.json
+        DEPENDS xray
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+        COMMENT "Measuring VM and AOT outcomes for every stdlib module probe"
+    )
+
+    add_custom_target(stdlib-full-xray-completion
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_full_xray_completion.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --probe-json ${CMAKE_CURRENT_BINARY_DIR}/stdlib-backend-probe.json
+        DEPENDS stdlib-backend-probe
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+        COMMENT "Checking stdlib public semantics are owned by Xray source"
     )
 
     add_custom_target(stdlib-module-merge-check

@@ -272,18 +272,18 @@ static XrValue os_system_username(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // homedir() - Get user home directory
-static XrValue os_homedir(XrVMRuntime *X, XrValue *args, int argc) {
+/* The host's own answer only; the environment chain is the module's Xray body. */
+static XrValue os_system_homedir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 #ifdef XR_OS_WINDOWS
-    const char *home = xr_os_core_homedir(os_core_getenv, NULL, NULL, NULL);
+    return xr_null();
 #else
-    const char *home = xr_os_core_homedir(os_core_getenv, NULL, os_core_system_homedir, NULL);
+    struct passwd *pw = getpwuid(getuid());
+    return (pw && pw->pw_dir) ? xrs_string_value_c(X, pw->pw_dir) : xr_null();
 #endif
-    return home ? xrs_string_value_c(X, home) : xr_null();
 }
 
-// uid() - Get user ID
 static XrValue os_uid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;

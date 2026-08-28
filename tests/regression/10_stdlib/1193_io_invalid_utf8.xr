@@ -1,0 +1,50 @@
+// Reading a file whose bytes are not valid UTF-8 answers null rather than
+// publishing a string with no payload. Interning rejects such bytes and
+// answers NULL; the value constructor only asserts against that, so an
+// optimized build used to hand back a string that faulted on first use.
+
+import io
+import path
+
+fn writeInvalidUtf8(target: Path) {
+    var bytes = Array<u8>()
+    bytes.push(255)
+    bytes.push(254)
+    bytes.push(0)
+    bytes.push(128)
+    bytes.push(98)
+    bytes.push(97)
+    bytes.push(100)
+    io.writeFileBytes(target, bytes)
+}
+
+@test
+fn test_read_file_rejects_invalid_utf8() {
+    var tmp = io.tempFile()!
+    writeInvalidUtf8(tmp)
+    // Compared with `==` rather than assertEqual: a string value carrying a
+    // NULL payload compares equal to null under assertEqual while `==`
+    // reports it as non-null, so only `==` distinguishes the defect.
+    assert(io.readFile(tmp) == null)
+    io.remove(tmp)
+}
+
+@test
+fn test_read_file_bytes_still_returns_the_raw_bytes() {
+    var tmp = io.tempFile()!
+    writeInvalidUtf8(tmp)
+    var raw = io.readFileBytes(tmp)
+    assert(raw != null)
+    assertEqual(len(raw!), 7)
+    assertEqual(raw![0], 255)
+    io.remove(tmp)
+}
+
+@test
+fn test_valid_utf8_is_unaffected() {
+    var tmp = io.tempFile()!
+    io.writeFile(tmp, "hello\nworld\n")
+    assertEqual(io.readFile(tmp) ?? "", "hello\nworld\n")
+    assertEqual(len(io.readLines(tmp)), 2)
+    io.remove(tmp)
+}

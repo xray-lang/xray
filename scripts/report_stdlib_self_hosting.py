@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Emit the task-196 source-derived stdlib self-hosting governance report."""
+"""Emit the source-derived stdlib governance report.
+
+What this report checks is agreement: every module's contracts, oracles,
+benchmarks and declared surface match the policy recorded against it in the
+boundary manifest. A module implemented entirely in C agrees with a policy
+that says so, so agreement holds while no public semantics are owned by Xray
+source at all.
+
+Whether the standard library owns its public semantics in Xray is a different
+question, decided per symbol rather than per module, and answered by
+`check_stdlib_full_xray_completion.py`. Neither report subsumes the other.
+"""
 
 from __future__ import annotations
 
@@ -96,24 +107,24 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
         for contract in contracts
         if contract.get("legacy_oracle") != "executable"
     )
-    completion_blockers: list[dict[str, Any]] = []
+    agreement_blockers: list[dict[str, Any]] = []
     if dynamic_report.get("migration_debt_count", 0):
-        completion_blockers.append(
+        agreement_blockers.append(
             {
                 "kind": "dynamic_migration_debt",
                 "count": dynamic_report["migration_debt_count"],
             }
         )
     if missing_contracts:
-        completion_blockers.append(
+        agreement_blockers.append(
             {"kind": "missing_correctness_contracts", "modules": missing_contracts}
         )
     if missing_benchmarks:
-        completion_blockers.append(
+        agreement_blockers.append(
             {"kind": "missing_active_benchmarks", "suites": missing_benchmarks}
         )
     if non_executable_legacy:
-        completion_blockers.append(
+        agreement_blockers.append(
             {"kind": "non_executable_legacy_oracles", "modules": non_executable_legacy}
         )
 
@@ -121,8 +132,8 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
         "schema": 1,
         "status": {
             "consistent": not errors,
-            "complete": not errors and not completion_blockers,
-            "completion_blockers": completion_blockers,
+            "policy_agreement": not errors and not agreement_blockers,
+            "policy_agreement_blockers": agreement_blockers,
         },
         "public_symbols_by_semantic_owner": {
             owner: {"count": len(set(symbols)), "symbols": sorted(set(symbols))}
@@ -153,7 +164,7 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
 
 
 def render_markdown(report: dict[str, Any]) -> str:
-    lines = ["# Xray stdlib self-hosting governance report", ""]
+    lines = ["# Xray stdlib governance report", ""]
     modules = report["modules"]
     lines.append(f"Registered modules: {modules['count']}")
     lines.append("")
@@ -167,7 +178,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "## Governance status",
             "",
             f"- Source consistency: {report['status']['consistent']}",
-            f"- Self-hosting complete: {report['status']['complete']}",
+            f"- Policy agreement: {report['status']['policy_agreement']}",
             f"- Native boundary modules: {len(report['remaining_native_boundaries'])}",
             f"- Dynamic migration debts: {report['dynamic_surface']['migration_debt_count']}",
             f"- Approved VM fastpaths: {len(report['vm_fastpaths'])}",
@@ -185,8 +196,19 @@ def main() -> int:
     parser.add_argument("--root", default=".")
     parser.add_argument("--json", type=Path)
     parser.add_argument("--markdown", type=Path)
-    parser.add_argument("--check", action="store_true")
-    parser.add_argument("--require-complete", action="store_true")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify the report is source-derived and internally consistent",
+    )
+    parser.add_argument(
+        "--require-complete",
+        action="store_true",
+        help=(
+            "require every module to agree with its recorded policy; this is "
+            "governance agreement, not Xray ownership of public semantics"
+        ),
+    )
     args = parser.parse_args()
     root = Path(args.root).resolve()
     errors, report = build_report(root)
@@ -204,15 +226,22 @@ def main() -> int:
     if not args.json and not args.markdown and not args.check and not args.require_complete:
         print(encoded, end="")
     if args.check:
-        print("OK: stdlib self-hosting report is source-derived and consistent")
+        print("OK: stdlib governance report is source-derived and consistent")
     if args.require_complete:
-        blockers = report["status"]["completion_blockers"]
+        blockers = report["status"]["policy_agreement_blockers"]
         if blockers:
-            print("stdlib self-hosting completion gate failed:", file=sys.stderr)
+            print("stdlib governance gate failed:", file=sys.stderr)
             for blocker in blockers:
                 print(f"  {blocker['kind']}: {json.dumps(blocker, sort_keys=True)}", file=sys.stderr)
             return 1
-        print("OK: stdlib self-hosting completion gate passed")
+        print(
+            "OK: stdlib governance gate passed -- every module's contracts, "
+            "oracles, benchmarks and declared surface agree with its recorded policy"
+        )
+        print(
+            "This gate does not check that public semantics are owned by Xray "
+            "source; check_stdlib_full_xray_completion.py is the gate that does"
+        )
     return 0
 
 

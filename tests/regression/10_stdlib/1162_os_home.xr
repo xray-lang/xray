@@ -1,0 +1,30 @@
+// homedir consults the environment before the host's own record, which is
+// what lets a process redirect its home directory. An empty value is not an
+// answer and does not stop the chain.
+
+import os
+
+@test
+fn test_environment_wins_over_the_host_record() {
+    var saved = os.getenv("HOME")
+    assert(os.setenv("HOME", "/tmp/xray-home-probe"))
+    assertEqual(os.homedir() ?? "", "/tmp/xray-home-probe")
+    if (saved != null) { os.setenv("HOME", saved!) }
+}
+
+@test
+fn test_an_empty_value_is_not_an_answer() {
+    var saved = os.getenv("HOME")
+    assert(os.setenv("HOME", ""))
+    // Falls through to the host record rather than answering the empty string.
+    var home = os.homedir()
+    assert(home == null || len(home!) > 0)
+    if (saved != null) { os.setenv("HOME", saved!) }
+}
+
+@test
+fn test_answers_something_in_a_normal_environment() {
+    var home = os.homedir()
+    assert(home != null)
+    assert(len(home!) > 0)
+}
