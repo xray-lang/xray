@@ -1,8 +1,13 @@
 import compress
 
+fn textOf(data: Array<u8>) -> string {
+    return string.fromUtf8(data[:])!
+}
+
 fn invalidGunzipError() -> string {
+    var payload = "not gzip"
     try {
-        compress.gunzip("not gzip")
+        compress.gunzip(payload.bytes())
         return "no-error"
     } catch (e: CompressionError) {
         return e.toString()
@@ -10,8 +15,9 @@ fn invalidGunzipError() -> string {
 }
 
 fn invalidInflateError() -> string {
+    var payload = "not deflate"
     try {
-        compress.inflate("not deflate")
+        compress.inflate(payload.bytes())
         return "no-error"
     } catch (e: CompressionError) {
         return e.toString()
@@ -19,8 +25,9 @@ fn invalidInflateError() -> string {
 }
 
 fn invalidZlibDecompressError() -> string {
+    var payload = "not zlib"
     try {
-        compress.zlibDecompress("not zlib")
+        compress.zlibDecompress(payload.bytes())
         return "no-error"
     } catch (e: CompressionError) {
         return e.toString()
@@ -28,16 +35,16 @@ fn invalidZlibDecompressError() -> string {
 }
 
 var text = "typed native gzip error"
-var gz = compress.gzip(text)!
-print(compress.gunzip(gz) == text)
+var gz = compress.gzip(text.bytes())
+print(textOf(compress.gunzip(gz[:])) == text)
 print(invalidGunzipError())
 
 var raw = "typed native inflate error"
-var deflated = compress.deflate(raw)!
-print(compress.inflate(deflated) == raw)
+var deflated = compress.deflate(raw.bytes())
+print(textOf(compress.inflate(deflated[:])) == raw)
 print(invalidInflateError())
 
 var wrapped = "typed native zlib error"
-var zlibbed = compress.zlibCompress(wrapped)!
-print(compress.zlibDecompress(zlibbed) == wrapped)
+var zlibbed = compress.zlibCompress(wrapped.bytes())
+print(textOf(compress.zlibDecompress(zlibbed[:])) == wrapped)
 print(invalidZlibDecompressError())

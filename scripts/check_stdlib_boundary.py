@@ -134,9 +134,11 @@ def check_builtin_distribution(root: Path) -> list[str]:
 
     ws left this set once its connection layer became pure Xray: it now has no
     core.def binding block and, like http, carries only a script factory.
+    compress left it the same way -- its coder is stated in compress.xr, so it
+    has neither a binding block nor a native factory to register.
     """
     errors: list[str] = []
-    expected = {"cluster", "http2", "compress", "crypto"}
+    expected = {"cluster", "http2", "crypto"}
     manifest = load_manifest(root)
     names = set(manifest.by_name)
     core_def = (root / "stdlib/defs/core.def").read_text(encoding="utf-8")

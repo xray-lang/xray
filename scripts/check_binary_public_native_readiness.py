@@ -43,7 +43,7 @@ L2_PUBLIC_NATIVE = {
 CONTRACT_FILES = ("contract.toml", "cases.jsonl", "diff_cases.txt")
 ABI_EVIDENCE = {
     "tests/unit/api/test_compress_native_error_abi.py": (
-        "stdlib/compress/compress.c",
+        "stdlib/compress/compress.xr",
         "CompressionError.InvalidData",
         "test_vm_native_aot_typed_catch_parity",
     ),
@@ -115,10 +115,13 @@ def check_boundary(
             if entry.get("perf_suite") != f"stdlib/{module}":
                 failures.append("perf_suite must use the stdlib namespace")
             semantic_source = root / str(entry.get("semantic_source", ""))
-            factory = root / str(entry.get("factory_source", ""))
             if not semantic_source.is_file():
                 failures.append("semantic_source is missing")
-            if not factory.is_file():
+            # A module that has finished its cutover has no native factory to
+            # point at -- compress states its coder in compress.xr and registers
+            # nothing -- so the file only has to exist when it is declared.
+            factory_source = str(entry.get("factory_source", ""))
+            if factory_source and not (root / factory_source).is_file():
                 failures.append("factory source is missing")
         results.append(result("BUILTIN_STDLIB_MODULE", module, failures))
 
@@ -154,7 +157,9 @@ def check_module_payloads(root: Path) -> list[CheckResult]:
         module_dir = root / "stdlib" / module
         if not module_dir.is_dir():
             failures.append(f"missing stdlib/{module}")
-        if not entry.get("private_native_sources"):
+        # Private native payloads have to be declared while they exist. A module
+        # that finished its .def migration has none left, and says so.
+        if not entry.get("private_native_sources") and not entry.get("def_migration_complete"):
             failures.append("private_native_sources must be declared")
         declared = set(entry.get("public_native", ()))
         # A module that still publishes native symbols has to declare them in

@@ -413,10 +413,9 @@ public = true
 layer = "L3"
 policy = "xray_semantic"
 semantic_source = "stdlib/compress/compress.xr"
-factory_source = "stdlib/compress/compress.c"
 public_native = []
-private_native_sources = ["stdlib/compress/*.c"]
-private_native_reason = "Deflate coder and its gzip/zlib container payloads, which Xray cannot build as strings, consumed by compress.xr"
+def_migration_complete = true
+aot_helper_forbidden = true
 perf_suite = "stdlib/compress"
 
 [[module]]

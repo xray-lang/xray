@@ -1526,12 +1526,6 @@ static const StdlibEntry stdlib_crypto[] = {
 };
 #endif
 
-#if defined(XR_HAS_COMPRESS)
-static const StdlibEntry stdlib_compress[] = {
-    {"compress", xr_native_module_create_compress},
-};
-#endif
-
 #if defined(XR_HAS_CLUSTER)
 static const StdlibEntry stdlib_cluster[] = {
     {"cluster", xr_native_module_create_cluster},
@@ -1577,9 +1571,6 @@ void xr_module_register_stdlib(XrVMRuntime *isolate) {
 #endif
 #if defined(XR_HAS_CRYPTO)
     REGISTER_TABLE(stdlib_crypto);
-#endif
-#if defined(XR_HAS_COMPRESS)
-    REGISTER_TABLE(stdlib_compress);
 #endif
 #if defined(XR_HAS_CLUSTER)
     REGISTER_TABLE(stdlib_cluster);

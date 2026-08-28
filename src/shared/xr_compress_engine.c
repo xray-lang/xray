@@ -5,37 +5,32 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * compress.c - Compression standard library implementation
+ * xr_compress_engine.c - RFC 1951/1952/1950 coder for the runtime's own use
  *
- * KEY CONCEPT:
- *   Implements deflate/inflate algorithm (RFC 1951) with LZ77 + Huffman coding.
- *   Supports gzip (RFC 1952) and zlib (RFC 1950) wrapper formats.
+ * This is no longer the standard library's compressor. compress.xr states
+ * deflate, inflate and both containers in Xray, so nothing in the language
+ * reaches this file. What still does is the runtime itself: the package client
+ * unpacks a .tar.gz before handing it to tar (src/module/xpkg_client.c), and
+ * the AOT runtime links the same coder for programs that were compiled ahead
+ * of time. It lives beside xr_compress_core.h, whose allocate-and-retry
+ * templates call straight into it, rather than under stdlib/, because a
+ * stdlib module is a thing Xray code can import and this is not one.
  */
 
-#include "compress.h"
-#include "../../src/shared/xr_compress_core.h"
+#include "xr_compress_core.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 
+// The coder allocates only through the two entry points below. Built into the
+// freestanding AOT runtime it has no allocator to reach but libc's; built into
+// the interpreter it uses the runtime's.
 #ifdef XR_COMPRESS_CORE_ONLY
 #define xr_malloc malloc
 #define xr_free free
 #else
-#include "../../stdlib/common.h"
-#include "../../src/base/xmalloc.h"
-#include "../../src/base/xglobal_indices.h"
-#include "../../src/runtime/class/xbuiltin_enum_error.h"
-#include "../../src/runtime/core/xr_runtime_core.h"
-#include "../../src/runtime/mem/xalloc_unified.h"
-#include "../../src/runtime/object/xpanic_info.h"
-#include "../../src/vm/xvm.h"
-
-/* ========== External Declarations ========== */
-
-extern XrValue xr_string_value(XrString *str);
-extern XrString *xr_string_intern(XrVMRuntime *X, const char *str, size_t len, uint32_t hash);
+#include "../base/xmalloc.h"
 #endif
 
 /* ========== CRC32 Implementation ========== */
@@ -1046,201 +1041,3 @@ XR_FUNC const char *xr_compress_error_str(XrCompressError err) {
             return "Unknown error";
     }
 }
-
-/* ========== Helper Functions ========== */
-
-#ifndef XR_COMPRESS_CORE_ONLY
-
-static XrValue make_string_n(XrVMRuntime *X, const char *s, size_t len) {
-    if (!s)
-        return xr_null();
-    XrString *str = xr_string_new_raw_bytes(X, s, len);
-    return str ? xr_string_value(str) : xr_null();
-}
-
-static int compress_level_arg(XrValue *args, int nargs) {
-    bool has_level = nargs >= 2 && XR_IS_INT(args[1]);
-    return xr_compress_core_level_or_default(has_level, has_level ? XR_TO_INT(args[1]) : 0);
-}
-
-/* ========== xray Binding Functions ========== */
-
-static void compress_publish_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
-                                                uint32_t member_index,
-                                                const char *fallback_message) {
-    XrBuiltinEnumErrorResult result = xr_builtin_enum_error_construct(
-        iso ? xr_isolate_get_runtime_core(iso) : NULL, builtin_index, member_index);
-    if (result.status == XR_BUILTIN_ENUM_ERROR_OK) {
-        XrValue error = result.value;
-        XrExecutionErrorPublishStatus publish = xr_exec_context_publish_error_owned(
-            iso ? xr_isolate_get_runtime_core(iso) : NULL, &error);
-        if (publish == XR_EXEC_ERROR_PUBLISH_OK)
-            return;
-        xr_rc_release_value(xr_current_coro_heap(), error);
-        error = xr_null();
-        if (publish == XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED)
-            return;
-    }
-    XrValue exc = xr_panic_info_newf(iso, XR_ERR_INTERNAL, "%s",
-                                     fallback_message ? fallback_message
-                                                      : "failed to construct typed compress error");
-    xr_vm_throw_exception(iso, exc);
-}
-
-// compress.gzip(data, level?) -> string
-static XrValue compress_gzip(XrVMRuntime *X, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_null();
-
-    int level = compress_level_arg(args, nargs);
-
-    size_t out_len;
-    uint8_t *output = xr_gzip_alloc((const uint8_t *) data, len, &out_len, level);
-    if (!output)
-        return xr_null();
-
-    XrValue result = make_string_n(X, (char *) output, out_len);
-    xr_free(output);
-    return result;
-}
-
-// compress.gunzip(data) -> string; errors: CompressionError.InvalidData
-static XrValue compress_gunzip(XrVMRuntime *X, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_null();
-
-    size_t out_len;
-    uint8_t *output = xr_gunzip_alloc((const uint8_t *) data, len, &out_len);
-    if (!output) {
-        compress_publish_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
-                                            "compress.gunzip invalid gzip data");
-        return xr_null();
-    }
-
-    XrValue result = make_string_n(X, (char *) output, out_len);
-    xr_free(output);
-    return result;
-}
-
-// compress.deflate(data, level?) -> string
-static XrValue compress_deflate(XrVMRuntime *X, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_null();
-
-    int level = compress_level_arg(args, nargs);
-
-    size_t out_len;
-    uint8_t *output = xr_compress_core_deflate_alloc((const uint8_t *) data, len, &out_len, level,
-                                                     compress_core_alloc, compress_core_free, NULL);
-    if (!output)
-        return xr_null();
-
-    XrValue result = make_string_n(X, (char *) output, out_len);
-    xr_free(output);
-    return result;
-}
-
-// compress.inflate(data) -> string; errors: CompressionError.InvalidData
-static XrValue compress_inflate(XrVMRuntime *X, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_null();
-
-    size_t out_len;
-    uint8_t *output = xr_compress_core_inflate_alloc((const uint8_t *) data, len, &out_len,
-                                                     compress_core_alloc, compress_core_free, NULL);
-    if (!output) {
-        compress_publish_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
-                                            "compress.inflate invalid deflate data");
-        return xr_null();
-    }
-
-    XrValue result = make_string_n(X, (char *) output, out_len);
-    xr_free(output);
-    return result;
-}
-
-// compress.zlibCompress(data, level?) -> string
-static XrValue compress_zlib_compress(XrVMRuntime *X, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_null();
-
-    int level = compress_level_arg(args, nargs);
-
-    size_t out_len;
-    uint8_t *output =
-        xr_compress_core_zlib_compress_alloc((const uint8_t *) data, len, &out_len, level,
-                                             compress_core_alloc, compress_core_free, NULL);
-    if (!output)
-        return xr_null();
-
-    XrValue result = make_string_n(X, (char *) output, out_len);
-    xr_free(output);
-    return result;
-}
-
-// compress.zlibDecompress(data) -> string; errors: CompressionError.InvalidData
-static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_null();
-
-    size_t out_len;
-    uint8_t *output = xr_compress_core_zlib_decompress_alloc(
-        (const uint8_t *) data, len, &out_len, compress_core_alloc, compress_core_free, NULL);
-    if (!output) {
-        compress_publish_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
-                                            "compress.zlibDecompress invalid zlib data");
-        return xr_null();
-    }
-
-    XrValue result = make_string_n(X, (char *) output, out_len);
-    xr_free(output);
-    return result;
-}
-
-/* ========== Module Loading ========== */
-
-#define XR_STDLIB_VM_BIND_MODULE_COMPRESS 1
-#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
-#undef XR_STDLIB_VM_BIND_MODULE_COMPRESS
-
-XR_FUNC XrModule *xr_native_module_create_compress(XrVMRuntime *isolate) {
-    XrModule *module = xr_module_create_native(isolate, "compress");
-    if (!module)
-        return NULL;
-
-    xr_stdlib_vm_bind_compress_generated(isolate, module);
-
-    return module;
-}
-
-#endif /* XR_COMPRESS_CORE_ONLY */

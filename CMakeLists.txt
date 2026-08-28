@@ -976,6 +976,9 @@ list(APPEND BASE_SRC
     "src/shared/xr_unicode_grapheme_data.c"
     "src/shared/xr_unicode_grapheme.c"
     "src/shared/xr_http_url.c"
+    # Not a stdlib module: compress.xr states the language's compressor, while
+    # this coder serves the package client and the AOT runtime.
+    "src/shared/xr_compress_engine.c"
 )
 # Cross-platform abstraction layer. Each impl file is exclusive to
 # its platform — no body guards, only the right subtree is built.
@@ -1104,7 +1107,6 @@ if(XR_STDLIB_FULL)
     add_compile_definitions(XR_HAS_NETWORK=1)
     add_compile_definitions(XR_HAS_DATA_FORMATS=1)
     add_compile_definitions(XR_HAS_CRYPTO=1)
-    add_compile_definitions(XR_HAS_COMPRESS=1)
     add_compile_definitions(XR_HAS_CLUSTER=1)
     add_compile_definitions(XR_HAS_WS=1)
     add_compile_definitions(XR_HAS_HTTP2=1)
@@ -1139,16 +1141,6 @@ else()
         list(APPEND STDLIB_SRC ${STDLIB_CRYPTO_SRC})
         add_compile_definitions(XR_HAS_CRYPTO=1)
         message(STATUS "Stdlib: +crypto")
-    endif()
-
-    if(XR_STDLIB_COMPRESS)
-        file(GLOB STDLIB_COMPRESS_SRC CONFIGURE_DEPENDS "stdlib/compress/*.c")
-        if(NOT ZLIB_FOUND)
-            list(FILTER STDLIB_COMPRESS_SRC EXCLUDE REGEX "compress_zlib\\.c$")
-        endif()
-        list(APPEND STDLIB_SRC ${STDLIB_COMPRESS_SRC})
-        add_compile_definitions(XR_HAS_COMPRESS=1)
-        message(STATUS "Stdlib: +compress")
     endif()
 
     if(XR_STDLIB_CLUSTER)
@@ -1417,7 +1409,7 @@ add_library(xray_aot_core STATIC
     src/base/xlog.c
     src/base/xsha256.c
     src/base/xunicode.c
-    stdlib/compress/compress.c
+    src/shared/xr_compress_engine.c
     stdlib/crypto/crypto.c
     stdlib/regex/xregex.c
     stdlib/regex/xregex_compile.c

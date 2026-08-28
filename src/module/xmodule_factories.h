@@ -71,12 +71,6 @@ XR_FUNC struct XrModule *xr_native_module_create_http2(struct XrVMRuntime *isola
 XR_FUNC struct XrModule *xr_native_module_create_crypto(struct XrVMRuntime *isolate);
 #endif
 
-/* ========== Compression Module ========== */
-
-#if defined(XR_HAS_COMPRESS) || !defined(XR_STDLIB_MODULAR)
-XR_FUNC struct XrModule *xr_native_module_create_compress(struct XrVMRuntime *isolate);
-#endif
-
 /* ========== Cluster Module ========== */
 
 #if defined(XR_HAS_CLUSTER) || !defined(XR_STDLIB_MODULAR)
