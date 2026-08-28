@@ -54,7 +54,26 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         manifest = load_manifest(ROOT)
         os_module = manifest.by_name["os"]
         binders = private_leaf_binder_modules(ROOT)
-        self.assertEqual({"io", "net", "os"}, set(binders))
+        # Every source module whose private leaves go through the generated
+        # binder belongs here. The set was last written when it held three; it
+        # already held eight at 34be0379c (cluster, compress, crypto, http2 and
+        # runtime had joined without it being updated), and regex makes nine.
+        # What the assertion is for is that no such module reverts to a
+        # hand-written factory, so it lists them rather than a count.
+        self.assertEqual(
+            {
+                "cluster",
+                "compress",
+                "crypto",
+                "http2",
+                "io",
+                "net",
+                "os",
+                "regex",
+                "runtime",
+            },
+            set(binders),
+        )
         self.assertIn("os", source_modules(ROOT))
         self.assertNotIn("os", registry_modules(ROOT))
         self.assertEqual(
