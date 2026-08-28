@@ -3207,15 +3207,17 @@ if(BUILD_TESTS)
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    # See the asan_focused COST note. Measured ~119s, so COST stays at 120 for
-    # scheduling. TIMEOUT does not: a limit equal to the measured runtime turns
-    # any machine-state variation into a red that each lane then has to prove is
-    # not theirs. Round 3 measured 120.20s on an idle machine and spent time on
-    # exactly that question.
+    # See the asan_focused COST note. Round 3 timed the script directly, with no
+    # ctest timeout in the way: 163s and 166s on two builds of an idle machine.
+    # The older "~119s" reading this file used to carry was stale, and both COST
+    # and TIMEOUT were set from it -- so the test was being scheduled as if it
+    # were 40s cheaper than it is, and killed at a limit below its own runtime.
+    # Note it also fails six of its own assertions on this base, independently
+    # of any timeout; raising the limit lets that be seen rather than masked.
     set_tests_properties(aot_incremental_cache PROPERTIES
         LABELS "aot;cache;smoke"
         PROCESSORS ${XRAY_CTEST_AOT_INCREMENTAL_JOBS}
-        COST 120
+        COST 170
         TIMEOUT 300
         SKIP_RETURN_CODE 77
     )
