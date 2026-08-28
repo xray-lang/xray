@@ -11,31 +11,37 @@ optional_context = ["operation_id", "layout_id", "owner_id", "state_id", "genera
 
 [[family]]
 prefix = "XR_SEM_"
+kind = "numbered"
 range = "0001-0999"
 owner = "semantic-plan-verifier"
 
 [[family]]
 prefix = "XR_TARGET_"
+kind = "numbered"
 range = "1000-1999"
 owner = "target-plan-verifier"
 
 [[family]]
 prefix = "XR_ARTIFACT_"
+kind = "numbered"
 range = "2000-2999"
 owner = "artifact-decoder-verifier"
 
 [[family]]
 prefix = "XR_OWN_"
+kind = "numbered"
 range = "3000-3999"
 owner = "ownership-certificate-checker"
 
 [[family]]
 prefix = "XR_CORO_"
+kind = "numbered"
 range = "4000-4999"
 owner = "coroutine-machine-verifier"
 
 [[family]]
 prefix = "XR_EXEC_"
+kind = "numbered"
 range = "5000-5999"
 owner = "typed-executor"
 
@@ -313,3 +319,235 @@ message = "loaded module generation identity, state, or counter proof is invalid
 id = "XR_EXEC_5009"
 name = "executed-program-divided-by-zero"
 message = "a verified typed program divided or took a modulo by zero at execution"
+
+# --- named families ----------------------------------------------------------
+#
+# These two spell their identity in words instead of digits, and new families
+# should follow them.
+#
+# A numbered code answers "which verifier refused" and stops there. It was
+# measured on 2026-08-28 that XR_TARGET_1003 alone carries 185 distinct message
+# texts across src/plan/target/, so grouping refusals by code collapses 185
+# unrelated causes into one bucket and the code carries no resolution of its
+# own. A named code is its own distinction: the reader needs no second lookup
+# to know what was refused.
+#
+# The numbered families are not being renumbered -- renumbering = "forbidden"
+# above, and their identities are already in artifacts.
+
+[[family]]
+prefix = "XR_AOT_REFINEMENT_"
+kind = "named"
+owner = "aot-representation-refinement"
+
+[[family]]
+prefix = "XR_AOT_TAIL_CALL_CONFORMANCE_"
+kind = "named"
+owner = "aot-tail-call-conformance"
+
+
+[[code]]
+id = "XR_AOT_REFINEMENT_OK"
+name = "ok"
+message = "no refinement issue; the pass produced an applied decision"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_INVALID_ARGUMENT"
+name = "invalid-argument"
+message = "a refinement entry point was called with an absent or malformed authority"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_OUT_OF_MEMORY"
+name = "out-of-memory"
+message = "the refinement plan could not be allocated"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_BASELINE_FINGERPRINT"
+name = "baseline-fingerprint"
+message = "the evidence baseline fingerprint does not match the plan it is applied to"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_PASS_PROTOCOL"
+name = "pass-protocol"
+message = "refinement passes ran out of order or repeated a phase"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_STALE_EVIDENCE"
+name = "stale-evidence"
+message = "the evidence predates the plan generation it is being applied to"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE"
+name = "invalidated-evidence"
+message = "the evidence was invalidated by a later authority change"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_SOURCE_IDENTITY"
+name = "source-identity"
+message = "the refined value does not name the source entity the evidence was collected for"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_USE_SITE"
+name = "use-site"
+message = "a use of the value is not covered by the refinement decision"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_SOURCE_TYPE"
+name = "source-type"
+message = "the semantic type of the value disagrees with the refined representation"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_REPRESENTATION"
+name = "representation"
+message = "the materialized machine representation does not match the verified authority"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_LAYOUT"
+name = "layout"
+message = "the refined layout disagrees with the frozen aggregate layout"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_RECORD_FINGERPRINT"
+name = "record-fingerprint"
+message = "an evidence record's fingerprint does not match its content"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE"
+name = "representation-schema-unavailable"
+message = "no representation schema covers the value's machine representation at this operation"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DUPLICATE_USE"
+name = "duplicate-use"
+message = "one use site is claimed by more than one refinement record"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_NONCANONICAL_ORDER"
+name = "noncanonical-order"
+message = "refinement records are not in the one canonical order"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE"
+name = "incomplete-coverage"
+message = "the refinement records do not cover every value the plan requires"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_RESOURCE_BUDGET"
+name = "resource-budget"
+message = "refinement exceeded its bounded record or memory budget"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_PLAN_FINGERPRINT"
+name = "plan-fingerprint"
+message = "the plan fingerprint changed between collection and application"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_PLAN_STATE"
+name = "plan-state"
+message = "the plan is not in a state that admits refinement"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED"
+name = "direct-call-target-not-closed"
+message = "a direct call's target set is not closed under the program authority"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY"
+name = "direct-call-callee-identity"
+message = "a direct call record does not name its callee exactly"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING"
+name = "direct-call-argument-mapping"
+message = "a direct call's arguments do not map onto the callee's parameters"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DIRECT_CALL_RESULT_MAPPING"
+name = "direct-call-result-mapping"
+message = "a direct call's result does not map onto the caller's storage"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DIRECT_CALL_ERROR_MAPPING"
+name = "direct-call-error-mapping"
+message = "a direct call's error channel is unmapped or mapped twice"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DIRECT_CALL_ENVIRONMENT_MAPPING"
+name = "direct-call-environment-mapping"
+message = "a direct call's captured environment is not mapped exactly"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DIRECT_CALL_GENERATION_MAPPING"
+name = "direct-call-generation-mapping"
+message = "a direct call's generation witness is absent or inexact"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_DIRECT_CALL_EFFECT_MAPPING"
+name = "direct-call-effect-mapping"
+message = "a direct call's declared effects do not match the callee's"
+
+[[code]]
+id = "XR_AOT_REFINEMENT_UNKNOWN"
+name = "unknown"
+message = "an unclassified refinement issue; report it, it should not reach a user"
+
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_OK"
+name = "ok"
+message = "no tail-call conformance issue"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_INVALID_ARGUMENT"
+name = "invalid-argument"
+message = "conformance was checked with an absent or malformed plan"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_PLAN_STATE"
+name = "plan-state"
+message = "the plan is not in a state that admits a tail-call check"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_SOURCE_IDENTITY"
+name = "source-identity"
+message = "the checked call does not name the source operation it claims"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_LIVE_OPCODE"
+name = "live-opcode"
+message = "a live opcode remains after the position a tail call must end at"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_OPERAND_MAPPING"
+name = "operand-mapping"
+message = "tail-call operands do not map onto the callee's parameters"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_CALL_AUTHORITY"
+name = "call-authority"
+message = "the tail call has no exact call authority behind it"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_DIRECT_CALL_RECORD"
+name = "direct-call-record"
+message = "the tail call has no matching direct-call record"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_CALLEE_MAPPING"
+name = "callee-mapping"
+message = "the tail call's callee is not resolved to one exact target"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_INCOMPLETE_COVERAGE"
+name = "incomplete-coverage"
+message = "not every tail-call site in the function was checked"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_RESOURCE_BUDGET"
+name = "resource-budget"
+message = "the conformance check exceeded its bounded budget"
+
+[[code]]
+id = "XR_AOT_TAIL_CALL_CONFORMANCE_UNKNOWN"
+name = "unknown"
+message = "an unclassified conformance issue; report it, it should not reach a user"
