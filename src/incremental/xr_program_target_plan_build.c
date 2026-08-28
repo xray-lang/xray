@@ -171,6 +171,21 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
     if (!collect_program_graph_semantics(request, program_semantic_modules,
                                          &program_semantic_module_count, error, error_size))
         return false;
+    /* A partitioned module set is a different product from a program graph: it
+     * proves module coverage, not a cross-module call. The XTP cache keys a plan
+     * by its program semantic provenance, which a partitioned set does not carry,
+     * so such a plan is built every time rather than keyed by a weaker identity. */
+    bool partitioned_module_set = program_semantic_module_count == 0u && request->program_modules &&
+                                  request->program_module_count > 1u &&
+                                  request->program_module_count <= XR_TARGET_MAX_PROGRAM_MODULES;
+    for (uint32_t row = 0; partitioned_module_set && row < request->program_module_count; row++) {
+        if (request->program_modules[row])
+            continue;
+        set_error(error, error_size, "program TargetPlan module set has an incomplete member");
+        return false;
+    }
+    XrCacheStore *cache_store = partitioned_module_set ? NULL : request->cache_store;
+    result->cache_enabled = cache_store != NULL;
 
     XrCacheXtpArtifactVerifyContext requirements = {
         .semantic_plan = request->semantic_plan,
@@ -182,19 +197,19 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
         .optimization_budget = request->optimization_budget,
     };
     XrCacheKey key = {{0}};
-    if (request->cache_store && !xr_cache_xtp_key(&requirements, &key)) {
+    if (cache_store && !xr_cache_xtp_key(&requirements, &key)) {
         set_error(error, error_size, "program TargetPlan cache authority failed");
         return false;
     }
 
     XrTargetPlan *plan = NULL;
-    if (request->cache_store && !request->rebuild) {
+    if (cache_store && !request->rebuild) {
         XrCacheXtpArtifactLoadContext load = {
             .requirements = requirements,
         };
         XrCacheBlob blob = {0};
         result->cache_load_attempted = true;
-        result->load_status = xr_cache_store_load(request->cache_store, XR_CACHE_ARTIFACT_XTP, key,
+        result->load_status = xr_cache_store_load(cache_store, XR_CACHE_ARTIFACT_XTP, key,
                                                   xr_cache_materialize_xtp_artifact, &load, &blob);
         xr_cache_blob_release(&blob);
         if (cancellation_requested_at(request->cancellation,
@@ -219,6 +234,10 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
                 ? xr_target_plan_build_program_graph(program_semantic_modules,
                                                      program_semantic_module_count,
                                                      request->profile, &plan, error, error_size)
+            : partitioned_module_set
+                ? xr_target_plan_build_program_module_set(
+                      request->program_modules, request->program_module_count,
+                      request->semantic_plan, request->profile, &plan, error, error_size)
                 : xr_target_plan_build_module_set(request->semantic_plan,
                                                   request->semantic_dependencies,
                                                   request->semantic_dependency_count,
@@ -231,7 +250,7 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
     if (cancellation_requested_at(request->cancellation, XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_BUILD))
         return cancel_build(result, plan, error, error_size);
 
-    if (request->cache_store && !result->cache_hit) {
+    if (cache_store && !result->cache_hit) {
         uint8_t *bytes = NULL;
         size_t size = 0;
         if (!xr_xtp_encode_plan(plan, &bytes, &size, error, error_size)) {
@@ -240,7 +259,7 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
         }
         result->cache_publish_attempted = true;
         result->publish_status =
-            xr_cache_store_publish(request->cache_store, XR_CACHE_ARTIFACT_XTP, key, bytes, size,
+            xr_cache_store_publish(cache_store, XR_CACHE_ARTIFACT_XTP, key, bytes, size,
                                    xr_cache_verify_xtp_artifact, &requirements);
         xr_xtp_encoded_free(bytes);
         result->cache_published = result->publish_status == XR_CACHE_PUBLISH_OK;

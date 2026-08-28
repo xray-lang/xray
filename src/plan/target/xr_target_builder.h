@@ -38,5 +38,13 @@ XR_FUNC bool xr_target_plan_build_program_graph(
     XrTargetPlan **out,
     char *error,
     size_t error_size);
+/* Build one global TargetPlan over an acyclic module set, partitioned per
+ * module. It claims module coverage only: every target row is attributed to the
+ * module whose SemanticPlan produced it, and no cross-module call is proven. */
+XR_FUNC bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *modules,
+                                                     uint32_t module_count,
+                                                     const XrSemanticPlan *entry,
+                                                     XrTargetProfile *profile, XrTargetPlan **out,
+                                                     char *error, size_t error_size);
 
 #endif  // XR_TARGET_BUILDER_H

@@ -133,6 +133,15 @@ XR_FUNC bool xr_target_semantic_program_module_direct_dependencies(
     const XrSemanticPlan *const *modules, uint32_t module_count,
     uint32_t program_module_row, const XrSemanticPlan ***dependencies,
     uint32_t *dependency_count, char *error, size_t error_size);
+/* Partition-set authority for a plan that covers several modules but claims no
+ * cross-module call. Keyed by each module's own SemanticPlan entity, so it is
+ * available to a program whose modules carry no program semantic provenance. */
+XR_FUNC bool xr_target_semantic_module_partition_set_verify(const XrSemanticPlan *const *modules,
+                                                            uint32_t module_count, char *error,
+                                                            size_t error_size);
+XR_FUNC bool
+xr_target_semantic_module_partition_set_fingerprint(const XrSemanticPlan *const *modules,
+                                                    uint32_t module_count, XrFingerprint *out);
 XR_FUNC bool xr_target_semantic_module_set_fingerprint(
     const XrSemanticPlan *const *modules, uint32_t module_count, XrFingerprint *out);
 XR_FUNC bool xr_target_semantic_capability_requirements(

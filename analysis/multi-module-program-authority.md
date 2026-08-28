@@ -129,6 +129,24 @@ XrProgramSemanticClosure *source_program_closure = NULL;   /* 可执行切片权
 每一条都**换了一条更靠后、更具体的拒绝消息**。这正是六层判据的逐层推进：
 第一层（source fact → PSC → program authority）通了，现在卡在第四层（TargetPlan）。
 
+## 5.1 第二层实测：TargetPlan 模块分区（L2）
+
+拆开「分区」与「图边」两个事实、并为 N 个模块产出分区后，同一批用例再推进一层：
+
+| 用例 | L1 后首拒 | L2 后首拒 |
+|---|---|---|
+| 单模块 | ✅ 通过（3908 字节 C） | ✅ **仍通过（3908 字节，逐字节相同）** |
+| `import base64` + main | `program TargetPlan is missing, corrupt, or has the wrong module set` | `XR_TARGET_1003: direct-local signature or result storage is incomplete opcode=116 operand-count=3 parameter-count=2 result-type-match=1 storage-mask=0 method=0` |
+| 3 模块链（纯 i64） | 同上 | `XR_TARGET_1001: target functions do not cover semantic value ownership` |
+| 3 模块、2 个 import | `XR_TARGET_1005: dynamic entry expectation table is not exact` | 同上 |
+| 2 模块、string 返回 | `XR_TARGET_1003: source-export call authority is incomplete` | 不变 |
+| `multimod_calls.xr` | `XR_TARGET_1003: source-export call authority is incomplete` | 不变 |
+
+`stdlib2` 的新拒绝值得单独一说：它现在是在**为 `base64.xr` 自己**构建 target plan 时失败的
+（`opcode=116`），也就是说多模块的**架构**墙已经推倒，暴露出来的是各模块自身的 AOT 能力缺口。
+这与 `blockers/a-stdlib-multi-module-program-authority.md` 记录的
+「33 个 stdlib 探针里 AOT 只有 `time` 能生成 C」是同一件事。
+
 ## 6. 六层判据的完整地图
 
 | 层 | 多模块能力 | 位置 |
@@ -289,7 +307,60 @@ VM 执行路径是 **module-local 编译**，AOT 与字节码打包路径是 **m
 放松判据换来的不是通过，是**把一个能被诊断的拒绝换成一个不能被诊断的错行绑定**。
 正确的做法是让 plan 真的有 N 个分区，而不是让判据闭嘴。
 
-### 8.2 剩余缺口的可行路径（已取证）
+### 8.2 L3 的架构诊断：verifier 的单 SemanticPlan 假设
+
+这是本轮同一个病灶的**第三次**出现，形态一次比一次深：
+
+| 层 | 形态 |
+|---|---|
+| L1 | 一个 authority 指针**身兼二职**，定义域几乎为空的窄职责拖累了普遍职责 |
+| L2 | 一句 verify 判据**绑了两个事实**（携带图边 vs 覆盖多模块） |
+| **L3** | **整条 verifier 通路建立在「一个 TargetPlan 对应一个 SemanticPlan」这个隐含假设上**，而 graph 族靠**另开一条为窄族定制的平行通路**绕过去 |
+
+L3 最严重，因为它不是某一处写错，而是**一个结构性假设被几十个函数共享，
+而第一个打破它的族选择了绕开而不是修正**。
+
+证据：`verify_value_reps`（`xr_target_verify.c:4531`）第一句是
+
+```c
+if (plan->functions_count != xr_semantic_plan_function_count(plan->semantic_plan))
+    return report(error, error_size, "XR_TARGET_1001",
+                  "target functions do not cover semantic value ownership");
+```
+
+——用 **entry 一个 SemanticPlan 解释整张合并表**，后面还有几十个同形状的 `verify_*`。
+graph 族之所以能过，是因为 `verify_program_graph_plan`（`:10376-10644`）是
+**完全独立的一条通路**，自己逐分区校验；而它的逐分区版
+`verify_program_graph_rows`（`:9863-10140`）是为第 2 节说的那 24 条 AND 的窄族定制的
+——要求 extent 全是 `XR_TARGET_EXTENT_FIXED`、layout 数等于唯一类型数、
+value_rep 逐个精确匹配——**对含 string / class / 协程的一般模块根本不成立，不能泛化。**
+
+绕开的代价现在显形：那条平行通路无法承担通用职责，
+于是打通多模块的人必须先把 verifier 从「单 SemanticPlan 解释全表」重构为「分区感知」。
+**这不是下一个错误码，是一个有名字的工程。**
+
+### 8.3 第二条不要走的捷径：在分区模式下绕过逐行校验
+
+在分区模式下跳过 `verify_value_reps` 那批校验，能让判别用例立刻"前进"。**不要这么做。**
+
+可以论证：合并是纯粹的行平移 + rep 重映射，若每个模块的行独立验证过，
+且分区区间无缝、无重叠、全覆盖（`graph_partition_ranges_are_exact` 正是这个判据），
+那么合并结果正确。这个论证可能是对的——
+
+**但那是作者的论证，不是验证器的判据。** 在一个 fail-closed 的系统里，
+绕过验证器等于把「作者相信它正确」冒充成「验证器确认了它正确」。
+这条线一旦越过，之后每一次拒绝都不再能说明任何事。与 8.1 是同一类陷阱的两个入口。
+
+### 8.4 一个已知限制：分区 plan 不进 XTP 缓存
+
+`xr_cache_xtp_key`（`src/incremental/xr_cache_artifact_verify.c:104`）用
+SemanticPlan 的 program provenance 作为程序身份，而分区集按定义不携带 provenance。
+因此 `xr_program_target_plan_build` 对分区模式**禁用 XTP 缓存**（每次重建），
+而不是用一个更弱的身份去 key 一个持久化制品。这是正确性优先的取舍，
+代价是多模块 AOT 目前没有增量。要恢复增量，需要给 cache context 一条
+以 `xr_target_semantic_module_partition_set_fingerprint` 为键的并行通路。
+
+### 8.5 剩余缺口的可行路径（已取证）
 
 `build_module_set` **没有行可分**：它的 draft 只 materialize entry 一个模块的表
 （`builder_materialize`，`xr_target_builder.c:15595`），依赖只以索引形式出现在 call 行里

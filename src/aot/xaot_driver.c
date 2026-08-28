@@ -1745,10 +1745,38 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
         return false;
     }
 
+    /* More than one Xi module means the product plan must attribute every target
+     * row to the module that produced it, so the whole module set travels with
+     * the request rather than only the entry and its direct dependencies. */
+    const XrSemanticPlan **program_modules = NULL;
+    uint32_t program_module_count = 0;
+    if (bundle->nmodules > 1u) {
+        program_modules =
+            (const XrSemanticPlan **) xr_calloc(bundle->nmodules, sizeof(*program_modules));
+        if (!program_modules) {
+            bundle->error_msg = "XR_TARGET_1000: product program module set allocation failed";
+            xr_free(dependencies);
+            return false;
+        }
+        for (uint32_t index = 0; index < bundle->nmodules; index++) {
+            const XiModule *member = bundle->modules[index];
+            program_modules[index] = member && member->init ? member->init->semantic_plan : NULL;
+            if (program_modules[index])
+                continue;
+            bundle->error_msg = "XR_TARGET_1000: product program module set is incomplete";
+            xr_free(program_modules);
+            xr_free(dependencies);
+            return false;
+        }
+        program_module_count = bundle->nmodules;
+    }
+
     XrProgramTargetPlanBuildRequest request = {
         .semantic_plan = semantic,
         .semantic_dependencies = dependencies,
         .semantic_dependency_count = dependency_count,
+        .program_modules = program_modules,
+        .program_module_count = program_module_count,
         .profile = profile,
         .cache_store = cache_store,
         .optimization_budget = xaot_target_plan_optimization_budget(),
@@ -1776,6 +1804,7 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
         bundle->error_msg =
             "XR_TARGET_1000: program TargetPlan build did not produce verified authority";
         xr_program_target_plan_build_result_release(&build);
+        xr_free(program_modules);
         xr_free(dependencies);
         return false;
     }
@@ -1807,6 +1836,7 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
         installed = false;
     }
     xr_program_target_plan_build_result_release(&build);
+    xr_free(program_modules);
     xr_free(dependencies);
     return installed;
 }
