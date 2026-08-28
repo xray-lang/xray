@@ -63,9 +63,17 @@ compared against. Measured against `00f665c5c` the count is 0 on both sides.
 
 ### The generator this blocks is past the guard too
 
-The build-time `xray_stdlib_bcgen native-fastpaths` step, whose 1439-line
-harness closes over 22 stdlib modules, no longer stops at the program-authority
-guard. It now reaches per-module Xi compilation and stops at
+The build-time `xray_stdlib_bcgen native-fastpaths` step no longer stops at the
+program-authority guard. Its 1439-line harness carries 25 import statements
+naming 14 modules directly; the transitive closure over `stdlib/*/*.xr` reaches
+22, but `http2` and `mem` have no `.xr` source and a module without one never
+enters the graph, so what the compiler actually receives is measured at 21:
+
+```
+$ build-nofp/xray build --native -c -o /tmp/x.c main.xr
+[xi-native] 21 modules (topo order):
+  ... [20] .../stdlib_vm_fastpaths/main.xr (entry)
+``` It now reaches per-module Xi compilation and stops at
 
 ```
 Error: Xi pipeline failed for 'stdlib/http/http.xr' at semantic-plan:

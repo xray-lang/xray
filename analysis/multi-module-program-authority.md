@@ -42,7 +42,7 @@ if (!source_program_closure && nmodules != 1) {
 形状还要求 entry 恰好 2 条顶层语句、依赖模块恰好 1 条、import 恰好 1 个 member 且无 alias。
 
 于是职责 (a) 被职责 (b) 拖累：**所有多模块程序一起被拒**，包括 3 模块的纯 i64 链、
-`import base64` + `main` 这种 2 模块程序、以及 stdlib fastpaths 生成器的 22 节点图。
+`import base64` + `main` 这种 2 模块程序、以及 stdlib fastpaths 生成器的 21 节点图（见 6.2）。
 
 这个族的定义域有多窄，值得写准：`publish_scalar_module_graph` 的接受条件展开是 **24 条 AND**，
 除图形状外还包括——入口函数体内恰好 1 个 `AST_CALL_EXPR`、依赖函数体内一个调用都不能有、
@@ -148,6 +148,35 @@ XrProgramSemanticClosure *source_program_closure = NULL;   /* 可执行切片权
 「33 个 stdlib 探针里 AOT 只有 `time` 能生成 C」是同一件事。
 
 ## 6. 六层判据的完整地图
+
+### 6.2 fastpaths harness 的图有多大：三个不同的口径
+
+这个数字被转述错过三次，所以把三个口径分开写，并注明每个是怎么得到的：
+
+| 口径 | 数字 | 怎么得到 |
+|---|---:|---|
+| import 语句条数 | 25 | 读 `main.xr` |
+| 直接 import 的模块 | 14 | 读 `main.xr`（14 条整模块 + 11 条具名） |
+| 沿 `stdlib/*/*.xr` 的传递闭包 | 22 | 静态推导 |
+| **编译器实际拿到的 `nmodules`** | **21** | **实测** |
+
+**只有最后一个是验收要撑住的规模**，而且它比传递闭包**小**，不是大：
+
+```
+$ build-nofp/xray build --native -c -o /tmp/x.c main.xr
+[xi-native] 21 modules (topo order):
+  [0] stdlib/base64/base64.xr   ...  [19] stdlib/yaml/yaml.xr
+  [20] .../stdlib_vm_fastpaths/main.xr (entry)
+```
+
+传递闭包多出的 8 个里，`http2` 与 `mem` **没有 `.xr` 源**（`stdlib/http/http.xr:18` 与
+`stdlib/sync/sync.xr:212` 确实 import 了它们），而**没有 `.xr` 源的模块从不进模块图**
+——这正是本 blocker 家族里 `import time` 曾经是单模块程序的原因。
+所以进图的传递依赖只有 `time, crypto, os, path, io, net` 6 个：
+14 + 6 = 20 个依赖，加入口模块自己 = 21。
+
+**口径必须随数字一起报。**「22 节点闭包」与「编译器拿到 21 节点图」是两个不同的事实，
+只报前者会让接手的人按错的规模做准备，而且方向是反的。
 
 | 层 | 多模块能力 | 位置 |
 |---|---|---|
@@ -415,10 +444,5 @@ target_call / target_argument / caller_slot / callee_slot / ...`），
 - freeze gate 与 `xr_target_plan_verify` 按「有没有图边」而不是「有没有分区」分流。
 
 **默认配置（不加 `-DXRAY_STDLIB_VM_FASTPATHS=OFF`）能完成构建**这个验收标准，
-要求 fastpaths 生成器的模块图走完整条 AOT 链路到 C emission。
-这张图的规模需要说准：生成的 `main.xr` 约 1439 行、277 个 `export fn` 包装器、
-25 条 import 语句涉及 **14 个直接 import 的模块**，
-但沿 `stdlib/*/*.xr` 做**传递闭包是 22 个节点**（多出
-`crypto, http2, io, mem, net, os, path, time`）。
-「14 模块」只对直接 import 面成立，编译器实际要撑住的是 22 节点图。因此该验收
+要求 fastpaths 生成器的模块图走完整条 AOT 链路到 C emission。这张图的规模见 6.2。因此该验收
 因此**必然**依赖上表中的 TargetPlan 改动。第一层打通是必要条件，不是充分条件。
