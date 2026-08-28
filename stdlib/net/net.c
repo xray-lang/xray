@@ -22,7 +22,6 @@
 
 #include "../../src/base/xmalloc.h"
 #include "../common.h"
-#include "net.h"
 #include "io.h"
 #include "tls.h"
 #include "../stdlib_cache.h"

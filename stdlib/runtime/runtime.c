@@ -24,7 +24,6 @@
  *   host-process state.
  */
 
-#include "runtime.h"
 #include "../common.h"
 #include "../stdlib_cache.h"
 #include "../../src/runtime/xisolate_internal.h"

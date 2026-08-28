@@ -236,12 +236,6 @@ XR_MODULE_SOURCE_RE = re.compile(r"^stdlib/(?P<module>[A-Za-z_][A-Za-z0-9_]*)/[^
 
 MODULE_FACTORY_RE = re.compile(r"^xr_native_module_create_(?P<module>[A-Za-z_][A-Za-z0-9_]*)$")
 
-MANUAL_NATIVE_CLASS_EXPORT_RE = re.compile(
-    r"\b(?P<helper>[A-Za-z_][A-Za-z0-9_]*export_native_class)\s*\("
-    r"[^;]*?,\s*\"(?P<name>[A-Za-z_][A-Za-z0-9_]*)\"\s*,",
-    re.DOTALL,
-)
-
 
 @dataclass
 class SymbolRow:
@@ -275,7 +269,7 @@ class ModuleRow:
     policy: str
     audience: str
     semantic_source: str
-    factory_source: str
+    loader_declarations: list[str] = field(default_factory=list)
     public_native: list[str] = field(default_factory=list)
     xr_sources: list[str] = field(default_factory=list)
     c_sources: list[str] = field(default_factory=list)
@@ -398,26 +392,19 @@ def c_sources(root: Path, module: str) -> list[Path]:
     return sorted(directory.glob("*.c"))
 
 
-def manual_native_class_exports(
-    root: Path, factory_source: str
-) -> dict[str, tuple[str, str]]:
-    """Trace manifest-declared manual native classes to their C export calls.
+def manual_native_class_exports(module: dict) -> dict[str, tuple[str, str]]:
+    """Trace manifest-declared manual native classes to what publishes them.
 
-    Some runtime-owned classes are installed by a module factory instead of a
-    ``.def`` declaration.  A bare string search is not authority: it would
-    accept comments and diagnostics.  This scanner admits only a call to the
-    module's native-class export helper and records both the helper and source
-    file so the public-native row remains attributable.
+    Some runtime-owned classes reach a module through neither a ``.def``
+    declaration nor an ``.xr`` export: the VM registers the class and the module
+    publishes it under its own name. That used to be a hand-written factory
+    call, which had to be traced by scanning C. It is a ``native_type_exports``
+    row now, so the declaration is the registration and is its own authority.
     """
-    if not factory_source:
-        return {}
-    path = root / factory_source
-    if not path.is_file():
-        return {}
-    source = rel(root, path)
     return {
-        match.group("name"): (source, match.group("helper"))
-        for match in MANUAL_NATIVE_CLASS_EXPORT_RE.finditer(c_without_comments(read(path)))
+        str(row["name"]): ("stdlib/stdlib_boundary.toml", str(row["builtin_type"]))
+        for row in module.get("native_type_exports", ())
+        if row.get("name") and row.get("builtin_type")
     }
 
 
@@ -794,7 +781,11 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
         )
         policy = str(module.get("policy", ""))
         semantic_source = str(module.get("semantic_source", ""))
-        factory_source = str(module.get("factory_source", ""))
+        loader_declarations = [
+            field_name
+            for field_name in ("native_type_exports", "native_fn_exports", "load_time_classes")
+            if module.get(field_name)
+        ]
         public_native = [str(x) for x in module.get("public_native", ())]
         manual_public_native = {
             str(x) for x in module.get("manual_public_native", ())
@@ -811,7 +802,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
             policy=policy,
             audience=audience,
             semantic_source=semantic_source,
-            factory_source=factory_source,
+            loader_declarations=loader_declarations,
             public_native=public_native,
             xr_sources=[rel(root, p) for p in xr_paths],
             c_sources=[rel(root, p) for p in c_paths],
@@ -972,12 +963,12 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
         # having no public native surface while the manifest declares five,
         # and every gate reading the inventory would be blind to them.
         seen = {r.symbol for r in rows if r.module == name}
-        manual_exports = manual_native_class_exports(root, factory_source)
+        manual_exports = manual_native_class_exports(module)
         for symbol in public_native:
             if symbol in seen:
                 continue
             if symbol in manual_public_native and symbol in manual_exports:
-                source, helper = manual_exports[symbol]
+                source, builtin_type = manual_exports[symbol]
                 rows.append(
                     SymbolRow(
                         module=name,
@@ -993,7 +984,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                         leaf_reason="",
                         factory_loader="",
                         plan_coverage="native_binding",
-                        vm_binding=f"{helper}:{symbol}",
+                        vm_binding=f"{builtin_type}:{symbol}",
                         aot_binding="",
                         covered_c_deletion=source,
                         blocker="runtime native class is still a public C-owned surface",

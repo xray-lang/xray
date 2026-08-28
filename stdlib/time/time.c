@@ -8,7 +8,6 @@
  * time.c - Time module implementation
  */
 
-#include "time.h"
 #include "../common.h"
 #include "../../src/coro/xworker.h"
 #include "../../src/coro/xyieldable.h"

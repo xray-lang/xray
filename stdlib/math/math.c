@@ -13,7 +13,6 @@
  *   APIs such as randomInt keep their declared int boundary.
  */
 
-#include "math.h"
 #include "../common.h"
 #include <math.h>
 #include <stdint.h>
