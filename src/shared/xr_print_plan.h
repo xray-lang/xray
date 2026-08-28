@@ -50,13 +50,15 @@ typedef enum XrPrintCapability {
     XR_PRINT_CAPABILITY_ALL = XR_PRINT_CAPABILITY_OUTPUT_WRITE,
 } XrPrintCapability;
 
-/* Schema v1 defines no flags. Executors render operand by operand, so a group
- * is not yet indivisible: a formatter that fails midway has already published
- * a prefix, and concurrent groups can interleave within a line. Whole-group
- * rendering is a separate capability and will introduce the flag that states
- * it, rather than this schema promising it in advance. */
+/* ATOMIC_GROUP states that the group is indivisible: an executor renders every
+ * operand into one buffer and reaches the output capability exactly once, at
+ * the end.  A formatter that fails midway therefore publishes nothing, and two
+ * concurrent groups cannot interleave within a line.  The buffer has that one
+ * exit: dying any other way — a panic unwinding past it, a coroutine collected
+ * while suspended inside a formatter — discards it unwritten. */
 typedef enum XrPrintPlanFlag {
     XR_PRINT_PLAN_FLAG_NONE = 0,
+    XR_PRINT_PLAN_FLAG_ATOMIC_GROUP = 1u << 0,
 } XrPrintPlanFlag;
 
 typedef enum XrPrintPlanStatus {
@@ -122,13 +124,27 @@ static inline size_t xr_print_plan_framing_bytes(const XrPrintPlan *plan) {
  * back into the interpreter. These bits carry the group facts that each
  * instruction needs, derived from the plan at emission time; nothing upstream
  * of emission encodes them, so the plan stays the only place the group is
- * described. The B field carries the separator, the C field these flags. */
-#define XR_PRINT_BC_TERMINATE 0x01u
-#define XR_PRINT_BC_NO_OPERAND 0x10u
-/* Unlike the two flags above, this one projects the operand's static type, not
- * a decision of the group: a full-width unsigned integer shares its slot
- * representation with a signed one, so the renderer cannot recover the sign
- * domain from the value alone. */
+ * described.
+ *
+ * Every bit below means one thing across the whole projection, whichever
+ * instruction and whichever operand slot carries it.  Separate and terminate
+ * never share an instruction, so they could have shared a bit; they do not,
+ * because then reading a flag word would first require knowing which
+ * instruction it came from, and the operand field is 16 bits wide with room to
+ * spare. */
+#define XR_PRINT_BC_SEPARATE 0x01u
+/* Unlike the group decisions here, this one projects the operand's static type:
+ * a full-width unsigned integer shares its slot representation with a signed
+ * one, so the renderer cannot recover the sign domain from the value alone. */
 #define XR_PRINT_BC_UNSIGNED 0x02u
+/* Rides the flush, the single instruction that reaches the output capability. */
+#define XR_PRINT_BC_TERMINATE 0x04u
+
+/* Registers PRINT_GROUP_APPEND reserves from its A operand, in order: the group
+ * buffer, the return slot of a user `toString`, and that call's frame base.
+ * The buffer sits below the callee, which is what keeps it alive across the
+ * call; the two slots above it are why the window is wider than one register. */
+#define XI_PRINT_GROUP_WINDOW 3u
+#define XI_PRINT_GROUP_CALL_SLOT 2u
 
 #endif /* XR_PRINT_PLAN_H */

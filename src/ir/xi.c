@@ -193,6 +193,13 @@ XiValue *xi_value_new_print(XiFunc *f, XiBlock *blk, struct XrType *unit_type,
     return print;
 }
 
+bool xi_print_operand_renders_unsigned(const XiValue *operand) {
+    const struct XrType *type = operand ? operand->type : NULL;
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    return type->scalar_rep == XR_NATIVE_U64 || type->scalar_rep == XR_NATIVE_USIZE;
+}
+
 bool xi_value_clone_assertion_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
     if (!f || !dst || !src)
         return false;

@@ -13,10 +13,18 @@ capability boundary for grouped output.
 3. Operands evaluate left to right, exactly once each, before any of them is
    rendered as text.
 4. Bytecode and generated C are projections of the group. Emission derives each
-   operand's separator and the group's terminator from the plan. The group
-   remains several instructions because rendering an operand may re-enter the
-   interpreter through a user `toString`, and one instruction has nowhere to
-   hold a partially rendered group across that call.
+   operand's separator and the group's terminator from the plan. A group
+   renders into one buffer and reaches the output capability exactly once, at
+   the end; every operand instruction appends to that buffer and can no more
+   write than it can choose a separator.
+   The buffer is an ordinary value holding a register, so it survives a user
+   `toString` re-entering the interpreter by living in the frame the call
+   returns to, and a nested group gets a buffer of its own. Several
+   instructions is what makes that re-entry a suspendable call: collapsing the
+   group into one instruction would require driving `toString` from C, and
+   `xr_vm_call_closure` reports a suspension as a failure, so `await` inside a
+   `toString` would stop working. The shape is a requirement, not a
+   concession.
 5. A full-width unsigned operand carries an explicit marker because its slot
    representation is indistinguishable from a signed one. Narrower unsigned
    types are non-negative in that slot and carry none.
@@ -30,25 +38,48 @@ capability boundary for grouped output.
 8. REPL auto-display is not a second output semantics. It elaborates a guarded
    ordinary call, so no suppress-null flag travels through the plan, the
    bytecode, or any backend.
-9. Schema v1 defines no plan flags. Executors render operand by operand, so a
-   group is not yet indivisible: a formatter that fails midway has already
-   published a prefix, and concurrent groups can interleave within a line.
-   Whole-group rendering is a separate capability and will introduce the flag
-   that states it; this schema does not promise it in advance.
+9. `ATOMIC_GROUP` states that a group is indivisible. The buffer has exactly
+   one exit: the flushing instruction. Dying any other way discards it
+   unwritten — a panic unwinding out of a formatter, a coroutine collected
+   while suspended inside one, or any other release. These are not three
+   rules; they are one rule seen from three directions, and the rule is that
+   nothing but the flush publishes anything. A formatter that fails partway
+   through therefore leaves no prefix behind, not even the separator that
+   would have preceded the operand that failed.
+   What an escaped prefix costs is more than the prefix: it carries no
+   terminator, so the next group continues the line it was stranded on, and
+   one failed call goes on corrupting the framing of everything printed after
+   it.
+10. Indivisibility of the flush itself is a separate fact from the count of
+    instructions that can reach it, and the two backends get it from different
+    places. Hosted output is a single stdio call on the stream the executor
+    owns, and stdio locks the `FILE` object, so a concurrent group cannot land
+    inside it even when the runtime is running coroutines on several threads;
+    writing through `write(2)` or an `_unlocked` variant would break this
+    without changing any instruction count. Freestanding output is a single
+    call to the exact output-write provider operation, and its indivisibility
+    is the provider's obligation, stated in the capability contract.
+    So verifying that one group reaches the output capability once is
+    sufficient for hosted output; for freestanding output it establishes that
+    no partial group is published, while non-interleaving rests on the
+    provider.
 
 ## Digest anchors
 
-anchor-sha256: src/shared/xr_print_plan.h 51f7910bf13f409520bd76ea2d98515cffa579260b155f31b4175940fc659a88
-anchor-sha256: src/shared/xr_core_intrinsic_registry.c 11660c702f0e438919444614f4be66f46cc595220711ec9ebd7e93dc7dc026b0
+anchor-sha256: src/shared/xr_print_plan.h 3bf58c71e0872cd80f761f40cf772086181274a8742da5cc0401d97f868facee
+anchor-sha256: src/shared/xr_core_intrinsic_registry.c 97197195363f6f21f9eefaa6440373e369ab70569a02aa4fe4afba8cac3ce13c
 anchor-sha256: src/ir/xi_lower_expr.c c6aa2113669d90137b367809b9b6fe4b7a588b20f45775abd2dc5ecb85dfe66e
-anchor-sha256: src/ir/xi_emit_call.c 698711436b6e940f3d06fcbcbf5a751eab7b59a66c1a0f0cf9f42b3302d42031
-anchor-sha256: src/vm/xvm_dispatch_convert.inc.c 6622f7f1d1817ef11f5108d4b3425794a49c3146c5750bbe1e33e9a5fc8e79e2
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 83e8c10fdb3d898578514fba5e9b055530081eeef81b4d98a7304e614f25496e
+anchor-sha256: src/ir/xi_emit_call.c f99706984af44243a0aa97651795f78f4247cbc45af1761ef4602f3aeb2180f8
+anchor-sha256: src/vm/xvm_dispatch_convert.inc.c c0d93e38cea5f4b03ef6f1ea1fcf008afc8f30a5086ad3ca4019577d86ed3a5a
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 19a18e7309c79361405446699a2b31bed81524db69cf7b34b0eef0552496fb03
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
 anchor-sha256: src/plan/target/xr_target_capability.h 5069e52a258729e7c1384d1cea8706aba2cfa639d45ad94280bda0d89bd7a3e0
-anchor-sha256: src/plan/target/xr_target_builder.c ebe2a51802a1cba0edbcc52dcfd3953cadd4c49268874dcc292c2ead781f6d33
+anchor-sha256: src/plan/target/xr_target_builder.c 78b496fc1c30ca46a7a360aa9a59a8fd1b4b96ff58771f47c9adc9a2917e8ba4
 anchor-sha256: src/api/xrepl.c 9c66051d7144b1ab126c76cefd6cb82b000e66887469f99bf3aad47b3ee74912
 anchor-sha256: tests/diff/cases/semantics/output/print_zero_args.xr a4c91a7c404a377515c73ed3d75b0548d7d7bb54ae0324c75622376df1ea03b8
 anchor-sha256: tests/diff/cases/semantics/output/print_separator_exact.xr 71b81c064808dfd69cc39867555f55c49d3cee23b2c3bfd387f1b5737a825c2f
 anchor-sha256: tests/diff/cases/semantics/output/print_terminator_exact.xr 32f13c28e415c770c81bd0eafbfb7d4008b8bdf192f7cb6cade5c01f2845a6a2
 anchor-sha256: tests/diff/cases/semantics/output/print_evaluation_order.xr 4ee769724ec8597a3674a631b1f91df82d5c06daa20f2c2c957f648c23a09518
+anchor-sha256: tests/diff/cases/semantics/output/print_group_atomic_on_panic.xr b089ad68db85aabc4aa18e338242096a56dbf91b51eaecc9c75e5cfaa4db622c
+anchor-sha256: tests/diff/cases/semantics/output/print_group_atomic_on_fatal.xr 491edb1d65f573bd0237ea4bd4d1f4d3f3609dae317509113345c3aa5b343746
+anchor-sha256: tests/diff/cases/semantics/output/print_unsigned_widths.xr 577699990edb47f23009271d683ac25fc46f93ff3b2eaa9db525904714f0e1d0

@@ -24,6 +24,14 @@ XR_FUNC bool xi_value_clone_print_plan(XiFunc *f, XiValue *dst, const XiValue *s
  * span against the plan's location.  Arguments are filled in by the caller. */
 XR_FUNC XiValue *xi_value_new_print(XiFunc *f, XiBlock *blk, struct XrType *unit_type,
                                     const XrPrintPlan *plan);
+/* Whether a print operand's slot bits denote an unsigned value.  A full-width
+ * unsigned integer shares its slot shape with a signed one, so no renderer can
+ * recover the domain from the value; a narrower unsigned type is non-negative
+ * in that slot and renders the same read either way, which is why width is not
+ * what decides this.  Both backends ask here rather than each restating the
+ * rule — restating it is how one of them came to count all five unsigned
+ * widths while the other counted two. */
+XR_FUNC bool xi_print_operand_renders_unsigned(const XiValue *operand);
 /* Clone metadata between values of the same operation.  Unlike the shallow
  * field copier, this preserves ownership for operation-specific aux payloads. */
 XR_FUNC bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src);

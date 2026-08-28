@@ -23,6 +23,7 @@
 #include "../../src/runtime/value/xtype.h"
 #include "../../src/shared/xr_core_intrinsic.h"
 #include "../../src/shared/xr_assertion_plan.h"
+#include "../../src/shared/xr_print_plan.h"
 #include "../../src/shared/xr_exact_scalar_registry.h"
 
 /* Generate enum from xi_intrinsic.def — mirrors xm_intrinsic.h */
@@ -625,6 +626,48 @@ static void test_assertion_plans_are_registry_projections(void) {
                 "freestanding assertion planning must reject a missing failure provider");
 }
 
+/* A print plan states that the group is indivisible.  That claim is only worth
+ * something if a plan without it is refused, so each mutation below first
+ * proves it actually changed the field it names — a mutation that assigns the
+ * value already there tests nothing while looking like a rejection test. */
+static void test_print_plans_declare_the_atomic_group(void) {
+    XrLocation source = {"print_contract.xr", 11, 5, 11, 19};
+    XrPrintPlan group;
+    ASSERT_TRUE(xr_print_plan_build(XR_CORE_BUILTIN_PRINT, 3, source, XR_CORE_INTRINSIC_TARGET_VM,
+                                    0, &group) == XR_PRINT_PLAN_OK,
+                "print plan must derive from the stable builtin row");
+    ASSERT_TRUE(group.flags == XR_PRINT_PLAN_FLAG_ATOMIC_GROUP,
+                "a built print plan must declare whole-group rendering");
+    ASSERT_TRUE(group.separator == XR_PRINT_SEPARATOR_SPACE &&
+                    group.terminator == XR_PRINT_TERMINATOR_NEWLINE && group.arity == 3,
+                "the group owns its separator, terminator and arity");
+
+    XrPrintPlan mutation = group;
+    mutation.flags = XR_PRINT_PLAN_FLAG_NONE;
+    ASSERT_TRUE(mutation.flags != group.flags,
+                "clearing the atomic-group flag must change the plan");
+    ASSERT_TRUE(!xr_print_plan_validate(&mutation),
+                "a plan that does not claim whole-group rendering must be refused");
+
+    mutation = group;
+    mutation.flags = XR_PRINT_PLAN_FLAG_ATOMIC_GROUP | (1u << 7);
+    ASSERT_TRUE(mutation.flags != group.flags, "setting an unknown flag must change the plan");
+    ASSERT_TRUE(!xr_print_plan_validate(&mutation),
+                "a plan carrying a flag this schema does not define must be refused");
+
+    mutation = group;
+    mutation.required_capabilities = XR_PRINT_CAPABILITY_NONE;
+    ASSERT_TRUE(mutation.required_capabilities != group.required_capabilities,
+                "dropping the output capability must change the plan");
+    ASSERT_TRUE(!xr_print_plan_validate(&mutation),
+                "a print plan must keep requiring the output capability");
+
+    /* Framing is a fact of the group, so the buffer size and the bytes written
+     * are derived from one place rather than counted twice. */
+    ASSERT_TRUE(xr_print_plan_framing_bytes(&group) == 3,
+                "three operands frame as two separators plus one terminator");
+}
+
 static void test_assertion_action_channels_are_not_exchangeable(void) {
     const uint32_t target = XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER;
     XrAssertionPlan throws_plan;
@@ -811,6 +854,7 @@ int main(void) {
     test_semantic_intrinsic_registry();
     test_core_intrinsic_registry();
     test_assertion_plans_are_registry_projections();
+    test_print_plans_declare_the_atomic_group();
     test_assertion_action_channels_are_not_exchangeable();
     test_assertion_failure_schema_and_renderer();
     test_exact_scalar_registry();

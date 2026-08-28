@@ -7830,7 +7830,6 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         return false;
     if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
-        xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
         cg_class_native_value_stmt_is_elided(ctx, f, v) ||
         cg_class_native_ctor_is_inlined_here(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
@@ -10257,9 +10256,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
         cg_class_descriptor_value_is_elided(ctx, f, v))
         return;
-    if (xicgen_box_only_feeds_native_int_print(ctx, f, v))
-        return;
-
     if (cg_class_native_value_stmt_is_elided(ctx, f, v))
         return;
 
@@ -10369,7 +10365,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_fixed_array_index_set_stmt(ctx, out, f, prefix, v))
         return;
 
-    if (emit_span_print_value_stmt(ctx, out, f, v))
+    if (emit_print_group_value_stmt(ctx, out, f, v))
         return;
 
     if (emit_span_to_string_value_stmt(ctx, out, f, v, false))
@@ -11293,7 +11289,6 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
         cg_class_descriptor_value_is_elided(ctx, f, v) ||
-        xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
         cg_class_native_value_stmt_is_elided(ctx, f, v) ||
         cg_class_native_ctor_is_inlined_here(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||

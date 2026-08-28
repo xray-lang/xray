@@ -1763,6 +1763,130 @@ static inline void xrt_println(XrValue v) {
     xrt_write_char('\n');
 }
 
+/* =========================================================================
+ * Print group — one source print() renders here and leaves in one write
+ * ========================================================================= */
+
+/* Same contract as the hosted group: one exit, so a formatter that traps
+ * partway publishes nothing, and the whole group reaches the provider through a
+ * single xr_hook_write, which is where write atomicity is decided.
+ *
+ * There is no strbuf here — that type is hosted-only — so the group carries its
+ * own inline buffer and grows onto the provider's allocator only when an
+ * operand does not fit. */
+#define XRT_PRINT_GROUP_INLINE_BYTES 256u
+
+typedef struct {
+    char *buf;
+    size_t len;
+    size_t cap;
+    char inline_buf[XRT_PRINT_GROUP_INLINE_BYTES];
+} xrt_print_group_t;
+
+static inline void xrt_print_group_begin(xrt_print_group_t *g) {
+    g->buf = g->inline_buf;
+    g->len = 0;
+    g->cap = XRT_PRINT_GROUP_INLINE_BYTES;
+}
+
+static inline void xrt_print_group_reserve(xrt_print_group_t *g, size_t need) {
+    if (XR_LIKELY(g->len + need <= g->cap))
+        return;
+    size_t want = g->cap;
+    while (want < g->len + need)
+        want *= 2u;
+    char *grown = (char *) xrt_freestanding_alloc_bytes(want, XRT_FREESTANDING_DEFAULT_ALLOC_ALIGN);
+    if (!grown)
+        xrt_freestanding_trap("print group buffer exhausted");
+    memcpy(grown, g->buf, g->len);
+    if (g->buf != g->inline_buf)
+        xr_hook_free(g->buf);
+    g->buf = grown;
+    g->cap = want;
+}
+
+static inline void xrt_print_group_put(xrt_print_group_t *g, const char *bytes, size_t len) {
+    if (!bytes || len == 0)
+        return;
+    xrt_print_group_reserve(g, len);
+    memcpy(g->buf + g->len, bytes, len);
+    g->len += len;
+}
+
+static inline void xrt_print_group_put_u64(xrt_print_group_t *g, uint64_t value) {
+    char digits[20];
+    size_t pos = sizeof(digits);
+    do {
+        digits[--pos] = (char) ('0' + (value % 10u));
+        value /= 10u;
+    } while (value != 0);
+    xrt_print_group_put(g, digits + pos, sizeof(digits) - pos);
+}
+
+static inline void xrt_print_group_put_char(xrt_print_group_t *g, uint32_t cp) {
+    char buf[4];
+    size_t len = 0;
+    if (cp <= 0x7Fu) {
+        buf[len++] = (char) cp;
+    } else if (cp <= 0x7FFu) {
+        buf[len++] = (char) (0xC0u | (cp >> 6));
+        buf[len++] = (char) (0x80u | (cp & 0x3Fu));
+    } else if (cp <= 0xFFFFu) {
+        buf[len++] = (char) (0xE0u | (cp >> 12));
+        buf[len++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        buf[len++] = (char) (0x80u | (cp & 0x3Fu));
+    } else {
+        buf[len++] = (char) (0xF0u | (cp >> 18));
+        buf[len++] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
+        buf[len++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        buf[len++] = (char) (0x80u | (cp & 0x3Fu));
+    }
+    xrt_print_group_put(g, buf, len);
+}
+
+/* Mirrors xrt_print's value coverage exactly; the buffer only changes where the
+ * bytes go, never what they are. */
+static inline void xrt_print_group_append(xrt_print_group_t *g, XrValue v, int separate) {
+    if (separate)
+        xrt_print_group_put(g, " ", 1);
+    if (XR_IS_INT(v)) {
+        if (v.i < 0) {
+            xrt_print_group_put(g, "-", 1);
+            xrt_print_group_put_u64(g, (uint64_t) (-(v.i + 1)) + 1u);
+        } else {
+            xrt_print_group_put_u64(g, (uint64_t) v.i);
+        }
+    } else if (XR_IS_BOOL(v)) {
+        xrt_print_group_put(g, v.i ? "true" : "false", v.i ? 4u : 5u);
+    } else if (XR_IS_NULL(v)) {
+        xrt_print_group_put(g, "null", 4);
+    } else if (XR_IS_RUNE(v)) {
+        xrt_print_group_put_char(g, (uint32_t) v.i);
+    } else if (XR_IS_STR(v)) {
+        xrt_print_group_put(g, xr_str_data(v), (size_t) xr_str_len(v));
+    } else {
+        xrt_freestanding_trap("freestanding print supports only scalar/string values");
+    }
+}
+
+static inline void xrt_print_group_append_u64(xrt_print_group_t *g, uint64_t v, int separate) {
+    if (separate)
+        xrt_print_group_put(g, " ", 1);
+    xrt_print_group_put_u64(g, v);
+}
+
+static inline void xrt_print_group_flush(xrt_print_group_t *g, int terminate) {
+    if (terminate)
+        xrt_print_group_put(g, "\n", 1);
+    if (g->len > 0)
+        xr_hook_write(g->buf, g->len);
+    if (g->buf != g->inline_buf)
+        xr_hook_free(g->buf);
+    g->buf = g->inline_buf;
+    g->len = 0;
+    g->cap = XRT_PRINT_GROUP_INLINE_BYTES;
+}
+
 static inline int64_t xrt_i64_add(int64_t a, int64_t b) {
     return (int64_t) ((uint64_t) a + (uint64_t) b);
 }

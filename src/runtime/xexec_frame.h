@@ -45,6 +45,13 @@
 #define XR_CALL_REPLAY_PRESET (1 << 6)
 #define XR_CALL_CLOSURE_PENDING (1 << 7)  // waiting for closure called via xr_call_closure
 
+/* XrBcCallFrame.flags — a frame this VM built for itself rather than for a
+ * source-level call.  PRINT_GROUP_APPEND calls a user toString(); the return
+ * path appends the result to the print group buffer, which sits two slots below
+ * the frame base (buffer, return slot, callee base).  Nothing here reaches the
+ * output capability: only PRINT_GROUP_FLUSH does. */
+#define XR_FRAME_PRINT_GROUP_APPEND ((uint8_t) (1u << 0))
+
 // Single activation record on call stack
 // Uses base_offset (not pointer) for stack resizing safety
 typedef struct XrBcCallFrame {

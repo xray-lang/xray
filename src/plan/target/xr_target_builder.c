@@ -10092,6 +10092,20 @@ static bool collect_native_module_scalar_call_intent(XrTargetPlanBuilder *builde
                                                      uint32_t operation_index,
                                                      const XrSemanticOperationRecord *operation,
                                                      char *error, size_t error_size) {
+    /* The scalar check is not a second opinion on the boundary judgement; it
+     * asks a stricter question that only emission needs answered. The boundary
+     * judgement admits an int whose representation is merely not absent, while
+     * a call row must name one of the ten machine widths this backend can emit.
+     * They agree on unit, on raw pointers, and on refusing nullable payloads;
+     * the int representation domain is the only place they can part, and over
+     * 735 measured cases they never did.
+     *
+     * Keeping it here rather than folding it into the shape judgement is
+     * deliberate: the verifier counts one call row per admitted operation, so
+     * narrowing admission on this side alone would unbalance that census. Both
+     * sides would have to move together, and a term with no observed divergence
+     * does not earn that. It stays where the row is built, fails closed, and
+     * says why. */
     uint32_t arity = 0;
     if (!semantic_native_module_scalar_call_is_exact(builder->semantic_plan, operation, &arity) ||
         !call_type_is_exact_scalar(builder->semantic_plan, operation->result_type))
@@ -10826,6 +10840,53 @@ static bool collect_native_namespace_yieldable_call_intent(XrTargetPlanBuilder *
     return append_call_intent(builder, &call, error, error_size);
 }
 
+/* The same yieldable native member the namespace convention covers, reached as
+ * a plain call: `import { sleep } from time` resolves the member directly, so
+ * operand zero is the resolved callee rather than a namespace receiver and the
+ * operation is XI_CALL rather than XI_CALL_METHOD. Everything else -- the
+ * suspension ABI, the absence of a source dependency or callee index, the
+ * scalar/unit result domain -- is what the namespace form already proves. An
+ * import spelling is not a capability, so refusing this shape while admitting
+ * the other one refused the same program written a second way. */
+static bool collect_native_yieldable_call_intent(XrTargetPlanBuilder *builder,
+                                                 uint32_t target_index,
+                                                 const XrSemanticCallTargetRecord *target,
+                                                 bool suspends, char *error, size_t error_size) {
+    const XrSemanticPlan *plan = builder ? builder->semantic_plan : NULL;
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+    if (!target || !operation || target->kind != XR_SEM_CALL_TARGET_NATIVE_YIELDABLE ||
+        target->function != XR_SEMANTIC_INDEX_NONE ||
+        target->dependency != XR_SEMANTIC_INDEX_NONE ||
+        target->source_export != XR_SEMANTIC_INDEX_NONE ||
+        target->callable_type != XR_SEMANTIC_INDEX_NONE || operation->opcode != XI_CALL ||
+        operation->operand_count < 1 || !suspends ||
+        !call_type_is_exact_scalar(plan, operation->result_type))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native yieldable call authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = target_index,
+        .semantic_operation = target->operation,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_YIELDABLE,
+        .target_kind = XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE,
+        .suspends = true,
+    };
+    if (!stable_identity_from_pair("xray-target-native-yieldable-v1", target->id, operation->id,
+                                   operation->operand_count - 1u, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native yieldable call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 /* The suspending method of a frozen builtin instance. The SemanticPlan target
  * names the receiver type and the roster entry its builtin id and arity select;
  * it names no callee function, so the intent carries none either. The call
@@ -10974,6 +11035,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+        bool native_yieldable = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
         bool class_construction =
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
         bool builtin_instance =
@@ -10988,11 +11050,12 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         bool names_local_function =
             xr_semantic_call_target_names_local_function(target, operation, function_count);
         if (!target || !operation ||
-            (!direct && !source && !native_namespace && !class_construction && !builtin_instance &&
-             !instance_method_local) ||
+            (!direct && !source && !native_namespace && !native_yieldable && !class_construction &&
+             !builtin_instance && !instance_method_local) ||
             ((direct || instance_method_local) && !names_local_function) ||
             (source && operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
+            (native_yieldable && operation->opcode != XI_CALL) ||
             (class_construction && operation->opcode != XI_CALL) ||
             (builtin_instance && operation->opcode != XI_CALL_METHOD) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
@@ -11011,8 +11074,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 fprintf(stderr,
                         "[target] refused in call target coverage: SemanticPlan proved a call "
                         "target of kind %s, and this family consumes only DIRECT_LOCAL, "
-                        "SOURCE_EXPORT, NATIVE_NAMESPACE_YIELDABLE, BUILTIN_INSTANCE_YIELDABLE, "
-                        "SOURCE_INSTANCE_METHOD_LOCAL and SOURCE_CLASS_CONSTRUCTOR\n",
+                        "SOURCE_EXPORT, NATIVE_YIELDABLE, NATIVE_NAMESPACE_YIELDABLE, "
+                        "BUILTIN_INSTANCE_YIELDABLE, SOURCE_INSTANCE_METHOD_LOCAL and "
+                        "SOURCE_CLASS_CONSTRUCTOR\n",
                         target_trace_call_target_kind_name(target ? target->kind : 0u));
                 fprintf(stderr,
                         "[target]   call target=%u    kind=%s (%u), names function %u, dependency "
@@ -11025,8 +11089,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                                        operation);
                 target_trace_judgement("the operation record exists", operation != NULL);
                 target_trace_judgement("this family consumes the kind",
-                                       direct || source || native_namespace || class_construction ||
-                                           builtin_instance);
+                                       direct || source || native_namespace || native_yieldable ||
+                                           class_construction || builtin_instance);
                 if (direct)
                     target_trace_judgement("DIRECT_LOCAL names a function in range",
                                            target->function < function_count);
@@ -11041,6 +11105,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 if (native_namespace)
                     target_trace_judgement("NATIVE_NAMESPACE_YIELDABLE sits on CALL_METHOD",
                                            operation && operation->opcode == XI_CALL_METHOD);
+                if (native_yieldable)
+                    target_trace_judgement("NATIVE_YIELDABLE sits on CALL",
+                                           operation && operation->opcode == XI_CALL);
                 if (class_construction)
                     target_trace_judgement("SOURCE_CLASS_CONSTRUCTOR sits on CALL",
                                            operation && operation->opcode == XI_CALL);
@@ -11134,6 +11201,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                                                                      error, error_size);
             } else if (target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE) {
                 valid = collect_native_namespace_yieldable_call_intent(
+                    builder, target_index, target, state_by_operation[i] != 0, error, error_size);
+            } else if (target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE) {
+                valid = collect_native_yieldable_call_intent(
                     builder, target_index, target, state_by_operation[i] != 0, error, error_size);
             } else if (target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE) {
                 valid = collect_builtin_instance_yieldable_call_intent(

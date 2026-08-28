@@ -56,6 +56,14 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
 /* Human-readable error string for emit status. */
 XR_FUNC const char *xi_emit_status_str(XiEmitStatus s);
 
+/* Check that every emitted print group reaches the output capability exactly
+ * once.  A group is a buffer instruction, its appends, and one flush; the flush
+ * is the only one of the three that can write, so counting flushes per group is
+ * what makes indivisibility mechanically checkable rather than merely asserted.
+ * Walks nested protos.  Returns false and fills `error` on the first violation. */
+XR_FUNC bool xi_emit_verify_print_groups(const struct XrProto *proto, char *error,
+                                         size_t error_size);
+
 /* Attach Xi IR to proto for AOT direct lowering.
  * Transfers XiFunc ownership: proto will free it in xr_instruction_unit_free().
  * Must only be called once per proto. */

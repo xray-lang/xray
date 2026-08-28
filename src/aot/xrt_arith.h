@@ -1260,6 +1260,62 @@ static inline void xrt_println(XrValue v) {
     printf("\n");
 }
 
+/* =========================================================================
+ * Print group — one source print() renders here and leaves in one write
+ * ========================================================================= */
+
+/* The group buffer has exactly one exit: xrt_print_group_flush. A formatter
+ * that panics partway through never reaches it, so the operands already
+ * rendered are discarded with the buffer rather than published as half a line.
+ * Flushing is a single fwrite so the stdio lock on stdout covers the whole
+ * group: two coroutines printing at once cannot interleave inside one line. */
+typedef struct {
+    xrt_strbuf_t sb;
+} xrt_print_group_t;
+
+#define XRT_PRINT_GROUP_INITIAL_CAP 128
+
+static inline void xrt_print_group_begin(xrt_print_group_t *g) {
+    g->sb.len = 0;
+    g->sb.cap = XRT_PRINT_GROUP_INITIAL_CAP;
+    g->sb.buf = (char *) XRT_MALLOC((size_t) g->sb.cap);
+    if (XR_UNLIKELY(!g->sb.buf)) {
+        fprintf(stderr, "xrt_print_group_begin: out of memory\n");
+        abort();
+    }
+    g->sb.buf[0] = 0;
+}
+
+/* Renders through the same xrt_format_value the VM's formatter mirrors, so a
+ * group is byte-identical across backends. */
+static inline void xrt_print_group_append(xrt_print_group_t *g, XrValue v, int separate) {
+    if (separate)
+        xrt_fmt_char(&g->sb, ' ');
+    xrt_format_value(v, &g->sb, 0);
+}
+
+/* A full-width unsigned integer shares its slot shape with a signed one, so the
+ * sign domain comes from the operand's static type, not from the value. */
+static inline void xrt_print_group_append_u64(xrt_print_group_t *g, uint64_t v, int separate) {
+    char digits[24];
+    int n = snprintf(digits, sizeof(digits), "%llu", (unsigned long long) v);
+    if (separate)
+        xrt_fmt_char(&g->sb, ' ');
+    if (n > 0)
+        xrt_fmt_puts(&g->sb, digits, (size_t) n);
+}
+
+static inline void xrt_print_group_flush(xrt_print_group_t *g, int terminate) {
+    if (terminate)
+        xrt_fmt_char(&g->sb, '\n');
+    if (g->sb.len > 0)
+        fwrite(g->sb.buf, 1, (size_t) g->sb.len, stdout);
+    XRT_FREE(g->sb.buf);
+    g->sb.buf = NULL;
+    g->sb.len = 0;
+    g->sb.cap = 0;
+}
+
 /* typeof(x) — return integer type ID matching VM XrTypeId.
  * XR_TID_I64=8, XR_TID_F64=11, XR_TID_BOOL=1, XR_TID_NULL=0,
  * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_SET=15,
