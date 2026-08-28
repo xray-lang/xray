@@ -90,11 +90,42 @@ static bool semantic_fixture_build(XiFunc *root, XrSemanticPlan **plan, char *er
 
 #define xr_semantic_plan_build semantic_fixture_build
 
-static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
-static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
-static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
-static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 4, .frozen = true};
-static XrType stub_null = {.kind = XR_KIND_NULL, .id = 6, .frozen = true};
+/* These five predate `scalar_rep`, and omitting it does not mean "unspecified":
+ * `XR_SCALAR_REP_NONE` is UINT8_MAX, so a zeroed field spells `XR_NATIVE_I64`.
+ * For the integer that is the right answer and the two spellings agree, but a
+ * bool, a string, a unit and a null were each claiming a machine width they do
+ * not have -- describing themselves as integers everywhere the representation
+ * is read rather than only the kind. Each now states what it is. */
+static XrType stub_int = {
+    .kind = XR_KIND_INT,
+    .id = 1,
+    .frozen = true,
+    .scalar_rep = XR_NATIVE_I64,
+};
+static XrType stub_bool = {
+    .kind = XR_KIND_BOOL,
+    .id = 2,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_string = {
+    .kind = XR_KIND_STRING,
+    .id = 3,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_unit = {
+    .kind = XR_KIND_UNIT,
+    .id = 4,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_null = {
+    .kind = XR_KIND_NULL,
+    .id = 6,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_string_builder = {
     .kind = XR_KIND_INSTANCE,
     .id = 9,
@@ -2639,7 +2670,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "dd7ec7ed2c1042d77ea7fab4d601051c") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "581a75b551c70fa0f19249651c01f939") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(
@@ -2664,7 +2695,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "fcbe75d3d10889e6e98882a610ac6607") == 0);
+    REQUIRE(strcmp(loan_id_hex, "b230a694f304f31044e50451f18124e9") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -2723,7 +2754,7 @@ static void test_immutable_owned_snapshot(void) {
      * operation-owner registry, not the stdlib registry.
      * Old: 5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881. */
     REQUIRE(strcmp(semantic_hex,
-                   "71cc98da6f063685a0ce4b45624aa3d94aa29acf4871cc5764a607393f47d76c") == 0);
+                   "824f9cd094c801ad2db105ba97ac080cbdeb79c0a50cc938ba906e10a9027aba") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3788,9 +3819,9 @@ static void test_source_export_call_target_authority(void) {
      * fingerprint in the key, so it stays put.
      * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
      * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "1e3473bd3c7bd746dc40f3a0d79c9c55") == 0);
-    REQUIRE(strcmp(export_id, "0dfad701bd306712350ea91732781cb5") == 0);
-    REQUIRE(strcmp(target_id, "9224bbcbb03e730dd6a246927371d9db") == 0);
+    REQUIRE(strcmp(dependency_id, "7febb40c979d4c33d701b155035eafb2") == 0);
+    REQUIRE(strcmp(export_id, "fda3c47f9afbb56bc6f54afe0f1f2516") == 0);
+    REQUIRE(strcmp(target_id, "c4bad43487a5c6d6d3b062e88a7a2964") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -4330,7 +4361,7 @@ static void test_native_namespace_yieldable_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":native-namespace=time.sleep:kind=5") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "0898b74184efc19d5ea543230d05c107") == 0);
+    REQUIRE(strcmp(target_id_hex, "a21ea08f53a086fdb6045813f6b8ab10") == 0);
     const XrSemanticOperationRecord *import = NULL;
     for (uint32_t i = 0; i < plan->operation_count; i++)
         if (plan->operations[i].opcode == XI_IMPORT_REF)
@@ -4442,7 +4473,7 @@ static void test_builtin_instance_yieldable_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":builtin-instance=Semaphore.acquire:type=") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "b30ba37eed27762dec383d1b89fb95d7") == 0);
+    REQUIRE(strcmp(target_id_hex, "74f7bea0914ede2ff42b0d8057691b82") == 0);
     uint32_t states = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         states += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
