@@ -580,6 +580,72 @@ def run_object_cache_relocation(rec: Recorder, config: Config,
            f"after={[p.name for p in object_files(debug_cache)]}")
 
 
+def find_second_c_compiler(config: Config) -> Path | None:
+    """A C compiler that is not the one a plain build would pick.
+
+    Only used to prove the object cache tells two compilers apart. Absent one,
+    the scenario says so rather than passing on a single compiler.
+    """
+    for candidate in ("/opt/homebrew/opt/llvm/bin/clang", "/usr/local/opt/llvm/bin/clang",
+                      "/usr/bin/gcc", "/usr/bin/clang"):
+        path = Path(candidate)
+        if not path.is_file() or not os.access(path, os.X_OK):
+            continue
+        result = proc.run([path, "--version"], timeout=config.timeout)
+        if result.ok:
+            yield path
+
+
+def run_compiler_identity(rec: Recorder, config: Config,
+                          ws: workspace.Workspace) -> None:
+    """Two C compilers must not share one cached object.
+
+    The object cache key folds the compiler's identity. Losing that would
+    serve one compiler's object to another -- a wrong hit, which is the
+    failure the path normalization in this key has to not introduce.
+    """
+    print("--- compiler-identity ---")
+    compilers = list(find_second_c_compiler(config))
+    versions = {}
+    for path in compilers:
+        result = proc.run([path, "--version"], timeout=config.timeout)
+        versions.setdefault(result.stdout_text("replace").splitlines()[0], path)
+    if len(versions) < 2:
+        rec.ok("compiler-identity: only one C compiler on this host, nothing to tell apart")
+        return
+    first, second = list(versions.values())[:2]
+
+    d = ws.subdir("compiler-identity")
+    app = d / "app.xr"
+    app.write_text("fn main() -> i64 { return 42 }\n", encoding="utf-8")
+    cache = d / "cache"
+
+    cold = build(config, cache, app, d / "first", ["--toolchain", "clang", "--cc", str(first)])
+    if not require_build(rec, cold, "compiler-identity-cold"):
+        return
+    expect_state(rec, cold.combined_text(), "app", "compiling", "compiler-identity-cold")
+    published = object_files(cache)
+
+    warm = build(config, cache, app, d / "first-again",
+                 ["--toolchain", "clang", "--cc", str(first)])
+    if not require_build(rec, warm, "compiler-identity-warm"):
+        return
+    expect_state(rec, warm.combined_text(), "app", "hit", "compiler-identity-warm")
+    expect(rec, object_files(cache) == published,
+           "compiler-identity: the same compiler reuses its object",
+           f"before={[p.name for p in published]}\nafter={[p.name for p in object_files(cache)]}")
+
+    other = build(config, cache, app, d / "second",
+                  ["--toolchain", "clang", "--cc", str(second)])
+    if not require_build(rec, other, "compiler-identity-other"):
+        return
+    expect_state(rec, other.combined_text(), "app", "compiling", "compiler-identity-other")
+    expect(rec, len(object_files(cache)) == len(published) + 1,
+           "compiler-identity: a second compiler publishes its own object",
+           f"first={first}\nsecond={second}\n"
+           f"objects={[p.name for p in object_files(cache)]}")
+
+
 SCENARIOS: dict[str, Callable] = {
     "basic": run_basic_modules,
     "evidence": run_evidence_manifest_cache,
@@ -587,6 +653,7 @@ SCENARIOS: dict[str, Callable] = {
     "lto": run_lto_cache,
     "link-output": run_link_output_identity,
     "object-relocation": run_object_cache_relocation,
+    "compiler-identity": run_compiler_identity,
 }
 
 
