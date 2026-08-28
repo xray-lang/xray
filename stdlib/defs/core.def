@@ -1387,7 +1387,7 @@ module regex {
   class_field RegexMatch.groups {
   }
 
-  fn compile {
+  fn __compile {
     signature: "(pattern: string, flags?: string): Regex"
     doc: "Compile regex pattern"
     vm: "regex_compile"
@@ -1402,7 +1402,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn compile {
+  fn __compile {
     signature: "(pattern: string, flags?: string): Regex"
     doc: "Compile regex pattern"
     vm: "regex_compile"
@@ -1417,7 +1417,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn test {
+  fn __test {
     signature: "(pattern: Regex, s: string): bool"
     doc: "Test if regex matches"
     vm: "regex_test"
@@ -1431,7 +1431,7 @@ module regex {
     allocation: "no_heap"
   }
 
-  fn count {
+  fn __count {
     signature: "(pattern: Regex, s: string): i64"
     doc: "Count matches"
     vm: "regex_count"
@@ -1445,7 +1445,7 @@ module regex {
     allocation: "no_heap"
   }
 
-  fn findText {
+  fn __findText {
     signature: "(pattern: Regex, s: string): string?"
     doc: "Find first matching text"
     vm: "regex_find_text"
@@ -1460,7 +1460,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn findGroup {
+  fn __findGroup {
     signature: "(pattern: Regex, s: string, index: i64): string?"
     doc: "Find capture group"
     vm: "regex_find_group"
@@ -1550,7 +1550,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn replace {
+  fn __replace {
     signature: "(pattern: Regex, s: string, repl: string): string"
     doc: "Replace first match"
     vm: "regex_replace"
@@ -1565,7 +1565,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn replaceAll {
+  fn __replaceAll {
     signature: "(pattern: Regex, s: string, repl: string): string"
     doc: "Replace all matches"
     vm: "regex_replace_all"
@@ -1580,7 +1580,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn split {
+  fn __split {
     signature: "(pattern: Regex, s: string, limit?: i64): Array<string>"
     doc: "Split string by regex"
     vm: "regex_split"
@@ -1595,7 +1595,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn split {
+  fn __split {
     signature: "(pattern: Regex, s: string, limit?: i64): Array<string>"
     doc: "Split string by regex"
     vm: "regex_split"
@@ -1610,7 +1610,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn escape {
+  fn __escape {
     signature: "(s: string): string"
     doc: "Escape regex special chars"
     vm: "regex_escape"
@@ -1623,7 +1623,7 @@ module regex {
     return_ownership: "fresh"
   }
 
-  fn isValid {
+  fn __isValid {
     signature: "(pattern: string): bool"
     doc: "Check if pattern is valid"
     vm: "regex_is_valid"

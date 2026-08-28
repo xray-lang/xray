@@ -381,19 +381,19 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_REGEX
 static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "compile", regex_compile);
-    XRS_EXPORT(module, isolate, "test", regex_test);
-    XRS_EXPORT(module, isolate, "count", regex_count);
-    XRS_EXPORT(module, isolate, "findText", regex_find_text);
-    XRS_EXPORT(module, isolate, "findGroup", regex_find_group);
+    XRS_EXPORT(module, isolate, "__compile", regex_compile);
+    XRS_EXPORT(module, isolate, "__test", regex_test);
+    XRS_EXPORT(module, isolate, "__count", regex_count);
+    XRS_EXPORT(module, isolate, "__findText", regex_find_text);
+    XRS_EXPORT(module, isolate, "__findGroup", regex_find_group);
     XRS_EXPORT(module, isolate, "find", regex_find);
     XRS_EXPORT(module, isolate, "fullFind", regex_full_match);
     XRS_EXPORT(module, isolate, "findAll", regex_find_all);
-    XRS_EXPORT(module, isolate, "replace", regex_replace);
-    XRS_EXPORT(module, isolate, "replaceAll", regex_replace_all);
-    XRS_EXPORT(module, isolate, "split", regex_split);
-    XRS_EXPORT(module, isolate, "escape", regex_escape);
-    XRS_EXPORT(module, isolate, "isValid", regex_is_valid);
+    XRS_EXPORT(module, isolate, "__replace", regex_replace);
+    XRS_EXPORT(module, isolate, "__replaceAll", regex_replace_all);
+    XRS_EXPORT(module, isolate, "__split", regex_split);
+    XRS_EXPORT(module, isolate, "__escape", regex_escape);
+    XRS_EXPORT(module, isolate, "__isValid", regex_is_valid);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_REGEX */
 
