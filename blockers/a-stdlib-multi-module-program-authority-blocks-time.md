@@ -34,10 +34,17 @@ count: with no Xray body, `time` never entered the graph and the program was a
 single module.
 
 `tests/aot/filetests/link/runtime_time_symbol.xr` is the committed case that
-records the capability, and it is the one and only new failure the migration
-causes. Measured by running the link filetests on both trees and diffing the
-failure sets: base fails 6, the parked branch fails 7, and the difference is
-exactly that case. `system_time_queries.xr` already fails on the base.
+records the capability, and the parked branch fails it where the base passes.
+`system_time_queries.xr` already fails on the base.
+
+One correction to how that was measured. The first comparison extracted failing
+case names with a pattern that required a single space before FAIL, and the
+runner pads the column, so it saw 6 failures per side where the suite actually
+reports 242. The new failure it named is real and was confirmed by hand, but the
+comparison was not exhaustive: the parked branch may fail cases beyond that one.
+Re-derive the two failure sets with `filetests/[a-z]+/[a-z0-9_]+\.xr *FAIL`
+before acting on the count. The same corrected comparison over this lane's
+merged commits shows no new failures against the base.
 
 ## Where the refusal is decided
 
