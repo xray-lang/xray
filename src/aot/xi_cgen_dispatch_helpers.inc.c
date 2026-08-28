@@ -874,7 +874,7 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
          * leaving an immutable imported integer marked TAGGED.  The bundle's
          * canonical literal is sufficient proof to emit the same wrapping
          * native operation as two ordinary I64 operands. */
-        if (cg_type_is_unsigned_int(v->type)) {
+        if (xr_type_is_exact_unsigned_integer(v->type)) {
             const char *ctype = cg_native_int_ctype(v->type->scalar_rep);
             if (!ctype)
                 ctype = "uint64_t";
@@ -988,7 +988,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
      * carries that proof to the shared owner and needs no zero probe; anything
      * else takes the throwing helper. emit_value_as_rep_ctx normalizes raw-i64
      * and boxed operands alike. */
-    if (result_rep == XR_REP_I64 && cg_type_is_unsigned_int(v->type)) {
+    if (result_rep == XR_REP_I64 && xr_type_is_exact_unsigned_integer(v->type)) {
         bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
         if (boxed)
             fprintf(out, "XR_FROM_INT(");
