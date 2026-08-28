@@ -124,6 +124,10 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
         xr_compiler_session_pop_arena(&scope);
 
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    /* Analysis clears the file cursor on its way out, but lowering attributes
+     * plans to exact source and reads it. A real compile is inside a file scope
+     * at this point; this harness has to say so too. */
+    analyzer->current_file = "quoted_literal_scaling.xr";
     XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     if (func)
         count_xi_values(func, payload_length, result);

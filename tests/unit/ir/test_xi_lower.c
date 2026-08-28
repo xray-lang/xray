@@ -98,6 +98,10 @@ static XiFunc *lower_source(const char *source) {
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    /* Analysis clears the file cursor on its way out, but lowering attributes
+     * plans to exact source and reads it. A real compile is inside a file scope
+     * at this point; this harness has to say so too. */
+    analyzer->current_file = "test.xr";
     XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     if (!typed.program) {
         fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
@@ -178,6 +182,10 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
         xr_compiler_session_pop_arena(&canon_scope);
 
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, out_ev, 1);
+    /* Analysis clears the file cursor on its way out, but lowering attributes
+     * plans to exact source and reads it. A real compile is inside a file scope
+     * at this point; this harness has to say so too. */
+    analyzer->current_file = "test.xr";
     XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     if (!typed.program) {
         fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
