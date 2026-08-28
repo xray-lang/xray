@@ -5,9 +5,9 @@
 #
 # A backend that refuses to build a case produces no such disagreement and does
 # not belong here. Those ratchet separately, in known_failures_not_comparable.txt.
-# Until 2026-08-16 they were counted as divergences, and 564 of them buried the
-# single real one this net had found -- the whole net read as permanently red,
-# so nobody could use it as a gate. Keeping the two questions apart is what
+# Until 2026-08-16 they were counted as divergences, and hundreds of them buried
+# the single real one this net had found -- the whole net read as permanently
+# red, so nobody could use it as a gate. Keeping the two questions apart is what
 # makes a line here mean something again.
 #
 # Rules
@@ -20,63 +20,26 @@
 #
 # Established 2026-07-31, when the differential net was moved out of the CI
 # exclusion list. It had been excluded wholesale because a minority of cases
-# were red — which left the other 471 ungated as well. The net compares the same
+# were red -- which left the other 471 ungated as well. The net compares the same
 # .xr through both backends byte for byte and is the only thing that can catch
 # "VM and AOT disagree"; running none of it was strictly worse than running it
 # with a written list of exceptions.
 #
-# One case path per line. Comments and blank lines ignored.
-
-# --- Group 1: xr_aot_scope_exit arity ---------------------------------------
-# Cleared 2026-07-31. The emitter had been updated to call
-# xr_aot_scope_exit(ctx, mode) while the helper still declared a third
-# out_value parameter, so the AOT build failed outright. A scope block is a
-# statement and produces no value, and the value the scope settles on already
-# rides in XrAotResult.value — the out-parameter was a second output channel
-# for the same value that no caller ever read, so the declaration followed the
-# emitter rather than the other way round. The seventh case filed here,
-# sys_process_direct.xr, was never a scope_exit failure at all; it is a missing
-# stdlib member and has moved to Group 2.
-
-# --- Group 2: computed properties ---------------------------------------------
-# Cleared 2026-07-31. Filed as "stdlib members missing from the emitted C", but
-# the members were not missing anywhere in particular: `x: int { fn() {...} }`
-# declares a computed property, and the accessor it defines was never reachable.
-# The parser stored accessors as methods named "get:x" / "set:x" and the runtime
-# gave them their own method kinds, but nothing resolved `obj.x` to one, so both
-# backends rejected the read -- these cases failed under the VM too, which the
-# old note had wrong. The analyzer now resolves the access, lowering emits the
-# call, and the accessor kinds are gone: an accessor is a closure method whose
-# name marks it. See spec 5.3.7.
-
-# --- Group 3: union overlay literals -----------------------------------------
-# Cleared 2026-07-31. The aggregate-literal completeness check counted a union's
-# fields the way it counts a struct's, so a literal was rejected for not setting
-# every member — writes that would have landed on the same storage, where only
-# the last could survive. A union literal now sets exactly one member: naming
-# none leaves which member is live undefined, naming several says the value is
-# two things at once. XrClassInfo.is_overlay_union carries the distinction,
-# which nothing recorded before: a struct and a union were both just value types
-# with the same member shape.
-
-# --- Group 4: AOT crash ------------------------------------------------------
-# Cleared 2026-07-31. nested_generator.xr died on signal 5 (heap-use-after-free
-# in libmalloc) because iterator() on an iterator returned the receiver without
-# retaining it: `for (v in gen)` inside a generator put the generator and its
-# iterator into two frame slots that both get released. See
-# xrt_method_return_self in src/aot/xrt_method.h.
-
-# --- Group 5: VM rejects a case whose contract says it runs ------------------
-# Filed 2026-08-16, the divergence that separating build refusals made visible.
-# The case pins a deliberate boundary: the closed-world AOT planner cannot prove
-# the target of an indirect call through an upvalue, a Map read, or a
-# loop-built array, so it rejects the program while the VM runs it. That is the
-# written contract at the top of the case.
+# One case path per line. `#` starts a comment, blank lines are ignored.
 #
-# The VM no longer runs it. It fails in its own semantic-plan stage with
-# XR_SEM_0018 "semantic capture contract is incomplete (func=<main>)", so both
-# halves of the rejection contract now refuse, for unrelated reasons. Either
-# the capture contract has a real gap that the AOT-side rejection was hiding,
-# or the case's premise about the VM has expired. Neither is settled here, and
-# no line was deleted to reach this state -- the entry records a divergence that
-# was already there.
+# --- currently empty --------------------------------------------------------
+#
+# No VM/AOT divergence is baselined. That is not the same as "the two backends
+# agree about the language": on this base only 166 of the 676 discovered cases
+# reach a comparison at all, and the other 510 are refused by the AOT side and
+# ratcheted next door. An empty file here is a statement about what has been
+# compared, not about what has been proven.
+#
+# The four groups this file used to carry (scope_exit arity, computed
+# properties, union overlay literals, and the nested-generator AOT crash) were
+# all cleared on 2026-07-31 and their prose is in the history. A fifth entry,
+# filed 2026-08-16 against semantics/functions/unproven_callee_targets.xr,
+# recorded that the VM had stopped running a case whose contract says it runs.
+# Re-measured 2026-08-28: the VM runs it again and the case passes its
+# rejection contract, so the note described a state that no longer exists and
+# would only send the next reader after a divergence that is not there.

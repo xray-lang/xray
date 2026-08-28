@@ -1,560 +1,588 @@
-
-
-
-
+# Cases the differential net cannot compare
 #
+# A line here is a case a backend refuses to build at all, so the run produced
+# no verdict about whether the two backends agree. That is a coverage limit,
+# not a divergence: known_failures.txt beside this file is for cases where both
+# backends ran and disagreed, and mixing the two is what made this net
+# unreadable -- hundreds of unfinished target authorities buried the one real
+# disagreement it had found.
 #
+# Established 2026-08-16 during the unified target-machine work, when the AOT
+# backend went fail-closed ahead of its per-construct authorities. Every entry
+# is expected to leave as its construct gains one. The count here is the honest
+# measure of how far that migration has to go.
 #
-#
+# Rules, the same ratchet as known_failures.txt
+#   - The list may only shrink. A case outside this list that stops building is
 #     a backend regression and fails the run; a listed case that starts building
 #     must have its line deleted in the same change.
-#     used to be comparable no longer is, which is a regression by definition.
 #   - Do not add a line to make a change go green. Adding one says a case that
-#   - The list may only shrink. A case outside this list that stops building is
-# --- Indirect call through a function-typed parameter ---------------------
-# --- cases ported ahead of their AOT support ------------------------------
-# --- ref-exposed locals and cross-module typed array fill ------------------
-# A line here is a case where a backend refuses to build at all, so the run
-# Cases the differential net cannot compare
-# Each pins a construct the VM already runs and the target plan still refuses:
-# Established 2026-08-16 during the unified target-machine work, when the AOT
-# One case path per line. Comments and blank lines ignored.
-# Rules, the same ratchet as known_failures.txt
-# The case was written to pin this exact gap: the closed-world target planner
-# Two cases written against AOT emitter defects found by running the wasm3
-# arms without a separator, derived JSON struct encoding, cross-module
-# backend went fail-closed ahead of its per-construct authorities. Every entry
-# cannot name the callee of a call made through a function-typed parameter, so
-# disagreement it had found.
-# enum payload equality, iteration through an interface-typed iterator, match
-# exist cannot be decided from here while the shallower layer refuses.
-# for it -- deleting a line here is how that work reports itself.
-# had no coverage for; whether the emitter defects they were written for still
-# is expected to leave as its construct gains one. The count here is the honest
-# it refuses with "call target has no consumable adapter authority". The VM
-# limit, not a divergence: known_failures.txt beside this file is for cases
-# measure of how far that migration has to go.
-# net unreadable -- 564 unfinished target authorities buried the one real
-# port end to end. On this branch neither reaches the emitter: the target plan
-# produced no verdict about whether the two backends agree. That is a coverage
-# refusals so the backend work that makes each one build has a case waiting
-# refuses both first, with "direct-local argument contract needs unsupported
-# runs it. Listed here rather than as a divergence because AOT never built.
-# storage or ownership". The cases are kept because they pin a gap the corpus
-# subclassing, and `is` on a generic instance. They are listed as build
-# where both backends ran and disagreed, and mixing the two is what made this
-tests/diff/cases/basic/arrays.xr
-tests/diff/cases/basic/closures.xr
-tests/diff/cases/basic/range_precedence.xr
-tests/diff/cases/basic/range_precedence_arithmetic.xr
-tests/diff/cases/basic/ranges.xr
-tests/diff/cases/basic/strings.xr
-tests/diff/cases/limits/struct_literal_over_32.xr
-tests/diff/cases/limits/upval_capture_over_254.xr
-tests/diff/cases/match/adt_enum_nonpayload_variant.xr
-tests/diff/cases/match/adt_enum_payload_tostring.xr
-tests/diff/cases/match/struct_destructure.xr
-tests/diff/cases/semantics/cleanup/defer_async_await.xr
-tests/diff/cases/semantics/cleanup/defer_block_scope_exits.xr
-tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr
-tests/diff/cases/semantics/cleanup/defer_conditional_early_return.xr
-tests/diff/cases/semantics/cleanup/defer_coroutine.xr
-tests/diff/cases/semantics/cleanup/defer_coroutine_local_panic_handler.xr
-tests/diff/cases/semantics/cleanup/defer_error_absorbed_inside_body.xr
-tests/diff/cases/semantics/cleanup/defer_nested_cleanup_and_local_control.xr
-tests/diff/cases/semantics/cleanup/defer_receiver_late_binding.xr
-tests/diff/cases/semantics/cleanup/resource_release_order.xr
-tests/diff/cases/semantics/closure/call_through_function_parameter.xr
-tests/diff/cases/semantics/closure/capture_forms.xr
-tests/diff/cases/semantics/closure/nested_closure_transitive_capture.xr
-tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr
-tests/diff/cases/semantics/collections/array_capacity_panic_shared_core.xr
-tests/diff/cases/semantics/collections/array_char_compact.xr
-tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr
-tests/diff/cases/semantics/collections/array_hof_shared_core.xr
-tests/diff/cases/semantics/collections/array_join_shared_core.xr
-tests/diff/cases/semantics/collections/array_join_special_object_shared_core.xr
-tests/diff/cases/semantics/collections/array_resize_reserve_shared_core.xr
-tests/diff/cases/semantics/collections/array_reverse_shared_core.xr
-tests/diff/cases/semantics/collections/array_shift_shared_core.xr
-tests/diff/cases/semantics/collections/array_sort_shared_core.xr
-tests/diff/cases/semantics/collections/array_typed_fill_storage_shared_core.xr
-tests/diff/cases/semantics/collections/array_unshift_shared_core.xr
-tests/diff/cases/semantics/collections/bool_conversion_truthy_shared_core.xr
-tests/diff/cases/semantics/collections/byte_array_append_repeat_safe_shared_core.xr
-tests/diff/cases/semantics/collections/byte_array_bool_short_circuit_liveness_shared_core.xr
-tests/diff/cases/semantics/collections/byte_array_constructor_shared_core.xr
-tests/diff/cases/semantics/collections/byte_array_int_arg_shared_core.xr
-tests/diff/cases/semantics/collections/byte_array_range_arg_shared_core.xr
-tests/diff/cases/semantics/collections/byte_slice_bulk_ops_shared_core.xr
-tests/diff/cases/semantics/collections/byte_slice_float_load_store_shared_core.xr
-tests/diff/cases/semantics/collections/byte_slice_load_store_endian_shared_core.xr
-tests/diff/cases/semantics/collections/byte_slice_signed_load_store_shared_core.xr
-tests/diff/cases/semantics/collections/byte_uint8_specialization_shared_core.xr
-tests/diff/cases/semantics/collections/container_print.xr
-tests/diff/cases/semantics/collections/enum_payload_equality.xr
-tests/diff/cases/semantics/collections/for_in_interface_iterator.xr
-tests/diff/cases/semantics/collections/hof_index_param.xr
-tests/diff/cases/semantics/collections/iterator_protocol_exhausted.xr
-tests/diff/cases/semantics/collections/json_forin_shared_core.xr
-tests/diff/cases/semantics/collections/map_bool_key.xr
-tests/diff/cases/semantics/collections/map_build_in_fn.xr
-tests/diff/cases/semantics/collections/map_float_key_identity.xr
-tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr
-tests/diff/cases/semantics/collections/map_json_concrete_type_check.xr
-tests/diff/cases/semantics/collections/map_key_contextual_literal.xr
-tests/diff/cases/semantics/collections/map_set_derived_key_fields.xr
-tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr
-tests/diff/cases/semantics/collections/method_self_return_ownership.xr
-tests/diff/cases/semantics/collections/range_iterator_shared_core.xr
-tests/diff/cases/semantics/collections/range_to_array_too_large_shared_core.xr
-tests/diff/cases/semantics/collections/slice_int_arg_shared_core.xr
-tests/diff/cases/semantics/collections/slice_window_shared_core.xr
-tests/diff/cases/semantics/collections/span_active_borrow_disjoint_owner_shared_core.xr
-tests/diff/cases/semantics/collections/span_active_borrow_nested_owner_shared_core.xr
-tests/diff/cases/semantics/collections/span_compare_pod_shared_core.xr
-tests/diff/cases/semantics/collections/span_copyfrom_pod_shared_core.xr
-tests/diff/cases/semantics/collections/span_fill_pod_shared_core.xr
-tests/diff/cases/semantics/collections/span_reinterpret_asbytes_shared_core.xr
-tests/diff/cases/semantics/collections/stringbuilder_append_shared_core.xr
-tests/diff/cases/semantics/collections/stringbuilder_scalar_known_append_shared_core.xr
-tests/diff/cases/semantics/collections/type_names_shared_core.xr
-tests/diff/cases/semantics/collections/value_format_truncation_shared_core.xr
-tests/diff/cases/semantics/concurrency/atomic_rawptr.xr
-tests/diff/cases/semantics/concurrency/barrier_compose.xr
-tests/diff/cases/semantics/concurrency/condvar_compose.xr
-tests/diff/cases/semantics/concurrency/go_lambda_local_scope.xr
-tests/diff/cases/semantics/concurrency/mutex_cross_coroutine.xr
-tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr
-tests/diff/cases/semantics/concurrency/once_compose.xr
-tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr
-tests/diff/cases/semantics/condition/bool_nullable_explicit.xr
-tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr
-tests/diff/cases/semantics/condition/nullable_presence.xr
-tests/diff/cases/semantics/coro/await_array.xr
-tests/diff/cases/semantics/coro/await_non_rethrowing_forms_observe.xr
-tests/diff/cases/semantics/coro/await_tuple_destructure.xr
-tests/diff/cases/semantics/coro/await_value_error_keeps_channel.xr
-tests/diff/cases/semantics/coro/channel_for_in_recv_or.xr
-tests/diff/cases/semantics/coro/channel_nonblocking_prelude_enums.xr
-tests/diff/cases/semantics/coro/channel_recv_timeout_unbuffered.xr
-tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr
-tests/diff/cases/semantics/coro/channel_send_timeout_unbuffered.xr
-tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr
-tests/diff/cases/semantics/coro/coroutine_throws_unit_variant.xr
-tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr
-tests/diff/cases/semantics/coro/defer_runs_on_cancel.xr
-tests/diff/cases/semantics/coro/deterministic_timer_schedule_order.xr
-tests/diff/cases/semantics/coro/inline_match_try_recv_heap.xr
-tests/diff/cases/semantics/coro/lazy_string_boundary.xr
-tests/diff/cases/semantics/coro/linked_scope_error_propagates_at_exit.xr
-tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr
-tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr
-tests/diff/cases/semantics/coro/scope_child_failure_isolation.xr
-tests/diff/cases/semantics/coro/select_send_transfer.xr
-tests/diff/cases/semantics/coro/semaphore_double_acquire_defer_bool_slot.xr
-tests/diff/cases/semantics/coro/suspended_frame_release.xr
-tests/diff/cases/semantics/coro/task_result_failed_error_value.xr
-tests/diff/cases/semantics/coro/task_transfer_already_taken.xr
-tests/diff/cases/semantics/coro/task_transfer_return_local.xr
-tests/diff/cases/semantics/coro/task_transfer_return_map_set.xr
-tests/diff/cases/semantics/coro/work_queue_native_methods.xr
-tests/diff/cases/semantics/default_params/default_evaluated_per_call.xr
-tests/diff/cases/semantics/default_params/explicit_null_does_not_use_default.xr
-tests/diff/cases/semantics/destructure/tuple_fixed_width_unsigned.xr
-tests/diff/cases/semantics/evaluation_order/e2_call_argument_order.xr
-tests/diff/cases/semantics/evaluation_order/e4_short_circuit_points.xr
-tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr
-tests/diff/cases/semantics/evaluation_order/e7_literal_element_order.xr
-tests/diff/cases/semantics/evaluation_order/e8_interpolation_order.xr
-tests/diff/cases/semantics/exception/array_class_throw_cleanup_lifetime.xr
-tests/diff/cases/semantics/exception/defer_nested_function_call.xr
-tests/diff/cases/semantics/exception/fixed_array_index_oob_panic_shape.xr
-tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr
-tests/diff/cases/semantics/exception/nested_defer.xr
-tests/diff/cases/semantics/exception/panic_exception_shape.xr
-tests/diff/cases/semantics/exception/pattern_catch.xr
-tests/diff/cases/semantics/exception/try_catch.xr
-tests/diff/cases/semantics/exception/type_cast_panic_shape.xr
-tests/diff/cases/semantics/exception/type_check_panic_shape.xr
-tests/diff/cases/semantics/exception/uncaught_top_level_error.xr
-tests/diff/cases/semantics/ffi/cfn_bsearch.xr
-tests/diff/cases/semantics/ffi/cfn_optable.xr
-tests/diff/cases/semantics/ffi/cfn_tail_thread.xr
-tests/diff/cases/semantics/ffi/cfn_visitor_return_once.xr
-tests/diff/cases/semantics/ffi/extern_decl_large_layout_control_flow.xr
-tests/diff/cases/semantics/ffi/extern_decl_registry_matrix.xr
-tests/diff/cases/semantics/ffi/extern_direct_noescape_pointer.xr
-tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr
-tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr
-tests/diff/cases/semantics/ffi/extern_scalar_descriptor_matrix.xr
-tests/diff/cases/semantics/ffi/mem_load_store_native_size.xr
-tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr
-tests/diff/cases/semantics/ffi/mem_view_extern_layout_native_size.xr
-tests/diff/cases/semantics/ffi/mem_view_imported_layout_native_size.xr
-tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr
-tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr
-tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr
-tests/diff/cases/semantics/float_fmt/ieee_arithmetic.xr
-tests/diff/cases/semantics/float_fmt/rounding_boundary.xr
-tests/diff/cases/semantics/function_value_to_string.xr
-tests/diff/cases/semantics/functions/bare_lambda_expression_positions.xr
-tests/diff/cases/semantics/functions/default_param_as_function_value.xr
-tests/diff/cases/semantics/functions/function_type_surface.xr
-tests/diff/cases/semantics/functions/higher_order_closures.xr
-tests/diff/cases/semantics/functions/lambda_forms.xr
-tests/diff/cases/semantics/functions/lambda_inference_sources.xr
-tests/diff/cases/semantics/functions/named_function_forms.xr
-tests/diff/cases/semantics/functions/parenthesized_function_type.xr
-tests/diff/cases/semantics/functions/unit_return_expression.xr
-tests/diff/cases/semantics/functions/vararg_functions.xr
-tests/diff/cases/semantics/generator/early_stop.xr
-tests/diff/cases/semantics/generator/generator_in_coroutine.xr
-tests/diff/cases/semantics/generator/heap_value_yield.xr
-tests/diff/cases/semantics/generator/iterator_error_beats_exhaustion.xr
-tests/diff/cases/semantics/generator/iterator_exhausted.xr
-tests/diff/cases/semantics/generator/iterator_param_loop_carried.xr
-tests/diff/cases/semantics/generator/nested_generator.xr
-tests/diff/cases/semantics/generator/value_yield.xr
-tests/diff/cases/semantics/generator/yield_throw.xr
-tests/diff/cases/semantics/generic_container_type_args.xr
-tests/diff/cases/semantics/generic_iterable_constraint.xr
-tests/diff/cases/semantics/generic_type_alias.xr
-tests/diff/cases/semantics/int/contextual_numeric_conversion.xr
-tests/diff/cases/semantics/int/wrapping_fixed_width.xr
-tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr
-tests/diff/cases/semantics/int_wrap/int_overflow_predicates.xr
-tests/diff/cases/semantics/int_wrap/int_safe_methods.xr
-tests/diff/cases/semantics/int_wrap/numeric_method_shared_core.xr
-tests/diff/cases/semantics/int_wrap/stringbuilder_numeric_shared_core.xr
-tests/diff/cases/semantics/int_wrap/uint64_print_compare.xr
-tests/diff/cases/semantics/iter_order/map_set_order.xr
-tests/diff/cases/semantics/json/json_decode_nullable_nested_object.xr
-tests/diff/cases/semantics/json/json_decode_object_loop_reuse.xr
-tests/diff/cases/semantics/json/json_decode_type_matrix.xr
-tests/diff/cases/semantics/json/json_decode_typed_fields.xr
-tests/diff/cases/semantics/json/json_derive_decode.xr
-tests/diff/cases/semantics/json/json_derive_struct_encode.xr
-tests/diff/cases/semantics/json/json_encode_boundary.xr
-tests/diff/cases/semantics/json/json_kind_and_object_type.xr
-tests/diff/cases/semantics/json/json_parse_typed_direct.xr
-tests/diff/cases/semantics/json/json_parse_typed_error_path.xr
-tests/diff/cases/semantics/json/json_parse_value_invalid_panic.xr
-tests/diff/cases/semantics/json/json_typed_root_values.xr
-tests/diff/cases/semantics/json/json_with_rest_and_path.xr
-tests/diff/cases/semantics/json/object_json_codec_bridge.xr
-tests/diff/cases/semantics/modules/cleanup_init_error.xr
-tests/diff/cases/semantics/modules/cleanup_init_import_once.xr
-tests/diff/cases/semantics/modules/cleanup_init_panic.xr
-tests/diff/cases/semantics/modules/cross_module_borrowed_arg_release.xr
-tests/diff/cases/semantics/modules/exported_struct_methods.xr
-tests/diff/cases/semantics/modules/multimod_calls.xr
-tests/diff/cases/semantics/modules/value_struct_return_release.xr
-tests/diff/cases/semantics/modules/xmod_class.xr
-tests/diff/cases/semantics/modules/xmod_coro.xr
-tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr
-tests/diff/cases/semantics/modules/xmod_default_arg_class.xr
-tests/diff/cases/semantics/modules/xmod_inherit.xr
-tests/diff/cases/semantics/modules/xmod_inherit_lib_subclass.xr
-tests/diff/cases/semantics/modules/xmod_namespace_generic.xr
-tests/diff/cases/semantics/modules/xmod_nested_class_field.xr
-tests/diff/cases/semantics/modules/xmod_private_const_defaults.xr
-tests/diff/cases/semantics/modules/xmod_ptr_offset_imported_const.xr
-tests/diff/cases/semantics/modules/xmod_same_name_classes.xr
-tests/diff/cases/semantics/modules/xmod_same_name_methods.xr
-tests/diff/cases/semantics/modules/xmod_static.xr
-tests/diff/cases/semantics/modules/xmod_static_defaults.xr
-tests/diff/cases/semantics/narrowing/narrowed_types_reach_codegen.xr
-tests/diff/cases/semantics/nullable_primitive_display.xr
-tests/diff/cases/semantics/nullable_scalar_target.xr
-tests/diff/cases/semantics/object/object_destructure.xr
-tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr
-tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr
-tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr
-tests/diff/cases/semantics/oop/class_field_copy_ref_local.xr
-tests/diff/cases/semantics/oop/class_field_default_initializers.xr
-tests/diff/cases/semantics/oop/class_fixed_array_field_storage.xr
-tests/diff/cases/semantics/oop/class_method_self_signature.xr
-tests/diff/cases/semantics/oop/class_native_heap_instance.xr
-tests/diff/cases/semantics/oop/class_native_receiver_as_value.xr
-tests/diff/cases/semantics/oop/class_native_ref_field_ownership.xr
-tests/diff/cases/semantics/oop/class_synth_constructor_super.xr
-tests/diff/cases/semantics/oop/computed_accessor_inheritance.xr
-tests/diff/cases/semantics/oop/enum_class_payload_aggregate.xr
-tests/diff/cases/semantics/oop/enum_dynamic_read_aggregate.xr
-tests/diff/cases/semantics/oop/enum_namespace_ctor_with_nullable.xr
-tests/diff/cases/semantics/oop/enum_nullable_materialize.xr
-tests/diff/cases/semantics/oop/enum_static_methods.xr
-tests/diff/cases/semantics/oop/enum_value_aot_identity.xr
-tests/diff/cases/semantics/oop/fixed_array_ref_whole_store.xr
-tests/diff/cases/semantics/oop/function_typed_field_call.xr
-tests/diff/cases/semantics/oop/generic_class_constructor_lambda_return.xr
-tests/diff/cases/semantics/oop/generic_inferred_nested_monomorphization.xr
-tests/diff/cases/semantics/oop/generic_instance_in_declared_member_types.xr
-tests/diff/cases/semantics/oop/hashable_contract.xr
-tests/diff/cases/semantics/oop/mem_view_int_literal_store.xr
-tests/diff/cases/semantics/oop/method_as_value.xr
-tests/diff/cases/semantics/oop/native_class_reference_field_transfer.xr
-tests/diff/cases/semantics/oop/operator_overload_arithmetic.xr
-tests/diff/cases/semantics/oop/operator_overload_inherited.xr
-tests/diff/cases/semantics/oop/operator_overload_result_type.xr
-tests/diff/cases/semantics/oop/optional_chain_class_field.xr
-tests/diff/cases/semantics/oop/override_checked_valid.xr
-tests/diff/cases/semantics/oop/polymorphic_dispatch_runtime.xr
-tests/diff/cases/semantics/oop/private_constructor_factory.xr
-tests/diff/cases/semantics/oop/repr_c_struct.xr
-tests/diff/cases/semantics/oop/repr_c_struct_aggregate_param.xr
-tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr
-tests/diff/cases/semantics/oop/static_methods.xr
-tests/diff/cases/semantics/oop/typename_class_instance.xr
-tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr
-tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr
-tests/diff/cases/semantics/oop/visibility_const.xr
-tests/diff/cases/semantics/optimizer/known_empty_call_result_is_null.xr
-tests/diff/cases/semantics/optimizer/known_nullable_never_assigned_keeps_type.xr
-tests/diff/cases/semantics/optimizer/known_struct_copy_is_not_an_alias.xr
-tests/diff/cases/semantics/optimizer/pass_ifconv_select_shape.xr
-tests/diff/cases/semantics/optimizer/pass_inline_small_callee.xr
-tests/diff/cases/semantics/optional_call.xr
-tests/diff/cases/semantics/ownership/auto_borrow_class_alias_return_downgrade.xr
-tests/diff/cases/semantics/ownership/auto_borrow_heap_readonly_param.xr
-tests/diff/cases/semantics/ownership/auto_borrow_value_struct_return_downgrade.xr
-tests/diff/cases/semantics/ownership/closure_mutable_scalar_direct_call.xr
-tests/diff/cases/semantics/ownership/converged_capability_positive.xr
-tests/diff/cases/semantics/ownership/copy_deep_independent.xr
-tests/diff/cases/semantics/ownership/copy_native_class_graph.xr
-tests/diff/cases/semantics/ownership/copy_preserves_type.xr
-tests/diff/cases/semantics/ownership/in_alias_reassigned_copy_escape_allowed.xr
-tests/diff/cases/semantics/ownership/in_closure_copy_capture_allowed.xr
-tests/diff/cases/semantics/ownership/in_forward_function_param_copy_escape_allowed.xr
-tests/diff/cases/semantics/ownership/in_function_param_copy_escape_allowed.xr
-tests/diff/cases/semantics/ownership/in_function_param_method_copy_escape_allowed.xr
-tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr
-tests/diff/cases/semantics/ownership/in_method_wrapper_param_copy_escape_allowed.xr
-tests/diff/cases/semantics/ownership/in_readonly_user_method_names.xr
-tests/diff/cases/semantics/ownership/in_ref_heap_borrows.xr
-tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr
-tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr
-tests/diff/cases/semantics/ownership/move_into_go.xr
-tests/diff/cases/semantics/ownership/move_local_heap.xr
-tests/diff/cases/semantics/ownership/move_local_in_fn.xr
-tests/diff/cases/semantics/ownership/ref_param_write_invalidates_prior_copy.xr
-tests/diff/cases/semantics/ownership/shared_class_copy_go.xr
-tests/diff/cases/semantics/ownership/shared_freeze_go.xr
-tests/diff/cases/semantics/ownership/stack_closure_cell_capture.xr
-tests/diff/cases/semantics/ownership/value_struct_alias_copy_param.xr
-tests/diff/cases/semantics/range_inclusive.xr
-tests/diff/cases/semantics/range_value_for_in.xr
-tests/diff/cases/semantics/slice/array_expression_view.xr
-tests/diff/cases/semantics/slice/ref_range_place.xr
-tests/diff/cases/semantics/slice/slice_arg_to_tagged_factory.xr
-tests/diff/cases/semantics/slice/slice_borrow_return_contracts.xr
-tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr
-tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr
-tests/diff/cases/semantics/slice/slice_single_source_return.xr
-tests/diff/cases/semantics/slice/slice_value_to_string.xr
-tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr
-tests/diff/cases/semantics/slice/string_byte_slice_view.xr
-tests/diff/cases/semantics/slice/string_from_utf8_slice.xr
-tests/diff/cases/semantics/stdlib/base64_isvalid_direct.xr
-tests/diff/cases/semantics/stdlib/base64_module.xr
-tests/diff/cases/semantics/stdlib/base64_property_direct.xr
-tests/diff/cases/semantics/stdlib/buffer_asbytes_write_rejected_shared_core.xr
-tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr
-tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.xr
-tests/diff/cases/semantics/stdlib/codegen_controls_shared_core.xr
-tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr
-tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr
-tests/diff/cases/semantics/stdlib/compress_truncated_direct.xr
-tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr
-tests/diff/cases/semantics/stdlib/coro_typed_local_pool.xr
-tests/diff/cases/semantics/stdlib/coro_typed_local_shell_reuse.xr
-tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr
-tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr
-tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr
-tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr
-tests/diff/cases/semantics/stdlib/datetime_core_direct.xr
-tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr
-tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr
-tests/diff/cases/semantics/stdlib/encoding_core_direct.xr
-tests/diff/cases/semantics/stdlib/encoding_module.xr
-tests/diff/cases/semantics/stdlib/encoding_property_direct.xr
-tests/diff/cases/semantics/stdlib/fixed_array_ptr_shared_core.xr
-tests/diff/cases/semantics/stdlib/http2_surface_direct.xr
-tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_error_nested_enum_payload_direct.xr
-tests/diff/cases/semantics/stdlib/http_formdata_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr
-tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr
-tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr
-tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr
-tests/diff/cases/semantics/stdlib/http_typed_request_surface.xr
-tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr
-tests/diff/cases/semantics/stdlib/io_chmod_shared_core.xr
-tests/diff/cases/semantics/stdlib/io_path_result_shared_core.xr
-tests/diff/cases/semantics/stdlib/io_read_dir_shared_core.xr
-tests/diff/cases/semantics/stdlib/io_read_stdin_shared_core.xr
-tests/diff/cases/semantics/stdlib/io_remove_all_shared_core.xr
-tests/diff/cases/semantics/stdlib/io_system_direct.xr
-tests/diff/cases/semantics/stdlib/io_touch_shared_core.xr
-tests/diff/cases/semantics/stdlib/io_write_shared_core.xr
-tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr
-tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr
-tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr
-tests/diff/cases/semantics/stdlib/math_random_int_arg_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_cache_maintenance_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_fence_unit_binding.xr
-tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_nontemporal_store_shared_core.xr
-tests/diff/cases/semantics/stdlib/mem_page_shared_core.xr
-tests/diff/cases/semantics/stdlib/native_tailcall_cfunction_direct.xr
-tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr
-tests/diff/cases/semantics/stdlib/net_copy_bidirectional_cancel.xr
-tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr
-tests/diff/cases/semantics/stdlib/net_copy_bidirectional_transfer.xr
-tests/diff/cases/semantics/stdlib/net_copy_bidirectional_type_surface.xr
-tests/diff/cases/semantics/stdlib/os_exec_system_direct.xr
-tests/diff/cases/semantics/stdlib/os_query_system_direct.xr
-tests/diff/cases/semantics/stdlib/os_sleep_system_direct.xr
-tests/diff/cases/semantics/stdlib/parallel_api_reference.xr
-tests/diff/cases/semantics/stdlib/parallel_default_options.xr
-tests/diff/cases/semantics/stdlib/parallel_for_each_vm_batch.xr
-tests/diff/cases/semantics/stdlib/parallel_map_vm_batch.xr
-tests/diff/cases/semantics/stdlib/parallel_plan_close_during_dispatch.xr
-tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr
-tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr
-tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr
-tests/diff/cases/semantics/stdlib/parallel_reduce_vm_batch.xr
-tests/diff/cases/semantics/stdlib/path_isabsolute.xr
-tests/diff/cases/semantics/stdlib/path_module.xr
-tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr
-tests/diff/cases/semantics/stdlib/path_string_ops.xr
-tests/diff/cases/semantics/stdlib/pointer_provenance_lifetime_shared_core.xr
-tests/diff/cases/semantics/stdlib/prelude_contract_direct.xr
-tests/diff/cases/semantics/stdlib/probe_module_shapes.xr
-tests/diff/cases/semantics/stdlib/process_schema_shared_core.xr
-tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.xr
-tests/diff/cases/semantics/stdlib/regex_escape_direct.xr
-tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr
-tests/diff/cases/semantics/stdlib/simd_intrinsic_identity_alias.xr
-tests/diff/cases/semantics/stdlib/simd_portable_integer_vectors.xr
-tests/diff/cases/semantics/stdlib/simd_top_level_shared_vectors.xr
-tests/diff/cases/semantics/stdlib/sync_cache_padded.xr
-tests/diff/cases/semantics/stdlib/sync_fence_alias.xr
-tests/diff/cases/semantics/stdlib/sync_module_import.xr
-tests/diff/cases/semantics/stdlib/sync_namespace_import.xr
-tests/diff/cases/semantics/stdlib/sys_barrier_direct.xr
-tests/diff/cases/semantics/stdlib/sys_condvar_direct.xr
-tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr
-tests/diff/cases/semantics/stdlib/sys_mutex_direct.xr
-tests/diff/cases/semantics/stdlib/sys_once_direct.xr
-tests/diff/cases/semantics/stdlib/sys_process_direct.xr
-tests/diff/cases/semantics/stdlib/sys_rwlock_direct.xr
-tests/diff/cases/semantics/stdlib/sys_signal_on_signal.xr
-tests/diff/cases/semantics/stdlib/sys_thread_const_function_value.xr
-tests/diff/cases/semantics/stdlib/sys_thread_os_primitives_cross_thread.xr
-tests/diff/cases/semantics/stdlib/sys_thread_utils_direct.xr
-tests/diff/cases/semantics/stdlib/sys_threadlocal_basic.xr
-tests/diff/cases/semantics/stdlib/sys_threadlocal_init_throw_retry.xr
-tests/diff/cases/semantics/stdlib/sys_threadlocal_nullable.xr
-tests/diff/cases/semantics/stdlib/sys_threadlocal_recursive_init.xr
-tests/diff/cases/semantics/stdlib/text_contract_direct.xr
-tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr
-tests/diff/cases/semantics/stdlib/url_core_direct.xr
-tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr
-tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr
-tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr
-tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr
-tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr
-tests/diff/cases/semantics/string/char_scalar.xr
-tests/diff/cases/semantics/string/interpolation_display_shapes.xr
-tests/diff/cases/semantics/string/multiconcat.xr
-tests/diff/cases/semantics/string/quoted_literals_variable_block.xr
-tests/diff/cases/semantics/string/string_indexof_start_shared_core.xr
-tests/diff/cases/semantics/string/string_surface_declared_methods.xr
-tests/diff/cases/semantics/string/template_nested_quotes.xr
-tests/diff/cases/semantics/string/unicode_escape.xr
-tests/diff/cases/semantics/type/is_generic_instance_target.xr
-tests/diff/cases/semantics/types/enum_type_name.xr
-tests/diff/cases/semantics/types/fixed_width_type_tests.xr
-tests/diff/cases/semantics/types/object_field_invariance.xr
-tests/diff/cases/semantics/types/object_optional_sparse_fields.xr
-tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr
-tests/diff/cases/semantics/types/union_member_selection.xr
-tests/diff/cases/semantics/user_hashable_map_set_key.xr
-tests/diff/cases/semantics/value_struct_generic_annotation.xr
-tests/diff/cases/semantics/value_struct_generic_literal.xr
-tests/diff/cases/semantics/value_struct_param_copy.xr
-tests/diff/cases/spread/array_object_spread.xr
-tests/diff/cases/spread/array_spread_eval_order.xr
-tests/diff/cases/spread/object_spread_eval_order.xr
-tests/regression/11_coroutine/1100_cancelled.xr
-tests/regression/11_coroutine/1101_channel_basic.xr
-tests/regression/11_coroutine/1102_go_await.xr
-tests/regression/11_coroutine/1104_coroutine_combined.xr
-tests/regression/11_coroutine/1106_select.xr
-tests/regression/11_coroutine/1107_go_deferred.xr
-tests/regression/11_coroutine/1108_await_all.xr
-tests/regression/11_coroutine/1109_await_any.xr
-tests/regression/11_coroutine/1111_comprehensive.xr
-tests/regression/11_coroutine/1112_go_lambda_call.xr
-tests/regression/11_coroutine/1113_select_send.xr
-tests/regression/11_coroutine/1114_select_after.xr
-tests/regression/11_coroutine/1115_cancel.xr
-tests/regression/11_coroutine/1116_task_status.xr
-tests/regression/11_coroutine/1117_await_timeout.xr
-tests/regression/11_coroutine/1118_comprehensive.xr
-tests/regression/11_coroutine/1119_await_all_syntax.xr
-tests/regression/11_coroutine/1120_scope_basic.xr
-tests/regression/11_coroutine/1122_coro_naming.xr
-tests/regression/11_coroutine/1123_channel_timeout.xr
-tests/regression/11_coroutine/1124_coro_stats.xr
-tests/regression/11_coroutine/1125_coro_local.xr
-tests/regression/11_coroutine/1128_yield.xr
-tests/regression/11_coroutine/1129_coro_dump.xr
-tests/regression/11_coroutine/1130_linked_scope.xr
-tests/regression/11_coroutine/1131_linked_go_expr.xr
-tests/regression/11_coroutine/1132_task_monitor.xr
-tests/regression/11_coroutine/1134_linked_go_propagation.xr
-tests/regression/11_coroutine/1135_scope_child_errors.xr
-tests/regression/11_coroutine/1136_task_link.xr
-tests/regression/11_coroutine/1137_await_any_success.xr
-tests/regression/11_coroutine/1138_get_result.xr
-tests/regression/11_coroutine/1139_error_isolation.xr
-tests/regression/11_coroutine/1140_task_error.xr
-tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr
-tests/regression/11_coroutine/1142_shared_move.xr
-tests/regression/11_coroutine/1143_syscall_handoff.xr
-tests/regression/11_coroutine/1144_coro_monitor.xr
-tests/regression/11_coroutine/1145_coro_error_patterns.xr
-tests/regression/11_coroutine/1146_multicore_string_concat.xr
-tests/regression/11_coroutine/1147_preempt_test.xr
-tests/regression/11_coroutine/1148_scope_race_stress.xr
-tests/regression/11_coroutine/1149_module_call_stack_grow.xr
-tests/regression/11_coroutine/1150_select_block_buffer_wake.xr
-tests/regression/11_coroutine/1151_inject_queue_spill.xr
-tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr
-tests/regression/11_coroutine/1155_channel_close_timeout_fanout.xr
-tests/regression/11_coroutine/1156_select_close_wake.xr
-tests/regression/11_coroutine/1157_select_after_scope_cancel.xr
-tests/regression/11_coroutine/1157_work_queue_generic_class.xr
-tests/regression/11_coroutine/1158_work_queue_native.xr
-tests/regression/11_coroutine/1159_work_queue_blocking_pop.xr
-tests/regression/11_coroutine/1160_work_queue_close_fanout.xr
-tests/regression/11_coroutine/1161_multiple_task_awaiters.xr
-tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr
-tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr
-tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr
-tests/regression/11_coroutine/1165_result_group_native.xr
-tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr
-tests/regression/11_coroutine/1167_channel_explicit_transfer.xr
-tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr
+#     used to be comparable no longer is, which is a regression by definition.
+#
+# One case path per line. `#` starts a comment, blank lines are ignored.
+#
+# --- the inline comment on every line ---------------------------------------
+#
+# Each line carries the first refusal that case actually hit, with the
+# case-specific operands (hashes, value ids, opcodes, absolute paths) stripped
+# so that two cases blocked on one gap read alike. It is measurement, not
+# policy: it says where the case stops today so the next reader does not have
+# to rebuild the tree to find out. It carries no promise that the refusal is
+# correct -- deleting the line when the case builds is still the only thing
+# this file asserts.
+#
+# `vm too:` prefixes a case the VM also refuses at compile time. Those are not
+# AOT coverage gaps at all: the case currently runs on neither side, and
+# chasing a target authority for it is chasing the wrong layer.
+#
+# Measured 2026-08-28 on 00f665c5c (tree afe293b71) with:
+#   cmake -S . -B build-nofp -G Ninja -DCMAKE_BUILD_TYPE=Release \
+#         -DXRAY_STDLIB_VM_FASTPATHS=OFF
+# FASTPATHS=OFF is not a detail: the default configuration does not finish
+# building on this base, so every annotation here is an OFF-configuration
+# reading and a lane that changes the multi-module program authority should
+# expect the XR_TARGET_1000 family to move as a block.
+#
+# --- what the 510 refusals are blocked on ------------------------------
+#
+# 43 distinct first refusals; 51 of the cases are refused by the VM too.
+#
+#    114  XR_TARGET_1003 call-shaped operation has no exact target authority
+#     90  XR_TARGET_1000 product TargetPlan requires one canonical program authority
+#     67  XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+#     45  XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+#     35  XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+#     24  XR_TARGET_1003 direct-local signature or result storage is incomplete
+#     18  XR_TARGET_1003 call target has no consumable adapter authority
+#     15  XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+#     13  coroutine lowering failed closed before publishing CoroLowered (at ownership)
+#     12  XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+#      8  XR_TARGET_1003 call argument lacks exact caller/callee storage
+#      6  XR_TARGET_1001 class allocation has no exact source class authority
+#      5  XR_TARGET_1006 module representation materialization failed: XR_AOT_REFINEMENT_REPRESENTATION
+#      4  XR_TARGET_1001 value representation binding is incomplete, incompatible, or unlocated
+#      4  XR_SEM_0019 source export call argument disagrees with frozen dependency (at semantic-plan)
+#      3  XR_SEM_0019 Array intrinsic authority is not exact (at semantic-plan)
+#      3  XR_SEM_0019 StringBuilder.append producer identity has no unique frozen shape (at semantic-plan)
+#      3  XR_AOT_REFINEMENT_USE_SITE
+#      3  XR_TARGET_1001 channel-receive-storage family requires exact Channel<T> payload authority
+#      3  AOT verifier failed: AOT fixed-bytes plan lacks func/value plan
+#      3  XR_TARGET_1002 value aggregate field identity is incomplete
+#      3  XR_OWN_3002 owner equivalence class has no ownership-defining operation (at semantic-plan)
+#      3  front-end cannot infer payload type for channel; add an explicit Channel<T> annotation or contextual type ...
+#     26  (spread over 20 further first refusals, one or two cases each)
+#
+# Read that table as the work queue it is: the largest group is one gap, not
+# one case at a time, and the case count beside it is what closing that gap
+# hands back to the net.
+
+tests/diff/cases/basic/arrays.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/basic/closures.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/basic/range_precedence.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/basic/range_precedence_arithmetic.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/basic/ranges.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/basic/strings.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/limits/struct_literal_over_32.xr  # xi_cgen ICE W4_FORWARD_REF: temporary v72 used before it is defined
+tests/diff/cases/limits/upval_capture_over_254.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/match/adt_enum_nonpayload_variant.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
+tests/diff/cases/match/adt_enum_payload_tostring.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/match/struct_destructure.xr  # XR_TARGET_1001 string concat argument has no exact C projection
+tests/diff/cases/semantics/cleanup/defer_async_await.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
+tests/diff/cases/semantics/cleanup/defer_block_scope_exits.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
+tests/diff/cases/semantics/cleanup/defer_conditional_early_return.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/cleanup/defer_coroutine.xr  # XR_TARGET_1006 module representation materialization failed: XR_AOT_REFINEMENT_REPRESENTATION
+tests/diff/cases/semantics/cleanup/defer_coroutine_local_panic_handler.xr  # XR_TARGET_1006 module representation materialization failed: XR_AOT_REFINEMENT_REPRESENTATION
+tests/diff/cases/semantics/cleanup/defer_error_absorbed_inside_body.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/cleanup/defer_nested_cleanup_and_local_control.xr  # vm too: XR_OWN_3005 single ownership disposition does not post-dominate its origin (at semantic-plan)
+tests/diff/cases/semantics/cleanup/defer_receiver_late_binding.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
+tests/diff/cases/semantics/cleanup/resource_release_order.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
+tests/diff/cases/semantics/closure/call_through_function_parameter.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/closure/capture_forms.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/closure/nested_closure_transitive_capture.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/collections/array_capacity_panic_shared_core.xr  # vm too: XR_SEM_0019 Array intrinsic authority is not exact (at semantic-plan)
+tests/diff/cases/semantics/collections/array_char_compact.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr  # vm too: XR_SEM_0019 Array intrinsic authority is not exact (at semantic-plan)
+tests/diff/cases/semantics/collections/array_hof_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/array_join_shared_core.xr  # XR_TARGET_1003 call/adapter tables do not exactly cover target authority
+tests/diff/cases/semantics/collections/array_join_special_object_shared_core.xr  # XR_TARGET_1003 call/adapter tables do not exactly cover target authority
+tests/diff/cases/semantics/collections/array_resize_reserve_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/array_reverse_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/collections/array_shift_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/array_sort_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/array_typed_fill_storage_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/array_unshift_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/bool_conversion_truthy_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/byte_array_append_repeat_safe_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/byte_array_bool_short_circuit_liveness_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/byte_array_constructor_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/byte_array_int_arg_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/byte_array_range_arg_shared_core.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/collections/byte_slice_bulk_ops_shared_core.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/collections/byte_slice_float_load_store_shared_core.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/collections/byte_slice_load_store_endian_shared_core.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/collections/byte_slice_signed_load_store_shared_core.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/collections/byte_uint8_specialization_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/collections/container_print.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/enum_payload_equality.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/for_in_interface_iterator.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/collections/hof_index_param.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/iterator_protocol_exhausted.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/json_forin_shared_core.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/collections/map_bool_key.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/map_build_in_fn.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/collections/map_float_key_identity.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/map_json_concrete_type_check.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/map_key_contextual_literal.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/map_set_derived_key_fields.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/method_self_return_ownership.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/range_iterator_shared_core.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/collections/range_to_array_too_large_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/slice_int_arg_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/slice_window_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/collections/span_active_borrow_disjoint_owner_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/collections/span_active_borrow_nested_owner_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/collections/span_compare_pod_shared_core.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/collections/span_copyfrom_pod_shared_core.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/collections/span_fill_pod_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/span_reinterpret_asbytes_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/collections/stringbuilder_append_shared_core.xr  # vm too: XR_SEM_0019 StringBuilder.append producer identity has no unique frozen shape (at semantic-plan)
+tests/diff/cases/semantics/collections/stringbuilder_scalar_known_append_shared_core.xr  # vm too: XR_SEM_0019 StringBuilder.append producer identity has no unique frozen shape (at semantic-plan)
+tests/diff/cases/semantics/collections/type_names_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/collections/value_format_truncation_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/concurrency/atomic_rawptr.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/concurrency/barrier_compose.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/concurrency/condvar_compose.xr  # vm too: XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/concurrency/go_lambda_local_scope.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/concurrency/mutex_cross_coroutine.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/concurrency/once_compose.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/condition/bool_nullable_explicit.xr  # front-end a bare <case> value cannot be used as a condition; use <case>, <case>, or <case> (at ...
+tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/condition/nullable_presence.xr  # XR_AOT_REFINEMENT_USE_SITE
+tests/diff/cases/semantics/coro/await_array.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/coro/await_non_rethrowing_forms_observe.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/diff/cases/semantics/coro/await_tuple_destructure.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/coro/await_value_error_keeps_channel.xr  # vm too: XR_CORO_4003 func <case>: state 1 error continuation is not derivable (at ownership)
+tests/diff/cases/semantics/coro/channel_for_in_recv_or.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/coro/channel_nonblocking_prelude_enums.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/coro/channel_recv_timeout_unbuffered.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/coro/channel_send_timeout_unbuffered.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/coro/coroutine_throws_unit_variant.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/coro/defer_runs_on_cancel.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/coro/deterministic_timer_schedule_order.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/coro/inline_match_try_recv_heap.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/coro/lazy_string_boundary.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/coro/linked_scope_error_propagates_at_exit.xr  # vm too: XR_CORO_4003 func <case>: state 1 error continuation is not derivable (at ownership)
+tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr  # XR_TARGET_1001 channel-receive-storage family requires exact Channel<T> payload authority
+tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/coro/scope_child_failure_isolation.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/coro/select_send_transfer.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/coro/semaphore_double_acquire_defer_bool_slot.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/coro/suspended_frame_release.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/coro/task_result_failed_error_value.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/diff/cases/semantics/coro/task_transfer_already_taken.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/diff/cases/semantics/coro/task_transfer_return_local.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/coro/task_transfer_return_map_set.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/coro/work_queue_native_methods.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/default_params/default_evaluated_per_call.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/default_params/explicit_null_does_not_use_default.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/destructure/tuple_fixed_width_unsigned.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/evaluation_order/e2_call_argument_order.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/evaluation_order/e4_short_circuit_points.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/evaluation_order/e7_literal_element_order.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/evaluation_order/e8_interpolation_order.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/exception/array_class_throw_cleanup_lifetime.xr  # XR_TARGET_1001 value representation binding is incomplete, incompatible, or unlocated
+tests/diff/cases/semantics/exception/defer_nested_function_call.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/exception/fixed_array_index_oob_panic_shape.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/exception/nested_defer.xr  # XR_TARGET_1001 value representation binding is incomplete, incompatible, or unlocated
+tests/diff/cases/semantics/exception/panic_exception_shape.xr  # vm too: XR_SEM_0019 Array intrinsic authority is not exact (at semantic-plan)
+tests/diff/cases/semantics/exception/pattern_catch.xr  # XR_TARGET_1001 value representation binding is incomplete, incompatible, or unlocated
+tests/diff/cases/semantics/exception/try_catch.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/exception/type_cast_panic_shape.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/exception/type_check_panic_shape.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/exception/uncaught_top_level_error.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ffi/cfn_bsearch.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ffi/cfn_optable.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/ffi/cfn_tail_thread.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/ffi/cfn_visitor_return_once.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/ffi/extern_decl_large_layout_control_flow.xr  # front-end operator <case> is not defined for <case> and <case> (at post-monomorphization analysis)
+tests/diff/cases/semantics/ffi/extern_decl_registry_matrix.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/ffi/extern_direct_noescape_pointer.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr  # AOT verifier failed: AOT fixed-bytes plan lacks func/value plan
+tests/diff/cases/semantics/ffi/extern_scalar_descriptor_matrix.xr  # AOT verifier failed: AOT fixed-bytes plan lacks func/value plan
+tests/diff/cases/semantics/ffi/mem_load_store_native_size.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ffi/mem_view_extern_layout_native_size.xr  # XR_TARGET_1002 value aggregate field identity is incomplete
+tests/diff/cases/semantics/ffi/mem_view_imported_layout_native_size.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/float_fmt/ieee_arithmetic.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/float_fmt/rounding_boundary.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/function_value_to_string.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/functions/bare_lambda_expression_positions.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/functions/default_param_as_function_value.xr  # XR_TARGET_1006 module representation materialization failed: XR_AOT_REFINEMENT_REPRESENTATION
+tests/diff/cases/semantics/functions/function_type_surface.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/functions/higher_order_closures.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/functions/lambda_forms.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/functions/lambda_inference_sources.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/functions/named_function_forms.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/functions/parenthesized_function_type.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/functions/unit_return_expression.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/functions/vararg_functions.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/generator/early_stop.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generator/generator_in_coroutine.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generator/heap_value_yield.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generator/iterator_error_beats_exhaustion.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generator/iterator_exhausted.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generator/iterator_param_loop_carried.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generator/nested_generator.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generator/value_yield.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generator/yield_throw.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generic_container_type_args.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generic_iterable_constraint.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/generic_type_alias.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/int/contextual_numeric_conversion.xr  # XR_AOT_REFINEMENT_USE_SITE
+tests/diff/cases/semantics/int/wrapping_fixed_width.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/int_wrap/int_overflow_predicates.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/int_wrap/int_safe_methods.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/int_wrap/numeric_method_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/int_wrap/stringbuilder_numeric_shared_core.xr  # vm too: XR_SEM_0019 StringBuilder.append producer identity has no unique frozen shape (at semantic-plan)
+tests/diff/cases/semantics/int_wrap/uint64_print_compare.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/iter_order/map_set_order.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/json/json_decode_nullable_nested_object.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_decode_object_loop_reuse.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_decode_type_matrix.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/json/json_decode_typed_fields.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_derive_decode.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_derive_struct_encode.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_encode_boundary.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_kind_and_object_type.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_parse_typed_direct.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/json/json_parse_typed_error_path.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/json/json_parse_value_invalid_panic.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_typed_root_values.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/json_with_rest_and_path.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/json/object_json_codec_bridge.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/modules/cleanup_init_error.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/cleanup_init_import_once.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/cleanup_init_panic.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/cross_module_borrowed_arg_release.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/exported_struct_methods.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/multimod_calls.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/value_struct_return_release.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_class.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_coro.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_default_arg_class.xr  # XR_SEM_0019 call-target authority disagrees with frozen invocation facts (at semantic-plan)
+tests/diff/cases/semantics/modules/xmod_inherit.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_inherit_lib_subclass.xr  # vm too: XR_SEM_0019 source-export row is not grounded in the root initializer (at semantic-plan)
+tests/diff/cases/semantics/modules/xmod_namespace_generic.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/modules/xmod_nested_class_field.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_private_const_defaults.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_ptr_offset_imported_const.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_same_name_classes.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_same_name_methods.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_static.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/xmod_static_defaults.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/narrowing/narrowed_types_reach_codegen.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/nullable_primitive_display.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/nullable_scalar_target.xr  # XR_AOT_REFINEMENT_USE_SITE
+tests/diff/cases/semantics/object/object_destructure.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr  # XR_TARGET_1003 direct-local managed aggregate needs frozen clone, drop, root, and generation authority
+tests/diff/cases/semantics/oop/class_field_copy_ref_local.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/oop/class_field_default_initializers.xr  # XR_TARGET_1001 class allocation has no exact source class authority
+tests/diff/cases/semantics/oop/class_fixed_array_field_storage.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/oop/class_method_self_signature.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/oop/class_native_heap_instance.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/oop/class_native_receiver_as_value.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/oop/class_native_ref_field_ownership.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/oop/class_synth_constructor_super.xr  # XR_TARGET_1001 class allocation has no exact source class authority
+tests/diff/cases/semantics/oop/computed_accessor_inheritance.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/oop/enum_class_payload_aggregate.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
+tests/diff/cases/semantics/oop/enum_dynamic_read_aggregate.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/oop/enum_namespace_ctor_with_nullable.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
+tests/diff/cases/semantics/oop/enum_nullable_materialize.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/oop/enum_static_methods.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/oop/enum_value_aot_identity.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/oop/fixed_array_ref_whole_store.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/oop/function_typed_field_call.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/oop/generic_class_constructor_lambda_return.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/oop/generic_inferred_nested_monomorphization.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/oop/generic_instance_in_declared_member_types.xr  # vm too: XR_SEM_0019 direct-local managed aggregate borrow authority is inconsistent (at semantic-plan)
+tests/diff/cases/semantics/oop/hashable_contract.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/oop/mem_view_int_literal_store.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/oop/method_as_value.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
+tests/diff/cases/semantics/oop/native_class_reference_field_transfer.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/oop/operator_overload_arithmetic.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/oop/operator_overload_inherited.xr  # XR_TARGET_1001 class allocation has no exact source class authority
+tests/diff/cases/semantics/oop/operator_overload_result_type.xr  # vm too: front-end operator <case> is not defined for <case> and <case>; <case> joins two strings, convert the ...
+tests/diff/cases/semantics/oop/optional_chain_class_field.xr  # XR_TARGET_1001 class allocation has no exact source class authority
+tests/diff/cases/semantics/oop/override_checked_valid.xr  # XR_TARGET_1001 class allocation has no exact source class authority
+tests/diff/cases/semantics/oop/polymorphic_dispatch_runtime.xr  # XR_TARGET_1001 class allocation has no exact source class authority
+tests/diff/cases/semantics/oop/private_constructor_factory.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/oop/repr_c_struct.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/oop/repr_c_struct_aggregate_param.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/oop/static_methods.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/oop/typename_class_instance.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr  # vm too: XR_SEM_0019 value aggregate declaration facts are unavailable (at semantic-plan)
+tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr  # vm too: XR_SEM_0019 value aggregate declaration facts are unavailable (at semantic-plan)
+tests/diff/cases/semantics/oop/visibility_const.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/optimizer/known_empty_call_result_is_null.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/optimizer/known_nullable_never_assigned_keeps_type.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/optimizer/known_struct_copy_is_not_an_alias.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/optimizer/pass_inline_small_callee.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/optional_call.xr  # XR_TARGET_1001 direct-local shared callee authority is incomplete
+tests/diff/cases/semantics/ownership/auto_borrow_class_alias_return_downgrade.xr  # XR_TARGET_1001 value representation binding is incomplete, incompatible, or unlocated
+tests/diff/cases/semantics/ownership/auto_borrow_heap_readonly_param.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ownership/auto_borrow_value_struct_return_downgrade.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/ownership/closure_mutable_scalar_direct_call.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/converged_capability_positive.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/diff/cases/semantics/ownership/copy_deep_independent.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ownership/copy_native_class_graph.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/copy_preserves_type.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ownership/in_alias_reassigned_copy_escape_allowed.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ownership/in_closure_copy_capture_allowed.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/ownership/in_forward_function_param_copy_escape_allowed.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ownership/in_function_param_copy_escape_allowed.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ownership/in_function_param_method_copy_escape_allowed.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/in_method_wrapper_param_copy_escape_allowed.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ownership/in_readonly_user_method_names.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ownership/in_ref_heap_borrows.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ownership/move_into_go.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/move_local_heap.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/move_local_in_fn.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/ref_param_write_invalidates_prior_copy.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/shared_class_copy_go.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ownership/shared_freeze_go.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/ownership/stack_closure_cell_capture.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/ownership/value_struct_alias_copy_param.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/range_inclusive.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/range_value_for_in.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/slice/array_expression_view.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/slice/ref_range_place.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/slice/slice_arg_to_tagged_factory.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/slice/slice_borrow_return_contracts.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr  # XR_TARGET_1002 value aggregate field identity is incomplete
+tests/diff/cases/semantics/slice/slice_single_source_return.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/slice/slice_value_to_string.xr  # vm too: XR_OWN_3002 owner equivalence class has no ownership-defining operation (at semantic-plan)
+tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/slice/string_byte_slice_view.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/slice/string_from_utf8_slice.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/base64_isvalid_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/base64_module.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/base64_property_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/buffer_asbytes_write_rejected_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/codegen_controls_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/stdlib/compress_truncated_direct.xr  # XR_TARGET_1003 call target has no consumable adapter authority
+tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/stdlib/coro_typed_local_pool.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/stdlib/coro_typed_local_shell_reuse.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/datetime_core_direct.xr  # vm too: XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr  # vm too: XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/encoding_core_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/encoding_module.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/encoding_property_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/fixed_array_ptr_shared_core.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/diff/cases/semantics/stdlib/http2_surface_direct.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/stdlib/http_chunked_body_pure_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_error_nested_enum_payload_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_formdata_pure_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_response_head_pure_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/http_typed_request_surface.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/io_chmod_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/io_path_result_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/io_read_dir_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/io_read_stdin_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/io_remove_all_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/io_system_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/io_touch_shared_core.xr  # front-end member access on a possibly-null value: narrow it first with `if x != null`, use `?.`, or ...
+tests/diff/cases/semantics/stdlib/io_write_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/math_random_int_arg_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_cache_maintenance_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_fence_unit_binding.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/stdlib/mem_nontemporal_store_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/mem_page_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/stdlib/native_tailcall_cfunction_direct.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr  # XR_SEM_0019 source export call argument disagrees with frozen dependency (at semantic-plan)
+tests/diff/cases/semantics/stdlib/net_copy_bidirectional_cancel.xr  # source value is used on a path after XI_SOURCE_MOVE (at ownership)
+tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/net_copy_bidirectional_transfer.xr  # source value is used on a path after XI_SOURCE_MOVE (at ownership)
+tests/diff/cases/semantics/stdlib/net_copy_bidirectional_type_surface.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/os_exec_system_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/os_query_system_direct.xr  # front-end Comparison: cannot compare non-nullable type <case> with null (at post-monomorphization ...
+tests/diff/cases/semantics/stdlib/os_sleep_system_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/parallel_api_reference.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/parallel_default_options.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/parallel_for_each_vm_batch.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/parallel_map_vm_batch.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/parallel_plan_close_during_dispatch.xr  # coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr  # coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr  # vm too: XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr  # vm too: XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/parallel_reduce_vm_batch.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/path_isabsolute.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/path_module.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/path_string_ops.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/pointer_provenance_lifetime_shared_core.xr  # XR_TARGET_1001 semantic scalar type has no exact machine representation
+tests/diff/cases/semantics/stdlib/prelude_contract_direct.xr  # front-end Comparison: cannot compare non-nullable type <case> with null (at post-monomorphization ...
+tests/diff/cases/semantics/stdlib/probe_module_shapes.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/process_schema_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/range_generic_format_shared_core.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/stdlib/regex_escape_direct.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/simd_intrinsic_identity_alias.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/simd_portable_integer_vectors.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/simd_top_level_shared_vectors.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sync_cache_padded.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sync_fence_alias.xr  # XR_SEM_0019 source export call argument disagrees with frozen dependency (at semantic-plan)
+tests/diff/cases/semantics/stdlib/sync_module_import.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/stdlib/sync_namespace_import.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/sys_barrier_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_condvar_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_mutex_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_once_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_process_direct.xr  # vm too: XR_SEM_0019 provable call has no call-target authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/sys_rwlock_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_signal_on_signal.xr  # XR_SEM_0019 source export call argument disagrees with frozen dependency (at semantic-plan)
+tests/diff/cases/semantics/stdlib/sys_thread_const_function_value.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_thread_os_primitives_cross_thread.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_thread_utils_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/sys_threadlocal_basic.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/sys_threadlocal_init_throw_retry.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/sys_threadlocal_nullable.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/sys_threadlocal_recursive_init.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/diff/cases/semantics/stdlib/text_contract_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/url_core_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr  # XR_SEM_0019 source export call argument disagrees with frozen dependency (at semantic-plan)
+tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/string/char_scalar.xr  # vm too: coroutine lowering failed closed before publishing CoroLowered (at ownership)
+tests/diff/cases/semantics/string/interpolation_display_shapes.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/string/multiconcat.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/string/quoted_literals_variable_block.xr  # AOT verifier failed: AOT fixed-bytes plan lacks func/value plan
+tests/diff/cases/semantics/string/string_indexof_start_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/string/string_surface_declared_methods.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/string/template_nested_quotes.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/string/unicode_escape.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/type/is_generic_instance_target.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/types/enum_type_name.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/types/fixed_width_type_tests.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/semantics/types/object_field_invariance.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/types/union_member_selection.xr  # XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE
+tests/diff/cases/semantics/user_hashable_map_set_key.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/value_struct_generic_annotation.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/semantics/value_struct_generic_literal.xr  # XR_TARGET_1002 value aggregate field identity is incomplete
+tests/diff/cases/semantics/value_struct_param_copy.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/diff/cases/spread/array_object_spread.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/spread/array_spread_eval_order.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/diff/cases/spread/object_spread_eval_order.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/regression/11_coroutine/1100_cancelled.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1101_channel_basic.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1102_go_await.xr  # XR_TARGET_1006 module representation materialization failed: XR_AOT_REFINEMENT_REPRESENTATION
+tests/regression/11_coroutine/1104_coroutine_combined.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1106_select.xr  # vm too: front-end cannot infer payload type for channel; add an explicit Channel<T> annotation or contextual type ...
+tests/regression/11_coroutine/1107_go_deferred.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1108_await_all.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1109_await_any.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1111_comprehensive.xr  # vm too: front-end cannot infer payload type for channel; add an explicit Channel<T> annotation or contextual type ...
+tests/regression/11_coroutine/1112_go_lambda_call.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1113_select_send.xr  # vm too: front-end cannot infer payload type for channel; add an explicit Channel<T> annotation or contextual type ...
+tests/regression/11_coroutine/1114_select_after.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/regression/11_coroutine/1115_cancel.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1116_task_status.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1117_await_timeout.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1118_comprehensive.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1119_await_all_syntax.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1120_scope_basic.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1122_coro_naming.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1123_channel_timeout.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/regression/11_coroutine/1124_coro_stats.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/regression/11_coroutine/1125_coro_local.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1128_yield.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1129_coro_dump.xr  # XR_TARGET_1001 direct-local go callee storage authority is not exact
+tests/regression/11_coroutine/1130_linked_scope.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1131_linked_go_expr.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/regression/11_coroutine/1132_task_monitor.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1134_linked_go_propagation.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/regression/11_coroutine/1135_scope_child_errors.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1136_task_link.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1137_await_any_success.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/regression/11_coroutine/1138_get_result.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1139_error_isolation.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/regression/11_coroutine/1140_task_error.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
+tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1142_shared_move.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
+tests/regression/11_coroutine/1143_syscall_handoff.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1144_coro_monitor.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1145_coro_error_patterns.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1146_multicore_string_concat.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1147_preempt_test.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1148_scope_race_stress.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/regression/11_coroutine/1149_module_call_stack_grow.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/regression/11_coroutine/1150_select_block_buffer_wake.xr  # XR_TARGET_1001 direct-local go callee storage authority is not exact
+tests/regression/11_coroutine/1151_inject_queue_spill.xr  # XR_TARGET_1006 module representation materialization failed: XR_AOT_REFINEMENT_REPRESENTATION
+tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1155_channel_close_timeout_fanout.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/regression/11_coroutine/1156_select_close_wake.xr  # XR_TARGET_1001 channel-receive-storage family requires exact Channel<T> payload authority
+tests/regression/11_coroutine/1157_select_after_scope_cancel.xr  # XR_TARGET_1001 channel-receive-storage family requires exact Channel<T> payload authority
+tests/regression/11_coroutine/1157_work_queue_generic_class.xr  # vm too: XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1158_work_queue_native.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/regression/11_coroutine/1159_work_queue_blocking_pop.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1160_work_queue_close_fanout.xr  # XR_SEM_0019 coroutine state count disagrees with grounded call authority (at semantic-plan)
+tests/regression/11_coroutine/1161_multiple_task_awaiters.xr  # vm too: XR_OWN_3002 owner equivalence class has no ownership-defining operation (at semantic-plan)
+tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr  # vm too: XR_OWN_3002 owner equivalence class has no ownership-defining operation (at semantic-plan)
+tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+tests/regression/11_coroutine/1165_result_group_native.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/regression/11_coroutine/1167_channel_explicit_transfer.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
+tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
