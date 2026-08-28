@@ -1394,8 +1394,24 @@ static bool cg_emit_program_direct_i64_initializer_decls(XiCgenCtx *ctx, FILE *o
             ctx->error = true;
             return false;
         }
-        fprintf(out, "XRT_INTERNAL %s %s(xrt_closure_t *_cl);\n", return_view.c_type,
-                initializer->c_symbol);
+        /* Take the linkage from the same helper the unit's own declarations
+         * use, so a change to how an initializer is linked cannot leave this
+         * declaration disagreeing with the definition it stands for. */
+        const char *initializer_prefix = NULL;
+        for (int i = 0; i < ctx->all_nmodules; i++) {
+            const XiModule *owner = ctx->all_modules[i];
+            if (owner && owner->init == initializer->xi_function) {
+                initializer_prefix = owner->name ? owner->name : "mod";
+                break;
+            }
+        }
+        if (!initializer_prefix) {
+            ctx->error = true;
+            return false;
+        }
+        fprintf(out, "%s%s %s(xrt_closure_t *_cl);\n",
+                cg_func_forward_linkage(ctx, initializer->xi_function, initializer_prefix, true),
+                return_view.c_type, initializer->c_symbol);
     }
     return true;
 }

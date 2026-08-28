@@ -835,6 +835,13 @@ target_include_directories(test_xrt_assertion PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
 )
+# This case compiles the header-only runtime rather than linking xray_core, so
+# it does not inherit the math library the core links for everyone else. Darwin
+# serves math from libSystem and never noticed; a glibc host fails to resolve
+# nan() at link time.
+if(NOT WIN32)
+    target_link_libraries(test_xrt_assertion PRIVATE m)
+endif()
 add_test(NAME test_xrt_assertion COMMAND $<TARGET_FILE:test_xrt_assertion>)
 set_tests_properties(test_xrt_assertion PROPERTIES LABELS "aot;vm;assertion;shared-core")
 add_test(NAME test_assertion_vm_equality
@@ -1388,6 +1395,7 @@ if(XR_BUILD_DAP)
     )
     target_include_directories(test_dap_breakpoints PRIVATE
         ${CMAKE_SOURCE_DIR}/src/app/dap
+        ${CMAKE_SOURCE_DIR}/include
     )
     add_test(NAME test_dap_breakpoints COMMAND test_dap_breakpoints)
 

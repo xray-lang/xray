@@ -11005,7 +11005,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
          * already builds its suspendability edge. Consume it here on the same
          * terms, or a target the semantic layer proved is refused as uncovered. */
         bool instance_method_local = xr_semantic_call_target_binds_instance_method(
-            target, plan, builder->semantic_dependencies, builder->semantic_dependency_count);
+            target, plan, (const XrSemanticPlan *const *) builder->semantic_dependencies,
+            builder->semantic_dependency_count);
         bool names_local_function =
             xr_semantic_call_target_names_local_function(target, operation, function_count);
         if (!target || !operation ||
@@ -11141,10 +11142,11 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         if (target_index != XR_SEMANTIC_INDEX_NONE) {
             const XrSemanticCallTargetRecord *target =
                 xr_semantic_plan_call_target(plan, target_index);
-            if (target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-                           xr_semantic_call_target_binds_instance_method(
-                               target, plan, builder->semantic_dependencies,
-                               builder->semantic_dependency_count))) {
+            if (target &&
+                (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+                 xr_semantic_call_target_binds_instance_method(
+                     target, plan, (const XrSemanticPlan *const *) builder->semantic_dependencies,
+                     builder->semantic_dependency_count))) {
                 valid = collect_direct_local_call_intent(
                     builder, target_index, target, state_by_operation[i] != 0,
                     target->function < function_count && suspendable[target->function] != 0, error,

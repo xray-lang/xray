@@ -2,10 +2,15 @@
 """A freestanding provider object must stay inside its declared ABI.
 
 The generated object for a freestanding coroutine target is compiled with the
-provider ABI defines and then checked two ways: its undefined-symbol set must
-equal the declared allow-list exactly (not merely be a subset -- an unexpected
-*absence* also means the ABI moved), and it must not carry the hosted value-ops
-bridge or reference a hosted runtime symbol.
+provider ABI defines and then checked three ways: nothing outside the declared
+allow-list may be left undefined, the case must still reach a core set of
+provider hooks, and it must not carry the hosted value-ops bridge or reference
+a hosted runtime symbol.
+
+The first two are separate because a hook is referenced only when the lowered
+program needs it, so equality against the whole allow-list would reject a legal
+lowering. What equality did cover and the core set does not is noted on
+REQUIRED_UNDEFINED.
 """
 
 from __future__ import annotations
@@ -58,6 +63,18 @@ ALLOWED_UNDEFINED = (
 # hook -- so requiring the whole list would fail on a legal lowering. Checking a
 # core set instead keeps a case that stops reaching the provider from passing
 # the escape test by referencing almost nothing.
+#
+# What the core set does not watch, and why, for each name in the difference:
+#   memcpy, memset                     not provider hooks
+#   xr_aot_runtime_config_init/new/    emitted together with xr_aot_run_main,
+#     delete                           which the core set does require
+#   xr_aot_await_task_resume           the other resume spellings are outside
+#                                      ALLOWED, so a switch still escapes
+#   xr_aot_trace_frame_value           UNWATCHED: this case traces no frame
+#                                      root, so nothing pins frame-root tracing
+#   xr_runtime_core_enable_object_/    UNWATCHED: driven by the OBJECTS and TASK
+#     task_destroy_ops                 capability bits, and no gate ties the
+#                                      declared capabilities to the emitted ones
 REQUIRED_UNDEFINED = (
     "xr_aot_await_task",
     "xr_aot_frame_alloc",
@@ -66,6 +83,9 @@ REQUIRED_UNDEFINED = (
     "xr_aot_spawn",
     "xrt_closure_new",
 )
+
+if not set(REQUIRED_UNDEFINED) <= set(ALLOWED_UNDEFINED):
+    raise AssertionError("required provider hooks must be declared as allowed")
 
 HOSTED_SYMBOL_RE = re.compile(
     r"^(pthread|malloc$|free$|epoll|kqueue|netpoll|xray_rt_coro|xray_core)",
