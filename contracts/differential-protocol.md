@@ -76,7 +76,7 @@ the program-output comparison remain byte-native and are not normalized.
 
 ## Digest anchors
 
-anchor-sha256: tests/diff/run_backend_diff.py 9b30566a476c0816a1939f41a281cbac3709b2062482ddcc0620b72b7424484d
+anchor-sha256: tests/diff/run_backend_diff.py 25e7a5cb894f419008eeffc1369f2c9567deb090492763b0a25eaaff959013e9
 anchor-sha256: tests/diff/survey_refusals.py 2b671c3f7cb21f97cf89905e16364083ed193a57f399d6d3cf737e1e4e46cb5b
 anchor-sha256: scripts/check_live_refusal_manifest.py 56fe2287953f6553988e0f5794533dd4bbcf82af50b603524268d3f408d35686
 anchor-sha256: src/plan/semantic/xr_semantic_verify.c d24b7b8b8755d07db5d45a4ed0059e7f5666c36309aec54d974c0c176bd14a97
