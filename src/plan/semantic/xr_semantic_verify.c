@@ -3794,15 +3794,28 @@ static bool verify_direct_local_managed_aggregate_boundaries(
             !operand || parameter->type != operand->type || parameter->mode != XR_PARAM_READ ||
             parameter->ownership != XI_OWN_BORROWED ||
             parameter->transfer_mode != XR_TRANSFER_SHARE ||
-            (parameter->flags & (uint8_t) ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+            (parameter->flags &
+             (uint8_t) ~(XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_READ_PLACE)) != 0 ||
             parameter->reserved != 0 || operand->role != XR_SEM_OPERAND_ARGUMENT ||
             operand->parameter != (int16_t) ordinal || operand->parameter_mode != XR_PARAM_READ ||
             operand->transfer_mode != XR_TRANSFER_SHARE ||
             operand->ownership_action != XR_SEM_OPERAND_BORROW ||
-            operand->access != XR_CALL_ARG_PLAIN || operand->origin != XI_PLACE_ORIGIN_NONE ||
-            operand->lifetime != XI_PLACE_LIFETIME_NONE ||
-            operand->escape != XI_PLACE_ESCAPE_NONE ||
-            operand->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+            operand->access != XR_CALL_ARG_PLAIN || operand->escape != XI_PLACE_ESCAPE_NONE ||
+            /* Same two spellings of one fact as the source-export path: a
+             * fixed-layout value aggregate passed to a `read` parameter uses
+             * the borrowed call-bound place ABI, so the caller's addressable
+             * operand is authorized exactly when the callee's own record froze
+             * READ_PLACE. Without the place the operand must carry no place
+             * provenance at all. */
+            ((operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0
+                 ? ((parameter->flags & XR_SEM_PARAMETER_READ_PLACE) == 0 ||
+                    operand->flags != (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) ||
+                    operand->origin == XI_PLACE_ORIGIN_NONE ||
+                    operand->origin > XI_PLACE_ORIGIN_PROJECTION_TEMP ||
+                    operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND)
+                 : (operand->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+                    operand->origin != XI_PLACE_ORIGIN_NONE ||
+                    operand->lifetime != XI_PLACE_LIFETIME_NONE)))
             return report(error, error_size, "XR_SEM_0019",
                           "direct-local managed aggregate borrow authority is inconsistent");
     }

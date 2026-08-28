@@ -276,78 +276,83 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
         return false;
     }
     state->entry = xr_path_join(root, state->project->main);
+    if (!state->entry) {
+        xr_cli_error("verify", "cannot resolve entry path for '%s'", state->project->main);
+        return false;
+    }
     state->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
     if (!state->entry || !state->isolate ||
         !xr_project_module_identity_authority(state->project, &state->entry_authority,
                                               &state->entry_authority_namespace,
                                               &state->entry_authority_root, NULL, 0))
         return false;
-    xr_module_system_init_with_script(state->isolate, state->entry);
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
-    xr_compiler_session_set_native_package_plan(session, state->project->native_plan);
-    XrModuleRegistry *registry = xr_isolate_get_module_registry(state->isolate);
-    XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
-    state->graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
-    if (!state->graph ||
-        xr_module_graph_build(state->graph, state->entry, &state->entry_authority, &graph_error) !=
-            0 ||
-        xr_module_graph_topological_sort(state->graph) != 0 || state->graph->has_cycle) {
-        xr_cli_error("verify", "%s", graph_error ? graph_error : "module graph build failed");
-        xr_free(graph_error);
-        return false;
-    }
+}
+xr_module_system_init_with_script(state->isolate, state->entry);
+XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
+xr_compiler_session_set_native_package_plan(session, state->project->native_plan);
+XrModuleRegistry *registry = xr_isolate_get_module_registry(state->isolate);
+XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+state->graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
+if (!state->graph ||
+    xr_module_graph_build(state->graph, state->entry, &state->entry_authority, &graph_error) != 0 ||
+    xr_module_graph_topological_sort(state->graph) != 0 || state->graph->has_cycle) {
+    xr_cli_error("verify", "%s", graph_error ? graph_error : "module graph build failed");
     xr_free(graph_error);
-    state->analyzer = xa_analyzer_new(session);
-    if (!state->analyzer)
-        return false;
-    xa_analyzer_set_graph(state->analyzer, state->graph);
-    for (int ti = 0; ti < state->graph->topo_count; ti++) {
-        XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
-        xa_analyzer_analyze(state->analyzer, spec->source_path, (XrAstNode *) spec->ast);
-        spec->export_symbols =
-            xa_analyzer_collect_export_symbols(state->analyzer, (XrAstNode *) spec->ast);
-        int ignored = 0;
-        for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(state->analyzer, &ignored); diag;
-             diag = diag->next)
-            if (diag->severity == XR_DIAG_SEV_ERROR)
-                errors++;
-        xa_analyzer_clear_diagnostics(state->analyzer);
-    }
-    AstNode **roots = (AstNode **) xr_calloc((size_t) state->graph->topo_count, sizeof(AstNode *));
-    if (!roots)
-        return false;
-    for (int ti = 0; ti < state->graph->topo_count; ti++)
-        roots[ti] = state->graph->specs[state->graph->topo_order[ti]].ast;
-    for (int ti = 0; ti < state->graph->topo_count; ti++) {
-        XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
-        /* A budget failure leaves calls unspecialized, so any shape contract
-         * proven below would describe code that was never going to be built.
-         * The diagnostic is also counted in the analysis loop; failing here
-         * makes verify's dependence on it explicit rather than incidental. */
-        if (!xa_mono_pass(spec->ast, roots, state->graph->topo_count, state->isolate,
-                          state->analyzer))
+    return false;
+}
+xr_free(graph_error);
+state->analyzer = xa_analyzer_new(session);
+if (!state->analyzer) {
+    xr_cli_error("verify", "cannot create the analyzer");
+    return false;
+}
+xa_analyzer_set_graph(state->analyzer, state->graph);
+for (int ti = 0; ti < state->graph->topo_count; ti++) {
+    XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
+    xa_analyzer_analyze(state->analyzer, spec->source_path, (XrAstNode *) spec->ast);
+    spec->export_symbols =
+        xa_analyzer_collect_export_symbols(state->analyzer, (XrAstNode *) spec->ast);
+    int ignored = 0;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(state->analyzer, &ignored); diag;
+         diag = diag->next)
+        if (diag->severity == XR_DIAG_SEV_ERROR)
             errors++;
-    }
-    for (int ti = 0; ti < state->graph->topo_count; ti++) {
-        XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
-        xa_analyzer_analyze(state->analyzer, spec->source_path, (XrAstNode *) spec->ast);
-        if (spec->export_symbols)
-            xr_hashmap_free(spec->export_symbols);
-        spec->export_symbols =
-            xa_analyzer_collect_export_symbols(state->analyzer, (XrAstNode *) spec->ast);
-        int ignored = 0;
-        for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(state->analyzer, &ignored); diag;
-             diag = diag->next)
-            if (diag->severity == XR_DIAG_SEV_ERROR)
-                errors++;
-        xa_analyzer_clear_diagnostics(state->analyzer);
-    }
-    xr_free(roots);
-    if (errors) {
-        xr_cli_error("verify", "project analysis failed with %d error(s)", errors);
-        return false;
-    }
-    return true;
+    xa_analyzer_clear_diagnostics(state->analyzer);
+}
+AstNode **roots = (AstNode **) xr_calloc((size_t) state->graph->topo_count, sizeof(AstNode *));
+if (!roots)
+    return false;
+for (int ti = 0; ti < state->graph->topo_count; ti++)
+    roots[ti] = state->graph->specs[state->graph->topo_order[ti]].ast;
+for (int ti = 0; ti < state->graph->topo_count; ti++) {
+    XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
+    /* A budget failure leaves calls unspecialized, so any shape contract
+     * proven below would describe code that was never going to be built.
+     * The diagnostic is also counted in the analysis loop; failing here
+     * makes verify's dependence on it explicit rather than incidental. */
+    if (!xa_mono_pass(spec->ast, roots, state->graph->topo_count, state->isolate, state->analyzer))
+        errors++;
+}
+for (int ti = 0; ti < state->graph->topo_count; ti++) {
+    XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
+    xa_analyzer_analyze(state->analyzer, spec->source_path, (XrAstNode *) spec->ast);
+    if (spec->export_symbols)
+        xr_hashmap_free(spec->export_symbols);
+    spec->export_symbols =
+        xa_analyzer_collect_export_symbols(state->analyzer, (XrAstNode *) spec->ast);
+    int ignored = 0;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(state->analyzer, &ignored); diag;
+         diag = diag->next)
+        if (diag->severity == XR_DIAG_SEV_ERROR)
+            errors++;
+    xa_analyzer_clear_diagnostics(state->analyzer);
+}
+xr_free(roots);
+if (errors) {
+    xr_cli_error("verify", "project analysis failed with %d error(s)", errors);
+    return false;
+}
+return true;
 }
 
 /* Semantic effect bits that an analysis pass in this compiler build actually

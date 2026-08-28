@@ -418,141 +418,141 @@ static void lsp_rebuild_module_graph(XrLspServer *server, XrLspDocument *doc) {
 static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const char *base_uri) {
     if (!server || !ast || !base_uri || !server->workspace_analyzer)
         return;
-    if (ast->type != AST_PROGRAM)
+    if (server->workspace_analyzer)
+        xa_analyzer_set_graph(server->workspace_analyzer, NULL);
+    if (server->module_graph) {
+        xr_module_graph_free(server->module_graph);
+        server->module_graph = NULL;
+    }
+    if (server->module_graph_authority) {
+        xr_cli_graph_authority_close(server->module_graph_authority);
+        xr_free(server->module_graph_authority);
+        server->module_graph_authority = NULL;
+    }
+}
+
+/* Build the module graph rooted at this document and analyse its dependencies
+ * through it.
+ *
+ * The analyzer answers an import specifier by finding the importing module in
+ * the graph and asking the resolver where the specifier points.  Without a
+ * graph it cannot map `"./palette"` onto anything, so every name imported from
+ * a sibling file degrades to an unknown-member diagnostic on code the compiler
+ * accepts.  Going through the graph also means the editor discovers files the
+ * way the compiler does — the specifier carries no extension, and the
+ * resolver's probing is what supplies it.
+ *
+ * Dependencies are read from disk. An unsaved buffer is authoritative only for
+ * the document being parsed, which keeps its own analysis below. */
+static void lsp_rebuild_module_graph(XrLspServer *server, XrLspDocument *doc) {
+    xlsp_release_module_graph(server);
+    if (!server->workspace_analyzer || !server->isolate || !doc || !doc->uri)
         return;
 
-    // Extract base directory from URI
-    char base_dir[XLSP_MAX_PATH];
-    const char *uri_path = base_uri;
-    uri_path = xlsp_uri_to_path(uri_path);
-    strncpy(base_dir, uri_path, sizeof(base_dir) - 1);
-    base_dir[sizeof(base_dir) - 1] = '\0';
-    char *last_slash = strrchr(base_dir, '/');
-    if (last_slash)
-        *last_slash = '\0';
+    const char *entry_path = xlsp_uri_to_path(doc->uri);
+    if (!entry_path || !entry_path[0])
+        return;
 
-    // Scan for import statements
-    for (int i = 0; i < ast->as.program.count; i++) {
-        AstNode *stmt = ast->as.program.statements[i];
-        if (!stmt || stmt->type != AST_IMPORT_STMT)
-            continue;
+    XrCliGraphAuthority *authority = (XrCliGraphAuthority *) xr_malloc(sizeof(*authority));
+    if (!authority)
+        return;
 
-        const char *import_path = stmt->as.import_stmt.module_name;
-        if (!import_path)
-            continue;
+    char authority_error[256] = {0};
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(server->isolate);
+    if (!xr_cli_graph_authority_open(authority, registry, entry_path, authority_error,
+                                     sizeof(authority_error))) {
+        lsp_log("graph: no authority for %s: %s", entry_path, authority_error);
+        xr_free(authority);
+        return;
+    }
 
-        // Skip stdlib imports
-        if (import_path[0] != '.' && import_path[0] != '/')
-            continue;
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
+    XrModuleGraph *graph = xr_module_graph_new(session, authority->resolver);
+    char *build_error = NULL;
+    if (!graph ||
+        xr_module_graph_build(graph, entry_path, &authority->entry_authority, &build_error) != 0) {
+        lsp_log("graph: build failed for %s: %s", entry_path,
+                build_error ? build_error : "unknown");
+        xr_free(build_error);
+        if (graph)
+            xr_module_graph_free(graph);
+        xr_cli_graph_authority_close(authority);
+        xr_free(authority);
+        return;
+    }
 
-        // Resolve relative path
-        char full_path[XLSP_MAX_PATH];
-        if (import_path[0] == '/') {
-            strncpy(full_path, import_path, sizeof(full_path) - 1);
-        } else if (strncmp(import_path, "./", 2) == 0) {
-            snprintf(full_path, sizeof(full_path), "%s/%s", base_dir, import_path + 2);
-        } else if (strncmp(import_path, "../", 3) == 0) {
-            // Handle parent directory
-            char parent_dir[XLSP_MAX_PATH];
-            strncpy(parent_dir, base_dir, sizeof(parent_dir) - 1);
-            const char *rel = import_path;
-            while (strncmp(rel, "../", 3) == 0) {
-                char *slash = strrchr(parent_dir, '/');
-                if (slash)
-                    *slash = '\0';
-                rel += 3;
-            }
-            snprintf(full_path, sizeof(full_path), "%s/%s", parent_dir, rel);
-        } else {
-            continue;
-        }
+    // Build import URI
+    char import_uri[1100];
+    snprintf(import_uri, sizeof(import_uri), "file://%s", full_path);
 
-        // Build import URI
-        char import_uri[1100];
-        snprintf(import_uri, sizeof(import_uri), "file://%s", full_path);
-
-        // Check if document is already open
-        XrLspDocument *open_doc = xlsp_document_get(server, import_uri);
-        if (open_doc) {
-            // Document is open - check if it needs re-analysis (dirty = has unsaved changes)
-            if (open_doc->dirty && open_doc->ast) {
-                lsp_log("import: %s is open and dirty, re-analyzing", full_path);
-                /* The analyzer borrows the file path it is handed and stores
-                 * it on every symbol it records, so the path has to outlive
-                 * those symbols. import_uri is this frame's buffer; the open
-                 * document owns an identical string for as long as it is
-                 * open, which is exactly the lifetime the symbols need. */
-                XlspAnalysisIdentity import_identity;
-                xlsp_analysis_identity_push(
-                    &import_identity, xr_compiler_session_current_for_isolate(server->isolate),
-                    server->module_graph, open_doc->uri);
-                xa_analyzer_refresh_file(server->workspace_analyzer, open_doc->uri,
-                                         (XrAstNode *) open_doc->ast, open_doc->content_hash);
-                xlsp_analysis_identity_pop(&import_identity);
-                open_doc->dirty = false;
-            } else {
-                lsp_log("import: %s already open (symbols up to date)", full_path);
-            }
-            continue;
-        }
-
-        // Document not open - read from disk
-        char *content = xr_file_read_all(full_path, "r", NULL);
-        if (!content) {
-            lsp_log("import: cannot open %s", full_path);
-            continue;
-        }
-
-        lsp_log("import: indexing from disk %s", full_path);
-
-        // Ensure type pool is set
-        XrTypePool *pool = lsp_compiler_analyzer_pool(server->isolate);
-        if (server->isolate && pool) {
-            xr_type_set_current_pool(pool, &pool->next_type_id);
-        }
-
-        // Parse the imported file using a temporary arena
-        XrArena temp_arena;
-        xr_arena_init(&temp_arena, 64 * 1024);  // 64KB initial size
-
-        XrCompilerSessionScope parse_scope;
-        if (!xr_compiler_session_push_arena(
-                xr_compiler_session_current_for_isolate(server->isolate), &temp_arena, import_uri,
-                &parse_scope)) {
-            lsp_log("import: failed to enter compiler session for %s", full_path);
-            xr_arena_destroy(&temp_arena);
-            xr_free(content);
-            continue;
-        }
-
-        Parser parser;
-        xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), content,
-                       import_uri, &temp_arena);
-
-        // Set max errors to avoid getting stuck on very broken files
-        parser.max_errors = 50;
-
-        AstNode *import_ast = xr_parse_recoverable(&parser);
-        xr_compiler_session_pop_arena(&parse_scope);
-
-        // Analyze even with parse errors to get partial symbols for completion
-        if (import_ast) {
+    // Check if document is already open
+    XrLspDocument *open_doc = xlsp_document_get(server, import_uri);
+    if (open_doc) {
+        // Document is open - check if it needs re-analysis (dirty = has unsaved changes)
+        if (open_doc->dirty && open_doc->ast) {
+            lsp_log("import: %s is open and dirty, re-analyzing", full_path);
+            /* The analyzer borrows the file path it is handed and stores
+             * it on every symbol it records, so the path has to outlive
+             * those symbols. import_uri is this frame's buffer; the open
+             * document owns an identical string for as long as it is
+             * open, which is exactly the lifetime the symbols need. */
             XlspAnalysisIdentity import_identity;
             xlsp_analysis_identity_push(&import_identity,
                                         xr_compiler_session_current_for_isolate(server->isolate),
-                                        server->module_graph, import_uri);
-            xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode *) import_ast);
+                                        server->module_graph, open_doc->uri);
+            xa_analyzer_refresh_file(server->workspace_analyzer, open_doc->uri,
+                                     (XrAstNode *) open_doc->ast, open_doc->content_hash);
             xlsp_analysis_identity_pop(&import_identity);
-            lsp_log("import: indexed %s%s", full_path, parser.had_error ? " (with errors)" : "");
+            open_doc->dirty = false;
         } else {
-            lsp_log("import: failed to parse %s", full_path);
+            lsp_log("import: %s already open (symbols up to date)", full_path);
         }
+        continue;
+        if (strcmp(spec->source_path, entry_path) == 0)
+            continue;
 
-        // Destroy temp arena - releases all AST memory at once
-        xr_arena_destroy(&temp_arena);
-
-        xr_free(content);
+        char spec_uri[XLSP_MAX_PATH + 8];
+        snprintf(spec_uri, sizeof(spec_uri), "file://%s", spec->source_path);
+        XrLspDocument *open_doc = xlsp_document_get(server, spec_uri);
+        XrAstNode *module_ast =
+            open_doc && open_doc->ast ? (XrAstNode *) open_doc->ast : (XrAstNode *) spec->ast;
+        if (!module_ast)
+            continue;
     }
+
+    Parser parser;
+    xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), content,
+                   import_uri, &temp_arena);
+
+    // Set max errors to avoid getting stuck on very broken files
+    parser.max_errors = 50;
+
+    AstNode *import_ast = xr_parse_recoverable(&parser);
+    xr_compiler_session_pop_arena(&parse_scope);
+
+    // Analyze even with parse errors to get partial symbols for completion
+    if (import_ast) {
+        XlspAnalysisIdentity import_identity;
+        xlsp_analysis_identity_push(&import_identity,
+                                    xr_compiler_session_current_for_isolate(server->isolate),
+                                    server->module_graph, import_uri);
+        xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode *) import_ast);
+        xlsp_analysis_identity_pop(&import_identity);
+        lsp_log("import: indexed %s%s", full_path, parser.had_error ? " (with errors)" : "");
+    } else {
+        lsp_log("import: failed to parse %s", full_path);
+    }
+
+    // Destroy temp arena - releases all AST memory at once
+    xr_arena_destroy(&temp_arena);
+
+    xa_analyzer_analyze(server->workspace_analyzer, spec->source_path, module_ast);
+    spec->export_symbols =
+        xa_analyzer_collect_export_symbols(server->workspace_analyzer, module_ast);
+    if (open_doc)
+        open_doc->dirty = false;
+}
+lsp_log("graph: %d module(s) for %s", graph->spec_count, entry_path);
 }
 
 void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
