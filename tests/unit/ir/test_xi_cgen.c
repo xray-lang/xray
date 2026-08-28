@@ -2906,9 +2906,12 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     TEST_REQUIRE(ref != NULL, "direct stdlib import metadata allocated");
     /* The leaf this names must be one the target layer can actually claim: a
      * frozen target-leaf entry, integer-returning, taking no tagged arguments.
-     * `io.__fileClose` looked like a direct import too, but its declaration
-     * passes a native int and carries no target-leaf entry, so no family
-     * covers it and the plan is refused before code generation is reached. */
+     * `io.__fileClose` looked like a direct import too, but it carries no
+     * target-leaf entry, so no family covers it and the plan is refused before
+     * code generation is reached. Its `arg_spec` of "i" is not the reason: that
+     * spelling is a documentation-only marker for an opaque handle and lowers
+     * exactly as "v" does, one tagged value, which is why the AOT declaration
+     * reads `xrt_io_file_close(XrValue)` and not a native int. */
     memset(ref, 0, sizeof(*ref));
     ref->module_path = "os";
     ref->member_name = "__getpid";
