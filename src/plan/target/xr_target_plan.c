@@ -703,6 +703,81 @@ bool xr_target_semantic_module_set_fingerprint(
     return valid;
 }
 
+static bool target_module_partition_row_for_plan(const XrSemanticPlan *const *modules,
+                                                 uint32_t module_count, const XrSemanticPlan *plan,
+                                                 uint32_t *out_row) {
+    if (out_row)
+        *out_row = UINT32_MAX;
+    if (!modules || !plan)
+        return false;
+    for (uint32_t row = 0; row < module_count; row++) {
+        if (modules[row] != plan)
+            continue;
+        if (out_row)
+            *out_row = row;
+        return true;
+    }
+    return false;
+}
+
+/* Identity for a plan that covers several modules without claiming any proven
+ * cross-module call. Which modules a plan covers and whether one direct-call
+ * edge crosses between two of them are different facts, so this set is keyed by
+ * each module's own SemanticPlan entity and needs no program provenance. */
+bool xr_target_semantic_module_partition_set_verify(const XrSemanticPlan *const *modules,
+                                                    uint32_t module_count, char *error,
+                                                    size_t error_size) {
+    if (!modules || !module_count || module_count > XR_TARGET_MAX_PROGRAM_MODULES) {
+        set_error(error, error_size, "XR_TARGET_1000",
+                  "target module partition set input is invalid");
+        return false;
+    }
+    for (uint32_t row = 0; row < module_count; row++) {
+        const XrSemanticEntityRecord *entity = target_semantic_module_entity(modules[row]);
+        if (!entity || !xr_semantic_plan_is_verified(modules[row])) {
+            set_error(error, error_size, "XR_TARGET_1000",
+                      "target module partition row has no exact module authority");
+            return false;
+        }
+        for (uint32_t prior = 0; prior < row; prior++) {
+            const XrSemanticEntityRecord *previous = target_semantic_module_entity(modules[prior]);
+            if (previous && xr_stable_id_equal(previous->id, entity->id)) {
+                set_error(error, error_size, "XR_TARGET_1000",
+                          "target module partition identity is duplicated");
+                return false;
+            }
+        }
+        if (!xr_target_semantic_program_module_verify_fragment(modules, module_count, row, error,
+                                                               error_size))
+            return false;
+    }
+    return true;
+}
+
+bool xr_target_semantic_module_partition_set_fingerprint(const XrSemanticPlan *const *modules,
+                                                         uint32_t module_count,
+                                                         XrFingerprint *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!modules || !out || !module_count || module_count > XR_TARGET_MAX_PROGRAM_MODULES)
+        return false;
+    for (uint32_t row = 0; row < module_count; row++)
+        if (!target_semantic_module_entity(modules[row]))
+            return false;
+    static const uint8_t domain[] = "xray-target-semantic-module-partition-set-v1\0";
+    XrSHA256Context ctx;
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
+    hash_u64(&ctx, module_count);
+    for (uint32_t row = 0; row < module_count; row++) {
+        hash_u64(&ctx, row);
+        hash_id(&ctx, target_semantic_module_entity(modules[row])->id);
+        hash_fingerprint(&ctx, xr_semantic_plan_fingerprint(modules[row]));
+    }
+    xr_sha256_final(&ctx, out->bytes);
+    return true;
+}
+
 bool xr_target_plan_program_module_set_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
     if (out)
         memset(out, 0, sizeof(*out));
@@ -944,7 +1019,11 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         set_error(error, error_size, "XR_TARGET_1000", "semantic plan is not exactly verified");
         return false;
     }
-    bool program_graph = draft->program_graphs_count || draft->module_partitions_count;
+    /* A program graph claims one proven cross-module call and is keyed by the
+     * program semantic provenance. A partition-only plan claims nothing but its
+     * own module coverage, so it is keyed by each module's SemanticPlan entity. */
+    bool program_graph = draft->program_graphs_count != 0u;
+    bool module_partitioned = draft->module_partitions_count != 0u;
     const XrSemanticProgramProvenance *entry_program =
         xr_semantic_plan_program_provenance(draft->semantic_plan);
     if (program_graph &&
@@ -956,6 +1035,16 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
          draft->semantic_modules[entry_program->program_module_row] != draft->semantic_plan)) {
         set_error(error, error_size, "XR_TARGET_1000",
                   "program semantic module set is not exactly verified");
+        return false;
+    }
+    if (!program_graph && module_partitioned &&
+        (!xr_target_semantic_module_partition_set_verify(draft->semantic_modules,
+                                                         draft->semantic_module_count,
+                                                         semantic_error, sizeof(semantic_error)) ||
+         !target_module_partition_row_for_plan(
+             draft->semantic_modules, draft->semantic_module_count, draft->semantic_plan, NULL))) {
+        set_error(error, error_size, "XR_TARGET_1000",
+                  "target module partition set is not exactly verified");
         return false;
     }
     if (!xr_target_profile_verify(draft->profile, error, error_size))
@@ -976,6 +1065,13 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             &plan->semantic_fingerprint)) {
         set_error(error, error_size, "XR_TARGET_1002",
                   "target module-set semantic identity is invalid");
+        goto fail;
+    }
+    if (!program_graph && module_partitioned &&
+        !xr_target_semantic_module_partition_set_fingerprint(
+            draft->semantic_modules, draft->semantic_module_count, &plan->semantic_fingerprint)) {
+        set_error(error, error_size, "XR_TARGET_1002",
+                  "target module partition identity is invalid");
         goto fail;
     }
     plan->semantic_dependency_count = draft->semantic_dependency_count;

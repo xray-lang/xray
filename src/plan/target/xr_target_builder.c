@@ -16576,6 +16576,305 @@ done:
     return built;
 }
 
+/* N-way selection merge over the per-module machine representation tables. Each
+ * module's table is already sorted, so taking the smallest remaining record and
+ * advancing every source that ties it yields one deduplicated union plus a
+ * per-module remap from local rep id to the merged id. */
+static bool module_set_merge_machine_reps(const XrTargetMaterializedPlan *sources,
+                                          uint32_t source_count, XrTargetMaterializedPlan *target,
+                                          uint16_t (*rep_maps)[256]) {
+    uint32_t *indexes = (uint32_t *) xr_calloc(source_count, sizeof(*indexes));
+    if (!indexes)
+        return false;
+    uint32_t merged = 0;
+    bool ok = true;
+    for (;;) {
+        const XrTargetMachineRepRecord *best = NULL;
+        for (uint32_t i = 0; i < source_count; i++) {
+            if (indexes[i] >= sources[i].machine_rep_count)
+                continue;
+            const XrTargetMachineRepRecord *candidate = &sources[i].machine_reps[indexes[i]];
+            if (!best || compare_rep_record(candidate, best) < 0)
+                best = candidate;
+        }
+        if (!best)
+            break;
+        if (merged >= target->machine_rep_count || merged >= 256u) {
+            ok = false;
+            break;
+        }
+        target->machine_reps[merged] = *best;
+        target->machine_reps[merged].id = merged;
+        for (uint32_t i = 0; i < source_count; i++) {
+            if (indexes[i] >= sources[i].machine_rep_count ||
+                compare_rep_record(&sources[i].machine_reps[indexes[i]], best) != 0)
+                continue;
+            rep_maps[i][indexes[i]] = (uint16_t) merged;
+            indexes[i]++;
+        }
+        merged++;
+    }
+    xr_free(indexes);
+    if (ok)
+        target->machine_rep_count = merged;
+    return ok;
+}
+
+/* Same shape for capabilities, except a capability claimed by two modules must
+ * be claimed identically: a differing provider or flag set is not a union. */
+static bool module_set_merge_capabilities(const XrTargetMaterializedPlan *sources,
+                                          uint32_t source_count, XrTargetMaterializedPlan *target) {
+    uint32_t *indexes = (uint32_t *) xr_calloc(source_count, sizeof(*indexes));
+    if (!indexes)
+        return false;
+    uint32_t merged = 0;
+    bool ok = true;
+    for (;;) {
+        const XrTargetCapabilityRecord *best = NULL;
+        for (uint32_t i = 0; i < source_count; i++) {
+            if (indexes[i] >= sources[i].capability_count)
+                continue;
+            const XrTargetCapabilityRecord *candidate = &sources[i].capabilities[indexes[i]];
+            if (!best || candidate->capability < best->capability)
+                best = candidate;
+        }
+        if (!best)
+            break;
+        if (merged >= target->capability_count) {
+            ok = false;
+            break;
+        }
+        target->capabilities[merged] = *best;
+        target->capabilities[merged].id = merged;
+        for (uint32_t i = 0; ok && i < source_count; i++) {
+            if (indexes[i] >= sources[i].capability_count)
+                continue;
+            const XrTargetCapabilityRecord *row = &sources[i].capabilities[indexes[i]];
+            if (row->capability != best->capability)
+                continue;
+            if (row->provider != best->provider || row->flags != best->flags)
+                ok = false;
+            else
+                indexes[i]++;
+        }
+        if (!ok)
+            break;
+        merged++;
+    }
+    xr_free(indexes);
+    if (ok)
+        target->capability_count = merged;
+    return ok;
+}
+
+static void module_set_dispose(XrTargetMaterializedPlan *materialized, uint32_t count) {
+    for (uint32_t i = 0; i < count; i++)
+        materialized_dispose(&materialized[i]);
+    xr_free(materialized);
+}
+
+static bool module_set_partition_rows(const XrSemanticPlan *const *modules, uint32_t module_count,
+                                      const XrTargetMaterializedPlan *materialized,
+                                      XrTargetModulePartitionRecord *partitions,
+                                      XrTargetMaterializedPlan *merged, uint16_t (*rep_maps)[256],
+                                      char *error, size_t error_size) {
+    uint32_t value_reps = 0, extents = 0, layouts = 0, fields = 0, functions = 0, slots = 0;
+    uint32_t instructions = 0, calls = 0, call_arguments = 0, root_maps = 0, root_slots = 0;
+    uint32_t cleanups = 0, adapters = 0, coroutines = 0, debug_facts = 0;
+    for (uint32_t row = 0; row < module_count; row++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_unique_module_entity(modules[row]);
+        if (!entity)
+            return fail(error, error_size, "XR_TARGET_1000",
+                        "target module set partition has no exact module identity");
+        partitions[row] = (XrTargetModulePartitionRecord) {
+            .module_identity = entity->id,
+            .semantic_fingerprint = xr_semantic_plan_fingerprint(modules[row]),
+            .program_module_row = row,
+            .semantic_module = row,
+            .value_reps_begin = value_reps,
+            .value_reps_count = materialized[row].value_rep_count,
+            .extents_begin = extents,
+            .extents_count = materialized[row].extent_count,
+            .layouts_begin = layouts,
+            .layouts_count = materialized[row].layout_count,
+            .fields_begin = fields,
+            .fields_count = materialized[row].field_count,
+            .functions_begin = functions,
+            .functions_count = materialized[row].function_count,
+            .slots_begin = slots,
+            .slots_count = materialized[row].slot_count,
+            .instructions_begin = instructions,
+            .instructions_count = materialized[row].instruction_count,
+            .calls_begin = calls,
+            .calls_count = materialized[row].call_count,
+            .call_arguments_begin = call_arguments,
+            .call_arguments_count = materialized[row].call_argument_count,
+            .root_maps_begin = root_maps,
+            .root_maps_count = materialized[row].root_map_count,
+            .root_slots_begin = root_slots,
+            .root_slots_count = materialized[row].root_slot_count,
+            .cleanups_begin = cleanups,
+            .cleanups_count = materialized[row].cleanup_count,
+            .adapters_begin = adapters,
+            .adapters_count = materialized[row].adapter_count,
+            .coroutines_begin = coroutines,
+            .coroutines_count = materialized[row].coroutine_count,
+            .debug_facts_begin = debug_facts,
+            .debug_facts_count = materialized[row].debug_fact_count,
+        };
+        value_reps += materialized[row].value_rep_count;
+        extents += materialized[row].extent_count;
+        layouts += materialized[row].layout_count;
+        fields += materialized[row].field_count;
+        functions += materialized[row].function_count;
+        slots += materialized[row].slot_count;
+        instructions += materialized[row].instruction_count;
+        calls += materialized[row].call_count;
+        call_arguments += materialized[row].call_argument_count;
+        root_maps += materialized[row].root_map_count;
+        root_slots += materialized[row].root_slot_count;
+        cleanups += materialized[row].cleanup_count;
+        adapters += materialized[row].adapter_count;
+        coroutines += materialized[row].coroutine_count;
+        debug_facts += materialized[row].debug_fact_count;
+        if (!graph_merge_module(merged, &materialized[row], &partitions[row], rep_maps[row]))
+            return fail(error, error_size, "XR_TARGET_1004",
+                        "target module set row merge is not exact");
+    }
+    return true;
+}
+
+bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *modules,
+                                             uint32_t module_count, const XrSemanticPlan *entry,
+                                             XrTargetProfile *profile, XrTargetPlan **out,
+                                             char *error, size_t error_size) {
+    if (out)
+        *out = NULL;
+    if (!modules || !module_count || module_count > XR_TARGET_MAX_PROGRAM_MODULES || !entry ||
+        !profile || !out)
+        return fail(error, error_size, "XR_TARGET_1000",
+                    "target module set builder input is invalid");
+    if (!xr_target_semantic_module_partition_set_verify(modules, module_count, error, error_size))
+        return false;
+    uint32_t entry_row = module_count;
+    for (uint32_t row = 0; row < module_count; row++)
+        if (modules[row] == entry)
+            entry_row = entry_row == module_count ? row : module_count;
+    if (entry_row >= module_count)
+        return fail(error, error_size, "XR_TARGET_1000",
+                    "target module set entry module is missing or ambiguous");
+
+    XrTargetMaterializedPlan *materialized =
+        (XrTargetMaterializedPlan *) xr_calloc(module_count, sizeof(*materialized));
+    XrTargetModulePartitionRecord *partitions =
+        (XrTargetModulePartitionRecord *) xr_calloc(module_count, sizeof(*partitions));
+    uint16_t (*rep_maps)[256] = (uint16_t (*)[256]) xr_calloc(module_count, sizeof(*rep_maps));
+    const XrSemanticPlan **entry_dependencies = NULL;
+    uint32_t entry_dependency_count = 0;
+    if (!materialized || !partitions || !rep_maps) {
+        xr_free(materialized);
+        xr_free(partitions);
+        xr_free(rep_maps);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "target module set builder allocation failed");
+    }
+
+    /* Every module is planned against its own direct dependency vector, so a
+     * module's target rows stay interpretable in its own semantic index space. */
+    bool built = true;
+    for (uint32_t row = 0; built && row < module_count; row++) {
+        const XrSemanticPlan **dependencies = NULL;
+        uint32_t dependency_count = 0;
+        built = xr_target_semantic_program_module_direct_dependencies(
+            modules, module_count, row, &dependencies, &dependency_count, error, error_size);
+        built = built && build_program_graph_module(modules[row], dependencies, dependency_count,
+                                                    profile, &materialized[row], error, error_size);
+        if (built && row == entry_row) {
+            entry_dependencies = dependencies;
+            entry_dependency_count = dependency_count;
+            dependencies = NULL;
+        }
+        xr_free(dependencies);
+    }
+
+    XrTargetMaterializedPlan merged = {0};
+    for (uint32_t row = 0; built && row < module_count; row++) {
+        built = graph_add_count(&merged.machine_rep_count, materialized[row].machine_rep_count) &&
+                graph_add_count(&merged.capability_count, materialized[row].capability_count) &&
+                graph_accumulate_counts(&merged, &materialized[row]);
+        if (!built)
+            fail(error, error_size, "XR_EXEC_5003", "target module set row count overflowed");
+    }
+    built = built && graph_allocate_materialized(&merged, error, error_size);
+    if (built && !module_set_merge_machine_reps(materialized, module_count, &merged, rep_maps)) {
+        fail(error, error_size, "XR_TARGET_1004",
+             "target module set machine representation union is not exact");
+        built = false;
+    }
+    if (built && !module_set_merge_capabilities(materialized, module_count, &merged)) {
+        fail(error, error_size, "XR_TARGET_1004",
+             "target module set capability union is not exact");
+        built = false;
+    }
+    built = built && module_set_partition_rows(modules, module_count, materialized, partitions,
+                                               &merged, rep_maps, error, error_size);
+
+    if (built) {
+        XrTargetPlanDraft draft = {
+            .semantic_plan = entry,
+            .semantic_dependencies = entry_dependencies,
+            .semantic_dependency_count = entry_dependency_count,
+            .semantic_modules = modules,
+            .semantic_module_count = module_count,
+            .profile = profile,
+            .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
+            .machine_reps = merged.machine_reps,
+            .machine_reps_count = merged.machine_rep_count,
+            .value_reps = merged.value_reps,
+            .value_reps_count = merged.value_rep_count,
+            .extents = merged.extents,
+            .extents_count = merged.extent_count,
+            .layouts = merged.layouts,
+            .layouts_count = merged.layout_count,
+            .fields = merged.fields,
+            .fields_count = merged.field_count,
+            .functions = merged.functions,
+            .functions_count = merged.function_count,
+            .slots = merged.slots,
+            .slots_count = merged.slot_count,
+            .instructions = merged.instructions,
+            .instructions_count = merged.instruction_count,
+            .calls = merged.calls,
+            .calls_count = merged.call_count,
+            .call_arguments = merged.call_arguments,
+            .call_arguments_count = merged.call_argument_count,
+            .root_maps = merged.root_maps,
+            .root_maps_count = merged.root_map_count,
+            .root_slots = merged.root_slots,
+            .root_slots_count = merged.root_slot_count,
+            .cleanups = merged.cleanups,
+            .cleanups_count = merged.cleanup_count,
+            .adapters = merged.adapters,
+            .adapters_count = merged.adapter_count,
+            .capabilities = merged.capabilities,
+            .capabilities_count = merged.capability_count,
+            .coroutines = merged.coroutines,
+            .coroutines_count = merged.coroutine_count,
+            .debug_facts = merged.debug_facts,
+            .debug_facts_count = merged.debug_fact_count,
+            .module_partitions = partitions,
+            .module_partitions_count = module_count,
+        };
+        built = xr_target_plan_freeze(&draft, out, error, error_size);
+    }
+    materialized_dispose(&merged);
+    module_set_dispose(materialized, module_count);
+    xr_free(partitions);
+    xr_free(rep_maps);
+    xr_free(entry_dependencies);
+    return built;
+}
+
 bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *profile,
                           XrTargetPlan **out, char *error, size_t error_size) {
     return xr_target_plan_build_module_set(semantic_plan, NULL, 0, profile, out, error, error_size);

@@ -10597,6 +10597,50 @@ static bool verify_program_graph_plan(const XrTargetPlan *plan, char *error, siz
     return true;
 }
 
+/* A partition-only plan covers several modules and claims no cross-module call.
+ * Its rows are the concatenation of every module's own target rows, so the
+ * partition ranges must tile each table exactly and every partition must name
+ * the module whose SemanticPlan produced its rows. */
+static bool verify_module_partition_plan(const XrTargetPlan *plan, char *error, size_t error_size) {
+    char nested_error[512] = {0};
+    if (!plan->module_partitions || !plan->semantic_modules ||
+        plan->module_partitions_count != plan->semantic_module_count ||
+        !graph_partition_ranges_are_exact(plan, error, error_size))
+        return report(error, error_size, "XR_TARGET_1001",
+                      "target module partition table is not exact");
+    if (!xr_target_semantic_module_partition_set_verify(
+            (const XrSemanticPlan *const *) plan->semantic_modules, plan->semantic_module_count,
+            nested_error, sizeof(nested_error)))
+        return report(error, error_size, "XR_TARGET_1001",
+                      "target module partition set is not exactly verified");
+    bool entry_seen = false;
+    for (uint32_t i = 0; i < plan->module_partitions_count; i++) {
+        const XrTargetModulePartitionRecord *partition = &plan->module_partitions[i];
+        const XrSemanticPlan *semantic = graph_partition_semantic(plan, i);
+        const XrSemanticEntityRecord *entity =
+            semantic ? xr_semantic_plan_unique_module_entity(semantic) : NULL;
+        if (!entity || partition->program_module_row != i || partition->semantic_module != i ||
+            !xr_stable_id_equal(partition->module_identity, entity->id) ||
+            !xr_fingerprint_equal(partition->semantic_fingerprint,
+                                  xr_semantic_plan_fingerprint(semantic)))
+            return report(error, error_size, "XR_TARGET_1001",
+                          "target module partition identity is invalid");
+        if (semantic == plan->semantic_plan)
+            entry_seen = true;
+    }
+    if (!entry_seen)
+        return report(error, error_size, "XR_TARGET_1001",
+                      "target module partition set omits its entry module");
+    XrFingerprint expected = {{0}};
+    if (!xr_target_semantic_module_partition_set_fingerprint(
+            (const XrSemanticPlan *const *) plan->semantic_modules, plan->semantic_module_count,
+            &expected) ||
+        !xr_fingerprint_equal(plan->semantic_fingerprint, expected))
+        return report(error, error_size, "XR_TARGET_1000",
+                      "target module partition identity does not match its exact input");
+    return true;
+}
+
 bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_size) {
     if (!plan || !plan->frozen || !plan->semantic_plan || !plan->profile)
         return report(error, error_size, "XR_EXEC_5000", "verifier requires a frozen TargetPlan");
@@ -10613,10 +10657,16 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
          program->program_family ==
              XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL))
         return verify_program_graph_plan(plan, error, error_size);
-    if (plan->program_graphs_count || plan->module_partitions_count ||
-        plan->semantic_module_count || plan->semantic_modules)
+    /* Covering several modules and proving one cross-module call are separate
+     * facts. Only the latter is program graph authority; a plan may carry module
+     * partitions without ever claiming a call edge. */
+    if (plan->program_graphs_count)
         return report(error, error_size, "XR_TARGET_1001",
-                      "non-graph TargetPlan carries program graph authority");
+                      "non-graph TargetPlan carries program call graph authority");
+    bool module_partitioned =
+        plan->module_partitions_count || plan->semantic_module_count || plan->semantic_modules;
+    if (module_partitioned && !verify_module_partition_plan(plan, error, error_size))
+        return false;
     char nested_error[512] = {0};
     bool semantic_verified =
         plan->semantic_dependency_count == 0
@@ -10626,8 +10676,9 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
                   plan->semantic_dependency_count, nested_error, sizeof(nested_error));
     if (!semantic_verified ||
         plan->semantic_dependency_count != xr_semantic_plan_dependency_count(plan->semantic_plan) ||
-        !xr_fingerprint_equal(plan->semantic_fingerprint,
-                              xr_semantic_plan_fingerprint(plan->semantic_plan)))
+        (!module_partitioned &&
+         !xr_fingerprint_equal(plan->semantic_fingerprint,
+                               xr_semantic_plan_fingerprint(plan->semantic_plan))))
         return report(error, error_size, "XR_TARGET_1000",
                       "TargetPlan semantic fingerprint does not match its exact input");
     if (!xr_target_profile_verify(plan->profile, error, error_size) ||
