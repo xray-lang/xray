@@ -1,7 +1,7 @@
 # Blocker: a local heap variable rebound inside a loop has no AOT representation schema
 
 - **Lane**: A (standard-library self-hosting)
-- **Status**: `BLOCKED`
+- **Status**: `FIXED for arrays and strings; BLOCKED for maps and for by-reference parameters`
 - **Requested owner**: H (AOT representation refinement)
 - **Severity**: this is not a standard-library problem. `var s = ""` followed by
   `for (...) { s = s + "x" }` inside a function cannot be compiled to native
@@ -160,12 +160,46 @@ that runs, and it has nothing to answer with.
 A scalar phi passes because the scalar family claims it. Nothing claims a phi
 whose result is an array, a string or a map.
 
+## Fixed on this branch
+
+Commit `618f239f7` makes the use side ask the same family the definition side
+already asks, and gives the two carrier lists a type-checked merge member. The
+shapes below now compile and answer correctly:
+
+| shape | answer |
+|---|---|
+| `var s = ""` accumulated in a loop | 5 |
+| local `Array<u8>` rebound in a loop | 16 |
+| local `Array<i64>` rebound in a loop | 4 |
+| loop-carried local array passed as a `ref` argument | 1 |
+
+Two things this did not reach, both verified after the fix:
+
+- **A map rebound in a loop** still refuses. Its carrier is a third family; the
+  change touched the array and string lists only.
+- **The AES block transform** still refuses, one layer further on and with a
+  different message: `XR_TARGET_1003: direct-local argument contract needs
+  unsupported storage or ownership`, from the TargetPlan rather than from
+  refinement. It reports `parameter-ownership=2` for the by-reference form and
+  `parameter-ordinal=1, addressable=0` for the value-returning form, so the
+  remaining gap is the direct-local argument contract for an aggregate
+  parameter, not the merge.
+
+No regression: the AOT filetests fail the same 242 link cases and the same 529
+across all modes as the base. `test_target_plan` and `test_semantic_plan` abort
+with and without the change alike, confirmed by reverting the file and
+rebuilding them.
+
 ## Requested capability
 
-Either a storage family that claims a heap-represented phi result, so the value
-stays native across the merge, or a fallback that lets such a phi be tagged
-under the AOT policies at the cost of one box/unbox at the merge point. The
-first is the real answer; the second would unblock ordinary code immediately.
+What remains is the TargetPlan's direct-local argument contract: an aggregate
+passed to a function, by reference or by value, is refused where the same value
+read in place is not. That is what still stands between a cipher written in
+Xray and a native binary.
+
+The map carrier family wants the same merge member the array and string lists
+now have; it was left alone because nothing in this lane exercised it and the
+change should be made by someone who can say what a map's carrier is.
 
 A source position in the diagnostic would also help: the refusal names `value`
 and `operation` ordinals, and reaching the shape above took a bisection rather
