@@ -2037,6 +2037,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     char **paths = NULL;
     char **mod_names = NULL;
     AstNode **mono_roots = NULL;
+    XrProgramSemanticClosure *program_graph_authority = NULL;
     XrProgramSemanticClosure *source_program_closure = NULL;
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(options != NULL, "xaot_build: NULL options");
@@ -2363,6 +2364,24 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     {
         char closure_error[512] = {0};
+        /* The canonical program authority of a product build is the complete
+         * reachable source-module graph: one root, no cycle, every module at
+         * its analyzed lifecycle, and one exact resolved edge per import. It
+         * is topology only and carries no executable, Xi, SemanticPlan, or
+         * TargetPlan authority, so it is published for every module count. */
+        XaProgramSemanticClosurePublishStatus graph_status =
+            xa_program_semantic_closure_publish_source_module_graph(
+                shared_analyzer, graph, &program_graph_authority, closure_error,
+                sizeof(closure_error));
+        if (graph_status != XA_PROGRAM_SEMANTIC_CLOSURE_READY) {
+            fprintf(stderr, "Error: source program graph authority publication failed: %s\n",
+                    closure_error[0] ? closure_error : "incomplete source module graph authority");
+            goto fail_free_analyzer;
+        }
+        /* An executable slice is published on top of that topology only when
+         * the graph matches one bounded family. Its absence is not a refusal:
+         * the graph authority above already answers who the program is. */
+        memset(closure_error, 0, sizeof(closure_error));
         XaProgramSemanticClosurePublishStatus closure_status =
             xa_program_semantic_closure_publish_source_module_scalar_private_leaf_call(
                 shared_analyzer, graph, &source_program_closure, closure_error,
@@ -2551,7 +2570,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
-    if (!source_program_closure && nmodules != 1) {
+    if (!program_graph_authority) {
         aot_bundle.error_msg =
             "XR_TARGET_1000: product TargetPlan requires one canonical program authority";
         xaot_survey_target_plan_refusal("program_authority", aot_bundle.error_msg);
@@ -2603,6 +2622,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     xr_program_semantic_closure_free(source_program_closure);
     source_program_closure = NULL;
+    xr_program_semantic_closure_free(program_graph_authority);
+    program_graph_authority = NULL;
     /* --- AOT target prepare: build sidecar rep/ABI plan before C emission --- */
     {
         uint32_t program_graph_count = 0;
@@ -3037,6 +3058,8 @@ fail_free_ir:
 fail_free_analyzer:
     xr_program_semantic_closure_free(source_program_closure);
     source_program_closure = NULL;
+    xr_program_semantic_closure_free(program_graph_authority);
+    program_graph_authority = NULL;
     if (cached_global_evidence_initialized) {
         xg_global_evidence_free(&cached_global_evidence);
         cached_global_evidence_initialized = false;
@@ -3053,6 +3076,8 @@ fail_free_analyzer:
 fail_free_graph:
     xr_program_semantic_closure_free(source_program_closure);
     source_program_closure = NULL;
+    xr_program_semantic_closure_free(program_graph_authority);
+    program_graph_authority = NULL;
     xr_free(imported_summary_modules);
     xr_free(discovered_imported_summary_payload_view);
     xaot_free_discovered_package_payloads(discovered_imported_summary_payloads,
