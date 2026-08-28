@@ -16,6 +16,7 @@ import {
 } from url
 import crypto
 import http2
+import { Http2Error } from http2
 import io
 import net
 import { DialOptions, NetError } from net
@@ -1910,6 +1911,7 @@ fn _http2HeadersValid(headers: Headers) -> bool {
     return true
 }
 
+
 fn _headersLocation(headers: Headers) -> string? {
     return headers.get("Location")
 }
@@ -2183,29 +2185,41 @@ fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Header
     var values: Array<string> = []
     var pairs = wireHeaders.entries()
     for (var i = 0; i < len(pairs); i++) {
-        names.push(text.lower(pairs[i].0))
+        names.push(pairs[i].0)
         values.push(pairs[i].1)
     }
 
-    var raw = http2.request(
-        _httpRequestUrlText(url), method.token, names, values, body, timeoutMs
-    )
-    if (raw == null) { throw HttpError.ConnectionFailed(_httpRequestUrlText(url)) }
-    var responseHeaders = Headers()
-    if (len(raw!.1) != len(raw!.2)) {
-        throw HttpError.ProtocolError("invalid HTTP/2 response headers")
+    var target = _httpRequestUrlText(url)
+    try {
+        var raw = http2.request(target, method.token, names, values, body, timeoutMs)
+        var responseHeaders = Headers()
+        for (var i = 0; i < len(raw.1); i++) {
+            responseHeaders.add(raw.1[i], raw.2[i])
+        }
+        return HttpResponse(
+            HttpVersion.Http2,
+            raw.0,
+            _statusReason(raw.0),
+            responseHeaders,
+            raw.3
+        )
+    } catch (e: Http2Error) {
+        throw _http2ToHttpError(e)
     }
-    for (var i = 0; i < len(raw!.1); i++) {
-        responseHeaders.add(raw!.1[i], raw!.2[i])
-    }
-    return HttpResponse(
-        HttpVersion.Http2,
-        raw!.0,
-        _statusReason(raw!.0),
-        responseHeaders,
-        raw!.3
-    )
 }
+
+// Map http2's single error channel onto this module's. The mapping is total
+// because every refusal http2 makes carries one of these five names.
+fn _http2ToHttpError(e: Http2Error) -> HttpError {
+    match (e) {
+        Http2Error.ProtocolError(reason) -> { return HttpError.ProtocolError(reason) }
+        Http2Error.FramingError(reason) -> { return HttpError.ProtocolError(reason) }
+        Http2Error.CompressionError(reason) -> { return HttpError.ProtocolError(reason) }
+        Http2Error.ConnectionFailed(target) -> { return HttpError.ConnectionFailed(target) }
+        Http2Error.TlsUnavailable -> { return HttpError.UnsupportedVersion(HttpVersion.Http2) }
+    }
+}
+
 
 export fn request(options: HttpRequestOptions) -> HttpResponse {
     var current = _parseHttpRequestUrl(options.url)

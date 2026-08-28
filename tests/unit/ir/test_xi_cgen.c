@@ -2711,9 +2711,17 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture below imports
-     * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b. */
+     * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b.
+     *
+     * It moved again when http2's single __request leaf was replaced by the
+     * four transport leaves __connect/__send/__recv/__close: the stdlib
+     * registry fingerprint is hashed into every SemanticPlan
+     * (src/plan/semantic/xr_semantic_plan.c:214-215), so any change to the
+     * set of declared entries moves this value whether or not the fixture
+     * touches the module.
+     * Old: fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4. */
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4") == 0,
+                        "f977cf5e1abdbb4a5b0634977c879b2e81afd1a0e0998c3774db7363f6459649") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;

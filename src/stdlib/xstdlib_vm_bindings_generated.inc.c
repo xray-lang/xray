@@ -84,7 +84,13 @@ XR_FUNC bool xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *m
     size_t expected_count = 0;
     XRS_EXPORT(module, isolate, "__supported", h2_supported);
     expected_count++;
-    XRS_EXPORT(module, isolate, "__request", h2_request_typed);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__connect", h2_connect);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__send", h2_send);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__recv", h2_recv);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__close", h2_close);
     expected_count++;
     return module->export_count == expected_count;
 }

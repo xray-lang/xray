@@ -1018,6 +1018,12 @@ set_tests_properties(test_unicode_grapheme_generator PROPERTIES
 # ============================================================================
 
 add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
+# The HPACK Huffman table now lives in Xray. This test parses the six
+# HUFFMAN_* constant arrays out of the .xr source at run time, so hand it an
+# absolute path instead of depending on the test's working directory.
+target_compile_definitions(test_http2_huffman PRIVATE
+    XRAY_HTTP2_XR_SOURCE="${CMAKE_SOURCE_DIR}/stdlib/http2/http2.xr"
+)
 
 # ============================================================================
 # stdlib/ — DateTime, crypto, compress, XML, buffer pool

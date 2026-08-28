@@ -2329,11 +2329,15 @@ static void test_plan_snapshot_and_determinism(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d") != 0)
+     * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679.
+     *
+     * It moved again when http2 replaced its single __request leaf with the
+     * four transport leaves __connect/__send/__recv/__close.
+     * Old: 84d044a712419d54aebe50bb7e9f83e98f30186456e79feb654b98fc0902d11b. */
+    if (strcmp(target_hex, "84d044a712419d54aebe50bb7e9f83e98f30186456e79feb654b98fc0902d11b") != 0)
         fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d") == 0);
+                   "84d044a712419d54aebe50bb7e9f83e98f30186456e79feb654b98fc0902d11b") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4494,8 +4498,12 @@ static void test_channel_close_call_authority(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f. */
-    REQUIRE(strcmp(call_hex, "23d4e50eae43bf74bde6bdf6ff008813d37c837f806229abe544e39b8392070e") ==
+     * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f.
+     *
+     * It moved again when http2 replaced its single __request leaf with the
+     * four transport leaves __connect/__send/__recv/__close.
+     * Old: 9f47d689341555ad96e9300be777b98fad812211afa5169f5bf94cef45d9ec98. */
+    REQUIRE(strcmp(call_hex, "9f47d689341555ad96e9300be777b98fad812211afa5169f5bf94cef45d9ec98") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -5253,8 +5261,12 @@ static void test_direct_local_call_adapter_family(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc. */
-    REQUIRE(strcmp(call_hex, "9347a21545b86d1447bc3afe873931c016b318be11d27235c5058b0315b6780e") ==
+     * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc.
+     *
+     * It moved again when http2 replaced its single __request leaf with the
+     * four transport leaves __connect/__send/__recv/__close.
+     * Old: d570b19039ead49c8706c012754d3e8987d151de011e487d2f262f86a4e573ed. */
+    REQUIRE(strcmp(call_hex, "d570b19039ead49c8706c012754d3e8987d151de011e487d2f262f86a4e573ed") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -5776,8 +5788,12 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e. */
-    REQUIRE(strcmp(tail_hex, "45df332a6c8d7316367994714bdbb600729e23d91c6bdae6de869dd10ea015fe") ==
+     * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e.
+     *
+     * It moved again when http2 replaced its single __request leaf with the
+     * four transport leaves __connect/__send/__recv/__close.
+     * Old: 98a0b40ab78833bf1ebab63dea3b729ef7cd06eb75b5b6b83dd2e9694d8df7ec. */
+    REQUIRE(strcmp(tail_hex, "98a0b40ab78833bf1ebab63dea3b729ef7cd06eb75b5b6b83dd2e9694d8df7ec") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

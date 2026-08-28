@@ -1,6 +1,6 @@
 schema = 1
 module = "http2"
-contract_revision = 2
+contract_revision = 3
 legacy_commit = "1134404162e287db158ec1ce805700114b47cecb"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/http2/legacy_expected.jsonl"
@@ -8,6 +8,9 @@ legacy_public_surface = ["http.HttpVersion.Http2"]
 intentional_semantic_changes = [
   "HTTP/2 transport ownership moved from the monolithic http module to the built-in http2 standard module",
   "supported and request expose one bare-name standard-module capability and data-plane boundary",
+  "HPACK, framing, the stream state machine and flow control moved from C into http2.xr; the native boundary is now four protocol-agnostic socket leaves (__connect/__send/__recv/__close) instead of one __request leaf that owned the whole protocol",
+  "request answers a tuple and raises Http2Error instead of answering null: every refusal now has one name, where the same input previously surfaced as ProtocolError or ConnectionFailed depending on which of two copies of the admission rules noticed it",
+  "one connection per request: the C connection pool is gone because HPACK dynamic-table state is per-connection and would have to live in module-level mutable state, which is not thread-safe",
 ]
 known_legacy_bugs = []
 equivalence = ["value", "error", "effect", "complexity"]

@@ -191,10 +191,41 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
 
 // http2 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http2_symbols[] = {
+    {"writeFrameHeader", XLSP_SYM_FUNCTION, "fn(out: ref Array<u8>, length: i64, kind: i64, flags: i64, streamId: i64): ()", "", NULL, 0},
+    {"readFrameHeader", XLSP_SYM_FUNCTION, "fn(src: Array<u8>, pos: i64): FrameHeader?", "", NULL, 0},
+    {"validateFrameHeader", XLSP_SYM_FUNCTION, "fn(header: FrameHeader): i64", "", NULL, 0},
+    {"applySettingsPayload", XLSP_SYM_FUNCTION, "fn(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64", "", NULL, 0},
+    {"encodeClientSettings", XLSP_SYM_FUNCTION, "fn(settings: Settings): Array<u8>", "", NULL, 0},
+    {"encodeSettingsAck", XLSP_SYM_FUNCTION, "fn(): Array<u8>", "", NULL, 0},
+    {"encodeWindowUpdate", XLSP_SYM_FUNCTION, "fn(streamId: i64, increment: i64): Array<u8>", "", NULL, 0},
+    {"encodeRstStream", XLSP_SYM_FUNCTION, "fn(streamId: i64, errorCode: i64): Array<u8>", "", NULL, 0},
+    {"encodeGoaway", XLSP_SYM_FUNCTION, "fn(lastStreamId: i64, errorCode: i64): Array<u8>", "", NULL, 0},
+    {"encodePingAck", XLSP_SYM_FUNCTION, "fn(payload: Array<u8>, start: i64): Array<u8>", "", NULL, 0},
     {"supported", XLSP_SYM_FUNCTION, "fn(): bool", "", NULL, 0},
-    {"request", XLSP_SYM_FUNCTION, "fn(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?", "", NULL, 0},
+    {"request", XLSP_SYM_FUNCTION, "fn(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)", "", NULL, 0},
+    {"NO_ERROR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"PROTOCOL_ERROR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"INTERNAL_ERROR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"FLOW_CONTROL_ERROR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"SETTINGS_TIMEOUT", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"STREAM_CLOSED", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"FRAME_SIZE_ERROR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"REFUSED_STREAM", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"CANCEL", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"COMPRESSION_ERROR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"CONNECT_ERROR", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"ENHANCE_YOUR_CALM", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"INADEQUATE_SECURITY", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"HTTP_1_1_REQUIRED", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"Http2Error", XLSP_SYM_CLASS, "type Http2Error", "Enum type", NULL, 0},
+    {"HeaderList", XLSP_SYM_CLASS, "type HeaderList", "Class type", NULL, 0},
+    {"HpackDecoder", XLSP_SYM_CLASS, "type HpackDecoder", "Class type", NULL, 0},
+    {"HpackEncoder", XLSP_SYM_CLASS, "type HpackEncoder", "Class type", NULL, 0},
+    {"FrameHeader", XLSP_SYM_CLASS, "type FrameHeader", "Class type", NULL, 0},
+    {"Settings", XLSP_SYM_CLASS, "type Settings", "Class type", NULL, 0},
+    {"StreamState", XLSP_SYM_CLASS, "type StreamState", "Enum type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP2_SYMBOL_COUNT 2
+#define GEN_XLSP_STDLIB_HTTP2_SYMBOL_COUNT 33
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {

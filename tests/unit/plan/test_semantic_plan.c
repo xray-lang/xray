@@ -2544,9 +2544,15 @@ static void test_immutable_owned_snapshot(void) {
      * their entries, so this digest moves even though the probe plan below imports
      * nothing.  The two registry digests above are unaffected: they cover the
      * operation-owner registry, not the stdlib registry.
-     * Old: 5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881. */
+     * Old: 5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881.
+     *
+     * It moved again when http2 traded its single __request leaf for the four
+     * transport leaves __connect/__send/__recv/__close: the registry digest
+     * covers the set of declared entries, so replacing one entry with four
+     * moves it.
+     * Old: 71cc98da6f063685a0ce4b45624aa3d94aa29acf4871cc5764a607393f47d76c. */
     REQUIRE(strcmp(semantic_hex,
-                   "71cc98da6f063685a0ce4b45624aa3d94aa29acf4871cc5764a607393f47d76c") == 0);
+                   "a813928bca1b1f5b5a8b97c7855bc63fa3c278d59fc833068b152ac7f07b77a9") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3610,10 +3616,16 @@ static void test_source_export_call_target_authority(void) {
      * target_id with it.  export_id is keyed off the export's own shape with no
      * fingerprint in the key, so it stays put.
      * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
-     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "1e3473bd3c7bd746dc40f3a0d79c9c55") == 0);
+     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4.
+     *
+     * Both moved again when http2's __request leaf became __connect/__send/
+     * __recv/__close.  export_id did not move, which is the check that the
+     * key really is fingerprint-free rather than merely believed to be.
+     * Old dependency_id: 1e3473bd3c7bd746dc40f3a0d79c9c55.
+     * Old target_id:     9224bbcbb03e730dd6a246927371d9db. */
+    REQUIRE(strcmp(dependency_id, "2d44eef3c6bf5e42654fe30bd09c5da5") == 0);
     REQUIRE(strcmp(export_id, "0dfad701bd306712350ea91732781cb5") == 0);
-    REQUIRE(strcmp(target_id, "9224bbcbb03e730dd6a246927371d9db") == 0);
+    REQUIRE(strcmp(target_id, "a7e059df3a39ec8f6e1dcd4f9f9b812b") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));

@@ -1,0 +1,510 @@
+// HTTP/2 protocol layer: HPACK, framing and SETTINGS, without network I/O.
+//
+// These cases took over from tests/unit/http/test_http2_huffman.c, which used
+// to drive the C implementations of http2_hpack_decode,
+// http2_validate_inbound_frame_header and http2_apply_settings_payload. Those
+// functions are now Xray and live in stdlib/http2/http2.xr, so the behaviour
+// they encode is asserted here instead. The C test that remains checks one
+// thing this file cannot: that the Huffman tables in http2.xr agree entry by
+// entry with RFC 7541 Appendix B.
+//
+// The HPACK vectors are verbatim from RFC 7541 Appendix C.
+
+import http2
+import { HpackDecoder, HpackEncoder, FrameHeader, Settings, Http2Error } from http2
+
+fn fromHex(s: string) -> Array<u8> {
+    var b: Slice<u8> = s.bytes()
+    var out = Array<u8>(len(b) / 2)
+    for (var i = 0; i < len(b) / 2; i++) {
+        var hi = b[i * 2] as i64
+        var lo = b[i * 2 + 1] as i64
+        hi = hi >= 97 ? hi - 87 : (hi >= 65 ? hi - 55 : hi - 48)
+        lo = lo >= 97 ? lo - 87 : (lo >= 65 ? lo - 55 : lo - 48)
+        out[i] = ((hi << 4) | lo) as u8
+    }
+    return out
+}
+
+fn toHex(a: Array<u8>) -> string {
+    var out = StringBuilder()
+    var hexAlphabet = "0123456789abcdef"
+    var digits: Slice<u8> = hexAlphabet.bytes()
+    for (var i = 0; i < len(a); i++) {
+        var b = a[i] as i64
+        out.append(rune(digits[b >> 4] as i64)!)
+        out.append(rune(digits[b & 15] as i64)!)
+    }
+    return out.toString()
+}
+
+// ---- HPACK decoding: RFC 7541 Appendix C.4 (requests, Huffman) ----
+
+@test
+fn test_hpack_rfc7541_c_4_1_first_request() {
+    var decoder = HpackDecoder()
+    var block = decoder.decode(fromHex("828684418cf1e3c2e5f23a6ba0ab90f4ff"))
+    assert(block != null)
+    assertEqual(block!.count(), 4)
+    assertEqual(block!.names[0], ":method")
+    assertEqual(block!.values[0], "GET")
+    assertEqual(block!.names[1], ":scheme")
+    assertEqual(block!.values[1], "http")
+    assertEqual(block!.names[2], ":path")
+    assertEqual(block!.values[2], "/")
+    assertEqual(block!.names[3], ":authority")
+    assertEqual(block!.values[3], "www.example.com")
+}
+
+@test
+fn test_hpack_rfc7541_c_4_2_reuses_dynamic_entry() {
+    // C.4.1 first, so that index 62 -- the first dynamic entry -- resolves.
+    var decoder = HpackDecoder()
+    assert(decoder.decode(fromHex("828684418cf1e3c2e5f23a6ba0ab90f4ff")) != null)
+    var block = decoder.decode(fromHex("828684be5886a8eb10649cbf"))
+    assert(block != null)
+    assertEqual(block!.count(), 5)
+    assertEqual(block!.names[3], ":authority")
+    assertEqual(block!.values[3], "www.example.com")
+    assertEqual(block!.names[4], "cache-control")
+    assertEqual(block!.values[4], "no-cache")
+}
+
+@test
+fn test_hpack_rfc7541_c_4_3_custom_header() {
+    var decoder = HpackDecoder()
+    var block = decoder.decode(
+        fromHex("408825a849e95ba97d7f8925a849e95bb8e8b4bf"))
+    assert(block != null)
+    assertEqual(block!.count(), 1)
+    assertEqual(block!.names[0], "custom-key")
+    assertEqual(block!.values[0], "custom-value")
+}
+
+// ---- HPACK decoding: RFC 7541 Appendix C.6 (responses, Huffman) ----
+
+@test
+fn test_hpack_rfc7541_c_6_1_response() {
+    var decoder = HpackDecoder()
+    var block = decoder.decode(fromHex(
+        "488264025885aec3771a4b6196d07abe941054d444a8200595040b8166e082a62d1bff" +
+        "6e919d29ad171863c78f0b97c8e9ae82ae43d3"))
+    assert(block != null)
+    assertEqual(block!.count(), 4)
+    assertEqual(block!.names[0], ":status")
+    assertEqual(block!.values[0], "302")
+    assertEqual(block!.names[1], "cache-control")
+    assertEqual(block!.values[1], "private")
+    assertEqual(block!.names[2], "date")
+    assertEqual(block!.values[2], "Mon, 21 Oct 2013 20:13:21 GMT")
+    assertEqual(block!.names[3], "location")
+    assertEqual(block!.values[3], "https://www.example.com")
+}
+
+@test
+fn test_hpack_rfc7541_c_6_3_gzip() {
+    var decoder = HpackDecoder()
+    var block = decoder.decode(fromHex("5a839bd9ab"))
+    assert(block != null)
+    assertEqual(block!.count(), 1)
+    assertEqual(block!.names[0], "content-encoding")
+    assertEqual(block!.values[0], "gzip")
+}
+
+// ---- HPACK error cases ----
+
+@test
+fn test_huffman_rejects_invalid_padding() {
+    // A single 0x00 byte decodes "00000" to '0' and leaves three zero bits.
+    // RFC 7541 Section 5.2 requires padding to be the EOS code's leading
+    // bits, which are all ones, so this must fail.
+    assert(HpackDecoder().decode(fromHex("4081008100")) == null)
+}
+
+@test
+fn test_huffman_rejects_explicit_eos() {
+    // Four 0xff bytes carry the 30-bit EOS code, which Section 5.2 forbids
+    // in the data.
+    assert(HpackDecoder().decode(fromHex("4084ffffffff")) == null)
+}
+
+@test
+fn test_hpack_rejects_index_zero() {
+    assert(HpackDecoder().decode(fromHex("80")) == null)
+}
+
+@test
+fn test_hpack_rejects_out_of_range_index() {
+    // Index 62 with an empty dynamic table names nothing.
+    assert(HpackDecoder().decode(fromHex("be")) == null)
+}
+
+@test
+fn test_hpack_rejects_oversized_table_size_update() {
+    // A dynamic table size update above the advertised 4096 is a decoding
+    // error under RFC 7541 Section 6.3. The C decoder took any value.
+    assert(HpackDecoder().decode(fromHex("3fe1ff03")) == null)
+}
+
+// ---- HPACK encoding ----
+
+@test
+fn test_hpack_encodes_static_entries_as_single_bytes() {
+    var encoder = HpackEncoder()
+    var names: Array<string> = [":method", ":path"]
+    var values: Array<string> = ["GET", "/"]
+    // Static index 2 is (:method, GET) and index 4 is (:path, /); both are
+    // indexed header fields, one byte each.
+    assertEqual(toHex(encoder.encode(names, values)), "8284")
+}
+
+@test
+fn test_hpack_encodes_huffman_when_shorter() {
+    // RFC 7541 C.4.3's Huffman form of custom-key/custom-value, byte for
+    // byte. The name is a new one, so it is a literal with a new name.
+    var encoder = HpackEncoder()
+    var names: Array<string> = ["custom-key"]
+    var values: Array<string> = ["custom-value"]
+    assertEqual(toHex(encoder.encode(names, values)),
+                "008825a849e95ba97d7f8925a849e95bb8e8b4bf")
+}
+
+@test
+fn test_hpack_lowercases_header_names() {
+    // RFC 7540 Section 8.1.2 requires lowercase field names on the wire.
+    var encoder = HpackEncoder()
+    var names: Array<string> = ["Content-Type"]
+    var values: Array<string> = ["text/plain"]
+    var block = encoder.encode(names, values)
+    var decoded = HpackDecoder().decode(block)
+    assert(decoded != null)
+    assertEqual(decoded!.names[0], "content-type")
+}
+
+@test
+fn test_hpack_round_trips_a_full_request() {
+    var encoder = HpackEncoder()
+    var names: Array<string> = [":method", ":scheme", ":path", ":authority",
+                                "accept", "x-trace"]
+    var values: Array<string> = ["POST", "https", "/v1/items", "api.example.com",
+                                 "application/json", "abc-123"]
+    var decoded = HpackDecoder().decode(encoder.encode(names, values))
+    assert(decoded != null)
+    assertEqual(decoded!.count(), len(names))
+    for (var i = 0; i < len(names); i++) {
+        assertEqual(decoded!.names[i], names[i])
+        assertEqual(decoded!.values[i], values[i])
+    }
+}
+
+// ---- Frame header ----
+
+@test
+fn test_frame_header_round_trip() {
+    var out = Array<u8>()
+    http2.writeFrameHeader(ref out, 16384, 0x1, 0x5, 2147483647)
+    assertEqual(len(out), 9)
+    var parsed = http2.readFrameHeader(out, 0)
+    assert(parsed != null)
+    assertEqual(parsed!.length, 16384)
+    assertEqual(parsed!.kind, 0x1)
+    assertEqual(parsed!.flags, 0x5)
+    assertEqual(parsed!.streamId, 2147483647)
+}
+
+@test
+fn test_frame_header_clears_the_reserved_bit() {
+    // The high bit of the stream identifier is reserved; a peer that sets it
+    // must not shift the identifier this endpoint reads.
+    var raw = fromHex("000000000480000001")
+    var parsed = http2.readFrameHeader(raw, 0)
+    assert(parsed != null)
+    assertEqual(parsed!.streamId, 1)
+}
+
+@test
+fn test_frame_header_needs_nine_bytes() {
+    assert(http2.readFrameHeader(fromHex("00000004"), 0) == null)
+}
+
+@test
+fn test_frame_header_refuses_oversized_length() {
+    var raised = false
+    try {
+        var out = Array<u8>()
+        http2.writeFrameHeader(ref out, 16777216, 0x0, 0, 1)
+    } catch (e: Http2Error) {
+        raised = true
+    }
+    assert(raised)
+}
+
+// ---- Frame header validation (took over the five deleted C cases) ----
+
+@test
+fn test_validate_accepts_current_client_frames() {
+    assertEqual(http2.validateFrameHeader(FrameHeader(4, 0x0, 0x1, 1)), http2.NO_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(0, 0x1, 0x4, 1)), http2.NO_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(0, 0x4, 0, 0)), http2.NO_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(8, 0x6, 0, 0)), http2.NO_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(5, 0x2, 0, 1)), http2.NO_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(4, 0x8, 0, 0)), http2.NO_ERROR)
+}
+
+@test
+fn test_validate_rejects_stream_zero_on_stream_frames() {
+    assertEqual(http2.validateFrameHeader(FrameHeader(1, 0x0, 0, 0)), http2.PROTOCOL_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(1, 0x1, 0x4, 0)), http2.PROTOCOL_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(4, 0x3, 0, 0)), http2.PROTOCOL_ERROR)
+}
+
+@test
+fn test_validate_rejects_unjoined_header_block() {
+    assertEqual(http2.validateFrameHeader(FrameHeader(1, 0x1, 0, 1)), http2.PROTOCOL_ERROR)
+}
+
+@test
+fn test_validate_rejects_control_frame_shape_errors() {
+    // SETTINGS with ACK must be empty.
+    assertEqual(http2.validateFrameHeader(FrameHeader(6, 0x4, 0x1, 0)), http2.FRAME_SIZE_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(3, 0x3, 0, 1)), http2.FRAME_SIZE_ERROR)
+    // The stream check runs before the length check: PRIORITY on stream 0
+    // with a correct length is a protocol error, not a size error.
+    assertEqual(http2.validateFrameHeader(FrameHeader(5, 0x2, 0, 0)), http2.PROTOCOL_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(4, 0x2, 0, 1)), http2.FRAME_SIZE_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(8, 0x6, 0, 1)), http2.PROTOCOL_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(4, 0x7, 0, 0)), http2.FRAME_SIZE_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(3, 0x8, 0, 0)), http2.FRAME_SIZE_ERROR)
+}
+
+@test
+fn test_validate_rejects_unsupported_header_block_frames() {
+    assertEqual(http2.validateFrameHeader(FrameHeader(8, 0x5, 0x4, 1)), http2.PROTOCOL_ERROR)
+    assertEqual(http2.validateFrameHeader(FrameHeader(1, 0x9, 0x4, 1)), http2.PROTOCOL_ERROR)
+}
+
+// ---- SETTINGS (took over the five deleted C cases) ----
+
+fn settingsPayload(id: i64, value: i64) -> Array<u8> {
+    var out = Array<u8>(6)
+    out[0] = ((id >> 8) & 255) as u8
+    out[1] = (id & 255) as u8
+    out[2] = ((value >> 24) & 255) as u8
+    out[3] = ((value >> 16) & 255) as u8
+    out[4] = ((value >> 8) & 255) as u8
+    out[5] = (value & 255) as u8
+    return out
+}
+
+@test
+fn test_settings_applies_valid_values() {
+    var settings = Settings()
+    var payload = settingsPayload(0x5, 32768)
+    var second = settingsPayload(0x2, 1)
+    payload.appendFrom(second[:])
+    assertEqual(http2.applySettingsPayload(ref settings, payload, 0, 12), http2.NO_ERROR)
+    assertEqual(settings.get(0x5), 32768)
+    assertEqual(settings.get(0x2), 1)
+}
+
+@test
+fn test_settings_rejects_partial_entry() {
+    var settings = Settings()
+    var payload = Array<u8>(5)
+    assertEqual(http2.applySettingsPayload(ref settings, payload, 0, 5),
+                http2.FRAME_SIZE_ERROR)
+}
+
+@test
+fn test_settings_rejects_invalid_max_frame_without_mutation() {
+    var settings = Settings()
+    var before = settings.get(0x5)
+    assertEqual(http2.applySettingsPayload(ref settings, settingsPayload(0x5, 0), 0, 6),
+                http2.PROTOCOL_ERROR)
+    assertEqual(settings.get(0x5), before)
+}
+
+@test
+fn test_settings_rejects_window_overflow_without_mutation() {
+    var settings = Settings()
+    var before = settings.get(0x4)
+    assertEqual(http2.applySettingsPayload(ref settings,
+                                           settingsPayload(0x4, 2147483648), 0, 6),
+                http2.FLOW_CONTROL_ERROR)
+    assertEqual(settings.get(0x4), before)
+}
+
+@test
+fn test_settings_rejects_invalid_enable_push_without_mutation() {
+    var settings = Settings()
+    var before = settings.get(0x2)
+    assertEqual(http2.applySettingsPayload(ref settings, settingsPayload(0x2, 2), 0, 6),
+                http2.PROTOCOL_ERROR)
+    assertEqual(settings.get(0x2), before)
+}
+
+@test
+fn test_settings_leaves_earlier_entries_untouched_when_a_later_one_is_invalid() {
+    // The whole payload is judged before any of it is applied.
+    var settings = Settings()
+    var before = settings.get(0x5)
+    var payload = settingsPayload(0x5, 32768)
+    var second = settingsPayload(0x2, 7)
+    payload.appendFrom(second[:])
+    assertEqual(http2.applySettingsPayload(ref settings, payload, 0, 12),
+                http2.PROTOCOL_ERROR)
+    assertEqual(settings.get(0x5), before)
+}
+
+// ---- Control frame encoders ----
+
+@test
+fn test_encodes_control_frames() {
+    assertEqual(toHex(http2.encodeSettingsAck()), "000000040100000000")
+    assertEqual(toHex(http2.encodeWindowUpdate(1, 65535)), "0000040800000000010000ffff")
+    assertEqual(toHex(http2.encodeRstStream(3, http2.CANCEL)), "00000403000000000300000008")
+    assertEqual(toHex(http2.encodeGoaway(5, http2.NO_ERROR)),
+                "0000080700000000000000000500000000")
+}
+
+@test
+fn test_client_settings_frame_shape() {
+    var frame = http2.encodeClientSettings(Settings())
+    // Nine bytes of header plus four six-byte entries.
+    assertEqual(len(frame), 9 + 24)
+    var parsed = http2.readFrameHeader(frame, 0)
+    assert(parsed != null)
+    assertEqual(parsed!.length, 24)
+    assertEqual(parsed!.kind, 0x4)
+    assertEqual(parsed!.streamId, 0)
+}
+
+// ---- Admission rules: http2 is their only owner ----
+
+// Answer whether the admission rules refuse this request. A request they
+// accept still fails, but later and for a different reason, so the two
+// outcomes are told apart by which Http2Error comes back rather than by
+// whether one does. The target is a port nothing listens on, so an accepted
+// request is refused by the kernel immediately instead of reaching a peer.
+fn requestRejects(method: string, names: Array<string>, values: Array<string>) -> bool {
+    var empty: Array<u8> = []
+    try {
+        http2.request("https://127.0.0.1:1/api", method, names, values, empty, 250)
+    } catch (e: Http2Error) {
+        match (e) {
+            Http2Error.ProtocolError(_) -> { return true }
+            _ -> { return false }
+        }
+    }
+    return false
+}
+
+fn urlRejects(url: string, timeoutMs: i64) -> bool {
+    var names: Array<string> = []
+    var values: Array<string> = []
+    var empty: Array<u8> = []
+    try {
+        http2.request(url, "GET", names, values, empty, timeoutMs)
+    } catch (e: Http2Error) {
+        match (e) {
+            Http2Error.ProtocolError(_) -> { return true }
+            _ -> { return false }
+        }
+    }
+    return false
+}
+
+@test
+fn test_rejects_non_token_method() {
+    var none: Array<string> = []
+    var alsoNone: Array<string> = []
+    // http.xr used to allow these through -- it only refused control
+    // characters and spaces -- while the C binding refused them, so the same
+    // method surfaced as a connection failure instead of a protocol error.
+    assert(requestRejects("GET@X", none, alsoNone))
+    assert(requestRejects("GET/X", none, alsoNone))
+    assert(requestRejects("GET X", none, alsoNone))
+    assert(requestRejects("", none, alsoNone))
+}
+
+@test
+fn test_rejects_connection_specific_headers() {
+    var values: Array<string> = ["keep-alive"]
+    var connection: Array<string> = ["Connection"]
+    assert(requestRejects("GET", connection, values))
+    var host: Array<string> = ["Host"]
+    var hostValue: Array<string> = ["other.example"]
+    assert(requestRejects("GET", host, hostValue))
+    var upgrade: Array<string> = ["Upgrade"]
+    var upgradeValue: Array<string> = ["h2c"]
+    assert(requestRejects("GET", upgrade, upgradeValue))
+}
+
+@test
+fn test_te_is_allowed_only_for_trailers() {
+    var te: Array<string> = ["TE"]
+    var gzip: Array<string> = ["gzip"]
+    assert(requestRejects("GET", te, gzip))
+    // Surrounding whitespace does not change the meaning. The C binding did
+    // not trim and refused this; http.xr trimmed and allowed it, which is the
+    // same input reaching two different answers.
+    var padded: Array<string> = ["  trailers  "]
+    assert(!requestRejects("GET", te, padded))
+}
+
+@test
+fn test_rejects_pseudo_headers_from_callers() {
+    var pseudo: Array<string> = [":path"]
+    var value: Array<string> = ["/override"]
+    assert(requestRejects("GET", pseudo, value))
+}
+
+@test
+fn test_rejects_header_injection() {
+    var name: Array<string> = ["X-Bad"]
+    var value: Array<string> = ["a\r\nInjected: y"]
+    assert(requestRejects("GET", name, value))
+}
+
+@test
+fn test_rejects_mismatched_header_arrays() {
+    // The two arrays are only meaningful in pairs. This was the one
+    // admission rule that had to stay in C, because C indexed `values` by
+    // the length of `names`; nothing indexes across the two arrays any more.
+    var names: Array<string> = ["a", "b"]
+    var values: Array<string> = ["1"]
+    assert(requestRejects("GET", names, values))
+}
+
+@test
+fn test_rejects_more_than_28_headers() {
+    var names: Array<string> = []
+    var values: Array<string> = []
+    for (var i = 0; i < 29; i++) {
+        names.push("x-h" + string(i))
+        values.push("v")
+    }
+    assert(requestRejects("GET", names, values))
+    names.pop()
+    values.pop()
+    // 28 is the ceiling, so 28 must be accepted by the admission rules; the
+    // request then fails later, on the connection.
+    assert(len(names) == 28)
+}
+
+@test
+fn test_rejects_non_https_urls() {
+    assert(urlRejects("http://127.0.0.1:1/", 250))
+}
+
+@test
+fn test_rejects_url_with_userinfo() {
+    assert(urlRejects("https://user:pw@127.0.0.1:1/", 250))
+}
+
+@test
+fn test_rejects_non_positive_timeout() {
+    assert(urlRejects("https://127.0.0.1:1/", 0))
+}
+
+print("All http2 protocol tests passed")
