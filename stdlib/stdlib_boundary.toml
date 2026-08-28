@@ -377,13 +377,13 @@ perf_suite = "stdlib/ws"
 name = "http2"
 public = true
 layer = "L5"
-policy = "native_library"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/http2/http2.xr"
 factory_source = "stdlib/http2/http2_binding.c"
 factory_symbol = "http2"
-public_native = ["request", "supported"]
+public_native = []
 private_native_sources = ["stdlib/http2/*.c"]
-private_native_reason = "HTTP/2 framing, HPACK and connection data plane remain an explicit native library boundary"
+private_native_reason = "HTTP/2 framing, HPACK and the TLS/ALPN connection pool are wire-protocol machinery consumed by http2.xr"
 perf_suite = "stdlib/http2"
 
 [[module]]

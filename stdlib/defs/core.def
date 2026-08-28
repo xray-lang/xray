@@ -3490,7 +3490,7 @@ module net {
 }
 
 module http2 {
-  fn supported {
+  fn __supported {
     signature: "(): bool"
     doc: "Whether the built-in HTTP/2 standard module is available on this target"
     vm: "h2_supported"
@@ -3502,7 +3502,7 @@ module http2 {
     layer: "runtime"
   }
 
-  fn request {
+  fn __request {
     signature: "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?"
     doc: "Execute one typed HTTP/2 request"
     vm: "h2_request_typed"

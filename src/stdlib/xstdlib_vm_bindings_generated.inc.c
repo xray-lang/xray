@@ -72,9 +72,15 @@ XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_HTTP2
-static void xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "supported", h2_supported);
-    XRS_EXPORT(module, isolate, "request", h2_request_typed);
+XR_FUNC bool xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    XRS_EXPORT(module, isolate, "__supported", h2_supported);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__request", h2_request_typed);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP2 */
 
