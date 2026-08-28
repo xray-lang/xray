@@ -826,8 +826,8 @@ static bool aot_runtime_register_number_parse_error(XrAotRuntime *runtime) {
         (char *) row->members[XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX],
         (char *) row->members[XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE],
     };
-    XrEnumType *type = xr_enum_type_new_core(
-        core, row->nominal_owner, row->enum_name, members, XR_NUMBER_PARSE_ERROR_MEMBER_COUNT);
+    XrEnumType *type = xr_enum_type_new_core(core, row->nominal_owner, row->enum_name, members,
+                                             XR_NUMBER_PARSE_ERROR_MEMBER_COUNT);
     if (!type || !type->layout || type->layout->layout_id != row->enum_layout_id ||
         type->member_count != XR_NUMBER_PARSE_ERROR_MEMBER_COUNT)
         return false;
@@ -898,8 +898,8 @@ static bool aot_builtin_index_is_prelude_enum(int32_t index) {
            index == XR_GLOBAL_VAR_ENDIAN || index == XR_GLOBAL_VAR_SEND_RESULT ||
            index == XR_GLOBAL_VAR_TASK_RESULT || index == XR_GLOBAL_VAR_TASK_STATUS ||
            index == XR_GLOBAL_VAR_UTF8_ERROR || index == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR ||
-           index == XR_GLOBAL_VAR_STRING_SLICE_ERROR ||
-           index == XR_GLOBAL_VAR_COMPRESSION_ERROR || index == XR_GLOBAL_VAR_CRYPTO_ERROR;
+           index == XR_GLOBAL_VAR_STRING_SLICE_ERROR || index == XR_GLOBAL_VAR_COMPRESSION_ERROR ||
+           index == XR_GLOBAL_VAR_CRYPTO_ERROR;
 }
 
 static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
@@ -1170,26 +1170,6 @@ XrValue xr_aot_runtime_adt_payload(XrValue value, int index) {
         return XR_NULL_VAL;
     }
     return xr_enum_aggregate_payload_get(agg, (uint32_t) index);
-}
-
-XrValue xr_aot_time_now(void) {
-    return XR_FROM_INT((int64_t) (xr_time_realtime_ns() / 1000000ULL));
-}
-
-XrValue xr_aot_time_monotonic(void) {
-    return XR_FROM_INT(xr_runtime_current_monotonic_ms());
-}
-
-XrValue xr_aot_time_nanos(void) {
-    return XR_FROM_INT(xr_runtime_current_monotonic_ns());
-}
-
-XrValue xr_aot_time_micros(void) {
-    return XR_FROM_INT(xr_runtime_current_monotonic_ns() / 1000LL);
-}
-
-XrValue xr_aot_time_clock(void) {
-    return XR_FROM_INT((int64_t) (xr_time_process_cpu_ns() / 1000000ULL));
 }
 
 static void aot_recycle_completed_executor(XrCoroutine *exec) {

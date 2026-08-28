@@ -1,0 +1,70 @@
+// mkdirp creates each missing level in turn. Separators follow the Path
+// type's own contract, which is POSIX: '/' only, so a backslash is an
+// ordinary filename byte and never splits a path.
+
+import io
+import path
+import { Path } from path
+
+fn scratch(name: string) -> Path {
+    var base = io.tempDir()!
+    return path.join(base, path.from(name))
+}
+
+@test
+fn test_empty_path_is_rejected() {
+    assertEqual(io.mkdirp(Path("")), false)
+}
+
+@test
+fn test_creates_every_missing_level() {
+    var root = scratch("mkdirp_nested")
+    var deep = path.join(root, path.from("a/b/c"))
+    assert(io.mkdirp(deep))
+    assert(io.isDir(path.join(root, path.from("a"))))
+    assert(io.isDir(path.join(root, path.from("a/b"))))
+    assert(io.isDir(deep))
+    io.removeAll(root)
+}
+
+@test
+fn test_existing_directory_succeeds() {
+    var root = scratch("mkdirp_existing")
+    assert(io.mkdirp(root))
+    assert(io.mkdirp(root))
+    io.removeAll(root)
+}
+
+@test
+fn test_trailing_and_repeated_separators() {
+    var root = scratch("mkdirp_seps")
+    assert(io.mkdirp(Path(root.toString() + "/x//y///z/")))
+    assert(io.isDir(Path(root.toString() + "/x/y/z")))
+    io.removeAll(root)
+}
+
+@test
+fn test_root_path_succeeds() {
+    assert(io.mkdirp(Path("/")))
+}
+
+@test
+fn test_backslash_is_a_filename_byte_not_a_separator() {
+    var root = scratch("mkdirp_backslash")
+    assert(io.mkdirp(Path(root.toString() + "/back\\slash/deep")))
+    // The backslash segment is one directory name, so no separate "back"
+    // directory is created beside it.
+    assertEqual(io.exists(Path(root.toString() + "/back")), false)
+    assert(io.isDir(Path(root.toString() + "/back\\slash")))
+    io.removeAll(root)
+}
+
+@test
+fn test_fails_when_an_intermediate_level_is_a_file() {
+    var root = scratch("mkdirp_blocked")
+    assert(io.mkdirp(root))
+    var blocker = path.join(root, path.from("blocker"))
+    assert(io.writeFile(blocker, "not a directory"))
+    assertEqual(io.mkdirp(path.join(blocker, path.from("child"))), false)
+    io.removeAll(root)
+}

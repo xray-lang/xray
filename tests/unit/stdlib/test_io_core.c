@@ -37,48 +37,6 @@ static bool io_core_collect(const char *input, IoLineCollector *collector) {
     return xr_io_core_read_lines_each(input, strlen(input), io_core_collect_line, collector);
 }
 
-typedef struct IoMkdirpFake {
-    char dirs[16][64];
-    size_t dir_count;
-    char calls[16][64];
-    size_t call_count;
-    const char *blocked_path;
-} IoMkdirpFake;
-
-static bool io_mkdirp_fake_has_dir(const IoMkdirpFake *fake, const char *path) {
-    for (size_t i = 0; i < fake->dir_count; i++) {
-        if (strcmp(fake->dirs[i], path) == 0)
-            return true;
-    }
-    return false;
-}
-
-static bool io_mkdirp_fake_add_dir(IoMkdirpFake *fake, const char *path) {
-    if (fake->dir_count >= 16 || strlen(path) >= sizeof(fake->dirs[0]))
-        return false;
-    strcpy(fake->dirs[fake->dir_count++], path);
-    return true;
-}
-
-static int io_mkdirp_fake_mkdir(void *ctx, const char *path) {
-    IoMkdirpFake *fake = (IoMkdirpFake *) ctx;
-    if (fake->call_count < 16 && strlen(path) < sizeof(fake->calls[0]))
-        strcpy(fake->calls[fake->call_count++], path);
-    if (fake->blocked_path && strcmp(fake->blocked_path, path) == 0)
-        return -1;
-    if (io_mkdirp_fake_has_dir(fake, path))
-        return -1;
-    return io_mkdirp_fake_add_dir(fake, path) ? 0 : -1;
-}
-
-static bool io_mkdirp_fake_is_dir(void *ctx, const char *path) {
-    return io_mkdirp_fake_has_dir((IoMkdirpFake *) ctx, path);
-}
-
-static bool io_mkdirp_fake_run(IoMkdirpFake *fake, char *path) {
-    return xr_io_core_mkdirp(path, io_mkdirp_fake_mkdir, io_mkdirp_fake_is_dir, fake);
-}
-
 typedef struct IoCopyFake {
     const char *src;
     size_t src_len;
@@ -97,15 +55,6 @@ typedef struct IoWriteAllFake {
     bool stall;
     size_t call_count;
 } IoWriteAllFake;
-
-typedef struct IoTouchFake {
-    bool update_ok;
-    bool create_ok;
-    size_t update_count;
-    size_t create_count;
-    char updated_path[32];
-    char created_path[32];
-} IoTouchFake;
 
 typedef struct IoRemoveAllNode {
     const char *path;
@@ -177,20 +126,6 @@ static bool io_write_all_fake_error(void *ctx) {
     return ((IoWriteAllFake *) ctx)->write_error;
 }
 
-static bool io_touch_fake_update(void *ctx, const char *path) {
-    IoTouchFake *fake = (IoTouchFake *) ctx;
-    fake->update_count++;
-    strcpy(fake->updated_path, path);
-    return fake->update_ok;
-}
-
-static bool io_touch_fake_create(void *ctx, const char *path) {
-    IoTouchFake *fake = (IoTouchFake *) ctx;
-    fake->create_count++;
-    strcpy(fake->created_path, path);
-    return fake->create_ok;
-}
-
 static const IoRemoveAllNode *io_remove_all_fake_find(const IoRemoveAllFake *fake,
                                                       const char *path) {
     for (size_t i = 0; i < fake->node_count; i++) {
@@ -217,21 +152,6 @@ static bool io_remove_all_fake_for_each(void *ctx, const char *path, XrIoCoreDir
     return true;
 }
 
-static bool io_remove_all_fake_log(IoRemoveAllFake *fake, const char *kind, const char *path) {
-    if (fake->log_count >= 16)
-        return false;
-    snprintf(fake->log[fake->log_count++], sizeof(fake->log[0]), "%s:%s", kind, path);
-    return !fake->fail_path || strcmp(fake->fail_path, path) != 0;
-}
-
-static bool io_remove_all_fake_remove_leaf(void *ctx, const char *path) {
-    return io_remove_all_fake_log((IoRemoveAllFake *) ctx, "leaf", path);
-}
-
-static bool io_remove_all_fake_remove_dir(void *ctx, const char *path) {
-    return io_remove_all_fake_log((IoRemoveAllFake *) ctx, "dir", path);
-}
-
 static void *io_remove_all_fake_alloc(void *ctx, size_t size) {
     IoRemoveAllFake *fake = (IoRemoveAllFake *) ctx;
     fake->alloc_count++;
@@ -242,20 +162,6 @@ static void io_remove_all_fake_free(void *ctx, void *ptr) {
     IoRemoveAllFake *fake = (IoRemoveAllFake *) ctx;
     fake->free_count++;
     free(ptr);
-}
-
-static XrIoCoreRemoveAllOps io_remove_all_fake_ops(IoRemoveAllFake *fake) {
-    XrIoCoreRemoveAllOps ops = {
-        .kind = io_remove_all_fake_kind,
-        .for_each_entry = io_remove_all_fake_for_each,
-        .remove_leaf = io_remove_all_fake_remove_leaf,
-        .remove_dir = io_remove_all_fake_remove_dir,
-        .alloc = io_remove_all_fake_alloc,
-        .free = io_remove_all_fake_free,
-        .alloc_ctx = fake,
-        .sep = '/',
-    };
-    return ops;
 }
 
 static XrIoCoreReadDirOps io_read_dir_fake_ops(IoRemoveAllFake *fake) {
@@ -441,70 +347,6 @@ TEST(io_core_read_lines_rejects_invalid_callback) {
     ASSERT(!xr_io_core_read_lines_each(NULL, 1, io_core_collect_line, NULL));
 }
 
-TEST(io_core_mkdirp_rejects_empty_path) {
-    IoMkdirpFake fake = {0};
-    char path[] = "";
-    ASSERT(!io_mkdirp_fake_run(&fake, path));
-    ASSERT_EQ_UINT(fake.call_count, 0);
-}
-
-TEST(io_core_mkdirp_creates_nested_directories) {
-    IoMkdirpFake fake = {0};
-    char path[] = "a/b/c";
-    ASSERT(io_mkdirp_fake_run(&fake, path));
-    ASSERT_EQ_UINT(fake.dir_count, 3);
-    ASSERT_STR_EQ(fake.dirs[0], "a");
-    ASSERT_STR_EQ(fake.dirs[1], "a/b");
-    ASSERT_STR_EQ(fake.dirs[2], "a/b/c");
-}
-
-TEST(io_core_mkdirp_existing_final_directory_succeeds) {
-    IoMkdirpFake fake = {0};
-    ASSERT(io_mkdirp_fake_add_dir(&fake, "a"));
-    ASSERT(io_mkdirp_fake_add_dir(&fake, "a/b"));
-    char path[] = "a/b";
-    ASSERT(io_mkdirp_fake_run(&fake, path));
-    ASSERT_EQ_UINT(fake.dir_count, 2);
-    ASSERT_EQ_UINT(fake.call_count, 2);
-    ASSERT_STR_EQ(fake.calls[0], "a");
-    ASSERT_STR_EQ(fake.calls[1], "a/b");
-}
-
-TEST(io_core_mkdirp_trims_trailing_separators) {
-    IoMkdirpFake fake = {0};
-    char path[] = "a/b///";
-    ASSERT(io_mkdirp_fake_run(&fake, path));
-    ASSERT_EQ_UINT(fake.dir_count, 2);
-    ASSERT_STR_EQ(fake.dirs[0], "a");
-    ASSERT_STR_EQ(fake.dirs[1], "a/b");
-}
-
-TEST(io_core_mkdirp_handles_root_path) {
-    IoMkdirpFake fake = {0};
-    ASSERT(io_mkdirp_fake_add_dir(&fake, "/"));
-    char path[] = "/";
-    ASSERT(io_mkdirp_fake_run(&fake, path));
-    ASSERT_EQ_UINT(fake.call_count, 0);
-}
-
-TEST(io_core_mkdirp_handles_backslash_separators) {
-    IoMkdirpFake fake = {0};
-    char path[] = "a\\b\\c";
-    ASSERT(io_mkdirp_fake_run(&fake, path));
-    ASSERT_EQ_UINT(fake.dir_count, 3);
-    ASSERT_STR_EQ(fake.dirs[0], "a");
-    ASSERT_STR_EQ(fake.dirs[1], "a\\b");
-    ASSERT_STR_EQ(fake.dirs[2], "a\\b\\c");
-}
-
-TEST(io_core_mkdirp_fails_on_blocked_intermediate) {
-    IoMkdirpFake fake = {.blocked_path = "a/b"};
-    char path[] = "a/b/c";
-    ASSERT(!io_mkdirp_fake_run(&fake, path));
-    ASSERT_EQ_UINT(fake.dir_count, 1);
-    ASSERT_STR_EQ(fake.dirs[0], "a");
-}
-
 TEST(io_core_copy_stream_copies_multiple_chunks) {
     char buf[4];
     IoCopyFake fake = {.src = "abcdefghij", .src_len = 10};
@@ -581,98 +423,6 @@ TEST(io_core_write_all_rejects_no_progress_and_invalid_args) {
     ASSERT_FALSE(xr_io_core_write_all(&fake, NULL, io_write_all_fake_error, "abc", 3));
     ASSERT_FALSE(
         xr_io_core_write_all(&fake, io_write_all_fake_write, io_write_all_fake_error, NULL, 1));
-}
-
-TEST(io_core_touch_prefers_timestamp_update) {
-    IoTouchFake fake = {.update_ok = true, .create_ok = true};
-    ASSERT_TRUE(xr_io_core_touch("file.txt", io_touch_fake_update, io_touch_fake_create, &fake));
-    ASSERT_EQ_UINT(fake.update_count, 1);
-    ASSERT_EQ_UINT(fake.create_count, 0);
-    ASSERT_STR_EQ(fake.updated_path, "file.txt");
-}
-
-TEST(io_core_touch_creates_when_update_fails) {
-    IoTouchFake fake = {.update_ok = false, .create_ok = true};
-    ASSERT_TRUE(xr_io_core_touch("new.txt", io_touch_fake_update, io_touch_fake_create, &fake));
-    ASSERT_EQ_UINT(fake.update_count, 1);
-    ASSERT_EQ_UINT(fake.create_count, 1);
-    ASSERT_STR_EQ(fake.created_path, "new.txt");
-}
-
-TEST(io_core_touch_rejects_create_failure_and_invalid_args) {
-    IoTouchFake fake = {.update_ok = false, .create_ok = false};
-    ASSERT_FALSE(
-        xr_io_core_touch("blocked.txt", io_touch_fake_update, io_touch_fake_create, &fake));
-    ASSERT_EQ_UINT(fake.update_count, 1);
-    ASSERT_EQ_UINT(fake.create_count, 1);
-    ASSERT_FALSE(xr_io_core_touch(NULL, io_touch_fake_update, io_touch_fake_create, &fake));
-    ASSERT_FALSE(xr_io_core_touch("x", NULL, io_touch_fake_create, &fake));
-    ASSERT_FALSE(xr_io_core_touch("x", io_touch_fake_update, NULL, &fake));
-}
-
-TEST(io_core_remove_all_recurses_depth_first_and_skips_dot_entries) {
-    IoRemoveAllFake fake = {
-        .nodes =
-            {
-                {.path = "root",
-                 .kind = XR_IO_CORE_PATH_DIR,
-                 .entries = {".", "..", "a", "sub"},
-                 .entry_count = 4},
-                {.path = "root/a", .kind = XR_IO_CORE_PATH_LEAF},
-                {.path = "root/sub",
-                 .kind = XR_IO_CORE_PATH_DIR,
-                 .entries = {"b"},
-                 .entry_count = 1},
-                {.path = "root/sub/b", .kind = XR_IO_CORE_PATH_LEAF},
-            },
-        .node_count = 4,
-    };
-    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
-
-    ASSERT_TRUE(xr_io_core_remove_all("root", &ops, &fake));
-    ASSERT_EQ_UINT(fake.log_count, 4);
-    ASSERT_STR_EQ(fake.log[0], "leaf:root/a");
-    ASSERT_STR_EQ(fake.log[1], "leaf:root/sub/b");
-    ASSERT_STR_EQ(fake.log[2], "dir:root/sub");
-    ASSERT_STR_EQ(fake.log[3], "dir:root");
-    ASSERT_EQ_UINT(fake.alloc_count, 3);
-    ASSERT_EQ_UINT(fake.free_count, 3);
-}
-
-TEST(io_core_remove_all_handles_leaf_and_missing_paths) {
-    IoRemoveAllFake fake = {
-        .nodes = {{.path = "file", .kind = XR_IO_CORE_PATH_LEAF}},
-        .node_count = 1,
-    };
-    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
-
-    ASSERT_TRUE(xr_io_core_remove_all("file", &ops, &fake));
-    ASSERT_EQ_UINT(fake.log_count, 1);
-    ASSERT_STR_EQ(fake.log[0], "leaf:file");
-    ASSERT_FALSE(xr_io_core_remove_all("missing", &ops, &fake));
-}
-
-TEST(io_core_remove_all_reports_child_failure_but_still_visits_parent_dirs) {
-    IoRemoveAllFake fake = {
-        .nodes =
-            {
-                {.path = "root", .kind = XR_IO_CORE_PATH_DIR, .entries = {"sub"}, .entry_count = 1},
-                {.path = "root/sub",
-                 .kind = XR_IO_CORE_PATH_DIR,
-                 .entries = {"bad"},
-                 .entry_count = 1},
-                {.path = "root/sub/bad", .kind = XR_IO_CORE_PATH_LEAF},
-            },
-        .node_count = 3,
-        .fail_path = "root/sub/bad",
-    };
-    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
-
-    ASSERT_FALSE(xr_io_core_remove_all("root", &ops, &fake));
-    ASSERT_EQ_UINT(fake.log_count, 3);
-    ASSERT_STR_EQ(fake.log[0], "leaf:root/sub/bad");
-    ASSERT_STR_EQ(fake.log[1], "dir:root/sub");
-    ASSERT_STR_EQ(fake.log[2], "dir:root");
 }
 
 TEST(io_core_read_dir_filters_dot_entries) {
@@ -920,21 +670,6 @@ TEST(io_core_relative_path_from_base_trims_one_separator) {
     ASSERT_STR_EQ(rel, "");
 }
 
-TEST(io_core_temp_template_uses_explicit_separator_and_stem) {
-    char path[64];
-    ASSERT(xr_io_core_temp_template("/tmp", '/', "xray_XXXXXX", path, sizeof(path)));
-    ASSERT_STR_EQ(path, "/tmp/xray_XXXXXX");
-    ASSERT(xr_io_core_temp_template("C:\\Temp", '\\', "xray_XXXXXX", path, sizeof(path)));
-    ASSERT_STR_EQ(path, "C:\\Temp\\xray_XXXXXX");
-}
-
-TEST(io_core_temp_template_rejects_invalid_or_truncated_output) {
-    char path[8];
-    ASSERT(!xr_io_core_temp_template("", '/', "xray_XXXXXX", path, sizeof(path)));
-    ASSERT(!xr_io_core_temp_template("/tmp", '/', "", path, sizeof(path)));
-    ASSERT(!xr_io_core_temp_template("/tmp", '/', "xray_XXXXXX", path, sizeof(path)));
-}
-
 TEST(io_core_path_result_view_keeps_length_and_buffer) {
     XrIoCorePathView view;
     const char path[] = "/tmp/xray-target-extra";
@@ -1027,15 +762,6 @@ RUN_TEST(io_core_read_lines_keeps_middle_empty_lines);
 RUN_TEST(io_core_read_lines_trims_trailing_carriage_returns);
 RUN_TEST(io_core_read_lines_rejects_invalid_callback);
 
-RUN_TEST_SUITE("IO Core - mkdirp");
-RUN_TEST(io_core_mkdirp_rejects_empty_path);
-RUN_TEST(io_core_mkdirp_creates_nested_directories);
-RUN_TEST(io_core_mkdirp_existing_final_directory_succeeds);
-RUN_TEST(io_core_mkdirp_trims_trailing_separators);
-RUN_TEST(io_core_mkdirp_handles_root_path);
-RUN_TEST(io_core_mkdirp_handles_backslash_separators);
-RUN_TEST(io_core_mkdirp_fails_on_blocked_intermediate);
-
 RUN_TEST_SUITE("IO Core - copy stream");
 RUN_TEST(io_core_copy_stream_copies_multiple_chunks);
 RUN_TEST(io_core_copy_stream_handles_exact_chunk_eof);
@@ -1048,16 +774,6 @@ RUN_TEST(io_core_write_all_retries_short_writes);
 RUN_TEST(io_core_write_all_accepts_zero_length_without_data);
 RUN_TEST(io_core_write_all_rejects_error_after_full_write);
 RUN_TEST(io_core_write_all_rejects_no_progress_and_invalid_args);
-
-RUN_TEST_SUITE("IO Core - touch");
-RUN_TEST(io_core_touch_prefers_timestamp_update);
-RUN_TEST(io_core_touch_creates_when_update_fails);
-RUN_TEST(io_core_touch_rejects_create_failure_and_invalid_args);
-
-RUN_TEST_SUITE("IO Core - remove all");
-RUN_TEST(io_core_remove_all_recurses_depth_first_and_skips_dot_entries);
-RUN_TEST(io_core_remove_all_handles_leaf_and_missing_paths);
-RUN_TEST(io_core_remove_all_reports_child_failure_but_still_visits_parent_dirs);
 
 RUN_TEST_SUITE("IO Core - read dir");
 RUN_TEST(io_core_read_dir_filters_dot_entries);
@@ -1083,8 +799,6 @@ RUN_TEST(io_core_dot_dir_entry_recognizes_reserved_names);
 RUN_TEST(io_core_join_child_path_uses_explicit_separator);
 RUN_TEST(io_core_join_child_path_rejects_empty_or_truncated_paths);
 RUN_TEST(io_core_relative_path_from_base_trims_one_separator);
-RUN_TEST(io_core_temp_template_uses_explicit_separator_and_stem);
-RUN_TEST(io_core_temp_template_rejects_invalid_or_truncated_output);
 
 RUN_TEST_SUITE("IO Core - path result view");
 RUN_TEST(io_core_path_result_view_keeps_length_and_buffer);

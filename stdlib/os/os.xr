@@ -49,7 +49,19 @@ export fn exit(code: i64 = 0) { __exit(code) }
 export fn getpid() -> i64 { return __getpid() }
 export fn getcwd() -> string { return __getcwd() }
 export fn hostname() -> string { return __hostname() }
-export fn tmpdir() -> string { return __tmpdir() }
+// The environment names the temporary root; the platform default applies only
+// when nothing does. An empty value is not an answer and does not stop the
+// chain. No host call is involved, so this belongs here rather than in C.
+export fn tmpdir() -> string {
+    var named = __getenv("TMPDIR")
+    if (named != null && len(named!) > 0) { return named! }
+    named = __getenv("TMP")
+    if (named != null && len(named!) > 0) { return named! }
+    named = __getenv("TEMP")
+    if (named != null && len(named!) > 0) { return named! }
+    if (platform() == "windows") { return "C:\\Windows\\Temp" }
+    return "/tmp"
+}
 // The host answer wins; environment fallback policy is shared by both
 // backends in this source body instead of being duplicated in native code.
 export fn username() -> string? {

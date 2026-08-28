@@ -9,7 +9,7 @@ print(io.mkdirp(nested))
 print(io.writeFile(path.join(root, path.from("top.txt")), "top"))
 print(io.writeFile(path.join(nested, path.from("deep.txt")), "deep"))
 
-var entries = io.readDir(root)
+var entries = io.readDir(root)!
 var hasTop = false
 var hasA = false
 var hasDot = false
@@ -26,7 +26,7 @@ print(hasA)
 print(!hasDot)
 print(!hasDotDot)
 
-var recursive = io.readDirRecursive(root)
+var recursive = io.readDirRecursive(root)!
 var hasRecursiveTop = false
 var hasRecursiveA = false
 var hasRecursiveAB = false
@@ -44,6 +44,6 @@ print(hasRecursiveAB)
 print(hasRecursiveDeep)
 
 var missing = io.readDirRecursive(path.join(root, path.from("missing")))
-print(len(missing))
+print(missing == null ? 0 : len(missing!))
 
 print(io.removeAll(root))

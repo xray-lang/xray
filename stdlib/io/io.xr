@@ -3,6 +3,7 @@
 // Native entry points are deliberately internal `__*` primitives. Resource
 // ownership, buffering, line iteration, Path shaping, and public value types
 // live here so VM and AOT compile the same Xray semantics.
+import os
 import { Path } from path
 
 export final class FileStat {
@@ -201,16 +202,78 @@ export fn isDir(path: Path) -> bool { return __isDir(path) }
 export fn isFile(path: Path) -> bool { return __isFile(path) }
 export fn isSymlink(path: Path) -> bool { return __isSymlink(path) }
 export fn mkdir(path: Path) -> bool { return __mkdir(path) }
-export fn mkdirp(path: Path) -> bool { return __mkdirp(path) }
+// Separators follow the Path type's own contract, which is POSIX: '/' only.
+// A backslash is an ordinary filename byte, which is what it is on the systems
+// Path describes. Creating each missing level in turn, and treating a level
+// that already exists as a directory as success, is the whole of the policy.
+fn _ensureDir(dir: Path) -> bool {
+    if (__mkdir(dir)) { return true }
+    return __isDir(dir)
+}
+
+export fn mkdirp(path: Path) -> bool {
+    var raw = path.toString()
+    if (len(raw) == 0) { return false }
+
+    var rootLen = 0
+    if (raw.slice(0, 1) == "/") { rootLen = 1 }
+
+    var end = len(raw)
+    while (end > rootLen + 1 && raw.slice(end - 1, end) == "/") { end = end - 1 }
+    var p = raw.slice(0, end)
+    if (end <= rootLen) { return __isDir(Path(p)) }
+
+    var i = rootLen
+    while (i < len(p) && p.slice(i, i + 1) == "/") { i = i + 1 }
+    while (i < len(p)) {
+        if (p.slice(i, i + 1) == "/") {
+            if (i > rootLen && !_ensureDir(Path(p.slice(0, i)))) { return false }
+            while (i + 1 < len(p) && p.slice(i + 1, i + 2) == "/") { i = i + 1 }
+        }
+        i = i + 1
+    }
+    return _ensureDir(Path(p))
+}
 export fn readFile(path: Path) -> string? { return __readFile(path) }
 export fn readFileBytes(path: Path) -> Array<u8>? { return __readFileBytes(path) }
 export fn readStdin() -> string? { return __readStdin() }
 export fn readStdinBytes() -> Array<u8>? { return __readStdinBytes() }
 export fn remove(path: Path) -> bool { return __remove(path) }
-export fn removeAll(path: Path) -> bool { return __removeAll(path) }
+// Removal descends into real directories only. A symlink is removed as the
+// link it is, never followed, so a link pointing outside the tree cannot make
+// the walk delete anything beyond it. The depth ceiling matches the recursive
+// listing's; the C implementation had none and a deep enough tree exhausted
+// the stack. A directory's own removal is attempted even when a child failed,
+// which reports the failure while still clearing what it can.
+fn _removeTree(target: Path, depth: i64) -> bool {
+    if (depth >= 64) { return false }
+    if (!__exists(target)) { return false }
+    if (!__isDir(target) || __isSymlink(target)) { return __remove(target) }
+
+    var names = __readDir(target)
+    if (names == null) { return false }
+    var ok = true
+    for (var i = 0; i < len(names!); i++) {
+        var child = Path(target.toString() + "/" + names![i])
+        if (!_removeTree(child, depth + 1)) { ok = false }
+    }
+    return __rmdir(target) && ok
+}
+
+export fn removeAll(path: Path) -> bool {
+    return _removeTree(path, 0)
+}
 export fn rename(old: Path, newPath: Path) -> bool { return __rename(old, newPath) }
 export fn symlink(target: Path, link: Path) -> bool { return __symlink(target, link) }
-export fn touch(path: Path) -> bool { return __touch(path) }
+// Update the timestamps first and fall back to creating the file, in that
+// order: a directory accepts the timestamp update but cannot be created as a
+// file, so trying creation first would report failure for a path that touch
+// handles. Appending nothing creates a missing file without truncating an
+// existing one.
+export fn touch(path: Path) -> bool {
+    if (__utimeNow(path)) { return true }
+    return __appendFile(path, "")
+}
 export fn writeFile(path: Path, data: string) -> bool { return __writeFile(path, data) }
 export fn writeFileBytes(path: Path, data: Array<u8>) -> bool {
     return __writeFileBytes(path, data)
@@ -225,16 +288,29 @@ export fn stat(path: Path) -> FileStat? {
                     raw!.uid, raw!.gid, raw!.isFile, raw!.isDir, raw!.isSymlink)
 }
 
+// The root comes from the os module, which owns the environment chain. Any
+// trailing separator is trimmed here so the join never doubles one -- macOS
+// sets TMPDIR with a trailing slash, and the old C join produced a doubled
+// separator in every temporary path built on it. Only the unique-name
+// creation is left to the host, because it has to be atomic.
+fn _tempRoot() -> string {
+    var root = os.tmpdir()
+    while (len(root) > 1 && root.slice(len(root) - 1, len(root)) == "/") {
+        root = root.slice(0, len(root) - 1)
+    }
+    return root
+}
+
 export fn tempDir() -> Path? {
-    var raw = __tempDir()
-    if (raw == null) { return null }
-    return Path(raw!)
+    var made = __makeTempDir(_tempRoot())
+    if (made == null) { return null }
+    return Path(made!)
 }
 
 export fn tempFile() -> Path? {
-    var raw = __tempFile()
-    if (raw == null) { return null }
-    return Path(raw!)
+    var made = __makeTempFile(_tempRoot())
+    if (made == null) { return null }
+    return Path(made!)
 }
 
 export fn readlink(path: Path) -> Path? {
@@ -249,17 +325,43 @@ export fn realpath(path: Path) -> Path? {
     return Path(raw!)
 }
 
-export fn readDir(path: Path) -> Array<Path> {
+// A path that cannot be listed answers null rather than an empty array: an
+// empty directory and a path that is not a directory are different answers,
+// and returning the same value for both hides the second.
+export fn readDir(path: Path) -> Array<Path>? {
     var raws = __readDir(path)
+    if (raws == null) { return null }
     var out: Array<Path> = []
-    for (var i = 0; i < len(raws); i++) { out.push(Path(raws[i])) }
+    for (var i = 0; i < len(raws!); i++) { out.push(Path(raws![i])) }
     return out
 }
 
-export fn readDirRecursive(path: Path) -> Array<Path> {
-    var raws = __readDirRecursive(path)
+// Entries are reported relative to the listed directory with '/' as the only
+// separator, and the walk stops at 64 levels. A symlinked directory is listed
+// but not descended into, so a cycle through one cannot make the walk repeat.
+fn _walkDir(full: string, rel: string, depth: i64, out: ref Array<string>) {
+    if (depth >= 64) { return }
+    var names = __readDir(Path(full))
+    if (names == null) { return }
+    for (var i = 0; i < len(names!); i++) {
+        var name = names![i]
+        var childFull = full + "/" + name
+        var childRel = name
+        if (len(rel) > 0) { childRel = rel + "/" + name }
+        out.push(childRel)
+        var child = Path(childFull)
+        if (__isDir(child) && !__isSymlink(child)) {
+            _walkDir(childFull, childRel, depth + 1, ref out)
+        }
+    }
+}
+
+export fn readDirRecursive(path: Path) -> Array<Path>? {
+    if (!__isDir(path)) { return null }
+    var raw: Array<string> = []
+    _walkDir(path.toString(), "", 0, ref raw)
     var out: Array<Path> = []
-    for (var i = 0; i < len(raws); i++) { out.push(Path(raws[i])) }
+    for (var i = 0; i < len(raw); i++) { out.push(Path(raw[i])) }
     return out
 }
 

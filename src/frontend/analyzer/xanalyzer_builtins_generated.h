@@ -202,13 +202,13 @@ static const XaBuiltinEnum g_gen_cluster_enums[] = {
 static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"self", "(): string", "Get own node name", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"nodes", "(): Array<string>", "List cluster node names", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"discover", "(): ()", "Start LAN auto-discovery", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__self", "(): string", "Get own node name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__nodes", "(): Array<string>?", "List cluster node names", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__discover", "(): ()", "Start LAN auto-discovery", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"info", "(): ClusterInfo?", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_BORROWED_STATIC},
+    {"__info", "(): ClusterInfo?", "Get cluster status info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_BORROWED_STATIC},
     {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_CLUSTER_FUNCTION_COUNT 10
@@ -305,30 +305,27 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__isFile", "(path: Path): bool", "Check if path is a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__isSymlink", "(path: Path): bool", "Check if path is a symlink", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__mkdir", "(path: Path): bool", "Create directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__mkdirp", "(path: Path): bool", "Create directory recursively", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__readDir", "(path: Path): Array<string>", "List directory entries (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readDirRecursive", "(path: Path): Array<string>", "List directory entries recursively (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__readDir", "(path: Path): Array<string>?", "List directory entries (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readFile", "(path: Path): string?", "Read entire file as string", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readFileBytes", "(path: Path): Array<u8>?", "Read entire file as byte array", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readLines", "(path: Path): Array<string>", "Read file as lines", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readStdin", "(): string?", "Read all data from standard input", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readStdinBytes", "(): Array<u8>?", "Read all standard input as binary bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readlink", "(path: Path): string?", "Read symlink target (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__realpath", "(path: Path): string?", "Resolve to absolute path (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__rmdir", "(path: Path): bool", "Remove an empty directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__remove", "(path: Path): bool", "Remove a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__removeAll", "(path: Path): bool", "Remove directory recursively", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__rename", "(old: Path, new: Path): bool", "Rename a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__stat", "(path: Path): __FileStat?", "Get file stat info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__symlink", "(target: Path, link: Path): bool", "Create symbolic link", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__tempDir", "(): string?", "Create temporary directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__tempFile", "(): string?", "Create temporary file (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__touch", "(path: Path): bool", "Create or update file timestamp", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__makeTempDir", "(root: string): string?", "Create a uniquely named directory inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__makeTempFile", "(root: string): string?", "Create a uniquely named file inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeFile", "(path: Path, data: string): bool", "Write string to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeFileBytes", "(path: Path, data: Array<u8>): bool", "Write byte array to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_IO_FUNCTION_COUNT 36
+#define GEN_IO_FUNCTION_COUNT 33
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {
@@ -524,7 +521,6 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__getpid", "(): i64", "Get process ID", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__getcwd", "(): string", "Get current working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__hostname", "(): string", "Get hostname", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__tmpdir", "(): string", "Get temporary directory path", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__systemUsername", "(): string?", "Get the host-reported current user name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__homedir", "(): string?", "Get user home directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__uid", "(): i64", "Get user ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -541,7 +537,7 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__exec", "(cmd: string): __ExecResult?", "Execute shell command", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__spawn", "(program: string, args: Array<string>): __ExecResult?", "Execute a program without a shell (injection-safe argv)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_OS_FUNCTION_COUNT 26
+#define GEN_OS_FUNCTION_COUNT 25
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
@@ -619,16 +615,13 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {
-    {"now", "(): i64", "Current time in milliseconds since epoch", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"clock", "(): i64", "CPU clock time in milliseconds", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"monotonic", "(): i64", "Monotonic time in milliseconds", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"nanos", "(): i64", "Monotonic time in nanoseconds", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"micros", "(): i64", "Monotonic time in microseconds", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"localOffset", "(): i64", "Local UTC offset in minutes for the current wall time", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"localOffsetAt", "(timestamp: i64): i64", "Local UTC offset in minutes at a Unix timestamp", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__realtimeNanos", "(): i64", "Nanoseconds since the Unix epoch on the wall clock", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__utcOffsetAt", "(seconds: i64): i64", "Minutes east of UTC at a Unix timestamp in seconds", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_TIME_FUNCTION_COUNT 8
+#define GEN_TIME_FUNCTION_COUNT 5
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {

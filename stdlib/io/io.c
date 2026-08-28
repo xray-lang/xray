@@ -171,9 +171,9 @@ static XrValue io_readStdin(XrVMRuntime *X, XrValue *args, int argc) {
     if (!buf)
         return xr_null();
 
-    XrString *str = xr_string_intern(X, buf, len, 0);
+    XrValue value = xrs_string_value_n(X, buf, len);
     xr_free(buf);
-    return xr_string_value(str);
+    return value;
 }
 
 static XrValue io_stream_read_bytes(XrVMRuntime *X, FILE *stream, int64_t max_bytes) {
@@ -309,7 +309,7 @@ static XrCFuncResult file_io_finish(XrVMRuntime *X, FileIoState *st, bool ok, Xr
     } else if (st->kind == FILE_IO_WRITE) {
         r = xr_bool(st->off == st->len);
     } else if (st->kind == FILE_IO_READ_STRING) {
-        r = xr_string_value(xr_string_intern(X, st->rbuf, st->off, 0));
+        r = xrs_string_value_n(X, st->rbuf, st->off);
     } else {  // FILE_IO_READ_BYTES
         XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) st->off);
         if (arr) {
@@ -444,7 +444,7 @@ static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValu
     char *buf = io_read_file_buffer_sync(path, &read_size);
     if (!buf)
         return XR_CFUNC_DONE;
-    *result = xr_string_value(xr_string_intern(X, buf, read_size, 0));
+    *result = xrs_string_value_n(X, buf, read_size);
     xr_free(buf);
     return XR_CFUNC_DONE;
 }
@@ -593,26 +593,7 @@ static XrValue io_exists(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    {
-        XrValue v = args[0];
-        fprintf(stderr, "[DBG io_exists] argc=%d tag=%d is_instance=%d is_string=%d\n", argc,
-                (int) v.tag, (int) XR_IS_INSTANCE(v), (int) XR_IS_STRING(v));
-        if (XR_IS_INSTANCE(v)) {
-            XrInstance *inst = XR_TO_INSTANCE(v);
-            const char *nm = (inst && inst->klass) ? xr_class_display_name(inst->klass) : "<null>";
-            int fc = (inst && inst->klass) ? (int) xr_class_instance_field_count(inst->klass) : -1;
-            const char *f0 = (inst && inst->klass && inst->klass->fields && fc >= 1)
-                                 ? inst->klass->fields[0].name
-                                 : "<none>";
-            fprintf(stderr, "[DBG io_exists] class=%s field_count=%d f0name=%s\n", nm ? nm : "<n>",
-                    fc, f0 ? f0 : "<n>");
-            if (inst && fc >= 1) {
-                XrValue raw = inst->fields[0];
-                fprintf(stderr, "[DBG io_exists] fields[0] tag=%d is_string=%d\n", (int) raw.tag,
-                        (int) XR_IS_STRING(raw));
-            }
-        }
-    }
+
     const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
@@ -670,7 +651,28 @@ static XrValue io_remove(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
+#ifdef XR_OS_WINDOWS
+    /* A read-only attribute blocks deletion. Clearing it is part of asking the
+     * host to delete rather than a choice the module makes, and the recursive
+     * removal path has always done it, so both paths answer the same here. */
+    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
+#endif
     return xr_bool(remove(path) == 0);
+}
+
+static XrValue io_rmdir(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    if (argc < 1)
+        return xr_bool(false);
+    const char *path = xrs_path_arg(args[0], NULL);
+    if (!path)
+        return xr_bool(false);
+
+#ifdef XR_OS_WINDOWS
+    return xr_bool(RemoveDirectoryA(path) != 0);
+#else
+    return xr_bool(rmdir(path) == 0);
+#endif
 }
 
 // rename(old, new) - Rename file
@@ -719,23 +721,6 @@ static bool io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryF
 
     xr_dir_close(it);
     return ok;
-}
-
-static XrIoCorePathKind io_path_kind(void *ctx, const char *path) {
-    (void) ctx;
-#ifdef XR_OS_WINDOWS
-    DWORD attrs = GetFileAttributesA(path);
-    if (attrs == INVALID_FILE_ATTRIBUTES)
-        return XR_IO_CORE_PATH_MISSING;
-    if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
-        return XR_IO_CORE_PATH_DIR;
-    return XR_IO_CORE_PATH_LEAF;
-#else
-    struct stat st;
-    if (lstat(path, &st) != 0)
-        return XR_IO_CORE_PATH_MISSING;
-    return S_ISDIR(st.st_mode) ? XR_IO_CORE_PATH_DIR : XR_IO_CORE_PATH_LEAF;
-#endif
 }
 
 typedef struct IoReadDirEmitCtx {
@@ -826,8 +811,11 @@ static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
     }
     int ret = fcopyfile(src_fd, dst_fd, NULL, COPYFILE_DATA);
     close(src_fd);
-    close(dst_fd);
-    return xr_bool(ret == 0);
+    /* A deferred write can fail at close, so the copy is complete only when
+     * the destination also closes cleanly. The buffered fallback below has
+     * always checked this; the fast paths did not. */
+    int closed = close(dst_fd);
+    return xr_bool(ret == 0 && closed == 0);
 #elif defined(XR_OS_LINUX)
     // Linux: use sendfile for zero-copy
     int src_fd = open(src, O_RDONLY);
@@ -861,8 +849,9 @@ static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
         remaining -= sent;
     }
     close(src_fd);
-    close(dst_fd);
-    return xr_bool(sendfile_ok && remaining == 0);
+    /* A deferred write can fail at close; see the note on the macOS path. */
+    int closed = close(dst_fd);
+    return xr_bool(sendfile_ok && remaining == 0 && closed == 0);
 #else
     FILE *fsrc = fopen(src, "rb");
     if (!fsrc)
@@ -901,50 +890,6 @@ static char *io_read_file_buffer_sync(const char *path, size_t *out_len) {
     return buf;
 }
 
-typedef struct IoReadLinesCtx {
-    XrVMRuntime *X;
-    XrArray *arr;
-} IoReadLinesCtx;
-
-static bool io_read_lines_push(void *ctx, const char *data, size_t len) {
-    IoReadLinesCtx *read_ctx = (IoReadLinesCtx *) ctx;
-    XrString *str = xr_string_intern(read_ctx->X, data, len, 0);
-    if (!str)
-        return false;
-    xr_array_push(read_ctx->arr, xr_string_value(str));
-    return true;
-}
-
-// readLines(path) - Read file by lines
-static XrValue io_readLines(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_null();
-
-    size_t len = 0;
-    char *buf = io_read_file_buffer_sync(path, &len);
-    if (!buf)
-        return xr_null();
-
-    XrArray *arr = xr_array_new(xr_current_coro(X));
-    if (!arr) {
-        xr_free(buf);
-        return xr_null();
-    }
-
-    IoReadLinesCtx read_ctx = {X, arr};
-    if (!xr_io_core_read_lines_each(buf, len, io_read_lines_push, &read_ctx)) {
-        xr_free(buf);
-        return xr_null();
-    }
-
-    xr_free(buf);
-    return xr_value_from_array(arr);
-}
-
-// isSymlink(path) - Check if path is a symlink
 static XrValue io_isSymlink(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
@@ -1039,85 +984,7 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_object_instance_value(obj);
 }
 
-static int io_mkdirp_mkdir(void *ctx, const char *path) {
-    (void) ctx;
-    return xr_fs_mkdir(path, 0755);
-}
-
-static bool io_mkdirp_is_dir(void *ctx, const char *path) {
-    (void) ctx;
-    return xr_fs_is_dir(path);
-}
-
-// mkdirp(path) - Recursively create directory.
-// Reject empty paths up-front: the previous implementation wrote to
-// tmp[-1] when handed "".
-static XrValue io_mkdirp(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    const char *path = xrs_path_arg(args[0], NULL);
-    // Catch truncation before we copy into a XR_PATH_MAX buffer.
-    if (path && strnlen(path, XR_PATH_MAX) >= XR_PATH_MAX)
-        return xr_bool(false);
-    if (!path || path[0] == '\0')
-        return xr_bool(false);
-
-    char tmp[XR_PATH_MAX];
-    size_t len = strnlen(path, sizeof(tmp));
-    if (len == 0 || len >= sizeof(tmp))
-        return xr_bool(false);
-    memcpy(tmp, path, len);
-    tmp[len] = '\0';
-
-    return xr_bool(xr_io_core_mkdirp(tmp, io_mkdirp_mkdir, io_mkdirp_is_dir, NULL));
-}
-
-static bool io_touch_update(void *ctx, const char *path) {
-    (void) ctx;
-#ifdef XR_OS_WINDOWS
-    return _utime(path, NULL) == 0;
-#else
-    return utime(path, NULL) == 0;
-#endif
-}
-
-static bool io_touch_create(void *ctx, const char *path) {
-    (void) ctx;
-    FILE *f = fopen(path, "a");
-    if (!f)
-        return false;
-    return fclose(f) == 0;
-}
-
-#ifdef XR_OS_WINDOWS
-static bool io_remove_all_leaf(void *ctx, const char *path) {
-    (void) ctx;
-    DWORD attrs = GetFileAttributesA(path);
-    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
-        return RemoveDirectoryA(path) != 0;
-    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
-    return DeleteFileA(path) != 0;
-}
-
-static bool io_remove_all_dir(void *ctx, const char *path) {
-    (void) ctx;
-    return RemoveDirectoryA(path) != 0;
-}
-#else
-static bool io_remove_all_leaf(void *ctx, const char *path) {
-    (void) ctx;
-    return remove(path) == 0;
-}
-
-static bool io_remove_all_dir(void *ctx, const char *path) {
-    (void) ctx;
-    return rmdir(path) == 0;
-}
-#endif
-
-// removeAll(path) - Recursively remove directory
-static XrValue io_removeAll(XrVMRuntime *X, XrValue *args, int argc) {
+static XrValue io_utime_now(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -1125,24 +992,13 @@ static XrValue io_removeAll(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    XrIoCoreRemoveAllOps ops = {
-        .kind = io_path_kind,
-        .for_each_entry = io_dir_for_each_entry,
-        .remove_leaf = io_remove_all_leaf,
-        .remove_dir = io_remove_all_dir,
-        .alloc = io_core_alloc,
-        .free = io_core_free,
-        .sep =
 #ifdef XR_OS_WINDOWS
-            '\\',
+    return xr_bool(_utime(path, NULL) == 0);
 #else
-            '/',
+    return xr_bool(utime(path, NULL) == 0);
 #endif
-    };
-    return xr_bool(xr_io_core_remove_all(path, &ops, NULL));
 }
 
-// chmod(path, mode) - Change file permissions
 static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
@@ -1164,17 +1020,6 @@ static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // touch(path) - Create empty file or update timestamp
-static XrValue io_touch(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_bool(false);
-    return xr_bool(xr_io_core_touch(path, io_touch_update, io_touch_create, NULL));
-}
-
-// symlink(target, path) - Create symbolic link
 static XrValue io_symlink(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
@@ -1246,94 +1091,70 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     return xrs_string_value_n(X, view.data, view.len);
 }
 
-// Adapter for xr_os_core_tmpdir(); fallback ordering lives in shared core.
 static const char *io_core_getenv(void *ctx, const char *name) {
     (void) ctx;
     return getenv(name);
 }
 
 // tempFile() - Create temporary file, return path
-static XrValue io_tempFile(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
+/*
+ * Create a uniquely named entry inside a caller-chosen root. Only the atomic
+ * creation stays here: choosing the root and joining the name are the module's
+ * own decisions and live in its Xray body, so both platforms are handed the
+ * same root instead of each consulting the environment its own way.
+ */
+static bool io_temp_template(const char *root, char *out, size_t cap) {
+    if (!root || root[0] == '\0')
+        return false;
+    int written = snprintf(out, cap, "%s/xray_XXXXXX", root);
+    return written > 0 && (size_t) written < cap;
+}
 
+static XrValue io_make_temp_dir(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1)
+        return xr_null();
+    size_t root_len = 0;
+    const char *root = xrs_string_arg(args[0], &root_len);
     char tpl[XR_PATH_MAX];
+    if (!io_temp_template(root, tpl, sizeof(tpl)))
+        return xr_null();
+
 #ifdef XR_OS_WINDOWS
-    char tmpdir[XR_PATH_MAX];
-    if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
+    char name[XR_PATH_MAX];
+    if (GetTempFileNameA(root, "xr_", 0, name) == 0)
         return xr_null();
-    char tmpfile[XR_PATH_MAX];
-    if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
+    DeleteFileA(name);
+    if (!CreateDirectoryA(name, NULL))
         return xr_null();
-    snprintf(tpl, sizeof(tpl), "%s", tmpfile);
+    return xrs_string_value_c(X, name);
 #else
-    const char *root = xr_os_core_tmpdir(io_core_getenv, NULL);
-    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
+    if (mkdtemp(tpl) == NULL)
         return xr_null();
+    return xrs_string_value_c(X, tpl);
+#endif
+}
+
+static XrValue io_make_temp_file(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1)
+        return xr_null();
+    size_t root_len = 0;
+    const char *root = xrs_string_arg(args[0], &root_len);
+    char tpl[XR_PATH_MAX];
+    if (!io_temp_template(root, tpl, sizeof(tpl)))
+        return xr_null();
+
+#ifdef XR_OS_WINDOWS
+    char name[XR_PATH_MAX];
+    if (GetTempFileNameA(root, "xr_", 0, name) == 0)
+        return xr_null();
+    return xrs_string_value_c(X, name);
+#else
     int fd = mkstemp(tpl);
     if (fd < 0)
         return xr_null();
     close(fd);
-#endif
     return xrs_string_value_c(X, tpl);
-}
-
-// tempDir() - Create temporary directory, return path
-static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-
-    char tpl[XR_PATH_MAX];
-#ifdef XR_OS_WINDOWS
-    char tmpdir[XR_PATH_MAX];
-    if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
-        return xr_null();
-    char tmpfile[XR_PATH_MAX];
-    if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
-        return xr_null();
-    // GetTempFileName creates a file; remove it and create dir instead
-    DeleteFileA(tmpfile);
-    if (!CreateDirectoryA(tmpfile, NULL))
-        return xr_null();
-    snprintf(tpl, sizeof(tpl), "%s", tmpfile);
-#else
-    const char *root = xr_os_core_tmpdir(io_core_getenv, NULL);
-    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
-        return xr_null();
-    if (mkdtemp(tpl) == NULL)
-        return xr_null();
 #endif
-    return xrs_string_value_c(X, tpl);
-}
-
-// readDirRecursive helper struct
-// readDirRecursive(path) - Recursively read directory
-static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_null();
-
-    XrArray *arr = xr_array_new(xr_current_coro(X));
-    if (!arr)
-        return xr_null();
-
-    IoReadDirEmitCtx emit = {.X = X, .arr = arr};
-    XrIoCoreReadDirOps ops = {
-        .for_each_entry = io_dir_for_each_entry,
-        .kind = io_path_kind,
-        .alloc = io_core_alloc,
-        .free = io_core_free,
-        .alloc_ctx = NULL,
-        .sep = '/',
-        .max_depth = XR_IO_CORE_READ_DIR_MAX_DEPTH,
-    };
-    if (!xr_io_core_read_dir_recursive(path, &ops, NULL, io_read_dir_emit, &emit)) {
-        io_release_array(arr);
-        return xr_null();
-    }
-    return xr_value_from_array(arr);
 }
 
 /* ========== Module Loading ========== */

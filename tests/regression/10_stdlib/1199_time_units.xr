@@ -1,0 +1,58 @@
+// The three clocks are read once each by a private nanosecond leaf; every
+// public reading is that leaf scaled in Xray. These check the scaling and the
+// derived relation between localOffset and localOffsetAt, which is what moving
+// the policy out of C is supposed to guarantee.
+
+import time
+
+@test
+fn test_wall_clock_is_in_milliseconds() {
+    var n = time.now()
+    // Milliseconds place this well past 2023 and well before 2033; a reading
+    // still in seconds or already in microseconds falls outside both bounds.
+    assert(n > 1700000000000)
+    assert(n < 2000000000000)
+}
+
+@test
+fn test_monotonic_micros_and_nanos_share_one_clock() {
+    var na = time.nanos()
+    var mi = time.micros()
+    var ms = time.monotonic()
+    // Readings are taken in sequence, so allow the clock to advance between
+    // them; what must hold is that they are the same clock in three units.
+    assert(mi - na / 1000 >= -1000 && mi - na / 1000 <= 1000)
+    assert(ms - na / 1000000 >= -1 && ms - na / 1000000 <= 1)
+}
+
+@test
+fn test_monotonic_never_goes_backwards() {
+    var first = time.nanos()
+    var second = time.nanos()
+    assert(second >= first)
+}
+
+@test
+fn test_cpu_clock_is_nonnegative_and_advances_monotonically() {
+    var first = time.clock()
+    assert(first >= 0)
+    var i = 0
+    var sink = 0
+    while (i < 200000) { sink = sink + i; i++ }
+    assert(sink > 0)
+    assert(time.clock() >= first)
+}
+
+@test
+fn test_local_offset_is_local_offset_at_now() {
+    // The two are one fact asked two ways. Deriving the first from the second
+    // is the reason only one host call remains behind them.
+    assertEqual(time.localOffset(), time.localOffsetAt(time.now() / 1000))
+}
+
+@test
+fn test_offset_is_in_minutes_and_within_the_utc_range() {
+    var off = time.localOffsetAt(0)
+    // Real zones span UTC-12:00 to UTC+14:00; anything outside is not minutes.
+    assert(off >= -720 && off <= 840)
+}

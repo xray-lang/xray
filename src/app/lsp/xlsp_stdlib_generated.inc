@@ -31,12 +31,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
-    {"self", XLSP_SYM_FUNCTION, "fn(): string", "Get own node name", NULL, 0},
-    {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "List cluster node names", NULL, 0},
-    {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},
-    {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "Get cluster status info", NULL, 0},
-    {"send", XLSP_SYM_FUNCTION, "fn(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", NULL, 0},
+    {"self", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
+    {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>?", "", NULL, 0},
+    {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "", NULL, 0},
+    {"send", XLSP_SYM_FUNCTION, "fn(topic: string, envelope: move Buffer): ClusterDelivery", "", NULL, 0},
+    {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coroName?: string?): Channel<string>", "", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
@@ -228,8 +228,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"tempFile", XLSP_SYM_FUNCTION, "fn(): Path?", "", NULL, 0},
     {"readlink", XLSP_SYM_FUNCTION, "fn(path: Path): Path?", "", NULL, 0},
     {"realpath", XLSP_SYM_FUNCTION, "fn(path: Path): Path?", "", NULL, 0},
-    {"readDir", XLSP_SYM_FUNCTION, "fn(path: Path): Array<Path>", "", NULL, 0},
-    {"readDirRecursive", XLSP_SYM_FUNCTION, "fn(path: Path): Array<Path>", "", NULL, 0},
+    {"readDir", XLSP_SYM_FUNCTION, "fn(path: Path): Array<Path>?", "", NULL, 0},
+    {"readDirRecursive", XLSP_SYM_FUNCTION, "fn(path: Path): Array<Path>?", "", NULL, 0},
     {"lines", XLSP_SYM_FUNCTION, "fn(path: Path): LineIterator?", "", NULL, 0},
     {"readLines", XLSP_SYM_FUNCTION, "fn(path: Path): Array<string>", "", NULL, 0},
     {"__FileStat", XLSP_SYM_CLASS, "type __FileStat", "Native handle type", NULL, 0},
@@ -557,14 +557,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
-    {"now", XLSP_SYM_FUNCTION, "fn(): i64", "Current time in milliseconds since epoch", NULL, 0},
-    {"clock", XLSP_SYM_FUNCTION, "fn(): i64", "CPU clock time in milliseconds", NULL, 0},
-    {"monotonic", XLSP_SYM_FUNCTION, "fn(): i64", "Monotonic time in milliseconds", NULL, 0},
-    {"nanos", XLSP_SYM_FUNCTION, "fn(): i64", "Monotonic time in nanoseconds", NULL, 0},
-    {"micros", XLSP_SYM_FUNCTION, "fn(): i64", "Monotonic time in microseconds", NULL, 0},
-    {"localOffset", XLSP_SYM_FUNCTION, "fn(): i64", "Local UTC offset in minutes for the current wall time", NULL, 0},
-    {"localOffsetAt", XLSP_SYM_FUNCTION, "fn(timestamp: i64): i64", "Local UTC offset in minutes at a Unix timestamp", NULL, 0},
     {"sleep", XLSP_SYM_FUNCTION, "fn(ms: i64): ()", "Sleep for milliseconds", NULL, 0},
+    {"now", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"clock", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"monotonic", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"micros", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"nanos", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"localOffsetAt", XLSP_SYM_FUNCTION, "fn(timestamp: i64): i64", "", NULL, 0},
+    {"localOffset", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT 8
 

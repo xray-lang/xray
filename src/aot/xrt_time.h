@@ -107,31 +107,23 @@ static inline uint64_t xrt_platform_process_cpu_ns(void) {
 
 #endif
 
-static inline XrValue xrt_time_now(void) {
-    return XR_FROM_INT((int64_t) (xrt_platform_realtime_ns() / 1000000ULL));
+/* Private leaves for time.xr.  Each answers the finest unit its clock reports
+ * and applies no policy: unit scaling and the choice of clock behind a public
+ * reading are compiled from the module body, not restated here. */
+
+static inline XrValue xrt_time_realtime_nanos(void) {
+    return XR_FROM_INT((int64_t) xrt_platform_realtime_ns());
 }
 
-static inline XrValue xrt_time_monotonic(void) {
-    return XR_FROM_INT((int64_t) (xrt_platform_monotonic_ns() / 1000000ULL));
-}
-
-static inline XrValue xrt_time_nanos(void) {
+static inline XrValue xrt_time_monotonic_nanos(void) {
     return XR_FROM_INT((int64_t) xrt_platform_monotonic_ns());
 }
 
-static inline XrValue xrt_time_micros(void) {
-    return XR_FROM_INT((int64_t) (xrt_platform_monotonic_ns() / 1000ULL));
+static inline XrValue xrt_time_cpu_nanos(void) {
+    return XR_FROM_INT((int64_t) xrt_platform_process_cpu_ns());
 }
 
-static inline XrValue xrt_time_clock(void) {
-    return XR_FROM_INT((int64_t) (xrt_platform_process_cpu_ns() / 1000000ULL));
-}
-
-static inline XrValue xrt_time_local_offset(void) {
-    return XR_FROM_INT((int64_t) xr_time_utc_offset_at(time(NULL)));
-}
-
-static inline XrValue xrt_time_local_offset_at(XrValue timestamp) {
+static inline XrValue xrt_time_utc_offset_at(XrValue timestamp) {
     int64_t ts = XR_IS_INT(timestamp) ? XR_TO_INT(timestamp) : 0;
     return XR_FROM_INT((int64_t) xr_time_utc_offset_at((time_t) ts));
 }

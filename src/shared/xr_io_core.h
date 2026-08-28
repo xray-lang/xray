@@ -58,17 +58,6 @@ typedef enum XrIoCorePathKind {
 
 typedef XrIoCorePathKind (*XrIoCorePathKindFn)(void *ctx, const char *path);
 
-typedef struct XrIoCoreRemoveAllOps {
-    XrIoCorePathKindFn kind;
-    XrIoCoreForEachDirEntryFn for_each_entry;
-    XrIoCorePathFn remove_leaf;
-    XrIoCorePathFn remove_dir;
-    XrIoCoreAllocFn alloc;
-    XrIoCoreFreeFn free;
-    void *alloc_ctx;
-    char sep;
-} XrIoCoreRemoveAllOps;
-
 #define XR_IO_CORE_READ_DIR_MAX_DEPTH 64
 
 typedef struct XrIoCoreReadDirOps {
@@ -335,15 +324,6 @@ static inline bool xr_io_core_write_all(void *ctx, XrIoCoreWriteFn write_fn,
     return error_fn ? !error_fn(ctx) : true;
 }
 
-static inline bool xr_io_core_touch(const char *path, XrIoCorePathFn update_fn,
-                                    XrIoCorePathFn create_fn, void *ctx) {
-    if (!path || !update_fn || !create_fn)
-        return false;
-    if (update_fn(ctx, path))
-        return true;
-    return create_fn(ctx, path);
-}
-
 static inline bool xr_io_core_is_sep(char ch) {
     return ch == '/' || ch == '\\';
 }
@@ -414,67 +394,6 @@ static inline bool xr_io_core_join_child_path(const char *parent, char sep, cons
         out[pos++] = name[i];
     out[pos] = '\0';
     return true;
-}
-
-static inline bool xr_io_core_remove_all_impl(const char *path, const XrIoCoreRemoveAllOps *ops,
-                                              void *ctx);
-
-typedef struct XrIoCoreRemoveAllVisitCtx {
-    const XrIoCoreRemoveAllOps *ops;
-    void *ctx;
-    const char *parent;
-    bool ok;
-} XrIoCoreRemoveAllVisitCtx;
-
-static inline bool xr_io_core_remove_all_visit(void *visit_ctx, const char *name) {
-    XrIoCoreRemoveAllVisitCtx *v = (XrIoCoreRemoveAllVisitCtx *) visit_ctx;
-    if (!v || !v->ops || xr_io_core_is_dot_dir_entry(name))
-        return true;
-
-    size_t child_len = 0;
-    if (!xr_io_core_join_child_len(v->parent, name, &child_len)) {
-        v->ok = false;
-        return true;
-    }
-
-    char *child = (char *) v->ops->alloc(v->ops->alloc_ctx, child_len + 1);
-    if (!child) {
-        v->ok = false;
-        return true;
-    }
-    char sep = v->ops->sep ? v->ops->sep : '/';
-    if (!xr_io_core_join_child_path(v->parent, sep, name, child, child_len + 1)) {
-        v->ops->free(v->ops->alloc_ctx, child);
-        v->ok = false;
-        return true;
-    }
-
-    if (!xr_io_core_remove_all_impl(child, v->ops, v->ctx))
-        v->ok = false;
-    v->ops->free(v->ops->alloc_ctx, child);
-    return true;
-}
-
-static inline bool xr_io_core_remove_all_impl(const char *path, const XrIoCoreRemoveAllOps *ops,
-                                              void *ctx) {
-    XrIoCorePathKind kind = ops->kind(ctx, path);
-    if (kind == XR_IO_CORE_PATH_MISSING)
-        return false;
-    if (kind == XR_IO_CORE_PATH_LEAF)
-        return ops->remove_leaf(ctx, path);
-
-    XrIoCoreRemoveAllVisitCtx visit_ctx = {.ops = ops, .ctx = ctx, .parent = path, .ok = true};
-    if (!ops->for_each_entry(ctx, path, xr_io_core_remove_all_visit, &visit_ctx))
-        visit_ctx.ok = false;
-    return ops->remove_dir(ctx, path) && visit_ctx.ok;
-}
-
-static inline bool xr_io_core_remove_all(const char *path, const XrIoCoreRemoveAllOps *ops,
-                                         void *ctx) {
-    if (!path || !ops || !ops->kind || !ops->for_each_entry || !ops->remove_leaf ||
-        !ops->remove_dir || !ops->alloc || !ops->free)
-        return false;
-    return xr_io_core_remove_all_impl(path, ops, ctx);
 }
 
 typedef struct XrIoCoreReadDirVisitCtx {
@@ -588,30 +507,6 @@ static inline bool xr_io_core_read_dir_recursive(const char *path, const XrIoCor
     return xr_io_core_read_dir_recursive_impl(path, &r);
 }
 
-static inline bool xr_io_core_temp_template(const char *root, char sep, const char *stem, char *out,
-                                            size_t out_cap) {
-    if (!root || root[0] == '\0' || !stem || stem[0] == '\0' || !out)
-        return false;
-
-    size_t root_len = xr_io_core_cstr_len(root);
-    size_t stem_len = xr_io_core_cstr_len(stem);
-    if (root_len > SIZE_MAX - stem_len - 1)
-        return false;
-
-    size_t total = root_len + 1 + stem_len;
-    if (total >= out_cap)
-        return false;
-
-    size_t pos = 0;
-    for (size_t i = 0; i < root_len; i++)
-        out[pos++] = root[i];
-    out[pos++] = sep;
-    for (size_t i = 0; i < stem_len; i++)
-        out[pos++] = stem[i];
-    out[pos] = '\0';
-    return true;
-}
-
 static inline const char *xr_io_core_relative_path_from_base(const char *fullpath,
                                                              size_t base_len) {
     if (!fullpath)
@@ -620,87 +515,6 @@ static inline const char *xr_io_core_relative_path_from_base(const char *fullpat
     if (xr_io_core_is_sep(*relpath))
         relpath++;
     return relpath;
-}
-
-static inline bool xr_io_core_is_alpha_ascii(char ch) {
-    return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
-}
-
-static inline size_t xr_io_core_root_len(const char *path) {
-    if (!path || path[0] == '\0')
-        return 0;
-
-    if (xr_io_core_is_alpha_ascii(path[0]) && path[1] == ':') {
-        if (xr_io_core_is_sep(path[2]))
-            return 3;
-        return 2;
-    }
-
-    if (xr_io_core_is_sep(path[0])) {
-#if defined(XR_OS_WINDOWS)
-        if (!xr_io_core_is_sep(path[1]))
-            return 1;
-        size_t i = 2;
-        while (path[i] && xr_io_core_is_sep(path[i]))
-            i++;
-        while (path[i] && !xr_io_core_is_sep(path[i]))
-            i++;
-        while (path[i] && xr_io_core_is_sep(path[i]))
-            i++;
-        while (path[i] && !xr_io_core_is_sep(path[i]))
-            i++;
-        return i > 2 ? i : 1;
-#else
-        return 1;
-#endif
-    }
-
-    return 0;
-}
-
-static inline bool xr_io_core_ensure_dir(void *ctx, const char *path, XrIoCoreMkdirFn mkdir_fn,
-                                         XrIoCoreIsDirFn is_dir_fn) {
-    if (!path || path[0] == '\0' || !mkdir_fn || !is_dir_fn)
-        return false;
-    if (mkdir_fn(ctx, path) == 0)
-        return true;
-    return is_dir_fn(ctx, path);
-}
-
-static inline bool xr_io_core_mkdirp(char *path, XrIoCoreMkdirFn mkdir_fn,
-                                     XrIoCoreIsDirFn is_dir_fn, void *ctx) {
-    if (!path || path[0] == '\0' || !mkdir_fn || !is_dir_fn)
-        return false;
-
-    size_t len = 0;
-    while (path[len])
-        len++;
-
-    size_t root_len = xr_io_core_root_len(path);
-    while (len > root_len + 1 && xr_io_core_is_sep(path[len - 1]))
-        path[--len] = '\0';
-
-    if (len <= root_len)
-        return is_dir_fn(ctx, path);
-
-    size_t segment_start = root_len;
-    while (path[segment_start] && xr_io_core_is_sep(path[segment_start]))
-        segment_start++;
-
-    for (size_t i = segment_start; path[i]; i++) {
-        if (!xr_io_core_is_sep(path[i]))
-            continue;
-        char saved = path[i];
-        path[i] = '\0';
-        bool ok = (i > root_len) && xr_io_core_ensure_dir(ctx, path, mkdir_fn, is_dir_fn);
-        path[i] = saved;
-        if (!ok)
-            return false;
-        while (path[i + 1] && xr_io_core_is_sep(path[i + 1]))
-            i++;
-    }
-
-    return xr_io_core_ensure_dir(ctx, path, mkdir_fn, is_dir_fn);
 }
 
 #endif /* XRAY_SHARED_XR_IO_CORE_H */

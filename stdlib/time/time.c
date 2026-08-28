@@ -18,68 +18,38 @@
 #include "../../src/shared/xr_time_offset.h"
 #include <time.h>
 
-// ========== Helper functions ==========
+// ========== Module-private native leaves ==========
+//
+// Each leaf answers the finest unit its clock reports and applies no policy.
+// Unit scaling and the choice of clock behind a public reading belong to
+// time.xr, which is the single place both backends compile them from.
 
-static int64_t get_timestamp_ms(void) {
-    return (int64_t) (xr_time_realtime_ns() / 1000000ULL);
-}
-
-static int64_t get_monotonic_ns(void) {
-    return xr_runtime_current_monotonic_ns();
-}
-
-// ========== Module-private function bindings ==========
-
-// time.now() -> int (milliseconds)
-static XrValue xr_time_now(XrVMRuntime *isolate, XrValue *args, int nargs) {
+// time.__realtimeNanos() -> int (nanoseconds since the Unix epoch)
+static XrValue time_realtimeNanos(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    return xr_int(get_timestamp_ms());
+    return xr_int((int64_t) xr_time_realtime_ns());
 }
 
-// time.clock() -> int (milliseconds of process CPU time)
-static XrValue xr_time_clock(XrVMRuntime *isolate, XrValue *args, int nargs) {
+// time.__monotonicNanos() -> int (nanoseconds on the runtime's monotonic clock)
+static XrValue time_monotonicNanos(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    return xr_int((int64_t) (xr_time_process_cpu_ns() / 1000000ULL));
+    return xr_int((int64_t) xr_runtime_current_monotonic_ns());
 }
 
-// time.monotonic() -> int (milliseconds)
-static XrValue xr_time_monotonic(XrVMRuntime *isolate, XrValue *args, int nargs) {
+// time.__cpuNanos() -> int (nanoseconds of process CPU time)
+static XrValue time_cpuNanos(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    return xr_int(get_monotonic_ns() / 1000000);
+    return xr_int((int64_t) xr_time_process_cpu_ns());
 }
 
-// time.nanos() -> int (nanoseconds, monotonic)
-static XrValue xr_time_nanos(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    (void) args;
-    (void) nargs;
-    return xr_int(get_monotonic_ns());
-}
-
-// time.micros() -> int (microseconds, monotonic)
-static XrValue xr_time_micros(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    (void) args;
-    (void) nargs;
-    return xr_int(get_monotonic_ns() / 1000);
-}
-
-// time.localOffset() -> int (minutes east of UTC for the current wall time)
-static XrValue xr_time_local_offset(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    (void) args;
-    (void) nargs;
-    return xr_int((int64_t) xr_time_utc_offset_at(time(NULL)));
-}
-
-// time.localOffsetAt(timestamp: int) -> int (minutes east of UTC at Unix seconds)
-static XrValue xr_time_local_offset_at(XrVMRuntime *isolate, XrValue *args, int nargs) {
+// time.__utcOffsetAt(seconds: int) -> int (minutes east of UTC at a Unix time)
+static XrValue time_utcOffsetAt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     int64_t ts = 0;
     if (nargs > 0 && XR_IS_INT(args[0]))

@@ -1,0 +1,52 @@
+// time — clock readings composed in Xray over a minimal host-clock boundary.
+//
+// Native entry points are deliberately internal `__*` primitives answering
+// nanoseconds, the finest unit every platform clock reports. Which of the three
+// clocks a public reading draws from, and the unit it is scaled to, are decided
+// here so VM and AOT compile the same Xray semantics.
+//
+// The three clocks are distinct and not interchangeable: the realtime clock
+// tracks wall time and can step backwards when the host is adjusted, the
+// monotonic clock only ever advances and is the one durations must be measured
+// against, and the CPU clock accumulates only while this process runs.
+
+const NANOS_PER_MILLI: i64 = 1000000
+const NANOS_PER_MICRO: i64 = 1000
+const MILLIS_PER_SECOND: i64 = 1000
+
+// Milliseconds since the Unix epoch, from the wall clock.
+export fn now() -> i64 {
+    return __realtimeNanos() / NANOS_PER_MILLI
+}
+
+// Milliseconds of CPU time this process has consumed.
+export fn clock() -> i64 {
+    return __cpuNanos() / NANOS_PER_MILLI
+}
+
+// Milliseconds from the monotonic clock. Only differences are meaningful; the
+// origin is unspecified and differs between platforms and between runs.
+export fn monotonic() -> i64 {
+    return __monotonicNanos() / NANOS_PER_MILLI
+}
+
+// Microseconds from the same monotonic clock as `monotonic`.
+export fn micros() -> i64 {
+    return __monotonicNanos() / NANOS_PER_MICRO
+}
+
+// Nanoseconds from the same monotonic clock as `monotonic`, unscaled.
+export fn nanos() -> i64 {
+    return __monotonicNanos()
+}
+
+// Minutes east of UTC at a Unix timestamp in seconds. West of UTC is negative.
+export fn localOffsetAt(timestamp: i64) -> i64 {
+    return __utcOffsetAt(timestamp)
+}
+
+// Minutes east of UTC for the current wall time. This is `localOffsetAt` asked
+// about now, which is what makes the two agree across a daylight-saving step.
+export fn localOffset() -> i64 {
+    return __utcOffsetAt(now() / MILLIS_PER_SECOND)
+}

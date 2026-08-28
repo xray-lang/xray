@@ -1,93 +1,58 @@
 module time {
-  fn now {
+  fn __realtimeNanos {
     signature: "(): i64"
-    doc: "Current time in milliseconds since epoch"
+    doc: "Nanoseconds since the Unix epoch on the wall clock"
     effect: "nothrow"
-    vm: "xr_time_now"
-    aot: "xrt_time_now"
+    vm: "time_realtimeNanos"
+    aot: "xrt_time_realtime_nanos"
     argc: 0
     arg_spec: ""
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
   }
 
-  fn clock {
+  fn __monotonicNanos {
     signature: "(): i64"
-    doc: "CPU clock time in milliseconds"
+    doc: "Nanoseconds on the runtime monotonic clock"
     effect: "nothrow"
-    vm: "xr_time_clock"
-    aot: "xrt_time_clock"
+    vm: "time_monotonicNanos"
+    aot: "xrt_time_monotonic_nanos"
     argc: 0
     arg_spec: ""
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
   }
 
-  fn monotonic {
+  fn __cpuNanos {
     signature: "(): i64"
-    doc: "Monotonic time in milliseconds"
+    doc: "Nanoseconds of process CPU time consumed"
     effect: "nothrow"
-    vm: "xr_time_monotonic"
-    aot: "xrt_time_monotonic"
+    vm: "time_cpuNanos"
+    aot: "xrt_time_cpu_nanos"
     argc: 0
     arg_spec: ""
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
   }
 
-  fn nanos {
-    signature: "(): i64"
-    doc: "Monotonic time in nanoseconds"
+  fn __utcOffsetAt {
+    signature: "(seconds: i64): i64"
+    doc: "Minutes east of UTC at a Unix timestamp in seconds"
     effect: "nothrow"
-    vm: "xr_time_nanos"
-    aot: "xrt_time_nanos"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: true
-    layer: "system"
-  }
-
-  fn micros {
-    signature: "(): i64"
-    doc: "Monotonic time in microseconds"
-    effect: "nothrow"
-    vm: "xr_time_micros"
-    aot: "xrt_time_micros"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: true
-    layer: "system"
-  }
-
-  fn localOffset {
-    signature: "(): i64"
-    doc: "Local UTC offset in minutes for the current wall time"
-    effect: "nothrow"
-    vm: "xr_time_local_offset"
-    aot: "xrt_time_local_offset"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: true
-    layer: "system"
-  }
-
-  fn localOffsetAt {
-    signature: "(timestamp: i64): i64"
-    doc: "Local UTC offset in minutes at a Unix timestamp"
-    effect: "nothrow"
-    vm: "xr_time_local_offset_at"
-    aot: "xrt_time_local_offset_at"
+    vm: "time_utcOffsetAt"
+    aot: "xrt_time_utc_offset_at"
     argc: 1
     arg_spec: "v"
     aot_direct: true
     link_object: true
     layer: "system"
+    visibility: "internal"
   }
 
   fn sleep {
@@ -1988,19 +1953,6 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __tmpdir {
-    signature: "(): string"
-    doc: "Get temporary directory path"
-    vm: "os_tmpdir"
-    aot: "xrt_os_tmpdir"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
   fn __systemUsername {
     signature: "(): string?"
     doc: "Get the host-reported current user name"
@@ -2378,37 +2330,11 @@ module io {
     layer: "system"
   }
 
-  fn __mkdirp {
-    signature: "(path: Path): bool"
-    doc: "Create directory recursively"
-    vm: "io_mkdirp"
-    aot: "xrt_io_mkdirp"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
   fn __readDir {
-    signature: "(path: Path): Array<string>"
+    signature: "(path: Path): Array<string>?"
     doc: "List directory entries (raw strings; io.xr wraps as Path)"
     vm: "io_readDir"
     aot: "xrt_io_read_dir"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-    return_ownership: "fresh"
-  }
-
-  fn __readDirRecursive {
-    signature: "(path: Path): Array<string>"
-    doc: "List directory entries recursively (raw strings; io.xr wraps as Path)"
-    vm: "io_readDirRecursive"
-    aot: "xrt_io_read_dir_recursive"
     argc: 1
     arg_spec: "p"
     aot_direct: true
@@ -2438,19 +2364,6 @@ module io {
     vm: "io_readFileBytes"
     vm_binding: "yieldable"
     aot: "xrt_io_read_file_bytes"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __readLines {
-    signature: "(path: Path): Array<string>"
-    doc: "Read file as lines"
-    vm: "io_readLines"
-    aot: "xrt_io_read_lines"
     argc: 1
     arg_spec: "p"
     aot_direct: true
@@ -2513,11 +2426,11 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn __remove {
+  fn __rmdir {
     signature: "(path: Path): bool"
-    doc: "Remove a file"
-    vm: "io_remove"
-    aot: "xrt_io_remove"
+    doc: "Remove an empty directory"
+    vm: "io_rmdir"
+    aot: "xrt_io_rmdir"
     argc: 1
     arg_spec: "p"
     aot_direct: true
@@ -2525,11 +2438,11 @@ module io {
     layer: "system"
   }
 
-  fn __removeAll {
+  fn __remove {
     signature: "(path: Path): bool"
-    doc: "Remove directory recursively"
-    vm: "io_removeAll"
-    aot: "xrt_io_remove_all"
+    doc: "Remove a file"
+    vm: "io_remove"
+    aot: "xrt_io_remove"
     argc: 1
     arg_spec: "p"
     aot_direct: true
@@ -2574,39 +2487,37 @@ module io {
     layer: "system"
   }
 
-  fn __tempDir {
-    signature: "(): string?"
-    doc: "Create temporary directory (raw string; io.xr wraps as Path)"
-    vm: "io_tempDir"
-    aot: "xrt_io_temp_dir"
-    argc: 0
-    arg_spec: ""
+  fn __makeTempDir {
+    signature: "(root: string): string?"
+    doc: "Create a uniquely named directory inside the given root"
+    vm: "io_make_temp_dir"
+    aot: "xrt_io_make_temp_dir"
+    argc: 1
+    arg_spec: "s"
     aot_direct: true
     link_object: false
     layer: "system"
-    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn __tempFile {
-    signature: "(): string?"
-    doc: "Create temporary file (raw string; io.xr wraps as Path)"
-    vm: "io_tempFile"
-    aot: "xrt_io_temp_file"
-    argc: 0
-    arg_spec: ""
+  fn __makeTempFile {
+    signature: "(root: string): string?"
+    doc: "Create a uniquely named file inside the given root"
+    vm: "io_make_temp_file"
+    aot: "xrt_io_make_temp_file"
+    argc: 1
+    arg_spec: "s"
     aot_direct: true
     link_object: false
     layer: "system"
-    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn __touch {
+  fn __utimeNow {
     signature: "(path: Path): bool"
-    doc: "Create or update file timestamp"
-    vm: "io_touch"
-    aot: "xrt_io_touch"
+    doc: "Set a path's access and modification times to now"
+    vm: "io_utime_now"
+    aot: "xrt_io_utime_now"
     argc: 1
     arg_spec: "p"
     aot_direct: true
@@ -3760,7 +3671,7 @@ module cluster {
     caps: "channel"
   }
 
-  fn self {
+  fn __self {
     signature: "(): string"
     doc: "Get own node name"
     vm: "cluster_self"
@@ -3772,8 +3683,8 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn nodes {
-    signature: "(): Array<string>"
+  fn __nodes {
+    signature: "(): Array<string>?"
     doc: "List cluster node names"
     vm: "cluster_nodes"
     argc: 0
@@ -3784,8 +3695,8 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn monitor {
-    signature: "(name: string, coro_name?: string): Channel"
+  fn __monitor {
+    signature: "(name: string, coro_name?: string): Channel<string>"
     doc: "Monitor node or remote coroutine"
     vm: "cluster_monitor_coro_fn"
     argc: 2
@@ -3796,7 +3707,7 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn discover {
+  fn __discover {
     signature: "(): ()"
     doc: "Start LAN auto-discovery"
     vm: "cluster_discover_fn"
@@ -3820,7 +3731,7 @@ module cluster {
     caps: "channel"
   }
 
-  fn info {
+  fn __info {
     signature: "(): ClusterInfo?"
     doc: "Get cluster status info"
     vm: "cluster_info_fn"
@@ -3832,7 +3743,7 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn send {
+  fn __send {
     signature: "(topic: string, envelope: move Buffer): ClusterDelivery"
     doc: "Hand one canonical opaque service envelope to local and connected transports"
     vm: "cluster_send_primitive"

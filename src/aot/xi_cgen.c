@@ -9441,8 +9441,6 @@ static bool cg_shared_load_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f,
                 }
                 if (a == 0 && (user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
                     user->aux) {
-                    if (cg_time_module_helper_ctx(ctx, f, user))
-                        continue;
                     const char *method = (const char *) user->aux;
                     CgStaticFunctionCall call = cg_resolve_module_member_call(ctx, f, user, method);
                     if (call.func && call.func->ncaptures == 0)
@@ -15833,9 +15831,8 @@ static bool cg_aot_stdlib_receiver_call_is_direct(XiCgenCtx *ctx, const XiFunc *
         call->nargs < 1 || !call->aux)
         return false;
     const char *module = cg_aot_stdlib_module_of_receiver(ctx, f, call->args[0]);
-    return (module && cg_find_aot_stdlib_method(module, (const char *) call->aux,
-                                                (uint16_t) (call->nargs - 1)) != NULL) ||
-           cg_time_module_helper_ctx(ctx, f, call) != NULL;
+    return module && cg_find_aot_stdlib_method(module, (const char *) call->aux,
+                                               (uint16_t) (call->nargs - 1)) != NULL;
 }
 
 static bool cg_aot_stdlib_import_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,

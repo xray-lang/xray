@@ -7913,32 +7913,6 @@ static const XiFunc *xicgen_lookup_receiver_method(XiCgenCtx *ctx, const XiFunc 
     return cg_lookup_method(ctx, method, recv_class, recv_class_id, method_prefix);
 }
 
-static bool xicgen_emit_time_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
-    if (!cg_is_time_module_call_ctx(ctx, f, v))
-        return false;
-    const char *method = (const char *) v->aux;
-    const char *time_helper = cg_time_module_helper_ctx(ctx, f, v);
-    if (!time_helper) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT time method '%s'\n",
-                method ? method : "?");
-        emit_codegen_abort_expr(out);
-        return true;
-    }
-    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-        fprintf(out, "XR_TO_INT(");
-    else if (cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-        fprintf(out, "XR_TO_FLOAT(");
-    fprintf(out, "%s(", time_helper);
-    if (cg_time_module_helper_has_tagged_arg(time_helper))
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-    fprintf(out, ")");
-    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ||
-        cg_value_plan_storage_rep(ctx, v) == XR_REP_F64)
-        fprintf(out, ")");
-    return true;
-}
-
 static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v, const char *prefix, const char *method,
                                            uint16_t nargs) {
@@ -11849,8 +11823,6 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     bool dispatch_is_static = dispatch_method && (dispatch_method->flags & XG_METHOD_STATIC) != 0;
 
     if (!is_super && xicgen_emit_import_module_member_call(ctx, out, f, v, prefix, method))
-        return;
-    if (xicgen_emit_time_method(ctx, out, f, v))
         return;
     if (xicgen_emit_runtime_control_method(ctx, out, f, v))
         return;

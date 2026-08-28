@@ -20,7 +20,7 @@ static const char *const g_aot_stdlib_net___copyBidirectional_enum_variants[] = 
     "OutOfMemory",
 };
 
-static const char *const g_aot_stdlib_cluster_send_enum_variants[] = {
+static const char *const g_aot_stdlib_cluster___send_enum_variants[] = {
     "Accepted",
     "InvalidTopic",
     "InvalidEnvelope",
@@ -30,13 +30,10 @@ static const char *const g_aot_stdlib_cluster_send_enum_variants[] = {
 };
 
 static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
-    {"time", "now", 0, "xrt_time_now", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "clock", 0, "xrt_time_clock", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "monotonic", 0, "xrt_time_monotonic", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "nanos", 0, "xrt_time_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "micros", 0, "xrt_time_micros", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "localOffset", 0, "xrt_time_local_offset", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"time", "localOffsetAt", 1, "xrt_time_local_offset_at", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"time", "__realtimeNanos", 0, "xrt_time_realtime_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"time", "__monotonicNanos", 0, "xrt_time_monotonic_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"time", "__cpuNanos", 0, "xrt_time_cpu_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"time", "__utcOffsetAt", 1, "xrt_time_utc_offset_at", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"math", "random", 0, "xrt_math_random", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"math", "randomInt", 2, "xrt_math_random_int", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"compress", "crc32", 1, "xrt_compress_crc32", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -114,7 +111,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"os", "__getpid", 0, "xrt_os_getpid", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__getcwd", 0, "xrt_os_getcwd", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__hostname", 0, "xrt_os_hostname", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"os", "__tmpdir", 0, "xrt_os_tmpdir", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__systemUsername", 0, "xrt_os_system_username", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__homedir", 0, "xrt_os_homedir", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__uid", 0, "xrt_os_uid", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -144,24 +140,21 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"io", "__isFile", 1, "xrt_io_is_file", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__isSymlink", 1, "xrt_io_is_symlink", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__mkdir", 1, "xrt_io_mkdir", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__mkdirp", 1, "xrt_io_mkdirp", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readDir", 1, "xrt_io_read_dir", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__readDirRecursive", 1, "xrt_io_read_dir_recursive", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readFile", 1, "xrt_io_read_file", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readFileBytes", 1, "xrt_io_read_file_bytes", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__readLines", 1, "xrt_io_read_lines", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readStdin", 0, "xrt_io_read_stdin", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readStdinBytes", 0, "xrt_io_read_stdin_bytes", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readlink", 1, "xrt_io_readlink", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__realpath", 1, "xrt_io_realpath", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"io", "__rmdir", 1, "xrt_io_rmdir", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__remove", 1, "xrt_io_remove", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__removeAll", 1, "xrt_io_remove_all", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__rename", 2, "xrt_io_rename", "pp", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__stat", 1, "xrt_io_stat", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__symlink", 2, "xrt_io_symlink", "pp", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__tempDir", 0, "xrt_io_temp_dir", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__tempFile", 0, "xrt_io_temp_file", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__touch", 1, "xrt_io_touch", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"io", "__makeTempDir", 1, "xrt_io_make_temp_dir", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"io", "__makeTempFile", 1, "xrt_io_make_temp_file", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"io", "__utimeNow", 1, "xrt_io_utime_now", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__writeFile", 2, "xrt_io_write_file", "ps", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__writeFileBytes", 2, "xrt_io_write_file_bytes", "pv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__writeStderr", 1, "xrt_io_write_stderr", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -220,7 +213,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"cluster", "__start", 8, "xrt_cluster_start", "svsvsssv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__join", 1, "xrt_cluster_join", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__stop", 0, "xrt_cluster_stop", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"cluster", "send", 2, "xrt_cluster_send", "sv", CG_AOT_RET_ENUM_I64, NULL, UINT32_C(4282747530), "ClusterDelivery", g_aot_stdlib_cluster_send_enum_variants, 6},
+    {"cluster", "__send", 2, "xrt_cluster_send", "sv", CG_AOT_RET_ENUM_I64, NULL, UINT32_C(4282747530), "ClusterDelivery", g_aot_stdlib_cluster___send_enum_variants, 6},
     {"cluster", "__listen", 2, "xrt_cluster_listen", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))
