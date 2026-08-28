@@ -6018,7 +6018,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
 
 static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFunc *f,
                                                      const XiValue *v, const XiValue *operand) {
-    if (!ctx || !v || v->nargs != 1)
+    if (!ctx || !v || v->nargs == 0)
         return NULL;
     const XiValue *arg = operand;
     if (!arg)
@@ -6040,7 +6040,7 @@ static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFun
 
 static const XiValue *xicgen_native_bool_print_source(XiCgenCtx *ctx, const XiFunc *f,
                                                       const XiValue *v, const XiValue *operand) {
-    if (!ctx || !v || v->nargs != 1)
+    if (!ctx || !v || v->nargs == 0)
         return NULL;
     const XiValue *arg = operand;
     if (!arg)
