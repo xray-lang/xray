@@ -7,6 +7,32 @@ handle declaration, type-method, native-class binding, and link-manifest
 metadata. The parser intentionally stays small: flat blocks with key: value
 properties, no embedded code, and generated C artifacts that are checked into
 the repository.
+
+Visibility
+----------
+Every declaration kind carries a visibility, and `is_internal` is the single
+question the surface gates ask of an entry. An internal entry keeps its whole
+C-side binding -- `vm:`, `aot:`, `argc`, `core_slot`, `native_body` and the
+rest still name the same C -- but stops counting as part of the module's
+public surface, so an `.xr` semantic source can publish over it.
+
+Two spellings decide it, and they differ per kind on purpose:
+
+* `fn` defaults to internal when the name starts with `__`, because a leaf
+  reached only from the module's own `.xr` body wants a name a caller cannot
+  spell anyway. An explicit `visibility:` key overrides that default.
+* Every other kind -- `const`, `type_method`, `native_class`, `class`,
+  `class_method`, `class_field` -- takes an explicit `visibility: "internal"`
+  key and nothing else. A class name is a user-visible type name that leaks
+  into diagnostics, LSP completion and error messages, so `__Buffer` would be
+  a worse name rather than a private one.
+
+Class members inherit. A `class_method`, `class_field` or `type_method` that
+declares no visibility of its own takes the visibility of the `class` or
+`native_class` of the same name in the same module. That way marking a class
+internal is one line rather than one line per member, and a member cannot be
+left publicly reachable on a class nothing can name. A member may still say
+`visibility: "public"` explicitly to opt out of the inheritance.
 """
 
 from __future__ import annotations
