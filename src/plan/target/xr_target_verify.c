@@ -44,6 +44,7 @@
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_native_module_shape.h"
+#include "../semantic/xr_semantic_native_module_call_shape.h"
 #include "../semantic/xr_semantic_native_leaf_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../ownership/xr_ownership_certificate.h"
@@ -5487,58 +5488,15 @@ static const char *verifier_native_module_namespace_path(const XrSemanticPlan *s
                : NULL;
 }
 
-static bool verifier_native_module_call_shape_is_exact(const XrSemanticPlan *semantic,
-                                                       const XrSemanticOperationRecord *operation,
-                                                       const char **out_selector,
-                                                       uint32_t *out_receiver_value,
-                                                       uint32_t *out_arity) {
-    uint32_t operands_count = 0, metadata_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operands_count);
-    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
-    if (!semantic || !operation ||
-        operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL ||
-        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
-        (operation->semantic_immediate & 1) != 0 || operation->operand_count == 0 ||
-        operation->operand_begin >= operands_count ||
-        operation->operand_count > operands_count - operation->operand_begin ||
-        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
-        !metadata || (operation->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
-        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
-        operation->result_alias_operand != -1 ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
-        !xr_semantic_native_module_boundary_type_is_exact(
-            xr_semantic_plan_type(semantic, operation->result_type), true))
-        return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
-    if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
-        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-        receiver->ownership_action != XR_SEM_OPERAND_BORROW)
-        return false;
-    for (uint16_t i = 1; i < operation->operand_count; i++) {
-        const XrSemanticOperandRecord *argument = receiver + i;
-        if (argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) (i - 1) ||
-            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            !xr_semantic_native_module_boundary_type_is_exact(
-                xr_semantic_plan_type(semantic, argument->type), false))
-            return false;
-    }
-    if (out_selector)
-        *out_selector = metadata[operation->metadata_begin];
-    if (out_receiver_value)
-        *out_receiver_value = receiver->value;
-    if (out_arity)
-        *out_arity = (uint32_t) (operation->operand_count - 1u);
-    return true;
-}
-
 static bool operation_is_exact_native_module_scalar_call(const XrSemanticPlan *semantic,
                                                          const XrSemanticOperationRecord *operation,
                                                          uint32_t *argument_count) {
     const char *selector = NULL;
     uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t arity = 0;
-    if (!verifier_native_module_call_shape_is_exact(semantic, operation, &selector, &receiver_value,
-                                                    &arity))
+    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL ||
+        !xr_semantic_native_module_scalar_call_shape_is_exact(semantic, operation, &selector,
+                                                              &receiver_value, &arity))
         return false;
     const char *module_path = verifier_native_module_namespace_path(semantic, receiver_value);
     if (!module_path ||
@@ -5661,8 +5619,9 @@ verifier_native_module_namespace_value_is_exact(const XrSemanticPlan *semantic,
             if (!module_path)
                 module_path =
                     verifier_native_module_namespace_path(semantic, operation->result_value);
-            bool scalar = verifier_native_module_call_shape_is_exact(semantic, use, &selector,
-                                                                     &receiver_value, &arity) &&
+            bool scalar = use->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+                          xr_semantic_native_module_scalar_call_shape_is_exact(
+                              semantic, use, &selector, &receiver_value, &arity) &&
                           receiver_value == operation->result_value && module_path &&
                           xr_stdlib_metadata_exact_native_direct_member(module_path, selector,
                                                                         (uint16_t) arity);

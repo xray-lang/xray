@@ -30,6 +30,7 @@
 #include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_string_slice_shape.h"
 #include "xr_semantic_native_module_shape.h"
+#include "xr_semantic_native_module_call_shape.h"
 #include "xr_semantic_native_leaf_shape.h"
 #include "../ownership/xr_ownership_check.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
@@ -2615,49 +2616,33 @@ static const char *semantic_native_module_receiver_path(const XrSemanticPlan *pl
                : NULL;
 }
 
+/* Classification and exactness must agree in both directions.
+ *
+ * The single-directional form this replaces returned true for every operation
+ * the classifier had not marked, so it could only catch a mark placed on an
+ * inexact row. It could not catch the opposite, and the opposite is the failure
+ * this family exists to prevent: an exact namespace callsite that never got the
+ * mark has no proven target, and the native backend refuses the whole module
+ * over one such callsite. That refusal is precisely the fault the family was
+ * introduced to fix, so a verifier blind to it cannot see the fault come back.
+ * The target leaf family below has always stated both directions; this one now
+ * states them too. */
 static bool verify_native_module_scalar_call(const XrSemanticPlan *plan,
                                              const XrSemanticOperationRecord *operation,
                                              char *error, size_t error_size) {
-    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL)
-        return true;
-    const XrSemanticOperandRecord *receiver =
-        operation->operand_count > 0 && operation->operand_begin < plan->operand_count &&
-                operation->operand_count <= plan->operand_count - operation->operand_begin
-            ? &plan->operands[operation->operand_begin]
-            : NULL;
-    const char *selector =
-        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
-            ? plan->metadata[operation->metadata_begin]
-            : NULL;
-    bool exact =
-        operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
-        (operation->semantic_immediate & 1) == 0 && selector && receiver &&
-        (operation->flags & XI_FLAG_MAY_SUSPEND) == 0 &&
-        operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
-        xr_semantic_native_module_boundary_type_is_exact(
-            operation->result_type < plan->type_count ? &plan->types[operation->result_type] : NULL,
-            true) &&
-        operation->result_alias_operand == -1 &&
-        operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
-        receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-        receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-        receiver->ownership_action == XR_SEM_OPERAND_BORROW;
-    for (uint16_t i = 1; exact && i < operation->operand_count; i++) {
-        const XrSemanticOperandRecord *argument = receiver + i;
-        exact = argument->role == XR_SEM_OPERAND_ARGUMENT &&
-                argument->parameter == (int16_t) (i - 1) &&
-                argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-                xr_semantic_native_module_boundary_type_is_exact(
-                    argument->type < plan->type_count ? &plan->types[argument->type] : NULL, false);
-    }
+    bool classified = operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL;
+    const char *selector = NULL;
+    uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t arity = 0;
+    bool exact = xr_semantic_native_module_scalar_call_shape_is_exact(plan, operation, &selector,
+                                                                      &receiver_value, &arity);
     if (exact) {
-        const char *module_path = semantic_native_module_receiver_path(plan, receiver->value);
-        exact = module_path &&
-                xr_stdlib_metadata_exact_native_direct_member(
-                    module_path, selector, (uint16_t) (operation->operand_count - 1u)) != NULL;
+        const char *module_path = semantic_native_module_receiver_path(plan, receiver_value);
+        exact = module_path && xr_stdlib_metadata_exact_native_direct_member(
+                                   module_path, selector, (uint16_t) arity) != NULL;
     }
-    return exact || report(error, error_size, "XR_SEM_0019",
-                           "native module scalar call authority is not exact");
+    return classified == exact || report(error, error_size, "XR_SEM_0019",
+                                         "native module scalar call authority is not exact");
 }
 
 static bool verify_native_target_leaf_scalar_call(const XrSemanticPlan *plan,

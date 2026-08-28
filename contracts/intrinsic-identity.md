@@ -46,12 +46,31 @@ reinterpretation identities without reassigning the existing registry.
     the builtin `StringBuilder` receiver. Xi and SemanticPlan carry and verify
     both numeric identities; `append` text is diagnostic metadata projected
     from the registry and a user method with the same spelling remains ordinary.
+13. The exact native module scalar call family has one stable semantic
+    identity, `XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL`. It authorizes a
+    stdlib member call made through an imported module namespace, and it is the
+    only authority covering that shape: the sibling target-leaf family answers a
+    disjoint shape -- `XI_CALL` on a member import, whose `member_name` is
+    non-empty where this family requires it empty -- so no widening of the leaf
+    registry can reach a namespace callsite. Removing the family, or narrowing
+    it so that a namespace callsite loses its proven target, is a contract
+    change and not a cleanup: the native backend refuses an entire module over
+    one callsite it cannot name, which is the fault this family was introduced
+    to fix. Membership is a registry fact, never a spelling: the frozen
+    definition row for the module path, selector, and arity is the authority.
+14. Every layer that admits the family states the call shape through the one
+    require an additional term only when that term is one its own artifact
+    alone can state, and the reason belongs next to the term. Classification and
+    exactness are verified in both directions: an exact callsite that carries no
+    mark is as much a violation as a mark on an inexact row.
 
 ## Digest anchors
 
 anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 2a2b5b90b2c739a55ea51207c67ab2c613396d3e3686ce0c913a1bd79ee91865
 anchor-sha256: src/ir/xi_method_sym.def 0ec1ca5390eb9be96b1a1fcfbf932787a39d6af810630f88c360538451359702
+anchor-sha256: src/plan/semantic/xr_semantic_native_module_call_shape.h a0fcc24c57573bd8187c93064d039f49898681d8e3e6c18a51fa28b29ae5445a
 anchor-sha256: src/ir/xi_semantic_intrinsic.c 20a45ccefbdbda7fe02cae622bc6f64187e080ec761b288a77764473a8e86068
+    shared judgement in `xr_semantic_native_module_call_shape.h`. A layer may
 anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e79c9ae5dd903770f799e0ef69c1805baa
 anchor-sha256: contracts/capability-deletions.tsv 0ce3ca872d9dafa777f75f8540cc92244edb082615b9733534e418afe2d40449
 anchor-sha256: scripts/check_branch_hint_surface_residue.py 1e1950f0e6bcd58b96d56b35bf8230e95b32ee0915cf62ad10ce5b70589b99aa

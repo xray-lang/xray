@@ -49,6 +49,7 @@
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_native_module_shape.h"
+#include "../semantic/xr_semantic_native_module_call_shape.h"
 #include "../semantic/xr_semantic_native_leaf_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
@@ -1683,55 +1684,35 @@ static const char *semantic_native_module_namespace_path(const XrSemanticPlan *p
                : NULL;
 }
 
-/* A native stdlib namespace member call with a plain scalar contract. The
- * frozen definition registry names one implementation for the module path plus
- * the selector, the receiver is a namespace handle rather than a value, and
- * every argument and the result cross the boundary as one plain scalar, so the
- * row states no ownership obligation of its own. */
+/* The frozen call shape plus the one term only this layer can state: the
+ * receiver and the result must be values of the function that owns the
+ * operation. The TargetPlan builder is about to emit a call row keyed on that
+ * function, so a row naming a value from another function would key a call to a
+ * frame that never holds it. The shared shape judgement deliberately stays out
+ * of this: it answers what the callsite is, not which frame is about to claim
+ * it, and the other three consumers do not emit rows. */
 static bool semantic_native_module_scalar_call_shape_is_exact(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     const char **out_selector, uint32_t *out_receiver_value, uint32_t *argument_count) {
-    uint32_t operands_count = 0, metadata_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operands_count);
-    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
-    if (!plan || !operation ||
-        operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL ||
-        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
-        (operation->semantic_immediate & 1) != 0 || operation->operand_count == 0 ||
-        operation->operand_begin >= operands_count ||
-        operation->operand_count > operands_count - operation->operand_begin ||
-        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
-        !metadata || (operation->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
-        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
-        operation->result_alias_operand != -1 ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
-        !xr_semantic_native_module_boundary_type_is_exact(
-            xr_semantic_plan_type(plan, operation->result_type), true))
+    const char *selector = NULL;
+    uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t arity = 0;
+    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL ||
+        !xr_semantic_native_module_scalar_call_shape_is_exact(plan, operation, &selector,
+                                                              &receiver_value, &arity))
         return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, operation->function);
-    if (!function || receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
-        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
-        receiver->value < function->value_begin ||
-        receiver->value >= function->value_begin + function->value_count ||
+    if (!function || receiver_value < function->value_begin ||
+        receiver_value >= function->value_begin + function->value_count ||
         operation->result_value < function->value_begin ||
         operation->result_value >= function->value_begin + function->value_count)
         return false;
-    for (uint16_t i = 1; i < operation->operand_count; i++) {
-        const XrSemanticOperandRecord *argument = receiver + i;
-        if (argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) (i - 1) ||
-            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            !xr_semantic_native_module_boundary_type_is_exact(
-                xr_semantic_plan_type(plan, argument->type), false))
-            return false;
-    }
     if (out_selector)
-        *out_selector = metadata[operation->metadata_begin];
+        *out_selector = selector;
     if (out_receiver_value)
-        *out_receiver_value = receiver->value;
+        *out_receiver_value = receiver_value;
     if (argument_count)
-        *argument_count = (uint32_t) (operation->operand_count - 1u);
+        *argument_count = arity;
     return true;
 }
 
