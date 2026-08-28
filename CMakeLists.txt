@@ -3207,13 +3207,17 @@ if(BUILD_TESTS)
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    # See the asan_focused COST note. Measured ~119s.
+    # See the asan_focused COST note. Measured ~119s, so COST stays at 120 for
+    # scheduling. TIMEOUT does not: a limit equal to the measured runtime turns
+    # any machine-state variation into a red that each lane then has to prove is
+    # not theirs. Round 3 measured 120.20s on an idle machine and spent time on
+    # exactly that question.
     set_tests_properties(aot_incremental_cache PROPERTIES
         LABELS "aot;cache;smoke"
         PROCESSORS ${XRAY_CTEST_AOT_INCREMENTAL_JOBS}
-        SKIP_RETURN_CODE 77
         COST 120
-        TIMEOUT 120
+        TIMEOUT 300
+        SKIP_RETURN_CODE 77
     )
 
     # Module summaries: identical sources must publish one identical dependency
