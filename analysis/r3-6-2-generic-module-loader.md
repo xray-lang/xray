@@ -201,20 +201,56 @@ make a disabled module loadable」。
 
 ## 9. 基线上就红、与本 lane 无关的
 
-- `check_stdlib_boundary.py` 的三条 Iterator 错误
-  （`Iterator declaration methods must be exactly hasNext/next/nth`、
-  `compiler Iterator method table must match stdlib/types/iterator.xr`、
-  `API inventory does not expose the complete Iterator schema`）。
-  用 `git archive HEAD` 导出基线树跑同一脚本，输出**逐字相同**。
-- `eval_stdlib_overlay` 和 `stdlib_embedded_layout`（后者报
-  `xray run: stdin source requires --module-id`，与 stdlib 无关）。
+聚焦门 `ctest -R 'stdlib|boundary|manifest|eval_stdlib|embedded'` 共 38 项，8 项失败。
+逐条归因如下——**判定方法是把基线树用 `git archive HEAD` 导出到 scratchpad
+再跑同一份脚本**，不是靠推理：
 
-## 10. 留给别人的
+| 失败项 | 归因 | 证据 |
+|---|---|---|
+| `eval_stdlib_overlay` | 基线红 | `xray run: stdin source requires --module-id`，与 stdlib 无关；6-2 简报已列 |
+| `stdlib_embedded_layout` | 基线红 | 同一条 stdin 错误；6-2 简报已列 |
+| `binary_stdlib_kat_baseline` | 基线红 | 基线树跑同脚本，`core_base64.expect` / `core_encoding.expect` 的 missing anchors **逐字相同** |
+| `binary_stdlib_runtime_baseline` | 基线红 | 同上，同样两个文件同样两条 |
+| `aot_link_command_manifest` | 基线红 | `XR_TARGET_1003` / `XR_TARGET_1000`；`analysis/r3-6-stdlib-selfhost-remaining-six.md` §3.1 已记录它在基线上失败 |
+| `aot_manifest_sweep` | 与本 lane 无关 | 618 个用例中 3 个失败，全是 `tests/diff/cases/spread/*`，这三个文件**一个 import 都没有**，报的是 spread 表达式的 representation schema 问题 |
+| `native_output_boundary` | 基线红（见 §9.1） | `XR_TARGET_1000: product TargetPlan requires one canonical program authority`，模块图是 `mem.xr` + 入口两个模块 |
+| `backend_diff_embedded` | 负载超时（见 §9.1） | `Timeout`；当时 load average 59，00-SHARED §4 要求串行复跑后再归因 |
 
-- `contracts/stdlib-symbol-inventory.json` 里仍有 `"factory_source": "stdlib/http/http.c"`
-  之类的字段，而那些文件已经不存在了。这份契约在基线上就带着 `time` 迁移留下的
-  同类 drift（见 `analysis/r3-6-stdlib-selfhost-remaining-six.md` §3），
-  应该由能重新导出它的人整体重算，而不是逐条手改。
+`check_stdlib_boundary.py` 还剩三条 Iterator 错误
+（`Iterator declaration methods must be exactly hasNext/next/nth`、
+`compiler Iterator method table must match stdlib/types/iterator.xr`、
+`API inventory does not expose the complete Iterator schema`）。
+基线树跑同一脚本，输出**逐字相同**。
+
+### 9.1 为什么模块加载的改动不可能改变 AOT 的拒绝
+
+值得单独写下来，因为它决定了上表最后两行怎么归因：**AOT 根本不走这条改动**。
+
+`xray build --native` 的模块图由 `src/module/xmodule_graph.c` 在编译期构建，
+读的是 `.xr` 源；本 lane 改的 `load_stdlib_module()` 是 VM 运行期的加载路径。
+两者唯一的交点是 `xmodule_resolver.c` 里「这个裸名字是不是 stdlib 模块」的判定，
+而那个判定前后**集合相同**：
+
+- 改前：`has_native_factory`（工厂表 30 个）`|| has_embedded_source`（`.xr` 30 个）
+- 改后：描述符表 = 30 个 `.xr` ∪ 有 binder 的模块 ∪ `prelude`
+
+两边都是 32 个（`test_yield` 两边都因 `XR_BUILD_TEST_MODULES=OFF` 不在）。
+`mem.xr` 在基线 `34be0379c` 上就已经是 `.xr` 模块，所以
+`native_output_boundary` 的模块图在改动前后都是两个模块，撞的都是 lane 4 的
+`blockers/a-stdlib-multi-module-program-authority.md`。
+
+## 10. 顺手清掉的与留给别人的
+
+`contracts/stdlib-symbol-inventory.json` 已经**整体重算**（`--json` 重新导出，
+`base` 记为本 lane 的提交）。原因是它的 `factory_source` 字段有 30 条指向已删除的
+文件，而字段本身描述的东西也不存在了；模块行现在带 `loader_declarations`。
+重算同时清掉了这份文件在基线上就带着的 `time` 迁移 drift
+（见 `analysis/r3-6-stdlib-selfhost-remaining-six.md` §3）。
+没有门读这份 JSON——`check_stdlib_full_xray_completion.py` 是 `import` inventory
+模块重新扫描，不读快照——所以这是把记录改回它所记录的东西。
+
+留给别人的：
+
 - `tests/aot/filetests/link/core_datetime.expect:20` 有一行
   `c_not_contains=xr_native_module_create_datetime`。它现在**更**成立了
   （符号已彻底不存在），不需要动。
