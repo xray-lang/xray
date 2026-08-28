@@ -22,6 +22,7 @@
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_identity.h"
 #include "../module/xmodule_resolver.h"
+#include "../shared/xr_core_intrinsic.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
 #include "../shared/xobject_shape.h"
@@ -8436,6 +8437,17 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.method_name_id = callee_name_id;
             if (strcmp(callee_name, "typeName") == 0)
                 bc->metadata_use_bits |= XG_METADATA_TYPENAME;
+        } else if (xr_core_intrinsic_by_source_name(callee_name, strlen(callee_name))) {
+            /* A core intrinsic is a sealed language operation: the callee is
+             * the compiler itself, no user body runs, and there is no callee
+             * summary to compose.  Leaving it on the closure kind would hand
+             * every program that prints or asserts an open function-value
+             * target set, which no whole-program effect or reachability proof
+             * can close.  A user function of the same name is a plain declared
+             * target and is classified above, before this branch is reached. */
+            row.kind = XG_CALL_NATIVE;
+            row.method_id = (XgMethodId) callee_name_id;
+            row.method_name_id = callee_name_id;
         } else if (body_variable_is_stdlib_native_function(bc, &callee->as.variable)) {
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_NATIVE;
