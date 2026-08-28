@@ -1,1 +1,2 @@
+--> 1:14 E0352
 Integer literal 9223372036854775808 is out of range for type 'i64'

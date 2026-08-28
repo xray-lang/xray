@@ -1,1 +1,3 @@
+--> 5:1 E0354
+misplaced 5:9
 raw pointer index `p[i]` must be inside an `unsafe { }` block

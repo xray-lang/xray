@@ -1,4 +1,11 @@
+--> 4:15 E0356
 uses 'string', which is a managed heap object
+
+--> 5:18 E0356
 uses type 'Array<i64>', which is not C-ABI-representable
+
+--> 6:16 E0356
 uses type 'Map<string, i64>', which is not C-ABI-representable
+
+--> 7:8 E0356
 uses type 'Array<i64>', which is not C-ABI-representable

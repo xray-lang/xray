@@ -1,1 +1,3 @@
+--> 6:1 E0383
+misplaced 6:16
 cannot store Slice view into an index target

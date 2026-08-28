@@ -1,1 +1,2 @@
+--> 3:18 E0352
 tuple values are not iterable in comptime for-in

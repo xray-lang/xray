@@ -1,1 +1,2 @@
+--> 5:1 E0385
 generator 'gen' cannot reach the scheduler; `scope join` is not allowed in a body that uses `yield expr`

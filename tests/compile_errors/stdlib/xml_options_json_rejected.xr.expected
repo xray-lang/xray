@@ -1,1 +1,2 @@
+--> 5:29
 type 'JSON.Object' is not assignable to parameter type 'XmlOptions'

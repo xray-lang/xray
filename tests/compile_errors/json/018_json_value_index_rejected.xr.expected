@@ -1,1 +1,3 @@
+--> 2:1 E0352
+misplaced 2:7
 JSON.Value does not support bracket access; use JSON.get/require with a JSON.Path or narrow with JSON.asObject/asArray

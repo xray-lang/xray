@@ -1,3 +1,4 @@
-E0352
+--> 4:1 E0352
+misplaced 4:29
 Return type mismatch: expected 'Point'
 extra field 'z'

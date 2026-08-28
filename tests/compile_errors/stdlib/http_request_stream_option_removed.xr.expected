@@ -1,2 +1,4 @@
+--> 2:0
+misplaced 2:14
 is not assignable to parameter type 'HttpRequestOptions'
 extra field 'stream'

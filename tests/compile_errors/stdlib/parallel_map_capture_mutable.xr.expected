@@ -1,1 +1,2 @@
+--> 5:48
 parallel.map callback cannot capture mutable variable 'scale'

@@ -1,1 +1,2 @@
+--> 1:1 E0350
 interface 'Stringable' redeclares the builtin 'Stringable'

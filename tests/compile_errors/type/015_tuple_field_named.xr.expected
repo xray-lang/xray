@@ -1,1 +1,2 @@
+--> 6:13 E0368
 tuple has no named field 'foo'; use .N (zero-based) instead

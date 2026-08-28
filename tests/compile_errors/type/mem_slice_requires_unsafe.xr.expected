@@ -1,1 +1,3 @@
+--> 4:1 E0354
+misplaced 4:20
 mem.slice<T>() must be inside an unsafe block

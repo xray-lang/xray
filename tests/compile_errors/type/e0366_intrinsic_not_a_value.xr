@@ -1,0 +1,4 @@
+// print 是 direct-only 的核心 intrinsic：它只有调用点计划，没有值表示。
+// 把名字本身当值绑定出去，后面就没有任何东西能承接它。
+var show = print
+show("hi")

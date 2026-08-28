@@ -1,1 +1,2 @@
+--> 4:15
 type 'JSON.Object' is not assignable to parameter type 'ClusterConfig'

@@ -1,1 +1,2 @@
+--> 2:5 E0352
 Type 'Array<u8>' is not assignable to type 'Slice<u8>'

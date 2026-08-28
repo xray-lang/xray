@@ -1,0 +1,6 @@
+// 多值 return 已被移除，元组是它的替代形式。
+fn pair() -> (i64, i64) {
+    return 1, 2
+}
+var p = pair()
+print(p.0)

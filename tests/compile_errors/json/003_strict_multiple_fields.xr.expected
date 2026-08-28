@@ -1,1 +1,2 @@
+--> 6:1 E0352
 type 'Vec2' does not allow adding field 'z'

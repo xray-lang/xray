@@ -1,1 +1,2 @@
+--> 3:9 E0356
 channel send argument transfer of type 'Array<i64>' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value

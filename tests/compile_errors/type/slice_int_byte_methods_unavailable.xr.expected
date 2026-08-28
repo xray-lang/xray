@@ -1,4 +1,11 @@
+--> 3:18 E0352
 Slice view has no member 'load'; use len(view) or indexed access
+
+--> 8:10 E0352
 Slice view has no member 'store'
+
+--> 14:21 E0352
 Slice view has no member 'commonPrefix'
+
+--> 19:10 E0352
 Slice view has no member 'repeatFrom'

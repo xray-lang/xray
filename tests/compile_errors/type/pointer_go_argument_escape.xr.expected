@@ -1,1 +1,2 @@
+--> 7:24 E0352
 cannot send raw pointer borrow across go argument

@@ -1,1 +1,3 @@
+--> 4:1 E0358
+misplaced 4:28
 JSON.decode<T>() field 'nested' is not decodable: UNSUPPORTED_TYPE (type 'Set<i64>')

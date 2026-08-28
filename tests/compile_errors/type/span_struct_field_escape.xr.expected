@@ -1,1 +1,3 @@
+--> 2:1 E0383
+misplaced 2:5
 cannot store Slice view in struct field 'view'

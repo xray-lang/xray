@@ -1,1 +1,2 @@
+--> 7:12 E0382
 cannot mutate owner 'buffer' while raw pointer borrow 'offset' is active

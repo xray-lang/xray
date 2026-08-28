@@ -1,1 +1,2 @@
-error: stdlib module 'sys' has no member '__dylibOpen'
+--> 4:11
+stdlib module 'sys' has no member '__dylibOpen'

@@ -1,0 +1,31 @@
+--> 10:19 E0356
+Argument 1: type 'i64'
+parameter type 'fn(i64, i64) -> U'
+
+--> 11:22 E0356
+Argument 1: type 'i64'
+parameter type 'fn(i64, i64) -> bool'
+
+--> 12:22 E0356
+Argument 1: type 'i64'
+parameter type 'fn(U, i64, i64) -> U'
+
+--> 13:20 E0356
+Argument 1: type 'i64'
+parameter type 'fn(i64) -> bool'
+
+--> 14:21 E0356
+Argument 1: type 'i64'
+parameter type 'fn(i64) -> bool'
+
+--> 15:20 E0356
+Argument 1: type 'i64'
+parameter type 'fn(i64) -> bool'
+
+--> 16:12 E0356
+Argument 1: type 'i64'
+parameter type 'fn(i64, i64)'
+
+--> 19:11 E0356
+Argument 1: type 'i64'
+parameter type 'fn(string, i64)'

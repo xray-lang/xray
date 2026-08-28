@@ -1,1 +1,3 @@
+--> 4:7 E0350
+misplaced 4:21
 class 'Base' is final and cannot be extended

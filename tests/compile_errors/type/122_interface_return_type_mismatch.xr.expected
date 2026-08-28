@@ -1,1 +1,3 @@
+--> 6:1 E0367
+misplaced 6:5
 Class 'BadReader' method 'read' does not match signature required by interface 'Reader': expected 'fn() -> i64', found 'fn() -> string'

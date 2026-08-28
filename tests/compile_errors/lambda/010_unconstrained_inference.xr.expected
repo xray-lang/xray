@@ -1,3 +1,4 @@
+--> 1:9 E0365
 Parameter 'value' of anonymous function cannot be inferred
 annotate this lambda parameter
 annotate the binding

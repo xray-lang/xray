@@ -1,1 +1,2 @@
+--> 6:25
 simd.U32x4.shuffle lane 2 must be a compile-time integer

@@ -1,1 +1,2 @@
+--> 5:1 E0354
 raw pointer store `p[i] = v` must be inside an `unsafe { }` block

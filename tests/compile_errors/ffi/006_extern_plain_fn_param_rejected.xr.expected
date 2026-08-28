@@ -1,1 +1,2 @@
+--> 1:28 E0356
 extern function parameter 'cb' uses Xray function type; use CFn<...> for C function pointers

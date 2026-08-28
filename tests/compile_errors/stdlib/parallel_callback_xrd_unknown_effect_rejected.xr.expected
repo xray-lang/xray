@@ -1,1 +1,11 @@
-parallel.forEach callback cannot throw or suspend; call to unknown-effect function 'parallel_unknown_effect_native.nativeOp' is not allowed in a parallel callback
+# BLOCKED -- capability gap, not wording drift. A bare module name resolves
+# through resolve_stdlib(), which knows only native factories and embedded
+# stdlib sources, so the sibling `parallel_unknown_effect_native.xrd` is refused
+# as "module '...' not found in stdlib" (src/module/xmodule_resolver.c:267)
+# before the frontend ever runs -- the .xrd search at
+# src/frontend/analyzer/xanalyzer_xrd.c:565 is never reached. The assertion
+# below is what this case demands; it stays red until named .xrd modules
+# resolve through the authoritative module graph.
+--> 5:48
+parallel.forEach callback cannot throw or suspend
+call to unknown-effect function 'parallel_unknown_effect_native.nativeOp'

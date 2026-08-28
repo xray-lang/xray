@@ -1,1 +1,2 @@
+--> 2:5 E0352
 comptime block currently supports const/var declarations, local var assignments, local var compound assignments, compile-time if/while statements, C-style for loops, fixed-array for-in loops, break/continue inside comptime loops, compile_assert(...) and compile_error(...)

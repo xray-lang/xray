@@ -1,1 +1,3 @@
+--> 4:1 E0354
+misplaced 4:17
 mem.load<T>() must be inside an unsafe block

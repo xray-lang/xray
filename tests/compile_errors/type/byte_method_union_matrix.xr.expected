@@ -1,2 +1,5 @@
+--> 2:12 E0354
 union type 'Array<u8> | Array<i64>' has no member 'appendFrom'
+
+--> 6:18 E0354
 union type 'Slice<u8> | Slice<i64>' has no member 'load'

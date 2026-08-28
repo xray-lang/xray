@@ -1,2 +1,4 @@
+--> 5:1 E0363
+misplaced 5:9
 go closure cannot capture mutable variable 'counter'
 hint: declare 'counter' as const, or pass the value as an explicit go argument (go worker(counter))

@@ -1,1 +1,2 @@
+--> 6:12 E0352
 comptime while condition must be evaluable at compile time

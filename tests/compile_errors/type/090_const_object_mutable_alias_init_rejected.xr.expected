@@ -1,1 +1,2 @@
+--> 10:16 E0352
 const binding from mutable reference value 'b' requires copy(b)

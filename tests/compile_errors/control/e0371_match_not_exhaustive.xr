@@ -1,0 +1,13 @@
+// 三个成员的 enum 只写了两条分支又没有 `_` 兜底，Blue 落进来时无处可去。
+enum Color { Red, Green, Blue }
+
+fn pick() -> Color { return Color.Red }
+
+fn main() {
+    match (pick()) {
+        Color.Red -> print("red")
+        Color.Green -> print("green")
+    }
+}
+
+main()

@@ -1,0 +1,15 @@
+--> 18:1 E0359
+super() must be the first statement in constructor
+
+--> 27:1 E0360
+Cannot access 'this' before calling super()
+
+--> 29:1 E0359
+super() must be the first statement in constructor
+
+--> 38:1 E0361
+Constructor must call super()
+'Animal' constructor requires 1 argument(s)
+
+--> 49:1 E0362
+super() can only be called in a class that extends

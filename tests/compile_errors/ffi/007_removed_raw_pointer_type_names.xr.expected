@@ -1,2 +1,5 @@
+--> 0:1 E0365
 undefined type 'RawPtr'
+
+--> 0:1 E0365
 undefined type 'RawMut'

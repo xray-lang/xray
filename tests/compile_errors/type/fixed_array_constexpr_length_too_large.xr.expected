@@ -1,2 +1,5 @@
+--> 2:15 E0352
 fixed array length exceeds maximum of 65535 elements
+
+--> 2:24 E0352
 fixed array repeat count must be a positive compile-time integer expression

@@ -1,1 +1,2 @@
+--> 1:5 E0352
 Type 'fn(i64)' is not assignable to type 'fn(ref i64)'
