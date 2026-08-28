@@ -376,7 +376,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_verify.c 1637430f1abcbf408d707f224c
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 642eff61fb0b06185d2aec4c0ce8d91919148de3d29d74a17e68bd1a5016b3fa
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 838f7adc60c3de52fda23ed25c07edb678a6274eb87d0deec2da033e701dca10
-anchor-sha256: src/ir/xi.h 089354e3324b62754b0c53c65f9e7451e735ce3bcbdcebcd3afc33c6ba44336e
+anchor-sha256: src/ir/xi.h 54d7d6b598120a47153f0b4f9ad6dbe59c3bb50deada24b30bd676ddd2548d26
 anchor-sha256: src/ir/xi.c 26d3ceab5e7653af4dde2c3af459dd68fc59b65d9824c667acf96a0812671960
 anchor-sha256: src/ir/xi_module.h 2ee8794e21ef18162b5c045e795a62a952762829c19af775a7bb7de73a873eb7
 anchor-sha256: src/ir/xi_lower.h 297d6165a47ac164a12df522091e970093fcc2ce35153378d5fd717019a8da72
