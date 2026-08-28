@@ -244,6 +244,23 @@ evidence that the program's meaning changed. It is the registry fingerprint
 doing its job. `test_xi_cgen` reaches `PASS 42` before and after once this one
 value is re-anchored, and it is the only 64-hex constant in that file.
 
+The same fingerprint reaches two more places, which is why seven values in
+`tests/unit/plan` moved as well:
+
+- `xr_semantic_verify.c:5437` spells a dependency's canonical key as
+  `"dependency-v1:...:semantic=<fingerprint>"` — the depended-on module's
+  SemanticPlan fingerprint, written into the key — and
+  `xr_semantic_verify.c:4175` then embeds that stable id in
+  `"call-target-v4:...:dependency=<id>:..."`. So two **32-hex stable ids** move
+  with the registry too.
+- `xr_target_plan.c:840` and `:801` hash `plan->semantic_fingerprint` first, so
+  the TargetPlan fingerprint and every call fingerprint follow.
+
+The chain stops at exports: an export's key carries no fingerprint, so
+`export_id` does not move. That is the direct evidence for why these cannot be
+replaced blind — of the 15 frozen values in `test_semantic_plan.c`, exactly 3
+moved and 12 did not.
+
 ## 2.2 The native-leaf allowlist gate
 
 `stdlib_native_leaf_allowlist` failed with all 127 leaves unclassified, and the
@@ -382,3 +399,37 @@ fails on the base, and `query_surface_residue`, `string_surface_residue`,
 Four other lanes were running `ctest -j4` on this machine concurrently. Any
 timeout observed under that load has to be re-run serially before it is
 attributed to a change; see the round-3 briefing §4.3.
+
+## 5. What landed, and what is left
+
+Ten commits on `work/6-stdlib-selfhost-00f665c5c`:
+
+```
+Record why math cannot be self-hosted yet and how the other five stand
+Publish the http2 surface from an Xray module body
+Write the compress checksums and header judgements in Xray
+Move the mem capability surface into Xray, leaving what Xray cannot say
+Publish ten regex module functions from an Xray body
+Re-anchor the SemanticPlan KAT the stdlib registry fingerprint moved
+Record why each native leaf is an accepted C boundary
+Stop asking the prelude for an Xray source it cannot have
+Record what the six remaining modules turned out to be
+Regenerate the analyzer and LSP stdlib tables for the four migrations
+Re-anchor the plan fingerprints and stable ids the stdlib registry moved
+```
+
+Left for other owners:
+
+- **math** — the blocker packet names the three coupled obstacles and the route
+  through `xa_intrinsic_registry.def` that `simd` and `codegen` already take.
+- **`RegexMatch` in `.xr`** — one line in `stdlib/prelude/builtin_symbols.def`
+  would let `find` / `fullFind` / `findAll` move too, at the cost of making the
+  name visible in every `.xr`. That is a language-surface call.
+- **`Buffer` and the other native classes** — `StdlibNativeClassEntry`,
+  `StdlibClassMethodEntry` and `StdlibTypeMethodEntry` need an `is_internal`
+  property before any native class can leave `public_native`. The 16 mem
+  symbols, the 13 regex ones and `net`'s 11 all wait on the same change.
+- **The two UNRUN gates** — `stdlib_generated_c_reproducibility` and
+  `stdlib_unified_target_plan_coverage` want backend probe evidence, which
+  cannot be produced while AOT refuses these modules at `XR_TARGET_1000`.
+- **The AOT link expectations** listed in §3, once their cases build again.
