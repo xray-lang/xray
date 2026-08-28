@@ -21,6 +21,11 @@
 struct XaTypedProgram {
     const struct AstNode *syntax;
     struct XaAnalyzer *semantics;
+    /* Compilation unit identity, snapshotted with the rest of the typed
+     * program.  Lowering attributes plans to exact source and must read the
+     * unit it was handed, not an analyzer cursor whose lifetime is the
+     * analysis pass. */
+    const char *source_file;
     const struct XgGlobalEvidence *global_evidence;
     uint64_t semantic_revision;
     uint32_t module_id;
@@ -156,6 +161,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     }
     program->syntax = syntax;
     program->semantics = analyzer;
+    program->source_file = analyzer->current_file;
     program->global_evidence = global_evidence;
     program->semantic_revision = analyzer->semantic_revision;
     program->module_id = module_id;
@@ -245,6 +251,10 @@ const struct AstNode *xa_typed_program_syntax(const XaTypedProgram *program) {
 
 struct XaAnalyzer *xa_typed_program_semantics(const XaTypedProgram *program) {
     return program ? program->semantics : NULL;
+}
+
+const char *xa_typed_program_source_file(const XaTypedProgram *program) {
+    return program ? program->source_file : NULL;
 }
 
 const struct XgGlobalEvidence *xa_typed_program_global_evidence(const XaTypedProgram *program) {

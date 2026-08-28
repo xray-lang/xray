@@ -171,6 +171,28 @@ bool xi_value_set_print_plan(XiFunc *f, XiValue *value, const XrPrintPlan *plan)
     return true;
 }
 
+XiValue *xi_value_new_print(XiFunc *f, XiBlock *blk, struct XrType *unit_type,
+                            const XrPrintPlan *plan) {
+    if (!plan || !xr_print_plan_validate(plan))
+        return NULL;
+    XiValue *print = xi_value_new(f, blk, XI_PRINT, unit_type, plan->arity);
+    if (!print)
+        return NULL;
+    if (!xi_value_set_print_plan(f, print, plan))
+        return NULL;
+    /* The span restates the plan's location, so it is derived from it rather
+     * than supplied again; the two cannot drift apart. */
+    print->source_span = (XiSourceSpan) {
+        .start_line = plan->source.line,
+        .start_column = plan->source.column,
+        .end_line = plan->source.end_line,
+        .end_column = plan->source.end_column,
+    };
+    print->flags = xi_op_default_effects(XI_PRINT);
+    print->line = plan->source.line;
+    return print;
+}
+
 bool xi_value_clone_assertion_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
     if (!f || !dst || !src)
         return false;

@@ -5971,7 +5971,7 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function | Signature | Description |
 |--|--|--|
-| `print` | `(...values) -> ()` | print to stdout, appending exactly one newline; arguments are separated by exactly one space; `print()` writes just the newline |
+| `print` | `(...values) -> ()` | print to stdout, appending exactly one newline; arguments are separated by exactly one space; `print()` writes just the newline. One call is one indivisible group: every argument is evaluated left to right exactly once, then all of them are rendered, then the group is written in a single act |
 | `dump` | `(value, indent?) -> ()` | structured debug output |
 | `len` | `(value) -> i64` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
 

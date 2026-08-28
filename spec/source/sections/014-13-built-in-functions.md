@@ -16,7 +16,7 @@ order: 014
 
 | 函数 | 签名 | 说明 |
 |--|--|--|
-| `print` | `(...values) -> ()` | 输出到 stdout，追加恰好一个换行；多参以恰好一个空格分隔；`print()` 只输出换行 |
+| `print` | `(...values) -> ()` | 输出到 stdout，追加恰好一个换行；多参以恰好一个空格分隔；`print()` 只输出换行。一次调用是一个不可分割的组：所有参数先从左到右各求值一次，再全部渲染，最后一次性写出 |
 | `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
 | `len` | `(value) -> i64` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
 
@@ -100,7 +100,7 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function | Signature | Description |
 |--|--|--|
-| `print` | `(...values) -> ()` | print to stdout, appending exactly one newline; arguments are separated by exactly one space; `print()` writes just the newline |
+| `print` | `(...values) -> ()` | print to stdout, appending exactly one newline; arguments are separated by exactly one space; `print()` writes just the newline. One call is one indivisible group: every argument is evaluated left to right exactly once, then all of them are rendered, then the group is written in a single act |
 | `dump` | `(value, indent?) -> ()` | structured debug output |
 | `len` | `(value) -> i64` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
 

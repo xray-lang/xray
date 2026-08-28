@@ -3871,7 +3871,12 @@ static XrCoreBuiltinId lower_core_builtin_id(XiLower *l, AstNode *callee) {
 /* Call AST nodes do not own a complete delimiter range.  The resolved builtin
  * variable does own the stable source identity, so freeze the exact
  * callee-token span instead of inventing a call-expression end.  Every core
- * intrinsic plan is attributed the same way, so the rule is written once. */
+ * intrinsic plan is attributed the same way, so the rule is written once.
+ *
+ * The file comes from the typed program because that is the compilation unit
+ * this lowering was handed.  Reading it from the analyzer instead would make
+ * attribution depend on a cursor whose lifetime is the analysis pass, and
+ * lowering runs after that pass has returned. */
 static XrLocation lower_core_builtin_source(XiLower *l, AstNode *node, CallExprNode *call,
                                             const XrCoreIntrinsicDesc *desc) {
     const AstNode *source_node = call ? call->callee : NULL;
@@ -3882,7 +3887,7 @@ static XrLocation lower_core_builtin_source(XiLower *l, AstNode *node, CallExprN
                                  ? (uint32_t) source_node->column
                                  : (node && node->column > 0 ? (uint32_t) node->column : 0);
     XrLocation source = {
-        .file = l && l->analyzer ? l->analyzer->current_file : NULL,
+        .file = l ? xa_typed_program_source_file(l->typed_program) : NULL,
         .line = source_line,
         .column = source_column,
         .end_line = source_line,
@@ -3929,26 +3934,13 @@ static XiValue *lower_core_print_call(XiLower *l, AstNode *node, CallExprNode *c
             return xi_const_null(l->func, l->cur_block, l->type_null);
     }
 
-    XiValue *print =
-        xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, (uint16_t) args.count);
+    XiValue *print = xi_value_new_print(l->func, l->cur_block, l->type_unit, &plan);
     if (!print) {
         l->had_error = true;
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
     for (int i = 0; i < args.count; i++)
         print->args[i] = args.items[i];
-    if (!xi_value_set_print_plan(l->func, print, &plan)) {
-        l->had_error = true;
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
-    print->source_span = (XiSourceSpan) {
-        .start_line = source.line,
-        .start_column = source.column,
-        .end_line = source.end_line,
-        .end_column = source.end_column,
-    };
-    print->flags = xi_op_default_effects(XI_PRINT);
-    print->line = (uint32_t) node->line;
     return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 

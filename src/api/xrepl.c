@@ -418,11 +418,24 @@ static void repl_elaborate_last_expr(XrCompilerContext *ctx, AstNode *program, v
                                     /*is_const=*/true, /*line=*/0);
     /* Auto-display is the REPL's own behaviour, expressed in the language: a
      * guarded ordinary call. Encoding "suppress null" as a flag on print would
-     * make the REPL a second output semantics that every backend has to carry. */
+     * make the REPL a second output semantics that every backend has to carry.
+     *
+     * The guard exists only where the result can actually be null. A
+     * non-nullable result is statically known to display, and the language
+     * rejects comparing such a type against null, so emitting the test anyway
+     * would refuse the very expressions it was meant to echo. */
+    bool guard_needed = XR_TYPE_IS_NULLABLE(result_type);
     int echo_line = plan->expr->line;
+    int echo_column = plan->expr->column;
     AstNode *result_ref = xr_ast_variable(plan->session, plan->result_name, echo_line);
-    AstNode *guard_ref = xr_ast_variable(plan->session, plan->result_name, echo_line);
+    AstNode *guard_ref =
+        guard_needed ? xr_ast_variable(plan->session, plan->result_name, echo_line) : NULL;
     AstNode *print_callee = xr_ast_variable(plan->session, "print", echo_line);
+    /* The elaborated call is attributed to the expression it echoes. Core
+     * intrinsic plans are attributed to exact source, and a synthesized callee
+     * that carried only a line would not name a position at all. */
+    if (print_callee)
+        print_callee->column = echo_column;
     AstNode *print_args[1] = {result_ref};
     AstNode *print_call =
         result_ref && print_callee
@@ -430,16 +443,19 @@ static void repl_elaborate_last_expr(XrCompilerContext *ctx, AstNode *program, v
             : NULL;
     AstNode *print_stmt =
         print_call ? xr_ast_expr_stmt(plan->session, print_call, echo_line) : NULL;
-    AstNode *echo_body = print_stmt ? xr_ast_block(plan->session, echo_line) : NULL;
-    if (echo_body)
-        xr_ast_block_add(plan->session, echo_body, print_stmt);
-    AstNode *null_literal = echo_body ? xr_ast_literal_null(plan->session, echo_line) : NULL;
-    AstNode *not_null =
-        guard_ref && null_literal
-            ? xr_ast_binary(plan->session, AST_BINARY_NE, guard_ref, null_literal, echo_line)
-            : NULL;
-    AstNode *print =
-        not_null ? xr_ast_if_stmt(plan->session, not_null, echo_body, NULL, echo_line) : NULL;
+    AstNode *print = print_stmt;
+    if (print && guard_needed) {
+        AstNode *echo_body = xr_ast_block(plan->session, echo_line);
+        if (echo_body)
+            xr_ast_block_add(plan->session, echo_body, print_stmt);
+        AstNode *null_literal = echo_body ? xr_ast_literal_null(plan->session, echo_line) : NULL;
+        AstNode *not_null =
+            guard_ref && null_literal
+                ? xr_ast_binary(plan->session, AST_BINARY_NE, guard_ref, null_literal, echo_line)
+                : NULL;
+        print =
+            not_null ? xr_ast_if_stmt(plan->session, not_null, echo_body, NULL, echo_line) : NULL;
+    }
     if (!bind || !print)
         goto done;
     AstNode **stmts = program->as.program.statements;
