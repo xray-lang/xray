@@ -128,7 +128,7 @@ static void test_freestanding_authority_is_not_hosted_projection(void) {
               freestanding.providers, freestanding.provider_count, &freestanding_mask,
               &freestanding_provider_fingerprint) == XR_RUNTIME_ABI_OK);
     CHECK(!xr_fingerprint_equal(hosted_provider_fingerprint, freestanding_provider_fingerprint));
-    CHECK((freestanding_mask & XR_TARGET_PROVIDER_MASK_ALL) == requested);
+    CHECK((freestanding_mask & XR_TARGET_CAPABILITY_MASK_ALL) == requested);
     CHECK((freestanding_mask & XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT)) !=
           0);
     CHECK((freestanding_mask & XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY)) ==

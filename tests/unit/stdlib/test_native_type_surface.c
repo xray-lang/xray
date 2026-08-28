@@ -213,13 +213,17 @@ TEST(native_module_object_and_enum_metadata) {
     const char *cluster_start_signature = xa_builtin_get_module_func_signature("cluster", "start");
     const XaBuiltinMember *cluster_start_primitive = find_module_member("cluster", "__start");
     const char *cluster_info_signature = xa_builtin_get_module_func_signature("cluster", "info");
+    const XaBuiltinMember *cluster_info_primitive = find_module_member("cluster", "__info");
     ASSERT_NULL(cluster_start_signature);
     ASSERT_NOT_NULL(cluster_start_primitive);
     ASSERT_TRUE(cluster_start_primitive->is_internal);
-    ASSERT_NOT_NULL(cluster_info_signature);
+    ASSERT_NULL(cluster_info_signature);
+    ASSERT_NOT_NULL(cluster_info_primitive);
+    ASSERT_TRUE(cluster_info_primitive->is_internal);
     XrType *cluster_start_fn =
         xa_builtin_parse_full_signature(iso, cluster_start_primitive->signature);
-    XrType *cluster_info_fn = xa_builtin_parse_full_signature(iso, cluster_info_signature);
+    XrType *cluster_info_fn =
+        xa_builtin_parse_full_signature(iso, cluster_info_primitive->signature);
     ASSERT_NOT_NULL(cluster_start_fn);
     ASSERT_NOT_NULL(cluster_info_fn);
     ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
