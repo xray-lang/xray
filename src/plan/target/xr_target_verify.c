@@ -4024,28 +4024,30 @@ imported_source_class_instance_storage_is_exact_verify(const XrTargetPlan *plan,
             (!callee && stable_id_is_zero(target->callee_function)));
 }
 
-static bool
-verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t semantic_type,
-                     uint32_t semantic_function, const XrSemanticOperationRecord *operation,
-                     uint32_t operation_index, const uint8_t *exact_direct_callees,
-                     const uint8_t *exact_go_callees, const uint8_t *exact_channel_values,
-                     const uint8_t *exact_channel_receives, const uint8_t *exact_source_namespaces,
-                     const uint8_t *exact_native_module_namespaces, uint8_t *bound_slots,
-                     const uint8_t *deferred_functions, uint32_t *failure_reason) {
+/* The module whose SemanticPlan produced this value travels with it: the row
+ * indices below are that module's, not the entry module's, and with one module
+ * the two are the same plan. */
+static bool verify_value_binding(
+    const XrTargetPlan *plan, const XrSemanticPlan *semantic, uint32_t semantic_value,
+    uint32_t semantic_type, uint32_t semantic_function, const XrSemanticOperationRecord *operation,
+    uint32_t operation_index, const uint8_t *exact_direct_callees, const uint8_t *exact_go_callees,
+    const uint8_t *exact_channel_values, const uint8_t *exact_channel_receives,
+    const uint8_t *exact_source_namespaces, const uint8_t *exact_native_module_namespaces,
+    uint8_t *bound_slots, const uint8_t *deferred_functions, uint32_t *failure_reason) {
 #define XR_VALUE_BINDING_FAIL(reason)                                                              \
     do {                                                                                           \
         if (failure_reason)                                                                        \
             *failure_reason = (reason);                                                            \
         return false;                                                                              \
     } while (0)
-    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan->semantic_plan, semantic_type);
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, semantic_type);
     uint16_t expected_kind = XR_MACHINE_REP_COUNT;
     bool generated_result_void =
         operation && operation->opcode < XI_OP_COUNT &&
         xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID;
     bool operation_result_void =
-        xr_semantic_operation_result_void_governs_storage(
-            plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function) &&
+        xr_semantic_operation_result_void_governs_storage(semantic, operation, semantic_value,
+                                                          semantic_type, semantic_function) &&
         operation->effects == xi_generated_op_effects(operation->opcode) &&
         operation->result_ownership == xi_generated_op_result_ownership(operation->opcode);
     /* A unit enum reaches the table's result-void opcode legitimately and its
@@ -4053,68 +4055,67 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     if (generated_result_void && !operation_result_void &&
         !xr_semantic_unit_enum_type_is_exact(type))
         XR_VALUE_BINDING_FAIL(1);
-    bool exact_heap_closure = semantic_heap_closure_is_exact(plan->semantic_plan, operation);
-    bool exact_panic_catch = xr_semantic_panic_catch_is_exact(plan->semantic_plan, operation) &&
+    bool exact_heap_closure = semantic_heap_closure_is_exact(semantic, operation);
+    bool exact_panic_catch = xr_semantic_panic_catch_is_exact(semantic, operation) &&
                              operation->result_value == semantic_value &&
                              operation->result_type == semantic_type &&
                              operation->function == semantic_function;
     bool exact_local_address =
-        xr_semantic_local_addr_is_exact(plan->semantic_plan, operation, NULL) ||
-        semantic_direct_local_scalar_ref_address_is_exact_verify(plan->semantic_plan, operation);
-    bool exact_dynamic_value = xr_semantic_dynamic_value_is_exact(plan->semantic_plan, operation) &&
+        xr_semantic_local_addr_is_exact(semantic, operation, NULL) ||
+        semantic_direct_local_scalar_ref_address_is_exact_verify(semantic, operation);
+    bool exact_dynamic_value = xr_semantic_dynamic_value_is_exact(semantic, operation) &&
                                operation->result_value == semantic_value &&
                                operation->result_type == semantic_type &&
                                operation->function == semantic_function;
-    bool exact_array_allocation =
-        semantic_array_allocation_is_exact(plan->semantic_plan, operation);
+    bool exact_array_allocation = semantic_array_allocation_is_exact(semantic, operation);
     bool exact_array_intrinsic =
-        semantic_array_intrinsic_is_exact_verify(plan->semantic_plan, operation, NULL, NULL);
+        semantic_array_intrinsic_is_exact_verify(semantic, operation, NULL, NULL);
     uint8_t array_hof_kind = XR_TARGET_ARRAY_HOF_NONE;
     bool exact_array_hof_result =
-        semantic_array_hof_is_exact_verify(plan->semantic_plan, operation, &array_hof_kind, NULL,
-                                           NULL, NULL, NULL, NULL) &&
+        semantic_array_hof_is_exact_verify(semantic, operation, &array_hof_kind, NULL, NULL, NULL,
+                                           NULL, NULL) &&
         array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE;
     bool exact_container_copy =
-        xr_semantic_container_copy_is_exact(plan->semantic_plan, operation, NULL, NULL) &&
+        xr_semantic_container_copy_is_exact(semantic, operation, NULL, NULL) &&
         operation->result_value == semantic_value && operation->result_type == semantic_type &&
         operation->function == semantic_function;
-    bool exact_array_fill = semantic_array_fill_scalar_is_exact_verify(plan->semantic_plan,
-                                                                       operation, NULL, NULL, NULL);
+    bool exact_array_fill =
+        semantic_array_fill_scalar_is_exact_verify(semantic, operation, NULL, NULL, NULL);
     /* A String read back out of its shared cell. It borrows the cell's
      * allocation, so it is bound to the same borrowed tagged carrier an Array
      * read of that cell gets. */
     bool exact_string_shared_read = semantic_string_shared_read_is_exact_verify(
-        plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
+        semantic, operation, semantic_value, semantic_type, semantic_function);
     bool exact_array_shared_read = semantic_array_shared_read_is_exact_verify(
-        plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
+        semantic, operation, semantic_value, semantic_type, semantic_function);
     bool exact_tagged_ref_place_load = semantic_direct_local_tagged_ref_place_load_is_exact_verify(
         plan, operation, semantic_value, semantic_type, semantic_function);
-    bool exact_string_literal = xr_semantic_string_literal_is_exact(plan->semantic_plan, operation);
-    bool exact_bigint_value = xr_semantic_bigint_value_is_exact(plan->semantic_plan, operation);
+    bool exact_string_literal = xr_semantic_string_literal_is_exact(semantic, operation);
+    bool exact_bigint_value = xr_semantic_bigint_value_is_exact(semantic, operation);
     /* Recomputed from the plan through the shared judgement rather than read
      * back from the builder: the String a concatenation allocates is a fresh
      * owner whose only storage fact is the outer tagged value. */
-    bool exact_string_concat = xr_semantic_string_concat_is_exact(plan->semantic_plan, operation) &&
+    bool exact_string_concat = xr_semantic_string_concat_is_exact(semantic, operation) &&
                                operation && operation->result_value == semantic_value &&
                                operation->result_type == semantic_type;
     /* Rebuilt the same way and for the same reason: the String a `string(x)`
      * conversion allocates is a fresh owner whose only storage fact is the
      * outer tagged value. */
-    bool exact_string_convert =
-        xr_semantic_string_convert_is_exact(plan->semantic_plan, operation) && operation &&
-        operation->result_value == semantic_value && operation->result_type == semantic_type;
+    bool exact_string_convert = xr_semantic_string_convert_is_exact(semantic, operation) &&
+                                operation && operation->result_value == semantic_value &&
+                                operation->result_type == semantic_type;
     /* Recomputed from the plan through the shared judgement rather than read
      * back from the builder, so a builder row this verifier cannot re-derive
      * stays unproven. */
-    bool exact_class_object = xr_semantic_class_object_is_exact(plan->semantic_plan, operation) &&
-                              operation && operation->result_value == semantic_value &&
+    bool exact_class_object = xr_semantic_class_object_is_exact(semantic, operation) && operation &&
+                              operation->result_value == semantic_value &&
                               operation->result_type == semantic_type;
     /* Recomputed the same way, and for the same reason: the construction, the
      * class object read it dispatches on and the instance reads that follow it
      * all carry an outer tagged value, and whether that value owns its
      * allocation is the operation's own result ownership. */
     bool exact_class_instance =
-        (xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) ||
+        (xr_semantic_class_instance_value_is_exact(semantic, operation, NULL) ||
          (operation && operation->opcode == XI_CALL &&
           imported_source_class_instance_storage_is_exact_verify(plan, operation_index,
                                                                  operation))) &&
@@ -4123,63 +4124,60 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     bool exact_class_instance_borrowed =
         exact_class_instance && operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
     bool exact_direct_string_result =
-        semantic_direct_local_string_result_is_exact(plan->semantic_plan, operation_index) &&
-        operation && operation->result_value == semantic_value &&
-        operation->result_type == semantic_type;
-    bool exact_stringbuilder =
-        semantic_stringbuilder_constructor_is_exact(plan->semantic_plan, operation);
+        semantic_direct_local_string_result_is_exact(semantic, operation_index) && operation &&
+        operation->result_value == semantic_value && operation->result_type == semantic_type;
+    bool exact_stringbuilder = semantic_stringbuilder_constructor_is_exact(semantic, operation);
     /* StringBuilder methods bind a dynamic result in their own right. Append
      * preserves the receiver's ownership, while toString creates a new owner. */
     bool exact_stringbuilder_append =
-        operation_is_exact_stringbuilder_append_rune(plan->semantic_plan, operation, NULL, NULL);
+        operation_is_exact_stringbuilder_append_rune(semantic, operation, NULL, NULL);
     bool exact_stringbuilder_to_string =
-        operation_is_exact_stringbuilder_to_string(plan->semantic_plan, operation, NULL);
+        operation_is_exact_stringbuilder_to_string(semantic, operation, NULL);
     bool exact_stringbuilder_append_string =
-        operation_is_exact_stringbuilder_append_string(plan->semantic_plan, operation, NULL);
+        operation_is_exact_stringbuilder_append_string(semantic, operation, NULL);
     /* A copy that only renames its operand carries the source's binding, so the
      * result having one is expected rather than unexplained. Same statement of
      * the shape the builder used to give it that binding. */
     uint32_t owner_forward_source = XR_SEMANTIC_INDEX_NONE;
     bool exact_owner_forward =
-        xr_semantic_owner_forward_is_exact(plan->semantic_plan, operation, &owner_forward_source);
+        xr_semantic_owner_forward_is_exact(semantic, operation, &owner_forward_source);
     uint32_t identity_copy_source = XR_SEMANTIC_INDEX_NONE;
     bool exact_identity_copy =
-        xr_semantic_identity_copy_is_exact(plan->semantic_plan, operation, &identity_copy_source);
-    bool exact_string_runes =
-        xr_semantic_string_runes_is_exact(plan->semantic_plan, operation, NULL);
+        xr_semantic_identity_copy_is_exact(semantic, operation, &identity_copy_source);
+    bool exact_string_runes = xr_semantic_string_runes_is_exact(semantic, operation, NULL);
     bool exact_map_entries_iterator =
-        semantic_map_entries_iterator_is_exact_verify(plan->semantic_plan, operation, NULL, NULL);
+        semantic_map_entries_iterator_is_exact_verify(semantic, operation, NULL, NULL);
     bool exact_map_entry_iterator_next =
-        semantic_map_entry_iterator_next_is_exact_verify(plan->semantic_plan, operation, NULL);
+        semantic_map_entry_iterator_next_is_exact_verify(semantic, operation, NULL);
     bool exact_string_slice_range =
-        xr_semantic_string_slice_range_is_exact(plan->semantic_plan, operation, NULL, NULL, NULL);
-    bool exact_rune_to_string =
-        xr_semantic_rune_to_string_is_exact(plan->semantic_plan, operation, NULL) && operation &&
-        operation->result_value == semantic_value && operation->result_type == semantic_type &&
-        operation->function == semantic_function;
+        xr_semantic_string_slice_range_is_exact(semantic, operation, NULL, NULL, NULL);
+    bool exact_rune_to_string = xr_semantic_rune_to_string_is_exact(semantic, operation, NULL) &&
+                                operation && operation->result_value == semantic_value &&
+                                operation->result_type == semantic_type &&
+                                operation->function == semantic_function;
     bool exact_json_namespace_value =
-        operation_is_exact_json_namespace_value(plan->semantic_plan, operation, NULL);
+        operation_is_exact_json_namespace_value(semantic, operation, NULL);
     bool exact_panic_info_constructor =
-        xr_semantic_panic_info_constructor_is_exact(plan->semantic_plan, operation, NULL);
+        xr_semantic_panic_info_constructor_is_exact(semantic, operation, NULL);
     /* An array member that hands back its receiver binds a dynamic result of
      * its own, exactly like the StringBuilder members that return `self`. */
     bool exact_array_member_result = false;
-    if (!operation_is_exact_array_member_scalar(plan->semantic_plan, operation, NULL, NULL,
+    if (!operation_is_exact_array_member_scalar(semantic, operation, NULL, NULL,
                                                 &exact_array_member_result))
         exact_array_member_result = false;
     bool exact_direct_callee = exact_direct_callees && exact_direct_callees[semantic_value] != 0;
     bool exact_go_callee = exact_go_callees && exact_go_callees[semantic_value] != 0;
     uint32_t semantic_operand_count = 0;
     const XrSemanticOperandRecord *semantic_operands =
-        xr_semantic_plan_operands(plan->semantic_plan, &semantic_operand_count);
+        xr_semantic_plan_operands(semantic, &semantic_operand_count);
     uint32_t go_task_callee = XR_SEMANTIC_INDEX_NONE;
-    bool exact_go_task = operation && operation->opcode == XI_GO && operation->operand_count != 0 &&
-                         operation->operand_begin < semantic_operand_count && semantic_operands &&
-                         (go_task_callee = semantic_operands[operation->operand_begin].value) !=
-                             XR_SEMANTIC_INDEX_NONE &&
-                         exact_go_callees && exact_go_callees[go_task_callee] != 0 &&
-                         xr_semantic_direct_local_go_task_result_is_exact(plan->semantic_plan,
-                                                                          operation, true, NULL);
+    bool exact_go_task =
+        operation && operation->opcode == XI_GO && operation->operand_count != 0 &&
+        operation->operand_begin < semantic_operand_count && semantic_operands &&
+        (go_task_callee = semantic_operands[operation->operand_begin].value) !=
+            XR_SEMANTIC_INDEX_NONE &&
+        exact_go_callees && exact_go_callees[go_task_callee] != 0 &&
+        xr_semantic_direct_local_go_task_result_is_exact(semantic, operation, true, NULL);
     bool exact_channel = exact_channel_values && exact_channel_values[semantic_value] != 0;
     bool exact_channel_receive =
         exact_channel_receives && exact_channel_receives[semantic_value] != 0;
@@ -4187,18 +4185,16 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         exact_source_namespaces && exact_source_namespaces[semantic_value] != 0;
     bool exact_native_module_namespace =
         exact_native_module_namespaces && exact_native_module_namespaces[semantic_value] != 0;
-    bool exact_string_byte_view =
-        semantic_string_byte_slice_view_is_exact(plan->semantic_plan, operation);
+    bool exact_string_byte_view = semantic_string_byte_slice_view_is_exact(semantic, operation);
     /* The view a range slice produces takes the same VIEW pair, re-proved from
      * the one judgement the builder published it from. */
-    bool exact_range_slice_view =
-        operation && operation->result_value == semantic_value &&
-        operation->result_type == semantic_type && operation->function == semantic_function &&
-        xr_semantic_range_slice_is_exact(plan->semantic_plan, operation, NULL);
+    bool exact_range_slice_view = operation && operation->result_value == semantic_value &&
+                                  operation->result_type == semantic_type &&
+                                  operation->function == semantic_function &&
+                                  xr_semantic_range_slice_is_exact(semantic, operation, NULL);
     const XrSemanticParameterRecord *parameter =
-        operation
-            ? NULL
-            : semantic_parameter_for_value(plan->semantic_plan, semantic_function, semantic_value);
+        operation ? NULL
+                  : semantic_parameter_for_value(semantic, semantic_function, semantic_value);
     bool exact_adt_enum =
         xr_semantic_adt_enum_type_is_exact(type) &&
         ((parameter && parameter->type == semantic_type &&
@@ -4208,37 +4204,33 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
           parameter->mode == XR_PARAM_READ && parameter->transfer_mode == XR_TRANSFER_SHARE) ||
          (operation && operation->result_value == semantic_value &&
           operation->result_type == semantic_type &&
-          (xr_semantic_adt_enum_constructor_is_exact(plan->semantic_plan, operation, NULL) ||
-           semantic_direct_local_adt_enum_result_is_exact(plan->semantic_plan, operation_index))));
+          (xr_semantic_adt_enum_constructor_is_exact(semantic, operation, NULL) ||
+           semantic_direct_local_adt_enum_result_is_exact(semantic, operation_index))));
     bool exact_adt_enum_borrowed =
         exact_adt_enum && parameter && parameter->ownership == XI_OWN_BORROWED;
-    bool exact_string_byte_parameter =
-        semantic_u8_slice_parameter_is_exact(plan->semantic_plan, parameter) &&
-        parameter->type == semantic_type;
+    bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(semantic, parameter) &&
+                                       parameter->type == semantic_type;
     uint8_t exact_tagged_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    bool exact_tagged_ref_parameter =
-        semantic_direct_local_tagged_ref_parameter_is_exact_verify(plan->semantic_plan, parameter,
-                                                                   &exact_tagged_ref_storage) &&
-        parameter->type == semantic_type;
+    bool exact_tagged_ref_parameter = semantic_direct_local_tagged_ref_parameter_is_exact_verify(
+                                          semantic, parameter, &exact_tagged_ref_storage) &&
+                                      parameter->type == semantic_type;
     /* An Array handed over by value borrows the caller's allocation for the
      * extent of the call, so it is bound to the same borrowed tagged carrier a
      * shared read of that array gets -- not to the pointer a ref parameter
      * needs. */
     uint8_t exact_array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    bool exact_array_value_parameter =
-        semantic_direct_local_array_value_parameter_is_exact_verify(plan->semantic_plan, parameter,
-                                                                    &exact_array_value_storage) &&
-        parameter->type == semantic_type;
+    bool exact_array_value_parameter = semantic_direct_local_array_value_parameter_is_exact_verify(
+                                           semantic, parameter, &exact_array_value_storage) &&
+                                       parameter->type == semantic_type;
     /* A String handed over by value. A String has no carrier other than the
      * outer tagged value, so it is bound to the same tagged binding an Array by
      * value gets; the declaration says whether the callee borrows the caller's
      * allocation or holds an owning reference it releases itself, and only the
      * ownership on the row differs between the two. */
     bool string_parameter_callee_owns = false;
-    bool exact_string_value_parameter =
-        xr_semantic_direct_local_string_value_parameter_is_exact(plan->semantic_plan, parameter,
-                                                                 &string_parameter_callee_owns) &&
-        parameter->type == semantic_type;
+    bool exact_string_value_parameter = xr_semantic_direct_local_string_value_parameter_is_exact(
+                                            semantic, parameter, &string_parameter_callee_owns) &&
+                                        parameter->type == semantic_type;
     /* Whether the callee owns the allocation is the parameter's own recorded
      * ownership, never a property of the family -- the same way a class
      * receiver and an ADT enum state theirs. */
@@ -4249,7 +4241,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     bool exact_direct_array_result =
         operation && operation->result_value == semantic_value &&
         operation->result_type == semantic_type &&
-        semantic_direct_local_array_result_is_exact_verify(plan->semantic_plan, operation_index);
+        semantic_direct_local_array_result_is_exact_verify(semantic, operation_index);
     /* Recomputed through the shared judgement for the same reason the class
      * object and the instance are. A receiver is the one value in the family
      * whose declaration its type row cannot name, so the judgement reads it off
@@ -4258,14 +4250,13 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
      * with, stays unproven. */
     uint32_t receiver_parameter =
         operation ? XR_SEMANTIC_INDEX_NONE
-                  : xr_semantic_class_parameter_for_value(plan->semantic_plan, semantic_value);
+                  : xr_semantic_class_parameter_for_value(semantic, semantic_value);
     const XrSemanticParameterRecord *receiver_record =
-        xr_semantic_plan_parameter(plan->semantic_plan, receiver_parameter);
-    bool exact_class_receiver =
-        xr_semantic_class_instance_parameter_source_class(
-            plan->semantic_plan, receiver_parameter) != XR_SEMANTIC_INDEX_NONE &&
-        receiver_record && receiver_record->type == semantic_type &&
-        receiver_record->function == semantic_function;
+        xr_semantic_plan_parameter(semantic, receiver_parameter);
+    bool exact_class_receiver = xr_semantic_class_instance_parameter_source_class(
+                                    semantic, receiver_parameter) != XR_SEMANTIC_INDEX_NONE &&
+                                receiver_record && receiver_record->type == semantic_type &&
+                                receiver_record->function == semantic_function;
     /* Whether the receiver owns its allocation is the parameter's own recorded
      * ownership, never a property of the family. */
     bool exact_class_receiver_borrowed =
@@ -4306,9 +4297,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
      * remain a hard refusal instead of silently
      * recovering an answer. */
     XrVerifyLeafProgramShape leaf_program = {0};
-    bool leaf_family = semantic_is_leaf_program_family(plan->semantic_plan);
-    bool leaf_shape_exact =
-        leaf_family && verify_leaf_program_shape(plan->semantic_plan, &leaf_program);
+    bool leaf_family = semantic_is_leaf_program_family(semantic);
+    bool leaf_shape_exact = leaf_family && verify_leaf_program_shape(semantic, &leaf_program);
     bool exact_leaf_aggregate_type = leaf_shape_exact && leaf_program.aggregate_binding &&
                                      leaf_program.aggregate_binding->semantic_type == semantic_type;
     bool exact_direct_aggregate_result = operation && operation->result_value == semantic_value &&
@@ -4317,9 +4307,9 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                                          leaf_program.operation == operation &&
                                          leaf_program.call_binding->operation == operation_index;
     XrVerifyProductProgramShape product_program = {0};
-    bool product_family = semantic_is_product_program_family(plan->semantic_plan);
+    bool product_family = semantic_is_product_program_family(semantic);
     bool product_shape_exact =
-        product_family && verify_product_program_shape(plan->semantic_plan, &product_program);
+        product_family && verify_product_program_shape(semantic, &product_program);
     bool exact_product_type = product_shape_exact && product_program.product &&
                               product_program.product->semantic_type == semantic_type;
     bool exact_direct_product_result = false;
@@ -4344,8 +4334,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                  (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0)
             aggregate = -1;
         else
-            aggregate = semantic_aggregate_eligibility(plan->semantic_plan, semantic_type,
-                                                       aggregate_stack, 0);
+            aggregate = semantic_aggregate_eligibility(semantic, semantic_type, aggregate_stack, 0);
     }
     int expected_layout = -1;
     if (exact_heap_closure || exact_panic_catch || exact_dynamic_value || exact_array_allocation ||
@@ -4542,36 +4531,44 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     return true;
 }
 
-static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_direct_callees,
-                              const uint8_t *exact_go_callees, const uint8_t *exact_channel_values,
-                              const uint8_t *exact_channel_receives,
-                              const uint8_t *exact_source_namespaces,
-                              const uint8_t *exact_native_module_namespaces, char *error,
-                              size_t error_size) {
+/* One module's values. Its SemanticPlan owns a value space that is dense in
+ * itself, so the coverage bitmap is allocated per module; slot indices are
+ * global, so every module marks into the one bitmap the caller owns and the
+ * completeness check waits until all of them have been read. */
+static bool verify_value_reps_partition(
+    const XrTargetPlan *plan, const XrTargetPartitionView *view,
+    const uint8_t *exact_direct_callees, const uint8_t *exact_go_callees,
+    const uint8_t *exact_channel_values, const uint8_t *exact_channel_receives,
+    const uint8_t *exact_source_namespaces, const uint8_t *exact_native_module_namespaces,
+    uint8_t *bound_slots, uint32_t *failed_value, uint32_t *failed_type, uint32_t *failed_opcode,
+    uint32_t *failure_reason, const XrSemanticPlan **failed_semantic, char *error,
+    size_t error_size) {
+    const XrSemanticPlan *semantic = view->semantic;
     uint32_t expected_values = 0;
-    size_t semantic_functions = xr_semantic_plan_function_count(plan->semantic_plan);
+    size_t semantic_functions = xr_semantic_plan_function_count(semantic);
     if (semantic_functions > UINT32_MAX)
         return report(error, error_size, "XR_EXEC_5003", "semantic function index budget overflow");
-    if (plan->functions_count != semantic_functions)
+    if (view->range.functions_count != semantic_functions)
         return report(error, error_size, "XR_TARGET_1001",
                       "target functions do not cover semantic value ownership");
     for (uint32_t function_index = 0; function_index < (uint32_t) semantic_functions;
          function_index++) {
         const XrSemanticFunctionRecord *function =
-            xr_semantic_plan_function(plan->semantic_plan, function_index);
+            xr_semantic_plan_function(semantic, function_index);
         if (!function || function->value_begin != expected_values ||
             function->value_count > UINT32_MAX - expected_values)
             return report(error, error_size, "XR_TARGET_1001",
-                          "semantic value ranges are not globally dense");
+                          "semantic value ranges are not dense within their module");
         expected_values += function->value_count;
     }
     if (expected_values > SIZE_MAX / sizeof(uint32_t))
         return report(error, error_size, "XR_EXEC_5003", "value representation budget overflow");
     uint32_t previous_value = 0;
-    for (uint32_t index = 0; index < plan->value_reps_count; index++) {
-        const XrTargetValueRepRecord *record = &plan->value_reps[index];
+    for (uint32_t local = 0; local < view->range.value_reps_count; local++) {
+        const XrTargetValueRepRecord *record =
+            &plan->value_reps[view->range.value_reps_begin + local];
         if (record->semantic_value >= expected_values ||
-            (index && record->semantic_value <= previous_value) ||
+            (local && record->semantic_value <= previous_value) ||
             record->register_rep >= plan->machine_reps_count ||
             record->memory_rep >= plan->machine_reps_count ||
             !machine_rep_allows_conversion(plan, record->register_rep, record->memory_rep))
@@ -4579,55 +4576,42 @@ static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_dir
                           "value representation binding is unordered, invalid, or not convertible");
         previous_value = record->semantic_value;
     }
-    uint8_t *defined = NULL;
-    uint8_t *bound_slots = NULL;
-    uint8_t *deferred_functions = NULL;
-    if (expected_values) {
-        defined = (uint8_t *) xr_calloc(expected_values, sizeof(*defined));
-    }
-    if (plan->slots_count)
-        bound_slots = (uint8_t *) xr_calloc(plan->slots_count, sizeof(*bound_slots));
-    if (semantic_functions)
-        deferred_functions = (uint8_t *) xr_calloc(semantic_functions, sizeof(*deferred_functions));
-    if ((expected_values && !defined) || (plan->slots_count && !bound_slots) ||
-        (semantic_functions && !deferred_functions) ||
-        xr_semantic_mark_coroutine_state_functions(plan->semantic_plan, deferred_functions,
+    uint8_t *defined =
+        expected_values ? (uint8_t *) xr_calloc(expected_values, sizeof(*defined)) : NULL;
+    uint8_t *deferred_functions =
+        semantic_functions ? (uint8_t *) xr_calloc(semantic_functions, sizeof(*deferred_functions))
+                           : NULL;
+    if ((expected_values && !defined) || (semantic_functions && !deferred_functions) ||
+        xr_semantic_mark_coroutine_state_functions(semantic, deferred_functions,
                                                    (uint32_t) semantic_functions) !=
             XR_SEMANTIC_COROUTINE_STATE_MARK_OK) {
         xr_free(defined);
-        xr_free(bound_slots);
         xr_free(deferred_functions);
         return report(error, error_size, "XR_EXEC_5003",
                       "value representation verifier allocation failed");
     }
     bool valid = true;
-    uint32_t failed_value = XR_SEMANTIC_INDEX_NONE;
-    uint32_t failed_type = XR_SEMANTIC_INDEX_NONE;
-    uint32_t failed_opcode = XI_OP_COUNT;
-    uint32_t failure_reason = 0;
-    uint32_t parameters = (uint32_t) xr_semantic_plan_parameter_count(plan->semantic_plan);
+    uint32_t parameters = (uint32_t) xr_semantic_plan_parameter_count(semantic);
     for (uint32_t index = 0; valid && index < parameters; index++) {
-        const XrSemanticParameterRecord *parameter =
-            xr_semantic_plan_parameter(plan->semantic_plan, index);
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(semantic, index);
         if (!parameter || parameter->value >= expected_values)
             valid = false;
         else if (!defined[parameter->value]) {
             defined[parameter->value] = 1;
             valid = verify_value_binding(
-                plan, parameter->value, parameter->type, parameter->function, NULL,
+                plan, semantic, parameter->value, parameter->type, parameter->function, NULL,
                 XR_SEMANTIC_INDEX_NONE, exact_direct_callees, exact_go_callees,
                 exact_channel_values, exact_channel_receives, exact_source_namespaces,
-                exact_native_module_namespaces, bound_slots, deferred_functions, &failure_reason);
+                exact_native_module_namespaces, bound_slots, deferred_functions, failure_reason);
             if (!valid) {
-                failed_value = parameter->value;
-                failed_type = parameter->type;
+                *failed_value = parameter->value;
+                *failed_type = parameter->type;
             }
         }
     }
-    uint32_t operations = (uint32_t) xr_semantic_plan_operation_count(plan->semantic_plan);
+    uint32_t operations = (uint32_t) xr_semantic_plan_operation_count(semantic);
     for (uint32_t index = 0; valid && index < operations; index++) {
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(plan->semantic_plan, index);
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, index);
         if (!operation)
             valid = false;
         else if (operation->result_value != XR_SEMANTIC_INDEX_NONE) {
@@ -4636,35 +4620,76 @@ static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_dir
             else if (!defined[operation->result_value]) {
                 defined[operation->result_value] = 1;
                 valid = verify_value_binding(
-                    plan, operation->result_value, operation->result_type, operation->function,
-                    operation, index, exact_direct_callees, exact_go_callees, exact_channel_values,
-                    exact_channel_receives, exact_source_namespaces, exact_native_module_namespaces,
-                    bound_slots, deferred_functions, &failure_reason);
+                    plan, semantic, operation->result_value, operation->result_type,
+                    operation->function, operation, index, exact_direct_callees, exact_go_callees,
+                    exact_channel_values, exact_channel_receives, exact_source_namespaces,
+                    exact_native_module_namespaces, bound_slots, deferred_functions,
+                    failure_reason);
                 if (!valid) {
-                    failed_value = operation->result_value;
-                    failed_type = operation->result_type;
-                    failed_opcode = operation->opcode;
+                    *failed_value = operation->result_value;
+                    *failed_type = operation->result_type;
+                    *failed_opcode = operation->opcode;
                 }
             }
         }
     }
-    for (uint32_t value = 0; value < plan->value_reps_count; value++) {
-        const XrTargetValueRepRecord *record = &plan->value_reps[value];
+    for (uint32_t local = 0; valid && local < view->range.value_reps_count; local++) {
+        const XrTargetValueRepRecord *record =
+            &plan->value_reps[view->range.value_reps_begin + local];
         if (!defined[record->semantic_value])
             valid = false;
+    }
+    xr_free(defined);
+    xr_free(deferred_functions);
+    if (!valid && !*failed_semantic)
+        *failed_semantic = semantic;
+    return valid;
+}
+
+static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_direct_callees,
+                              const uint8_t *exact_go_callees, const uint8_t *exact_channel_values,
+                              const uint8_t *exact_channel_receives,
+                              const uint8_t *exact_source_namespaces,
+                              const uint8_t *exact_native_module_namespaces, char *error,
+                              size_t error_size) {
+    uint8_t *bound_slots = NULL;
+    if (plan->slots_count) {
+        bound_slots = (uint8_t *) xr_calloc(plan->slots_count, sizeof(*bound_slots));
+        if (!bound_slots)
+            return report(error, error_size, "XR_EXEC_5003",
+                          "value representation verifier allocation failed");
+    }
+    uint32_t failed_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t failed_type = XR_SEMANTIC_INDEX_NONE;
+    uint32_t failed_opcode = XI_OP_COUNT;
+    uint32_t failure_reason = 0;
+    const XrSemanticPlan *failed_semantic = NULL;
+    bool valid = true;
+    for (uint32_t partition = 0; valid && partition < verifier_partition_count(plan); partition++) {
+        XrTargetPartitionView view;
+        if (!verifier_partition_view(plan, partition, &view)) {
+            xr_free(bound_slots);
+            return report(error, error_size, "XR_TARGET_1001",
+                          "target functions do not cover semantic value ownership");
+        }
+        valid = verify_value_reps_partition(
+            plan, &view, exact_direct_callees, exact_go_callees, exact_channel_values,
+            exact_channel_receives, exact_source_namespaces, exact_native_module_namespaces,
+            bound_slots, &failed_value, &failed_type, &failed_opcode, &failure_reason,
+            &failed_semantic, error, error_size);
     }
     for (uint32_t slot = 0; valid && slot < plan->slots_count; slot++)
         if (!bound_slots[slot])
             valid = false;
-    xr_free(defined);
     xr_free(bound_slots);
-    xr_free(deferred_functions);
     if (!valid) {
+        /* A shape refusal already wrote its own diagnosis; only a binding
+         * failure, which names a module, is reported here. */
         const XrSemanticTypeRecord *failed_semantic_type =
-            failed_type == XR_SEMANTIC_INDEX_NONE
+            failed_type == XR_SEMANTIC_INDEX_NONE || !failed_semantic
                 ? NULL
-                : xr_semantic_plan_type(plan->semantic_plan, failed_type);
-        if (error && error_size)
+                : xr_semantic_plan_type(failed_semantic, failed_type);
+        if (failed_semantic && error && error_size)
             snprintf(error, error_size,
                      "XR_TARGET_1001: value representation binding is incomplete, "
                      "incompatible, or unlocated "
@@ -4677,6 +4702,9 @@ static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_dir
                      failed_opcode < XI_OP_COUNT ? xi_generated_op_name((XiOp) failed_opcode)
                                                  : "<parameter>",
                      failure_reason);
+        else if (error && error_size && !error[0])
+            snprintf(error, error_size,
+                     "XR_TARGET_1001: target slots are not all bound to a value");
         return false;
     }
     return true;
