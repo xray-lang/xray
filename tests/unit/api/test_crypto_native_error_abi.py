@@ -20,6 +20,7 @@ def _cache_root() -> Path:
 RANDOM_BYTES_FIXTURE = ROOT / "tests/aot/basic/crypto_random_bytes_typed_error.xr"
 DECRYPT_FIXTURE = ROOT / "tests/aot/basic/crypto_decrypt_typed_error.xr"
 CORE_DEF = ROOT / "stdlib/defs/core.def"
+CRYPTO_SOURCE = ROOT / "stdlib/crypto/crypto.xr"
 VM_RUNTIME = ROOT / "stdlib/crypto/crypto.c"
 AOT_RUNTIME = ROOT / "src/aot/xrt_crypto.h"
 GENERATED = ROOT / "src/frontend/analyzer/xanalyzer_builtins_generated.h"
@@ -54,63 +55,55 @@ class CryptoNativeErrorAbiTest(unittest.TestCase):
         )
 
     def test_public_contract_is_typed_and_preswitch_string_return(self) -> None:
+        """randomBytes answers a hex string and refuses a bad length as a typed
+        CryptoError.  Its contract moved to crypto.xr when the module's digests
+        and CSPRNG surface became Xray; decrypt is still declared in core.def,
+        so the two are checked against the source that owns each."""
         core_def = CORE_DEF.read_text(encoding="utf-8")
         generated = GENERATED.read_text(encoding="utf-8")
-        random_bytes_def = core_def[
-            core_def.index("fn randomBytes {") : core_def.index("fn uuid {")
+        crypto_source = CRYPTO_SOURCE.read_text(encoding="utf-8")
+        random_bytes_body = crypto_source[
+            crypto_source.index("export fn randomBytes(") : crypto_source.index("export fn uuid(")
         ]
         decrypt_def = core_def[
-            core_def.index("fn decrypt {") : core_def.index("fn timingSafeEqual {")
+            core_def.index("fn decrypt {") : core_def.index("\n}\n", core_def.index("fn decrypt {"))
         ]
 
-        self.assertIn('fn randomBytes {\n    signature: "(n: i64): string"', core_def)
-        self.assertIn('effect: "CryptoError.InvalidLength"', random_bytes_def)
-        self.assertNotIn("@errors(", random_bytes_def)
-        self.assertNotIn("Array<u8>", random_bytes_def)
+        self.assertIn("export fn randomBytes(n: i64) -> string", crypto_source)
+        self.assertIn("throw CryptoError.InvalidLength", random_bytes_body)
+        self.assertNotIn("Array<u8>", random_bytes_body)
+        self.assertNotIn("fn randomBytes {", core_def)
         self.assertIn('fn decrypt {\n    signature: "(key: string, ciphertext: string): string?"', core_def)
         self.assertIn('effect: "CryptoError.InvalidLength"', decrypt_def)
         self.assertNotIn("@errors(", decrypt_def)
-        self.assertIn('"randomBytes", "(n: i64): string"', generated)
         self.assertIn('"decrypt", "(key: string, ciphertext: string): string?"', generated)
         self.assertIn("XA_EFFECT_CONTRACT_ERRORS", generated)
         self.assertIn('"CryptoError.InvalidLength"', generated)
 
     def test_runtime_sources_route_invalid_length_to_typed_error_channel(self) -> None:
+        """decrypt is the remaining native entry point that reports a typed
+        length error, so the VM and AOT runtimes must still publish it through
+        the builtin-enum channel rather than answering a bare null.  The
+        randomBytes half of this check moved to crypto.xr with the function."""
         vm_runtime = VM_RUNTIME.read_text(encoding="utf-8")
         aot_runtime = AOT_RUNTIME.read_text(encoding="utf-8")
-        vm_random_bytes = vm_runtime[
-            vm_runtime.index("static XrValue crypto_random_bytes") :
-            vm_runtime.index("static XrValue crypto_uuid")
-        ]
-        aot_random_bytes = aot_runtime[
-            aot_runtime.index("static inline XrValue xrt_crypto_random_bytes") :
-            aot_runtime.index("static inline XrValue xrt_crypto_uuid")
-        ]
         vm_decrypt = vm_runtime[
             vm_runtime.index("static XrValue crypto_decrypt") :
-            vm_runtime.index("// Constant-time comparison")
+            vm_runtime.index("\n}\n", vm_runtime.index("static XrValue crypto_decrypt"))
         ]
         aot_decrypt = aot_runtime[
             aot_runtime.index("static inline XrValue xrt_crypto_decrypt") :
-            aot_runtime.index("static inline XrValue xrt_crypto_hmac")
+            aot_runtime.index("\n}\n", aot_runtime.index("static inline XrValue xrt_crypto_decrypt"))
         ]
 
-        self.assertIn("XR_GLOBAL_VAR_CRYPTO_ERROR", vm_random_bytes)
-        self.assertIn("crypto_publish_builtin_enum_error", vm_random_bytes)
         self.assertIn("XR_GLOBAL_VAR_CRYPTO_ERROR", vm_decrypt)
         self.assertIn("crypto_publish_builtin_enum_error", vm_decrypt)
         self.assertIn("crypto.decrypt invalid ciphertext length", vm_decrypt)
         self.assertIn("xr_builtin_enum_error_construct", vm_runtime)
         self.assertIn("if (ctx && !XR_IS_NULL(ctx->pending_error))", vm_runtime)
         self.assertIn("ctx->pending_error.ptr == result.value.ptr", vm_runtime)
-        self.assertIn('"CryptoError", "InvalidLength"', aot_random_bytes)
         self.assertIn('"CryptoError", "InvalidLength"', aot_decrypt)
         self.assertIn("xrt_pending_error = xrt_enum_aggregate_box(err);", aot_runtime)
-        self.assertNotIn("if (len <= 0 || len > 1024)\n        return xr_null();", vm_random_bytes)
-        self.assertNotIn(
-            "if (len64 <= 0 || len64 > 1024)\n        return XR_NULL_VAL;",
-            aot_random_bytes,
-        )
 
     def assert_vm_native_aot_parity(self, fixture: Path, expected: bytes, native_stem: str) -> None:
         vm = self.run_checked([str(self.xray), str(fixture)]).stdout.replace(b"\r\n", b"\n")

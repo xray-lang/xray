@@ -199,16 +199,8 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"compress", "zlibDecompress", "(data: string): string", "Zlib decompress", "compress_zlib_decompress", "normal", "", "xrt_compress_zlib_decompress", "s", "value", "", "compress.zlibDecompress", "", "alloc", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"compress", "isGzip", "(data: string): bool", "Check if gzip data", "compress_is_gzip", "normal", "", "xrt_compress_is_gzip", "s", "value", "", "compress.isGzip", "", "alloc", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"compress", "isZlib", "(data: string): bool", "Check if zlib data", "compress_is_zlib", "normal", "", "xrt_compress_is_zlib", "s", "value", "", "compress.isZlib", "", "alloc", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "md5", "(data: string): string", "Compute MD5 hash", "crypto_md5", "normal", "", "xrt_crypto_md5", "s", "value", "", "crypto.md5", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "sha1", "(data: string): string", "Compute SHA-1 hash", "crypto_sha1", "normal", "", "xrt_crypto_sha1", "s", "value", "", "crypto.sha1", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "sha256", "(data: string): string", "Compute SHA-256 hash", "crypto_sha256", "normal", "", "xrt_crypto_sha256", "s", "value", "", "crypto.sha256", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "sha512", "(data: string): string", "Compute SHA-512 hash", "crypto_sha512", "normal", "", "xrt_crypto_sha512", "s", "value", "", "crypto.sha512", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "hmac", "(algo: string, key: string, data: string): string?", "Compute HMAC", "crypto_hmac", "normal", "", "xrt_crypto_hmac", "sss", "value", "", "crypto.hmac", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "randomBytes", "(n: i64): string", "Generate random bytes", "crypto_random_bytes", "normal", "", "xrt_crypto_random_bytes", "v", "value", "", "crypto.randomBytes", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "uuid", "(): string", "Generate UUID v4", "crypto_uuid", "normal", "", "xrt_crypto_uuid", "", "value", "", "crypto.uuid", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", "crypto_encrypt", "normal", "", "xrt_crypto_encrypt", "ss", "value", "", "crypto.encrypt", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", "crypto_decrypt", "normal", "", "xrt_crypto_decrypt", "ss", "value", "", "crypto.decrypt", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"crypto", "timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", "crypto_timing_safe_equal", "normal", "", "xrt_crypto_timing_safe_equal", "ss", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"crypto", "__randomBytes", "(n: i64): Array<u8>", "Read n bytes from the platform CSPRNG", "crypto_random_bytes_raw", "normal", "", "xrt_crypto_random_bytes_raw", "v", "value", "", "crypto.__randomBytes", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"crypto", "__timingSafeEqualBytes", "(a: Array<u8>, b: Array<u8>): bool", "Compare two byte buffers in time independent of where they differ", "crypto_timing_safe_equal_bytes", "normal", "", "xrt_crypto_timing_safe_equal_bytes", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "OsMutex", "(): OsMutex", "Create an OS-domain mutex", "sys_mutex_new", "normal", "", "xrt_sys_mutex_new", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__osMutexNew", "(): OsMutex", "Create an OS-domain mutex for sys module internals", "sys_mutex_new", "normal", "", "xrt_sys_mutex_new", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "OsRwLock", "(): OsRwLock", "Create an OS-domain read-write lock", "sys_rwlock_new", "normal", "", "xrt_sys_rwlock_new", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -310,11 +302,11 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"io", "__writeFileBytes", "(path: Path, data: Array<u8>): bool", "Write byte array to file", "io_writeFileBytes", "yieldable", "", "xrt_io_write_file_bytes", "pv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", "io_writeStderr", "normal", "", "xrt_io_write_stderr", "s", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", "io_writeStdout", "normal", "", "xrt_io_write_stdout", "s", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"runtime", "liveBytes", "(): i64", "Get live memory usage in bytes", "runtime_live_bytes", "normal", "", "xr_aot_runtime_live_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"runtime", "liveObjects", "(): i64", "Get live object count", "runtime_live_objects", "normal", "", "xr_aot_runtime_live_objects", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"runtime", "sharedBytes", "(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak", "runtime_shared_bytes", "normal", "", "xr_aot_runtime_shared_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"runtime", "staticBytes", "(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", "runtime_static_bytes", "normal", "", "xr_aot_runtime_static_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"runtime", "info", "(): RuntimeInfo", "Get a typed snapshot of the current execution-local reclamation domain", "runtime_info", "normal", "", "xr_aot_runtime_info", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"runtime", "__stats", "(): __RuntimeStats", "Read the current execution-local reclamation domain counters", "runtime_stats", "normal", "", "xr_aot_runtime_info", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"runtime", "__liveBytes", "(): i64", "Live memory bytes in the current execution-local reclamation domain", "runtime_live_bytes", "normal", "", "xr_aot_runtime_live_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"runtime", "__liveObjects", "(): i64", "Live object count in the current execution-local reclamation domain", "runtime_live_objects", "normal", "", "xr_aot_runtime_live_objects", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"runtime", "__sharedLiveBytes", "(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide)", "runtime_shared_bytes", "normal", "", "xr_aot_runtime_shared_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"runtime", "__staticAllocBytes", "(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide)", "runtime_static_bytes", "normal", "", "xr_aot_runtime_static_bytes", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"mem", "fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", "mem_fence", "normal", "", "xrt_mem_fence", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "prefetch", "(ptr: Ptr<u8>, rw: i64): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", "mem_prefetch", "normal", "", "xrt_mem_prefetch", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", "mem_cache_flush", "normal", "", "xrt_mem_cache_flush", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -409,14 +401,13 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_runtime_RuntimeInfo[] = {
-    {"runtime", "RuntimeInfo", "liveBytes", "i64", true},
-    {"runtime", "RuntimeInfo", "liveKB", "f64", true},
-    {"runtime", "RuntimeInfo", "liveObjects", "i64", true},
-    {"runtime", "RuntimeInfo", "finalizerCount", "i64", true},
-    {"runtime", "RuntimeInfo", "blocks", "i64", true},
-    {"runtime", "RuntimeInfo", "freeBlocks", "i64", true},
-    {"runtime", "RuntimeInfo", "fullBlocks", "i64", true},
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_runtime___RuntimeStats[] = {
+    {"runtime", "__RuntimeStats", "liveBytes", "i64", true},
+    {"runtime", "__RuntimeStats", "liveObjects", "i64", true},
+    {"runtime", "__RuntimeStats", "finalizerCount", "i64", true},
+    {"runtime", "__RuntimeStats", "blocks", "i64", true},
+    {"runtime", "__RuntimeStats", "freeBlocks", "i64", true},
+    {"runtime", "__RuntimeStats", "fullBlocks", "i64", true},
 };
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
@@ -484,7 +475,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_Cluster
 };
 
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
-    {"runtime", "RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", xr_stdlib_object_fields_runtime_RuntimeInfo, 7, true},
+    {"runtime", "__RuntimeStats", "Raw counters read in one pass from the current execution-local reclamation domain", xr_stdlib_object_fields_runtime___RuntimeStats, 6, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},

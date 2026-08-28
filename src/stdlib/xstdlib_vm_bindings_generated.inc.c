@@ -60,16 +60,8 @@ static void xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule 
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_CRYPTO
 static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "md5", crypto_md5);
-    XRS_EXPORT(module, isolate, "sha1", crypto_sha1);
-    XRS_EXPORT(module, isolate, "sha256", crypto_sha256);
-    XRS_EXPORT(module, isolate, "sha512", crypto_sha512);
-    XRS_EXPORT(module, isolate, "hmac", crypto_hmac);
-    XRS_EXPORT(module, isolate, "randomBytes", crypto_random_bytes);
-    XRS_EXPORT(module, isolate, "uuid", crypto_uuid);
-    XRS_EXPORT(module, isolate, "encrypt", crypto_encrypt);
-    XRS_EXPORT(module, isolate, "decrypt", crypto_decrypt);
-    XRS_EXPORT(module, isolate, "timingSafeEqual", crypto_timing_safe_equal);
+    XRS_EXPORT(module, isolate, "__randomBytes", crypto_random_bytes_raw);
+    XRS_EXPORT(module, isolate, "__timingSafeEqualBytes", crypto_timing_safe_equal_bytes);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 
@@ -393,11 +385,11 @@ static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *mo
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_RUNTIME
 static void xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "liveBytes", runtime_live_bytes);
-    XRS_EXPORT(module, isolate, "liveObjects", runtime_live_objects);
-    XRS_EXPORT(module, isolate, "sharedBytes", runtime_shared_bytes);
-    XRS_EXPORT(module, isolate, "staticBytes", runtime_static_bytes);
-    XRS_EXPORT(module, isolate, "info", runtime_info);
+    XRS_EXPORT(module, isolate, "__stats", runtime_stats);
+    XRS_EXPORT(module, isolate, "__liveBytes", runtime_live_bytes);
+    XRS_EXPORT(module, isolate, "__liveObjects", runtime_live_objects);
+    XRS_EXPORT(module, isolate, "__sharedLiveBytes", runtime_shared_bytes);
+    XRS_EXPORT(module, isolate, "__staticAllocBytes", runtime_static_bytes);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_RUNTIME */
 

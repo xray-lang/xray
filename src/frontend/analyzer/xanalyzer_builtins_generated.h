@@ -240,28 +240,12 @@ static const XaBuiltinMember g_gen_compress_functions[] = {
 };
 #define GEN_COMPRESS_FUNCTION_COUNT 10
 
-static const char *g_gen_crypto_randombytes_5_errors[] = {
-    "CryptoError.InvalidLength",
-};
-
-static const char *g_gen_crypto_decrypt_8_errors[] = {
-    "CryptoError.InvalidLength",
-};
-
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
-    {"md5", "(data: string): string", "Compute MD5 hash", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"sha1", "(data: string): string", "Compute SHA-1 hash", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"sha256", "(data: string): string", "Compute SHA-256 hash", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"sha512", "(data: string): string", "Compute SHA-512 hash", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"hmac", "(algo: string, key: string, data: string): string?", "Compute HMAC", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"randomBytes", "(n: i64): string", "Generate random bytes", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_randombytes_5_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"uuid", "(): string", "Generate UUID v4", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_decrypt_8_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__randomBytes", "(n: i64): Array<u8>", "Read n bytes from the platform CSPRNG", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__timingSafeEqualBytes", "(a: Array<u8>, b: Array<u8>): bool", "Compare two byte buffers in time independent of where they differ", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_CRYPTO_FUNCTION_COUNT 10
+#define GEN_CRYPTO_FUNCTION_COUNT 2
 
 // http2 module functions
 static const XaBuiltinMember g_gen_http2_functions[] = {
@@ -557,10 +541,9 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
 };
 #define GEN_REGEX_FUNCTION_COUNT 13
 
-// runtime.RuntimeInfo object fields
-static const XaBuiltinObjectField g_gen_runtime_runtimeinfo_object_fields[] = {
+// runtime.__RuntimeStats object fields
+static const XaBuiltinObjectField g_gen_runtime___runtimestats_object_fields[] = {
     {"liveBytes", "i64"},
-    {"liveKB", "f64"},
     {"liveObjects", "i64"},
     {"finalizerCount", "i64"},
     {"blocks", "i64"},
@@ -569,17 +552,17 @@ static const XaBuiltinObjectField g_gen_runtime_runtimeinfo_object_fields[] = {
 };
 
 static const XaBuiltinObjectShape g_gen_runtime_object_shapes[] = {
-    {"RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", g_gen_runtime_runtimeinfo_object_fields, 7, true},
+    {"__RuntimeStats", "Raw counters read in one pass from the current execution-local reclamation domain", g_gen_runtime___runtimestats_object_fields, 6, true},
 };
 #define GEN_RUNTIME_OBJECT_SHAPE_COUNT 1
 
 // runtime module functions
 static const XaBuiltinMember g_gen_runtime_functions[] = {
-    {"liveBytes", "(): i64", "Get live memory usage in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"liveObjects", "(): i64", "Get live object count", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"sharedBytes", "(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"staticBytes", "(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"info", "(): RuntimeInfo", "Get a typed snapshot of the current execution-local reclamation domain", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__stats", "(): __RuntimeStats", "Read the current execution-local reclamation domain counters", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__liveBytes", "(): i64", "Live memory bytes in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__liveObjects", "(): i64", "Live object count in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sharedLiveBytes", "(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__staticAllocBytes", "(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_RUNTIME_FUNCTION_COUNT 5
 

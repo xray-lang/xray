@@ -1,0 +1,807 @@
+// crypto — hash and MAC kernels written in Xray.
+//
+// The four digests and the MAC built on them need nothing from the host: they
+// are byte arithmetic, and the language carries the 32-bit and 64-bit shifts
+// and wrapping addition they are defined in terms of. Only the entropy source
+// stays native, because a CSPRNG is a property of the operating system rather
+// than of the algorithm.
+//
+// The kernels work on Array<u8> and answer Array<u8>. The public surface takes
+// and answers strings because that is what the module has always published;
+// the conversion is stated once, here.
+
+const MASK32: i64 = 4294967295
+
+const MD5_K: Array<i64> = [
+    3614090360, 3905402710, 606105819, 3250441966, 4118548399, 1200080426,
+    2821735955, 4249261313, 1770035416, 2336552879, 4294925233, 2304563134,
+    1804603682, 4254626195, 2792965006, 1236535329, 4129170786, 3225465664,
+    643717713, 3921069994, 3593408605, 38016083, 3634488961, 3889429448,
+    568446438, 3275163606, 4107603335, 1163531501, 2850285829, 4243563512,
+    1735328473, 2368359562, 4294588738, 2272392833, 1839030562, 4259657740,
+    2763975236, 1272893353, 4139469664, 3200236656, 681279174, 3936430074,
+    3572445317, 76029189, 3654602809, 3873151461, 530742520, 3299628645,
+    4096336452, 1126891415, 2878612391, 4237533241, 1700485571, 2399980690,
+    4293915773, 2240044497, 1873313359, 4264355552, 2734768916, 1309151649,
+    4149444226, 3174756917, 718787259, 3951481745]
+
+const MD5_S: Array<i64> = [
+    7, 12, 17, 22, 7, 12, 17, 22,
+    7, 12, 17, 22, 7, 12, 17, 22,
+    5, 9, 14, 20, 5, 9, 14, 20,
+    5, 9, 14, 20, 5, 9, 14, 20,
+    4, 11, 16, 23, 4, 11, 16, 23,
+    4, 11, 16, 23, 4, 11, 16, 23,
+    6, 10, 15, 21, 6, 10, 15, 21,
+    6, 10, 15, 21, 6, 10, 15, 21]
+
+const K256: Array<i64> = [
+    1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993,
+    2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987,
+    1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774,
+    264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986,
+    2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711,
+    113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291,
+    1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411,
+    3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344,
+    430227734, 506948616, 659060556, 883997877, 958139571, 1322822218,
+    1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424,
+    2428436474, 2756734187, 3204031479, 3329325298]
+
+const K512: Array<u64> = [
+    4794697086780616226, 8158064640168781261, 13096744586834688815, 16840607885511220156,
+    4131703408338449720, 6480981068601479193, 10538285296894168987, 12329834152419229976,
+    15566598209576043074, 1334009975649890238, 2608012711638119052, 6128411473006802146,
+    8268148722764581231, 9286055187155687089, 11230858885718282805, 13951009754708518548,
+    16472876342353939154, 17275323862435702243, 1135362057144423861, 2597628984639134821,
+    3308224258029322869, 5365058923640841347, 6679025012923562964, 8573033837759648693,
+    10970295158949994411, 12119686244451234320, 12683024718118986047, 13788192230050041572,
+    14330467153632333762, 15395433587784984357, 489312712824947311, 1452737877330783856,
+    2861767655752347644, 3322285676063803686, 5560940570517711597, 5996557281743188959,
+    7280758554555802590, 8532644243296465576, 9350256976987008742, 10552545826968843579,
+    11727347734174303076, 12113106623233404929, 14000437183269869457, 14369950271660146224,
+    15101387698204529176, 15463397548674623760, 17586052441742319658, 1182934255886127544,
+    1847814050463011016, 2177327727835720531, 2830643537854262169, 3796741975233480872,
+    4115178125766777443, 5681478168544905931, 6601373596472566643, 7507060721942968483,
+    8399075790359081724, 8693463985226723168, 9568029438360202098, 10144078919501101548,
+    10430055236837252648, 11840083180663258601, 13761210420658862357, 14299343276471374635,
+    14566680578165727644, 15097957966210449927, 16922976911328602910, 17689382322260857208,
+    500013540394364858, 748580250866718886, 1242879168328830382, 1977374033974150939,
+    2944078676154940804, 3659926193048069267, 4368137639120453308, 4836135668995329356,
+    5532061633213252278, 6448918945643986474, 6902733635092675308, 7801388544844847127]
+
+const H512_INIT: Array<u64> = [
+    7640891576956012808, 13503953896175478587, 4354685564936845355, 11912009170470909681,
+    5840696475078001361, 11170449401992604703, 2270897969802886507, 6620516959819538809]
+
+const HEX_DIGITS: string = "0123456789abcdef"
+
+fn rotl32(x: i64, n: i64) -> i64 {
+    return ((x << n) | (x >> (32 - n))) & MASK32
+}
+
+fn rotr32(x: i64, n: i64) -> i64 {
+    return ((x >> n) | (x << (32 - n))) & MASK32
+}
+
+fn rotr64(x: u64, n: u64) -> u64 {
+    return (x >> n) | (x << (64 - n))
+}
+
+fn hexOf(bytes: Array<u8>) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < len(bytes); i++) {
+        var b = bytes[i] as i64
+        var hi = (b >> 4) & 15
+        var lo = b & 15
+        out.append(HEX_DIGITS.slice(hi, hi + 1))
+        out.append(HEX_DIGITS.slice(lo, lo + 1))
+    }
+    return out.toString()
+}
+
+// Append the message length in bits, big-endian over eight bytes.
+fn appendLengthBE(msg: ref Array<u8>, bitLen: i64) {
+    for (var i = 7; i >= 0; i--) { msg.push(((bitLen >> (i * 8)) & 255) as u8) }
+}
+
+// Materialize a borrowed byte view. The kernels below own a working copy
+// anyway, so taking the view first costs nothing and keeps the public entry
+// points from calling an allocating method directly on their parameter.
+fn toArray(view: Slice<u8>) -> Array<u8> {
+    var out: Array<u8> = []
+    for (var i = 0; i < len(view); i++) { out.push(view[i]) }
+    return out
+}
+
+fn md5Bytes(data: Array<u8>) -> Array<u8> {
+    var msg: Array<u8> = []
+    for (var i = 0; i < len(data); i++) { msg.push(data[i]) }
+    var bitLen = len(data) * 8
+    msg.push(128)
+    while (len(msg) % 64 != 56) { msg.push(0) }
+    // MD5 is the one of the four that records its length little-endian.
+    for (var i = 0; i < 8; i++) { msg.push(((bitLen >> (i * 8)) & 255) as u8) }
+
+    var h = [1732584193, 4023233417, 2562383102, 271733878]
+    var m = Array<i64>(16)
+    var block = 0
+    while (block < len(msg)) {
+        for (var t = 0; t < 16; t++) {
+            var o = block + t * 4
+            m[t] = ((msg[o] as i64) | ((msg[o + 1] as i64) << 8) |
+                    ((msg[o + 2] as i64) << 16) | ((msg[o + 3] as i64) << 24)) & MASK32
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]
+        for (var i = 0; i < 64; i++) {
+            var fv = 0
+            var g = 0
+            if (i < 16) { fv = (b & c) | ((b ^ MASK32) & d); g = i }
+            else if (i < 32) { fv = (d & b) | ((d ^ MASK32) & c); g = (5 * i + 1) % 16 }
+            else if (i < 48) { fv = b ^ c ^ d; g = (3 * i + 5) % 16 }
+            else { fv = c ^ (b | (d ^ MASK32)); g = (7 * i) % 16 }
+            var tmp = d
+            d = c
+            c = b
+            b = (b + rotl32((a + fv + MD5_K[i] + m[g]) & MASK32, MD5_S[i])) & MASK32
+            a = tmp
+        }
+        h[0] = (h[0] + a) & MASK32; h[1] = (h[1] + b) & MASK32
+        h[2] = (h[2] + c) & MASK32; h[3] = (h[3] + d) & MASK32
+        block = block + 64
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < 4; i++) {
+        for (var b = 0; b < 4; b++) { out.push(((h[i] >> (b * 8)) & 255) as u8) }
+    }
+    return out
+}
+
+fn sha1Bytes(data: Array<u8>) -> Array<u8> {
+    var msg: Array<u8> = []
+    for (var i = 0; i < len(data); i++) { msg.push(data[i]) }
+    var bitLen = len(data) * 8
+    msg.push(128)
+    while (len(msg) % 64 != 56) { msg.push(0) }
+    appendLengthBE(ref msg, bitLen)
+
+    var h = [1732584193, 4023233417, 2562383102, 271733878, 3285377520]
+    var w = Array<i64>(80)
+    var block = 0
+    while (block < len(msg)) {
+        for (var t = 0; t < 16; t++) {
+            var o = block + t * 4
+            w[t] = (((msg[o] as i64) << 24) | ((msg[o + 1] as i64) << 16) |
+                    ((msg[o + 2] as i64) << 8) | (msg[o + 3] as i64)) & MASK32
+        }
+        for (var t = 16; t < 80; t++) {
+            w[t] = rotl32(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1)
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]; var e = h[4]
+        for (var t = 0; t < 80; t++) {
+            var fv = 0
+            var k = 0
+            if (t < 20) { fv = (b & c) | ((b ^ MASK32) & d); k = 1518500249 }
+            else if (t < 40) { fv = b ^ c ^ d; k = 1859775393 }
+            else if (t < 60) { fv = (b & c) | (b & d) | (c & d); k = 2400959708 }
+            else { fv = b ^ c ^ d; k = 3395469782 }
+            var tmp = (rotl32(a, 5) + fv + e + k + w[t]) & MASK32
+            e = d; d = c
+            c = rotl32(b, 30)
+            b = a
+            a = tmp
+        }
+        h[0] = (h[0] + a) & MASK32; h[1] = (h[1] + b) & MASK32
+        h[2] = (h[2] + c) & MASK32; h[3] = (h[3] + d) & MASK32
+        h[4] = (h[4] + e) & MASK32
+        block = block + 64
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < 5; i++) {
+        for (var b = 3; b >= 0; b--) { out.push(((h[i] >> (b * 8)) & 255) as u8) }
+    }
+    return out
+}
+
+fn sha256Bytes(data: Array<u8>) -> Array<u8> {
+    var msg: Array<u8> = []
+    for (var i = 0; i < len(data); i++) { msg.push(data[i]) }
+    var bitLen = len(data) * 8
+    msg.push(128)
+    while (len(msg) % 64 != 56) { msg.push(0) }
+    appendLengthBE(ref msg, bitLen)
+
+    var h = [1779033703, 3144134277, 1013904242, 2773480762,
+             1359893119, 2600822924, 528734635, 1541459225]
+    var w = Array<i64>(64)
+    var block = 0
+    while (block < len(msg)) {
+        for (var t = 0; t < 16; t++) {
+            var o = block + t * 4
+            w[t] = (((msg[o] as i64) << 24) | ((msg[o + 1] as i64) << 16) |
+                    ((msg[o + 2] as i64) << 8) | (msg[o + 3] as i64)) & MASK32
+        }
+        for (var t = 16; t < 64; t++) {
+            var x = w[t - 15]
+            var y = w[t - 2]
+            var s0 = rotr32(x, 7) ^ rotr32(x, 18) ^ (x >> 3)
+            var s1 = rotr32(y, 17) ^ rotr32(y, 19) ^ (y >> 10)
+            w[t] = (w[t - 16] + s0 + w[t - 7] + s1) & MASK32
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]
+        var e = h[4]; var fv = h[5]; var g = h[6]; var hh = h[7]
+        for (var t = 0; t < 64; t++) {
+            var S1 = rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25)
+            var ch = (e & fv) ^ ((e ^ MASK32) & g)
+            var t1 = (hh + S1 + ch + K256[t] + w[t]) & MASK32
+            var S0 = rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22)
+            var maj = (a & b) ^ (a & c) ^ (b & c)
+            var t2 = (S0 + maj) & MASK32
+            hh = g; g = fv; fv = e
+            e = (d + t1) & MASK32
+            d = c; c = b; b = a
+            a = (t1 + t2) & MASK32
+        }
+        h[0] = (h[0] + a) & MASK32; h[1] = (h[1] + b) & MASK32
+        h[2] = (h[2] + c) & MASK32; h[3] = (h[3] + d) & MASK32
+        h[4] = (h[4] + e) & MASK32; h[5] = (h[5] + fv) & MASK32
+        h[6] = (h[6] + g) & MASK32; h[7] = (h[7] + hh) & MASK32
+        block = block + 64
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < 8; i++) {
+        for (var b = 3; b >= 0; b--) { out.push(((h[i] >> (b * 8)) & 255) as u8) }
+    }
+    return out
+}
+
+fn sha512Bytes(data: Array<u8>) -> Array<u8> {
+    var msg: Array<u8> = []
+    for (var i = 0; i < len(data); i++) { msg.push(data[i]) }
+    var bitLen = len(data) * 8
+    msg.push(128)
+    while (len(msg) % 128 != 112) { msg.push(0) }
+    // The length field is 128 bits wide; the high half is always zero for any
+    // message this runtime can hold.
+    for (var i = 0; i < 8; i++) { msg.push(0) }
+    appendLengthBE(ref msg, bitLen)
+
+    var h: Array<u64> = []
+    for (var i = 0; i < 8; i++) { h.push(H512_INIT[i]) }
+    var w = Array<u64>(80)
+    var block = 0
+    while (block < len(msg)) {
+        for (var t = 0; t < 16; t++) {
+            var o = block + t * 8
+            var v: u64 = 0
+            for (var j = 0; j < 8; j++) { v = (v << 8) | (msg[o + j] as u64) }
+            w[t] = v
+        }
+        for (var t = 16; t < 80; t++) {
+            var x = w[t - 15]
+            var y = w[t - 2]
+            var s0 = rotr64(x, 1) ^ rotr64(x, 8) ^ (x >> 7)
+            var s1 = rotr64(y, 19) ^ rotr64(y, 61) ^ (y >> 6)
+            w[t] = w[t - 16] + s0 + w[t - 7] + s1
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]
+        var e = h[4]; var fv = h[5]; var g = h[6]; var hh = h[7]
+        for (var t = 0; t < 80; t++) {
+            var S1 = rotr64(e, 14) ^ rotr64(e, 18) ^ rotr64(e, 41)
+            var ch = (e & fv) ^ ((~e) & g)
+            var t1 = hh + S1 + ch + K512[t] + w[t]
+            var S0 = rotr64(a, 28) ^ rotr64(a, 34) ^ rotr64(a, 39)
+            var maj = (a & b) ^ (a & c) ^ (b & c)
+            var t2 = S0 + maj
+            hh = g; g = fv; fv = e
+            e = d + t1
+            d = c; c = b; b = a
+            a = t1 + t2
+        }
+        h[0] = h[0] + a; h[1] = h[1] + b; h[2] = h[2] + c; h[3] = h[3] + d
+        h[4] = h[4] + e; h[5] = h[5] + fv; h[6] = h[6] + g; h[7] = h[7] + hh
+        block = block + 128
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < 8; i++) {
+        for (var b = 7; b >= 0; b--) { out.push(((h[i] >> ((b * 8) as u64)) & 255) as u8) }
+    }
+    return out
+}
+
+export fn md5(data: string) -> string { return hexOf(md5Bytes(toArray(data.bytes()))) }
+export fn sha1(data: string) -> string { return hexOf(sha1Bytes(toArray(data.bytes()))) }
+export fn sha256(data: string) -> string { return hexOf(sha256Bytes(toArray(data.bytes()))) }
+export fn sha512(data: string) -> string { return hexOf(sha512Bytes(toArray(data.bytes()))) }
+
+fn digestOf(algo: string, data: Array<u8>) -> Array<u8>? {
+    if (algo == "md5") { return md5Bytes(data) }
+    if (algo == "sha1") { return sha1Bytes(data) }
+    if (algo == "sha256") { return sha256Bytes(data) }
+    if (algo == "sha512") { return sha512Bytes(data) }
+    return null
+}
+
+fn blockSizeOf(algo: string) -> i64 {
+    if (algo == "sha512") { return 128 }
+    return 64
+}
+
+// HMAC as RFC 2104 defines it: the key is reduced by the hash when it is longer
+// than a block and zero-extended when it is shorter, then the message is hashed
+// under the inner pad and that digest under the outer pad.
+fn hmacBytes(algo: string, key: Array<u8>, msg: Array<u8>) -> Array<u8>? {
+    var blockSize = blockSizeOf(algo)
+    var k = key
+    if (len(k) > blockSize) {
+        var reduced = digestOf(algo, k)
+        if (reduced == null) { return null }
+        k = reduced!
+    }
+    while (len(k) < blockSize) { k.push(0) }
+
+    var inner: Array<u8> = []
+    var outer: Array<u8> = []
+    for (var i = 0; i < blockSize; i++) {
+        inner.push((((k[i] as i64) ^ 54) & 255) as u8)
+        outer.push((((k[i] as i64) ^ 92) & 255) as u8)
+    }
+    for (var i = 0; i < len(msg); i++) { inner.push(msg[i]) }
+
+    var innerDigest = digestOf(algo, inner)
+    if (innerDigest == null) { return null }
+    var id = innerDigest!
+    for (var i = 0; i < len(id); i++) { outer.push(id[i]) }
+    return digestOf(algo, outer)
+}
+
+export fn hmac(algo: string, key: string, data: string) -> string? {
+    var digest = hmacBytes(algo, toArray(key.bytes()), toArray(data.bytes()))
+    if (digest == null) { return null }
+    return hexOf(digest!)
+}
+
+// A read this large is a mistake rather than a request: the ceiling belongs to
+// the module, not to the platform, so the leaf below answers any length and
+// this is the only place that refuses one.
+const MAX_RANDOM_BYTES: i64 = 1024
+
+// n random bytes, hex encoded. The hex form is what this module has always
+// published and what ws and http build their nonces and boundaries from.
+export fn randomBytes(n: i64) -> string {
+    if (n <= 0 || n > MAX_RANDOM_BYTES) { throw CryptoError.InvalidLength }
+    return hexOf(__randomBytes(n))
+}
+
+// A version 4 UUID as RFC 4122 defines it: sixteen random bytes with the
+// version written into the high nibble of byte 6 and the variant into the top
+// two bits of byte 8, printed 8-4-4-4-12.
+export fn uuid() -> string {
+    var b = __randomBytes(16)
+    b[6] = ((((b[6] as i64) & 15) | 64)) as u8
+    b[8] = ((((b[8] as i64) & 63) | 128)) as u8
+
+    var out = StringBuilder()
+    for (var i = 0; i < 16; i++) {
+        if (i == 4 || i == 6 || i == 8 || i == 10) { out.append("-") }
+        var v = b[i] as i64
+        var hi = (v >> 4) & 15
+        var lo = v & 15
+        out.append(HEX_DIGITS.slice(hi, hi + 1))
+        out.append(HEX_DIGITS.slice(lo, lo + 1))
+    }
+    return out.toString()
+}
+
+// Compare two strings in time that does not depend on where they first differ.
+// Unequal lengths answer false, but only after the comparison has run, which is
+// why the leaf is handed both buffers rather than a length check up front.
+export fn timingSafeEqual(a: string, b: string) -> bool {
+    return __timingSafeEqualBytes(toArray(a.bytes()), toArray(b.bytes()))
+}
+
+// ── AES-256 ──
+
+const AES_SBOX: Array<u8> = [
+    99, 124, 119, 123, 242, 107, 111, 197, 48, 1, 103, 43, 254, 215, 171, 118,
+    202, 130, 201, 125, 250, 89, 71, 240, 173, 212, 162, 175, 156, 164, 114, 192,
+    183, 253, 147, 38, 54, 63, 247, 204, 52, 165, 229, 241, 113, 216, 49, 21,
+    4, 199, 35, 195, 24, 150, 5, 154, 7, 18, 128, 226, 235, 39, 178, 117,
+    9, 131, 44, 26, 27, 110, 90, 160, 82, 59, 214, 179, 41, 227, 47, 132,
+    83, 209, 0, 237, 32, 252, 177, 91, 106, 203, 190, 57, 74, 76, 88, 207,
+    208, 239, 170, 251, 67, 77, 51, 133, 69, 249, 2, 127, 80, 60, 159, 168,
+    81, 163, 64, 143, 146, 157, 56, 245, 188, 182, 218, 33, 16, 255, 243, 210,
+    205, 12, 19, 236, 95, 151, 68, 23, 196, 167, 126, 61, 100, 93, 25, 115,
+    96, 129, 79, 220, 34, 42, 144, 136, 70, 238, 184, 20, 222, 94, 11, 219,
+    224, 50, 58, 10, 73, 6, 36, 92, 194, 211, 172, 98, 145, 149, 228, 121,
+    231, 200, 55, 109, 141, 213, 78, 169, 108, 86, 244, 234, 101, 122, 174, 8,
+    186, 120, 37, 46, 28, 166, 180, 198, 232, 221, 116, 31, 75, 189, 139, 138,
+    112, 62, 181, 102, 72, 3, 246, 14, 97, 53, 87, 185, 134, 193, 29, 158,
+    225, 248, 152, 17, 105, 217, 142, 148, 155, 30, 135, 233, 206, 85, 40, 223,
+    140, 161, 137, 13, 191, 230, 66, 104, 65, 153, 45, 15, 176, 84, 187, 22]
+
+const AES_INV_SBOX: Array<u8> = [
+    82, 9, 106, 213, 48, 54, 165, 56, 191, 64, 163, 158, 129, 243, 215, 251,
+    124, 227, 57, 130, 155, 47, 255, 135, 52, 142, 67, 68, 196, 222, 233, 203,
+    84, 123, 148, 50, 166, 194, 35, 61, 238, 76, 149, 11, 66, 250, 195, 78,
+    8, 46, 161, 102, 40, 217, 36, 178, 118, 91, 162, 73, 109, 139, 209, 37,
+    114, 248, 246, 100, 134, 104, 152, 22, 212, 164, 92, 204, 93, 101, 182, 146,
+    108, 112, 72, 80, 253, 237, 185, 218, 94, 21, 70, 87, 167, 141, 157, 132,
+    144, 216, 171, 0, 140, 188, 211, 10, 247, 228, 88, 5, 184, 179, 69, 6,
+    208, 44, 30, 143, 202, 63, 15, 2, 193, 175, 189, 3, 1, 19, 138, 107,
+    58, 145, 17, 65, 79, 103, 220, 234, 151, 242, 207, 206, 240, 180, 230, 115,
+    150, 172, 116, 34, 231, 173, 53, 133, 226, 249, 55, 232, 28, 117, 223, 110,
+    71, 241, 26, 113, 29, 41, 197, 137, 111, 183, 98, 14, 170, 24, 190, 27,
+    252, 86, 62, 75, 198, 210, 121, 32, 154, 219, 192, 254, 120, 205, 90, 244,
+    31, 221, 168, 51, 136, 7, 199, 49, 177, 18, 16, 89, 39, 128, 236, 95,
+    96, 81, 127, 169, 25, 181, 74, 13, 45, 229, 122, 159, 147, 201, 156, 239,
+    160, 224, 59, 77, 174, 42, 245, 176, 200, 235, 187, 60, 131, 83, 153, 97,
+    23, 43, 4, 126, 186, 119, 214, 38, 225, 105, 20, 99, 85, 33, 12, 125]
+
+const AES_RCON: Array<u8> = [
+    0, 1, 2, 4, 8, 16, 32, 64, 128, 27, 54]
+
+const AES_ROUNDS: i64 = 14
+const AES_KEY_WORDS: i64 = 8
+const AES_BLOCK: i64 = 16
+
+// The cipher multiplies by six fixed field elements only, so those products
+// are tabulated rather than recomputed a bit at a time on every column.
+const GF_MUL2: Array<u8> = [
+    0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30,
+    32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62,
+    64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94,
+    96, 98, 100, 102, 104, 106, 108, 110, 112, 114, 116, 118, 120, 122, 124, 126,
+    128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 152, 154, 156, 158,
+    160, 162, 164, 166, 168, 170, 172, 174, 176, 178, 180, 182, 184, 186, 188, 190,
+    192, 194, 196, 198, 200, 202, 204, 206, 208, 210, 212, 214, 216, 218, 220, 222,
+    224, 226, 228, 230, 232, 234, 236, 238, 240, 242, 244, 246, 248, 250, 252, 254,
+    27, 25, 31, 29, 19, 17, 23, 21, 11, 9, 15, 13, 3, 1, 7, 5,
+    59, 57, 63, 61, 51, 49, 55, 53, 43, 41, 47, 45, 35, 33, 39, 37,
+    91, 89, 95, 93, 83, 81, 87, 85, 75, 73, 79, 77, 67, 65, 71, 69,
+    123, 121, 127, 125, 115, 113, 119, 117, 107, 105, 111, 109, 99, 97, 103, 101,
+    155, 153, 159, 157, 147, 145, 151, 149, 139, 137, 143, 141, 131, 129, 135, 133,
+    187, 185, 191, 189, 179, 177, 183, 181, 171, 169, 175, 173, 163, 161, 167, 165,
+    219, 217, 223, 221, 211, 209, 215, 213, 203, 201, 207, 205, 195, 193, 199, 197,
+    251, 249, 255, 253, 243, 241, 247, 245, 235, 233, 239, 237, 227, 225, 231, 229]
+
+const GF_MUL3: Array<u8> = [
+    0, 3, 6, 5, 12, 15, 10, 9, 24, 27, 30, 29, 20, 23, 18, 17,
+    48, 51, 54, 53, 60, 63, 58, 57, 40, 43, 46, 45, 36, 39, 34, 33,
+    96, 99, 102, 101, 108, 111, 106, 105, 120, 123, 126, 125, 116, 119, 114, 113,
+    80, 83, 86, 85, 92, 95, 90, 89, 72, 75, 78, 77, 68, 71, 66, 65,
+    192, 195, 198, 197, 204, 207, 202, 201, 216, 219, 222, 221, 212, 215, 210, 209,
+    240, 243, 246, 245, 252, 255, 250, 249, 232, 235, 238, 237, 228, 231, 226, 225,
+    160, 163, 166, 165, 172, 175, 170, 169, 184, 187, 190, 189, 180, 183, 178, 177,
+    144, 147, 150, 149, 156, 159, 154, 153, 136, 139, 142, 141, 132, 135, 130, 129,
+    155, 152, 157, 158, 151, 148, 145, 146, 131, 128, 133, 134, 143, 140, 137, 138,
+    171, 168, 173, 174, 167, 164, 161, 162, 179, 176, 181, 182, 191, 188, 185, 186,
+    251, 248, 253, 254, 247, 244, 241, 242, 227, 224, 229, 230, 239, 236, 233, 234,
+    203, 200, 205, 206, 199, 196, 193, 194, 211, 208, 213, 214, 223, 220, 217, 218,
+    91, 88, 93, 94, 87, 84, 81, 82, 67, 64, 69, 70, 79, 76, 73, 74,
+    107, 104, 109, 110, 103, 100, 97, 98, 115, 112, 117, 118, 127, 124, 121, 122,
+    59, 56, 61, 62, 55, 52, 49, 50, 35, 32, 37, 38, 47, 44, 41, 42,
+    11, 8, 13, 14, 7, 4, 1, 2, 19, 16, 21, 22, 31, 28, 25, 26]
+
+const GF_MUL9: Array<u8> = [
+    0, 9, 18, 27, 36, 45, 54, 63, 72, 65, 90, 83, 108, 101, 126, 119,
+    144, 153, 130, 139, 180, 189, 166, 175, 216, 209, 202, 195, 252, 245, 238, 231,
+    59, 50, 41, 32, 31, 22, 13, 4, 115, 122, 97, 104, 87, 94, 69, 76,
+    171, 162, 185, 176, 143, 134, 157, 148, 227, 234, 241, 248, 199, 206, 213, 220,
+    118, 127, 100, 109, 82, 91, 64, 73, 62, 55, 44, 37, 26, 19, 8, 1,
+    230, 239, 244, 253, 194, 203, 208, 217, 174, 167, 188, 181, 138, 131, 152, 145,
+    77, 68, 95, 86, 105, 96, 123, 114, 5, 12, 23, 30, 33, 40, 51, 58,
+    221, 212, 207, 198, 249, 240, 235, 226, 149, 156, 135, 142, 177, 184, 163, 170,
+    236, 229, 254, 247, 200, 193, 218, 211, 164, 173, 182, 191, 128, 137, 146, 155,
+    124, 117, 110, 103, 88, 81, 74, 67, 52, 61, 38, 47, 16, 25, 2, 11,
+    215, 222, 197, 204, 243, 250, 225, 232, 159, 150, 141, 132, 187, 178, 169, 160,
+    71, 78, 85, 92, 99, 106, 113, 120, 15, 6, 29, 20, 43, 34, 57, 48,
+    154, 147, 136, 129, 190, 183, 172, 165, 210, 219, 192, 201, 246, 255, 228, 237,
+    10, 3, 24, 17, 46, 39, 60, 53, 66, 75, 80, 89, 102, 111, 116, 125,
+    161, 168, 179, 186, 133, 140, 151, 158, 233, 224, 251, 242, 205, 196, 223, 214,
+    49, 56, 35, 42, 21, 28, 7, 14, 121, 112, 107, 98, 93, 84, 79, 70]
+
+const GF_MUL11: Array<u8> = [
+    0, 11, 22, 29, 44, 39, 58, 49, 88, 83, 78, 69, 116, 127, 98, 105,
+    176, 187, 166, 173, 156, 151, 138, 129, 232, 227, 254, 245, 196, 207, 210, 217,
+    123, 112, 109, 102, 87, 92, 65, 74, 35, 40, 53, 62, 15, 4, 25, 18,
+    203, 192, 221, 214, 231, 236, 241, 250, 147, 152, 133, 142, 191, 180, 169, 162,
+    246, 253, 224, 235, 218, 209, 204, 199, 174, 165, 184, 179, 130, 137, 148, 159,
+    70, 77, 80, 91, 106, 97, 124, 119, 30, 21, 8, 3, 50, 57, 36, 47,
+    141, 134, 155, 144, 161, 170, 183, 188, 213, 222, 195, 200, 249, 242, 239, 228,
+    61, 54, 43, 32, 17, 26, 7, 12, 101, 110, 115, 120, 73, 66, 95, 84,
+    247, 252, 225, 234, 219, 208, 205, 198, 175, 164, 185, 178, 131, 136, 149, 158,
+    71, 76, 81, 90, 107, 96, 125, 118, 31, 20, 9, 2, 51, 56, 37, 46,
+    140, 135, 154, 145, 160, 171, 182, 189, 212, 223, 194, 201, 248, 243, 238, 229,
+    60, 55, 42, 33, 16, 27, 6, 13, 100, 111, 114, 121, 72, 67, 94, 85,
+    1, 10, 23, 28, 45, 38, 59, 48, 89, 82, 79, 68, 117, 126, 99, 104,
+    177, 186, 167, 172, 157, 150, 139, 128, 233, 226, 255, 244, 197, 206, 211, 216,
+    122, 113, 108, 103, 86, 93, 64, 75, 34, 41, 52, 63, 14, 5, 24, 19,
+    202, 193, 220, 215, 230, 237, 240, 251, 146, 153, 132, 143, 190, 181, 168, 163]
+
+const GF_MUL13: Array<u8> = [
+    0, 13, 26, 23, 52, 57, 46, 35, 104, 101, 114, 127, 92, 81, 70, 75,
+    208, 221, 202, 199, 228, 233, 254, 243, 184, 181, 162, 175, 140, 129, 150, 155,
+    187, 182, 161, 172, 143, 130, 149, 152, 211, 222, 201, 196, 231, 234, 253, 240,
+    107, 102, 113, 124, 95, 82, 69, 72, 3, 14, 25, 20, 55, 58, 45, 32,
+    109, 96, 119, 122, 89, 84, 67, 78, 5, 8, 31, 18, 49, 60, 43, 38,
+    189, 176, 167, 170, 137, 132, 147, 158, 213, 216, 207, 194, 225, 236, 251, 246,
+    214, 219, 204, 193, 226, 239, 248, 245, 190, 179, 164, 169, 138, 135, 144, 157,
+    6, 11, 28, 17, 50, 63, 40, 37, 110, 99, 116, 121, 90, 87, 64, 77,
+    218, 215, 192, 205, 238, 227, 244, 249, 178, 191, 168, 165, 134, 139, 156, 145,
+    10, 7, 16, 29, 62, 51, 36, 41, 98, 111, 120, 117, 86, 91, 76, 65,
+    97, 108, 123, 118, 85, 88, 79, 66, 9, 4, 19, 30, 61, 48, 39, 42,
+    177, 188, 171, 166, 133, 136, 159, 146, 217, 212, 195, 206, 237, 224, 247, 250,
+    183, 186, 173, 160, 131, 142, 153, 148, 223, 210, 197, 200, 235, 230, 241, 252,
+    103, 106, 125, 112, 83, 94, 73, 68, 15, 2, 21, 24, 59, 54, 33, 44,
+    12, 1, 22, 27, 56, 53, 34, 47, 100, 105, 126, 115, 80, 93, 74, 71,
+    220, 209, 198, 203, 232, 229, 242, 255, 180, 185, 174, 163, 128, 141, 154, 151]
+
+const GF_MUL14: Array<u8> = [
+    0, 14, 28, 18, 56, 54, 36, 42, 112, 126, 108, 98, 72, 70, 84, 90,
+    224, 238, 252, 242, 216, 214, 196, 202, 144, 158, 140, 130, 168, 166, 180, 186,
+    219, 213, 199, 201, 227, 237, 255, 241, 171, 165, 183, 185, 147, 157, 143, 129,
+    59, 53, 39, 41, 3, 13, 31, 17, 75, 69, 87, 89, 115, 125, 111, 97,
+    173, 163, 177, 191, 149, 155, 137, 135, 221, 211, 193, 207, 229, 235, 249, 247,
+    77, 67, 81, 95, 117, 123, 105, 103, 61, 51, 33, 47, 5, 11, 25, 23,
+    118, 120, 106, 100, 78, 64, 82, 92, 6, 8, 26, 20, 62, 48, 34, 44,
+    150, 152, 138, 132, 174, 160, 178, 188, 230, 232, 250, 244, 222, 208, 194, 204,
+    65, 79, 93, 83, 121, 119, 101, 107, 49, 63, 45, 35, 9, 7, 21, 27,
+    161, 175, 189, 179, 153, 151, 133, 139, 209, 223, 205, 195, 233, 231, 245, 251,
+    154, 148, 134, 136, 162, 172, 190, 176, 234, 228, 246, 248, 210, 220, 206, 192,
+    122, 116, 102, 104, 66, 76, 94, 80, 10, 4, 22, 24, 50, 60, 46, 32,
+    236, 226, 240, 254, 212, 218, 200, 198, 156, 146, 128, 142, 164, 170, 184, 182,
+    12, 2, 16, 30, 52, 58, 40, 38, 124, 114, 96, 110, 68, 74, 88, 86,
+    55, 57, 43, 37, 15, 1, 19, 29, 71, 73, 91, 85, 127, 113, 99, 109,
+    215, 217, 203, 197, 239, 225, 243, 253, 167, 169, 187, 181, 159, 145, 131, 141]
+
+// Expand a 32-byte key into 15 round keys, 240 bytes in all.
+fn aesExpandKey(key: Array<u8>) -> Array<u8> {
+    var w = Array<u8>((AES_ROUNDS + 1) * 16)
+    for (var i = 0; i < AES_KEY_WORDS * 4; i++) { w[i] = key[i] }
+
+    var total = (AES_ROUNDS + 1) * 4
+    for (var i = AES_KEY_WORDS; i < total; i++) {
+        var t0 = w[(i - 1) * 4] as i64
+        var t1 = w[(i - 1) * 4 + 1] as i64
+        var t2 = w[(i - 1) * 4 + 2] as i64
+        var t3 = w[(i - 1) * 4 + 3] as i64
+        if (i % AES_KEY_WORDS == 0) {
+            // RotWord then SubWord, then add the round constant.
+            var r0 = t0
+            t0 = (AES_SBOX[t1] as i64) ^ (AES_RCON[i / AES_KEY_WORDS] as i64)
+            t1 = AES_SBOX[t2] as i64
+            t2 = AES_SBOX[t3] as i64
+            t3 = AES_SBOX[r0] as i64
+        } else if (i % AES_KEY_WORDS == 4) {
+            t0 = AES_SBOX[t0] as i64
+            t1 = AES_SBOX[t1] as i64
+            t2 = AES_SBOX[t2] as i64
+            t3 = AES_SBOX[t3] as i64
+        }
+        w[i * 4] = (((w[(i - AES_KEY_WORDS) * 4] as i64) ^ t0) & 255) as u8
+        w[i * 4 + 1] = (((w[(i - AES_KEY_WORDS) * 4 + 1] as i64) ^ t1) & 255) as u8
+        w[i * 4 + 2] = (((w[(i - AES_KEY_WORDS) * 4 + 2] as i64) ^ t2) & 255) as u8
+        w[i * 4 + 3] = (((w[(i - AES_KEY_WORDS) * 4 + 3] as i64) ^ t3) & 255) as u8
+    }
+    return w
+}
+
+fn addRoundKey(state: ref Array<u8>, rk: Array<u8>, round: i64) {
+    for (var i = 0; i < 16; i++) {
+        state[i] = (((state[i] as i64) ^ (rk[round * 16 + i] as i64)) & 255) as u8
+    }
+}
+
+// The state is column-major: byte i sits at row i%4, column i/4. Each row
+// rotates left by its own index, done with scalars so a block costs no
+// allocation per round.
+fn shiftRows(state: ref Array<u8>) {
+    var t = state[1]
+    state[1] = state[5]; state[5] = state[9]; state[9] = state[13]; state[13] = t
+    t = state[2]; state[2] = state[10]; state[10] = t
+    t = state[6]; state[6] = state[14]; state[14] = t
+    t = state[15]
+    state[15] = state[11]; state[11] = state[7]; state[7] = state[3]; state[3] = t
+}
+
+fn invShiftRows(state: ref Array<u8>) {
+    var t = state[13]
+    state[13] = state[9]; state[9] = state[5]; state[5] = state[1]; state[1] = t
+    t = state[2]; state[2] = state[10]; state[10] = t
+    t = state[6]; state[6] = state[14]; state[14] = t
+    t = state[3]
+    state[3] = state[7]; state[7] = state[11]; state[11] = state[15]; state[15] = t
+}
+
+fn mixColumns(state: ref Array<u8>) {
+    for (var c = 0; c < 4; c++) {
+        var a0 = state[c * 4] as i64
+        var a1 = state[c * 4 + 1] as i64
+        var a2 = state[c * 4 + 2] as i64
+        var a3 = state[c * 4 + 3] as i64
+        state[c * 4] = (((GF_MUL2[a0] as i64) ^ (GF_MUL3[a1] as i64) ^ a2 ^ a3) & 255) as u8
+        state[c * 4 + 1] = ((a0 ^ (GF_MUL2[a1] as i64) ^ (GF_MUL3[a2] as i64) ^ a3) & 255) as u8
+        state[c * 4 + 2] = ((a0 ^ a1 ^ (GF_MUL2[a2] as i64) ^ (GF_MUL3[a3] as i64)) & 255) as u8
+        state[c * 4 + 3] = (((GF_MUL3[a0] as i64) ^ a1 ^ a2 ^ (GF_MUL2[a3] as i64)) & 255) as u8
+    }
+}
+
+fn invMixColumns(state: ref Array<u8>) {
+    for (var c = 0; c < 4; c++) {
+        var a0 = state[c * 4] as i64
+        var a1 = state[c * 4 + 1] as i64
+        var a2 = state[c * 4 + 2] as i64
+        var a3 = state[c * 4 + 3] as i64
+        state[c * 4] = (((GF_MUL14[a0] as i64) ^ (GF_MUL11[a1] as i64) ^ (GF_MUL13[a2] as i64) ^ (GF_MUL9[a3] as i64)) & 255) as u8
+        state[c * 4 + 1] = (((GF_MUL9[a0] as i64) ^ (GF_MUL14[a1] as i64) ^ (GF_MUL11[a2] as i64) ^ (GF_MUL13[a3] as i64)) & 255) as u8
+        state[c * 4 + 2] = (((GF_MUL13[a0] as i64) ^ (GF_MUL9[a1] as i64) ^ (GF_MUL14[a2] as i64) ^ (GF_MUL11[a3] as i64)) & 255) as u8
+        state[c * 4 + 3] = (((GF_MUL11[a0] as i64) ^ (GF_MUL13[a1] as i64) ^ (GF_MUL9[a2] as i64) ^ (GF_MUL14[a3] as i64)) & 255) as u8
+    }
+}
+
+// Both directions transform the state where it lies, so a CBC run reuses one
+// sixteen-byte buffer for the whole message.
+fn aesEncryptBlock(rk: Array<u8>, state: ref Array<u8>) {
+    addRoundKey(ref state, rk, 0)
+    for (var round = 1; round < AES_ROUNDS; round++) {
+        for (var i = 0; i < 16; i++) { state[i] = AES_SBOX[state[i] as i64] }
+        shiftRows(ref state)
+        mixColumns(ref state)
+        addRoundKey(ref state, rk, round)
+    }
+    for (var i = 0; i < 16; i++) { state[i] = AES_SBOX[state[i] as i64] }
+    shiftRows(ref state)
+    addRoundKey(ref state, rk, AES_ROUNDS)
+}
+
+fn aesDecryptBlock(rk: Array<u8>, state: ref Array<u8>) {
+    addRoundKey(ref state, rk, AES_ROUNDS)
+    for (var round = AES_ROUNDS - 1; round > 0; round--) {
+        invShiftRows(ref state)
+        for (var i = 0; i < 16; i++) { state[i] = AES_INV_SBOX[state[i] as i64] }
+        addRoundKey(ref state, rk, round)
+        invMixColumns(ref state)
+    }
+    invShiftRows(ref state)
+    for (var i = 0; i < 16; i++) { state[i] = AES_INV_SBOX[state[i] as i64] }
+    addRoundKey(ref state, rk, 0)
+}
+
+
+// ── AEAD ──
+//
+// Encrypt-then-MAC over AES-256-CBC. The user key is stretched into an
+// independent cipher key and MAC key, the plaintext is PKCS#7 padded and
+// chained under a fresh IV, and the tag covers the IV together with the
+// ciphertext, so tampering is detected before anything is decrypted rather
+// than surfacing as corrupted output.
+//
+// Wire format: hex(IV(16) || ciphertext(16n) || tag(32)).
+
+const AEAD_ENC_LABEL: string = "xray-aead-enc-v1"
+const AEAD_MAC_LABEL: string = "xray-aead-mac-v1"
+const AEAD_TAG_LEN: i64 = 32
+const AEAD_OVERHEAD: i64 = 48
+
+fn hexDigit(c: i64) -> i64 {
+    if (c >= 48 && c <= 57) { return c - 48 }
+    if (c >= 97 && c <= 102) { return c - 87 }
+    if (c >= 65 && c <= 70) { return c - 55 }
+    return -1
+}
+
+fn hexToBytes(view: Slice<u8>) -> Array<u8>? {
+    if (len(view) % 2 != 0) { return null }
+    var out: Array<u8> = []
+    for (var i = 0; i < len(view); i = i + 2) {
+        var hi = hexDigit(view[i] as i64)
+        var lo = hexDigit(view[i + 1] as i64)
+        if (hi < 0 || lo < 0) { return null }
+        out.push((((hi * 16) + lo) & 255) as u8)
+    }
+    return out
+}
+
+fn aeadKey(key: Array<u8>, label: string) -> Array<u8> {
+    return hmacBytes("sha256", key, toArray(label.bytes()))!
+}
+
+fn cbcEncrypt(rk: Array<u8>, iv: Array<u8>, padded: Array<u8>) -> Array<u8> {
+    var out: Array<u8> = []
+    var state = Array<u8>(AES_BLOCK)
+    for (var i = 0; i < AES_BLOCK; i++) { state[i] = iv[i] }
+    var off = 0
+    while (off < len(padded)) {
+        // The previous ciphertext block is already in state, so chaining is an
+        // xor in place rather than a copy.
+        for (var i = 0; i < AES_BLOCK; i++) {
+            state[i] = (((padded[off + i] as i64) ^ (state[i] as i64)) & 255) as u8
+        }
+        aesEncryptBlock(rk, ref state)
+        for (var i = 0; i < AES_BLOCK; i++) { out.push(state[i]) }
+        off = off + AES_BLOCK
+    }
+    return out
+}
+
+fn cbcDecrypt(rk: Array<u8>, iv: Array<u8>, cipher: Array<u8>) -> Array<u8> {
+    var out: Array<u8> = []
+    var state = Array<u8>(AES_BLOCK)
+    var prev = Array<u8>(AES_BLOCK)
+    for (var i = 0; i < AES_BLOCK; i++) { prev[i] = iv[i] }
+    var off = 0
+    while (off < len(cipher)) {
+        for (var i = 0; i < AES_BLOCK; i++) { state[i] = cipher[off + i] }
+        aesDecryptBlock(rk, ref state)
+        for (var i = 0; i < AES_BLOCK; i++) {
+            out.push((((state[i] as i64) ^ (prev[i] as i64)) & 255) as u8)
+            prev[i] = cipher[off + i]
+        }
+        off = off + AES_BLOCK
+    }
+    return out
+}
+
+// Authenticated encryption. The result is hex so it survives anywhere a string
+// goes, which is what this module has always published.
+export fn encrypt(key: string, plaintext: string) -> string {
+    var k = toArray(key.bytes())
+    var encKey = aeadKey(k, AEAD_ENC_LABEL)
+    var macKey = aeadKey(k, AEAD_MAC_LABEL)
+
+    // PKCS#7 always adds a block when the plaintext already fills one, so the
+    // final byte is never ambiguous about how much to remove.
+    var plain = toArray(plaintext.bytes())
+    var pad = AES_BLOCK - (len(plain) % AES_BLOCK)
+    var padded: Array<u8> = []
+    for (var i = 0; i < len(plain); i++) { padded.push(plain[i]) }
+    for (var i = 0; i < pad; i++) { padded.push((pad & 255) as u8) }
+
+    var iv = __randomBytes(AES_BLOCK)
+    var raw: Array<u8> = []
+    for (var i = 0; i < AES_BLOCK; i++) { raw.push(iv[i]) }
+    var cipher = cbcEncrypt(aesExpandKey(encKey), iv, padded)
+    for (var i = 0; i < len(cipher); i++) { raw.push(cipher[i]) }
+
+    var tag = hmacBytes("sha256", macKey, raw)!
+    for (var i = 0; i < len(tag); i++) { raw.push(tag[i]) }
+    return hexOf(raw)
+}
+
+// Answers null for anything that does not authenticate, without distinguishing
+// a bad tag from bad padding: telling those apart is what makes a padding
+// oracle.
+export fn decrypt(key: string, ciphertext: string) -> string? {
+    var raw = hexToBytes(ciphertext.bytes())
+    if (raw == null) { return null }
+    var bytes = raw!
+    var cipherLen = len(bytes) - AEAD_OVERHEAD
+    if (cipherLen <= 0 || cipherLen % AES_BLOCK != 0) { throw CryptoError.InvalidLength }
+
+    var k = toArray(key.bytes())
+    var macKey = aeadKey(k, AEAD_MAC_LABEL)
+
+    var signed: Array<u8> = []
+    for (var i = 0; i < AES_BLOCK + cipherLen; i++) { signed.push(bytes[i]) }
+    var actual: Array<u8> = []
+    for (var i = 0; i < AEAD_TAG_LEN; i++) { actual.push(bytes[AES_BLOCK + cipherLen + i]) }
+    if (!__timingSafeEqualBytes(hmacBytes("sha256", macKey, signed)!, actual)) { return null }
+
+    var iv = Array<u8>(AES_BLOCK)
+    for (var i = 0; i < AES_BLOCK; i++) { iv[i] = bytes[i] }
+    var cipher: Array<u8> = []
+    for (var i = 0; i < cipherLen; i++) { cipher.push(bytes[AES_BLOCK + i]) }
+
+    var encKey = aeadKey(k, AEAD_ENC_LABEL)
+    var plain = cbcDecrypt(aesExpandKey(encKey), iv, cipher)
+
+    var pad = plain[len(plain) - 1] as i64
+    if (pad <= 0 || pad > AES_BLOCK || pad > len(plain)) { return null }
+    for (var i = len(plain) - pad; i < len(plain); i++) {
+        if ((plain[i] as i64) != pad) { return null }
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < len(plain) - pad; i++) { out.push(plain[i]) }
+    return string.fromUtf8(out[:])
+}

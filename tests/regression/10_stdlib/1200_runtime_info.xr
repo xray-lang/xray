@@ -1,0 +1,43 @@
+// The snapshot is one counter read shaped in Xray; the kilobyte reading is the
+// byte count scaled here rather than a second thing the host reports. These
+// pin that relation and the agreement between the snapshot and the scalar
+// readings, which is what having one owner is supposed to buy.
+
+import runtime
+
+@test
+fn test_kilobytes_are_the_bytes_scaled() {
+    var i = runtime.info()
+    assertEqual(i.liveKB, i.liveBytes.toF64() / 1024.0)
+}
+
+@test
+fn test_a_snapshot_reports_a_live_domain() {
+    var i = runtime.info()
+    assert(i.liveBytes > 0)
+    assert(i.liveObjects > 0)
+    assert(i.finalizerCount >= 0)
+    assert(i.blocks >= 0)
+    assert(i.freeBlocks >= 0)
+    assert(i.fullBlocks >= 0)
+}
+
+@test
+fn test_scalar_readings_agree_with_the_snapshot() {
+    // Separate reads of a live domain, so they may drift; what must hold is
+    // that they report the same domain rather than unrelated host state.
+    var before = runtime.liveBytes()
+    var i = runtime.info()
+    var after = runtime.liveBytes()
+    assert(i.liveBytes >= before / 2)
+    assert(i.liveBytes <= after * 2 + 4096)
+    assert(runtime.liveObjects() > 0)
+}
+
+@test
+fn test_process_wide_counters_are_nonnegative() {
+    // These read the system heap, not the coroutine domain, so they answer
+    // independently of what the snapshot reports.
+    assert(runtime.sharedBytes() >= 0)
+    assert(runtime.staticBytes() > 0)
+}

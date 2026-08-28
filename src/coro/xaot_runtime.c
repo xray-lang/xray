@@ -121,7 +121,6 @@ XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
     if (ops && ops->execution_arena_live_bytes && ops->execution_arena_live_objects &&
         state->execution_arena) {
         info.live_bytes = ops->execution_arena_live_bytes(state->execution_arena);
-        info.live_kb = (double) info.live_bytes / 1024.0;
         info.live_objects = ops->execution_arena_live_objects(state->execution_arena);
         if (ops->execution_arena_finalizer_count)
             info.finalizer_count = ops->execution_arena_finalizer_count(state->execution_arena);
@@ -133,7 +132,6 @@ XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
     XrRegionStats stats = {0};
     xr_region_get_stats(&heap->region, &stats);
     info.live_bytes = heap->totalbytes;
-    info.live_kb = (double) heap->totalbytes / 1024.0;
     info.live_objects = (int64_t) heap->object_count;
     info.finalizer_count = (int64_t) heap->finalizer_count;
     info.blocks = (int64_t) stats.total_blocks;
@@ -344,15 +342,13 @@ static XrValue aot_bridge_string_to_runtime(XrRuntimeCore *core, XrValue value) 
     uint32_t hash;
     if (value.tag == XR_AOT_VALUE_TAG_STR_ARC) {
         const XrString *src = (const XrString *) value.ptr;
-        if (xr_runtime_string_object_validate_prefix(src) !=
-            XR_RUNTIME_ABI_OK)
+        if (xr_runtime_string_object_validate_prefix(src) != XR_RUNTIME_ABI_OK)
             return XR_NULL_VAL;
         data = src->data;
         length = src->length;
         hash = src->hash;
     } else {
-        const XrAotLiteralStringView *src =
-            (const XrAotLiteralStringView *) value.ptr;
+        const XrAotLiteralStringView *src = (const XrAotLiteralStringView *) value.ptr;
         if (!src->data || src->len < 0 ||
             (uint64_t) src->len > XR_RUNTIME_STRING_MAXIMUM_BYTE_LENGTH)
             return XR_NULL_VAL;

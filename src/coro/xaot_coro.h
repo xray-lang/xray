@@ -183,7 +183,6 @@ typedef struct XrAotContext {
 
 typedef struct XrAotRuntimeInfo {
     int64_t live_bytes;
-    double live_kb;
     int64_t live_objects;
     int64_t finalizer_count;
     int64_t blocks;

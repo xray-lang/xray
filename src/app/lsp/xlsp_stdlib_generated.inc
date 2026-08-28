@@ -84,16 +84,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {
 
 // crypto module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
-    {"md5", XLSP_SYM_FUNCTION, "fn(data: string): string", "Compute MD5 hash", NULL, 0},
-    {"sha1", XLSP_SYM_FUNCTION, "fn(data: string): string", "Compute SHA-1 hash", NULL, 0},
-    {"sha256", XLSP_SYM_FUNCTION, "fn(data: string): string", "Compute SHA-256 hash", NULL, 0},
-    {"sha512", XLSP_SYM_FUNCTION, "fn(data: string): string", "Compute SHA-512 hash", NULL, 0},
-    {"hmac", XLSP_SYM_FUNCTION, "fn(algo: string, key: string, data: string): string?", "Compute HMAC", NULL, 0},
-    {"randomBytes", XLSP_SYM_FUNCTION, "fn(n: i64): string", "Generate random bytes", NULL, 0},
-    {"uuid", XLSP_SYM_FUNCTION, "fn(): string", "Generate UUID v4", NULL, 0},
-    {"encrypt", XLSP_SYM_FUNCTION, "fn(key: string, plaintext: string): string", "AES-256-CBC encrypt", NULL, 0},
-    {"decrypt", XLSP_SYM_FUNCTION, "fn(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", NULL, 0},
-    {"timingSafeEqual", XLSP_SYM_FUNCTION, "fn(a: string, b: string): bool", "Constant-time string comparison", NULL, 0},
+    {"md5", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"sha1", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"sha256", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"sha512", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"hmac", XLSP_SYM_FUNCTION, "fn(algo: string, key: string, data: string): string?", "", NULL, 0},
+    {"randomBytes", XLSP_SYM_FUNCTION, "fn(n: i64): string", "", NULL, 0},
+    {"uuid", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
+    {"timingSafeEqual", XLSP_SYM_FUNCTION, "fn(a: string, b: string): bool", "", NULL, 0},
+    {"encrypt", XLSP_SYM_FUNCTION, "fn(key: string, plaintext: string): string", "", NULL, 0},
+    {"decrypt", XLSP_SYM_FUNCTION, "fn(key: string, ciphertext: string): string?", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT 10
 
@@ -482,14 +482,15 @@ static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
 
 // runtime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
-    {"liveBytes", XLSP_SYM_FUNCTION, "fn(): i64", "Get live memory usage in bytes", NULL, 0},
-    {"liveObjects", XLSP_SYM_FUNCTION, "fn(): i64", "Get live object count", NULL, 0},
-    {"sharedBytes", XLSP_SYM_FUNCTION, "fn(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak", NULL, 0},
-    {"staticBytes", XLSP_SYM_FUNCTION, "fn(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "Get a typed snapshot of the current execution-local reclamation domain", NULL, 0},
-    {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo = { liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }", "Typed snapshot of the current execution-local reclamation domain", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "", NULL, 0},
+    {"liveBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"liveObjects", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"sharedBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"staticBytes", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo", "Class type", NULL, 0},
+    {"__RuntimeStats", XLSP_SYM_CLASS, "type __RuntimeStats = { liveBytes: i64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }", "Raw counters read in one pass from the current execution-local reclamation domain", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 6
+#define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 7
 
 // simd module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_simd_symbols[] = {

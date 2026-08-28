@@ -54,24 +54,8 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "compress.isGzip";
     if (strcmp(symbol, "compress.isZlib") == 0)
         return "compress.isZlib";
-    if (strcmp(symbol, "crypto.md5") == 0)
-        return "crypto.md5";
-    if (strcmp(symbol, "crypto.sha1") == 0)
-        return "crypto.sha1";
-    if (strcmp(symbol, "crypto.sha256") == 0)
-        return "crypto.sha256";
-    if (strcmp(symbol, "crypto.sha512") == 0)
-        return "crypto.sha512";
-    if (strcmp(symbol, "crypto.hmac") == 0)
-        return "crypto.hmac";
-    if (strcmp(symbol, "crypto.randomBytes") == 0)
-        return "crypto.randomBytes";
-    if (strcmp(symbol, "crypto.uuid") == 0)
-        return "crypto.uuid";
-    if (strcmp(symbol, "crypto.encrypt") == 0)
-        return "crypto.encrypt";
-    if (strcmp(symbol, "crypto.decrypt") == 0)
-        return "crypto.decrypt";
+    if (strcmp(symbol, "crypto.__randomBytes") == 0)
+        return "crypto.__randomBytes";
     if (strcmp(symbol, "regex.compile") == 0)
         return "regex.compile";
     if (strcmp(symbol, "regex.test") == 0)

@@ -187,10 +187,12 @@ perf_suite = "stdlib/codegen"
 name = "runtime"
 public = true
 layer = "L0"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/runtime/runtime.xr"
 factory_source = "stdlib/runtime/runtime.c"
-public_native = ["RuntimeInfo", "info", "liveBytes", "liveObjects", "sharedBytes", "staticBytes"]
+public_native = []
+private_native_sources = ["stdlib/runtime/*.c"]
+private_native_reason = "Private reclamation-domain and system-heap counter reads consumed by runtime.xr"
 perf_suite = "stdlib/runtime"
 
 [[module]]
@@ -222,8 +224,8 @@ perf_suite = "stdlib/parallel"
 name = "sys"
 public = true
 layer = "L2"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/sys/sys.xr"
 factory_source = "stdlib/sys/sys.c"
 public_native = ["OsBarrier", "OsBarrier.wait", "OsCondvar", "OsCondvar.broadcast", "OsCondvar.signal", "OsCondvar.wait", "OsCondvar.waitFor", "OsMutex", "OsMutex.lock", "OsMutex.tryLock", "OsMutex.unlock", "OsOnce", "OsOnce.call", "OsRwLock", "OsRwLock.rdlock", "OsRwLock.rdunlock", "OsRwLock.wrlock", "OsRwLock.wrunlock", "cpuCount", "pinToCpu", "sleepMs", "threadYield"]
 private_native_sources = ["stdlib/sys/sys.c"]
@@ -388,12 +390,12 @@ perf_suite = "stdlib/http2"
 name = "crypto"
 public = true
 layer = "L3"
-policy = "native_library"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/crypto/crypto.xr"
 factory_source = "stdlib/crypto/crypto.c"
-public_native = ["decrypt", "encrypt", "hmac", "md5", "randomBytes", "sha1", "sha256", "sha512", "timingSafeEqual", "uuid"]
+public_native = []
 private_native_sources = ["stdlib/crypto/*.c"]
-private_native_reason = "Platform CSPRNG, constant-time operations and mature cryptographic kernels"
+private_native_reason = "Platform CSPRNG and constant-time comparison consumed by crypto.xr"
 perf_suite = "stdlib/crypto"
 
 [[module]]
