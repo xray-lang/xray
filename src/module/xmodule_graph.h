@@ -148,6 +148,19 @@ XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g,
  * Returns 0 on success (no cycle), -1 if cycles detected (g->cycle_desc set). */
 XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g);
 
+/* The name this module is imported under at run time.
+ *
+ * A dependency that is preloaded, or bundled without its bytecode, is
+ * reconstituted by handing this string to xr_module_import, whose contract is
+ * an import specifier: a bare name for the standard library, a path for a
+ * source file. The canonical id is neither -- it is the length-framed durable
+ * identity the resolver builds for graph keys, and it contains '/', so feeding
+ * it back in is read as a third-party package and fails closed on lookup.
+ *
+ * Both the preload path and the bundle writer must ask this, or one of them
+ * ends up storing an identity where the other stores a name. */
+XR_FUNC const char *xr_module_spec_import_name(const XrModuleSpec *spec);
+
 /* Lookup a module spec by canonical ID.  Returns index or -1. */
 XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical);
 /* Physical-source lookup is local plumbing only; it is never a graph identity key. */
