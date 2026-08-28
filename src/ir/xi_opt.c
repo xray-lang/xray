@@ -2831,8 +2831,8 @@ static bool sr_i64_overflow_predicate_identity_is_exact(const XiValue *value) {
     if (!function || !plan || !xr_semantic_plan_is_verified(plan) || !provenance ||
         provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE ||
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE ||
-        value->op != XI_CALL_METHOD || value->nargs != 2 || !value->args ||
-        !value->args[0] || !value->args[1])
+        value->op != XI_CALL_METHOD || value->nargs != 2 || !value->args || !value->args[0] ||
+        !value->args[1])
         return false;
     const XrSemanticFunctionRecord *semantic_function =
         xr_semantic_plan_function(plan, function->semantic_plan_function_index);
@@ -2947,8 +2947,7 @@ static bool sr_array_hof_identity_is_exact(const XiValue *value, SrArrayHofIdent
     return true;
 }
 
-static const XrSemanticOperationRecord *
-sr_number_parse_error_operation(const XiValue *value) {
+static const XrSemanticOperationRecord *sr_number_parse_error_operation(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
     const XrSemanticPlan *plan = function ? function->semantic_plan : NULL;
     if (!function || !plan || !xr_semantic_plan_is_verified(plan) ||
@@ -2991,8 +2990,8 @@ static bool sr_number_parse_error_catch_narrow_is_exact(const XiValue *value) {
 static bool sr_number_parse_error_equality_is_exact(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
     return value && value->op == XI_EQ && function && function->semantic_plan &&
-           xr_semantic_number_parse_error_equality_is_exact(
-               function->semantic_plan, sr_number_parse_error_operation(value));
+           xr_semantic_number_parse_error_equality_is_exact(function->semantic_plan,
+                                                            sr_number_parse_error_operation(value));
 }
 
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
@@ -3045,7 +3044,13 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_RECV:
             return XR_REP_TAGGED;
+        /* Promotion to a tail call moves the return out of the frame; it does
+         * not move the call off the native ABI boundary. Leaving the promoted
+         * form on the tagged default asks for adapters around a call that must
+         * stay in tail position, and an unbox sequenced after it is exactly
+         * what takes the call out of that position. */
         case XI_CALL:
+        case XI_TAIL_CALL:
             return sr_type_native_boundary_rep(v->type);
         case XI_CALL_METHOD_DIRECT:
             return sr_type_native_boundary_rep(v->type);
@@ -3479,7 +3484,10 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                 return sr_type_scalar_rep(user->args[arg_idx]->type);
             }
             return XR_REP_TAGGED;
+        /* Both call forms share the ordinary argument layout, so an argument
+         * carries the same representation whichever form holds it. */
         case XI_CALL:
+        case XI_TAIL_CALL:
             if (arg_idx > 0 && arg_idx < user->nargs && user->args[arg_idx] &&
                 (user->args[arg_idx]->op == XI_LOCAL_ADDR ||
                  sr_param_is_call_bound_place(user->args[arg_idx])))

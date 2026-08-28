@@ -8758,6 +8758,13 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
         case XI_IS:
         case XI_LEN:
         case XI_CALL:
+        /* A tagged result reaches its storage only through the named families
+         * below: the fallback after this switch answers scalars from the
+         * frozen machine rep and refuses every dynamic kind, so an opcode
+         * missing here loses the only route it has. The families themselves
+         * already accept both call forms, and the use-site oracle already pairs
+         * them; this is the one place that did not. */
+        case XI_TAIL_CALL:
             /* An owned String result is the one non-scalar direct-local shape
              * with an exact target row; everything else keeps the scalar
              * machine storage proof. The owned instance a source-class

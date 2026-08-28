@@ -3824,6 +3824,11 @@ if(BUILD_TESTS)
     add_test(
         NAME backend_diff
         COMMAND ${CMAKE_COMMAND} -E env
+                # The native-run probe budget is sized for an idle machine. These
+                # lanes run beside other CTest lanes, and a probe that loses that
+                # race reports every case in the lane as a build refusal, which is
+                # indistinguishable from a real capability refusal in the output.
+                XRAY_TOOLCHAIN_PROBE_SCALE=4
                 XRAY_DIFF_MAX_AUTO_JOBS=${XRAY_CTEST_DIFF_JOBS}
                 XRAY_DIFF_COLD_MAX_AUTO_JOBS=4
                 XRAY_DIFF_HOT_MAX_AUTO_JOBS=8
@@ -3855,6 +3860,7 @@ if(BUILD_TESTS)
     add_test(
         NAME backend_diff_embedded
         COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_TOOLCHAIN_PROBE_SCALE=4
                 XRAY_DIFF_BACKENDS=vm,embed
                 XRAY_DIFF_BASELINE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/known_failures_embedded.txt
                 XRAY_DIFF_MAX_AUTO_JOBS=${XRAY_CTEST_DIFF_JOBS}
@@ -3904,6 +3910,7 @@ if(BUILD_TESTS)
     add_test(
         NAME backend_diff_optimized
         COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_TOOLCHAIN_PROBE_SCALE=4
                 XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/optimizer_cases.txt
                 XRAY_DIFF_EXTRA_CASES_FILE=
                 XRAY_AOT_TEST_OPT=2
@@ -3941,6 +3948,7 @@ if(BUILD_TESTS)
     add_test(
         NAME backend_diff_deterministic
         COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_TOOLCHAIN_PROBE_SCALE=4
                 XRAY_CORO_DETERMINISTIC=1
                 XRAY_CORO_SEED=12345
                 XRAY_TEST_CACHE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/.cache/xray-test/deterministic

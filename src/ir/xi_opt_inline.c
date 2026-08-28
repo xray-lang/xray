@@ -469,11 +469,24 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
      * identity in the caller, the same conclusion the call-plan place origins
      * below already reach; it survives inlining as a temporary. */
     cloned->var_id = XI_NO_VAR_ID;
-    /* Tail position is scoped to the callee frame. Once that frame is
-     * inlined, its former tail call must flow through the caller's
-     * continuation, so carrying XI_FLAG_TAIL forward can make later method
-     * specialization treat an open dispatch as a direct terminal invoke. The
-     * regular tail-call pass may rediscover a true caller tail position. */
+    /* Tail position is scoped to the callee frame. Once that frame is inlined
+     * the call lands mid-caller, with the caller's remaining work after it, so
+     * the tail claim cannot survive the copy in either form it takes.
+     *
+     * Promoted, the claim is the opcode, and the emitter turns that into an
+     * unconditional tail instruction which replaces the frame and returns: a
+     * caller that keeps it stops at the inlined call and still reports success.
+     * Both call forms share the ordinary argument layout and call plan, so the
+     * demotion is a rename. It happens after the clone rather than at
+     * construction because cloning metadata requires the opcode to still match
+     * the source.
+     *
+     * Unpromoted, the claim is a flag, and carrying it forward can make later
+     * method specialization treat an open dispatch as a direct terminal invoke.
+     *
+     * The tail-call pass may promote the call again if it does end the caller. */
+    if (cloned->op == XI_TAIL_CALL)
+        cloned->op = (uint16_t) XI_CALL;
     cloned->flags &= (uint8_t) ~XI_FLAG_TAIL;
     if (xi_evidence_domain_is_proven_current(caller, XI_EVD_ALIAS))
         xi_tbaa_annotate_value(cloned);
