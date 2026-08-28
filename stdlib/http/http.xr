@@ -1894,23 +1894,6 @@ fn _requestWireHeaders(headers: Headers, stripSensitive: bool = false) -> Header
     return out
 }
 
-fn _http2HeadersValid(headers: Headers) -> bool {
-    var pairs = headers.entries()
-    if (len(pairs) > 28) { return false }
-    for (var i = 0; i < len(pairs); i++) {
-        var name = text.lower(pairs[i].0)
-        if (name == "connection" || name == "keep-alive" ||
-            name == "proxy-connection" || name == "transfer-encoding" ||
-            name == "upgrade" || name == "host") {
-            return false
-        }
-        if (name == "te" && text.lower(text.trim(pairs[i].1)) != "trailers") {
-            return false
-        }
-    }
-    return true
-}
-
 
 fn _headersLocation(headers: Headers) -> string? {
     return headers.get("Location")
@@ -2177,9 +2160,13 @@ fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Header
 
     var wireHeaders = _requestWireHeaders(headers, stripSensitive)
     wireHeaders.set("Content-Length", string(len(body)))
-    if (!_http2HeadersValid(wireHeaders)) {
-        throw HttpError.ProtocolError("invalid HTTP/2 headers")
-    }
+
+    // The HTTP/2 admission rules -- the header ceiling, the forbidden
+    // connection-specific names, the `te: trailers` exception, the method
+    // grammar and the header name/value grammar -- were stated here and again
+    // in C, and the two copies did not agree. They now have one owner, http2,
+    // and one channel, Http2Error, which _http2ToHttpError maps into this
+    // module's error set below.
 
     var names: Array<string> = []
     var values: Array<string> = []
