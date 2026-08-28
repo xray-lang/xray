@@ -75,9 +75,29 @@ public name:
 
 | site | what it matches |
 |---|---|
-| `src/ir/xi_backend_lower.c:42-73` | `backend_math_call_arity_ok` holds 34 public names; the aux is built as `"math." + member` |
+| `src/ir/xi_backend_lower.c:42-73` | `backend_math_call_arity_ok` holds 35 public names; the aux is built as `"math." + member` |
 | `src/aot/xi_cgen_dispatch_helpers.inc.c:7616-7686` | strips the `"math."` prefix and looks the member up in a second handwritten table |
-| `src/aot/xi_cgen_dispatch_helpers.inc.c:3951-3966` | `xicgen_import_ref_is_core_math_member` holds a third copy of the 34 names |
+| `src/aot/xi_cgen_dispatch_helpers.inc.c:3951-3966` | `xicgen_import_ref_is_core_math_member` holds a third copy of the 35 names |
+
+**Corrected after a fuller sweep**: three is the count of tables that emit the
+call, not the count of places that match on the public spelling. There are
+**thirteen** handwritten ones, and the five this packet first missed all sit in
+the analyzer and the lowering rather than in the backend:
+
+| site | what it holds |
+|---|---|
+| `src/frontend/analyzer/xanalyzer_visitor_call.c:6149-6165` | `xa_math_runtime_shape_return_type` — the analyzer's own int-preserving return rule for abs/min/max/clamp |
+| `src/frontend/analyzer/xanalyzer_visitor_call.c:7616-7621` | `math_preserves_numeric_shape`, driving the `expected_type` and `param_type` overrides at `:7801` and `:7879` |
+| `src/frontend/analyzer/xanalyzer_visitor.c:423-436` | `xa_freestanding_math_member_allowed` — 14 constants plus min/max/clamp |
+| `src/ir/xi_lower_expr.c:1965-2004` | `lower_math_constant` — the VM path's own copy of all 14 constant values |
+| `src/ir/xi_lower_expr.c:2044-2063` | `lower_math_call_arity_ok` — **byte-for-byte identical to the backend table above** |
+| `src/ir/xi_lower_expr.c:2084-2103` | `lower_math_call_result_type` — eleven branches |
+| `src/aot/xi_cgen_dispatch_helpers.inc.c:7356-7375` | `xicgen_math_result_rep` — a fourth spelling-keyed table, for the result representation |
+
+Six more are generated from `core.def` and follow it automatically; two of
+those — `cg_aot_stdlib_generated_has_builtin_direct_call` and
+`xaot_stdlib_generated_symbol_is_builtin_direct`, each carrying the 35 names —
+have no caller at all and can be deleted.
 
 After a rename to `__sqrt`, the arity table no longer matches, no
 `XI_CALL_BUILTIN` is produced, and `cg_aot_stdlib_has_direct_member`
