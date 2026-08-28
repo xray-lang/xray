@@ -1,7 +1,8 @@
 # Blocker: the Xi optimization pipeline miscompiles tail calls, and no gate sees most of it
 
 - **Lane**: B (current census / refusal evidence)
-- **Status**: `BLOCKED` on capability this lane must not implement
+- **Status**: `PARTIALLY FIXED` in this branch — two of the three defects are closed;
+  see "What was fixed" at the end. One case remains, from an unrelated ownership defect.
 - **Requested owner**: H (compiler / unified target machine)
 - **Severity**: highest of anything this lane found. One case produces a **silently wrong
   program** — correct exit status, missing output — rather than a refusal. Three of the
@@ -257,7 +258,10 @@ This lane's census inherits the hole. `tests/diff/survey_refusals.py` measures w
 unoptimized pipeline only. Read the census figure as **138 comparable unoptimized and
 under Xi optimization**, not 142.
 
-## The optimized lane cannot be made green by any baseline edit
+## The ratchet contradiction, and why fixing the root cause dissolved it
+
+Resolved by the fix below; recorded because the shape will recur whenever a case builds at
+one optimization level and is refused at another.
 
 `backend_diff_optimized` currently reports three refusals that are not baselined; two are
 the PHI regressions recorded separately, the third is `pass_tail_call_accumulator.xr`.
@@ -278,9 +282,14 @@ builds at `-O0` and is refused under Xi optimization:
 | case absent (today) | red: new refusal | green |
 | case present | green | red: listed case now builds, delete it |
 
-There is no baseline state in which both lanes are green. The lane is red until either the
-compiler defect is fixed or `backend_diff_optimized` is given its own baseline the way the
-embedded lane already has one.
+There was no baseline state in which both lanes were green, which is the point: the only
+two ways out were to fix the compiler or to give `backend_diff_optimized` its own baseline
+the way the embedded lane already has one. The fix below took the first, and the case now
+builds under optimization, so nothing needs baselining and the contradiction is gone.
+
+Worth keeping in mind rather than solved in general: any future case that builds at one
+optimization level and is refused at another lands in the same trap, because these lanes
+still share one refusal list while disagreeing about what they compile.
 
 ## Reproduce
 
@@ -300,3 +309,64 @@ XRAY_DIFF_XI_OPT=vm=full,aot=full XRAY_DIFF_SINGLE_CASE=<case> \
 `src/ir/**`, `src/aot/**`, `CMakeLists.txt`, `tests/diff/optimizer_cases.txt`, and every
 baseline and allowlist. In particular no case was added to any baseline: the ratchet
 contradiction above is reported, not worked around.
+
+## What was fixed
+
+Two changes, both in the Xi layer, both teaching an existing rule about the opcode it did
+not know.
+
+**Inlining demotes a copied tail call.** `clone_value` in `src/ir/xi_opt_inline.c` already
+cleared `XI_FLAG_TAIL` from every cloned value, with a comment explaining that tail
+position is scoped to the callee frame. It cleared the flag form only. The promoted form
+is an opcode, so it now demotes `XI_TAIL_CALL` to `XI_CALL` in the same place. The
+demotion has to happen after the clone rather than at construction, because
+`xi_value_clone_metadata` requires the opcode to still match the source and returns false
+otherwise, which would leave a half-built value already appended to the block.
+
+**Representation selection knows the opcode.** `sr_def_rep` and `sr_use_rep` in
+`src/ir/xi_opt.c` handled `XI_CALL` and let the promoted form fall to the tagged default,
+which asked for adapters around a call that has to stay in tail position. Both now treat
+the two forms alike, which is what the AOT refinement layer already did.
+
+Measured on the four affected cases, with Xi optimization enabled:
+
+| | before | after |
+|---|---|---|
+| `aot=full` | 0 passed, 4 refused | **3 passed, 1 refused** |
+| `vm=full` | 2 passed, 2 differential failures | **3 passed, 1 failure** |
+
+The silent miscompilation is gone: `unit_enum_return_value.xr` prints all eight values
+under `--xi-opt vm=full`, and the simplest general tail call now builds natively where
+before none ever had.
+
+## What remains
+
+`semantics/functions/string_result_direct_call.xr`, both sides, from a different defect:
+
+```
+XR_OWN_3001: ownership balance becomes negative
+  (owner=... origin=TAIL_CALL func=forward block=4 entry=0 delta=-1
+   events=[TAIL_CALL@4:0,TAIL_CALL@4:-1])
+```
+
+The imbalance is inside `forward`, not at an inlined site, so it is ownership accounting
+for the tail-call form rather than either defect fixed above. Not investigated further.
+
+## A fix that was tried and reverted
+
+Adding the tail-position invariant to `verify_tail_calls` — requiring a promoted tail call
+to be its block's control value, which is what the AOT conformance gate checks — looked
+like the natural third change and is **wrong to add as things stand**.
+
+With it, every nested tail call (`return describe(choose(n))`) fails to compile at the
+representation stage, because representation selection legitimately places a return
+adapter after the call and moves the block's control to it. Measured with the invariant
+disabled, the VM executes those same graphs correctly. So the invariant converts working
+programs into compile failures, which is a regression, and it was removed rather than
+kept behind a flag.
+
+What that experiment did establish is a real disagreement, still open: representation
+selection emits a return adapter after a tail call, and the AOT conformance gate refuses
+exactly that shape. One of the two is wrong, and deciding which is a design question about
+whether a tail call may be adapted at all — it belongs to whoever owns both stages, not to
+a verifier tweak.

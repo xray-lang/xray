@@ -204,13 +204,12 @@ Both predate this lane and are unmodified by it.
 - The default CMake configuration cannot produce a compiler. `XRAY_STDLIB_VM_FASTPATHS`
   defaults to `ON`, and generating the fastpath harness compiles a 25-import module graph,
   which the program-authority guard refuses. `build-fastpaths-on/xray` is never produced.
-- `backend_diff_optimized` is red, and cannot be made green by any baseline edit. It
-  reports 44 passed, 0 differential failures, 13 refused, of which three are not
-  baselined. Two are the PHI regressions in `b-new-refusal-regressions.md`; the third is a
-  tail-call defect that the shared refusal ratchet has no consistent state for. Confirmed
-  pre-existing by re-running the lane with this branch's `CMakeLists.txt` reverted to the
-  previous commit — it fails identically either way — and root-caused in
-  `b-xi-optimization-tail-call-defects.md`.
+- `backend_diff_optimized` is red. As measured it reported 44 passed, 0 differential
+  failures, 13 refused, of which three were not baselined. Confirmed pre-existing by
+  re-running the lane with this branch's `CMakeLists.txt` reverted — it failed identically
+  either way. The tail-call fixes in `b-xi-optimization-tail-call-defects.md` close one of
+  the three, taking the lane to 45 passed and 12 refused; the two that remain are the PHI
+  regressions in `b-new-refusal-regressions.md`, which this lane did not attempt.
 - With fastpaths off, 2 of 620 build targets fail: the generated fixtures
   `tests/unit/generated/leaf_product_native.c` and `i64_overflow_native.c`. Their
   generator is the registered CTest `test_xi_program_semantic`, two of whose subtests are

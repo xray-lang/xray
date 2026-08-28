@@ -70,3 +70,11 @@ tests/diff/cases/semantics/optimizer/pass_loop_split_conditional_body.xr
 tests/diff/cases/semantics/optimizer/pass_loop_unroll_small_trip_count.xr
 tests/diff/cases/semantics/optimizer/pass_sccp_conditional_constant.xr
 tests/diff/cases/semantics/optimizer/pass_tail_call_accumulator.xr
+
+# Tail-call promotion decides what these two programs do, so they only mean
+# something with the middle end enabled. They are listed because inlining once
+# copied a promoted tail call into its caller and kept the opcode, which made
+# the caller return at that call and skip the rest of its work while still
+# exiting zero.
+tests/diff/cases/semantics/recursion/self_recursion.xr
+tests/diff/cases/semantics/unit_enum_return_value.xr
