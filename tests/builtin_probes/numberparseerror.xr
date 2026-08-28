@@ -1,0 +1,2 @@
+fn use(e: NumberParseError) -> bool { return e == NumberParseError.InvalidSyntax }
+print(use(NumberParseError.InvalidSyntax))

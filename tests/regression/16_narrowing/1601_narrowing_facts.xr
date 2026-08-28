@@ -311,7 +311,11 @@ fn test_n12_string_concatenation_accepts_null() {
     // N-12 arithmetic rule does not apply to it.
     var missing: string? = null
     assertEqual("value: " + missing, "value: null")
-    assertEqual("a" + string(1) + true + null, "a1truenull")
+    // A null operand keeps rendering as "null" further along a chain, but only
+    // where the operand is a string?. Mixed-operand concatenation was rejected
+    // outright, so bool and a bare null literal no longer join a string here.
+    var absent: string? = null
+    assertEqual("a" + string(1) + absent, "a1null")
 }
 
 @test
