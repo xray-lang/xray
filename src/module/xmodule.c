@@ -16,6 +16,7 @@
 #include "xray_vm.h"
 #include "../stdlib/xstdlib_vm_fastpath.h"
 #include "xmodule_graph.h"
+#include "xmodule_factories.h"
 #include "xmodule_resolver.h"
 #include "xproject.h"
 #include "../base/xchecks.h"
@@ -1067,9 +1068,10 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
 ** Load a standard library module
 **
 ** Flow:
-** 1. Create a module through its native factory or the generic source shell
-** 2. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
-** 3. Script extension can access C module exports and add/override exports
+** 1. Create a module through its legacy native factory or the generic source shell
+** 2. Bind private native leaves to the generic shell when declared
+** 3. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
+** 4. Script extension can access private C leaves and publish source-owned exports
 */
 static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_name) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
@@ -1088,6 +1090,12 @@ static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_nam
 
     if (!module) {
         xr_log_warning("module", "failed to create standard library module '%s'", module_name);
+        return NULL;
+    }
+    if (!factory &&
+        !xr_stdlib_embedded_private_leaves_install(isolate, module, module_name)) {
+        xr_log_warning("module", "failed to bind private native leaves for '%s'", module_name);
+        xr_module_free(module);
         return NULL;
     }
 
@@ -1451,8 +1459,6 @@ bool xr_module_is_export_const(XrVMRuntime *isolate, XrModule *module, const cha
 
 /* ========== Module System Initialization (Standard Library Registration) ========== */
 
-#include "xmodule_factories.h"
-
 typedef struct {
     const char *name;
     XrNativeModuleFactory factory;
@@ -1466,7 +1472,6 @@ static const StdlibEntry stdlib_core[] = {
     {"time", xr_native_module_create_time},
     {"math", xr_native_module_create_math},
     {"path", xr_native_module_create_path},
-    {"base64", xr_native_module_create_base64},
     {"regex", xr_native_module_create_regex},
     {"mem", xr_native_module_create_mem},
     {"runtime", xr_native_module_create_runtime},
@@ -1488,7 +1493,6 @@ static const StdlibEntry stdlib_core[] = {
 #if defined(XR_HAS_FILESYSTEM)
 static const StdlibEntry stdlib_filesystem[] = {
     {"io", xr_native_module_create_io},
-    {"os", xr_native_module_create_os},
 };
 #endif
 

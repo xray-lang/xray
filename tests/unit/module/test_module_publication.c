@@ -10,6 +10,7 @@
 #include "base/xmalloc.h"
 #include "module/xmodule.h"
 #include "module/xmodule_resolver.h"
+#include "module/xstdlib_embedded.h"
 #include "xray_vm.h"
 
 TEST(module_exports_are_invisible_until_atomic_publication) {
@@ -52,6 +53,12 @@ TEST(module_exports_are_invisible_until_atomic_publication) {
     XrValue lower = xr_module_get_export(isolate, xr_value_to_module(text_value), "lower");
     ASSERT_TRUE(xr_value_is_closure(lower));
 
+    XrValue base64_value = xr_module_import(isolate, "base64");
+    ASSERT_TRUE(xr_value_is_module(base64_value));
+    XrValue encode =
+        xr_module_get_export(isolate, xr_value_to_module(base64_value), "encode");
+    ASSERT_TRUE(xr_value_is_closure(encode));
+
 #if defined(XR_HAS_DATA_FORMATS)
     XrValue csv_value = xr_module_import(isolate, "csv");
     ASSERT_TRUE(xr_value_is_module(csv_value));
@@ -67,6 +74,7 @@ TEST(module_exports_are_invisible_until_atomic_publication) {
     XrModule *os_module = xr_value_to_module(os_value);
     ASSERT_TRUE(xr_value_is_closure(xr_module_get_export(isolate, os_module, "sleep")));
     ASSERT_TRUE(xr_value_is_cfunction(xr_module_get_export(isolate, os_module, "__sleep")));
+    ASSERT_TRUE(xr_value_is_cfunction(xr_module_get_export(isolate, os_module, "__getpid")));
 #else
     ASSERT_TRUE(XR_IS_NULL(xr_module_import(isolate, "os")));
 #endif
@@ -92,6 +100,38 @@ TEST(failed_module_never_publishes_partial_exports) {
     ASSERT_FALSE(xr_module_publish(module));
 
     xr_module_free(module);
+    xray_vm_delete(isolate);
+}
+
+TEST(embedded_private_leaf_binding_is_exact_and_one_shot) {
+    XrVMConfig config = {0};
+    XrVMRuntime *isolate = xray_vm_new_full(&config);
+    ASSERT_NOT_NULL(isolate);
+
+    XrModule *foreign = xr_module_create_native(isolate, "foreign");
+    ASSERT_NOT_NULL(foreign);
+    ASSERT_FALSE(xr_stdlib_embedded_private_leaves_install(isolate, foreign, "os"));
+
+    XrModule *source_only = xr_module_create_native(isolate, "base64");
+    ASSERT_NOT_NULL(source_only);
+    ASSERT_TRUE(
+        xr_stdlib_embedded_private_leaves_install(isolate, source_only, "base64"));
+    ASSERT_TRUE(xr_module_begin_initialization(source_only));
+    ASSERT_TRUE(xr_module_publish(source_only));
+    ASSERT_FALSE(
+        xr_stdlib_embedded_private_leaves_install(isolate, source_only, "base64"));
+
+#if defined(XR_HAS_FILESYSTEM)
+    XrModule *os_module = xr_module_create_native(isolate, "os");
+    ASSERT_NOT_NULL(os_module);
+    ASSERT_TRUE(xr_stdlib_embedded_private_leaves_install(isolate, os_module, "os"));
+    ASSERT_TRUE(os_module->export_count > 0);
+    ASSERT_FALSE(xr_stdlib_embedded_private_leaves_install(isolate, os_module, "os"));
+    xr_module_free(os_module);
+#endif
+
+    xr_module_free(source_only);
+    xr_module_free(foreign);
     xray_vm_delete(isolate);
 }
 
@@ -144,5 +184,6 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Module publication");
 RUN_TEST(module_exports_are_invisible_until_atomic_publication);
 RUN_TEST(failed_module_never_publishes_partial_exports);
+RUN_TEST(embedded_private_leaf_binding_is_exact_and_one_shot);
 RUN_TEST(stdlib_resolver_follows_build_authority);
 TEST_MAIN_END()

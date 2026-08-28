@@ -1175,6 +1175,8 @@ else()
 endif()
 
 file(GLOB XRAY_STDLIB_SCRIPT_SOURCES CONFIGURE_DEPENDS "stdlib/*/*.xr")
+# Native type declarations are compiler inputs, not loadable source modules.
+list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX "stdlib/types/[^/]+\\.xr$")
 if(NOT XR_STDLIB_FULL)
     # The generated embedded-source table is the binary's source-module
     # descriptor set. Keep it aligned with the same feature gates that select
@@ -1240,6 +1242,8 @@ add_custom_command(
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
         ${XRAY_STDLIB_EMBED_GENERATOR}
+        ${STDLIBGEN}
+        ${XRAY_STDLIB_DEF_FILES}
         ${XRAY_STDLIB_SCRIPT_SOURCES}
     COMMENT "Generating embedded stdlib source table"
     VERBATIM
@@ -2422,6 +2426,18 @@ if(BUILD_TESTS)
         LABELS "stdlib;boundary;unit"
         PROCESSORS 1
         TIMEOUT ${STDLIB_BOUNDARY_MANIFEST_TIMEOUT}
+    )
+
+    add_test(
+        NAME stdlib_embedded_generator_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+                --self-test
+    )
+    set_tests_properties(stdlib_embedded_generator_self_test PROPERTIES
+        LABELS "stdlib;embed;generator;unit"
+        PROCESSORS 1
+        TIMEOUT 30
     )
 
     add_test(

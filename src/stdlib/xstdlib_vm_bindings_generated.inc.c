@@ -67,43 +67,83 @@ static void xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *mo
 #endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP2 */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_IO
-static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
     XRS_EXPORT(module, isolate, "__appendFile", io_appendFile);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__chmod", io_chmod);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__chdir", io_chdir);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__copyFile", io_copyFile);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__cwd", io_cwd);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__exists", io_exists);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__fileClose", io_fileClose);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__fileOpen", io_fileOpen);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__fileRead", io_fileRead);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__fileSize", io_fileSize);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__isDir", io_isDir);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__isFile", io_isFile);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__isSymlink", io_isSymlink);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__mkdir", io_mkdir);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__mkdirp", io_mkdirp);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__readDir", io_readDir);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__readDirRecursive", io_readDirRecursive);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__readFile", io_readFile);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__readFileBytes", io_readFileBytes);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__readLines", io_readLines);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__readStdin", io_readStdin);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__readStdinBytes", io_readStdinBytes);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__readlink", io_readlink);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__realpath", io_realpath);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__remove", io_remove);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__removeAll", io_removeAll);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__rename", io_rename);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__stat", io_stat);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__symlink", io_symlink);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__tempDir", io_tempDir);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__tempFile", io_tempFile);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__touch", io_touch);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeFile", io_writeFile);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeFileBytes", io_writeFileBytes);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__writeStderr", io_writeStderr);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__writeStdout", io_writeStdout);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_IO */
 
@@ -202,67 +242,128 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MEM */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_NET
-static void xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
     XRS_EXPORT_YIELDABLE(module, isolate, "__resolveAll", net_resolve_all_yieldable);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__connectFd", net_connect_fd_yieldable);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__nowMs", net_now_ms_fn);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__lastConnectCode", net_last_connect_code);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__listenFd", net_listen_fd);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__accept", net_accept_handle_yieldable);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__readInto", net_read_into_yieldable);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeBytes", net_write_bytes_yieldable);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__copyBidirectional", net_copy_bidirectional_yieldable);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__shutdownRead", net_shutdown_read);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__shutdownWrite", net_shutdown_write);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__shutdown", net_shutdown_conn);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__close", net_close_handle);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__fd", net_fd_handle);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__setReadDeadline", net_set_read_deadline);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__setWriteDeadline", net_set_write_deadline);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__setDeadline", net_set_deadline);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__setAcceptDeadline", net_set_accept_deadline);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__lastCode", net_last_code);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__lastErrno", net_last_errno);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__hasTLS", net_has_tls);
+    expected_count++;
 #ifdef XR_ENABLE_TLS
     XRS_EXPORT_YIELDABLE(module, isolate, "__tlsHandshake", net_tls_handshake_yieldable);
+    expected_count++;
 #endif  /* XR_ENABLE_TLS */
     XRS_EXPORT(module, isolate, "__udpBind", net_udp_bind_handle);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__udpSendTo", net_udp_send_to_yieldable);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__udpRecvInto", net_udp_recv_into_yieldable);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__udpFromHost", net_udp_from_host);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__udpFromPort", net_udp_from_port);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_NET */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_OS
-static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
     XRS_EXPORT(module, isolate, "__platform", os_platform);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__arch", os_arch);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__getenv", os_getenv);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__setenv", os_setenv);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__unsetenv", os_unsetenv);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__environBlock", os_environ_block);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__exit", os_exit);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__getpid", os_getpid);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__getcwd", os_getcwd);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__hostname", os_hostname);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__tmpdir", os_tmpdir);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__systemUsername", os_system_username);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__homedir", os_homedir);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__uid", os_uid);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__gid", os_gid);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__cpuCount", os_cpuCount);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__ppid", os_ppid);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__kill", os_kill);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__totalMemory", os_totalMemory);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__freeMemory", os_freeMemory);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__uptime", os_uptime);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__loadavg", os_loadavg);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__clock", os_clock);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__sleep", os_sleep);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__exec", os_exec);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__spawn", os_spawn);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_OS */
 

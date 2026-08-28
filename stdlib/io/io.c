@@ -1353,7 +1353,10 @@ XR_FUNC XrModule *xr_native_module_create_io(XrVMRuntime *isolate) {
     // io_get_stat_class() on first call, so no explicit pre-init is
     // needed at module-load time.
 
-    xr_stdlib_vm_bind_io_generated(isolate, mod);
+    if (!xr_stdlib_vm_bind_io_generated(isolate, mod)) {
+        xr_module_free(mod);
+        return NULL;
+    }
 
     // The Path-returning public surface (cwd/tempDir/tempFile/readlink/realpath/
     // readDir/readDirRecursive) lives in stdlib/io/io.xr, which wraps the raw

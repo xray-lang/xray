@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import copy
+import dataclasses
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -19,8 +22,11 @@ from check_stdlib_boundary import (  # noqa: E402
     check_semantic_owners,
 )
 from stdlib_manifest import (  # noqa: E402
+    BoundaryManifest,
     load_manifest,
     loadable_modules,
+    load_stdlibgen,
+    private_leaf_binder_modules,
     registry_modules,
     source_modules,
 )
@@ -36,11 +42,53 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
 
     def test_source_only_module_needs_no_native_factory(self) -> None:
         manifest = load_manifest(ROOT)
-        csv = manifest.by_name["csv"]
-        self.assertIn("csv", source_modules(ROOT))
-        self.assertNotIn("csv", registry_modules(ROOT))
-        self.assertNotIn("factory_source", csv)
-        self.assertEqual([], csv.get("public_native", []))
+        for name in ("base64", "csv"):
+            module = manifest.by_name[name]
+            self.assertIn(name, source_modules(ROOT))
+            self.assertNotIn(name, registry_modules(ROOT))
+            self.assertNotIn(name, private_leaf_binder_modules(ROOT))
+            self.assertNotIn("factory_source", module)
+            self.assertEqual([], module.get("public_native", []))
+
+    def test_source_module_private_leaves_use_generic_binder(self) -> None:
+        manifest = load_manifest(ROOT)
+        os_module = manifest.by_name["os"]
+        binders = private_leaf_binder_modules(ROOT)
+        self.assertEqual({"io", "net", "os"}, set(binders))
+        self.assertIn("os", source_modules(ROOT))
+        self.assertNotIn("os", registry_modules(ROOT))
+        self.assertEqual(
+            "xr_stdlib_vm_bind_os_generated",
+            binders.get("os"),
+        )
+        self.assertNotIn("factory_source", os_module)
+        self.assertTrue(os_module.get("private_native_sources"))
+
+    def test_generic_private_leaf_module_rejects_stale_factory_source(self) -> None:
+        manifest = load_manifest(ROOT)
+        raw = copy.deepcopy(manifest.raw)
+        os_module = next(module for module in raw["module"] if module["name"] == "os")
+        os_module["factory_source"] = "stdlib/os/os.c"
+        mutated = BoundaryManifest(
+            root=ROOT,
+            raw=raw,
+            modules=tuple(raw["module"]),
+            vm_fastpaths=tuple(raw.get("vm_fastpath", ())),
+        )
+        with mock.patch("check_stdlib_boundary.load_manifest", return_value=mutated):
+            errors = check_manifest(ROOT)
+        self.assertIn(
+            "module os: module without native factory must not declare factory_source",
+            errors,
+        )
+
+    def test_duplicate_private_leaf_provider_identity_fails_generation(self) -> None:
+        stdlibgen = load_stdlibgen(ROOT)
+        entries, *_ = stdlibgen.parse_def_metadata(ROOT)
+        original = next(entry for entry in entries if entry.vm)
+        divergent = dataclasses.replace(original, vm=f"{original.vm}_divergent")
+        with self.assertRaisesRegex(SystemExit, "duplicate VM binding rows disagree"):
+            stdlibgen.unique_vm_binding_entries([original, divergent])
 
     def test_semantic_native_and_fastpath_contracts_are_source_derived(self) -> None:
         self.assertEqual([], check_semantic_owners(ROOT))

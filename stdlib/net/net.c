@@ -2430,11 +2430,16 @@ void xr_netlistener_register_class(XrVMRuntime *isolate) {
 XrModule *xr_native_module_create_net(XrVMRuntime *isolate) {
     net_platform_init();
     XrModule *mod = xr_module_create_native(isolate, "net");
+    if (!mod)
+        return NULL;
 
     // NetConn / NetListener XrClasses are registered up front by the
     // prelude module; nothing to do here.
 
-    xr_stdlib_vm_bind_net_generated(isolate, mod);
+    if (!xr_stdlib_vm_bind_net_generated(isolate, mod)) {
+        xr_module_free(mod);
+        return NULL;
+    }
 
     return mod;
 }
