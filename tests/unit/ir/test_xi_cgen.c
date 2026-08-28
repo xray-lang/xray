@@ -211,7 +211,8 @@ static XiFunc *make_manual_extern_func(const char *source_name, const char *link
 }
 
 TEST(aot_extern_registry_deduplicates_and_rejects_conflicts) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 120, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 120, .frozen = true};
     XrType int32_type = {
         .kind = XR_KIND_INT, .id = 121, .scalar_rep = XR_NATIVE_I32, .frozen = true};
     XrType float32_type = {
@@ -2367,7 +2368,8 @@ TEST(cgen_returned_scalar_constant_emits_immediate_without_local) {
 }
 
 TEST(cgen_returned_null_constant_emits_immediate_without_local) {
-    XrType null_type = {.kind = XR_KIND_NULL, .id = 935, .frozen = true};
+    XrType null_type = {
+        .kind = XR_KIND_NULL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 935, .frozen = true};
     XiFunc *ir = xi_func_new("manual_return_null", &null_type);
     TEST_REQUIRE(ir != NULL, "manual returned-null function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2436,10 +2438,12 @@ TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
 }
 
 TEST(cgen_shared_string_constant_emits_immediate_without_local) {
-    XrType null_type = {.kind = XR_KIND_NULL, .id = 938, .frozen = true};
+    XrType null_type = {
+        .kind = XR_KIND_NULL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 938, .frozen = true};
     XrType string_type = {
         .kind = XR_KIND_STRING, .id = 939, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 940, .frozen = true};
     XiFunc *ir = xi_func_new("manual_shared_literal", &null_type);
     TEST_REQUIRE(ir != NULL, "manual shared-literal function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2913,7 +2917,8 @@ TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
 }
 
 TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
-    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 159, .frozen = true};
+    XrType bool_type = {
+        .kind = XR_KIND_BOOL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 159, .frozen = true};
     XrType int_type = {.kind = XR_KIND_INT, .id = 160, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 161, .frozen = true};
     XrFunctionParam func_params[1] = {{.type = &int_type, .mode = XR_PARAM_READ}};
@@ -3608,7 +3613,8 @@ TEST(cgen_consumed_shared_load_stays_release_materialized) {
 
 TEST(cgen_shared_store_uses_portable_owned_value_helper) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 935, .scalar_rep = XR_NATIVE_I64, .frozen = true};
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 936, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 936, .frozen = true};
     XiFunc *ir = xi_func_new("manual_portable_shared_store", &int_type);
     TEST_REQUIRE(ir != NULL, "manual shared-store function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -3707,7 +3713,8 @@ TEST(cgen_dynamic_conversion_inlines_null_literal_without_forward_ref) {
 
 TEST(cgen_immediate_scalar_constant_inlines_into_place_store) {
     XrType u64_type = {.kind = XR_KIND_INT, .id = 930, .scalar_rep = XR_NATIVE_U64, .frozen = true};
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 931, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 931, .frozen = true};
     XiFunc *ir = xi_func_new("manual_const_place_store", &u64_type);
     TEST_REQUIRE(ir != NULL, "manual constant place-store function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -5847,7 +5854,8 @@ TEST(analyzer_parallel_for_each_rejects_throwing_body) {
 }
 
 TEST(cgen_parallel_for_body_closure_stack_allocates) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 906, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 906, .frozen = true};
     XrType int_type = {.kind = XR_KIND_INT, .id = 907, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 908, .frozen = true};
     XrFunctionParam func_params[2] = {
@@ -10709,7 +10717,8 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
 
 TEST(cgen_codegen_controls_emit_provider_constructs_without_runtime_calls) {
     XrType u64_type = {.kind = XR_KIND_INT, .id = 964, .scalar_rep = XR_NATIVE_U64, .frozen = true};
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 965, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 965, .frozen = true};
     XiFunc *ir = xi_func_new("manual_codegen_controls", &u64_type);
     TEST_REQUIRE(ir != NULL, "manual codegen-controls function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -10806,7 +10815,8 @@ TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
     }
     TEST_REQUIRE(caller != NULL && caller_call != NULL, "caller direct call must survive lowering");
 
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1901, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 1901, .frozen = true};
     XiValue *check =
         xi_value_insert_after(caller, caller_call->block, caller_call, XI_ERR_CHECK, &unit_type, 1);
     TEST_REQUIRE(check != NULL, "conservative error check inserted");
@@ -10926,7 +10936,8 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
         {XI_SELECT_BLOCK, "SELECT_BLOCK"},
         {XI_TIME_AFTER, "TIME_AFTER"},
     };
-    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 100, .frozen = true};
+    XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 100, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     assert(ir != NULL);
 
@@ -10952,8 +10963,10 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
 }
 
 TEST(cgen_unresolved_import_fails_fast) {
-    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 102, .frozen = true};
-    XrType stub_string = {.kind = XR_KIND_STRING, .id = 103, .frozen = true};
+    XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 102, .frozen = true};
+    XrType stub_string = {
+        .kind = XR_KIND_STRING, .scalar_rep = XR_SCALAR_REP_NONE, .id = 103, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     assert(ir != NULL);
 
@@ -10987,8 +11000,10 @@ TEST(cgen_unresolved_import_fails_fast) {
 }
 
 TEST(cgen_unknown_method_symbol_fails_fast) {
-    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 104, .frozen = true};
-    XrType stub_string = {.kind = XR_KIND_STRING, .id = 105, .frozen = true};
+    XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 104, .frozen = true};
+    XrType stub_string = {
+        .kind = XR_KIND_STRING, .scalar_rep = XR_SCALAR_REP_NONE, .id = 105, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     assert(ir != NULL);
 
@@ -11018,10 +11033,12 @@ TEST(cgen_unknown_method_symbol_fails_fast) {
 }
 
 static XiFunc *make_json_codec_preflight_ir(void) {
-    static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 107, .frozen = true};
+    static XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 107, .frozen = true};
     static XrType stub_json = {.kind = XR_KIND_JSON, .id = 108, .frozen = true};
     static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 109, .frozen = true};
-    static XrType stub_string = {.kind = XR_KIND_STRING, .id = 110, .frozen = true};
+    static XrType stub_string = {
+        .kind = XR_KIND_STRING, .scalar_rep = XR_SCALAR_REP_NONE, .id = 110, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     if (!ir)
         return NULL;
@@ -11535,7 +11552,8 @@ TEST(cgen_coro_shared_static_function_retain_is_elided) {
 }
 
 TEST(cgen_suspendable_dependency_init_fails_fast) {
-    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 101, .frozen = true};
+    XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 101, .frozen = true};
 
     XiFunc *dep = xi_func_new("init", &stub_unit);
     XiFunc *entry = xi_func_new("init", &stub_unit);
@@ -14662,8 +14680,10 @@ TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
 }
 
 TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
-    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 941, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 940, .frozen = true};
+    XrType bool_type = {
+        .kind = XR_KIND_BOOL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 941, .frozen = true};
     XrType map_type = {.kind = XR_KIND_MAP, .id = 942, .frozen = true};
     XrType object_type = {.kind = XR_KIND_STRUCT_OBJECT, .id = 943, .frozen = true};
     XiFunc *ir = xi_func_new("json_decode_loop_arc", &unit_type);
