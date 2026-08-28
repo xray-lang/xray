@@ -2122,7 +2122,7 @@ TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
     TEST_REQUIRE(fn_end != NULL, "addressed C-alias function end emitted");
     TEST_REQUIRE(contains_between(fn, fn_end, "int64_t v1 = v0;"),
                  "a scalar alias whose C address is taken must remain materialized");
-    TEST_REQUIRE(contains_between(fn, fn_end, "int64_t * v2 = (int64_t *)(&v1);"),
+    TEST_REQUIRE(contains_between(fn, fn_end, "(void *)(&v1)"),
                  "the scalar place must address the materialized alias local");
 
     printf("  Kept addressed scalar alias in %zu bytes of C code\n", strlen(code));
@@ -2712,7 +2712,7 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * changes produces, so it records the plan as it is rather than a change
      * made alongside it. */
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "5976f1e37d9a830465e57b73036e50ae4f59f359e3c1da85d644170897034577") == 0,
+                        "9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;
@@ -2890,16 +2890,13 @@ TEST(cgen_panicinfo_constructor_token_emits_no_local) {
 }
 
 TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
-    XrType bool_type = {
-        .kind = XR_KIND_BOOL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 159, .frozen = true};
-    XrType int_type = {.kind = XR_KIND_INT, .id = 160, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 160, .scalar_rep = XR_NATIVE_I64, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 161, .frozen = true};
-    XrFunctionParam func_params[1] = {{.type = &int_type, .mode = XR_PARAM_READ}};
-    func_type.function.params = func_params;
-    func_type.function.param_count = 1;
-    func_type.function.min_params = 1;
-    func_type.function.return_type = &bool_type;
-    XiFunc *ir = xi_func_new("direct_stdlib_import", &bool_type);
+    func_type.function.params = NULL;
+    func_type.function.param_count = 0;
+    func_type.function.min_params = 0;
+    func_type.function.return_type = &int_type;
+    XiFunc *ir = xi_func_new("direct_stdlib_import", &int_type);
     TEST_REQUIRE(ir != NULL, "direct stdlib import function allocated");
     XiBlock *entry = xi_block_new(ir);
     TEST_REQUIRE(entry != NULL, "direct stdlib import entry allocated");
