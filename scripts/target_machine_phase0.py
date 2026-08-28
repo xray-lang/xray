@@ -546,36 +546,57 @@ def validate_policies(root: Path) -> list[str]:
     identity = tomllib.loads(read(identity_path))
 
     expected_prefixes = {
-        "XR_SEM_", "XR_TARGET_", "XR_ARTIFACT_", "XR_OWN_", "XR_CORO_", "XR_EXEC_"
+        "XR_SEM_", "XR_TARGET_", "XR_ARTIFACT_", "XR_OWN_", "XR_CORO_", "XR_EXEC_",
+        "XR_AOT_REFINEMENT_", "XR_AOT_TAIL_CALL_CONFORMANCE_",
     }
     families = diagnostics.get("family", [])
     prefixes = {family.get("prefix") for family in families}
     if prefixes != expected_prefixes:
         errors.append(f"diagnostic family mismatch: {sorted(prefixes)}")
     ranges: dict[str, tuple[int, int]] = {}
+    named_prefixes: set[str] = set()
     for family in families:
+        prefix = family.get("prefix", "")
+        kind = family.get("kind")
+        if kind == "named":
+            if family.get("range"):
+                errors.append(f"named diagnostic family must not carry a range: {prefix}")
+            named_prefixes.add(prefix)
+            continue
+        if kind != "numbered":
+            errors.append(f"diagnostic family lacks an explicit kind: {prefix}")
+            continue
         match = re.fullmatch(r"([0-9]{4})-([0-9]{4})", family.get("range", ""))
         if not match:
-            errors.append(f"invalid diagnostic range for {family.get('prefix')}")
+            errors.append(f"invalid diagnostic range for {prefix}")
             continue
-        ranges[family["prefix"]] = (int(match.group(1)), int(match.group(2)))
+        ranges[prefix] = (int(match.group(1)), int(match.group(2)))
     seen: set[str] = set()
     for code in diagnostics.get("code", []):
         code_id = code.get("id", "")
         if code_id in seen:
             errors.append(f"duplicate diagnostic code {code_id}")
         seen.add(code_id)
-        prefix = next((item for item in expected_prefixes if code_id.startswith(item)), None)
-        if prefix is None or prefix not in ranges:
+        prefix = max(
+            (item for item in expected_prefixes if code_id.startswith(item)),
+            key=len,
+            default=None,
+        )
+        if prefix is None or (prefix not in ranges and prefix not in named_prefixes):
             errors.append(f"diagnostic code outside registered family: {code_id}")
             continue
         suffix = code_id[len(prefix):]
-        if not re.fullmatch(r"[0-9]{4}", suffix):
-            errors.append(f"invalid diagnostic code spelling: {code_id}")
-            continue
-        low, high = ranges[prefix]
-        if not low <= int(suffix) <= high:
-            errors.append(f"diagnostic code outside family range: {code_id}")
+        if prefix in named_prefixes:
+            if not re.fullmatch(r"[A-Z][A-Z0-9_]*", suffix):
+                errors.append(f"invalid named diagnostic code spelling: {code_id}")
+                continue
+        else:
+            if not re.fullmatch(r"[0-9]{4}", suffix):
+                errors.append(f"invalid diagnostic code spelling: {code_id}")
+                continue
+            low, high = ranges[prefix]
+            if not low <= int(suffix) <= high:
+                errors.append(f"diagnostic code outside family range: {code_id}")
         if not code.get("name") or not code.get("message"):
             errors.append(f"diagnostic code lacks stable name/message: {code_id}")
 
@@ -595,6 +616,7 @@ def validate_policies(root: Path) -> list[str]:
         errors.append("identity policy does not reject address/order inputs")
     if diagnostics.get("policy", {}).get("unknown_code") == "error":
         errors.extend(unregistered_emitted_codes(root, seen, ranges))
+        errors.extend(unregistered_issue_names(root, seen))
     return errors
 
 
@@ -623,6 +645,54 @@ def unregistered_emitted_codes(
     return [
         f"emitted diagnostic code is not registered: {code} ({emitted[code]})"
         for code in sorted(set(emitted) - registered)
+    ]
+
+
+ISSUE_NAME_TABLE = re.compile(r"(\w*_(?:issue|code|diagnostic)_name)\s*\([^)]*\)\s*\{")
+CODE_SHAPED = re.compile(r"^XR_[A-Z][A-Z0-9_]*$")
+
+
+def issue_name_table_bodies(text: str):
+    """Yield (function name, body) for every code-name table in one source."""
+    for match in ISSUE_NAME_TABLE.finditer(text):
+        depth, index = 0, match.end() - 1
+        while index < len(text):
+            if text[index] == "{":
+                depth += 1
+            elif text[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            index += 1
+        yield match.group(1), text[match.end():index]
+
+
+def unregistered_issue_names(root: Path, registered: set[str]) -> list[str]:
+    """Enforce the same policy against codes a name table spells, not just literals.
+
+    unregistered_emitted_codes() builds its pattern from the registered family
+    prefixes, so it can only find a member missing from a family already in the
+    registry. A family that is not registered at all is invisible to it, which
+    is how two of them shipped: 41 code-shaped names reaching users through
+    *_issue_name() tables while the gate stayed green.
+
+    A name table returning a code-shaped string is the source declaring that
+    string is an identity users will see, so that is the open-world question
+    asked here. A table returning lowercase prose (missing_mandatory_plan) is
+    describing, not identifying, and is left alone.
+    """
+    emitted: dict[str, str] = {}
+    for path in sorted((root / "src").rglob("*")):
+        if path.suffix not in (".c", ".h"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for function, body in issue_name_table_bodies(text):
+            for name in re.findall(r'return\s+"([^"\n]*)"', body):
+                if CODE_SHAPED.fullmatch(name):
+                    emitted.setdefault(name, f"{path.relative_to(root)}:{function}")
+    return [
+        f"code-shaped name is not registered: {name} ({emitted[name]})"
+        for name in sorted(set(emitted) - registered)
     ]
 
 
