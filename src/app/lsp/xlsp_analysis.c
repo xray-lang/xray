@@ -38,6 +38,9 @@
 #include "../../runtime/value/xtype_pool.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../module/xmodule_identity.h"
+#include "../../module/xmodule_graph.h"
+#include "../../runtime/xisolate_api.h"
+#include "../cli/xcli_graph_authority.h"
 
 // AST formatter (lives in frontend/format).
 #include "../../frontend/format/xfmt.h"
@@ -56,10 +59,11 @@ static XrTypePool *lsp_compiler_analyzer_pool(XrVMRuntime *isolate) {
  * unit; the editor path has to do the same or it analyses a different
  * language than the compiler does.
  *
- * The identity is derived from the document URI, which is stable for the
- * life of the file.  Stability is required, not incidental: the owner is
- * baked into the recorded enum layout, so a value that changed per keystroke
- * would invalidate that layout on every edit. */
+ * A graph-backed document uses the graph's canonical identity; a buffer that
+ * has no graph entry falls back to an identity derived from its stable URI.
+ * Stability is required, not incidental: the owner is baked into the recorded
+ * enum layout, so a value that changed per keystroke would invalidate that
+ * layout on every edit. */
 /* Turn a document URI into a logical module path: relative, forward-slashed,
  * and free of empty or dot segments.  Returns false when no such path exists,
  * leaving the caller to analyse without an identity rather than inventing one. */
@@ -78,21 +82,38 @@ static bool lsp_logical_path_from_uri(const char *uri, char *buf, size_t cap) {
     return true;
 }
 
+static const char *lsp_graph_identity_for_uri(const XrModuleGraph *graph, const char *uri) {
+    if (!graph || !uri)
+        return NULL;
+
+    const char *path = xlsp_uri_to_path(uri);
+    char *canonical_path = xr_realpath(path);
+    int idx = xr_module_graph_find_source(graph, canonical_path ? canonical_path : path);
+    xr_free(canonical_path);
+    return idx >= 0 ? graph->specs[idx].canonical : NULL;
+}
+
 bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
-                                 const char *uri) {
+                                 const XrModuleGraph *graph, const char *uri) {
     scope->session = NULL;
     scope->identity = NULL;
     if (!session || !uri)
         return false;
 
-    char logical[XLSP_MAX_PATH];
-    if (!lsp_logical_path_from_uri(uri, logical, sizeof(logical)))
-        return false;
-
-    const XrModuleIdentityAuthority authority = {.kind = XR_MODULE_IDENTITY_SCRIPT};
     char *identity = NULL;
-    if (!xr_module_identity_from_logical(&authority, logical, &identity))
-        return false;
+    const char *graph_identity = lsp_graph_identity_for_uri(graph, uri);
+    if (graph_identity) {
+        identity = xr_strdup(graph_identity);
+        if (!identity)
+            return false;
+    } else {
+        char logical[XLSP_MAX_PATH];
+        if (!lsp_logical_path_from_uri(uri, logical, sizeof(logical)))
+            return false;
+        const XrModuleIdentityAuthority authority = {.kind = XR_MODULE_IDENTITY_SCRIPT};
+        if (!xr_module_identity_from_logical(&authority, logical, &identity))
+            return false;
+    }
 
     const XrCompileUnitIdentity unit = {.kind = XR_COMPILE_UNIT_USER, .module_identity = identity};
     if (!xr_compiler_session_set_compile_unit_identity(session, &unit)) {
@@ -260,6 +281,139 @@ static void lsp_error_callback(void *user_data, int line, int column, int end_li
 
 // lsp_log declared in xlsp_server.h (included via xlsp_analysis.h)
 
+void xlsp_analysis_release_module_graph(XrLspServer *server) {
+    if (!server)
+        return;
+
+    if (server->workspace_analyzer)
+        xa_analyzer_set_graph(server->workspace_analyzer, NULL);
+
+    /* Dependency ASTs are owned by the graph. Remove their analyzer scopes
+     * before freeing it so symbol locations and names cannot outlive the AST
+     * storage they borrow. The entry is analyzed from the open document AST
+     * under its URI and therefore is not graph-owned. */
+    if (server->module_graph && server->workspace_analyzer) {
+        for (int i = 0; i < server->module_graph->spec_count; i++) {
+            if (i == server->module_graph->entry_index)
+                continue;
+            const char *source_path = server->module_graph->specs[i].source_path;
+            if (source_path)
+                xa_analyzer_remove_file(server->workspace_analyzer, source_path);
+        }
+    }
+
+    if (server->module_graph) {
+        xr_module_graph_free(server->module_graph);
+        server->module_graph = NULL;
+    }
+    if (server->module_graph_authority) {
+        xr_cli_graph_authority_close(server->module_graph_authority);
+        xr_free(server->module_graph_authority);
+        server->module_graph_authority = NULL;
+    }
+}
+
+static XrLspDocument *lsp_document_for_source(XrLspServer *server, const char *source_path) {
+    if (!server || !server->doc_table || !source_path)
+        return NULL;
+    for (int i = 0; i < server->doc_table->bucket_count; i++) {
+        for (XrLspDocBucket *bucket = server->doc_table->buckets[i]; bucket;
+             bucket = bucket->next) {
+            XrLspDocument *doc = bucket->doc;
+            const char *doc_path = doc && doc->uri ? xlsp_uri_to_path(doc->uri) : NULL;
+            char *canonical_path = doc_path ? xr_realpath(doc_path) : NULL;
+            bool matches = canonical_path && strcmp(canonical_path, source_path) == 0;
+            xr_free(canonical_path);
+            if (matches)
+                return doc;
+        }
+    }
+    return NULL;
+}
+
+/* Build the exact source graph rooted at the document, then analyze every
+ * dependency leaves-first so its checked export table exists before an
+ * importer resolves a relative specifier. The open document itself is
+ * analyzed below from its in-memory AST. */
+static void lsp_rebuild_module_graph(XrLspServer *server, XrLspDocument *doc) {
+    xlsp_analysis_release_module_graph(server);
+    if (!server || !server->workspace_analyzer || !server->isolate || !doc || !doc->uri)
+        return;
+
+    const char *entry_path = xlsp_uri_to_path(doc->uri);
+    if (!entry_path || !entry_path[0])
+        return;
+
+    XrCliGraphAuthority *authority = xr_malloc(sizeof(*authority));
+    if (!authority)
+        return;
+
+    char authority_error[256] = {0};
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(server->isolate);
+    if (!xr_cli_graph_authority_open(authority, registry, entry_path, authority_error,
+                                     sizeof(authority_error))) {
+        lsp_log("graph: no authority for %s: %s", entry_path, authority_error);
+        xr_free(authority);
+        return;
+    }
+
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
+    XrModuleGraph *graph = xr_module_graph_new(session, authority->resolver);
+    char *build_error = NULL;
+    if (!graph ||
+        xr_module_graph_build(graph, entry_path, &authority->entry_authority, &build_error) != 0) {
+        lsp_log("graph: build failed for %s: %s", entry_path,
+                build_error ? build_error : "unknown");
+        xr_free(build_error);
+        if (graph)
+            xr_module_graph_free(graph);
+        xr_cli_graph_authority_close(authority);
+        xr_free(authority);
+        return;
+    }
+
+    /* Cycles remain analyzer diagnostics; the graph still contains the exact
+     * resolver identities needed for cross-file lookup. */
+    (void) xr_module_graph_topological_sort(graph);
+    server->module_graph = graph;
+    server->module_graph_authority = authority;
+    xa_analyzer_set_graph(server->workspace_analyzer, graph);
+
+    for (int i = 0; i < graph->topo_count; i++) {
+        int spec_index = graph->topo_order[i];
+        if (spec_index == graph->entry_index)
+            continue;
+        XrModuleSpec *spec = &graph->specs[spec_index];
+        if (!spec->source_path)
+            continue;
+
+        XrLspDocument *open_doc = lsp_document_for_source(server, spec->source_path);
+        XrAstNode *module_ast =
+            open_doc && open_doc->ast ? (XrAstNode *) open_doc->ast : (XrAstNode *) spec->ast;
+        if (!module_ast)
+            continue;
+
+        char spec_uri[XLSP_MAX_PATH + 8];
+        int written = snprintf(spec_uri, sizeof(spec_uri), "file://%s", spec->source_path);
+        if (written < 0 || (size_t) written >= sizeof(spec_uri))
+            continue;
+
+        XlspAnalysisIdentity dependency_identity;
+        xlsp_analysis_identity_push(&dependency_identity, session, graph, spec_uri);
+        xa_analyzer_analyze(server->workspace_analyzer, spec->source_path, module_ast);
+        xlsp_analysis_identity_pop(&dependency_identity);
+
+        XrHashMap *exports = NULL;
+        if (xa_analyzer_collect_export_symbols_checked(server->workspace_analyzer, module_ast,
+                                                       &exports)) {
+            spec->export_symbols = exports;
+        }
+        if (open_doc)
+            open_doc->dirty = false;
+    }
+    lsp_log("graph: %d module(s) for %s", graph->spec_count, entry_path);
+}
+
 // Parse and index imported files on demand
 static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const char *base_uri) {
     if (!server || !ast || !base_uri || !server->workspace_analyzer)
@@ -326,7 +480,7 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
                 XlspAnalysisIdentity import_identity;
                 xlsp_analysis_identity_push(
                     &import_identity, xr_compiler_session_current_for_isolate(server->isolate),
-                    import_uri);
+                    server->module_graph, import_uri);
                 xa_analyzer_refresh_file(server->workspace_analyzer, import_uri,
                                          (XrAstNode *) open_doc->ast, open_doc->content_hash);
                 xlsp_analysis_identity_pop(&import_identity);
@@ -381,7 +535,7 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             XlspAnalysisIdentity import_identity;
             xlsp_analysis_identity_push(&import_identity,
                                         xr_compiler_session_current_for_isolate(server->isolate),
-                                        import_uri);
+                                        server->module_graph, import_uri);
             xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode *) import_ast);
             xlsp_analysis_identity_pop(&import_identity);
             lsp_log("import: indexed %s%s", full_path, parser.had_error ? " (with errors)" : "");
@@ -472,10 +626,17 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     doc->parse_error = parser.had_error;
     doc->cached_diagnostics = error_ctx.diagnostics;
 
-    // Index imported files on demand (before analyzing current file)
-    // Now safe after fixing parser infinite loop issues
+    // Resolve imports through the compiler's exact graph first. The on-demand
+    // path is only a best-effort fallback for unsaved/non-file buffers. Do not
+    // run both: its temporary AST storage cannot be retained beside graph-owned
+    // dependency scopes, and duplicate analysis would create two authorities.
     if (ast) {
-        index_imports_on_demand(server, ast, doc->uri);
+        lsp_rebuild_module_graph(server, doc);
+        XrModuleGraph *graph = server->module_graph;
+        bool graph_read_entry = graph && graph->entry_index >= 0 &&
+                                graph->specs[graph->entry_index].ast;
+        if (!graph_read_entry)
+            index_imports_on_demand(server, ast, doc->uri);
     }
 
     // Run static analysis using workspace-level analyzer (incremental update)
@@ -486,7 +647,8 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
         // Use incremental update with content hash for true change detection
         XlspAnalysisIdentity doc_identity;
         xlsp_analysis_identity_push(&doc_identity,
-                                    xr_compiler_session_current_for_isolate(isolate), doc->uri);
+                                    xr_compiler_session_current_for_isolate(isolate),
+                                    server->module_graph, doc->uri);
         xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri, (XrAstNode *) ast,
                                  doc->content_hash);
         xlsp_analysis_identity_pop(&doc_identity);

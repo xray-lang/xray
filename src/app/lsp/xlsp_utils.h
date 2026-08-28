@@ -27,8 +27,19 @@
 static inline const char *xlsp_uri_to_path(const char *uri) {
     if (!uri)
         return NULL;
-    if (strncmp(uri, "file://", 7) == 0)
-        return uri + 7;
+    if (strncmp(uri, "file://", 7) == 0) {
+        const char *path = uri + 7;
+#ifdef _WIN32
+        /* A standard Windows file URI is file:///C:/path. Win32 path APIs
+         * accept C:/path, not the URI's leading slash. */
+        if (path[0] == '/' &&
+            ((path[1] >= 'A' && path[1] <= 'Z') || (path[1] >= 'a' && path[1] <= 'z')) &&
+            path[2] == ':') {
+            path++;
+        }
+#endif
+        return path;
+    }
     return uri;
 }
 

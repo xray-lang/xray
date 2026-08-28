@@ -20,6 +20,7 @@
 #include "xlsp_completion.h"
 
 typedef struct XrCompilerSession XrCompilerSession;
+typedef struct XrModuleGraph XrModuleGraph;
 
 /* Scoped compiler identity used by every LSP analyzer entry point.  The
  * identity storage is borrowed by the compiler session until pop. */
@@ -29,8 +30,13 @@ typedef struct XlspAnalysisIdentity {
 } XlspAnalysisIdentity;
 
 XR_FUNC bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope,
-                                         XrCompilerSession *session, const char *uri);
+                                         XrCompilerSession *session,
+                                         const XrModuleGraph *graph, const char *uri);
 XR_FUNC void xlsp_analysis_identity_pop(XlspAnalysisIdentity *scope);
+
+/* Clear the analyzer's borrowed graph and release the server-owned graph and
+ * authority. Safe to call during server teardown or analyzer replacement. */
+XR_FUNC void xlsp_analysis_release_module_graph(XrLspServer *server);
 
 // Generate diagnostics for a document
 XR_FUNC XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc);

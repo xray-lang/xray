@@ -25,6 +25,7 @@
 #include "../../../src/app/lsp/xlsp_semantic_tokens.h"
 #include "../../../src/app/lsp/xlsp_workspace.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/module/xmodule_graph.h"
 #include "../../../src/base/xjson.h"
 #include "../test_win_compat.h"
 
@@ -154,6 +155,31 @@ static bool content_position_of_nth(const char *content, const char *needle, int
     if (out_col)
         *out_col = col;
     return true;
+}
+
+static bool write_text_file(const char *path, const char *content) {
+    FILE *file = fopen(path, "wb");
+    if (!file)
+        return false;
+    bool wrote = fputs(content, file) >= 0;
+    bool closed = fclose(file) == 0;
+    return wrote && closed;
+}
+
+static bool file_uri_for_test(const char *path, char *uri, size_t uri_size) {
+    char resolved[XR_TEST_PATH_MAX];
+    if (!xr_test_realpath_buf(path, resolved, sizeof(resolved)))
+        return false;
+    for (char *p = resolved; *p; p++) {
+        if (*p == '\\')
+            *p = '/';
+    }
+#ifdef _WIN32
+    int written = snprintf(uri, uri_size, "file:///%s", resolved);
+#else
+    int written = snprintf(uri, uri_size, "file://%s", resolved);
+#endif
+    return written >= 0 && (size_t) written < uri_size;
 }
 
 TEST(block_import_path_uses_shared_quoted_literal_decoder) {
@@ -545,6 +571,54 @@ TEST(watched_file_refresh_installs_enum_identity) {
 
     ASSERT(remove(path) == 0);
     xlsp_server_free(server);
+}
+
+TEST(relative_import_from_disk_provides_precise_hover) {
+    char directory[] = "xray-lsp-module-graph-XXXXXX";
+    ASSERT(xr_test_mkdtemp(directory) != NULL);
+
+    char dependency_path[XR_TEST_PATH_MAX];
+    char entry_path[XR_TEST_PATH_MAX];
+    ASSERT(snprintf(dependency_path, sizeof(dependency_path), "%s/palette.xr", directory) > 0);
+    ASSERT(snprintf(entry_path, sizeof(entry_path), "%s/main.xr", directory) > 0);
+
+    const char *dependency = "export enum Shade { Light, Dark }\n";
+    const char *entry = "import { Shade } from \"./palette\"\n"
+                        "var selected = Shade.Light\n";
+    ASSERT(write_text_file(dependency_path, dependency));
+    ASSERT(write_text_file(entry_path, entry));
+
+    char entry_uri[XR_TEST_PATH_MAX + 16];
+    ASSERT(file_uri_for_test(entry_path, entry_uri, sizeof(entry_uri)));
+
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    XrLspDocument *doc = xlsp_document_open(server, entry_uri, entry, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    ASSERT(server->module_graph != NULL);
+    ASSERT(server->module_graph->spec_count == 2);
+    XrJsonValue *diagnostics = xlsp_analyze_diagnostics(doc);
+    ASSERT(diagnostics != NULL);
+    ASSERT_EQ(xjson_array_len(diagnostics), 0);
+    xjson_free(diagnostics);
+
+    int hover_line = 0;
+    int hover_col = 0;
+    ASSERT(content_position_of_nth(entry, "Shade", 2, &hover_line, &hover_col));
+    XrJsonValue *hover = xlsp_analyze_hover(
+        server, doc, (XrLspPosition) {(uint32_t) hover_line, (uint32_t) hover_col + 1});
+    ASSERT(hover != NULL);
+    const char *hover_text = hover_markdown_value(hover);
+    ASSERT(hover_text != NULL);
+    ASSERT(strstr(hover_text, "enum Shade") != NULL);
+    xjson_free(hover);
+
+    xlsp_server_free(server);
+    ASSERT(xr_test_unlink(entry_path) == 0);
+    ASSERT(xr_test_unlink(dependency_path) == 0);
+    ASSERT(xr_test_rmdir(directory) == 0);
 }
 
 TEST(completion_enum_descriptor_properties) {
@@ -1636,6 +1710,7 @@ int main(int argc, char **argv) {
     RUN_TEST(completion_enum_static_variants_descriptor);
     RUN_TEST(dirty_open_import_refresh_preserves_enum_identity);
     RUN_TEST(watched_file_refresh_installs_enum_identity);
+    RUN_TEST(relative_import_from_disk_provides_precise_hover);
     RUN_TEST(completion_enum_descriptor_properties);
     RUN_TEST(completion_enum_iteration_variable_is_descriptor);
     RUN_TEST(hover_enum_descriptor_keeps_precise_type);

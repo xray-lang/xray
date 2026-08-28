@@ -1297,6 +1297,13 @@ if(XR_BUILD_LSP)
 
     file(GLOB LSP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
     list(REMOVE_ITEM LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c)
+    # Module-graph authority is shared with CLI source commands and is not part
+    # of xray_core. Production xray already links these sources; full-source
+    # LSP unit binaries must name them as well.
+    list(APPEND LSP_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_graph_authority.c
+        ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_fs.c
+        ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_output.c)
 
     # The full-source LSP tests exercise the same Windows CRT-pipe adapters as
     # the production server; keep them enabled on every host.
