@@ -2495,7 +2495,7 @@ module mem {
     argc: 1
   }
 
-  fn fence {
+  fn __fence {
     signature: "(ordering: i64): ()"
     doc: "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)"
     vm: "mem_fence"
@@ -2507,7 +2507,7 @@ module mem {
     layer: "core"
   }
 
-  fn prefetch {
+  fn __prefetch {
     signature: "(ptr: Ptr<u8>, rw: i64): ()"
     doc: "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch"
     vm: "mem_prefetch"
@@ -2520,7 +2520,7 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn cacheFlush {
+  fn __cacheFlush {
     signature: "(ptr: Ptr<u8>, n: i64): ()"
     doc: "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_flush"
@@ -2532,7 +2532,7 @@ module mem {
     layer: "core"
   }
 
-  fn cacheInvalidate {
+  fn __cacheInvalidate {
     signature: "(ptr: Ptr<u8>, n: i64): ()"
     doc: "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_invalidate"
@@ -2544,7 +2544,7 @@ module mem {
     layer: "core"
   }
 
-  fn nontemporalStore {
+  fn __nontemporalStore {
     signature: "(ptr: MutPtr<u8>, v: i64, size: i64): ()"
     doc: "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available"
     vm: "mem_nontemporal_store"
@@ -2556,7 +2556,7 @@ module mem {
     layer: "core"
   }
 
-  fn cacheLineSize {
+  fn __cacheLineSize {
     signature: "(): i64"
     doc: "CPU cache line size in bytes"
     vm: "mem_cache_line_size"
@@ -2626,47 +2626,7 @@ module mem {
     semantic_intrinsic: true
   }
 
-  const PROT_NONE {
-    signature: ": i64"
-    doc: "No access protection for mem.pageAlloc/pageProtect"
-    vm: "mem.PROT_NONE"
-    vm_value: "xr_int(XR_MEM_PROT_NONE)"
-    aot_const: "int64"
-    value: 0
-    layer: "core"
-  }
-
-  const PROT_READ {
-    signature: ": i64"
-    doc: "Readable page protection bit for mem.pageAlloc/pageProtect"
-    vm: "mem.PROT_READ"
-    vm_value: "xr_int(XR_MEM_PROT_READ)"
-    aot_const: "int64"
-    value: 1
-    layer: "core"
-  }
-
-  const PROT_WRITE {
-    signature: ": i64"
-    doc: "Writable page protection bit for mem.pageAlloc/pageProtect"
-    vm: "mem.PROT_WRITE"
-    vm_value: "xr_int(XR_MEM_PROT_WRITE)"
-    aot_const: "int64"
-    value: 2
-    layer: "core"
-  }
-
-  const PROT_EXEC {
-    signature: ": i64"
-    doc: "Executable page protection bit for mem.pageAlloc/pageProtect"
-    vm: "mem.PROT_EXEC"
-    vm_value: "xr_int(XR_MEM_PROT_EXEC)"
-    aot_const: "int64"
-    value: 4
-    layer: "core"
-  }
-
-  fn alloc {
+  fn __alloc {
     signature: "(n: i64): Buffer"
     doc: "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped"
     vm: "mem_alloc"
@@ -2680,7 +2640,7 @@ module mem {
     return_ownership: "fresh"
   }
 
-  fn allocZeroed {
+  fn __allocZeroed {
     signature: "(n: i64): Buffer"
     doc: "Allocate n zero-initialized bytes as a managed Buffer"
     vm: "mem_alloc_zeroed"
@@ -2694,7 +2654,7 @@ module mem {
     return_ownership: "fresh"
   }
 
-  fn allocAligned {
+  fn __allocAligned {
     signature: "(n: i64, align: i64): Buffer"
     doc: "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))"
     vm: "mem_alloc_aligned"
@@ -2734,7 +2694,7 @@ module mem {
     layer: "core"
   }
 
-  fn pageProtect {
+  fn __pageProtect {
     signature: "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool"
     doc: "Change anonymous page protection bits; returns false on OS failure"
     vm: "mem_page_protect"
@@ -2746,7 +2706,7 @@ module mem {
     layer: "core"
   }
 
-  fn pageFree {
+  fn __pageFree {
     signature: "(ptr: MutPtr<u8>, bytes: i64): bool"
     doc: "Release anonymous pages from mem.pageAlloc; returns false on OS failure"
     vm: "mem_page_free"
@@ -2834,7 +2794,7 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn copy {
+  fn __copy {
     signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
     doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
     allocation: "no_heap"
@@ -2847,7 +2807,7 @@ module mem {
     layer: "core"
   }
 
-  fn move {
+  fn __move {
     signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
     doc: "Copy n bytes from src to dst (may overlap; memmove)"
     vm: "mem_move"
@@ -2860,7 +2820,7 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn set {
+  fn __set {
     signature: "(dst: MutPtr<u8>, u8: i64, n: i64): ()"
     doc: "Fill n bytes at dst with byte (memset)"
     vm: "mem_set"
@@ -2873,7 +2833,7 @@ module mem {
     allocation: "no_heap"
   }
 
-  fn compare {
+  fn __compare {
     signature: "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64"
     doc: "Compare n bytes at a and b (memcmp: <0, 0, >0)"
     vm: "mem_compare"
@@ -2885,7 +2845,7 @@ module mem {
     layer: "core"
   }
 
-  fn volatileLoad {
+  fn __volatileLoad {
     signature: "(ptr: Ptr<u8>, size: i64): i64"
     doc: "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
     vm: "mem_volatile_load"
@@ -2897,7 +2857,7 @@ module mem {
     layer: "core"
   }
 
-  fn volatileStore {
+  fn __volatileStore {
     signature: "(ptr: MutPtr<u8>, v: i64, size: i64): ()"
     doc: "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
     vm: "mem_volatile_store"

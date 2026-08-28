@@ -1,0 +1,91 @@
+// mem — raw-memory capability surface composed in Xray over private native
+// leaves.
+//
+// What stays native, and why, is decided by one rule: a symbol lives here when
+// its meaning can be stated in Xray, and stays in the .def when the compiler
+// owns its meaning.
+//
+// Three groups keep .def rows:
+//
+//   1. The layout/pointer/borrow intrinsics — sizeOf, alignOf, offsetOf, ptr,
+//      mutPtr, slice, load, store, withSliceMut, assumeInitialized. These are
+//      not calls the VM can make: the analyzer computes their result type from
+//      an explicit type argument, and lowering encodes the selected T, endian,
+//      and owner evidence directly onto the backend op. Their VM entry points
+//      are deliberately unreachable stubs. Xray has no way to spell "the
+//      caller's T decides my return type and my element layout", so a source
+//      body here could only restate a lie.
+//
+//   2. Buffer and its four methods, because a native class and its methods have
+//      no internal spelling in the .def metadata: renaming them cannot make
+//      them private, and Buffer additionally occupies a runtime core class slot.
+//
+//   3. pageAlloc, because its .def declares two arities that select two
+//      different AOT entry points (xrt_mem_page_alloc_default for the
+//      read/write default, xrt_mem_page_alloc when protection bits are given).
+//      Xray has no function overloading, and collapsing the pair into one
+//      default-argument function would erase the one-argument entry point.
+//
+// Everything else is a plain forward over a private leaf, so the VM and AOT
+// compile the same Xray semantics instead of one restatement each.
+
+// Page protection bits for pageAlloc/pageProtect.
+//
+// These are xray's own abstract bits (XrMemProt in src/os/os_mem.h), not the
+// host's PROT_* values: prot_to_posix / prot_to_win translate them per platform,
+// so the numbers below are the same on every target and belong in source rather
+// than behind a host query.
+export const PROT_NONE: i64 = 0
+export const PROT_READ: i64 = 1
+export const PROT_WRITE: i64 = 2
+export const PROT_EXEC: i64 = 4
+
+// Memory ordering fence. `ordering` mirrors the Ordering enum ordinals
+// (0 Relaxed .. 4 SeqCst).
+export fn fence(ordering: i64) { __fence(ordering) }
+
+// Prefetch a cache line at ptr; rw != 0 signals write intent. A pure
+// performance hint with no observable effect: a VM no-op, __builtin_prefetch
+// under AOT.
+export fn prefetch(ptr: Ptr<u8>, rw: i64) { __prefetch(ptr, rw) }
+
+// Best-effort cache maintenance over a byte range. Neither call may alter
+// memory contents; unsupported platforms lower them to a fence or a no-op.
+export fn cacheFlush(ptr: Ptr<u8>, n: i64) { __cacheFlush(ptr, n) }
+export fn cacheInvalidate(ptr: Ptr<u8>, n: i64) { __cacheInvalidate(ptr, n) }
+
+// Best-effort non-temporal sized store; size in {1, 2, 4, 8}. The VM stores
+// normally, AOT emits streaming stores where the target has them.
+export fn nontemporalStore(ptr: MutPtr<u8>, v: i64, size: i64) {
+    __nontemporalStore(ptr, v, size)
+}
+
+// CPU cache line size in bytes.
+export fn cacheLineSize() -> i64 { return __cacheLineSize() }
+
+// Managed allocation. Each returns a Buffer that owns its bytes and releases
+// them when dropped.
+export fn alloc(n: i64) -> Buffer { return __alloc(n) }
+export fn allocZeroed(n: i64) -> Buffer { return __allocZeroed(n) }
+export fn allocAligned(n: i64, align: i64) -> Buffer { return __allocAligned(n, align) }
+
+// Anonymous page protection and release. pageAlloc itself remains a .def row:
+// see the header note on its two arities.
+export fn pageProtect(ptr: MutPtr<u8>, bytes: i64, prot: i64) -> bool {
+    return __pageProtect(ptr, bytes, prot)
+}
+export fn pageFree(ptr: MutPtr<u8>, bytes: i64) -> bool {
+    return __pageFree(ptr, bytes)
+}
+
+// Bulk byte operations: libc memcpy / memmove / memset / memcmp semantics.
+export fn copy(dst: MutPtr<u8>, src: Ptr<u8>, n: i64) { __copy(dst, src, n) }
+export fn move(dst: MutPtr<u8>, src: Ptr<u8>, n: i64) { __move(dst, src, n) }
+export fn set(dst: MutPtr<u8>, byte: i64, n: i64) { __set(dst, byte, n) }
+export fn compare(a: Ptr<u8>, b: Ptr<u8>, n: i64) -> i64 { return __compare(a, b, n) }
+
+// Volatile MMIO access of size bytes; size in {1, 2, 4, 8}, native byte order.
+export fn volatileLoad(ptr: Ptr<u8>, size: i64) -> i64 { return __volatileLoad(ptr, size) }
+export fn volatileStore(ptr: MutPtr<u8>, v: i64, size: i64) {
+    __volatileStore(ptr, v, size)
+}

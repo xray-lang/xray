@@ -166,10 +166,19 @@ perf_suite = "stdlib/regex"
 name = "mem"
 public = true
 layer = "L1"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/mem/mem.xr"
 factory_source = "stdlib/mem/mem.c"
-public_native = ["Buffer", "Buffer.asBytes", "Buffer.asMutBytes", "Buffer.borrowPtr", "Buffer.resize", "PROT_EXEC", "PROT_NONE", "PROT_READ", "PROT_WRITE", "addr", "alignOf", "alloc", "allocAligned", "allocZeroed", "assumeInitialized", "cacheFlush", "cacheInvalidate", "cacheLineSize", "compare", "copy", "fence", "load", "move", "mutPtr", "nontemporalStore", "offsetOf", "pageAlloc", "pageFree", "pageProtect", "prefetch", "ptr", "set", "sizeOf", "slice", "store", "volatileLoad", "volatileStore", "withSliceMut"]
+# Partial migration. The retained rows are the ones whose meaning the compiler
+# owns rather than the source: Buffer plus its methods occupy a runtime core
+# class slot and have no internal spelling in .def metadata, the layout/pointer/
+# borrow intrinsics take their result type from an explicit type argument and
+# lower to backend ops rather than calls, and pageAlloc declares two arities
+# that select two AOT entry points, which Xray cannot express without function
+# overloading.
+public_native = ["Buffer", "Buffer.asBytes", "Buffer.asMutBytes", "Buffer.borrowPtr", "Buffer.resize", "addr", "alignOf", "assumeInitialized", "load", "mutPtr", "offsetOf", "pageAlloc", "ptr", "sizeOf", "slice", "store", "withSliceMut"]
+private_native_sources = ["stdlib/mem/mem.c"]
+private_native_reason = "Private fence, cache, allocation, page, address and bulk-byte leaves consumed by mem.xr"
 perf_suite = "stdlib/mem"
 
 [[module]]
