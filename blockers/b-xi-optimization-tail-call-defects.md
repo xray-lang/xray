@@ -72,7 +72,9 @@ Both ingredients are required, established by subtraction:
 
 So the trigger is a free function whose body is a nested tail call
 (`return describe(choose(n))`) coexisting with a called class method that is itself a tail
-call (`return choose(n)`), over a unit enum.
+call (`return choose(n)`), over a unit enum. The source shape is incidental; what matters
+is that the inliner chooses to inline a function whose body ends in a promoted tail call,
+which the root-cause section below establishes.
 
 ## Attribution: the Xi pipeline, not the host C optimizer
 
@@ -179,9 +181,66 @@ returns 12 `XR_AOT_TAIL_CALL_CONFORMANCE_*` strings, none registered in
 `contracts/target-machine/diagnostic-codes.toml`, so a refusal naming one still owes a
 stable diagnostic code.
 
-**Scope limit:** this traces the native-side refusal. Whether the VM-side miscompilation
-above shares this root cause is untested — it is the same feature and the same pass, but
-the silent-truncation failure was not traced to the representation stage.
+## Root cause of the VM-side miscompilation
+
+Same opcode, different unmodelled layer. Two passes are jointly required, established by
+disabling each of the 23 passes in turn against the minimal case: turning off **either**
+`inline` **or** `tail_call` restores correct output, and every other pass is irrelevant.
+
+Dumping `main` after inlining (`XRAY_XI_DUMP=main:inline`) shows what happens:
+
+```
+func main() -> void {
+    v1  = CONST 1
+    v2  = PRINT v1
+    v19 = CALL v18 v4
+    v20 = TAIL_CALL v17 v19     <-- inlined out of roundtrip
+    v6  = PRINT v20             <-- and there is still code after it
+    v13 = CALL_METHOD v9 v12
+    v15 = PRINT v14
+    RET
+}
+```
+
+`tail_call` correctly promotes `return describe(choose(n))` inside `roundtrip`: there it
+really is in tail position. `inline` then copies that body into `main` and **carries the
+`XI_TAIL_CALL` opcode across unchanged**, where it is no longer in tail position and three
+more statements follow it.
+
+Tail semantics live in the opcode: `xi_emit_tail_call`
+(`src/ir/xi_emit_call.c:217`) "always emits `OP_TAILCALL` … the op absorbs the tail
+semantics". The VM reaches that instruction mid-function, replaces the frame and returns,
+so `main` ends after its first `print` — with exit status 0, because nothing went wrong as
+far as the VM is concerned.
+
+`src/ir/xi_opt_inline.c` does not mention `XI_TAIL_CALL` **once**. It neither demotes the
+opcode back to `XI_CALL` when the call stops being a tail call, nor counts it in the
+inlining cost metric (`:157` counts `XI_CALL`, `XI_CALL_METHOD`, `XI_CALL_METHOD_DIRECT`,
+`XI_CALL_BUILTIN` and stops), nor excludes callees containing one.
+
+**Why nothing caught it.** `verify_tail_calls` (`src/ir/xi_verify.c:1717`) checks four
+invariants about a promoted tail call — no leftover `XI_FLAG_TAIL`, a callee operand
+exists, it does not target its own activation, the callee is function-typed — but never
+that the call is **in tail position at all**. The AOT side does check the equivalent fact,
+as condition 7 of the conformance gate above, which is why the same malformed IR is
+refused there and silently executed here.
+
+## One opcode, three unmodelled layers
+
+Both defects in this document are the same omission at different layers. Occurrences of
+`XI_TAIL_CALL` per file:
+
+| file | count | consequence |
+|---|---:|---|
+| `src/ir/xi_opt_inline.c` | **0** | inlining leaves a tail call mid-function; VM miscompiles |
+| `src/ir/xi_opt.c` (representation selection) | 1, unrelated | falls to tagged default; BOX/UNBOX breaks tail position; AOT refuses |
+| `src/ir/xi_verify.c` | 10 | four invariants checked, tail position not among them |
+| `src/aot/refine/xr_aot_representation_refinement.c` | 6 | handles it correctly, paired with `XI_CALL` |
+| `src/ir/xi_emit_call.c` | 1 | emits `OP_TAILCALL` unconditionally |
+
+The opcode was introduced with producers, an emitter and a verifier, but its consumers —
+the inliner and the representation stage — were never taught it exists. Fixing only the
+conformance gate would leave the VM miscompilation untouched, and vice versa.
 
 ## Why no gate catches three of the four
 
