@@ -128,6 +128,58 @@ static XrType stub_unrepresented_int = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
 };
+/* The bool the runtime actually interns.  `stub_bool` predates the field and
+ * leaves it zero, which spells `XR_NATIVE_I64` -- harmless where only the kind
+ * is read, but the native module boundary admits a bool exactly when it claims
+ * no machine width, because a bool that named one would be describing an
+ * integer.  `mem.pageFree` returns a bool, so this is the spelling its result
+ * has to carry. */
+static XrType stub_exact_bool = {
+    .kind = XR_KIND_BOOL,
+    .id = 36,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+/* `MutPtr<u8>`.  A raw pointer is the one boundary type whose exactness rests
+ * on the canonical key rather than on a kind plus a representation, and the key
+ * the plan writes for a pointer names kind and mutability and nothing else --
+ * the pointee never reaches it.  So this stub is the whole mutable half of the
+ * pointer family rather than one element type's instance of it, and handing the
+ * builder a real `XrType` is what makes the key under test the key the plan
+ * actually emits instead of one a hand-built record asserted.  `scalar_rep` is
+ * spelled out for the same reason `stub_i64` spells it: the field's zero is
+ * `XR_NATIVE_I64`, and a pointer claiming a machine width writes a header this
+ * boundary refuses. */
+static XrType stub_mut_ptr_u8 = {
+    .kind = XR_KIND_POINTER,
+    .id = 33,
+    .frozen = true,
+    .container = {.element_type = &stub_u8},
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .ptr_is_mut = true,
+};
+/* `Ptr<u8>` -- the same header with the mutability bit clear. */
+static XrType stub_const_ptr_u8 = {
+    .kind = XR_KIND_POINTER,
+    .id = 34,
+    .frozen = true,
+    .container = {.element_type = &stub_u8},
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .ptr_is_mut = false,
+};
+/* `MutPtr<u8>?` -- one term of the header differs.  A nullable pointer is no
+ * longer a bare address the generated shim can move as one plain tagged value,
+ * and the key says so in the field the judgement reads, which makes it the
+ * single-term counterexample for the pointer half. */
+static XrType stub_nullable_mut_ptr_u8 = {
+    .kind = XR_KIND_POINTER,
+    .id = 35,
+    .frozen = true,
+    .container = {.element_type = &stub_u8},
+    .is_nullable = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .ptr_is_mut = true,
+};
 /* The type lowering gives a whole-module import reference. A module namespace
  * is not a declared type, so lowering leaves it unknown; the plan reads that as
  * an ownership root with no children, which is exactly what the namespace
@@ -823,15 +875,16 @@ static XrSemanticPlan *build_native_namespace_yieldable_plan(const char *module,
  * `method_immediate` carries the `XI_CALL_METHOD` encoding `(symbol << 1) |
  * optional_chaining`, so an odd value spells `mem?.cacheLineSize()` and zero
  * spells a callsite whose method symbol never resolved -- neither of which
- * names a single implementation.  `scalar_type` is the type both the result and
- * every argument carry across the boundary, which the generated direct shim
- * moves as one plain tagged value. */
-static XrSemanticPlan *
-build_native_module_scalar_call_plan(const char *module, const char *member_name,
-                                     const char *selector, uint16_t argument_count,
-                                     int64_t method_immediate, XrType *scalar_type) {
+ * names a single implementation.  `result_type` and `argument_types` are the
+ * types crossing the boundary, which the generated direct shim moves as one
+ * plain tagged value each; the two positions are stated separately because a
+ * member like `mem.pageFree(ptr, bytes)` mixes them, and the judgement asks the
+ * same question of every one independently. */
+static XrSemanticPlan *build_native_module_member_call_plan(
+    const char *module, const char *member_name, const char *selector, uint16_t argument_count,
+    XrType *const *argument_types, int64_t method_immediate, XrType *result_type) {
     XiFunc *root = xi_func_new("native_module_scalar_root", &stub_unit);
-    XiFunc *caller = xi_func_new("native_module_scalar_caller", scalar_type);
+    XiFunc *caller = xi_func_new("native_module_scalar_caller", result_type);
     REQUIRE(root != NULL && caller != NULL);
     XiBlock *root_entry = xi_block_new(root);
     XiBlock *caller_entry = xi_block_new(caller);
@@ -868,12 +921,12 @@ build_native_module_scalar_call_plan(const char *module, const char *member_name
     REQUIRE(receiver != NULL);
     receiver->aux_int = 0;
     XiValue *arguments[4] = {0};
-    REQUIRE(argument_count <= 4);
+    REQUIRE(argument_count <= 4 && (argument_count == 0 || argument_types != NULL));
     for (uint16_t index = 0; index < argument_count; index++) {
-        arguments[index] = xi_const_int(caller, caller_entry, index + 1, scalar_type);
+        arguments[index] = xi_const_int(caller, caller_entry, index + 1, argument_types[index]);
         REQUIRE(arguments[index] != NULL);
     }
-    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, scalar_type,
+    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL_METHOD, result_type,
                                  (uint16_t) (argument_count + 1u));
     REQUIRE(call != NULL);
     call->args[0] = receiver;
@@ -891,6 +944,18 @@ build_native_module_scalar_call_plan(const char *module, const char *member_name
     REQUIRE(built && plan != NULL);
     xi_func_free(root);
     return plan;
+}
+
+/* The uniform-type spelling: a member whose result and every argument carry the
+ * same type, which is every member of the family that predates the pointer
+ * half. */
+static XrSemanticPlan *
+build_native_module_scalar_call_plan(const char *module, const char *member_name,
+                                     const char *selector, uint16_t argument_count,
+                                     int64_t method_immediate, XrType *scalar_type) {
+    XrType *argument_types[4] = {scalar_type, scalar_type, scalar_type, scalar_type};
+    return build_native_module_member_call_plan(module, member_name, selector, argument_count,
+                                                argument_types, method_immediate, scalar_type);
 }
 
 static XrSemanticPlan *build_builtin_instance_yieldable_plan(XrType *receiver_type,
@@ -4107,6 +4172,150 @@ static void test_native_module_scalar_call_authority(void) {
         NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_unrepresented_int));
 }
 
+/* The exact raw pointer header, read back from the plan that wrote it.
+ *
+ * Every other boundary type answers on a kind plus a scalar representation, but
+ * a raw pointer answers on the canonical key alone, and on all eleven of its
+ * fields: kind, semantic type id, builtin type, nullable, const, value,
+ * literal, cycle candidate, pointer mutability, scalar representation, alias
+ * length -- and then on the key ending right there, because a pointer appends
+ * no element and a key that continued would be describing something else.  This
+ * restates that header in the test so a change to either side has to be
+ * deliberate, and it reads the record the builder produced rather than one the
+ * fixture assembled: a hand-built record can satisfy the struct fields and
+ * still spell a key the plan never emits, which would prove nothing about the
+ * shape that reaches a backend. */
+static void expect_exact_raw_pointer_type(const XrSemanticPlan *plan, uint32_t type_index,
+                                          unsigned pointer_mutable) {
+    char expected[96];
+    REQUIRE(plan != NULL && type_index < plan->type_count);
+    snprintf(expected, sizeof(expected),
+             "type-v3:%u:0:%u:0:0:0:0:0:%u:%u:0:", (unsigned) XR_KIND_POINTER,
+             (unsigned) XR_TID_NULL, pointer_mutable, (unsigned) XR_SCALAR_REP_NONE);
+    const XrSemanticTypeRecord *type = &plan->types[type_index];
+    REQUIRE(strcmp(type->canonical_key, expected) == 0);
+    /* The record has to agree with its own key.  An address is invisible to the
+     * collector and holds nothing, so every structural term reads empty: no
+     * children, no aggregate extent, no source class, and none of the ownership
+     * flags a reference-capable type would carry. */
+    REQUIRE(type->kind == XR_KIND_POINTER && type->builtin_type == XR_TID_NULL &&
+            type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0 && type->child_count == 0 &&
+            type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+            type->source_class == XR_SEMANTIC_INDEX_NONE);
+}
+
+/* The pointer half of the native module boundary.
+ *
+ * `mem.pageAlloc` returns an address and `mem.pageFree` accepts one, so between
+ * them they exercise both positions the judgement distinguishes.  Nothing about
+ * a pointer makes the two positions differ -- unlike unit, which only a result
+ * may be -- and that sameness is the claim these cases prove: the same header
+ * is admitted whether it is returned or passed, and it is admitted alongside
+ * plain integers in the very same call. */
+static void test_native_module_pointer_boundary_authority(void) {
+    char error[512] = {0};
+    const int64_t immediate = NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0);
+
+    /* `mem.pageAlloc(bytes)` -- an i64 in, a `MutPtr<u8>` out.  The result half
+     * of the pointer judgement had no coverage before this: every other member
+     * in the family returns an integer, a float or a bool. */
+    XrType *bytes_only[] = {&stub_i64};
+    XrSemanticPlan *alloc_one = build_native_module_member_call_plan(
+        "mem", NULL, "pageAlloc", 1, bytes_only, immediate, &stub_mut_ptr_u8);
+    const XrSemanticOperationRecord *alloc_one_call = native_module_call_operation(alloc_one);
+    REQUIRE(alloc_one_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+            alloc_one_call->operand_count == 2 &&
+            (alloc_one_call->flags & XI_FLAG_MAY_SUSPEND) == 0);
+    expect_exact_raw_pointer_type(alloc_one, alloc_one_call->result_type, 1);
+    REQUIRE(xr_semantic_plan_verify(alloc_one, error, sizeof(error)));
+    xr_semantic_plan_free(alloc_one);
+
+    /* `mem.pageAlloc(bytes, prot)` is a second registry row, not the first one
+     * tolerating an extra argument: the registry is asked for the member at
+     * this callsite's argument count, and the two rows name two different
+     * shims.  Both arities therefore have to carry call authority on their own,
+     * which is what the shared-core overload fixture states at the source
+     * level and what nothing proved at this layer. */
+    XrType *bytes_and_prot[] = {&stub_i64, &stub_i64};
+    XrSemanticPlan *alloc_two = build_native_module_member_call_plan(
+        "mem", NULL, "pageAlloc", 2, bytes_and_prot, immediate, &stub_mut_ptr_u8);
+    const XrSemanticOperationRecord *alloc_two_call = native_module_call_operation(alloc_two);
+    REQUIRE(alloc_two_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+            alloc_two_call->operand_count == 3);
+    expect_exact_raw_pointer_type(alloc_two, alloc_two_call->result_type, 1);
+    REQUIRE(xr_semantic_plan_verify(alloc_two, error, sizeof(error)));
+    xr_semantic_plan_free(alloc_two);
+
+    /* `mem.pageFree(ptr, bytes)` -- the argument half, and a mixed callsite: a
+     * pointer and an integer cross the same boundary in one call, each proved
+     * on its own row.  The result is a bool, so no pointer reaches the result
+     * position here and the two halves stay separately demonstrated. */
+    XrType *ptr_and_bytes[] = {&stub_mut_ptr_u8, &stub_i64};
+    XrSemanticPlan *release = build_native_module_member_call_plan(
+        "mem", NULL, "pageFree", 2, ptr_and_bytes, immediate, &stub_exact_bool);
+    XrSemanticOperationRecord *release_call = native_module_call_operation(release);
+    REQUIRE(release_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+            release_call->operand_count == 3 && release_call->metadata_count == 1);
+    REQUIRE(strcmp(release->metadata[release_call->metadata_begin], "pageFree") == 0);
+    const XrSemanticOperandRecord *operands = &release->operands[release_call->operand_begin];
+    REQUIRE(operands[0].role == XR_SEM_OPERAND_RECEIVER &&
+            operands[1].role == XR_SEM_OPERAND_ARGUMENT && operands[1].parameter == 0 &&
+            operands[1].flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+            operands[2].role == XR_SEM_OPERAND_ARGUMENT && operands[2].parameter == 1);
+    expect_exact_raw_pointer_type(release, operands[1].type, 1);
+    REQUIRE(operands[1].type != operands[2].type);
+    REQUIRE(xr_semantic_plan_verify(release, error, sizeof(error)));
+
+    /* The mark has to survive the wire for a pointer callsite too, and so does
+     * the header it rests on: the backends re-prove exactness against the
+     * decoded type table, so a key the encoder did not carry through verbatim
+     * would withdraw the authority at the far end. */
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_encode(release, &bytes, &size, error, sizeof(error)) &&
+            xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)) &&
+            xr_semantic_plan_verify(decoded, error, sizeof(error)));
+    const XrSemanticOperationRecord *decoded_call = native_module_call_operation(decoded);
+    REQUIRE(decoded_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+            decoded_call->operand_count == release_call->operand_count);
+    expect_exact_raw_pointer_type(decoded, decoded->operands[decoded_call->operand_begin + 1].type,
+                                  1);
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+    xr_semantic_plan_free(release);
+
+    /* A `Ptr<u8>` argument lands as well, and that is a finding rather than an
+     * accident.  The key carries no element type, so `Ptr<u8>` and `Ptr<int>`
+     * are already one record here, and mutability is the single term the two
+     * pointer spellings can disagree about.  This boundary does not read it:
+     * the shim moves an address either way, and the permission question belongs
+     * to the argument-versus-parameter judgement that compares two records --
+     * not to the one-record question of whether a type can cross at all. */
+    XrType *const_ptr_and_bytes[] = {&stub_const_ptr_u8, &stub_i64};
+    XrSemanticPlan *const_release = build_native_module_member_call_plan(
+        "mem", NULL, "pageFree", 2, const_ptr_and_bytes, immediate, &stub_exact_bool);
+    const XrSemanticOperationRecord *const_call = native_module_call_operation(const_release);
+    REQUIRE(const_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
+    expect_exact_raw_pointer_type(const_release,
+                                  const_release->operands[const_call->operand_begin + 1].type, 0);
+    REQUIRE(xr_semantic_plan_verify(const_release, error, sizeof(error)));
+    xr_semantic_plan_free(const_release);
+
+    /* `MutPtr<u8>?` in either position withdraws the mark.  One field of the
+     * header differs and the key says so, which is the whole distance between
+     * an address the shim can move and a value that may instead be null.
+     * Module path, selector and arity stay the baseline's in both, so the
+     * registry still names one implementation and this is the pointer judgement
+     * refusing on its own rather than the lookup refusing for it. */
+    XrType *nullable_result[] = {&stub_i64};
+    expect_no_native_module_scalar_call(build_native_module_member_call_plan(
+        "mem", NULL, "pageAlloc", 1, nullable_result, immediate, &stub_nullable_mut_ptr_u8));
+    XrType *nullable_argument[] = {&stub_nullable_mut_ptr_u8, &stub_i64};
+    expect_no_native_module_scalar_call(build_native_module_member_call_plan(
+        "mem", NULL, "pageFree", 2, nullable_argument, immediate, &stub_exact_bool));
+}
+
 static void test_native_namespace_yieldable_authority(void) {
     XrSemanticPlan *plan =
         build_native_namespace_yieldable_plan("time", "sleep", true, false, true);
@@ -6168,6 +6377,7 @@ int main(int argc, char **argv) {
     test_native_yieldable_call_target_authority();
     test_native_target_leaf_scalar_authority();
     test_native_module_scalar_call_authority();
+    test_native_module_pointer_boundary_authority();
     test_native_namespace_yieldable_authority();
     test_builtin_instance_yieldable_authority();
     test_source_instance_method_local_authority();

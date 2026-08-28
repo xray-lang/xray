@@ -10092,6 +10092,20 @@ static bool collect_native_module_scalar_call_intent(XrTargetPlanBuilder *builde
                                                      uint32_t operation_index,
                                                      const XrSemanticOperationRecord *operation,
                                                      char *error, size_t error_size) {
+    /* The scalar check is not a second opinion on the boundary judgement; it
+     * asks a stricter question that only emission needs answered. The boundary
+     * judgement admits an int whose representation is merely not absent, while
+     * a call row must name one of the ten machine widths this backend can emit.
+     * They agree on unit, on raw pointers, and on refusing nullable payloads;
+     * the int representation domain is the only place they can part, and over
+     * 735 measured cases they never did.
+     *
+     * Keeping it here rather than folding it into the shape judgement is
+     * deliberate: the verifier counts one call row per admitted operation, so
+     * narrowing admission on this side alone would unbalance that census. Both
+     * sides would have to move together, and a term with no observed divergence
+     * does not earn that. It stays where the row is built, fails closed, and
+     * says why. */
     uint32_t arity = 0;
     if (!semantic_native_module_scalar_call_is_exact(builder->semantic_plan, operation, &arity) ||
         !call_type_is_exact_scalar(builder->semantic_plan, operation->result_type))
