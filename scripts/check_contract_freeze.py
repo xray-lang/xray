@@ -644,6 +644,7 @@ CONTRACT_SPECS = (
             "tests/unit/incremental/test_program_plan_cache_qualification.c",
             "tests/unit/incremental/test_module_summary_build.c",
             "scripts/check_runtime_archive_cache_symbols.py",
+            "tests/target-machine/run_program_plan_cache_qualification.py",
             "tests/unit/aot/test_xaot_driver.c",
             "tests/unit/os/test_fs_atomic.c",
             "tests/aot/run_module_summary_determinism.py",
