@@ -233,6 +233,7 @@ CONTRACT_SPECS = (
             "src/base/xnumber_parse_error.h",
             "include/xray_hosted_fragment_abi.h",
             "src/app/cli/xcmd_build.c",
+            "tests/aot/run_aot_incremental_cache.py",
             "src/app/toolchain/xtc_model.c",
             "src/app/toolchain/xtc_probe.c",
             "src/ir/xi.h",
