@@ -170,7 +170,39 @@ native factory 表和内嵌 stdlib，查不到就因串里含 `/` 落进"第三�
 
 **测试脚本与 fixture 本身没有问题，不要改。**
 
-## 6. 越界项：`test_mcp_knowledge_generation` 要写 `src/`
+## 6. 半属冻结值失配、但修了也不会变绿：三个 native error ABI 测试
+
+`test_string_native_error_abi` / `test_compress_native_error_abi` /
+`test_crypto_native_error_abi` **各自混了两类失败**，这是它们看起来难缠的原因：
+
+**第一类，源码模式断言过时**（属冻结值失配）。测试扫 `src/runtime/object/xstring_methods.c`
+的正文，要求出现字面片段：
+
+```python
+self.assertIn("if (ctx && !XR_IS_NULL(ctx->pending_error))", vm_runtime)
+self.assertIn("ctx->pending_error.ptr == result.value.ptr", vm_runtime)
+```
+
+该文件现在**一处 `pending_error` 都没有**，而这个模式活在 `src/api/xvm_exec.c:89`。
+`git log -S` 指向 `6fdc13f5e runtime: own value-error publication in execution context`
+——提交标题就说明了这是有意的所有权转移：错误发布从每个方法自查搬进了执行上下文。
+断言该跟着搬，或者改成断言那个不变量本身而不是它的字面写法。
+
+**第二类，真实行为差异**（不是冻结值）。例如：
+
+```
+期望 b'true\nno-error\nCryptoError.InvalidLength\n…'
+实际 b'true\nCryptoError.InvalidLength\nCryptoError.In…'
+```
+
+少了一行 `no-error`——某个本该无错的调用现在报错了。另有多个用例以 ERROR（异常）
+而非断言失败告终。
+
+**所以这三项不能只改断言**：把第一类修好，第二类仍然红，测试不会变绿，
+**改动也就无法验证**。本 lane 的原则是不提交无法验证的改动，故记账未改。
+接手时请按两类分别处理，先修第二类。
+
+## 7. 越界项：`test_mcp_knowledge_generation` 要写 `src/`
 
 ```
 error: src/app/mcp/xmcp_knowledge_generated.c: stale
@@ -184,7 +216,7 @@ runtime: source API symbols missing from generated knowledge: RuntimeInfo.constr
 cmake --build build-nofp --target regen-mcp-knowledge
 ```
 
-## 7. 无门在守：Iterator 的 builtin-schema 三条
+## 8. 无门在守：Iterator 的 builtin-schema 三条
 
 `check_stdlib_boundary.py --check all` 有 8 个子检查，**只有 5 个注册成了 ctest**
 （`stdlib_boundary_{manifest,semantic,error-model,fastpath,dynamic}`，实测 5/5 全绿）。
@@ -200,7 +232,7 @@ API inventory does not expose the complete Iterator schema
 因为没有门，它不在失败清单里，也不会拦住任何人。要么把它接成 ctest，要么把判据更新到
 `iterator.xr` 现在的 5 个方法——两者都不在本 lane 的边界内。
 
-## 8. 观察：身份换代了，版本号没跟着换
+## 9. 观察：身份换代了，版本号没跟着换
 
 不阻塞任何人，但值得记一笔，否则下次还会踩。
 
@@ -215,7 +247,7 @@ API inventory does not expose the complete Iterator schema
 但它意味着**任何一次无关的 frontend 枚举增删都会静默旋转已冻结的语义身份，而版本号不会告诉你**。
 版本号的作用就是宣告值空间换代，它没做到这件事本身就是治理缺陷。
 
-## 9. 复跑方式
+## 10. 复跑方式
 
 ```bash
 cmake -S . -B build-nofp -G Ninja -DCMAKE_BUILD_TYPE=Release -DXRAY_STDLIB_VM_FASTPATHS=OFF
