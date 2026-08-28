@@ -129,7 +129,6 @@ src/incremental/xr_module_task_graph.h
 src/ir/xi_builtin_map_entry_iterator_shape.h
 src/ir/xi_coro_analyze.h
 src/ir/xi_coro_lower.c
-src/ir/xi_emit.c
 src/ir/xi_emit_arith.c
 src/ir/xi_emit_eh.c
 src/ir/xi_emit_object.c
@@ -262,7 +261,6 @@ src/runtime/value/xchunk.c
 src/runtime/value/xchunk.h
 src/runtime/value/xenum_layout.h
 src/runtime/value/xf64_methods.h
-src/runtime/value/xinstruction_table.h
 src/runtime/value/xvalue_deep_eq.c
 src/runtime/value/xvalue_truthy.c
 src/runtime/value/xvalue_typeid.c
