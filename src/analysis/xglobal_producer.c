@@ -3129,39 +3129,6 @@ static bool body_global_builtin_call_is_leaf_intrinsic(const char *name, int arg
     return false;
 }
 
-static bool body_builtin_receiver_pod_span_elem(const XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool body_builtin_receiver_matches(const XrType *receiver, XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver && XR_TYPE_IS_ARRAY(receiver);
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver && XR_TYPE_IS_SLICE(receiver) && receiver->container.element_type &&
-                   body_builtin_receiver_pod_span_elem(receiver->container.element_type);
-    }
-    return false;
-}
-
 /* Receiver intrinsics are sealed language operations.  Resolve them through
  * the canonical registry so the global effect summary agrees with analyzer
  * and Xi lowering without a second method-name whitelist. */
@@ -3179,7 +3146,7 @@ body_builtin_receiver_method_spec(XgBodyCollect *bc, const MemberAccessNode *mem
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
         if (strcmp(spec->source_name, member->name) != 0 ||
-            !body_builtin_receiver_matches(receiver, spec->receiver) ||
+            !xa_builtin_receiver_matches_type(receiver, spec->receiver) ||
             (arg_count >= 0 && (arg_count < spec->min_params ||
                                 (!spec->is_variadic && arg_count > spec->param_count))))
             continue;
@@ -8138,6 +8105,12 @@ static bool body_sequence_registry_receiver_matches(const XgLocalType *local,
             return (local->sequence_kind == XG_SEQ_SLICE ||
                     local->sequence_kind == XG_SEQ_BYTE_SLICE) &&
                    body_type_key_is_pod_array_lane(local->sequence_elem_type_key);
+        /* A map is not a sequence: XgSequenceKind spells arrays, byte arrays,
+         * strings, slices and string builders, and nothing here can carry a
+         * map. This arm refuses rather than falls through so that the refusal
+         * is a decision on the record instead of an omission. */
+        case XA_BUILTIN_RECEIVER_MAP:
+            return false;
     }
     return false;
 }

@@ -269,41 +269,6 @@ static bool type_is_u8_contiguous_view(const XrType *type) {
     return elem && xr_type_is_exact_u8(elem) && !elem->is_nullable;
 }
 
-static bool own_type_is_pod_span_elem(const XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool own_builtin_receiver_registry_matches(const XrType *receiver_type,
-                                                  XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver_type && receiver_type->kind == XR_KIND_INT &&
-                   !receiver_type->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver_type);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver_type);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver_type && receiver_type->kind == XR_KIND_ARRAY;
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver_type);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && receiver_type->kind == XR_KIND_SLICE &&
-                   own_type_is_pod_span_elem(receiver_type->container.element_type);
-    }
-    return false;
-}
-
 static bool own_call_method_matches_receiver_registry_id(const XiValue *user,
                                                          XaBuiltinReceiverMethodId method_id) {
     const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
@@ -311,7 +276,7 @@ static bool own_call_method_matches_receiver_registry_id(const XiValue *user,
         user->nargs < 1 || !user->args[0] || !user->aux)
         return false;
     return strcmp((const char *) user->aux, spec->source_name) == 0 &&
-           own_builtin_receiver_registry_matches(user->args[0]->type, spec->receiver);
+           xa_builtin_receiver_matches_type(user->args[0]->type, spec->receiver);
 }
 
 static bool low_level_byte_method_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
