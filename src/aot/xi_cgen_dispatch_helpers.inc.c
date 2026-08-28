@@ -6146,8 +6146,12 @@ static void xicgen_emit_print_operand(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     const XiValue *operand = v->args[ordinal];
     bool print_span = operand && cg_value_plan_is_span_aggregate(ctx, operand);
 
-    if (operand && xicgen_type_is_unsigned_int(operand->type) &&
-        cg_value_plan_storage_rep(ctx, operand) != XR_REP_TAGGED) {
+    /* The domain is a fact about the operand's type, answered in one place for
+     * both backends.  It does not depend on where the value is stored: a
+     * full-width unsigned integer in a tagged slot holds the same bits it would
+     * hold in a native one, and reading them as signed prints UINT64_MAX as
+     * -1. */
+    if (xi_print_operand_renders_unsigned(operand)) {
         fprintf(out, "xrt_print_group_append_u64(&%s, (uint64_t)", group_name);
         emit_value_as_rep_ctx(ctx, out, operand, XR_REP_I64);
         fprintf(out, ", %d)", add_space ? 1 : 0);

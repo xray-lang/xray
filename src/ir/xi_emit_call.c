@@ -1292,16 +1292,6 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         xr_free(parts);
 }
 
-/* A full-width unsigned integer occupies the same slot shape as a signed one,
- * so the renderer needs the static sign domain; narrower unsigned types are
- * always non-negative in that slot and need no marker. */
-static bool xi_print_operand_is_unsigned(const XiValue *operand) {
-    const struct XrType *type = operand ? operand->type : NULL;
-    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
-        return false;
-    return type->scalar_rep == XR_NATIVE_U64 || type->scalar_rep == XR_NATIVE_USIZE;
-}
-
 /* Print
  *
  * The Xi operation is one group carrying one plan. Bytecode is a projection of
@@ -1364,7 +1354,7 @@ XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_PRINT_GROUP_NEW, group, 0, 0));
     for (uint16_t a = 0; a < n; a++) {
         uint16_t flags = xr_print_plan_operand_needs_separator(plan, a) ? XR_PRINT_BC_SEPARATE : 0u;
-        if (xi_print_operand_is_unsigned(v->args[a]))
+        if (xi_print_operand_renders_unsigned(v->args[a]))
             flags |= XR_PRINT_BC_UNSIGNED;
         emit_inst(ctx, CREATE_ABC(OP_PRINT_GROUP_APPEND, group, ops[a], flags));
     }

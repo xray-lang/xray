@@ -1,0 +1,21 @@
+// anchor: print-unsigned-width-domain
+// Which operands render as unsigned is one fact, answered in one place. Only a
+// full-width unsigned integer needs saying: it shares its slot shape with a
+// signed one, so the renderer cannot recover the domain from the value. The
+// narrower widths are non-negative in that slot and read the same either way.
+//
+// This case exists because the two backends used to restate the rule
+// separately and did not agree on it -- one counted all five unsigned widths,
+// the other counted the two full-width ones. Both produced correct text, so
+// nothing caught the disagreement. It pins the answer at every width.
+
+fn main() {
+    var a: u8 = 200
+    var b: u16 = 60000
+    var c: u32 = 4000000000
+    var d: u64 = 18446744073709551615
+    var e: usize = 12345
+    print(a, b, c)
+    print(d, e)
+}
+main()

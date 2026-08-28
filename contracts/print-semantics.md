@@ -82,3 +82,4 @@ anchor-sha256: tests/diff/cases/semantics/output/print_terminator_exact.xr 32f13
 anchor-sha256: tests/diff/cases/semantics/output/print_evaluation_order.xr 4ee769724ec8597a3674a631b1f91df82d5c06daa20f2c2c957f648c23a09518
 anchor-sha256: tests/diff/cases/semantics/output/print_group_atomic_on_panic.xr b089ad68db85aabc4aa18e338242096a56dbf91b51eaecc9c75e5cfaa4db622c
 anchor-sha256: tests/diff/cases/semantics/output/print_group_atomic_on_fatal.xr 491edb1d65f573bd0237ea4bd4d1f4d3f3609dae317509113345c3aa5b343746
+anchor-sha256: tests/diff/cases/semantics/output/print_unsigned_widths.xr 577699990edb47f23009271d683ac25fc46f93ff3b2eaa9db525904714f0e1d0
