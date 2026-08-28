@@ -1,19 +1,30 @@
 // 1301_compress.xr - Compress module tests
+//
+// The module publishes Slice<u8> in and Array<u8> out, so a string source is
+// borrowed with .bytes() at the call site and a compressed result is handed
+// back with [:]. Decoding answers bytes, and textOf turns them back into the
+// string the test started from.
 
 import compress
+
+fn textOf(data: Array<u8>) -> string {
+    return string.fromUtf8(data[:])!
+}
 
 // ===== CRC32 =====
 
 @test
 fn test_crc32() {
-    var crc = compress.crc32("Hello")
+    var data = "Hello"
+    var crc = compress.crc32(data.bytes())
     assert(crc != 0)
 }
 
 @test
 fn test_crc32_deterministic() {
-    var crc1 = compress.crc32("Hello")
-    var crc2 = compress.crc32("Hello")
+    var data = "Hello"
+    var crc1 = compress.crc32(data.bytes())
+    var crc2 = compress.crc32(data.bytes())
     assertEqual(crc1, crc2)
 }
 
@@ -21,7 +32,8 @@ fn test_crc32_deterministic() {
 
 @test
 fn test_adler32() {
-    var adler = compress.adler32("Hello")
+    var data = "Hello"
+    var adler = compress.adler32(data.bytes())
     assert(adler != 0)
 }
 
@@ -30,17 +42,17 @@ fn test_adler32() {
 @test
 fn test_gzip_roundtrip() {
     var data = "Hello, World! This is a test string for compression."
-    var compressed = compress.gzip(data) ?? ""
-    var decompressed = compress.gunzip(compressed) ?? ""
-    assertEqual(decompressed, data)
+    var compressed = compress.gzip(data.bytes())
+    var decompressed = compress.gunzip(compressed[:])
+    assertEqual(textOf(decompressed), data)
 }
 
 @test
 fn test_is_gzip() {
     var data = "test data"
-    var compressed = compress.gzip(data) ?? ""
-    assertEqual(compress.isGzip(compressed ?? ""), true)
-    assertEqual(compress.isGzip(data ?? ""), false)
+    var compressed = compress.gzip(data.bytes())
+    assertEqual(compress.isGzip(compressed[:]), true)
+    assertEqual(compress.isGzip(data.bytes()), false)
 }
 
 // ===== Deflate/Inflate =====
@@ -48,9 +60,9 @@ fn test_is_gzip() {
 @test
 fn test_deflate_inflate() {
     var data = "Hello, World! This is a test string for compression."
-    var deflated = compress.deflate(data) ?? ""
-    var inflated = compress.inflate(deflated) ?? ""
-    assertEqual(inflated, data)
+    var deflated = compress.deflate(data.bytes())
+    var inflated = compress.inflate(deflated[:])
+    assertEqual(textOf(inflated), data)
 }
 
 // ===== Zlib =====
@@ -58,10 +70,10 @@ fn test_deflate_inflate() {
 @test
 fn test_zlib_roundtrip() {
     var data = "Hello, World! This is a test string for compression."
-    var compressed = compress.zlibCompress(data) ?? ""
-    assertEqual(compress.isZlib(compressed ?? ""), true)
-    var decompressed = compress.zlibDecompress(compressed) ?? ""
-    assertEqual(decompressed, data)
+    var compressed = compress.zlibCompress(data.bytes())
+    assertEqual(compress.isZlib(compressed[:]), true)
+    var decompressed = compress.zlibDecompress(compressed[:])
+    assertEqual(textOf(decompressed), data)
 }
 
 // ===== CRC32 known values =====
@@ -69,13 +81,15 @@ fn test_zlib_roundtrip() {
 @test
 fn test_crc32_known_value() {
     // CRC32("123456789") = 0xCBF43926
-    var crc = compress.crc32("123456789")
+    var kat = "123456789"
+    var crc = compress.crc32(kat.bytes())
     assertEqual(crc, 3421780262)  // 0xCBF43926 as unsigned
 }
 
 @test
 fn test_crc32_empty() {
-    var crc = compress.crc32("")
+    var empty = ""
+    var crc = compress.crc32(empty.bytes())
     assertEqual(crc, 0)
 }
 
@@ -84,13 +98,15 @@ fn test_crc32_empty() {
 @test
 fn test_adler32_known_value() {
     // Adler32("Wikipedia") = 0x11E60398
-    var adler = compress.adler32("Wikipedia")
+    var kat = "Wikipedia"
+    var adler = compress.adler32(kat.bytes())
     assertEqual(adler, 300286872)  // 0x11E60398
 }
 
 @test
 fn test_adler32_empty() {
-    var adler = compress.adler32("")
+    var empty = ""
+    var adler = compress.adler32(empty.bytes())
     assertEqual(adler, 1)  // Initial value
 }
 
@@ -99,25 +115,25 @@ fn test_adler32_empty() {
 @test
 fn test_gzip_empty() {
     var data = ""
-    var compressed = compress.gzip(data) ?? ""
-    var decompressed = compress.gunzip(compressed) ?? ""
-    assertEqual(decompressed, data)
+    var compressed = compress.gzip(data.bytes())
+    var decompressed = compress.gunzip(compressed[:])
+    assertEqual(textOf(decompressed), data)
 }
 
 @test
 fn test_deflate_empty() {
     var data = ""
-    var deflated = compress.deflate(data) ?? ""
-    var inflated = compress.inflate(deflated) ?? ""
-    assertEqual(inflated, data)
+    var deflated = compress.deflate(data.bytes())
+    var inflated = compress.inflate(deflated[:])
+    assertEqual(textOf(inflated), data)
 }
 
 @test
 fn test_zlib_empty() {
     var data = ""
-    var compressed = compress.zlibCompress(data) ?? ""
-    var decompressed = compress.zlibDecompress(compressed) ?? ""
-    assertEqual(decompressed, data)
+    var compressed = compress.zlibCompress(data.bytes())
+    var decompressed = compress.zlibDecompress(compressed[:])
+    assertEqual(textOf(decompressed), data)
 }
 
 // ===== Large data roundtrip =====
@@ -129,9 +145,9 @@ fn test_gzip_large_data() {
     for (var i = 0; i < 500; i++) {
         big = big + "The quick brown fox jumps over the lazy dog. "
     }
-    var compressed = compress.gzip(big) ?? ""
-    var decompressed = compress.gunzip(compressed) ?? ""
-    assertEqual(decompressed, big)
+    var compressed = compress.gzip(big.bytes())
+    var decompressed = compress.gunzip(compressed[:])
+    assertEqual(textOf(decompressed), big)
 }
 
 @test
@@ -140,9 +156,9 @@ fn test_deflate_large_data() {
     for (var i = 0; i < 500; i++) {
         big = big + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 "
     }
-    var deflated = compress.deflate(big) ?? ""
-    var inflated = compress.inflate(deflated) ?? ""
-    assertEqual(inflated, big)
+    var deflated = compress.deflate(big.bytes())
+    var inflated = compress.inflate(deflated[:])
+    assertEqual(textOf(inflated), big)
 }
 
 // ===== Compression levels =====
@@ -150,18 +166,18 @@ fn test_deflate_large_data() {
 @test
 fn test_gzip_level_zero() {
     var data = "Hello, World! This is a test string for compression."
-    var level0 = compress.gzip(data, 0) ?? ""
-    var restored = compress.gunzip(level0) ?? ""
-    assertEqual(restored, data)
+    var level0 = compress.gzip(data.bytes(), 0)
+    var restored = compress.gunzip(level0[:])
+    assertEqual(textOf(restored), data)
 }
 
 @test
 fn test_gzip_all_levels() {
     var data = "Compress this text with different levels for testing."
     for (var level = 0; level < 10; level++) {
-        var compressed = compress.gzip(data, level) ?? ""
-        var decompressed = compress.gunzip(compressed) ?? ""
-        assertEqual(decompressed, data)
+        var compressed = compress.gzip(data.bytes(), level)
+        var decompressed = compress.gunzip(compressed[:])
+        assertEqual(textOf(decompressed), data)
     }
 }
 
@@ -169,9 +185,9 @@ fn test_gzip_all_levels() {
 fn test_deflate_all_levels() {
     var data = "Deflate this text with different levels for testing."
     for (var level = 0; level < 10; level++) {
-        var deflated = compress.deflate(data, level) ?? ""
-        var inflated = compress.inflate(deflated) ?? ""
-        assertEqual(inflated, data)
+        var deflated = compress.deflate(data.bytes(), level)
+        var inflated = compress.inflate(deflated[:])
+        assertEqual(textOf(inflated), data)
     }
 }
 
@@ -179,27 +195,82 @@ fn test_deflate_all_levels() {
 fn test_zlib_all_levels() {
     var data = "Zlib compress this text with different levels for testing."
     for (var level = 0; level < 10; level++) {
-        var compressed = compress.zlibCompress(data, level) ?? ""
-        assertEqual(compress.isZlib(compressed ?? ""), true)
-        var decompressed = compress.zlibDecompress(compressed) ?? ""
-        assertEqual(decompressed, data)
+        var compressed = compress.zlibCompress(data.bytes(), level)
+        assertEqual(compress.isZlib(compressed[:]), true)
+        var decompressed = compress.zlibDecompress(compressed[:])
+        assertEqual(textOf(decompressed), data)
     }
+}
+
+// A level outside 0..9 is taken to the nearest end of the range rather than
+// refused, so both ends round-trip like the levels beside them.
+@test
+fn test_levels_outside_the_range_are_clamped() {
+    var data = "Levels outside the range are clamped, not rejected."
+    var high = compress.gzip(data.bytes(), 42)
+    assertEqual(textOf(compress.gunzip(high[:])), data)
+    var low = compress.deflate(data.bytes(), -7)
+    assertEqual(textOf(compress.inflate(low[:])), data)
 }
 
 // ===== Detection on invalid data =====
 
 @test
 fn test_is_gzip_invalid() {
-    assertEqual(compress.isGzip(""), false)
-    assertEqual(compress.isGzip("x"), false)
-    assertEqual(compress.isGzip("hello world"), false)
+    var empty = ""
+    var short = "x"
+    var text = "hello world"
+    assertEqual(compress.isGzip(empty.bytes()), false)
+    assertEqual(compress.isGzip(short.bytes()), false)
+    assertEqual(compress.isGzip(text.bytes()), false)
 }
 
 @test
 fn test_is_zlib_invalid() {
-    assertEqual(compress.isZlib(""), false)
-    assertEqual(compress.isZlib("x"), false)
-    assertEqual(compress.isZlib("hello world"), false)
+    var empty = ""
+    var short = "x"
+    var text = "hello world"
+    assertEqual(compress.isZlib(empty.bytes()), false)
+    assertEqual(compress.isZlib(short.bytes()), false)
+    assertEqual(compress.isZlib(text.bytes()), false)
+}
+
+// ===== Malformed input is refused, not mis-decoded =====
+
+@test
+fn test_decompression_refuses_malformed_input() {
+    var notGzip = "not a gzip member"
+    var refused = false
+    try {
+        compress.gunzip(notGzip.bytes())
+    } catch (e: CompressionError) {
+        refused = true
+    }
+    assertEqual(refused, true)
+
+    var notZlib = "not a zlib stream"
+    var zlibRefused = false
+    try {
+        compress.zlibDecompress(notZlib.bytes())
+    } catch (e: CompressionError) {
+        zlibRefused = true
+    }
+    assertEqual(zlibRefused, true)
+}
+
+// A truncated payload must be reported, not decoded into something shorter.
+@test
+fn test_truncated_payload_is_refused() {
+    var data = "Truncated payloads must be reported rather than half-decoded."
+    var gz = compress.gzip(data.bytes())
+    assert(len(gz) > 1)
+    var refused = false
+    try {
+        compress.gunzip(gz[0:1])
+    } catch (e: CompressionError) {
+        refused = true
+    }
+    assertEqual(refused, true)
 }
 
 // ===== Binary data with repeated patterns =====
@@ -210,9 +281,9 @@ fn test_gzip_repeated_pattern() {
     for (var i = 0; i < 1000; i++) {
         data = data + "AAAA"
     }
-    var compressed = compress.gzip(data) ?? ""
+    var compressed = compress.gzip(data.bytes())
     // Repeated data should compress well
-    assert(len((compressed ?? "")) < len(data))
-    var decompressed = compress.gunzip(compressed) ?? ""
-    assertEqual(decompressed, data)
+    assert(len(compressed) < len(data.bytes()))
+    var decompressed = compress.gunzip(compressed[:])
+    assertEqual(textOf(decompressed), data)
 }

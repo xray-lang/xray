@@ -69,16 +69,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {
 
 // compress module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {
-    {"crc32", XLSP_SYM_FUNCTION, "fn(data: string): i64", "", NULL, 0},
-    {"adler32", XLSP_SYM_FUNCTION, "fn(data: string): i64", "", NULL, 0},
-    {"isGzip", XLSP_SYM_FUNCTION, "fn(data: string): bool", "", NULL, 0},
-    {"isZlib", XLSP_SYM_FUNCTION, "fn(data: string): bool", "", NULL, 0},
-    {"gzip", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "wrap and compress. A level outside 0..9 is taken to the nearest end of", NULL, 0},
-    {"gunzip", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
-    {"deflate", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "", NULL, 0},
-    {"inflate", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
-    {"zlibCompress", XLSP_SYM_FUNCTION, "fn(data: string, level?: i64): string?", "", NULL, 0},
-    {"zlibDecompress", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
+    {"gzip", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>, level?: i64): Array<u8>", "wrap and compress. The trailer carries the CRC-32 of the input and its", NULL, 0},
+    {"gunzip", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): Array<u8>", "", NULL, 0},
+    {"zlibCompress", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>, level?: i64): Array<u8>", "", NULL, 0},
+    {"zlibDecompress", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): Array<u8>", "", NULL, 0},
+    {"crc32", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): i64", "", NULL, 0},
+    {"adler32", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): i64", "", NULL, 0},
+    {"isGzip", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): bool", "", NULL, 0},
+    {"isZlib", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): bool", "", NULL, 0},
+    {"deflate", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>, level?: i64): Array<u8>", "", NULL, 0},
+    {"inflate", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): Array<u8>", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_COMPRESS_SYMBOL_COUNT 10
 

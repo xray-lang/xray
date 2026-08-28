@@ -1,26 +1,25 @@
-// compress — container discipline and checksums written in Xray.
+// compress — deflate, its two containers, and the checksums they are framed by,
+// all written in Xray.
 //
-// Two of the four things this module publishes need nothing from the host.
-// CRC-32 and Adler-32 are byte arithmetic over a running 32-bit accumulator,
-// and "is this gzip" / "is this zlib" are two-byte judgements about a header;
-// the language carries the shifts, the masks and the modulus they are defined
-// in terms of, so all four are stated here rather than called out to C.
+// This module used to hand every compressed byte to a C leaf, for one reason:
+// its public surface carried those bytes as a string, and the language builds a
+// string through string.fromUtf8, which rejects a byte sequence that is not
+// text, and cuts one apart through sliceBytes, which refuses an offset that is
+// not a scalar boundary. A gzip payload is neither. The carrier, not the
+// algorithm, was what could not be expressed.
 //
-// What stays native is the deflate coder itself. Not because the algorithm
-// resists Xray, but because its output is arbitrary bytes and a string is the
-// only shape this module has ever published them in: the language builds a
-// string from bytes through string.fromUtf8, which rejects a byte sequence
-// that is not text, and cuts one apart through sliceBytes, which refuses an
-// offset that is not a scalar boundary. A gzip payload is neither. Until the
-// public surface carries Array<u8>, the six entry points that produce or
-// consume compressed bytes have to hand the whole buffer to a leaf.
+// So the carrier changed. Compressed bytes now enter as Slice<u8> and leave as
+// Array<u8>, which is what base64 and crypto already settled on, and with that
+// the whole module is statable here: the bit reader and writer, canonical
+// Huffman in both directions, LZ77 over a 32 KB window, and the gzip and zlib
+// envelopes around them.
 //
-// What those six still own here is the default compression level, which the
-// .def used to state by carrying two entries per compressor -- one arity for
-// "no level given" and one for an explicit level. A default argument says the
-// same thing once. Nothing else is restated: the level clamp and the container
-// header check both already have an owner inside the leaf, and a second copy
-// of a rule is a copy that can drift.
+// Two consequences of the new carrier are worth stating plainly. Compression no
+// longer answers null -- it has no failure mode short of running out of memory,
+// which is a panic rather than a value -- so gzip, deflate and zlibCompress
+// return Array<u8> rather than Array<u8>?. And the header judgements no longer
+// allocate, because a Slice<u8> is a borrowed view and asking whether it opens
+// as gzip only reads it.
 
 const CRC32_TABLE: Array<i64> = [
     0, 1996959894, 3993919788, 2567524794, 124634137, 1886057615,
@@ -125,18 +124,6 @@ fn adler32Bytes(view: Slice<u8>) -> i64 {
     }
     return (b << 16) | a
 }
-
-// The CRC-32 of the bytes, as an unsigned 32-bit value widened to i64.
-export fn crc32(data: string) -> i64 {
-    return crc32Bytes(data.bytes())
-}
-
-// The Adler-32 of the bytes, as an unsigned 32-bit value widened to i64.
-// The empty input answers 1, which is the checksum's initial state.
-export fn adler32(data: string) -> i64 {
-    return adler32Bytes(data.bytes())
-}
-
 // ── Container judgements ──
 
 // Anything shorter than a gzip header is not gzip, whatever its first two
@@ -155,49 +142,813 @@ fn isZlibBytes(view: Slice<u8>) -> bool {
     return check % ZLIB_CHECK_MOD == 0 && ((view[0] as i64) & 15) == ZLIB_METHOD_DEFLATE
 }
 
+// Container field values and sizes, named where they are first needed.
+const GZIP_METHOD_DEFLATE: i64 = 8
+const GZIP_OS_UNKNOWN: i64 = 255
+const GZIP_TRAILER_LEN: i64 = 8
+// A member needs a header, a payload no shorter than an empty stored block,
+// and a trailer, so anything under eighteen bytes cannot be one.
+const GZIP_MIN_MEMBER_LEN: i64 = 18
+const GZIP_FHCRC: i64 = 2
+const GZIP_FEXTRA: i64 = 4
+const GZIP_FNAME: i64 = 8
+const GZIP_FCOMMENT: i64 = 16
+
+const ZLIB_CMF_DEFLATE_32K: i64 = 120
+const ZLIB_TRAILER_LEN: i64 = 4
+const ZLIB_MIN_STREAM_LEN: i64 = 6
+const ZLIB_FDICT: i64 = 32
+
+// A level outside the range is taken to the nearest end of it rather than
+// refused. That was the C coder's rule and callers depend on it, so it is
+// stated once here and every entry point goes through it.
+const NO_COMPRESSION: i64 = 0
+const BEST_COMPRESSION: i64 = 9
+
+fn clampLevel(level: i64) -> i64 {
+    if (level < NO_COMPRESSION) { return NO_COMPRESSION }
+    if (level > BEST_COMPRESSION) { return BEST_COMPRESSION }
+    return level
+}
+// ── DEFLATE shared kernel (RFC 1951) ───────────────────────────────────────
+//
+// This block is the CONTRACT both the encoder and the decoder build on.
+// Do not restate any table or helper below; call it.
+
+// Length codes 257..285: the base length each code stands for, and how many
+// extra bits follow it.
+const LENGTH_BASE: Array<i64> = [
+    3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59,
+    67, 83, 99, 115, 131, 163, 195, 227, 258]
+const LENGTH_EXTRA: Array<i64> = [
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3,
+    4, 4, 4, 4, 5, 5, 5, 5, 0]
+
+// Distance codes 0..29, same shape.
+const DIST_BASE: Array<i64> = [
+    1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513,
+    769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577]
+const DIST_EXTRA: Array<i64> = [
+    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8,
+    9, 9, 10, 10, 11, 11, 12, 12, 13, 13]
+
+// The order a dynamic block states its code-length code lengths in.
+const CLCL_ORDER: Array<i64> = [
+    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
+
+const MAX_BITS: i64 = 15
+const END_OF_BLOCK: i64 = 256
+const WINDOW_SIZE: i64 = 32768
+const MIN_MATCH: i64 = 3
+const MAX_MATCH: i64 = 258
+
+// ── Bit output ──
+//
+// Deflate fills a byte from its low bit upwards. Everything except a Huffman
+// code is written low bit first; a Huffman code travels high bit first, so
+// writeCode reverses it into the same low-first stream.
+class BitWriter {
+    out: Array<u8>
+    bitBuf: i64
+    bitCount: i64
+
+    constructor() {
+        this.out = Array<u8>()
+        this.bitBuf = 0
+        this.bitCount = 0
+    }
+
+    writeBits(value: i64, count: i64) {
+        this.bitBuf = this.bitBuf | ((value & ((1 << count) - 1)) << this.bitCount)
+        this.bitCount = this.bitCount + count
+        while (this.bitCount >= 8) {
+            this.out.push((this.bitBuf & 255) as u8)
+            this.bitBuf = this.bitBuf >> 8
+            this.bitCount = this.bitCount - 8
+        }
+    }
+
+    // A canonical Huffman code is transmitted most significant bit first.
+    writeCode(code: i64, count: i64) {
+        var reversed = 0
+        var i = 0
+        while (i < count) {
+            reversed = (reversed << 1) | ((code >> i) & 1)
+            i++
+        }
+        this.writeBits(reversed, count)
+    }
+
+    alignByte() {
+        if (this.bitCount > 0) {
+            this.out.push((this.bitBuf & 255) as u8)
+            this.bitBuf = 0
+            this.bitCount = 0
+        }
+    }
+
+    finish() -> Array<u8> {
+        this.alignByte()
+        return this.out
+    }
+}
+
+// ── Canonical Huffman decoding ──
+//
+// A canonical code is fully described by how many codes share each length and
+// by the symbols in code order, which is what buildHuffman derives from a
+// length vector. decodeSymbol then walks one bit at a time, comparing the code
+// so far against the first code of that length -- the shape puff.c uses,
+// because it needs no table beyond these two vectors.
+class Huffman {
+    counts: Array<i64>
+    symbols: Array<i64>
+
+    constructor(counts: Array<i64>, symbols: Array<i64>) {
+        this.counts = counts
+        this.symbols = symbols
+    }
+}
+
+fn buildHuffman(lengths: Array<i64>, n: i64) -> Huffman {
+    var counts = Array<i64>(MAX_BITS + 1, 0)
+    for (var i = 0; i < n; i++) {
+        counts[lengths[i]] = counts[lengths[i]] + 1
+    }
+    // An all-zero vector is a code with no symbols, which only a distance tree
+    // for a literal-only block may be.
+    if (counts[0] == n) { return Huffman(counts, Array<i64>(0, 0)) }
+
+    // Reject an over-subscribed code: at every length the codes available must
+    // cover the codes used.
+    var left = 1
+    for (var length = 1; length <= MAX_BITS; length++) {
+        left = left << 1
+        left = left - counts[length]
+        if (left < 0) { throw CompressionError.InvalidData }
+    }
+
+    var offsets = Array<i64>(MAX_BITS + 2, 0)
+    for (var length = 1; length <= MAX_BITS; length++) {
+        offsets[length + 1] = offsets[length] + counts[length]
+    }
+    var symbols = Array<i64>(n, 0)
+    for (var symbol = 0; symbol < n; symbol++) {
+        if (lengths[symbol] != 0) {
+            symbols[offsets[lengths[symbol]]] = symbol
+            offsets[lengths[symbol]] = offsets[lengths[symbol]] + 1
+        }
+    }
+    return Huffman(counts, symbols)
+}
+
+// The fixed literal/length and distance code lengths of RFC 1951 3.2.6.
+fn fixedLiteralLengths() -> Array<i64> {
+    var lengths = Array<i64>(288, 0)
+    for (var i = 0; i < 144; i++) { lengths[i] = 8 }
+    for (var i = 144; i < 256; i++) { lengths[i] = 9 }
+    for (var i = 256; i < 280; i++) { lengths[i] = 7 }
+    for (var i = 280; i < 288; i++) { lengths[i] = 8 }
+    return lengths
+}
+
+fn fixedDistanceLengths() -> Array<i64> {
+    var lengths = Array<i64>(30, 0)
+    for (var i = 0; i < 30; i++) { lengths[i] = 5 }
+    return lengths
+}
+
+// ── Deflate ──
+//
+// The encoder emits stored blocks at level 0 and fixed-Huffman blocks
+// otherwise. Fixed coding is chosen over dynamic deliberately: a dynamic block
+// would compress a little better, but it also has to transmit its own code
+// lengths, and the decoder beside this reads both, so nothing is lost in
+// interoperability by not producing one.
+
+const MAX_STORED_BLOCK: i64 = 65535
+// Below this, a fixed-Huffman block costs more than it saves -- the end-of-block
+// symbol and the block header alone outweigh what a handful of literals gain.
+const STORED_THRESHOLD: i64 = 10
+
+const HASH_SIZE: i64 = 32768
+const HASH_MASK: i64 = 32767
+
+// How far along a hash chain each level looks, and the match length at which it
+// stops looking. Level 0 never gets here, so its slot is unused. Both tables are
+// zlib's, and the second one is what keeps highly repetitive input affordable:
+// without it every position on a long run walks the whole chain to rediscover a
+// match it already had.
+const CHAIN_LENGTHS: Array<i64> = [0, 4, 8, 16, 32, 64, 128, 256, 1024, 4096]
+const NICE_LENGTHS: Array<i64> = [0, 8, 16, 32, 16, 32, 128, 128, 258, 258]
+
+// A stored block carries its bytes unchanged, so it is the only shape that
+// never grows the input by more than five bytes per 64 KB.
+fn deflateStored(src: Slice<u8>) -> Array<u8> {
+    var w = BitWriter()
+    var total = len(src)
+    if (total == 0) {
+        // An empty input still has to say it is the end of the stream.
+        w.writeBits(1, 1)
+        w.writeBits(0, 2)
+        w.alignByte()
+        w.out.push(0 as u8)
+        w.out.push(0 as u8)
+        w.out.push(255 as u8)
+        w.out.push(255 as u8)
+        return w.out
+    }
+    var pos = 0
+    while (pos < total) {
+        var chunk = total - pos
+        if (chunk > MAX_STORED_BLOCK) { chunk = MAX_STORED_BLOCK }
+        var isFinal = 0
+        if (pos + chunk >= total) { isFinal = 1 }
+        w.writeBits(isFinal, 1)
+        w.writeBits(0, 2)
+        w.alignByte()
+        w.out.push((chunk & 255) as u8)
+        w.out.push(((chunk >> 8) & 255) as u8)
+        w.out.push(((~chunk) & 255) as u8)
+        w.out.push((((~chunk) >> 8) & 255) as u8)
+        w.out.appendFrom(src[pos:pos + chunk])
+        pos = pos + chunk
+    }
+    return w.out
+}
+
+// The canonical code for each symbol, derived from the length vector by the
+// procedure in RFC 1951 3.2.2. The decoder derives its tables from the same
+// vector, so the two cannot disagree about what a code means.
+fn canonicalCodes(lengths: Array<i64>, n: i64) -> Array<i64> {
+    var blCount = Array<i64>(MAX_BITS + 1, 0)
+    for (var i = 0; i < n; i++) { blCount[lengths[i]] = blCount[lengths[i]] + 1 }
+    blCount[0] = 0
+
+    var nextCode = Array<i64>(MAX_BITS + 2, 0)
+    var code = 0
+    for (var bits = 1; bits <= MAX_BITS; bits++) {
+        code = (code + blCount[bits - 1]) << 1
+        nextCode[bits] = code
+    }
+
+    var codes = Array<i64>(n, 0)
+    for (var i = 0; i < n; i++) {
+        if (lengths[i] != 0) {
+            codes[i] = nextCode[lengths[i]]
+            nextCode[lengths[i]] = nextCode[lengths[i]] + 1
+        }
+    }
+    return codes
+}
+
+// Three bytes hashed into a bucket. Collisions are fine -- the chain is walked
+// and every candidate is compared -- so this only has to spread well.
+fn hash3(src: Slice<u8>, pos: i64) -> i64 {
+    return (((src[pos] as i64) << 10) ^ ((src[pos + 1] as i64) << 5)
+        ^ (src[pos + 2] as i64)) & HASH_MASK
+}
+
+fn insertHash(src: Slice<u8>, pos: i64, head: ref Array<i64>, prev: ref Array<i64>) {
+    var bucket = hash3(src, pos)
+    prev[pos] = head[bucket]
+    head[bucket] = pos
+}
+
+// The longest match for the bytes at pos, returned as one i64: the length in
+// the high half and the distance in the low half. A distance never reaches
+// 65536, so the two never collide, and packing keeps this loop allocation-free.
+// Answers 0 when nothing at least MIN_MATCH long was found.
+fn findMatch(src: Slice<u8>, pos: i64, total: i64, head: Array<i64>, prev: Array<i64>,
+             maxChain: i64, niceLength: i64) -> i64 {
+    var maxLength = total - pos
+    if (maxLength > MAX_MATCH) { maxLength = MAX_MATCH }
+    if (maxLength < MIN_MATCH) { return 0 }
+
+    var earliest = pos - WINDOW_SIZE
+    if (earliest < 0) { earliest = 0 }
+
+    var bestLength = 0
+    var bestDistance = 0
+    var candidate = head[hash3(src, pos)]
+    var chain = maxChain
+
+    while (candidate >= earliest && chain > 0) {
+        chain--
+        // A candidate can only win by reaching past the current best, so the
+        // byte that would have to differ is checked before the run is walked.
+        if (bestLength > 0 && src[candidate + bestLength] != src[pos + bestLength]) {
+            candidate = prev[candidate]
+            continue
+        }
+        var length = 0
+        while (length < maxLength && src[candidate + length] == src[pos + length]) {
+            length++
+        }
+        if (length > bestLength) {
+            bestLength = length
+            bestDistance = pos - candidate
+            // Nothing can beat the longest match the format can express, and
+            // past niceLength the chain is no longer worth walking.
+            if (length >= maxLength || length >= niceLength) { break }
+        }
+        candidate = prev[candidate]
+    }
+
+    if (bestLength < MIN_MATCH) { return 0 }
+    return (bestLength << 16) | bestDistance
+}
+
+// Length 3..258 maps onto codes 257..285; the search walks down from the top
+// because the bases are ascending and the table is short.
+fn lengthCodeFor(length: i64) -> i64 {
+    var code = 28
+    while (code > 0 && length < LENGTH_BASE[code]) { code-- }
+    return code
+}
+
+fn distCodeFor(distance: i64) -> i64 {
+    var code = 29
+    while (code > 0 && distance < DIST_BASE[code]) { code-- }
+    return code
+}
+
+fn emitLiteral(w: ref BitWriter, value: i64, codes: Array<i64>, lengths: Array<i64>) {
+    w.writeCode(codes[value], lengths[value])
+}
+
+fn emitMatch(w: ref BitWriter, length: i64, distance: i64,
+             litCodes: Array<i64>, litLengths: Array<i64>,
+             distCodes: Array<i64>, distLengths: Array<i64>) {
+    var lengthCode = lengthCodeFor(length)
+    var symbol = 257 + lengthCode
+    w.writeCode(litCodes[symbol], litLengths[symbol])
+    var lengthExtra = LENGTH_EXTRA[lengthCode]
+    if (lengthExtra > 0) { w.writeBits(length - LENGTH_BASE[lengthCode], lengthExtra) }
+
+    var distCode = distCodeFor(distance)
+    w.writeCode(distCodes[distCode], distLengths[distCode])
+    var distExtra = DIST_EXTRA[distCode]
+    if (distExtra > 0) { w.writeBits(distance - DIST_BASE[distCode], distExtra) }
+}
+
+fn deflateFixed(src: Slice<u8>, level: i64) -> Array<u8> {
+    var litLengths = fixedLiteralLengths()
+    var litCodes = canonicalCodes(litLengths, 288)
+    var distLengths = fixedDistanceLengths()
+    var distCodes = canonicalCodes(distLengths, 30)
+
+    var total = len(src)
+    var head = Array<i64>(HASH_SIZE, -1)
+    var prev = Array<i64>(total, -1)
+    var maxChain = CHAIN_LENGTHS[level]
+    var niceLength = NICE_LENGTHS[level]
+
+    var w = BitWriter()
+    // One block covers the whole input: the format puts no ceiling on a coded
+    // block, and splitting would only help if the tables changed with it.
+    w.writeBits(1, 1)
+    w.writeBits(1, 2)
+
+    var pos = 0
+    while (pos < total) {
+        var matchLength = 0
+        var matchDistance = 0
+        if (pos + MIN_MATCH <= total) {
+            var hit = findMatch(src, pos, total, head, prev, maxChain, niceLength)
+            if (hit != 0) {
+                matchLength = hit >> 16
+                matchDistance = hit & 65535
+            }
+        }
+
+        if (matchLength >= MIN_MATCH) {
+            emitMatch(ref w, matchLength, matchDistance, litCodes, litLengths, distCodes,
+                      distLengths)
+            // Every position the match covered still has to enter the chain, or
+            // later matches would never see it.
+            for (var k = 0; k < matchLength; k++) {
+                if (pos + k + MIN_MATCH <= total) { insertHash(src, pos + k, ref head, ref prev) }
+            }
+            pos = pos + matchLength
+        } else {
+            emitLiteral(ref w, src[pos] as i64, litCodes, litLengths)
+            if (pos + MIN_MATCH <= total) { insertHash(src, pos, ref head, ref prev) }
+            pos++
+        }
+    }
+
+    w.writeCode(litCodes[END_OF_BLOCK], litLengths[END_OF_BLOCK])
+    return w.finish()
+}
+
+fn deflateRaw(src: Slice<u8>, level: i64) -> Array<u8> {
+    // One return, one owner: mixing a callee's buffer with a local on different
+    // return paths is rejected as mixed return storage (E0352).
+    var result = Array<u8>()
+    if (level == NO_COMPRESSION || len(src) < STORED_THRESHOLD) {
+        result = deflateStored(src)
+    } else {
+        result = deflateFixed(src, level)
+        // Fixed Huffman spends eight or nine bits on every literal it cannot
+        // match, so input with no structure comes out larger than it went in. A
+        // stored block never does, and costs five bytes per 64 KB to say so.
+        // The second pass only happens when the first failed to compress.
+        if (len(result) >= len(src)) {
+            var stored = deflateStored(src)
+            if (len(stored) < len(result)) { result = stored }
+        }
+    }
+    return result
+}
+
+// ── Inflate ──
+//
+// The decoder owns its input rather than borrowing it. That is forced, not
+// stylistic: a Slice cannot be a class field, and threading one through every
+// method instead makes it escape -- passing a Slice to a method on a `ref`
+// receiver marks it escaping (E0383), while dropping the `ref` makes the
+// receiver read-only and the cursor unadvanceable (E0353). Owning the
+// compressed bytes costs one copy of the smaller of the two buffers and buys a
+// decoder shaped like the format it reads.
+class Inflater {
+    src: Array<u8>
+    out: Array<u8>
+    pos: i64
+    bitBuf: i64
+    bitCount: i64
+
+    constructor(src: Array<u8>) {
+        this.src = src
+        this.out = Array<u8>()
+        this.pos = 0
+        this.bitBuf = 0
+        this.bitCount = 0
+    }
+
+    // Reads count bits, low bit first. Running past the end is a malformed
+    // stream, not a zero fill.
+    readBits(count: i64) -> i64 {
+        while (this.bitCount < count) {
+            if (this.pos >= len(this.src)) { throw CompressionError.InvalidData }
+            this.bitBuf = this.bitBuf | ((this.src[this.pos] as i64) << this.bitCount)
+            this.pos = this.pos + 1
+            this.bitCount = this.bitCount + 8
+        }
+        var value = this.bitBuf & ((1 << count) - 1)
+        this.bitBuf = this.bitBuf >> count
+        this.bitCount = this.bitCount - count
+        return value
+    }
+
+    // Whatever is left in the bit buffer belongs to a byte already consumed, so
+    // discarding it leaves pos on the next whole byte.
+    alignByte() {
+        this.bitBuf = 0
+        this.bitCount = 0
+    }
+
+    // Walks one bit at a time, comparing the code so far against the first code
+    // of that length -- the shape puff.c uses, because it needs no table beyond
+    // the two vectors buildHuffman produces.
+    decodeSymbol(tree: Huffman) -> i64 {
+        var code = 0
+        var first = 0
+        var index = 0
+        for (var length = 1; length <= MAX_BITS; length++) {
+            code = code | this.readBits(1)
+            var count = tree.counts[length]
+            if (code - count < first) { return tree.symbols[index + (code - first)] }
+            index = index + count
+            first = (first + count) << 1
+            code = code << 1
+        }
+        throw CompressionError.InvalidData
+    }
+
+    // A stored block restates its length twice, the second time complemented,
+    // so a stream that lost its alignment is caught before any bytes are copied.
+    storedBlock() {
+        this.alignByte()
+        var total = len(this.src)
+        if (this.pos + 4 > total) { throw CompressionError.InvalidData }
+        var blockLen = (this.src[this.pos] as i64) | ((this.src[this.pos + 1] as i64) << 8)
+        var blockNlen = (this.src[this.pos + 2] as i64) | ((this.src[this.pos + 3] as i64) << 8)
+        if (blockNlen != ((~blockLen) & 65535)) { throw CompressionError.InvalidData }
+        this.pos = this.pos + 4
+        if (this.pos + blockLen > total) { throw CompressionError.InvalidData }
+        this.out.appendFrom(this.src[this.pos:this.pos + blockLen])
+        this.pos = this.pos + blockLen
+    }
+
+    // The code lengths of a dynamic block are themselves Huffman coded, with
+    // three symbols above the literal ones that repeat: 16 repeats the previous
+    // length, 17 and 18 repeat zero over two different ranges.
+    readCodeLengths(tree: Huffman, count: i64, lengths: ref Array<i64>) {
+        var i = 0
+        while (i < count) {
+            var symbol = this.decodeSymbol(tree)
+            if (symbol < 16) {
+                lengths[i] = symbol
+                i++
+            } else if (symbol == 16) {
+                // Nothing precedes the first length, so it cannot be repeated.
+                if (i == 0) { throw CompressionError.InvalidData }
+                var previous = lengths[i - 1]
+                var repeat = 3 + this.readBits(2)
+                if (i + repeat > count) { throw CompressionError.InvalidData }
+                for (var k = 0; k < repeat; k++) {
+                    lengths[i] = previous
+                    i++
+                }
+            } else if (symbol == 17) {
+                var repeat = 3 + this.readBits(3)
+                if (i + repeat > count) { throw CompressionError.InvalidData }
+                for (var k = 0; k < repeat; k++) {
+                    lengths[i] = 0
+                    i++
+                }
+            } else if (symbol == 18) {
+                var repeat = 11 + this.readBits(7)
+                if (i + repeat > count) { throw CompressionError.InvalidData }
+                for (var k = 0; k < repeat; k++) {
+                    lengths[i] = 0
+                    i++
+                }
+            } else {
+                throw CompressionError.InvalidData
+            }
+        }
+    }
+
+    // One coded block, whichever pair of trees describes it. A back-reference is
+    // applied with repeatFrom, whose overlapping semantics are exactly the ones
+    // deflate defines: a distance shorter than the length repeats what it just
+    // wrote, byte by byte.
+    codedBlock(litTree: Huffman, distTree: Huffman) {
+        while (true) {
+            var symbol = this.decodeSymbol(litTree)
+            if (symbol < 256) {
+                this.out.push(symbol as u8)
+            } else if (symbol == END_OF_BLOCK) {
+                return
+            } else {
+                var lengthIndex = symbol - 257
+                if (lengthIndex >= 29) { throw CompressionError.InvalidData }
+                var length = LENGTH_BASE[lengthIndex]
+                var lengthExtra = LENGTH_EXTRA[lengthIndex]
+                if (lengthExtra > 0) { length = length + this.readBits(lengthExtra) }
+
+                var distSymbol = this.decodeSymbol(distTree)
+                if (distSymbol >= 30) { throw CompressionError.InvalidData }
+                var distance = DIST_BASE[distSymbol]
+                var distExtra = DIST_EXTRA[distSymbol]
+                if (distExtra > 0) { distance = distance + this.readBits(distExtra) }
+
+                // A distance reaching back past the start of the output names
+                // bytes that were never written.
+                if (distance > len(this.out)) { throw CompressionError.InvalidData }
+                this.out.repeatFrom(distance, length)
+            }
+        }
+    }
+
+    dynamicBlock() {
+        var hlit = this.readBits(5) + 257
+        var hdist = this.readBits(5) + 1
+        var hclen = this.readBits(4) + 4
+
+        // The code-length lengths arrive in an order that front-loads the ones
+        // most often non-zero, so a short block can stop early.
+        var clcl = Array<i64>(19, 0)
+        for (var i = 0; i < hclen; i++) {
+            clcl[CLCL_ORDER[i]] = this.readBits(3)
+        }
+        var clTree = buildHuffman(clcl, 19)
+
+        // Literal and distance lengths are coded as one run and split
+        // afterwards, because a repeat may straddle the boundary between them.
+        var all = Array<i64>(hlit + hdist, 0)
+        this.readCodeLengths(clTree, hlit + hdist, ref all)
+        var litLengths = copy(all[0:hlit])
+        var distLengths = copy(all[hlit:hlit + hdist])
+
+        this.codedBlock(buildHuffman(litLengths, hlit), buildHuffman(distLengths, hdist))
+    }
+
+    run() -> Array<u8> {
+        while (true) {
+            var isFinal = this.readBits(1)
+            var blockType = this.readBits(2)
+            if (blockType == 0) {
+                this.storedBlock()
+            } else if (blockType == 1) {
+                this.codedBlock(buildHuffman(fixedLiteralLengths(), 288),
+                                buildHuffman(fixedDistanceLengths(), 30))
+            } else if (blockType == 2) {
+                this.dynamicBlock()
+            } else {
+                // BTYPE 3 is reserved and names no coding.
+                throw CompressionError.InvalidData
+            }
+            if (isFinal == 1) { return this.out }
+        }
+        return this.out
+    }
+}
+
+fn inflateRaw(src: Slice<u8>) -> Array<u8> {
+    var owned = copy(src[0:len(src)])
+    var decoder = Inflater(owned)
+    return decoder.run()
+}
+// ── Container framing ───────────────────────────────────────────────────────
+//
+// gzip and zlib are the same deflate stream under two different envelopes: a
+// header that names the method, and a trailer that restates the payload so a
+// decoder can tell a truncated stream from a complete one. Both envelopes are
+// byte arithmetic, so both are stated here.
+
+fn pushU32LE(out: ref Array<u8>, value: i64) {
+    out.push((value & 255) as u8)
+    out.push(((value >> 8) & 255) as u8)
+    out.push(((value >> 16) & 255) as u8)
+    out.push(((value >> 24) & 255) as u8)
+}
+
+fn readU32LE(src: Slice<u8>, at: i64) -> i64 {
+    return (src[at] as i64) | ((src[at + 1] as i64) << 8) | ((src[at + 2] as i64) << 16)
+        | ((src[at + 3] as i64) << 24)
+}
+
+fn readU32BE(src: Slice<u8>, at: i64) -> i64 {
+    return ((src[at] as i64) << 24) | ((src[at + 1] as i64) << 16) | ((src[at + 2] as i64) << 8)
+        | (src[at + 3] as i64)
+}
+
+// ── gzip (RFC 1952) ──
+
+// The header is the fixed ten bytes: the two magic bytes, deflate as the
+// method, no optional fields, an unset modification time, no extra flags, and
+// an unnamed operating system. Nothing here varies with the input, so nothing
+// here is computed.
+fn writeGzipHeader(out: ref Array<u8>) {
+    out.push(GZIP_ID1 as u8)
+    out.push(GZIP_ID2 as u8)
+    out.push(GZIP_METHOD_DEFLATE as u8)
+    out.push(0 as u8)
+    out.push(0 as u8)
+    out.push(0 as u8)
+    out.push(0 as u8)
+    out.push(0 as u8)
+    out.push(0 as u8)
+    out.push(GZIP_OS_UNKNOWN as u8)
+}
+
+// gzip-wrap and compress. The trailer carries the CRC-32 of the input and its
+// length modulo 2^32, both little endian, which is what gunzip checks.
+export fn gzip(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Array<u8> {
+    var out = Array<u8>()
+    writeGzipHeader(ref out)
+    var body = deflateRaw(data, clampLevel(level))
+    out.appendFrom(body[:])
+    pushU32LE(ref out, crc32Bytes(data))
+    pushU32LE(ref out, len(data) & MASK32)
+    return out
+}
+
+// Unwrap a gzip member and decompress it. A member shorter than a header plus
+// an empty payload plus a trailer cannot be one, whatever its first two bytes
+// say, and a method other than deflate is one this decoder does not implement.
+export fn gunzip(data: Slice<u8>) -> Array<u8> {
+    if (!isGzipBytes(data)) { throw CompressionError.InvalidData }
+    var total = len(data)
+    if (total < GZIP_MIN_MEMBER_LEN) { throw CompressionError.InvalidData }
+    if ((data[2] as i64) != GZIP_METHOD_DEFLATE) { throw CompressionError.InvalidData }
+
+    // The four optional fields are laid out in flag order, each sized either by
+    // a count it carries or by its own terminating zero byte.
+    var flags = data[3] as i64
+    var pos = GZIP_HEADER_LEN
+    if ((flags & GZIP_FEXTRA) != 0) {
+        if (pos + 2 > total) { throw CompressionError.InvalidData }
+        var extraLen = (data[pos] as i64) | ((data[pos + 1] as i64) << 8)
+        pos = pos + 2 + extraLen
+    }
+    if ((flags & GZIP_FNAME) != 0) {
+        while (pos < total && (data[pos] as i64) != 0) { pos++ }
+        pos++
+    }
+    if ((flags & GZIP_FCOMMENT) != 0) {
+        while (pos < total && (data[pos] as i64) != 0) { pos++ }
+        pos++
+    }
+    if ((flags & GZIP_FHCRC) != 0) { pos = pos + 2 }
+    if (pos + GZIP_TRAILER_LEN > total) { throw CompressionError.InvalidData }
+
+    var out = inflateRaw(data[pos:total - GZIP_TRAILER_LEN])
+
+    // Both trailer fields are checked. The length alone would miss a corrupted
+    // byte, and the checksum alone would miss a stream truncated at a block
+    // boundary of exactly the right shape.
+    var trailer = total - GZIP_TRAILER_LEN
+    if (readU32LE(data, trailer) != crc32Bytes(out[:])) {
+        throw CompressionError.InvalidData
+    }
+    if (readU32LE(data, trailer + 4) != (len(out) & MASK32)) {
+        throw CompressionError.InvalidData
+    }
+    return out
+}
+
+// ── zlib (RFC 1950) ──
+
+// CMF names deflate over a 32K window. FLG carries the level hint in its top
+// two bits and is then raised to whatever makes the pair a multiple of
+// thirty-one, which is the check the format uses in place of a magic number.
+fn zlibHeaderFlg(level: i64) -> i64 {
+    var flevel = 3
+    if (level <= 1) {
+        flevel = 0
+    } else if (level <= 5) {
+        flevel = 1
+    } else if (level <= 7) {
+        flevel = 2
+    }
+    var flg = flevel << 6
+    var remainder = ((ZLIB_CMF_DEFLATE_32K << 8) | flg) % ZLIB_CHECK_MOD
+    if (remainder != 0) { flg = flg + (ZLIB_CHECK_MOD - remainder) }
+    return flg
+}
+
+// zlib-wrap and compress. The trailer is the Adler-32 of the input, big endian
+// -- the one place this module writes a number high byte first.
+export fn zlibCompress(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Array<u8> {
+    var out = Array<u8>()
+    var chosen = clampLevel(level)
+    out.push(ZLIB_CMF_DEFLATE_32K as u8)
+    out.push(zlibHeaderFlg(chosen) as u8)
+    var body = deflateRaw(data, chosen)
+    out.appendFrom(body[:])
+    var adler = adler32Bytes(data)
+    out.push(((adler >> 24) & 255) as u8)
+    out.push(((adler >> 16) & 255) as u8)
+    out.push(((adler >> 8) & 255) as u8)
+    out.push((adler & 255) as u8)
+    return out
+}
+
+// Unwrap a zlib stream and decompress it. A preset dictionary is announced by
+// FDICT and would name a dictionary this decoder was never given, so the four
+// bytes naming it are skipped and the stream is decoded without it.
+export fn zlibDecompress(data: Slice<u8>) -> Array<u8> {
+    if (!isZlibBytes(data)) { throw CompressionError.InvalidData }
+    var total = len(data)
+    if (total < ZLIB_MIN_STREAM_LEN) { throw CompressionError.InvalidData }
+
+    var headerLen = ZLIB_HEADER_LEN
+    if (((data[1] as i64) & ZLIB_FDICT) != 0) {
+        headerLen = headerLen + 4
+        if (total < headerLen + ZLIB_TRAILER_LEN) { throw CompressionError.InvalidData }
+    }
+
+    var out = inflateRaw(data[headerLen:total - ZLIB_TRAILER_LEN])
+    if (readU32BE(data, total - ZLIB_TRAILER_LEN) != adler32Bytes(out[:])) {
+        throw CompressionError.InvalidData
+    }
+    return out
+}
+
+// ── Public surface ──
+
+// The CRC-32 of the bytes, as an unsigned 32-bit value widened to i64.
+export fn crc32(data: Slice<u8>) -> i64 {
+    return crc32Bytes(data)
+}
+
+// The Adler-32 of the bytes, as an unsigned 32-bit value widened to i64.
+// The empty input answers 1, which is the checksum's initial state.
+export fn adler32(data: Slice<u8>) -> i64 {
+    return adler32Bytes(data)
+}
+
 // Whether the bytes open as a gzip member.
-export fn isGzip(data: string) -> bool {
-    return isGzipBytes(data.bytes())
+export fn isGzip(data: Slice<u8>) -> bool {
+    return isGzipBytes(data)
 }
 
 // Whether the bytes open as a zlib stream.
-export fn isZlib(data: string) -> bool {
-    return isZlibBytes(data.bytes())
-}
-
-// ── Compression ──
-
-// gzip-wrap and compress. A level outside 0..9 is taken to the nearest end of
-// the range by the coder, so it is not re-decided here. Answers null when the
-// payload cannot be produced.
-export fn gzip(data: string, level: i64 = DEFAULT_COMPRESSION) -> string? {
-    return __gzip(data, level)
-}
-
-// Unwrap a gzip member and decompress it. The decoder refuses an input whose
-// header is not gzip and verifies the trailing CRC-32 and length.
-export fn gunzip(data: string) -> string {
-    return __gunzip(data)
+export fn isZlib(data: Slice<u8>) -> bool {
+    return isZlibBytes(data)
 }
 
 // Raw deflate, with no container of any kind around it.
-export fn deflate(data: string, level: i64 = DEFAULT_COMPRESSION) -> string? {
-    return __deflate(data, level)
+export fn deflate(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Array<u8> {
+    return deflateRaw(data, clampLevel(level))
 }
 
 // Raw inflate. A deflate stream carries no header to check ahead of time, so
 // every input goes to the decoder and malformed ones come back as the error.
-export fn inflate(data: string) -> string {
-    return __inflate(data)
-}
-
-// zlib-wrap and compress. Answers null when the payload cannot be produced.
-export fn zlibCompress(data: string, level: i64 = DEFAULT_COMPRESSION) -> string? {
-    return __zlibCompress(data, level)
-}
-
-// Unwrap a zlib stream and decompress it. As with gunzip the decoder owns both
-// the header refusal and the trailing Adler-32.
-export fn zlibDecompress(data: string) -> string {
-    return __zlibDecompress(data)
+export fn inflate(data: Slice<u8>) -> Array<u8> {
+    return inflateRaw(data)
 }
