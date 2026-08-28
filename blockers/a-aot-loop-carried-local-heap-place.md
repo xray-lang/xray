@@ -20,7 +20,11 @@
 Two lines, no standard library beyond the prelude:
 
 ```xray
-fn run() -> i64 { var s = ""; for (var i = 0; i < 5; i++) { s = s + "x" } return len(s) }
+fn run() -> i64 {
+    var s = ""
+    for (var i = 0; i < 5; i++) { s = s + "x" }
+    return len(s)
+}
 print(run())
 ```
 
@@ -32,7 +36,11 @@ Error: module representation authority build failed:
 The same refusal with no string involved, and no function call at all:
 
 ```xray
-fn run() -> i64 { var s = Array<u8>(16); for (var i = 0; i < 3; i++) { s = Array<u8>(16) } return s[0] as i64 }
+fn run() -> i64 {
+    var s = Array<u8>(16)
+    for (var i = 0; i < 3; i++) { s = Array<u8>(16) }
+    return s[0] as i64
+}
 ```
 
 ## What the refusal is keyed on
@@ -114,12 +122,54 @@ named round steps into one loop body. It is not a route for the general case:
 nothing can be done for `s = s + x` except write it a different way, and a user
 should not have to know that.
 
+## Root cause
+
+`XRAY_AOT_REFINE_TRACE=1` names it exactly:
+
+```
+[aot-refine] refused in the use-site oracle: the use site admits no storage for
+             this operand: its opcode branch in oracle_use_storage names no
+             family that covers the value
+[aot-refine]   value=7      defined by operation 5 CONST, definition rep = tagged
+[aot-refine]   operation=7  the USE SITE = opcode PHI, operand 0, block 2
+```
+
+The use site is the loop header's **PHI**. A binding carried across iterations
+becomes a phi, which is why every passing row above is a shape that produces no
+phi for the value: a fresh binding each round, a module-scope slot, an element
+write that leaves the array's identity alone.
+
+`oracle_use_storage` does have a phi branch
+(`src/aot/refine/xr_aot_representation_refinement.c:9723`):
+
+```c
+case XI_PHI:
+    if (ctx->policy->force_phi_tagged) {
+        *out_storage = XR_REP_TAGGED;
+        return true;
+    }
+    return oracle_machine_storage(ctx, operation->result_value, out_storage, &ignored_kind);
+```
+
+so the gap is one level below it: `oracle_machine_storage` names no family for
+the phi's result when that result is heap-represented. Both AOT policies set
+`force_phi_tagged = false` (`src/ir/xi_opt.h:94` and `:102`; only
+`xi_rep_policy_tagged_boundary` sets it true), so the fallback branch is the one
+that runs, and it has nothing to answer with.
+
+A scalar phi passes because the scalar family claims it. Nothing claims a phi
+whose result is an array, a string or a map.
+
 ## Requested capability
 
-A representation schema for a function-local heap place whose binding is
-loop-carried. The refusal names `value` and `operation` ordinals rather than a
-source position, so a diagnostic pointing at the rebinding would also help
-anyone who hits this in ordinary code.
+Either a storage family that claims a heap-represented phi result, so the value
+stays native across the merge, or a fallback that lets such a phi be tagged
+under the AOT policies at the cost of one box/unbox at the merge point. The
+first is the real answer; the second would unblock ordinary code immediately.
+
+A source position in the diagnostic would also help: the refusal names `value`
+and `operation` ordinals, and reaching the shape above took a bisection rather
+than a reading.
 
 ## Files deliberately not modified
 
