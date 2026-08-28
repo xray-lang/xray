@@ -4396,7 +4396,7 @@ static bool verify_value_binding(
         eligibility =
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_DYNAMIC
                 ? 1
-                : -1;
+                : -4;
     } else if (exact_owner_forward) {
         /* A transfer holds what its source held, so the expected kind is the
          * source's. An unclaimed source leaves it unclaimed rather than
@@ -4445,22 +4445,26 @@ static bool verify_value_binding(
         eligibility =
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_VIEW
                 ? 1
-                : -1;
+                : -5;
     } else if (exact_unit_enum) {
         expected_kind = XR_MACHINE_REP_ENUM_ORDINAL;
         expected_layout = verifier_layout_for_type(plan, view, semantic_type);
         eligibility =
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_SCALAR
                 ? 1
-                : -1;
+                : -6;
     } else if (eligibility == 0 && deferred_operation) {
         eligibility = 0;
     } else if (aggregate == 1) {
         expected_kind = XR_MACHINE_REP_AGGREGATE;
         expected_layout = verifier_layout_for_type(plan, view, semantic_type);
-        eligibility = expected_layout >= 0 ? 1 : -1;
+        /* Distinguish the two ways an aggregate becomes ineligible: its module
+         * holds no layout for the type, or the type itself is not one this pass
+         * can lay out. A single reason code for both leaves the reader unable
+         * to tell a missing row from an unsupported shape. */
+        eligibility = expected_layout >= 0 ? 1 : -2;
     } else if (aggregate < 0) {
-        eligibility = -1;
+        eligibility = -3;
     } else if (aggregate == 0 && eligibility == 0) {
         eligibility = 0;
     }
@@ -4468,7 +4472,12 @@ static bool verify_value_binding(
         expected_kind = XR_MACHINE_REP_VOID;
     const XrTargetValueRepRecord *record = verifier_value_rep(plan, view, semantic_value);
     if (eligibility < 0) {
-        XR_VALUE_BINDING_FAIL(2);
+        XR_VALUE_BINDING_FAIL(eligibility == -2   ? 21u
+                              : eligibility == -3 ? 22u
+                              : eligibility == -4 ? 23u
+                              : eligibility == -5 ? 24u
+                              : eligibility == -6 ? 25u
+                                                  : 2u);
     }
     if (eligibility == 0) {
         if (record != NULL)
