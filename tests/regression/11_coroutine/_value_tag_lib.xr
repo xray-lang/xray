@@ -1,0 +1,8 @@
+// Helper module for 1170: an exported function whose single string parameter
+// has an allocating method called on it. Crossing the module boundary is what
+// delivers the receiver to dispatch as a plain value, which is where the type
+// question used to be asked of the wrong memory.
+
+export fn byte_length(data: string) -> i64 {
+    return len(data.copyBytes())
+}
