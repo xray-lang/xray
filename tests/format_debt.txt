@@ -106,7 +106,6 @@ src/frontend/analyzer/xa_i64_overflow_program.c
 src/frontend/analyzer/xa_i64_overflow_program.h
 src/frontend/analyzer/xa_node_table.c
 src/frontend/analyzer/xa_scalar_program_authority.h
-src/frontend/analyzer/xanalyzer.c
 src/frontend/analyzer/xanalyzer_memory_effect.c
 src/frontend/analyzer/xanalyzer_operator_overload.c
 src/frontend/analyzer/xbuiltin_receiver_registry.h

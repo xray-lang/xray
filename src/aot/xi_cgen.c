@@ -5700,7 +5700,8 @@ static void emit_shift_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ", %s)", kind);
         return;
     }
-    if (v->op == XI_SHR && v->nargs >= 1 && v->args[0] && xr_type_is_exact_unsigned_integer(v->args[0]->type))
+    if (v->op == XI_SHR && v->nargs >= 1 && v->args[0] &&
+        xr_type_is_exact_unsigned_integer(v->args[0]->type))
         kind = "XR_SHIFT_RIGHT_UNSIGNED";
 
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
