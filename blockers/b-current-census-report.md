@@ -2,8 +2,10 @@
 
 - **Lane**: B (current census / refusal evidence)
 - **Status**: `READY`
-- **Scope**: measurement only. This lane does not implement compiler capability and
-  did not modify any baseline, allowlist, timeout, or compiler semantics.
+- **Scope**: this lane began as measurement only and stayed that way through the census.
+  It later fixed compiler defects the census surfaced, on explicit instruction, so the
+  branch is no longer a pure measurement lane — see "Changes beyond measurement". No
+  baseline, allowlist, or acceptance threshold was modified at any point.
 
 ## Exact source identity
 
@@ -11,21 +13,22 @@
 |---|---|
 | documented base | `bb6eac777369c915ddbde8e4fe76e622ded64d28` |
 | worker branch | `work/b-current-census-evidence` |
-| branch head at measurement | `5cc0daf3888836731a5baee09a0fe69f14fe6db1` |
+| branch head at measurement | `b92abcc59c12` |
 | tree state | clean |
-| binary | `build/xray`, commit `5cc0daf38888`, `dirty=false`, Release, Ninja |
+| binary | `build/xray`, commit `b92abcc59c12`, `dirty=false`, Release, Ninja |
 | build configuration | `cmake --preset default -DXRAY_STDLIB_VM_FASTPATHS=OFF` |
 | provider | apple-clang 21.0.0, `ready=true`, `fallbackUsed=false`, all capabilities ok |
 
-The branch head is ahead of the documented base by three commits owned by this lane;
-they change evidence tooling and diagnostic governance only, never compiler semantics.
+The branch head is ahead of the documented base. The census was regenerated at the
+current head after the compiler fixes landed, so the manifest below matches the binary
+that produced it.
 
 ## Manifest
 
 | item | value |
 |---|---|
-| path | `build/current-refusals-5cc0daf38888.json` |
-| sha256 | `7b941de9c27f01d6fd0a207e8d4f23b9387d9af1602a51ae7647b8022f419f3b` |
+| path | `build/current-refusals-b92abcc59c12.json` |
+| sha256 | `1021265064cd4f381f8790ceb8742fad47e79b30b0cff410b2eea5591da48e04` |
 | generator exit code | 1 |
 | retained logs | 519 refused build logs alongside the manifest |
 
@@ -33,7 +36,7 @@ Command:
 
 ```
 python3 tests/diff/survey_refusals.py --build build \
-  --output build/current-refusals-5cc0daf38888.json --jobs 8 --timeout 180
+  --output build/current-refusals-b92abcc59c12.json --jobs 8 --timeout 180
 ```
 
 Exit code 1 is investigation evidence, not a qualification certificate. It is caused by
@@ -216,3 +219,48 @@ Both predate this lane and are unmodified by it.
   red (`XR_TARGET_1003: leaf product program target projection is invalid`, predicate
   `verify_product_program_target` at `src/plan/target/xr_target_verify.c:8270`). The
   compiler itself links and is complete.
+
+## Changes beyond measurement
+
+The census is the deliverable this lane was chartered for, and it was produced before any
+of the changes below. They are listed so a reviewer sees the whole branch rather than
+discovering half of it in the diff.
+
+**Evidence tooling and diagnostic governance.** The refusal generator and its independent
+checker decided what a diagnostic code was by matching an `XR_`-shaped token, which both
+accepted internal enumerator names and rejected registered codes over punctuation. Both
+now look the code up in the governed registry. Seven emitted codes that were never
+registered are now registered, and the registry's `unknown_code = "error"` policy has an
+enforcer for the first time.
+
+**Gate configuration.** The differential lanes now scale the native-run probe budget, so
+a cold cache under concurrent load stops reporting every case as a build refusal.
+
+**Compiler fixes.** Four defects, all the same omission at different layers: a promoted
+tail call was not modelled by the inliner, by representation selection, by ARC's
+callee resolution, or by the AOT definition-site oracle. Details, evidence and the one
+fix that was tried and reverted are in `b-xi-optimization-tail-call-defects.md`.
+
+These touch `src/ir/` and `src/aot/`, which lane B's charter lists as read-only, and the
+probe change touches a timeout the charter forbids modifying. Both were done on explicit
+instruction rather than this lane's own judgement.
+
+**Effect on the census: none.** The generator measures at `aot_opt="0"` with no Xi
+optimization, and every compiler fix is on the optimized path. Re-running the full census
+at the fixed head reproduces the earlier numbers exactly — 664 = 142 + 519 + 2 + 1, 449
+structured refusals, 70 evidence gaps, 2775 refusal events, 4 new refusals. The fixes are
+visible only with `--xi-opt` enabled, where the four affected cases go from 0 passed / 4
+refused to 4 passed on both backends.
+
+## A gate that cannot pass at this base
+
+`asan_focused` fails on this branch, and would fail on any branch cut from this base. It
+builds the whole tree, and the tree does not build: the generated fixtures
+`tests/unit/generated/leaf_product_native.c` and `i64_overflow_native.c` fail exactly as
+they do at `bb6eac777`, with `XR_TARGET_1003: leaf product program target projection is
+invalid` from `test_xi_program_semantic.c:2536` and `:2766`.
+
+No sanitizer reported anything; the failure is in the build phase. This matters for
+process, not just for this lane: the repository requires `asan_focused` before handing off
+any change under `src/ir/`, `src/aot/`, or `src/analysis/`, and that requirement cannot be
+satisfied by anyone until those two fixtures are repaired.
