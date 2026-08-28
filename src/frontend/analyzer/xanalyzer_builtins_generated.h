@@ -364,6 +364,11 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 };
 #define GEN_MATH_FUNCTION_COUNT 51
 
+static const XaBuiltinClass g_gen_mem_classes[] = {
+    {"Buffer", false},
+};
+#define GEN_MEM_CLASS_COUNT 1
+
 // mem module functions
 static const XaBuiltinMember g_gen_mem_functions[] = {
     {"__fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -426,6 +431,12 @@ static const XaBuiltinEnum g_gen_net_enums[] = {
     {"NetError", "Typed failure from network operations; classification from native codes lives in net.xr", g_gen_net_neterror_variants, 10, UINT32_C(2184710811)},
 };
 #define GEN_NET_ENUM_COUNT 1
+
+static const XaBuiltinClass g_gen_net_classes[] = {
+    {"NetConn", false},
+    {"NetListener", false},
+};
+#define GEN_NET_CLASS_COUNT 2
 
 static const char *g_gen_net___copybidirectional_8_errors[] = {
     "NetError.Timeout",
@@ -514,6 +525,12 @@ static const XaBuiltinMember g_gen_os_functions[] = {
 };
 #define GEN_OS_FUNCTION_COUNT 25
 
+static const XaBuiltinClass g_gen_regex_classes[] = {
+    {"Regex", false},
+    {"RegexMatch", false},
+};
+#define GEN_REGEX_CLASS_COUNT 2
+
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
     {"__compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
@@ -557,6 +574,15 @@ static const XaBuiltinMember g_gen_runtime_functions[] = {
 };
 #define GEN_RUNTIME_FUNCTION_COUNT 5
 
+static const XaBuiltinClass g_gen_sys_classes[] = {
+    {"OsMutex", false},
+    {"OsRwLock", false},
+    {"OsCondvar", false},
+    {"OsBarrier", false},
+    {"OsOnce", false},
+};
+#define GEN_SYS_CLASS_COUNT 5
+
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {
     {"OsMutex", "(): OsMutex", "Create an OS-domain mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
@@ -599,20 +625,20 @@ static const XaBuiltinMember g_gen_time_functions[] = {
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
-    {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT},
-    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_object_shapes, GEN_CLUSTER_OBJECT_SHAPE_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT},
-    {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0},
-    {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, g_gen_net_object_shapes, GEN_NET_OBJECT_SHAPE_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT},
-    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0},
-    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, g_gen_runtime_object_shapes, GEN_RUNTIME_OBJECT_SHAPE_COUNT, NULL, 0},
-    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT, NULL, 0},
+    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_object_shapes, GEN_CLUSTER_OBJECT_SHAPE_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT, NULL, 0},
+    {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
+    {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
+    {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
+    {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
+    {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_mem_classes, GEN_MEM_CLASS_COUNT},
+    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, g_gen_net_object_shapes, GEN_NET_OBJECT_SHAPE_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT, g_gen_net_classes, GEN_NET_CLASS_COUNT},
+    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_regex_classes, GEN_REGEX_CLASS_COUNT},
+    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, g_gen_runtime_object_shapes, GEN_RUNTIME_OBJECT_SHAPE_COUNT, NULL, 0, NULL, 0},
+    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_sys_classes, GEN_SYS_CLASS_COUNT},
+    {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
 };
 #define GEN_BUILTIN_MODULE_COUNT 14
 

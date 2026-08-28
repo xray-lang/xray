@@ -1876,6 +1876,19 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
                                             !xa_stdlib_native_type_is_internal(handle->name));
     }
 
+    /* Native classes declared in stdlib/defs/*.def. An internal class is still
+     * registered -- the module's own body is exactly where it has to be
+     * nameable -- it just stays off the exported surface. The .def visibility
+     * key answers that, not the name: unlike a handle or an object shape, a
+     * class cannot be renamed to `__Something` without that name reaching
+     * diagnostics and completion. */
+    for (int i = 0; i < module->class_count; i++) {
+        const XaBuiltinClass *class_decl = &module->classes[i];
+        if (class_decl->name)
+            xa_register_native_class_symbol(analyzer, scope, file, class_decl->name,
+                                            !class_decl->is_internal);
+    }
+
     for (int i = 0; i < module->object_shape_count; i++) {
         const XaBuiltinObjectShape *object_shape = &module->object_shapes[i];
         if (!object_shape->name || xa_scope_lookup_local(scope, object_shape->name))
