@@ -174,6 +174,71 @@ Xi 层：按名字认出 time.sleep → 建 1 个 COROUTINE_STATE   → actual =
 所以 `actual = 1` **不是** `flags` 带来的，是 Xi 协程分析那条**独立的、按名字硬编码的**路径带来的。
 第一节的 `flags`/`effects` 分歧与本条是**两个独立的分歧**，不要合并处理。
 
+### 第 7 份判据：给 `flags` 加位的闸，比协程分析的 roster 窄得多
+
+追这条时挖出的。给一条指令的实例 `flags` 加上 `XI_FLAG_MAY_SUSPEND` 的闸**总共只有两个**：
+
+```c
+src/ir/xi_lower_expr.c:5404  lower_call_resumes_by_netpoll_retry
+    → 转调 xr_stdlib_metadata_func_resumes_by_netpoll_retry，该函数硬性要求 module == "net"
+
+src/ir/xi_lower_expr.c:505   xi_lower_method_may_suspend
+    if (xi_lower_type_is_named_instance(receiver_type, "WorkQueue"))
+        return strcmp(method, "pop") == 0 && (nargs == 0 || nargs == 1);
+    if (xi_lower_type_is_named_instance(receiver_type, "ResultGroup"))
+        return strcmp(method, "recv") == 0 && nargs == 0;
+    return false;
+```
+
+对照 Xi 协程分析的 roster（`xi_value_is_blocking_*_method_call`）认的 14 个
+`(选择子, arity)` 组合，**lowering 闸只认其中 3 个**。Channel 与 Task 有专属 opcode
+（表默认值自带该位）不受影响，但 `Semaphore.acquire` / `CountdownLatch.wait` /
+`EventCount.wait` **既不在 lowering 闸里、也没有专属 opcode**，与 `time.sleep` 处境相同。
+
+### 一条被实测否定的修法（重要，避免重走）
+
+一个自然的修法猜想是：**让 `effects` 携带实例信息，使它与 `flags` 恒等**——如果 `time.sleep`
+的 yieldable 性本该经 `effects` 传到验证层，那本节与第一节就是同一个修复。
+
+**实测否定：`flags` 对这条调用也不带 `MAY_SUSPEND`。** 两条独立证据：
+
+1. 前述临时探针的触发条件正是 `flags.MAY_SUSPEND != effects.MAY_SUSPEND`，跑这个用例**从未触发**
+   → 两字段一致，都是 0。
+2. 上面枚举的两个闸都不认 `time`（一个要求 `module == "net"`，另一个只认两个 handle 选择子）。
+
+**所以第一节与本节是两个独立的缺陷，"让 effects 跟上 flags"修不了本节。**
+
+### 影响面：45 条，10 个不同 selector
+
+在 1 号的基线上按 `(码, 归一化消息)` 二元组聚类：
+
+```
+45 条 "coroutine state count disagrees with grounded call authority"
+  27  selector=sleep
+   5  selector=(空)
+   4  selector=get
+   3  selector=map
+   1  selector=wait / call / run / runDirect / lock / push  各 1
+```
+
+用现成用例独立复现了两个非 `sleep` 的形态：
+
+```
+tests/diff/cases/semantics/concurrency/barrier_compose.xr   selector=wait expected=0 actual=1
+tests/diff/cases/semantics/concurrency/once_compose.xr      selector=call expected=0 actual=1
+```
+
+**`get` / `map` / `push` / `lock` 不在协程分析那 14 个 roster 里**，说明产生协程状态的路径
+不止 `xi_coro_is_*_call` 这一族——**影响面的边界尚未摸到底，在枚举完整之前不应确定修法。**
+
+### 同族的 name-based 硬编码不止一处
+
+`xi_coro_is_time_sleep_call` 之外，同文件还有两处同型：
+
+- `xi_coro_is_test_yield_call`（`:323`）硬编码 3 个 `test_yield` 成员名
+- `xi_coro_is_net_io_call`（`:338`）硬编码 4 个 net 成员名，且用的是**公开拼写**
+  `accept/read/write/writeBytes`，而 metadata 侧是 `__accept/__read/...` **7 个私有拼写**
+
 ### 与 1 号统计的对应关系
 
 1 号的清单里 `XR_SEM_0019` 有 49 条，其中 **45 条**的消息是
