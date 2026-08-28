@@ -137,6 +137,21 @@ is_leaf = symbol.startswith("__") or (
 
 改完之后，即使 4 个 native_class 标着 internal，该门仍是 **PASS，0 unclassified**。
 
+## 3.3 好消息：`visibility` 不移动全树指纹
+
+`00-SHARED.md` 警告过「改 core.def = 移动全树指纹」——
+`xr_semantic_plan.c:214-215` 把 `stdlib_registry_fingerprint` 哈希进每一个 SemanticPlan，
+一改 core.def 就要重锚一批 KAT。
+
+**加 `visibility:` 键不触发它。** 实测：本分支给 4 个 `native_class` 各加一行之后，
+`git diff 34be0379c..HEAD -- src/stdlib/` 是**空的**——
+`xstdlib_defs_generated.h`、`xstdlib_vm_bindings_generated.inc.c`、
+`xaot_stdlib_generated.inc` 全部逐字未变，因为 `visibility` 是表面元数据，
+不进 C 侧注册表。`test_xi_cgen` 前后都是 **42 PASS**，一个 KAT 都不用动。
+
+会变的只有 `xanalyzer_builtins_generated.h`（class 表的 `is_internal` 那一列）
+和 `xlsp_stdlib_generated.inc`，两者都由 `scripts/gen_stdlib_types.py` 重跑产出。
+
 ## 4. 判据
 
 一个 `.def` 条目该标 `internal`，当且仅当：**模块的公开 API 不依赖这个条目存在。**
