@@ -95,13 +95,9 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
-    XRS_EXPORT(module, isolate, "__appendFile", io_appendFile);
-    expected_count++;
     XRS_EXPORT(module, isolate, "__chmod", io_chmod);
     expected_count++;
     XRS_EXPORT(module, isolate, "__chdir", io_chdir);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__copyFile", io_copyFile);
     expected_count++;
     XRS_EXPORT(module, isolate, "__cwd", io_cwd);
     expected_count++;
@@ -109,9 +105,17 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     expected_count++;
     XRS_EXPORT(module, isolate, "__fileClose", io_fileClose);
     expected_count++;
+    XRS_EXPORT(module, isolate, "__fileFlush", io_fileFlush);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__fileOpen", io_fileOpen);
     expected_count++;
+    XRS_EXPORT(module, isolate, "__fileOpenWrite", io_fileOpenWrite);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__fileRead", io_fileRead);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__fileWrite", io_fileWrite);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "__fileWriteStr", io_fileWriteStr);
     expected_count++;
     XRS_EXPORT(module, isolate, "__fileSize", io_fileSize);
     expected_count++;
@@ -152,14 +156,6 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "__makeTempFile", io_make_temp_file);
     expected_count++;
     XRS_EXPORT(module, isolate, "__utimeNow", io_utime_now);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__writeFile", io_writeFile);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__writeFileBytes", io_writeFileBytes);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__writeStderr", io_writeStderr);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__writeStdout", io_writeStdout);
     expected_count++;
     return module->export_count == expected_count;
 }

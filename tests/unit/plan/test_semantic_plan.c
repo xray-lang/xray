@@ -2544,9 +2544,13 @@ static void test_immutable_owned_snapshot(void) {
      * their entries, so this digest moves even though the probe plan below imports
      * nothing.  The two registry digests above are unaffected: they cover the
      * operation-owner registry, not the stdlib registry.
-     * Old: 5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881. */
+     * Old: 5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881.
+     * Moved again by the io write-side migration, which
+     * replaced six write leaves with the descriptor-based
+     * __fileOpenWrite/__fileWrite/__fileWriteStr/__fileFlush set.
+     * Previous: 71cc98da6f063685a0ce4b45624aa3d94aa29acf4871cc5764a607393f47d76c. */
     REQUIRE(strcmp(semantic_hex,
-                   "71cc98da6f063685a0ce4b45624aa3d94aa29acf4871cc5764a607393f47d76c") == 0);
+                   "cc4e0d72e05dcfb1a9b1dd59bcfae7310633c63a0ddb429b6895ab9b1ee0e4e1") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3610,10 +3614,16 @@ static void test_source_export_call_target_authority(void) {
      * target_id with it.  export_id is keyed off the export's own shape with no
      * fingerprint in the key, so it stays put.
      * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
-     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "1e3473bd3c7bd746dc40f3a0d79c9c55") == 0);
+     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4.
+     * Moved again by the io write-side migration, which replaced six write
+     * leaves with the descriptor-based __fileOpenWrite/__fileWrite/
+     * __fileWriteStr/__fileFlush set.  export_id stayed put again, which is
+     * the check that the key really carries no fingerprint.
+     * Previous dependency_id: 1e3473bd3c7bd746dc40f3a0d79c9c55.
+     * Previous target_id:     9224bbcbb03e730dd6a246927371d9db. */
+    REQUIRE(strcmp(dependency_id, "4f2ab0d1f957fa74b9de92515a862d98") == 0);
     REQUIRE(strcmp(export_id, "0dfad701bd306712350ea91732781cb5") == 0);
-    REQUIRE(strcmp(target_id, "9224bbcbb03e730dd6a246927371d9db") == 0);
+    REQUIRE(strcmp(target_id, "5a247f990d896873d857daae1fd253c7") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));

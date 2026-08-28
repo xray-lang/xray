@@ -1972,18 +1972,6 @@ module io {
     fields: "const size: i64, const mode: i64, const mtime: i64, const atime: i64, const ctime: i64, const uid: i64, const gid: i64, const isFile: bool, const isDir: bool, const isSymlink: bool"
   }
 
-  fn __appendFile {
-    signature: "(path: Path, data: string): bool"
-    doc: "Append string to file"
-    vm: "io_appendFile"
-    aot: "xrt_io_append_file"
-    argc: 2
-    arg_spec: "ps"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
   fn __chmod {
     signature: "(path: Path, mode: i64): bool"
     doc: "Change file permissions"
@@ -2003,18 +1991,6 @@ module io {
     aot: "xrt_io_chdir"
     argc: 1
     arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __copyFile {
-    signature: "(src: Path, dst: Path): bool"
-    doc: "Copy a file"
-    vm: "io_copyFile"
-    aot: "xrt_io_copy_file"
-    argc: 2
-    arg_spec: "pp"
     aot_direct: true
     link_object: false
     layer: "system"
@@ -2048,7 +2024,7 @@ module io {
 
   fn __fileClose {
     signature: "(handle: i64): bool"
-    doc: "Close an owned binary file handle"
+    doc: "Close an owned file descriptor; 0, 1 and 2 are refused"
     vm: "io_fileClose"
     aot: "xrt_io_file_close"
     argc: 1
@@ -2059,9 +2035,22 @@ module io {
     visibility: "internal"
   }
 
+  fn __fileFlush {
+    signature: "(handle: i64): bool"
+    doc: "Flush any C-runtime buffering behind a standard stream handle"
+    vm: "io_fileFlush"
+    aot: "xrt_io_file_flush"
+    argc: 1
+    arg_spec: "i"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
   fn __fileOpen {
     signature: "(path: Path): i64"
-    doc: "Open a file for binary reading and return an opaque handle"
+    doc: "Open a file for binary reading and return a file descriptor"
     vm: "io_fileOpen"
     aot: "xrt_io_file_open"
     argc: 1
@@ -2072,9 +2061,22 @@ module io {
     visibility: "internal"
   }
 
+  fn __fileOpenWrite {
+    signature: "(path: Path, append: bool): i64"
+    doc: "Open a file for binary writing and return a file descriptor"
+    vm: "io_fileOpenWrite"
+    aot: "xrt_io_file_open_write"
+    argc: 2
+    arg_spec: "pv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
   fn __fileRead {
     signature: "(handle: i64, maxBytes: i64): Array<u8>?"
-    doc: "Read at most maxBytes from an opaque binary stream; empty means EOF"
+    doc: "Read at most maxBytes from a descriptor; an empty result means EOF"
     vm: "io_fileRead"
     aot: "xrt_io_read_handle_chunk"
     argc: 2
@@ -2084,6 +2086,34 @@ module io {
     layer: "system"
     visibility: "internal"
     return_ownership: "fresh"
+  }
+
+  fn __fileWrite {
+    signature: "(handle: i64, data: Array<u8>, offset: i64): i64"
+    doc: "Write bytes from offset once; returns how many the stream accepted"
+    vm: "io_fileWrite"
+    vm_binding: "yieldable"
+    aot: "xrt_io_write_handle_chunk"
+    argc: 3
+    arg_spec: "ivi"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
+  }
+
+  fn __fileWriteStr {
+    signature: "(handle: i64, data: string, offset: i64): i64"
+    doc: "Write string bytes from offset once; returns how many were accepted"
+    vm: "io_fileWriteStr"
+    vm_binding: "yieldable"
+    aot: "xrt_io_write_handle_str"
+    argc: 3
+    arg_spec: "isi"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+    visibility: "internal"
   }
 
   fn __fileSize {
@@ -2341,55 +2371,6 @@ module io {
     layer: "system"
   }
 
-  fn __writeFile {
-    signature: "(path: Path, data: string): bool"
-    doc: "Write string to file"
-    vm: "io_writeFile"
-    vm_binding: "yieldable"
-    aot: "xrt_io_write_file"
-    argc: 2
-    arg_spec: "ps"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __writeFileBytes {
-    signature: "(path: Path, data: Array<u8>): bool"
-    doc: "Write byte array to file"
-    vm: "io_writeFileBytes"
-    vm_binding: "yieldable"
-    aot: "xrt_io_write_file_bytes"
-    argc: 2
-    arg_spec: "pv"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __writeStderr {
-    signature: "(data: string): bool"
-    doc: "Write text to standard error without adding a newline"
-    vm: "io_writeStderr"
-    aot: "xrt_io_write_stderr"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __writeStdout {
-    signature: "(data: string): bool"
-    doc: "Write text to standard output without adding a newline"
-    vm: "io_writeStdout"
-    aot: "xrt_io_write_stdout"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
 }
 
 module runtime {

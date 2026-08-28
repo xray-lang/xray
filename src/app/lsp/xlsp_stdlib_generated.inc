@@ -198,6 +198,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http2_symbols[] = {
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
+    {"flushWriter", XLSP_SYM_FUNCTION, "fn(writer: BufWriter): bool", "", NULL, 0},
     {"appendFile", XLSP_SYM_FUNCTION, "fn(path: Path, data: string): bool", "", NULL, 0},
     {"chmod", XLSP_SYM_FUNCTION, "fn(path: Path, mode: i64): bool", "", NULL, 0},
     {"chdir", XLSP_SYM_FUNCTION, "fn(path: Path): bool", "", NULL, 0},
@@ -239,7 +240,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
     {"LineIterator", XLSP_SYM_CLASS, "type LineIterator", "Class type", NULL, 0},
     {"BufWriter", XLSP_SYM_CLASS, "type BufWriter", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_IO_SYMBOL_COUNT 40
+#define GEN_XLSP_STDLIB_IO_SYMBOL_COUNT 41
 
 // log module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {

@@ -291,15 +291,22 @@ deletion_trigger = "when http2.xr reads the TLS provider's presence through net.
 # io -- filesystem and standard streams
 # ============================================================================
 #
-# Two facts govern this module. First, the read-side handle triple
-# (__fileOpen/__fileRead/__fileClose) passes a raw `FILE*` cast to i64 across
-# the boundary and there is no write-side equivalent; the missing half is filed
-# as `blockers/a-stdlib-no-write-side-file-descriptor-leaf.md`, and every
-# write-shaped leaf here has its deletion trigger pointed at it. Second, the VM
-# and AOT halves of this module are two independent implementations that share
-# only the pure loop helpers in `src/shared/xr_io_core.h`; where they reach
-# different syscalls the provider field says so, because a leaf with two
-# meanings cannot be reduced to one Xray body until they agree.
+# Two facts govern this module. First, a handle is a file descriptor. It used
+# to be a `FILE*` cast to i64, which meant an arbitrary integer written in
+# `.xr` source could be dereferenced; a descriptor is validated by the kernel
+# and answers EBADF instead, and it is the only handle form io_uring accepts.
+# 0, 1 and 2 are reserved for the standard streams, and reads on 0 and writes
+# on 1 and 2 go through the C runtime's own stdin/stdout/stderr so they stay
+# ordered against print(), which writes the same FILE*. The write-side half of
+# the triple requested in
+# `blockers/a-stdlib-no-write-side-file-descriptor-leaf.md` now exists, so the
+# drain loop, the no-progress-is-failure rule and the failed-close rule live in
+# `io.xr` and `__appendFile`, `__copyFile`, `__writeFile`, `__writeFileBytes`,
+# `__writeStdout` and `__writeStderr` are gone. Second, the VM and AOT halves
+# of this module are two independent implementations that share only the pure
+# loop helpers in `src/shared/xr_io_core.h`; where they reach different
+# syscalls the provider field says so, because a leaf with two meanings cannot
+# be reduced to one Xray body until they agree.
 
 [[leaf]]
 module = "io"
@@ -310,16 +317,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "declaration only (stdlib/defs/core.def). VM materialises it via xr_stdlib_record_class_get(X, \"io\", \"__FileStat\") in stdlib/io/io.c; AOT ignores the class and builds an anonymous struct object in src/aot/xrt_io.h"
 deletion_trigger = "when io.__stat is deleted, or when a .def entry can declare its return as a type io.xr owns, so the ten stat fields stop needing a native record class to travel through"
-
-[[leaf]]
-module = "io"
-symbol = "__appendFile"
-class = "host_abi_leaf"
-abi = "fopen(3) mode \"ab\", fwrite(3), fclose(3), reaching open(2) and write(2)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c io_appendFile; AOT src/aot/xrt_io.h xrt_io_append_file. Both drive the shared short-write drain loop xr_io_core_write_all() in src/shared/xr_io_core.h, which issues no syscall of its own"
-deletion_trigger = "when the write-side handle triple requested in blockers/a-stdlib-no-write-side-file-descriptor-leaf.md exists, so the drain loop and the failed-close rule can be written in io.xr over __fileOpenWrite/__fileWrite/__fileClose"
 
 [[leaf]]
 module = "io"
@@ -340,16 +337,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "kernel via libc. VM stdlib/io/io.c io_chmod; AOT src/aot/xrt_io.h xrt_io_chmod_value. Both range-check the mode through xr_io_core_chmod_mode() in src/shared/xr_io_core.h, which is a cast and a bounds test"
 deletion_trigger = "when Xray source can issue the chmod(2) call itself; the leaf is already the minimal form of this boundary"
-
-[[leaf]]
-module = "io"
-symbol = "__copyFile"
-class = "host_abi_leaf"
-abi = "VM: macOS fcopyfile(3), Linux sendfile(2) in a resume loop, Win32 CopyFileA, otherwise fread(3)/fwrite(3). AOT: fopen(3)/fread(3)/fwrite(3) on every platform"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel and libc. VM stdlib/io/io.c io_copyFile; AOT src/aot/xrt_io.h xrt_io_copy_file. The two halves do not reach the same syscalls: only the VM has the zero-copy fast paths"
-deletion_trigger = "when the write-side handle triple from blockers/a-stdlib-no-write-side-file-descriptor-leaf.md exists, so the read-write pump can be written in io.xr; the platform zero-copy fast paths would then have to be re-offered as their own leaf or dropped"
 
 [[leaf]]
 module = "io"
@@ -375,31 +362,71 @@ deletion_trigger = "when the compiler owner picks lstat or stat as canonical for
 module = "io"
 symbol = "__fileClose"
 class = "host_abi_leaf"
-abi = "fclose(3), reaching close(2)"
+abi = "close(2); Win32 CRT _close"
 ownership = "none"
 effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c io_fileClose; AOT src/aot/xrt_io.h xrt_io_file_close. Both reject handle <= 0 and cast the remaining i64 back to FILE*"
-deletion_trigger = "when the whole file-handle triple is replaced by a typed file-descriptor handle Xray owns, so a close does not mean casting an i64 back to a FILE* the runtime never validated"
+provider = "kernel via libc. VM stdlib/io/io.c io_fileClose; AOT src/aot/xrt_io.h xrt_io_file_close. Both refuse handle <= 2, because 0, 1 and 2 are the reserved standard streams and closing one would cost the process its output"
+deletion_trigger = "when a .def entry can declare an opaque handle type io.xr owns, so the descriptor stops travelling as a bare i64 that any arithmetic can produce; the syscall underneath is already the minimal form of this boundary"
+
+[[leaf]]
+module = "io"
+symbol = "__fileFlush"
+class = "host_abi_leaf"
+abi = "fflush(3) on stdout or stderr, reaching write(2); no call at all for any other handle"
+ownership = "none"
+effect = "nothrow"
+provider = "libc stdio. VM stdlib/io/io.c io_fileFlush; AOT src/aot/xrt_io.h xrt_io_file_flush. Only handles 1 and 2 reach a syscall: a plain descriptor carries no C-runtime buffering, so flushing one is a no-op that reports success"
+deletion_trigger = "when writes to the standard streams no longer pass through C-runtime buffering -- that is, when nothing else in the process writes stdout through a FILE* and the ordering this leaf exists to preserve stops mattering. print() is the one that does today (src/runtime/value/xvalue_print.c on the VM, xrt_print on the AOT side)"
 
 [[leaf]]
 module = "io"
 symbol = "__fileOpen"
 class = "host_abi_leaf"
-abi = "fopen(3) mode \"rb\", reaching open(2)"
+abi = "open(2) with O_RDONLY|O_CLOEXEC; Win32 CRT _open with _O_BINARY|_O_NOINHERIT"
 ownership = "none"
 effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c io_fileOpen; AOT src/aot/xrt_io.h xrt_io_file_open. The returned i64 is a raw FILE* cast to intptr_t -- there is no handle table -- with 0 reserved for stdin and negative values for failure"
-deletion_trigger = "when the runtime offers a typed file handle instead of a raw pointer cast to i64, so an arbitrary integer from Xray source can no longer be dereferenced as a FILE*"
+provider = "kernel via libc. VM stdlib/io/io.c io_fileOpen; AOT src/aot/xrt_io.h xrt_io_file_open. The returned i64 is a file descriptor, so a bogus integer from Xray source answers EBADF rather than being dereferenced. A descriptor landing on 0, 1 or 2 is lifted above the reserved range with F_DUPFD_CLOEXEC, and a failed lift refuses the open"
+deletion_trigger = "when a .def entry can declare an opaque handle type io.xr owns, so the descriptor stops travelling as a bare i64; the open(2) call itself is already the minimal form of this boundary"
+
+[[leaf]]
+module = "io"
+symbol = "__fileOpenWrite"
+class = "host_abi_leaf"
+abi = "open(2) with O_WRONLY|O_CREAT|O_CLOEXEC plus O_APPEND or O_TRUNC; Win32 CRT _open with _O_BINARY|_O_NOINHERIT"
+ownership = "none"
+effect = "nothrow"
+provider = "kernel via libc. VM stdlib/io/io.c io_fileOpenWrite; AOT src/aot/xrt_io.h xrt_io_file_open_write. The write-side half of the handle triple requested in blockers/a-stdlib-no-write-side-file-descriptor-leaf.md. Same descriptor discipline as io.__fileOpen, and the append flag is the whole of the difference between a truncating write and an appending one -- which is why io.xr needs no second entry point for it"
+deletion_trigger = "same as io.__fileOpen: when a .def entry can declare an opaque handle type io.xr owns. The truncate-or-append choice is one open(2) flag and has no smaller form"
 
 [[leaf]]
 module = "io"
 symbol = "__fileRead"
 class = "host_abi_leaf"
-abi = "fread(3), reaching read(2)"
+abi = "read(2), retried on EINTR; fread(3) for handle 0. Win32 CRT _read"
 ownership = "fresh"
 effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c io_fileRead; AOT src/aot/xrt_io.h xrt_io_read_handle_chunk. One fread into a freshly allocated byte array, no retry loop; handle 0 is read as stdin on both sides"
-deletion_trigger = "when the runtime offers a typed file handle instead of a raw pointer cast to i64; the chunked-read shape itself is already what io.xr's BufReader is built on and does not need to change"
+provider = "kernel via libc. VM stdlib/io/io.c io_fileRead; AOT src/aot/xrt_io.h xrt_io_read_handle_chunk. One read into a freshly allocated byte array, no drain loop; a zero-length result is EOF. Handle 0 is read through the C runtime's stdin stream on both sides, so it stays ordered against anything else the process reads from it"
+deletion_trigger = "same as io.__fileOpen: when a .def entry can declare an opaque handle type io.xr owns. The chunked-read shape itself is already what io.xr's BufReader is built on and does not need to change"
+
+[[leaf]]
+module = "io"
+symbol = "__fileWrite"
+class = "host_abi_leaf"
+abi = "write(2), retried on EINTR, or one io_uring WRITE submission on Linux; fwrite(3) for handles 1 and 2. Win32 CRT _write"
+ownership = "none"
+effect = "suspends"
+provider = "kernel plus the Xray runtime's io_uring completion path on the VM (src/os/netpoll/netpoll_iouring.c); plain write(2) on the AOT side, which has no coroutine to park. One write, reporting what the stream accepted; the drain loop, the no-progress-is-failure rule and the failed-close rule are in stdlib/io/io.xr. The uring submission passes offset -1 so the descriptor's own file position advances, which is what lets an appending handle keep appending"
+deletion_trigger = "when Xray source can issue the write(2) call itself. Two smaller boundaries are already gone: the retry loop and the close rule moved to io.xr with this leaf, so what remains is one syscall and the coroutine parking around it"
+
+[[leaf]]
+module = "io"
+symbol = "__fileWriteStr"
+class = "host_abi_leaf"
+abi = "same as io.__fileWrite: write(2) or an io_uring WRITE submission, fwrite(3) for handles 1 and 2"
+ownership = "none"
+effect = "suspends"
+provider = "kernel plus the Xray runtime's io_uring completion path on the VM; plain write(2) on the AOT side. It exists next to io.__fileWrite because arg_spec \"s\" lowers a string to a borrowed (data, len) pair, so a string write copies nothing; routing strings through the Array<u8> leaf would cost a full copy of every file written"
+deletion_trigger = "when a .def entry can name one parameter type that both a string and an Array<u8> satisfy without copying either, collapsing this leaf into io.__fileWrite; failing that, when Xray source can issue the write(2) call itself"
 
 [[leaf]]
 module = "io"
@@ -600,63 +627,6 @@ ownership = "none"
 effect = "nothrow"
 provider = "libc reaching the kernel. VM stdlib/io/io.c io_utime_now and AOT src/aot/xrt_io.h xrt_io_utime_now both call utime directly; neither uses the futimens-based xr_fs_touch in src/os/unix/fs_unix.c"
 deletion_trigger = "when Xray source can issue the utimensat(2) call itself; the \"now\" default is one NULL argument and carries no policy that could move to io.xr first"
-
-[[leaf]]
-module = "io"
-symbol = "__writeFile"
-class = "host_abi_leaf"
-abi = "VM: open(2) and an io_uring WRITE submission on Linux, falling back to pwrite(2); otherwise fopen(3) mode \"wb\", fwrite(3), fclose(3). AOT: fopen(3)/fwrite(3) only"
-ownership = "none"
-effect = "suspends"
-provider = "kernel plus the Xray runtime's io_uring completion path on the VM; plain libc stdio on the AOT side. Only the VM can park the coroutine"
-deletion_trigger = "when the write-side handle triple requested in blockers/a-stdlib-no-write-side-file-descriptor-leaf.md exists and carries the same yieldable effect, so the truncate-open, the drain loop and the checked close can be written in io.xr without moving the call back onto the worker thread"
-
-[[leaf]]
-module = "io"
-symbol = "__writeFileBytes"
-class = "host_abi_leaf"
-abi = "same as io.__writeFile: VM open(2)/io_uring WRITE with a pwrite(2) fallback, otherwise stdio; AOT fopen(3)/fwrite(3)"
-ownership = "none"
-effect = "suspends"
-provider = "kernel plus the Xray runtime's io_uring completion path on the VM; plain libc stdio on the AOT side"
-deletion_trigger = "same as io.__writeFile: when the yieldable write-side handle triple from blockers/a-stdlib-no-write-side-file-descriptor-leaf.md exists"
-
-[[leaf]]
-module = "io"
-symbol = "__writeStderr"
-class = "host_abi_leaf"
-abi = "the stdio `stderr` stream: fwrite(3) plus fflush(3), reaching write(2)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c io_writeStderr; AOT src/aot/xrt_io.h xrt_io_write_stderr. Both drive xr_io_core_write_all(); neither uses the raw descriptor 2"
-deletion_trigger = "when a standard-stream handle exists in the write-side form requested by blockers/a-stdlib-no-write-side-file-descriptor-leaf.md, so the drain loop and the flush can be written in io.xr"
-
-[[leaf]]
-module = "io"
-symbol = "__writeStdout"
-class = "host_abi_leaf"
-abi = "the stdio `stdout` stream: fwrite(3) plus fflush(3), reaching write(2)"
-ownership = "none"
-effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c io_writeStdout; AOT src/aot/xrt_io.h xrt_io_write_stdout. Both drive xr_io_core_write_all(); neither uses the raw descriptor 1"
-deletion_trigger = "same as io.__writeStderr: when a write-side standard-stream handle exists, so the drain loop and the flush move into io.xr"
-
-# ============================================================================
-# mem -- allocation, cache and memory-ordering primitives
-# ============================================================================
-#
-# This module is the one place where the closed class set earns its keep: the
-# seventeen leaves split four ways -- allocator primitives, libc byte
-# operations, machine intrinsics, and one compile-time constant -- and calling
-# them all `host_abi_leaf` would erase the distinction that decides how each
-# one could ever be replaced.
-#
-# Three of them behave differently enough between backends to be worth reading
-# as one group: `__cacheFlush`, `__cacheInvalidate` and `__prefetch` are true
-# no-ops on the VM, and `__nontemporalStore` carries a fence on AOT that the VM
-# does not emit. `mem.pageAlloc` deliberately stays a public native pair rather
-# than a private leaf, because folding its two arities into one default
-# argument would drop the single-argument AOT entry point.
 
 [[leaf]]
 module = "mem"

@@ -48,6 +48,7 @@
 #define xrt_io_platform_utime _utime
 #else
 #include <dirent.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -60,6 +61,62 @@
 #endif
 
 #define XRT_IO_MAX_READ_BYTES ((long) INT32_MAX)
+
+/* ========== File descriptor handles ==========
+ *
+ * A handle is a file descriptor, not a FILE* cast to an integer, so a bogus
+ * integer arriving from Xray source answers EBADF instead of dereferencing an
+ * arbitrary address. 0, 1 and 2 are reserved for the standard streams: reads
+ * on 0 and writes on 1 and 2 go through the C runtime's own stdin/stdout/
+ * stderr, which keeps them ordered against print(). This mirrors the VM half
+ * in stdlib/io/io.c byte for byte -- the two backends must agree here.
+ */
+#define XRT_IO_STD_IN 0
+#define XRT_IO_STD_OUT 1
+#define XRT_IO_STD_ERR 2
+
+#if defined(XR_OS_WINDOWS)
+typedef int xrt_io_fd_ssize_t;
+#define xrt_io_fd_open _open
+#define xrt_io_fd_read _read
+#define xrt_io_fd_write _write
+#define xrt_io_fd_close _close
+#define XRT_IO_FD_OPEN_FLAGS (_O_BINARY | _O_NOINHERIT)
+#define XRT_IO_FD_CREATE_MODE (_S_IREAD | _S_IWRITE)
+#else
+typedef ssize_t xrt_io_fd_ssize_t;
+#define xrt_io_fd_open open
+#define xrt_io_fd_read read
+#define xrt_io_fd_write write
+#define xrt_io_fd_close close
+#define XRT_IO_FD_OPEN_FLAGS O_CLOEXEC
+#define XRT_IO_FD_CREATE_MODE 0644
+#endif
+
+// An open must never hand back 0, 1 or 2: a file landing on one of those would
+// make a later write to "stdout" reach that file instead. Only reachable when
+// the process starts with a standard stream already closed, which is why a
+// failed lift refuses the open rather than returning the low descriptor.
+static inline int xrt_io_fd_reserve_above_std(int fd) {
+    if (fd < 0 || fd > XRT_IO_STD_ERR)
+        return fd;
+#if defined(XR_OS_WINDOWS)
+    int lifted = _dup(fd);
+    if (lifted >= 0 && lifted <= XRT_IO_STD_ERR) {
+        _close(lifted);
+        lifted = -1;
+    }
+#else
+    int lifted = fcntl(fd, F_DUPFD_CLOEXEC, XRT_IO_STD_ERR + 1);
+#endif
+    xrt_io_fd_close(fd);
+    return lifted;
+}
+
+// A non-bool tag fails closed to false rather than reading its payload.
+static inline bool xrt_io_bool_arg(XrValue v) {
+    return v.tag == XR_TAG_BOOL && v.i != 0;
+}
 
 static inline bool xrt_io_prepare_binary_stdin(void) {
 #if defined(XR_OS_WINDOWS)
@@ -230,56 +287,6 @@ static inline XrValue xrt_io_read_file_bytes(const char *path_data, int64_t path
     return out;
 }
 
-static inline XrValue xrt_io_write_buffer(const char *path, const char *data, size_t len,
-                                          const char *mode) {
-    if (!path || !data || !mode)
-        return XR_FROM_BOOL(false);
-    FILE *f = fopen(path, mode);
-    if (!f)
-        return XR_FROM_BOOL(false);
-    bool ok = xr_io_core_write_all(f, xrt_io_file_write, xrt_io_file_error, data, len);
-    bool close_ok = fclose(f) == 0;
-    ok = ok && close_ok;
-    return XR_FROM_BOOL(ok);
-}
-
-static inline XrValue xrt_io_write_file(const char *path_data, int64_t path_len, const char *data,
-                                        int64_t data_len) {
-    char stack_path[512];
-    char *owned = NULL;
-    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    XrValue ok =
-        xrt_io_write_buffer(path, data ? data : "", data_len < 0 ? 0 : (size_t) data_len, "wb");
-    XRT_FREE(owned);
-    return ok;
-}
-
-static inline XrValue xrt_io_append_file(const char *path_data, int64_t path_len, const char *data,
-                                         int64_t data_len) {
-    char stack_path[512];
-    char *owned = NULL;
-    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    XrValue ok =
-        xrt_io_write_buffer(path, data ? data : "", data_len < 0 ? 0 : (size_t) data_len, "ab");
-    XRT_FREE(owned);
-    return ok;
-}
-
-static inline XrValue xrt_io_write_file_bytes(const char *path_data, int64_t path_len,
-                                              XrValue bytes) {
-    if (!XR_IS_ARRAY(bytes) || !bytes.ptr)
-        return XR_FROM_BOOL(false);
-    xrt_array_t *arr = (xrt_array_t *) bytes.ptr;
-    if (arr->elem_type != XR_ELEM_U8)
-        return XR_FROM_BOOL(false);
-    char stack_path[512];
-    char *owned = NULL;
-    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    XrValue ok = xrt_io_write_buffer(path, (const char *) arr->data, (size_t) arr->length, "wb");
-    XRT_FREE(owned);
-    return ok;
-}
-
 static inline XrValue xrt_io_remove(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
@@ -352,56 +359,6 @@ static inline XrValue xrt_io_chdir(const char *path_data, int64_t path_len) {
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
     bool ok = path && xrt_io_platform_chdir(path) == 0;
     XRT_FREE(owned);
-    return XR_FROM_BOOL(ok);
-}
-
-typedef struct XrtIoCopyFileCtx {
-    FILE *src;
-    FILE *dst;
-} XrtIoCopyFileCtx;
-
-static inline size_t xrt_io_copy_file_read(void *ctx, void *buf, size_t cap) {
-    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
-    return fread(buf, 1, cap, copy_ctx->src);
-}
-
-static inline size_t xrt_io_copy_file_write(void *ctx, const void *buf, size_t len) {
-    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
-    return fwrite(buf, 1, len, copy_ctx->dst);
-}
-
-static inline bool xrt_io_copy_file_error(void *ctx) {
-    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
-    return ferror(copy_ctx->src) != 0;
-}
-
-static inline XrValue xrt_io_copy_file(const char *src_data, int64_t src_len, const char *dst_data,
-                                       int64_t dst_len) {
-    char src_stack[512];
-    char dst_stack[512];
-    char *src_owned = NULL;
-    char *dst_owned = NULL;
-    char *src = xrt_io_copy_cstr_arg(src_data, src_len, src_stack, sizeof(src_stack), &src_owned);
-    char *dst = xrt_io_copy_cstr_arg(dst_data, dst_len, dst_stack, sizeof(dst_stack), &dst_owned);
-    bool ok = false;
-    if (src && dst) {
-        FILE *in = fopen(src, "rb");
-        if (in) {
-            FILE *out = fopen(dst, "wb");
-            if (out) {
-                char buf[XR_IO_CORE_COPY_BUFFER_SIZE];
-                XrtIoCopyFileCtx copy_ctx = {.src = in, .dst = out};
-                ok =
-                    xr_io_core_copy_stream(&copy_ctx, xrt_io_copy_file_read, xrt_io_copy_file_write,
-                                           xrt_io_copy_file_error, buf, sizeof(buf));
-                if (fclose(out) != 0)
-                    ok = false;
-            }
-            fclose(in);
-        }
-    }
-    XRT_FREE(src_owned);
-    XRT_FREE(dst_owned);
     return XR_FROM_BOOL(ok);
 }
 
@@ -798,24 +755,62 @@ static inline XrValue xrt_io_read_stdin_bytes(void) {
     return out;
 }
 
-static inline intptr_t XR_IO_CORE_ACQUIRE_HANDLE("xray_file_stream")
+static inline int XR_IO_CORE_ACQUIRE_HANDLE("xray_file_descriptor")
     xrt_io_file_open_handle(const char *path) {
-    FILE *file = path && path[0] != '\0' ? fopen(path, "rb") : NULL;
-    return file ? (intptr_t) file : -1;
+    if (!path || path[0] == '\0')
+        return -1;
+    return xrt_io_fd_reserve_above_std(xrt_io_fd_open(path, O_RDONLY | XRT_IO_FD_OPEN_FLAGS));
+}
+
+static inline int XR_IO_CORE_ACQUIRE_HANDLE("xray_file_descriptor")
+    xrt_io_file_open_write_handle(const char *path, bool append) {
+    if (!path || path[0] == '\0')
+        return -1;
+    int flags = O_WRONLY | O_CREAT | XRT_IO_FD_OPEN_FLAGS | (append ? O_APPEND : O_TRUNC);
+    return xrt_io_fd_reserve_above_std(xrt_io_fd_open(path, flags, XRT_IO_FD_CREATE_MODE));
 }
 
 static inline bool
-xrt_io_file_close_handle(intptr_t handle XR_IO_CORE_RELEASE_HANDLE("xray_file_stream")) {
-    return handle >= 0 && fclose((FILE *) handle) == 0;
+xrt_io_file_close_handle(int handle XR_IO_CORE_RELEASE_HANDLE("xray_file_descriptor")) {
+    return xrt_io_fd_close(handle) == 0;
 }
 
 static inline XrValue xrt_io_file_open(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    intptr_t handle = xrt_io_file_open_handle(path);
+    int handle = xrt_io_file_open_handle(path);
     XRT_FREE(owned);
     return XR_FROM_INT((int64_t) handle);
+}
+
+static inline XrValue xrt_io_file_open_write(const char *path_data, int64_t path_len,
+                                             XrValue append) {
+    char stack_path[512];
+    char *owned = NULL;
+    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
+    int handle = xrt_io_file_open_write_handle(path, xrt_io_bool_arg(append));
+    XRT_FREE(owned);
+    return XR_FROM_INT((int64_t) handle);
+}
+
+static inline XrValue xrt_io_fd_read_bytes(int fd, int64_t max_bytes) {
+    XrValue out = xrt_array_new_typed_uninit(max_bytes, XR_ELEM_U8);
+    if (!XR_IS_ARRAY(out) || !out.ptr)
+        return XR_NULL_VAL;
+    xrt_array_t *arr = (xrt_array_t *) out.ptr;
+    if (max_bytes == 0)
+        return out;
+    xrt_io_fd_ssize_t count;
+    do {
+        count = xrt_io_fd_read(fd, arr->data, (size_t) max_bytes);
+    } while (count < 0 && errno == EINTR);
+    if (count < 0) {
+        xrt_release(out);
+        return XR_NULL_VAL;
+    }
+    arr->length = (int64_t) count;
+    return out;
 }
 
 static inline XrValue xrt_io_read_handle_chunk(XrValue handle_value, XrValue max_bytes_value) {
@@ -823,35 +818,89 @@ static inline XrValue xrt_io_read_handle_chunk(XrValue handle_value, XrValue max
         return XR_NULL_VAL;
     int64_t handle = XR_TO_INT(handle_value);
     int64_t max_bytes = XR_TO_INT(max_bytes_value);
-    FILE *stream = handle == 0 ? stdin : (FILE *) (uintptr_t) handle;
-    if (handle == 0 && !xrt_io_prepare_binary_stdin())
+    if (handle < 0 || max_bytes < 0 || max_bytes > XRT_IO_MAX_READ_BYTES)
         return XR_NULL_VAL;
-    return xrt_io_stream_read_bytes(stream, max_bytes);
+    if (handle == XRT_IO_STD_IN) {
+        if (!xrt_io_prepare_binary_stdin())
+            return XR_NULL_VAL;
+        return xrt_io_stream_read_bytes(stdin, max_bytes);
+    }
+    return xrt_io_fd_read_bytes((int) handle, max_bytes);
 }
 
 static inline XrValue xrt_io_file_close(XrValue handle_value) {
     if (!XR_IS_INT(handle_value))
         return XR_FROM_BOOL(false);
     int64_t handle = XR_TO_INT(handle_value);
-    if (handle <= 0)
+    if (handle <= XRT_IO_STD_ERR)
+        return XR_FROM_BOOL(false);  // the standard streams are not the caller's to close
+    return XR_FROM_BOOL(xrt_io_file_close_handle((int) handle));
+}
+
+// Only the standard streams carry C-runtime buffering; a plain descriptor has
+// none, so flushing one is a no-op that still reports success.
+static inline XrValue xrt_io_file_flush(XrValue handle_value) {
+    if (!XR_IS_INT(handle_value))
         return XR_FROM_BOOL(false);
-    return XR_FROM_BOOL(xrt_io_file_close_handle((intptr_t) handle));
-}
-
-static inline XrValue xrt_io_write_stream(FILE *stream, const char *data, int64_t len) {
-    if (!stream || len < 0)
+    int64_t handle = XR_TO_INT(handle_value);
+    if (handle < 0)
         return XR_FROM_BOOL(false);
-    bool ok = xr_io_core_write_all(stream, xrt_io_file_write, xrt_io_file_error, data ? data : "",
-                                   (size_t) len);
-    return XR_FROM_BOOL(ok && fflush(stream) == 0);
+    if (handle == XRT_IO_STD_OUT)
+        return XR_FROM_BOOL(fflush(stdout) == 0);
+    if (handle == XRT_IO_STD_ERR)
+        return XR_FROM_BOOL(fflush(stderr) == 0);
+    return XR_FROM_BOOL(true);
 }
 
-static inline XrValue xrt_io_write_stdout(const char *data, int64_t len) {
-    return xrt_io_write_stream(stdout, data, len);
+/* One write, reported as the number of bytes the stream accepted. `offset` is
+ * an index into the caller's buffer, never a file offset: the file position is
+ * the descriptor's own, so an appending handle keeps appending. The retry loop
+ * that turns a short write into a complete one lives in io.xr. */
+static inline XrValue xrt_io_write_once(int64_t handle, const char *data, size_t len,
+                                        int64_t offset) {
+    if (handle < 0 || offset < 0 || (!data && len != 0))
+        return XR_FROM_INT(-1);
+    if ((uint64_t) offset >= (uint64_t) len)
+        return XR_FROM_INT(0);
+    const char *from = data + offset;
+    size_t remaining = len - (size_t) offset;
+
+    if (handle == XRT_IO_STD_OUT || handle == XRT_IO_STD_ERR) {
+        FILE *stream = (handle == XRT_IO_STD_OUT) ? stdout : stderr;
+        size_t n = fwrite(from, 1, remaining, stream);
+        if (n == 0 && ferror(stream))
+            return XR_FROM_INT(-1);
+        return XR_FROM_INT((int64_t) n);
+    }
+    if (handle == XRT_IO_STD_IN)
+        return XR_FROM_INT(-1);  // stdin is not writable
+
+    xrt_io_fd_ssize_t n;
+    do {
+        n = xrt_io_fd_write((int) handle, from, remaining);
+    } while (n < 0 && errno == EINTR);
+    return XR_FROM_INT(n < 0 ? -1 : (int64_t) n);
 }
 
-static inline XrValue xrt_io_write_stderr(const char *data, int64_t len) {
-    return xrt_io_write_stream(stderr, data, len);
+static inline XrValue xrt_io_write_handle_chunk(XrValue handle_value, XrValue bytes,
+                                                XrValue offset_value) {
+    if (!XR_IS_INT(handle_value) || !XR_IS_INT(offset_value))
+        return XR_FROM_INT(-1);
+    if (!XR_IS_ARRAY(bytes) || !bytes.ptr)
+        return XR_FROM_INT(-1);
+    xrt_array_t *arr = (xrt_array_t *) bytes.ptr;
+    if (arr->elem_type != XR_ELEM_U8)
+        return XR_FROM_INT(-1);
+    return xrt_io_write_once(XR_TO_INT(handle_value), (const char *) arr->data,
+                             (size_t) arr->length, XR_TO_INT(offset_value));
+}
+
+static inline XrValue xrt_io_write_handle_str(XrValue handle_value, const char *data, int64_t len,
+                                              XrValue offset_value) {
+    if (!XR_IS_INT(handle_value) || !XR_IS_INT(offset_value) || len < 0)
+        return XR_FROM_INT(-1);
+    return xrt_io_write_once(XR_TO_INT(handle_value), data ? data : "", (size_t) len,
+                             XR_TO_INT(offset_value));
 }
 
 #endif  // XRT_IO_H

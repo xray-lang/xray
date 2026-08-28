@@ -2711,9 +2711,13 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture below imports
-     * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b. */
+     * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b.
+     * Moved again by the io write-side migration, which
+     * replaced six write leaves with the descriptor-based
+     * __fileOpenWrite/__fileWrite/__fileWriteStr/__fileFlush set.
+     * Previous: fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4. */
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4") == 0,
+                        "78e9dcd05604d3a1b38368df9273694ae026844fcc92b1d1a5fa88578d6a99f1") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;

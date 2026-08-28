@@ -2329,11 +2329,15 @@ static void test_plan_snapshot_and_determinism(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d") != 0)
+     * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679.
+     * Moved again by the io write-side migration, which
+     * replaced six write leaves with the descriptor-based
+     * __fileOpenWrite/__fileWrite/__fileWriteStr/__fileFlush set.
+     * Previous: 566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d. */
+    if (strcmp(target_hex, "64fe818f85721520f268c1b6ed0f9fe41f7f25865074d9b206fcc3f00d329379") != 0)
         fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d") == 0);
+                   "64fe818f85721520f268c1b6ed0f9fe41f7f25865074d9b206fcc3f00d329379") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4494,8 +4498,12 @@ static void test_channel_close_call_authority(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f. */
-    REQUIRE(strcmp(call_hex, "23d4e50eae43bf74bde6bdf6ff008813d37c837f806229abe544e39b8392070e") ==
+     * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f.
+     * Moved again by the io write-side migration, which
+     * replaced six write leaves with the descriptor-based
+     * __fileOpenWrite/__fileWrite/__fileWriteStr/__fileFlush set.
+     * Previous: 23d4e50eae43bf74bde6bdf6ff008813d37c837f806229abe544e39b8392070e. */
+    REQUIRE(strcmp(call_hex, "7a4fc87bfb97aeb89b3460ee066104524ba1081de16f9c4dc8e8bb37061cc2a6") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -5253,8 +5261,12 @@ static void test_direct_local_call_adapter_family(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc. */
-    REQUIRE(strcmp(call_hex, "9347a21545b86d1447bc3afe873931c016b318be11d27235c5058b0315b6780e") ==
+     * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc.
+     * Moved again by the io write-side migration, which
+     * replaced six write leaves with the descriptor-based
+     * __fileOpenWrite/__fileWrite/__fileWriteStr/__fileFlush set.
+     * Previous: 9347a21545b86d1447bc3afe873931c016b318be11d27235c5058b0315b6780e. */
+    REQUIRE(strcmp(call_hex, "d99f130746c53afaeddec45a3824786b32b97d179f23e15f59c9acb61b506204") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -5776,8 +5788,12 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e. */
-    REQUIRE(strcmp(tail_hex, "45df332a6c8d7316367994714bdbb600729e23d91c6bdae6de869dd10ea015fe") ==
+     * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e.
+     * Moved again by the io write-side migration, which
+     * replaced six write leaves with the descriptor-based
+     * __fileOpenWrite/__fileWrite/__fileWriteStr/__fileFlush set.
+     * Previous: 45df332a6c8d7316367994714bdbb600729e23d91c6bdae6de869dd10ea015fe. */
+    REQUIRE(strcmp(tail_hex, "77c725871d7411142fd90ed4b663f4d288e25a48fc0116307b4fa857ca2e99b3") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

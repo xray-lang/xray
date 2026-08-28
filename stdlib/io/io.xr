@@ -33,9 +33,12 @@ export final class FileStat {
     }
 }
 
-// File is a synchronous read-only byte stream. It deliberately requires an
-// explicit close (normally `defer { file.close() }`): native resources must not
-// depend on a nondeterministic finalizer contract.
+// File is a synchronous byte stream over one file descriptor. It deliberately
+// requires an explicit close (normally `defer { file.close() }`): native
+// resources must not depend on a nondeterministic finalizer contract.
+//
+// Handles 0, 1 and 2 are the standard streams and are never owned, so closing
+// one is refused rather than costing the process its input or output.
 export final class File {
     private _handle: i64
     private _open: bool
@@ -53,11 +56,40 @@ export final class File {
         return File(handle, true)
     }
 
+    // `append` keeps what the file already holds; otherwise it is truncated.
+    static openWrite(path: Path, append: bool) -> File? {
+        var handle = __fileOpenWrite(path, append)
+        if (handle < 0) { return null }
+        return File(handle, true)
+    }
+
     static stdin() -> File { return File(0, false) }
+    static stdout() -> File { return File(1, false) }
+    static stderr() -> File { return File(2, false) }
 
     read(maxBytes: i64 = 131072) -> Array<u8>? {
         if (!this._open || maxBytes < 0) { return null }
         return __fileRead(this._handle, maxBytes)
+    }
+
+    // One write, reporting what the stream accepted. `offset` indexes into the
+    // caller's buffer, not the file: the file position is the descriptor's own.
+    // Retrying a short write is the caller's job -- see _drainBytes.
+    write(data: Array<u8>, offset: i64) -> i64 {
+        if (!this._open) { return -1 }
+        return __fileWrite(this._handle, data, offset)
+    }
+
+    writeString(data: string, offset: i64) -> i64 {
+        if (!this._open) { return -1 }
+        return __fileWriteStr(this._handle, data, offset)
+    }
+
+    // Only the standard streams carry C-runtime buffering; on any other handle
+    // this reports success without a syscall.
+    flush() -> bool {
+        if (!this._open) { return false }
+        return __fileFlush(this._handle)
     }
 
     close() -> bool {
@@ -159,9 +191,74 @@ export final class LineIterator {
     }
 }
 
+// Writing is open, drain, close. Each of the three rules below is policy, which
+// is why it lives here rather than behind the host boundary:
+//
+//   - the drain loop, which keeps a short write (a signal, a full pipe) from
+//     silently truncating the output;
+//   - "no progress is a failure", so a stream that accepts nothing is not
+//     retried forever;
+//   - "a failed close is a failed write", because a deferred write can fail at
+//     close and nowhere earlier.
+//
+// The host boundary underneath is one write that reports what it accepted.
+fn _drainBytes(file: File, data: Array<u8>) -> bool {
+    var off = 0
+    while (off < len(data)) {
+        var n = file.write(data, off)
+        if (n <= 0) { return false }
+        off = off + n
+    }
+    return true
+}
+
+// The offset counts bytes, so the bound has to be the byte length: len(data)
+// would be the scalar count and would stop early on any non-ASCII content.
+fn _drainStr(file: File, data: string) -> bool {
+    var off = 0
+    var total = len(data.bytes())
+    while (off < total) {
+        var n = file.writeString(data, off)
+        if (n <= 0) { return false }
+        off = off + n
+    }
+    return true
+}
+
+// The close is issued before the drain result is consulted, so a failed write
+// still releases the descriptor.
+fn _publishStr(path: Path, data: string, append: bool) -> bool {
+    var file = File.openWrite(path, append)
+    if (file == null) { return false }
+    var ok = _drainStr(file!, data)
+    return file!.close() && ok
+}
+
+fn _publishBytes(path: Path, data: Array<u8>, append: bool) -> bool {
+    var file = File.openWrite(path, append)
+    if (file == null) { return false }
+    var ok = _drainBytes(file!, data)
+    return file!.close() && ok
+}
+
+// The standard streams keep the C runtime's buffering, so a write here stays
+// ordered against print(), and the flush that publishes it is the caller's last
+// step rather than the host's.
+fn _writeStdStream(file: File, data: string) -> bool {
+    return _drainStr(file, data) && file.flush()
+}
+
 // BufWriter batches byte writes and publishes them atomically through the
 // whole-file primitive. Repeated flushes rewrite the same complete buffer;
 // callers may reset explicitly before composing another file image.
+//
+// The publish step is `io.flushWriter(w)` rather than a `w.flush()` method, and
+// deliberately so: a method on a stdlib class that reaches a suspending leaf
+// through an Xray function does not survive coroutine lowering today, because
+// two of the compiler's four suspendability oracles seed only from `net`. This
+// is the same shape net.xr already uses -- every one of its I/O entry points is
+// a module-level function over an opaque handle, and not one is a method. See
+// blockers/a-stdlib-class-method-cannot-reach-suspending-leaf-indirectly.md.
 export final class BufWriter {
     private _path: Path
     private _buffer: Array<u8>
@@ -184,17 +281,52 @@ export final class BufWriter {
         return this.write(bytes[:])
     }
 
-    flush() -> bool { return __writeFileBytes(this._path, this._buffer) }
+    path() -> Path { return this._path }
+
+    bytes() -> Array<u8> { return this._buffer }
 
     reset() { this._buffer.clear() }
 
     size() -> i64 { return len(this._buffer) }
 }
 
-export fn appendFile(path: Path, data: string) -> bool { return __appendFile(path, data) }
+export fn flushWriter(writer: BufWriter) -> bool {
+    return _publishBytes(writer.path(), writer.bytes(), false)
+}
+
+export fn appendFile(path: Path, data: string) -> bool { return _publishStr(path, data, true) }
 export fn chmod(path: Path, mode: i64) -> bool { return __chmod(path, mode) }
 export fn chdir(path: Path) -> bool { return __chdir(path) }
-export fn copyFile(src: Path, dst: Path) -> bool { return __copyFile(src, dst) }
+// A copy is a read-write pump over the two handles. The platform zero-copy
+// calls that used to back this (fcopyfile, sendfile, CopyFileA) are gone: only
+// the VM ever had them, so the two backends disagreed on what a copy reached,
+// and the pump is the same policy on both. The destination's close is part of
+// the result because a deferred write can fail there; the source's is not,
+// which is what the C implementation already did.
+fn _pump(input: File, output: File) -> bool {
+    while (true) {
+        var chunk = input.read(65536)
+        if (chunk == null) { return false }
+        if (len(chunk!) == 0) { return true }
+        if (!_drainBytes(output, chunk!)) { return false }
+    }
+    return true
+}
+
+export fn copyFile(src: Path, dst: Path) -> bool {
+    var input = File.open(src)
+    if (input == null) { return false }
+    var output = File.openWrite(dst, false)
+    if (output == null) {
+        input!.close()
+        return false
+    }
+    var ok = _pump(input!, output!)
+    var published = output!.close() && ok
+    input!.close()
+    return published
+}
+
 export fn cwd() -> Path { return Path(__cwd()) }
 export fn exists(path: Path) -> bool { return __exists(path) }
 export fn fileSize(path: Path) -> i64 { return __fileSize(path) }
@@ -272,14 +404,14 @@ export fn symlink(target: Path, link: Path) -> bool { return __symlink(target, l
 // existing one.
 export fn touch(path: Path) -> bool {
     if (__utimeNow(path)) { return true }
-    return __appendFile(path, "")
+    return _publishStr(path, "", true)
 }
-export fn writeFile(path: Path, data: string) -> bool { return __writeFile(path, data) }
+export fn writeFile(path: Path, data: string) -> bool { return _publishStr(path, data, false) }
 export fn writeFileBytes(path: Path, data: Array<u8>) -> bool {
-    return __writeFileBytes(path, data)
+    return _publishBytes(path, data, false)
 }
-export fn writeStderr(data: string) -> bool { return __writeStderr(data) }
-export fn writeStdout(data: string) -> bool { return __writeStdout(data) }
+export fn writeStderr(data: string) -> bool { return _writeStdStream(File.stderr(), data) }
+export fn writeStdout(data: string) -> bool { return _writeStdStream(File.stdout(), data) }
 
 export fn stat(path: Path) -> FileStat? {
     var raw = __stat(path)
