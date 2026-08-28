@@ -902,11 +902,12 @@ static void test_c_emission_registry_free(TestCEmissionRegistry *registry) {
     memset(registry, 0, sizeof(*registry));
 }
 
-/* A hand-built XI_PRINT carries the same authority a lowered one does: the
- * frozen plan, and a source span that agrees with the plan's location field
- * for field. The semantic builder compares the two, so a fixture that sets
- * neither is refused before code generation is ever reached. */
-static bool test_attach_print_plan(XiFunc *func, XiValue *print, uint32_t line) {
+/* A hand-built XI_PRINT carries the same authority a lowered one does, and it
+ * gets it the same way: from the plan. Building the operation and attaching its
+ * plan were two steps, so a fixture could take the first and skip the second;
+ * one step means there is no spelling that omits it. */
+static XiValue *test_new_print(XiFunc *func, XiBlock *block, struct XrType *unit_type,
+                               uint16_t nargs, uint32_t line) {
     XrLocation source = {
         .file = "test.xr",
         .line = line,
@@ -915,20 +916,11 @@ static bool test_attach_print_plan(XiFunc *func, XiValue *print, uint32_t line) 
         .end_column = 6,
     };
     XrPrintPlan plan;
-    if (xr_print_plan_build(XR_CORE_BUILTIN_PRINT, print->nargs, source,
+    if (xr_print_plan_build(XR_CORE_BUILTIN_PRINT, nargs, source,
                             XR_CORE_INTRINSIC_TARGET_OUTPUT_ALL, XR_PRINT_CAPABILITY_NONE,
-                            &plan) != XR_PRINT_PLAN_OK ||
-        !xi_value_set_print_plan(func, print, &plan))
-        return false;
-    print->source_span = (XiSourceSpan) {
-        .start_line = source.line,
-        .start_column = source.column,
-        .end_line = source.end_line,
-        .end_column = source.end_column,
-    };
-    print->flags = xi_op_default_effects(XI_PRINT);
-    print->line = line;
-    return true;
+                            &plan) != XR_PRINT_PLAN_OK)
+        return NULL;
+    return xi_value_new_print(func, block, unit_type, &plan);
 }
 
 static bool test_c_emission_registry_install(TestCEmissionRegistry *registry, XiCgenCtx *ctx,
@@ -3178,9 +3170,8 @@ TEST(cgen_iterator_rune_next_consumes_immutable_emission_recipe) {
     XiValue *source = xi_const_str(ir, entry, "0123456789abcdef", &string_type);
     XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
     XiValue *next = xi_value_new(ir, entry, XI_CALL_METHOD, &rune_type, 1);
-    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
-    TEST_REQUIRE(print && test_attach_print_plan(ir, print, 1u),
-                 "hand-built print carries its frozen plan");
+    XiValue *print = test_new_print(ir, entry, &unit_type, 1, 1u);
+    TEST_REQUIRE(print, "hand-built print carries its frozen plan");
     XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
     TEST_REQUIRE(source && runes && next && print && release,
                  "Iterator<rune>.next recipe values allocated");
@@ -3234,9 +3225,8 @@ TEST(cgen_iterator_rune_nth_consumes_immutable_emission_recipe) {
     XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
     XiValue *index = xi_const_int(ir, entry, 1, &int_type);
     XiValue *nth = xi_value_new(ir, entry, XI_CALL_METHOD, &rune_type, 2);
-    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
-    TEST_REQUIRE(print && test_attach_print_plan(ir, print, 1u),
-                 "hand-built print carries its frozen plan");
+    XiValue *print = test_new_print(ir, entry, &unit_type, 1, 1u);
+    TEST_REQUIRE(print, "hand-built print carries its frozen plan");
     XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
     TEST_REQUIRE(source && runes && index && nth && print && release,
                  "Iterator<rune>.nth recipe values allocated");
@@ -3292,9 +3282,8 @@ TEST(cgen_rune_to_uint32_consumes_immutable_emission_recipe) {
     XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
     XiValue *next = xi_value_new(ir, entry, XI_CALL_METHOD, &rune_type, 1);
     XiValue *to_u32 = xi_value_new(ir, entry, XI_CALL_METHOD, &u32_type, 1);
-    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
-    TEST_REQUIRE(print && test_attach_print_plan(ir, print, 1u),
-                 "hand-built print carries its frozen plan");
+    XiValue *print = test_new_print(ir, entry, &unit_type, 1, 1u);
+    TEST_REQUIRE(print, "hand-built print carries its frozen plan");
     XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
     TEST_REQUIRE(source && runes && next && to_u32 && print && release,
                  "rune.toUInt32 recipe values allocated");
@@ -3359,9 +3348,8 @@ TEST(cgen_rune_to_string_consumes_immutable_emission_recipe) {
     XiValue *index = xi_const_int(ir, entry, 1, &int_type);
     XiValue *nth = xi_value_new(ir, entry, XI_CALL_METHOD, &rune_type, 2);
     XiValue *to_string = xi_value_new(ir, entry, XI_CALL_METHOD, &string_type, 1);
-    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
-    TEST_REQUIRE(print && test_attach_print_plan(ir, print, 1u),
-                 "hand-built print carries its frozen plan");
+    XiValue *print = test_new_print(ir, entry, &unit_type, 1, 1u);
+    TEST_REQUIRE(print, "hand-built print carries its frozen plan");
     XiValue *release_string = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
     XiValue *release_runes = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
     TEST_REQUIRE(source && runes && index && nth && to_string && print && release_string &&
@@ -3435,9 +3423,8 @@ TEST(cgen_rune_is_whitespace_consumes_immutable_emission_recipe) {
     XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
     XiValue *next = xi_value_new(ir, entry, XI_CALL_METHOD, &rune_type, 1);
     XiValue *is_whitespace = xi_value_new(ir, entry, XI_CALL_METHOD, &bool_type, 1);
-    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
-    TEST_REQUIRE(print && test_attach_print_plan(ir, print, 1u),
-                 "hand-built print carries its frozen plan");
+    XiValue *print = test_new_print(ir, entry, &unit_type, 1, 1u);
+    TEST_REQUIRE(print, "hand-built print carries its frozen plan");
     XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
     TEST_REQUIRE(source && runes && next && is_whitespace && print && release,
                  "rune.isWhitespace recipe values allocated");
@@ -3930,9 +3917,8 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiValue *one = xi_const_int(ir, entry, 1, &u32_type);
     XiValue *sum = xi_value_new(ir, entry, XI_ADD, &u32_type, 2);
     XiValue *literal = xi_const_str(ir, entry, "immutable-authority", &string_type);
-    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
-    TEST_REQUIRE(print && test_attach_print_plan(ir, print, 1u),
-                 "hand-built print carries its frozen plan");
+    XiValue *print = test_new_print(ir, entry, &unit_type, 1, 1u);
+    TEST_REQUIRE(print, "hand-built print carries its frozen plan");
     XiValue *capacity = xi_const_int(ir, entry, 3, &u32_type);
     XiValue *channel = xi_value_new(ir, entry, XI_CHAN_NEW, &channel_type, 1);
     XiValue *receive = xi_value_new(ir, entry, XI_CHAN_TRY_RECV, &u32_type, 1);
