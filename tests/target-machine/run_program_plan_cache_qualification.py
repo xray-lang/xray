@@ -641,13 +641,13 @@ def load_average() -> list:
 
 
 def contention(cold: dict, warm: dict, load: dict) -> dict:
-    """Whether these numbers are this cache's, or another lane's compile.
+    """How much of this measurement belongs to this cache.
 
-    This host is shared. When another lane is building, a sample lands tens of
-    seconds off its median, and both the absolute figures and the warm/cold
-    ratio stop describing the cache. A report that does not say so invites a
-    performance claim it cannot support, so the spread decides it here rather
-    than the reader guessing.
+    This host is shared. A median is robust to a handful of slow samples --
+    another lane's compile has to occupy more than half the run to move it --
+    but a p95 is not: one interrupted sample is enough. Reporting a single
+    usable/unusable verdict throws away the half that survived, so say which
+    statistic the spread condemns and which it does not.
     """
     def spread(phase: dict) -> float:
         seconds = phase.get("seconds", {})
@@ -656,20 +656,27 @@ def contention(cold: dict, warm: dict, load: dict) -> dict:
 
     cold_spread = spread(cold)
     warm_spread = spread(warm)
-    # A quiet machine holds p95 within roughly half again the median. Anything
-    # wider means a sample waited on someone else.
-    quiet = max(cold_spread, warm_spread) <= 1.5
+    samples = cold.get("seconds", {}).get("samples", 0)
+    # A quiet machine holds p95 within roughly half again the median.
+    tail_usable = max(cold_spread, warm_spread) <= 1.5
+    # Fewer than five surviving samples leaves the median itself to one bad
+    # draw, and a discarded pair means a build did not run at all.
+    median_usable = samples >= 5 and cold.get("discarded_pairs", 0) == 0
     return {
         "cold_p95_over_p50": cold_spread,
         "warm_p95_over_p50": warm_spread,
         "peak_load_average_1m": max(
             [load.get("before", [0])[0] if load.get("before") else 0,
              load.get("after", [0])[0] if load.get("after") else 0]),
-        "quiet_enough_for_absolute_numbers": quiet,
-        "note": "" if quiet else
-                "another lane was building during this run: treat the absolute "
-                "seconds and the warm/cold ratio as unusable and read only the "
-                "counts, byte totals and invalidation breadth",
+        "surviving_samples": samples,
+        "median_usable": median_usable,
+        "tail_usable": tail_usable,
+        "note": "" if tail_usable else
+                "another lane was building during this run: p95 and max belong "
+                "to that, not to this cache. The medians, counts, byte totals "
+                "and invalidation breadth are unaffected"
+                if median_usable else
+                "too few surviving samples to trust any statistic here",
     }
 
 
@@ -1062,6 +1069,21 @@ def self_test() -> int:
     race = COLLECT_RACE_RE.search("    collect race: evicted=3 readers=3 recomputed=1\n")
     if not race or race.groups() != ("3", "3", "1"):
         print("FAIL: collection race line parsing")
+        return 1
+    # A spread that condemns the tail must not condemn the median with it.
+    verdict = contention(
+        {"seconds": {"p50": 0.7, "p95": 3.8, "samples": 7}, "discarded_pairs": 0},
+        {"seconds": {"p50": 0.4, "p95": 2.9, "samples": 7}},
+        {"before": [6.7], "after": [5.0]})
+    if verdict["tail_usable"] or not verdict["median_usable"]:
+        print(f"FAIL: contention verdict {verdict}")
+        return 1
+    thin = contention({"seconds": {"p50": 1.0, "p95": 1.1, "samples": 2},
+                       "discarded_pairs": 1},
+                      {"seconds": {"p50": 1.0, "p95": 1.1, "samples": 2}},
+                      {"before": [1.0], "after": [1.0]})
+    if thin["median_usable"]:
+        print(f"FAIL: a run that discarded a pair must not claim its median {thin}")
         return 1
     stats = distribution([1.0, 2.0, 3.0, 4.0], "s")
     if stats["samples"] != 4 or stats["p50"] != 2.5 or stats["max"] != 4.0:
