@@ -7,10 +7,12 @@ category-specific failure modes as XrErrorSet, function-type-owned error sets,
 and MAY_THROW naming are replaced by XaEffectDatabase.
 
 Task 216 additionally makes ``XrFnThrowEffect`` a frontend-owned typed bit.
-The backend may fold already-emitted checks as defense-in-depth, but it must
-not inspect or independently reconstruct that source-level bit.  The
+The backend may read it to fold an already-emitted check as defense-in-depth,
+and a verifier may read it to assert the shape the frontend published, but
+nothing below lowering may write or independently reconstruct it.  The
 ``THROW_BIT_RECOMPUTE`` category is therefore a fail-closed zero gate over
-typed-bit consumers below lowering.
+writes below lowering.  Reads are what both allowed uses are made of, so they
+do not count and no file needs an exemption from the category.
 """
 
 from __future__ import annotations
@@ -79,9 +81,12 @@ NATIVE_ERROR_RE = re.compile(
     re.IGNORECASE,
 )
 TASK_ERROR_RE = re.compile(r"\b(?:TaskOutcome|TaskResult|Failed\(unknown\)|Task<[^>]*,\s*[^>]*>)\b")
+# Reconstruction is a write: the setter, or an assignment to the field.  A
+# comparison ("== XR_FN_EFFECT_NO_THROW", "!=") is a read and is how both
+# allowed uses are spelled, so it must not match.
 THROW_BIT_RE = re.compile(
-    r"\b(?:XrFnThrowEffect|XR_FN_EFFECT_(?:NO_THROW|MAY_THROW|POLY)|"
-    r"function\.throw_effect|xr_type_function_(?:throw_effect|is_no_throw|set_throw_effect))\b"
+    r"\bxr_type_function_set_throw_effect\s*\(|"
+    r"\bthrow_effect\s*(?:=[^=]|[-+|&^]=)"
 )
 
 XR_ERROR_SET_NEEDLES = ("XrErrorSet", "xr_error_set_")
@@ -203,7 +208,6 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         categories.append("TASK_TYPED_ERROR_RESIDUE")
     if (
         (rel_path.startswith("src/aot/") or rel_path.startswith("src/ir/"))
-        and rel_path != "src/ir/xi_lower_expr.c"
         and THROW_BIT_RE.search(line)
     ):
         categories.append("THROW_BIT_RECOMPUTE")

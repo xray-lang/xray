@@ -306,6 +306,29 @@ XR_SEM_0019: Array intrinsic authority is not exact
 但实测产品只对 **`string?`** 成立：字面 `null`、`bool?`、`i64?` 一律拒绝。
 规范的表述比实现宽。
 
+## 9c. 最终清单差集
+
+排除 `backend_diff*` 的宽范围跑，两次都跑到汇总行，逐项名做差集：
+
+```
+起点   73 失败 / 490
+终点   68 失败 / 490
+
+消失 5 项：
+  binary_stdlib_kat_baseline        本 lane 修
+  binary_stdlib_runtime_baseline    本 lane 修
+  bytes_type_residue                本 lane 修
+  narrowing_conformance             本 lane 修
+  query_surface_residue             不是本 lane 修的：起点那次是负载下的 Timeout，
+                                    终点这次自己过了
+
+新增 0 项
+```
+
+**新增为零**，即本 lane 的全部改动零回归。三个 `*_native_error_abi` 仍在失败清单里——
+它们的源码模式类用例已全绿，剩下的 parity 用例要 `build --native`，
+属 AOT 线的 fail-closed，不是本 lane 的残留。
+
 ## 10. 复跑方式
 
 ```bash

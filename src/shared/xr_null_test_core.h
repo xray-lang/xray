@@ -8,7 +8,7 @@
  * xr_null_test_core.h - Runtime-neutral null observation semantics.
  *
  * Tagged runtimes observe null through the stable zero tag. Native pointer,
- * RawPtr, and string storage observe null through the null pointer. Carrier
+ * Ptr, and string storage observe null through the null pointer. Carrier
  * validation and representation selection remain mechanical backend work.
  */
 
