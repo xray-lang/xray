@@ -356,6 +356,33 @@ A lane 把 `time` 迁成 `.xr` 源，这个用例就从"单模块"变成"两模�
 **按纪律不把这四条加进清单。** 规则明写"不许为让改动变绿而加行"，而且加进去等于把
 "stdlib 迁移正在扩大 AOT 覆盖缺口"这条事实盖住。它们属于 4 号的 `XR_TARGET_1000`。
 
+### 3.8 落盘后的 gate 实测
+
+改动落盘后跑了一次完整 `backend_diff`（直跑 runner，绕开 ctest 在有负载的机器上必撞的
+900s 上限；`XRAY_DIFF_JOBS=3`、`XRAY_TOOLCHAIN_PROBE_SCALE=16`、`XRAY_TEST_CASE_TIMEOUT=900`）：
+
+```
+=== Results: 161 passed, 0 failed, 514 refused, 1 skipped ===
+Ratchet: 0 diverging, 0 baselined.
+
+=== Cases that stopped building (not in tests/diff/known_failures_not_comparable.txt) ===
+  tests/diff/cases/semantics/modules/value_struct_arg_alias_import.xr
+  tests/diff/cases/semantics/modules/value_struct_arg_without_type_import.xr
+  tests/diff/cases/semantics/modules/value_struct_copy_without_type_import.xr
+  tests/diff/cases/semantics/stdlib/time_query_system_direct.xr
+Coverage: 514 not comparable, 510 listed.
+```
+
+三件事由此坐实：
+
+1. **`=== Listed cases now build ===` 这一段没有出现**——510 条里没有一条现在能构建，
+   说明删掉的 5 条删对了，一条不多一条不少。
+2. **`0 failed` / `0 diverging`**——native lane 上没有 VM/AOT 输出分歧。
+3. **唯一红点是 §3.7 那四条清单外的用例**（`514 - 510 = 4`）。
+
+伪影检索在这次运行上同样是三个零（`cannot lock binary cache` / `no provider reached READY` /
+`timed out after`），而这次是在 load 55–97 下跑的——`PROBE_SCALE` 从 4 提到 16 顶住了。
+
 ---
 
 ## 4. embedded lane（vm / embed）：68 → 48
