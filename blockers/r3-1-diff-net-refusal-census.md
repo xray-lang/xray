@@ -661,3 +661,67 @@ guard 是浅层的，它挡在真正的能力判据前面（§3.7 对四条 `val
 四条 §3.7 的 `value_struct` / `time_query` 用例在 L1 后停在哪一层，是另一件值得单独看的事：
 它们会露出下一层，而下一层可能就是上一轮 E lane 记录的
 `is_value_type` 两层分歧——那个缺陷一直被这条 guard 挡在视线之外。
+
+---
+
+## 12. L1 之后重跑了：解封 0 条，但那堵墙没了
+
+§11 说合并后必须重跑、且预期不是解封而是换首拒。**跑了，两条都对。**
+
+在集成分支 `57ef1f67f`（比冻结起点多 99 提交，含 4 号 L1）上新建 worktree、
+用同一套配置构建并跑同一条命令：
+
+| | `00f665c5c`（冻结起点） | `57ef1f67f`（含 L1） |
+| --- | ---: | ---: |
+| passed | 161 | **150** |
+| failed | 0 | 0 |
+| refused | 514 | **525** |
+| Coverage | 514 / 510 listed | 525 / 521 listed |
+| `Listed cases now build` | 未出现 | **未出现** |
+| stopped building | 4 条 | **同 4 条** |
+| 伪影三检 | 0 / 0 / 0 | 0 / 0 / 0 |
+
+**通过数不升反降 11 条**，但那 11 条与 L1 无关——是 6 号把 `mem` 迁成 `.xr` 源带来的，
+已由他自己以同样的注释格式登记进清单（`b1756dcd9`），清单因此从 510 涨到 521。
+这正是 §3.1.1 那条推论的第二次实证：**stdlib 自举每往前一步，AOT 的覆盖缺口就往外扩一点。**
+
+### 12.1 L1 真正搬动的东西：`XR_TARGET_1000` 从 90 条降到 0
+
+按 `(码, 归一化消息)` 二元组做差集：
+
+```
+ delta   base    L1   首拒
+   -90     90     0   XR_TARGET_1000 product TargetPlan requires one canonical program authority
+   +40    114   154   XR_TARGET_1003 call-shaped operation has no exact target authority
+   +35     18    53   XR_TARGET_1003 call target has no consumable adapter authority
+   +21      4    25   XR_SEM_0019   source export call argument disagrees with frozen dependency
+    +8      0     8   XR_TARGET_1003 source-export call authority is incomplete          ← 新族
+    +5      0     5   XR_TARGET_1001 source namespace storage authority is not exact      ← 新族
+    +4      0     4   XR_TARGET_1001 target functions do not cover semantic value ownership ← 新族
+    -5     45    40   XR_SEM_0019   coroutine state count disagrees with grounded call authority
+    -4     13     9   coroutine lowering failed closed before publishing CoroLowered
+    -3     67    64   XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
+```
+
+族数从 **44 涨到 49**。
+
+**这就是"浅层 guard 掩盖深层缺陷"的完整实证：解开 guard 不产生绿，产生可见性。**
+90 条原本挤在一句"product TargetPlan requires one canonical program authority"后面，
+现在分散到 6 个具体的能力缺口上，其中 3 个是这张网此前从未见过的族。
+
+对 4 号 L1 的正确评价因此是：**它没有解封任何一条差分用例，但它把这张网最大的一个盲区
+换成了六个可以分别攻的目标。** 用"解封条数"衡量它会得出"零价值"的结论，那是错的；
+用"首拒分布"衡量才看得见它做了什么。这也是为什么本 lane 的交付物是分布而不是计数。
+
+### 12.2 那四条清单外的红，L1 后仍在
+
+```
+semantics/modules/value_struct_arg_alias_import.xr
+semantics/modules/value_struct_arg_without_type_import.xr
+semantics/modules/value_struct_copy_without_type_import.xr
+semantics/stdlib/time_query_system_direct.xr
+```
+
+§3.7 说它们的 `XR_TARGET_1000` 挡在上一轮 E lane 那个 `is_value_type` 两层分歧前面，
+L1 之后应该露出下一层。**结果是它们仍然 refused**，所以那个假设还没被证实也没被证伪——
+它们换了首拒但没有变得可比，需要单独看新的首拒是什么。这条留给下一个人。
