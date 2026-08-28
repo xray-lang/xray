@@ -323,11 +323,16 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             // Document is open - check if it needs re-analysis (dirty = has unsaved changes)
             if (open_doc->dirty && open_doc->ast) {
                 lsp_log("import: %s is open and dirty, re-analyzing", full_path);
+                /* The analyzer borrows the file path it is handed and stores
+                 * it on every symbol it records, so the path has to outlive
+                 * those symbols. import_uri is this frame's buffer; the open
+                 * document owns an identical string for as long as it is
+                 * open, which is exactly the lifetime the symbols need. */
                 XlspAnalysisIdentity import_identity;
                 xlsp_analysis_identity_push(
                     &import_identity, xr_compiler_session_current_for_isolate(server->isolate),
-                    import_uri);
-                xa_analyzer_refresh_file(server->workspace_analyzer, import_uri,
+                    open_doc->uri);
+                xa_analyzer_refresh_file(server->workspace_analyzer, open_doc->uri,
                                          (XrAstNode *) open_doc->ast, open_doc->content_hash);
                 xlsp_analysis_identity_pop(&import_identity);
                 open_doc->dirty = false;
