@@ -433,17 +433,15 @@ static bool xaot_module_semantic_authority_matches(const XiModule *module,
         return false;
     if (xaot_module_uses_detached_leaf_psc(module))
         return xi_program_semantic_plan_verify_detached_leaf_authority(module->init, semantic, NULL,
-                                                                        0);
+                                                                       0);
     const XrSemanticPlan *live_semantic = module->init->semantic_plan;
     const XrSemanticEntityRecord *live_entity =
         xr_semantic_plan_unique_module_entity(live_semantic);
     const XrSemanticEntityRecord *candidate_entity =
         xr_semantic_plan_unique_module_entity(semantic);
     if (!live_semantic || !xr_semantic_plan_is_frozen(live_semantic) ||
-        !xr_semantic_plan_is_verified(live_semantic) ||
-        !xr_semantic_plan_is_frozen(semantic) ||
-        !xr_semantic_plan_is_verified(semantic) || !live_entity ||
-        !candidate_entity ||
+        !xr_semantic_plan_is_verified(live_semantic) || !xr_semantic_plan_is_frozen(semantic) ||
+        !xr_semantic_plan_is_verified(semantic) || !live_entity || !candidate_entity ||
         !xr_stable_id_equal(live_entity->id, candidate_entity->id) ||
         !xr_fingerprint_equal(xr_semantic_plan_fingerprint(live_semantic),
                               xr_semantic_plan_fingerprint(semantic)))
@@ -456,10 +454,8 @@ static bool xaot_module_semantic_authority_matches(const XiModule *module,
     if (!candidate_program && !live_program)
         return true;
     if (!candidate_program || !live_program ||
-        candidate_program->program_module_row !=
-            live_program->program_module_row ||
-        !xr_stable_id_equal(candidate_program->program_module,
-                            live_program->program_module) ||
+        candidate_program->program_module_row != live_program->program_module_row ||
+        !xr_stable_id_equal(candidate_program->program_module, live_program->program_module) ||
         !xr_fingerprint_equal(candidate_program->program_fingerprint,
                               live_program->program_fingerprint) ||
         memcmp(candidate_program->generation_identity.bytes,
@@ -467,40 +463,26 @@ static bool xaot_module_semantic_authority_matches(const XiModule *module,
                sizeof(candidate_program->generation_identity.bytes)) != 0)
         return false;
 
-    const XrProgramSemanticClosure *closure =
-        module->program_semantic_closure;
+    const XrProgramSemanticClosure *closure = module->program_semantic_closure;
     const XrProgramSemanticModuleInput *source =
-        module->source_semantic_module_present
-            ? &module->source_semantic_module
-            : NULL;
+        module->source_semantic_module_present ? &module->source_semantic_module : NULL;
     const XrProgramSemanticModuleRecord *psc_module =
-        closure ? xr_program_semantic_closure_module(
-                      closure, module->psc_module_index)
-                : NULL;
-    XrGenerationClosureId closure_generation =
-        xr_program_semantic_closure_generation_id(closure);
-    return closure && source && psc_module &&
-           xr_program_semantic_closure_is_frozen(closure) &&
+        closure ? xr_program_semantic_closure_module(closure, module->psc_module_index) : NULL;
+    XrGenerationClosureId closure_generation = xr_program_semantic_closure_generation_id(closure);
+    return closure && source && psc_module && xr_program_semantic_closure_is_frozen(closure) &&
            xr_program_semantic_closure_is_verified(closure) &&
-           candidate_program->program_family ==
-               xr_program_semantic_closure_family(closure) &&
-           candidate_program->module_count ==
-               xr_program_semantic_closure_module_count(closure) &&
+           candidate_program->program_family == xr_program_semantic_closure_family(closure) &&
+           candidate_program->module_count == xr_program_semantic_closure_module_count(closure) &&
            candidate_program->program_module_row == module->psc_module_index &&
-           xr_stable_id_equal(candidate_program->program_module,
-                              source->module_identity) &&
-           xr_stable_id_equal(candidate_program->program_module,
-                              psc_module->module_identity) &&
+           xr_stable_id_equal(candidate_program->program_module, source->module_identity) &&
+           xr_stable_id_equal(candidate_program->program_module, psc_module->module_identity) &&
            xr_fingerprint_equal(candidate_program->program_fingerprint,
-                                xr_program_semantic_closure_fingerprint(
-                                    closure)) &&
-           memcmp(candidate_program->generation_identity.bytes,
-                  closure_generation.bytes,
+                                xr_program_semantic_closure_fingerprint(closure)) &&
+           memcmp(candidate_program->generation_identity.bytes, closure_generation.bytes,
                   sizeof(candidate_program->generation_identity.bytes)) == 0 &&
            xr_fingerprint_equal(psc_module->module_authority_fingerprint,
                                 source->module_authority_fingerprint) &&
-           xr_fingerprint_equal(psc_module->source_fingerprint,
-                                source->source_fingerprint);
+           xr_fingerprint_equal(psc_module->source_fingerprint, source->source_fingerprint);
 }
 
 static bool xaot_function_belongs_to_module(const XiModule *module, const XiFunc *function) {
@@ -513,8 +495,8 @@ static bool xaot_function_belongs_to_module(const XiModule *module, const XiFunc
 }
 
 XR_FUNC bool xaot_bundle_program_partition_for_module(const XaotBundle *bundle,
-                                                       uint32_t module_index,
-                                                       uint32_t *partition_out) {
+                                                      uint32_t module_index,
+                                                      uint32_t *partition_out) {
     if (partition_out)
         *partition_out = UINT32_MAX;
     if (!bundle || !bundle->program_target_plan || !bundle->modules ||
@@ -522,8 +504,7 @@ XR_FUNC bool xaot_bundle_program_partition_for_module(const XaotBundle *bundle,
         return false;
     const XiModule *module = bundle->modules[module_index];
     uint32_t partition_count = 0;
-    (void) xr_target_plan_module_partitions(bundle->program_target_plan,
-                                            &partition_count);
+    (void) xr_target_plan_module_partitions(bundle->program_target_plan, &partition_count);
     if (!partition_count)
         partition_count = 1u;
     uint32_t match = UINT32_MAX;
@@ -542,21 +523,21 @@ XR_FUNC bool xaot_bundle_program_partition_for_module(const XaotBundle *bundle,
     return true;
 }
 
-XR_FUNC bool xaot_bundle_program_partition_for_xi_module(
-    const XaotBundle *bundle, const XiModule *module, uint32_t *partition_out) {
+XR_FUNC bool xaot_bundle_program_partition_for_xi_module(const XaotBundle *bundle,
+                                                         const XiModule *module,
+                                                         uint32_t *partition_out) {
     if (partition_out)
         *partition_out = UINT32_MAX;
     if (!bundle || !bundle->program_target_plan || !module || !partition_out)
         return false;
     uint32_t partition_count = 0;
-    (void) xr_target_plan_module_partitions(bundle->program_target_plan,
-                                            &partition_count);
+    (void) xr_target_plan_module_partitions(bundle->program_target_plan, &partition_count);
     if (!partition_count)
         partition_count = 1u;
     uint32_t match = UINT32_MAX;
     for (uint32_t partition = 0; partition < partition_count; partition++) {
-        const XrSemanticPlan *semantic = xr_target_plan_semantic_module(
-            bundle->program_target_plan, partition);
+        const XrSemanticPlan *semantic =
+            xr_target_plan_semantic_module(bundle->program_target_plan, partition);
         if (!xaot_module_semantic_authority_matches(module, semantic))
             continue;
         if (match != UINT32_MAX)
@@ -569,19 +550,17 @@ XR_FUNC bool xaot_bundle_program_partition_for_xi_module(
     return true;
 }
 
-XR_FUNC const XrSemanticPlan *
-xaot_bundle_program_semantic_for_module(const XaotBundle *bundle,
-                                        uint32_t module_index) {
+XR_FUNC const XrSemanticPlan *xaot_bundle_program_semantic_for_module(const XaotBundle *bundle,
+                                                                      uint32_t module_index) {
     uint32_t partition = UINT32_MAX;
     return xaot_bundle_program_partition_for_module(bundle, module_index, &partition)
                ? xr_target_plan_semantic_module(bundle->program_target_plan, partition)
                : NULL;
 }
 
-XR_FUNC const XrSemanticPlan *
-xaot_bundle_program_semantic_for_func(const XaotBundle *bundle,
-                                      const XiFunc *func,
-                                      uint32_t *partition_out) {
+XR_FUNC const XrSemanticPlan *xaot_bundle_program_semantic_for_func(const XaotBundle *bundle,
+                                                                    const XiFunc *func,
+                                                                    uint32_t *partition_out) {
     if (partition_out)
         *partition_out = UINT32_MAX;
     if (!bundle || !func || !bundle->program_target_plan)
@@ -625,8 +604,7 @@ XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBu
 
 XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_func(const XaotBundle *bundle,
                                                                   const XiFunc *func) {
-    if (!bundle || !func || !bundle->module_emission_plans ||
-        !bundle->program_target_plan)
+    if (!bundle || !func || !bundle->module_emission_plans || !bundle->program_target_plan)
         return NULL;
     const XrCEmissionPlan *match = NULL;
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
@@ -691,8 +669,7 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     return true;
 }
 
-XR_FUNC bool xaot_bundle_set_program_target_plan(XaotBundle *bundle,
-                                                 XrTargetPlan *target_plan) {
+XR_FUNC bool xaot_bundle_set_program_target_plan(XaotBundle *bundle, XrTargetPlan *target_plan) {
     char error[256] = {0};
 
     if (!bundle || !bundle->modules || !bundle->nmodules || !target_plan)
@@ -715,12 +692,10 @@ XR_FUNC bool xaot_bundle_set_program_target_plan(XaotBundle *bundle,
         }
         for (uint32_t prior = 0; prior < module_index; prior++) {
             uint32_t prior_partition = UINT32_MAX;
-            if (!xaot_bundle_program_partition_for_module(bundle, prior,
-                                                          &prior_partition) ||
+            if (!xaot_bundle_program_partition_for_module(bundle, prior, &prior_partition) ||
                 prior_partition == partition) {
                 bundle->program_target_plan = previous;
-                bundle->error_msg =
-                    "program TargetPlan module partition authority is duplicated";
+                bundle->error_msg = "program TargetPlan module partition authority is duplicated";
                 return false;
             }
         }
@@ -756,14 +731,13 @@ XR_FUNC bool xaot_bundle_install_representation_refinement(XaotBundle *bundle,
                                                            const struct XiRepPolicy *policy) {
     if (!bundle || !bundle->representation_refinements ||
         !bundle->representation_policy_fingerprints || !bundle->program_target_plan ||
-        module_index >= bundle->nmodules || !refinement || !policy ||
-        !bundle->modules || !bundle->modules[module_index] || !bundle->modules[module_index]->init ||
+        module_index >= bundle->nmodules || !refinement || !policy || !bundle->modules ||
+        !bundle->modules[module_index] || !bundle->modules[module_index]->init ||
         !xaot_bundle_program_semantic_for_module(bundle, module_index))
         return false;
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
     if (!xr_aot_representation_materialization_verify(&view, bundle->modules[module_index]->init,
-                                                      bundle->program_target_plan, policy,
-                                                      NULL)) {
+                                                      bundle->program_target_plan, policy, NULL)) {
         bundle->error_msg = "module representation authority is incomplete, stale, or bound to a "
                             "different materialization";
         return false;
@@ -4164,13 +4138,12 @@ XR_FUNC bool xaot_bundle_set_capability_provider(XaotBundle *bundle,
     uint32_t capability_count = 0;
     const uint32_t *capabilities = xg_capability_catalog(&capability_count);
     uint32_t known_capabilities = 0;
-    const uint32_t known_hooks = XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
-                                 XAOT_PROVIDER_HOOK_PARK_WAKE | XAOT_PROVIDER_HOOK_TIMER |
-                                 XAOT_PROVIDER_HOOK_EXECUTOR_PUMP |
-                                 XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE |
-                                 XAOT_PROVIDER_HOOK_ASSERTION_REPORT |
-                                 XAOT_PROVIDER_HOOK_ALLOC | XAOT_PROVIDER_HOOK_FREE |
-                                 XAOT_PROVIDER_HOOK_PANIC;
+    const uint32_t known_hooks =
+        XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT | XAOT_PROVIDER_HOOK_PARK_WAKE |
+        XAOT_PROVIDER_HOOK_TIMER | XAOT_PROVIDER_HOOK_EXECUTOR_PUMP |
+        XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE | XAOT_PROVIDER_HOOK_ASSERTION_REPORT |
+        XAOT_PROVIDER_HOOK_ALLOC | XAOT_PROVIDER_HOOK_FREE | XAOT_PROVIDER_HOOK_PANIC |
+        XAOT_PROVIDER_HOOK_OUTPUT_WRITE;
     for (uint32_t i = 0; i < capability_count; i++)
         known_capabilities |= capabilities[i];
     if (!bundle || !provider || bundle->global_evidence_plan.evidence ||
@@ -7599,16 +7572,13 @@ static bool dump_value_authority(const XaotBundle *bundle, const XaotFuncPlan *f
         !bundle->program_target_plan || function_plan->module_index >= bundle->nmodules ||
         semantic_function->value_begin > UINT32_MAX - value->id)
         return false;
-    target_plan = xaot_bundle_program_semantic_for_module(
-                      bundle, function_plan->module_index)
+    target_plan = xaot_bundle_program_semantic_for_module(bundle, function_plan->module_index)
                       ? xaot_bundle_program_target_plan(bundle)
                       : NULL;
-    if (!xaot_bundle_program_partition_for_module(bundle, function_plan->module_index,
-                                                  &partition))
+    if (!xaot_bundle_program_partition_for_module(bundle, function_plan->module_index, &partition))
         return false;
     out->semantic_value = semantic_function->value_begin + value->id;
-    out->target =
-        xr_target_plan_value_rep_for_module(target_plan, partition, out->semantic_value);
+    out->target = xr_target_plan_value_rep_for_module(target_plan, partition, out->semantic_value);
     legacy_count = dump_legacy_value_plan_count(bundle, function_plan->func, value, &legacy);
     if ((out->target ? 1u : 0u) + legacy_count != 1u)
         return false;
@@ -7666,12 +7636,10 @@ static bool dump_validate_function_authority(const XaotBundle *bundle,
         function_plan->module_index >= bundle->nmodules)
         return false;
     func = function_plan->func;
-    target_plan = xaot_bundle_program_semantic_for_module(
-                      bundle, function_plan->module_index)
+    target_plan = xaot_bundle_program_semantic_for_module(bundle, function_plan->module_index)
                       ? xaot_bundle_program_target_plan(bundle)
                       : NULL;
-    module_semantic =
-        xaot_bundle_program_semantic_for_module(bundle, function_plan->module_index);
+    module_semantic = xaot_bundle_program_semantic_for_module(bundle, function_plan->module_index);
     if (!func || !target_plan || !module_semantic || func->semantic_plan != module_semantic ||
         !xaot_bundle_program_partition_for_module(bundle, function_plan->module_index,
                                                   &partition) ||
@@ -7691,8 +7659,7 @@ static bool dump_validate_function_authority(const XaotBundle *bundle,
              * removed SSA value has no legacy row to consume; an immutable
              * TargetPlan binding, when present, is still counted below. */
             uint32_t semantic_value = semantic_function->value_begin + value_id;
-            if (xr_target_plan_value_rep_for_module(target_plan, partition,
-                                                    semantic_value))
+            if (xr_target_plan_value_rep_for_module(target_plan, partition, semantic_value))
                 target_count++;
             continue;
         }
@@ -7737,10 +7704,9 @@ static bool dump_validate_value_authorities(const XaotBundle *bundle) {
         (bundle->nvalue_plans && !bundle->value_plans))
         return false;
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
-        const XrTargetPlan *target_plan =
-            xaot_bundle_program_semantic_for_module(bundle, mi)
-                ? xaot_bundle_program_target_plan(bundle)
-                : NULL;
+        const XrTargetPlan *target_plan = xaot_bundle_program_semantic_for_module(bundle, mi)
+                                              ? xaot_bundle_program_target_plan(bundle)
+                                              : NULL;
         if (target_plan && !dump_target_plan_is_exact(bundle, mi, target_plan))
             return false;
     }
@@ -7751,17 +7717,14 @@ static bool dump_validate_value_authorities(const XaotBundle *bundle) {
 
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
         uint32_t count = 0;
-        const XrTargetPlan *target_plan =
-            xaot_bundle_program_semantic_for_module(bundle, mi)
-                ? xaot_bundle_program_target_plan(bundle)
-                : NULL;
-        const XrSemanticPlan *semantic =
-            xaot_bundle_program_semantic_for_module(bundle, mi);
+        const XrTargetPlan *target_plan = xaot_bundle_program_semantic_for_module(bundle, mi)
+                                              ? xaot_bundle_program_target_plan(bundle)
+                                              : NULL;
+        const XrSemanticPlan *semantic = xaot_bundle_program_semantic_for_module(bundle, mi);
         uint32_t partition = UINT32_MAX;
         if (!dump_target_plan_is_exact(bundle, mi, target_plan))
             return false;
-        if (!semantic ||
-            !xaot_bundle_program_partition_for_module(bundle, mi, &partition))
+        if (!semantic || !xaot_bundle_program_partition_for_module(bundle, mi, &partition))
             return false;
         uint32_t partition_count = 0;
         const XrTargetModulePartitionRecord *partitions =
@@ -7771,8 +7734,7 @@ static bool dump_validate_value_authorities(const XaotBundle *bundle) {
         else
             (void) xr_target_plan_value_reps(target_plan, &count);
         target_bindings += count;
-        size_t semantic_function_count =
-            xr_semantic_plan_function_count(semantic);
+        size_t semantic_function_count = xr_semantic_plan_function_count(semantic);
         for (size_t semantic_function = 0; semantic_function < semantic_function_count;
              semantic_function++) {
             uint32_t matches = 0;
@@ -7808,10 +7770,9 @@ static bool dump_validate_value_authorities(const XaotBundle *bundle) {
 }
 
 static void dump_module_target_plan(FILE *out, const XaotBundle *bundle, uint32_t module_index) {
-    const XrTargetPlan *target_plan =
-        xaot_bundle_program_semantic_for_module(bundle, module_index)
-            ? xaot_bundle_program_target_plan(bundle)
-            : NULL;
+    const XrTargetPlan *target_plan = xaot_bundle_program_semantic_for_module(bundle, module_index)
+                                          ? xaot_bundle_program_target_plan(bundle)
+                                          : NULL;
     const XrSemanticPlan *semantic_plan =
         xaot_bundle_program_semantic_for_module(bundle, module_index);
     char target[XR_FINGERPRINT_BYTES * 2 + 1];
@@ -8357,8 +8318,8 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 "attrs=0x%x signature=%016" PRIx64 " first-module=%u first-line=%u\n",
                 ei, decl->stable_id, safe_str(decl->source_name), safe_str(decl->link_symbol),
                 safe_str(decl->library), (unsigned) decl->nparams, (unsigned) decl->c_binding,
-                decl->attributes,
-                decl->signature_hash, decl->first_module, decl->first_source_line);
+                decl->attributes, decl->signature_hash, decl->first_module,
+                decl->first_source_line);
     }
 
     for (uint32_t order_index = 0; order_index < bundle->nfunc_plans; order_index++) {
@@ -8390,9 +8351,8 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 "backend_adapters=%u\n",
                 order_index, safe_str(func ? func->name : NULL), plan->module_index,
                 func->semantic_plan_function_index, (unsigned) plan->depth,
-                plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN
-                    ? "target-plan"
-                    : "legacy",
+                plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN ? "target-plan"
+                                                                           : "legacy",
                 xaot_abi_kind_name(abi->kind), xaot_boundary_reason_name(abi->boundary_reason),
                 (unsigned) abi->nparams, safe_str(abi->ret.c_type),
                 xaot_value_kind_name(abi->ret.rep.kind), rep_name(abi->ret.rep.rep),
@@ -8755,10 +8715,9 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             "stats functions=%u target-plan=%u native=%u tagged=%u coro=%u values=%u "
             "boundaries=%u containers=%u\n",
             bundle->stats.functions_total, bundle->stats.functions_target_plan_abi,
-            bundle->stats.functions_native_abi,
-            bundle->stats.functions_tagged_abi, bundle->stats.functions_coro_abi,
-            bundle->stats.values_total, bundle->stats.boundary_count,
-            bundle->stats.containers_total);
+            bundle->stats.functions_native_abi, bundle->stats.functions_tagged_abi,
+            bundle->stats.functions_coro_abi, bundle->stats.values_total,
+            bundle->stats.boundary_count, bundle->stats.containers_total);
     fprintf(out,
             "value-stats scalar=%u tagged=%u ptr=%u aggregate=%u vector=%u view=%u void=%u "
             "enum-ordinal=%u rep-adapter=%u\n",

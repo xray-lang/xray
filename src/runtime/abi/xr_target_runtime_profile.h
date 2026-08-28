@@ -79,7 +79,8 @@ typedef enum XrTargetCapabilityKind {
  * TargetPlan capability row, never as a fabricated runtime provider. */
 #define XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK                                                 \
     (XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT) |                            \
-     XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY))
+     XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY) |                              \
+     XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE))
 
 static inline bool xr_target_capability_kind_valid(uint32_t capability) {
     return capability == XR_TARGET_CAPABILITY_ALLOCATOR ||

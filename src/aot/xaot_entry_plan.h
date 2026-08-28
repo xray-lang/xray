@@ -34,6 +34,7 @@ enum {
     XAOT_PROVIDER_HOOK_ALLOC = 1u << 7,
     XAOT_PROVIDER_HOOK_FREE = 1u << 8,
     XAOT_PROVIDER_HOOK_PANIC = 1u << 9,
+    XAOT_PROVIDER_HOOK_OUTPUT_WRITE = 1u << 10,
 };
 
 typedef struct XaotTargetCapabilityProvider {

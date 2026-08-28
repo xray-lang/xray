@@ -94,20 +94,18 @@ static void hash_fingerprint(XrSHA256Context *ctx, XrFingerprint fingerprint) {
 
 static void hash_begin(XrSHA256Context *ctx, XrRuntimeContractRecordKind kind) {
     xr_sha256_init(ctx);
-    xr_sha256_update(ctx, xr_runtime_contract_domain,
-                     sizeof(xr_runtime_contract_domain) - 1);
+    xr_sha256_update(ctx, xr_runtime_contract_domain, sizeof(xr_runtime_contract_domain) - 1);
     hash_u8(ctx, (uint8_t) kind);
 }
 
 static bool field_is_zero(const XrRuntimePhysicalFieldAbi *field) {
-    return field->role == 0 && field->offset == 0 && field->width == 0 &&
-           field->alignment == 0 && field->encoding == 0 && field->atomicity == 0 &&
-           field->index_semantics == 0 && field->reserved8 == 0 &&
-           field->reserved32 == 0;
+    return field->role == 0 && field->offset == 0 && field->width == 0 && field->alignment == 0 &&
+           field->encoding == 0 && field->atomicity == 0 && field->index_semantics == 0 &&
+           field->reserved8 == 0 && field->reserved32 == 0;
 }
 
-static XrRuntimeAbiStatus verify_field(const XrRuntimePhysicalFieldAbi *field,
-                                       uint16_t record_size, uint16_t record_alignment) {
+static XrRuntimeAbiStatus verify_field(const XrRuntimePhysicalFieldAbi *field, uint16_t record_size,
+                                       uint16_t record_alignment) {
     if (field->role <= XR_RUNTIME_FIELD_ROLE_INVALID ||
         field->role >= XR_RUNTIME_FIELD_ROLE_COUNT || field->width == 0 ||
         !is_power_of_two_u64(field->alignment) || field->alignment > field->width ||
@@ -151,9 +149,11 @@ static XrRuntimeAbiStatus verify_field(const XrRuntimePhysicalFieldAbi *field,
     return XR_RUNTIME_ABI_OK;
 }
 
-static XrRuntimeAbiStatus verify_field_sequence(
-    const XrRuntimePhysicalFieldAbi *fields, size_t field_count, uint16_t record_size,
-    uint16_t record_alignment, const uint16_t *expected_roles, size_t expected_count) {
+static XrRuntimeAbiStatus verify_field_sequence(const XrRuntimePhysicalFieldAbi *fields,
+                                                size_t field_count, uint16_t record_size,
+                                                uint16_t record_alignment,
+                                                const uint16_t *expected_roles,
+                                                size_t expected_count) {
     if (!fields || !expected_roles || field_count != expected_count || record_size == 0 ||
         !is_power_of_two_u64(record_alignment) || record_size % record_alignment != 0)
         return XR_RUNTIME_ABI_INVALID_SHAPE;
@@ -218,9 +218,8 @@ static XrRuntimeAbiStatus verify_object_kinds(const XrRuntimeObjectKindAbi *kind
 }
 
 static bool flag_entry_is_zero(const XrRuntimeObjectFlagAbiEntry *entry) {
-    return id_is_zero(entry->stable_id) && entry->bit == 0 &&
-           entry->exclusivity_group == 0 && entry->reserved16 == 0 &&
-           entry->reserved32 == 0;
+    return id_is_zero(entry->stable_id) && entry->bit == 0 && entry->exclusivity_group == 0 &&
+           entry->reserved16 == 0 && entry->reserved32 == 0;
 }
 
 static XrRuntimeAbiStatus verify_flag_groups(const XrRuntimeObjectFlagAbi *flags) {
@@ -256,9 +255,9 @@ static XrRuntimeAbiStatus verify_object_flags(const XrRuntimeObjectFlagAbi *flag
     uint64_t observed_mask = 0;
     for (size_t i = 0; i < flags->entry_count; i++) {
         const XrRuntimeObjectFlagAbiEntry *entry = &flags->entries[i];
-        if (id_is_zero(entry->stable_id) || entry->reserved16 != 0 ||
-            entry->reserved32 != 0 || !is_power_of_two_u64(entry->bit) ||
-            (entry->bit & complete_mask) != entry->bit || (observed_mask & entry->bit) != 0)
+        if (id_is_zero(entry->stable_id) || entry->reserved16 != 0 || entry->reserved32 != 0 ||
+            !is_power_of_two_u64(entry->bit) || (entry->bit & complete_mask) != entry->bit ||
+            (observed_mask & entry->bit) != 0)
             return XR_RUNTIME_ABI_INVALID_SHAPE;
         if (i != 0 && id_compare(flags->entries[i - 1].stable_id, entry->stable_id) >= 0)
             return XR_RUNTIME_ABI_INVALID_ORDER;
@@ -304,10 +303,8 @@ static XrRuntimeAbiStatus verify_rc(const XrRuntimeRcAbi *rc) {
 }
 
 static const uint16_t object_header_roles[XR_RUNTIME_OBJECT_HEADER_FIELD_COUNT] = {
-    XR_RUNTIME_FIELD_HEADER_RC,
-    XR_RUNTIME_FIELD_HEADER_OBJECT_KIND,
-    XR_RUNTIME_FIELD_HEADER_FLAGS,
-    XR_RUNTIME_FIELD_HEADER_LAYOUT_ID,
+    XR_RUNTIME_FIELD_HEADER_RC,        XR_RUNTIME_FIELD_HEADER_OBJECT_KIND,
+    XR_RUNTIME_FIELD_HEADER_FLAGS,     XR_RUNTIME_FIELD_HEADER_LAYOUT_ID,
     XR_RUNTIME_FIELD_HEADER_DOMAIN_ID,
 };
 
@@ -336,12 +333,10 @@ static XrRuntimeAbiStatus verify_object_header(const XrRuntimeObjectHeaderAbi *a
     if (rc->width != 4 || rc->encoding != XR_RUNTIME_FIELD_SIGNED_TWOS_COMPLEMENT ||
         rc->atomicity != XR_RUNTIME_FIELD_DOMAIN_CONDITIONAL ||
         rc->index_semantics != XR_RUNTIME_INDEX_NONE ||
-        kind->encoding != XR_RUNTIME_FIELD_UNSIGNED ||
-        flags->encoding != XR_RUNTIME_FIELD_BITSET ||
+        kind->encoding != XR_RUNTIME_FIELD_UNSIGNED || flags->encoding != XR_RUNTIME_FIELD_BITSET ||
         layout->encoding != XR_RUNTIME_FIELD_UNSIGNED ||
         domain->encoding != XR_RUNTIME_FIELD_UNSIGNED ||
-        kind->atomicity != XR_RUNTIME_FIELD_PLAIN ||
-        flags->atomicity != XR_RUNTIME_FIELD_PLAIN ||
+        kind->atomicity != XR_RUNTIME_FIELD_PLAIN || flags->atomicity != XR_RUNTIME_FIELD_PLAIN ||
         layout->atomicity != XR_RUNTIME_FIELD_PLAIN ||
         domain->atomicity != XR_RUNTIME_FIELD_PLAIN ||
         kind->index_semantics != XR_RUNTIME_INDEX_NONE ||
@@ -417,8 +412,8 @@ static void hash_object_header(XrSHA256Context *ctx, const XrRuntimeObjectHeader
     hash_u64(ctx, abi->domain_id.invalid_encoding);
 }
 
-XrRuntimeAbiStatus xr_runtime_object_header_abi_fingerprint(
-    const XrRuntimeObjectHeaderAbi *abi, XrFingerprint *out) {
+XrRuntimeAbiStatus xr_runtime_object_header_abi_fingerprint(const XrRuntimeObjectHeaderAbi *abi,
+                                                            XrFingerprint *out) {
     if (!out)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     XrRuntimeAbiStatus status = verify_object_header(abi);
@@ -467,8 +462,7 @@ static XrRuntimeAbiStatus verify_dynamic_tags(const XrRuntimeDynamicValueAbi *ab
     bool saw_object = false;
     for (size_t i = 0; i < abi->tag_count; i++) {
         const XrRuntimeDynamicTagAbiEntry *tag = &abi->tags[i];
-        if (id_is_zero(tag->stable_id) ||
-            !bytes_are_zero(tag->reserved8, sizeof(tag->reserved8)) ||
+        if (id_is_zero(tag->stable_id) || !bytes_are_zero(tag->reserved8, sizeof(tag->reserved8)) ||
             !value_fits_width(tag->encoding, abi->tag_encoding_width) ||
             tag->encoding == abi->invalid_tag ||
             tag->payload_kind <= XR_RUNTIME_DYN_PAYLOAD_INVALID ||
@@ -484,8 +478,8 @@ static XrRuntimeAbiStatus verify_dynamic_tags(const XrRuntimeDynamicValueAbi *ab
         }
         if (tag->encoding == abi->null_tag) {
             saw_null = true;
-            if (tag->payload_kind != XR_RUNTIME_DYN_PAYLOAD_NONE ||
-                tag->required_flags != 0 || tag->allowed_flags != 0)
+            if (tag->payload_kind != XR_RUNTIME_DYN_PAYLOAD_NONE || tag->required_flags != 0 ||
+                tag->allowed_flags != 0)
                 return XR_RUNTIME_ABI_INVALID_POLICY;
         }
         if (tag->encoding == abi->object_reference_tag) {
@@ -504,8 +498,7 @@ static XrRuntimeAbiStatus verify_dynamic_tags(const XrRuntimeDynamicValueAbi *ab
 }
 
 static XrRuntimeAbiStatus verify_dynamic_value(const XrRuntimeDynamicValueAbi *abi,
-                                               uint16_t pointer_width,
-                                               uint8_t target_endian) {
+                                               uint16_t pointer_width, uint8_t target_endian) {
     if (abi->schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION)
         return XR_RUNTIME_ABI_INVALID_SCHEMA;
     if (abi->target_endian != target_endian ||
@@ -514,25 +507,22 @@ static XrRuntimeAbiStatus verify_dynamic_value(const XrRuntimeDynamicValueAbi *a
         abi->reserved32 != 0 || !bytes_are_zero(abi->reserved8, sizeof(abi->reserved8)) ||
         abi->reserved[0] != 0 || abi->reserved[1] != 0)
         return XR_RUNTIME_ABI_INVALID_POLICY;
-    XrRuntimeAbiStatus status = verify_field_sequence(
-        abi->fields, XR_RUNTIME_DYNAMIC_FIELD_COUNT, abi->size, abi->alignment,
-        dynamic_value_roles, XR_RUNTIME_DYNAMIC_FIELD_COUNT);
+    XrRuntimeAbiStatus status =
+        verify_field_sequence(abi->fields, XR_RUNTIME_DYNAMIC_FIELD_COUNT, abi->size,
+                              abi->alignment, dynamic_value_roles, XR_RUNTIME_DYNAMIC_FIELD_COUNT);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     const XrRuntimePhysicalFieldAbi *tag = &abi->fields[0];
     const XrRuntimePhysicalFieldAbi *flags = &abi->fields[1];
     const XrRuntimePhysicalFieldAbi *payload = &abi->fields[2];
-    if (tag->encoding != XR_RUNTIME_FIELD_UNSIGNED ||
-        flags->encoding != XR_RUNTIME_FIELD_BITSET ||
+    if (tag->encoding != XR_RUNTIME_FIELD_UNSIGNED || flags->encoding != XR_RUNTIME_FIELD_BITSET ||
         payload->encoding != XR_RUNTIME_FIELD_OPAQUE_BITS ||
-        tag->atomicity != XR_RUNTIME_FIELD_PLAIN ||
-        flags->atomicity != XR_RUNTIME_FIELD_PLAIN ||
+        tag->atomicity != XR_RUNTIME_FIELD_PLAIN || flags->atomicity != XR_RUNTIME_FIELD_PLAIN ||
         payload->atomicity != XR_RUNTIME_FIELD_PLAIN ||
         tag->index_semantics != XR_RUNTIME_INDEX_NONE ||
         flags->index_semantics != XR_RUNTIME_INDEX_NONE ||
         payload->index_semantics != XR_RUNTIME_INDEX_NONE ||
-        tag->width != abi->tag_encoding_width ||
-        flags->width != abi->flags_encoding_width ||
+        tag->width != abi->tag_encoding_width || flags->width != abi->flags_encoding_width ||
         payload->width < abi->object_reference_width)
         return XR_RUNTIME_ABI_INVALID_POLICY;
     return verify_dynamic_tags(abi);
@@ -569,10 +559,9 @@ static bool enum_value_is_zero(const XrRuntimeEnumValueAbi *entry) {
 }
 
 static bool namespace_is_zero(const XrRuntimeEnumNamespaceAbi *space) {
-    if (space->invalid_encoding != 0 || space->valid_mask != 0 ||
-        space->reserved_zero_mask != 0 || space->role != 0 || space->entry_count != 0 ||
-        space->kind != 0 || space->encoding_width != 0 || space->reserved16 != 0 ||
-        space->reserved32 != 0)
+    if (space->invalid_encoding != 0 || space->valid_mask != 0 || space->reserved_zero_mask != 0 ||
+        space->role != 0 || space->entry_count != 0 || space->kind != 0 ||
+        space->encoding_width != 0 || space->reserved16 != 0 || space->reserved32 != 0)
         return false;
     for (size_t i = 0; i < XR_RUNTIME_ABI_MAX_ENUM_VALUES; i++) {
         if (!enum_value_is_zero(&space->entries[i]))
@@ -581,8 +570,7 @@ static bool namespace_is_zero(const XrRuntimeEnumNamespaceAbi *space) {
     return true;
 }
 
-static XrRuntimeAbiStatus verify_namespace_entries(
-    const XrRuntimeEnumNamespaceAbi *space) {
+static XrRuntimeAbiStatus verify_namespace_entries(const XrRuntimeEnumNamespaceAbi *space) {
     uint64_t observed_mask = 0;
     for (size_t i = 0; i < space->entry_count; i++) {
         const XrRuntimeEnumValueAbi *entry = &space->entries[i];
@@ -597,8 +585,7 @@ static XrRuntimeAbiStatus verify_namespace_entries(
                 return XR_RUNTIME_ABI_INVALID_ORDER;
         }
         if (space->kind == XR_RUNTIME_NAMESPACE_BITMASK) {
-            if (!is_power_of_two_u64(entry->encoding) ||
-                (observed_mask & entry->encoding) != 0)
+            if (!is_power_of_two_u64(entry->encoding) || (observed_mask & entry->encoding) != 0)
                 return XR_RUNTIME_ABI_INVALID_MASK;
             observed_mask |= entry->encoding;
         }
@@ -625,8 +612,7 @@ static XrRuntimeAbiStatus verify_namespace(const XrRuntimeEnumNamespaceAbi *spac
     uint64_t complete_mask = width_mask(space->encoding_width);
     switch ((XrRuntimeEnumNamespaceKind) space->kind) {
         case XR_RUNTIME_NAMESPACE_ENUM:
-            if (space->entry_count == 0 || space->valid_mask != 0 ||
-                space->reserved_zero_mask != 0)
+            if (space->entry_count == 0 || space->valid_mask != 0 || space->reserved_zero_mask != 0)
                 return XR_RUNTIME_ABI_INVALID_MASK;
             break;
         case XR_RUNTIME_NAMESPACE_BITMASK:
@@ -636,8 +622,7 @@ static XrRuntimeAbiStatus verify_namespace(const XrRuntimeEnumNamespaceAbi *spac
                 return XR_RUNTIME_ABI_INVALID_MASK;
             break;
         case XR_RUNTIME_NAMESPACE_SENTINEL:
-            if (space->entry_count != 0 || space->valid_mask != 0 ||
-                space->reserved_zero_mask != 0)
+            if (space->entry_count != 0 || space->valid_mask != 0 || space->reserved_zero_mask != 0)
                 return XR_RUNTIME_ABI_INVALID_MASK;
             break;
         default:
@@ -646,8 +631,7 @@ static XrRuntimeAbiStatus verify_namespace(const XrRuntimeEnumNamespaceAbi *spac
     return verify_namespace_entries(space);
 }
 
-static void hash_namespace(XrSHA256Context *ctx,
-                           const XrRuntimeEnumNamespaceAbi *space) {
+static void hash_namespace(XrSHA256Context *ctx, const XrRuntimeEnumNamespaceAbi *space) {
     hash_u16(ctx, space->role);
     hash_u8(ctx, space->kind);
     hash_u8(ctx, space->encoding_width);
@@ -791,10 +775,11 @@ static XrRuntimeAbiStatus verify_record_field_policies(const XrRuntimeRecordAbi 
     return XR_RUNTIME_ABI_OK;
 }
 
-static XrRuntimeAbiStatus verify_record(
-    const XrRuntimeRecordAbi *record, uint16_t expected_kind,
-    const uint16_t *expected_fields, size_t expected_field_count,
-    const uint16_t *expected_namespaces, size_t expected_namespace_count) {
+static XrRuntimeAbiStatus verify_record(const XrRuntimeRecordAbi *record, uint16_t expected_kind,
+                                        const uint16_t *expected_fields,
+                                        size_t expected_field_count,
+                                        const uint16_t *expected_namespaces,
+                                        size_t expected_namespace_count) {
     if (record->field_count > XR_RUNTIME_ABI_MAX_RECORD_FIELDS ||
         record->namespace_count > XR_RUNTIME_ABI_MAX_ENUM_NAMESPACES)
         return XR_RUNTIME_ABI_BUDGET_EXCEEDED;
@@ -804,9 +789,9 @@ static XrRuntimeAbiStatus verify_record(
         record->namespace_count != expected_namespace_count || record->reserved16 != 0 ||
         record->reserved32 != 0 || record->reserved[0] != 0 || record->reserved[1] != 0)
         return XR_RUNTIME_ABI_INVALID_SHAPE;
-    XrRuntimeAbiStatus status = verify_field_sequence(
-        record->fields, record->field_count, record->size, record->alignment,
-        expected_fields, expected_field_count);
+    XrRuntimeAbiStatus status =
+        verify_field_sequence(record->fields, record->field_count, record->size, record->alignment,
+                              expected_fields, expected_field_count);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     status = verify_record_field_policies(record);
@@ -821,8 +806,7 @@ static XrRuntimeAbiStatus verify_record(
         if (!field || field->width != record->namespaces[i].encoding_width)
             return XR_RUNTIME_ABI_INVALID_SHAPE;
     }
-    return record_trailing_fields_zero(record) ? XR_RUNTIME_ABI_OK
-                                                : XR_RUNTIME_ABI_INVALID_POLICY;
+    return record_trailing_fields_zero(record) ? XR_RUNTIME_ABI_OK : XR_RUNTIME_ABI_INVALID_POLICY;
 }
 
 static void hash_record(XrSHA256Context *ctx, const XrRuntimeRecordAbi *record) {
@@ -849,18 +833,12 @@ static const uint16_t domain_namespaces[] = {
     XR_RUNTIME_NAMESPACE_MATERIALIZATION,
 };
 static const uint16_t extent_fields[] = {
-    XR_RUNTIME_FIELD_EXTENT_SCHEMA,
-    XR_RUNTIME_FIELD_EXTENT_ID,
-    XR_RUNTIME_FIELD_EXTENT_LAYOUT_ID,
-    XR_RUNTIME_FIELD_EXTENT_GROUP_ID,
-    XR_RUNTIME_FIELD_EXTENT_PROVIDER_ID,
-    XR_RUNTIME_FIELD_EXTENT_TAIL_OFFSET,
-    XR_RUNTIME_FIELD_EXTENT_STRIDE,
-    XR_RUNTIME_FIELD_EXTENT_OPERAND_INDEX,
-    XR_RUNTIME_FIELD_EXTENT_PART_INDEX,
-    XR_RUNTIME_FIELD_EXTENT_PART_COUNT,
-    XR_RUNTIME_FIELD_EXTENT_KIND,
-    XR_RUNTIME_FIELD_EXTENT_FINGERPRINT,
+    XR_RUNTIME_FIELD_EXTENT_SCHEMA,      XR_RUNTIME_FIELD_EXTENT_ID,
+    XR_RUNTIME_FIELD_EXTENT_LAYOUT_ID,   XR_RUNTIME_FIELD_EXTENT_GROUP_ID,
+    XR_RUNTIME_FIELD_EXTENT_PROVIDER_ID, XR_RUNTIME_FIELD_EXTENT_TAIL_OFFSET,
+    XR_RUNTIME_FIELD_EXTENT_STRIDE,      XR_RUNTIME_FIELD_EXTENT_OPERAND_INDEX,
+    XR_RUNTIME_FIELD_EXTENT_PART_INDEX,  XR_RUNTIME_FIELD_EXTENT_PART_COUNT,
+    XR_RUNTIME_FIELD_EXTENT_KIND,        XR_RUNTIME_FIELD_EXTENT_FINGERPRINT,
 };
 static const uint16_t extent_namespaces[] = {
     XR_RUNTIME_NAMESPACE_EXTENT_KIND,
@@ -890,12 +868,9 @@ static const uint16_t limits_fields[] = {
     XR_RUNTIME_FIELD_LIMIT_MAX_ALIGNMENT,
 };
 static const uint16_t evaluated_fields[] = {
-    XR_RUNTIME_FIELD_EVALUATED_EXTENT_ID,
-    XR_RUNTIME_FIELD_EVALUATED_EXTENT_FINGERPRINT,
-    XR_RUNTIME_FIELD_EVALUATED_BYTES,
-    XR_RUNTIME_FIELD_EVALUATED_OPERAND,
-    XR_RUNTIME_FIELD_EVALUATED_ALIGNMENT,
-    XR_RUNTIME_FIELD_EVALUATED_PART_INDEX,
+    XR_RUNTIME_FIELD_EVALUATED_EXTENT_ID,  XR_RUNTIME_FIELD_EVALUATED_EXTENT_FINGERPRINT,
+    XR_RUNTIME_FIELD_EVALUATED_BYTES,      XR_RUNTIME_FIELD_EVALUATED_OPERAND,
+    XR_RUNTIME_FIELD_EVALUATED_ALIGNMENT,  XR_RUNTIME_FIELD_EVALUATED_PART_INDEX,
     XR_RUNTIME_FIELD_EVALUATED_PART_COUNT,
 };
 static const uint16_t group_fields[] = {
@@ -905,43 +880,39 @@ static const uint16_t group_fields[] = {
 };
 
 static XrRuntimeAbiStatus verify_runtime_records(const XrRuntimeAbiContract *abi) {
-    XrRuntimeAbiStatus status = verify_record(
-        &abi->domain_identity, XR_RUNTIME_RECORD_DOMAIN_IDENTITY, domain_fields,
-        sizeof(domain_fields) / sizeof(domain_fields[0]), domain_namespaces,
-        sizeof(domain_namespaces) / sizeof(domain_namespaces[0]));
+    XrRuntimeAbiStatus status =
+        verify_record(&abi->domain_identity, XR_RUNTIME_RECORD_DOMAIN_IDENTITY, domain_fields,
+                      sizeof(domain_fields) / sizeof(domain_fields[0]), domain_namespaces,
+                      sizeof(domain_namespaces) / sizeof(domain_namespaces[0]));
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    status = verify_record(&abi->extent_descriptor, XR_RUNTIME_RECORD_EXTENT_DESCRIPTOR,
-                           extent_fields, sizeof(extent_fields) / sizeof(extent_fields[0]),
-                           extent_namespaces,
-                           sizeof(extent_namespaces) / sizeof(extent_namespaces[0]));
+    status =
+        verify_record(&abi->extent_descriptor, XR_RUNTIME_RECORD_EXTENT_DESCRIPTOR, extent_fields,
+                      sizeof(extent_fields) / sizeof(extent_fields[0]), extent_namespaces,
+                      sizeof(extent_namespaces) / sizeof(extent_namespaces[0]));
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    status = verify_record(&abi->layout_descriptor, XR_RUNTIME_RECORD_LAYOUT_DESCRIPTOR,
-                           layout_fields, sizeof(layout_fields) / sizeof(layout_fields[0]),
-                           layout_namespaces,
-                           sizeof(layout_namespaces) / sizeof(layout_namespaces[0]));
+    status =
+        verify_record(&abi->layout_descriptor, XR_RUNTIME_RECORD_LAYOUT_DESCRIPTOR, layout_fields,
+                      sizeof(layout_fields) / sizeof(layout_fields[0]), layout_namespaces,
+                      sizeof(layout_namespaces) / sizeof(layout_namespaces[0]));
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    status = verify_record(&abi->extent_limits, XR_RUNTIME_RECORD_EXTENT_LIMITS,
-                           limits_fields, sizeof(limits_fields) / sizeof(limits_fields[0]),
-                           NULL, 0);
+    status = verify_record(&abi->extent_limits, XR_RUNTIME_RECORD_EXTENT_LIMITS, limits_fields,
+                           sizeof(limits_fields) / sizeof(limits_fields[0]), NULL, 0);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    status = verify_record(&abi->evaluated_extent, XR_RUNTIME_RECORD_EVALUATED_EXTENT,
-                           evaluated_fields,
-                           sizeof(evaluated_fields) / sizeof(evaluated_fields[0]), NULL, 0);
+    status =
+        verify_record(&abi->evaluated_extent, XR_RUNTIME_RECORD_EVALUATED_EXTENT, evaluated_fields,
+                      sizeof(evaluated_fields) / sizeof(evaluated_fields[0]), NULL, 0);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    return verify_record(&abi->extent_group_summary,
-                         XR_RUNTIME_RECORD_EXTENT_GROUP_SUMMARY, group_fields,
-                         sizeof(group_fields) / sizeof(group_fields[0]), NULL, 0);
+    return verify_record(&abi->extent_group_summary, XR_RUNTIME_RECORD_EXTENT_GROUP_SUMMARY,
+                         group_fields, sizeof(group_fields) / sizeof(group_fields[0]), NULL, 0);
 }
 
-static XrRuntimeAbiStatus verify_status_namespace(
-    const XrRuntimeEnumNamespaceAbi *space) {
-    XrRuntimeAbiStatus status =
-        verify_namespace(space, XR_RUNTIME_NAMESPACE_STATUS);
+static XrRuntimeAbiStatus verify_status_namespace(const XrRuntimeEnumNamespaceAbi *space) {
+    XrRuntimeAbiStatus status = verify_namespace(space, XR_RUNTIME_NAMESPACE_STATUS);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     if (space->kind != XR_RUNTIME_NAMESPACE_ENUM ||
@@ -961,20 +932,19 @@ static XrRuntimeAbiStatus verify_status_namespace(
     return XR_RUNTIME_ABI_OK;
 }
 
-static XrRuntimeAbiStatus verify_extent_provider_callback(
-    const XrRuntimeExtentProviderCallbackAbi *callback, uint16_t pointer_width) {
+static XrRuntimeAbiStatus
+verify_extent_provider_callback(const XrRuntimeExtentProviderCallbackAbi *callback,
+                                uint16_t pointer_width) {
     if (callback->schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION)
         return XR_RUNTIME_ABI_INVALID_SCHEMA;
-    if (id_is_zero(callback->contract_id) ||
-        callback->provider_id_width != XR_STABLE_ID_BYTES ||
+    if (id_is_zero(callback->contract_id) || callback->provider_id_width != XR_STABLE_ID_BYTES ||
         callback->operand_element_width != sizeof(uint64_t) ||
         callback->operand_count_width != pointer_width ||
         callback->result_width != sizeof(uint64_t))
         return XR_RUNTIME_ABI_INVALID_SHAPE;
     if (callback->error_normalization != XR_RUNTIME_PROVIDER_ERROR_NON_OK_TO_REJECTED ||
-        callback->reserved8 != 0 || callback->reserved16 != 0 ||
-        callback->reserved32 != 0 || callback->reserved[0] != 0 ||
-        callback->reserved[1] != 0)
+        callback->reserved8 != 0 || callback->reserved16 != 0 || callback->reserved32 != 0 ||
+        callback->reserved[0] != 0 || callback->reserved[1] != 0)
         return XR_RUNTIME_ABI_INVALID_POLICY;
     return verify_status_namespace(&callback->status_namespace);
 }
@@ -995,9 +965,8 @@ static XrRuntimeAbiStatus verify_runtime_contract(const XrRuntimeAbiContract *ab
         abi->checked_arithmetic_policy != XR_RUNTIME_CHECKED_ARITHMETIC_REJECT_OVERFLOW ||
         abi->alignment_policy != XR_RUNTIME_ALIGNMENT_POWER_OF_TWO_REJECT_OVERFLOW ||
         abi->unknown_enum_policy != XR_RUNTIME_UNKNOWN_ENUM_REJECT ||
-        abi->reserved_zero_policy != XR_RUNTIME_RESERVED_ZERO_REJECT ||
-        abi->reserved16 != 0 || abi->reserved32 != 0 || abi->reserved[0] != 0 ||
-        abi->reserved[1] != 0)
+        abi->reserved_zero_policy != XR_RUNTIME_RESERVED_ZERO_REJECT || abi->reserved16 != 0 ||
+        abi->reserved32 != 0 || abi->reserved[0] != 0 || abi->reserved[1] != 0)
         return XR_RUNTIME_ABI_INVALID_POLICY;
 
     XrRuntimeAbiStatus status =
@@ -1006,15 +975,13 @@ static XrRuntimeAbiStatus verify_runtime_contract(const XrRuntimeAbiContract *ab
         return status;
     if (abi->object_header.target_endian != abi->target_endian)
         return XR_RUNTIME_ABI_INVALID_POLICY;
-    status = verify_dynamic_value(&abi->dynamic_value, abi->pointer_width,
-                                  abi->target_endian);
+    status = verify_dynamic_value(&abi->dynamic_value, abi->pointer_width, abi->target_endian);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     status = verify_runtime_records(abi);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    return verify_extent_provider_callback(&abi->extent_provider_callback,
-                                           abi->pointer_width);
+    return verify_extent_provider_callback(&abi->extent_provider_callback, abi->pointer_width);
 }
 
 static void hash_runtime_contract(XrSHA256Context *ctx, const XrRuntimeAbiContract *abi,
@@ -1048,8 +1015,8 @@ static void hash_runtime_contract(XrSHA256Context *ctx, const XrRuntimeAbiContra
     hash_namespace(ctx, &callback->status_namespace);
 }
 
-XrRuntimeAbiStatus xr_runtime_abi_contract_fingerprint(
-    const XrRuntimeAbiContract *abi, XrFingerprint *out) {
+XrRuntimeAbiStatus xr_runtime_abi_contract_fingerprint(const XrRuntimeAbiContract *abi,
+                                                       XrFingerprint *out) {
     if (!out)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     XrFingerprint header_fingerprint;
@@ -1068,17 +1035,14 @@ XrRuntimeAbiStatus xr_runtime_abi_contract_fingerprint(
 static bool provider_call_slot_is_zero(const XrTargetProviderCallSlotAbi *slot) {
     return slot->value_kind == 0 && slot->width == 0 && slot->alignment == 0 &&
            slot->ownership == 0 && slot->flags == 0 &&
-           bytes_are_zero(slot->reserved8, sizeof(slot->reserved8)) &&
-           slot->reserved64 == 0;
+           bytes_are_zero(slot->reserved8, sizeof(slot->reserved8)) && slot->reserved64 == 0;
 }
 
 static bool provider_call_abi_is_zero(const XrTargetProviderCallAbiContract *abi) {
-    if (abi->schema_version != 0 || abi->parameter_count != 0 ||
-        abi->calling_convention != 0 || abi->target_endian != 0 ||
-        abi->pointer_width != 0 || abi->pointer_alignment != 0 || abi->variadic != 0 ||
-        abi->reserved8 != 0 || abi->reserved32 != 0 ||
-        !provider_call_slot_is_zero(&abi->result) || abi->reserved[0] != 0 ||
-        abi->reserved[1] != 0)
+    if (abi->schema_version != 0 || abi->parameter_count != 0 || abi->calling_convention != 0 ||
+        abi->target_endian != 0 || abi->pointer_width != 0 || abi->pointer_alignment != 0 ||
+        abi->variadic != 0 || abi->reserved8 != 0 || abi->reserved32 != 0 ||
+        !provider_call_slot_is_zero(&abi->result) || abi->reserved[0] != 0 || abi->reserved[1] != 0)
         return false;
     for (size_t i = 0; i < XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS; i++) {
         if (!provider_call_slot_is_zero(&abi->parameters[i]))
@@ -1087,12 +1051,11 @@ static bool provider_call_abi_is_zero(const XrTargetProviderCallAbiContract *abi
     return true;
 }
 
-static XrRuntimeAbiStatus verify_provider_call_slot(
-    const XrTargetProviderCallAbiContract *abi,
-    const XrTargetProviderCallSlotAbi *slot, bool is_result,
-    uint32_t *derived_lifetime_flags) {
-    if (!bytes_are_zero(slot->reserved8, sizeof(slot->reserved8)) ||
-        slot->reserved64 != 0)
+static XrRuntimeAbiStatus verify_provider_call_slot(const XrTargetProviderCallAbiContract *abi,
+                                                    const XrTargetProviderCallSlotAbi *slot,
+                                                    bool is_result,
+                                                    uint32_t *derived_lifetime_flags) {
+    if (!bytes_are_zero(slot->reserved8, sizeof(slot->reserved8)) || slot->reserved64 != 0)
         return XR_RUNTIME_ABI_INVALID_POLICY;
     if ((slot->flags & ~XR_TARGET_PROVIDER_CALL_SLOT_FLAGS_ALL) != 0)
         return XR_RUNTIME_ABI_INVALID_MASK;
@@ -1100,38 +1063,32 @@ static XrRuntimeAbiStatus verify_provider_call_slot(
     switch ((XrTargetProviderCallValueKind) slot->value_kind) {
         case XR_TARGET_PROVIDER_CALL_VALUE_VOID:
             if (!is_result || slot->width != 0 || slot->alignment != 0 ||
-                slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE ||
-                slot->flags != 0)
+                slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE || slot->flags != 0)
                 return XR_RUNTIME_ABI_INVALID_SHAPE;
             return XR_RUNTIME_ABI_OK;
         case XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER:
         case XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER:
         case XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT:
-            if (!scalar_width_valid(slot->width) ||
-                !is_power_of_two_u64(slot->alignment) ||
+            if (!scalar_width_valid(slot->width) || !is_power_of_two_u64(slot->alignment) ||
                 slot->alignment > slot->width ||
-                slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE ||
-                slot->flags != 0 ||
-                (slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT &&
-                 slot->width != 4 && slot->width != 8))
+                slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE || slot->flags != 0 ||
+                (slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT && slot->width != 4 &&
+                 slot->width != 8))
                 return XR_RUNTIME_ABI_INVALID_SHAPE;
             return XR_RUNTIME_ABI_OK;
         case XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS:
         case XR_TARGET_PROVIDER_CALL_VALUE_CODE_ADDRESS:
-            if (slot->width != abi->pointer_width ||
-                slot->alignment != abi->pointer_alignment ||
+            if (slot->width != abi->pointer_width || slot->alignment != abi->pointer_alignment ||
                 (slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_CODE_ADDRESS &&
                  (slot->flags & XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE) != 0))
                 return XR_RUNTIME_ABI_INVALID_SHAPE;
             if (is_result) {
                 if (slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE &&
                     !(slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS &&
-                      slot->ownership ==
-                          XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED))
+                      slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED))
                     return XR_RUNTIME_ABI_INVALID_SHAPE;
                 if (slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED)
-                    *derived_lifetime_flags |=
-                        XR_TARGET_PROVIDER_LIFETIME_RETURNS_OWNED;
+                    *derived_lifetime_flags |= XR_TARGET_PROVIDER_LIFETIME_RETURNS_OWNED;
             } else {
                 if (slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE &&
                     slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED &&
@@ -1141,8 +1098,7 @@ static XrRuntimeAbiStatus verify_provider_call_slot(
                 if (slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED)
                     *derived_lifetime_flags |= XR_TARGET_PROVIDER_LIFETIME_BORROWS;
                 if (slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED)
-                    *derived_lifetime_flags |=
-                        XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED;
+                    *derived_lifetime_flags |= XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED;
                 if (slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_CODE_ADDRESS)
                     *derived_lifetime_flags |= XR_TARGET_PROVIDER_LIFETIME_CALLBACK;
             }
@@ -1152,8 +1108,8 @@ static XrRuntimeAbiStatus verify_provider_call_slot(
     }
 }
 
-static XrRuntimeAbiStatus verify_provider_call_abi(
-    const XrTargetProviderCallAbiContract *abi, uint32_t *derived_lifetime_flags) {
+static XrRuntimeAbiStatus verify_provider_call_abi(const XrTargetProviderCallAbiContract *abi,
+                                                   uint32_t *derived_lifetime_flags) {
     if (!abi)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     if (abi->schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION)
@@ -1172,18 +1128,15 @@ static XrRuntimeAbiStatus verify_provider_call_abi(
         return XR_RUNTIME_ABI_INVALID_POLICY;
 
     uint32_t lifetime_flags = 0;
-    XrRuntimeAbiStatus status =
-        verify_provider_call_slot(abi, &abi->result, true, &lifetime_flags);
+    XrRuntimeAbiStatus status = verify_provider_call_slot(abi, &abi->result, true, &lifetime_flags);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     for (size_t i = 0; i < abi->parameter_count; i++) {
-        status = verify_provider_call_slot(abi, &abi->parameters[i], false,
-                                           &lifetime_flags);
+        status = verify_provider_call_slot(abi, &abi->parameters[i], false, &lifetime_flags);
         if (status != XR_RUNTIME_ABI_OK)
             return status;
     }
-    for (size_t i = abi->parameter_count;
-         i < XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS; i++) {
+    for (size_t i = abi->parameter_count; i < XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS; i++) {
         if (!provider_call_slot_is_zero(&abi->parameters[i]))
             return XR_RUNTIME_ABI_INVALID_POLICY;
     }
@@ -1192,8 +1145,7 @@ static XrRuntimeAbiStatus verify_provider_call_abi(
     return XR_RUNTIME_ABI_OK;
 }
 
-static void hash_provider_call_slot(XrSHA256Context *ctx,
-                                    const XrTargetProviderCallSlotAbi *slot) {
+static void hash_provider_call_slot(XrSHA256Context *ctx, const XrTargetProviderCallSlotAbi *slot) {
     hash_u8(ctx, slot->value_kind);
     hash_u8(ctx, slot->width);
     hash_u8(ctx, slot->alignment);
@@ -1201,8 +1153,8 @@ static void hash_provider_call_slot(XrSHA256Context *ctx,
     hash_u8(ctx, slot->flags);
 }
 
-static void hash_provider_call_abi(
-    XrSHA256Context *ctx, const XrTargetProviderCallAbiContract *abi) {
+static void hash_provider_call_abi(XrSHA256Context *ctx,
+                                   const XrTargetProviderCallAbiContract *abi) {
     hash_u32(ctx, abi->schema_version);
     hash_u8(ctx, abi->calling_convention);
     hash_u8(ctx, abi->target_endian);
@@ -1215,8 +1167,9 @@ static void hash_provider_call_abi(
         hash_provider_call_slot(ctx, &abi->parameters[i]);
 }
 
-XrRuntimeAbiStatus xr_target_provider_call_abi_fingerprint(
-    const XrTargetProviderCallAbiContract *abi, XrFingerprint *out) {
+XrRuntimeAbiStatus
+xr_target_provider_call_abi_fingerprint(const XrTargetProviderCallAbiContract *abi,
+                                        XrFingerprint *out) {
     if (!out)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     XrRuntimeAbiStatus status = verify_provider_call_abi(abi, NULL);
@@ -1231,18 +1184,16 @@ XrRuntimeAbiStatus xr_target_provider_call_abi_fingerprint(
     return XR_RUNTIME_ABI_OK;
 }
 
-static bool provider_operation_is_zero(
-    const XrTargetProviderOperationContract *operation) {
-    return id_is_zero(operation->stable_id) &&
-           provider_call_abi_is_zero(&operation->call_abi) &&
+static bool provider_operation_is_zero(const XrTargetProviderOperationContract *operation) {
+    return id_is_zero(operation->stable_id) && provider_call_abi_is_zero(&operation->call_abi) &&
            operation->effect_flags == 0 && operation->lifetime_flags == 0 &&
            operation->failure_flags == 0 && operation->reserved32 == 0 &&
            operation->reserved64 == 0;
 }
 
-static XrRuntimeAbiStatus verify_provider_operations(
-    const XrTargetProviderContract *provider, uint32_t *out_effects,
-    uint32_t *out_failures) {
+static XrRuntimeAbiStatus verify_provider_operations(const XrTargetProviderContract *provider,
+                                                     uint32_t *out_effects,
+                                                     uint32_t *out_failures) {
     if (provider->operation_count > XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS)
         return XR_RUNTIME_ABI_BUDGET_EXCEEDED;
     if (provider->operation_count == 0)
@@ -1260,17 +1211,15 @@ static XrRuntimeAbiStatus verify_provider_operations(
             (operation->effect_flags & ~XR_TARGET_PROVIDER_EFFECT_FLAGS_ALL) != 0 ||
             (operation->lifetime_flags & ~XR_TARGET_PROVIDER_LIFETIME_FLAGS_ALL) != 0 ||
             (operation->failure_flags & ~XR_TARGET_PROVIDER_FAILURE_FLAGS_ALL) != 0 ||
-            operation->lifetime_flags != call_lifetime_flags ||
-            operation->reserved32 != 0 || operation->reserved64 != 0)
+            operation->lifetime_flags != call_lifetime_flags || operation->reserved32 != 0 ||
+            operation->reserved64 != 0)
             return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
-        if (i != 0 && id_compare(provider->operations[i - 1].stable_id,
-                                 operation->stable_id) >= 0)
+        if (i != 0 && id_compare(provider->operations[i - 1].stable_id, operation->stable_id) >= 0)
             return XR_RUNTIME_ABI_INVALID_ORDER;
         effects |= operation->effect_flags;
         failures |= operation->failure_flags;
     }
-    for (size_t i = provider->operation_count;
-         i < XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS; i++) {
+    for (size_t i = provider->operation_count; i < XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS; i++) {
         if (!provider_operation_is_zero(&provider->operations[i]))
             return XR_RUNTIME_ABI_INVALID_POLICY;
     }
@@ -1280,15 +1229,14 @@ static XrRuntimeAbiStatus verify_provider_operations(
 }
 
 static bool provider_available_for_profile(const XrTargetProviderContract *provider) {
-    uint32_t required_flag =
-        provider->runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED
-            ? XR_TARGET_PROVIDER_AVAILABLE_HOSTED
-            : XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING;
+    uint32_t required_flag = provider->runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED
+                                 ? XR_TARGET_PROVIDER_AVAILABLE_HOSTED
+                                 : XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING;
     return (provider->flags & required_flag) != 0;
 }
 
-static XrRuntimeAbiStatus verify_provider_kind_facts(
-    const XrTargetProviderContract *provider, uint32_t effects, uint32_t failures) {
+static XrRuntimeAbiStatus verify_provider_kind_facts(const XrTargetProviderContract *provider,
+                                                     uint32_t effects, uint32_t failures) {
     bool allocator_booleans_valid = provider->allocator_sized_free <= 1 &&
                                     provider->allocator_zeroed_allocation <= 1 &&
                                     provider->allocator_thread_safe <= 1;
@@ -1328,8 +1276,8 @@ static XrRuntimeAbiStatus verify_provider_kind_facts(
     return XR_RUNTIME_ABI_OK;
 }
 
-static XrRuntimeAbiStatus verify_provider(
-    const XrTargetProviderContract *provider, uint8_t expected_profile) {
+static XrRuntimeAbiStatus verify_provider(const XrTargetProviderContract *provider,
+                                          uint8_t expected_profile) {
     if (provider->schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION ||
         provider->abi_schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION)
         return XR_RUNTIME_ABI_INVALID_SCHEMA;
@@ -1339,13 +1287,11 @@ static XrRuntimeAbiStatus verify_provider(
         (provider->flags & ~XR_TARGET_PROVIDER_FLAGS_ALL) != 0 ||
         !provider_available_for_profile(provider))
         return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
-    if (provider->reserved32 != 0 || provider->reserved[0] != 0 ||
-        provider->reserved[1] != 0)
+    if (provider->reserved32 != 0 || provider->reserved[0] != 0 || provider->reserved[1] != 0)
         return XR_RUNTIME_ABI_INVALID_POLICY;
     uint32_t effects = 0;
     uint32_t failures = 0;
-    XrRuntimeAbiStatus status =
-        verify_provider_operations(provider, &effects, &failures);
+    XrRuntimeAbiStatus status = verify_provider_operations(provider, &effects, &failures);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     return verify_provider_kind_facts(provider, effects, failures);
@@ -1371,75 +1317,71 @@ static bool provider_operation_id_from_key(const char *key, XrStableId *out) {
     return true;
 }
 
-static bool provider_call_slot_exact(const XrTargetProviderCallSlotAbi *slot,
-                                     uint8_t value_kind, uint8_t width,
-                                     uint8_t alignment, uint8_t ownership,
+static bool provider_call_slot_exact(const XrTargetProviderCallSlotAbi *slot, uint8_t value_kind,
+                                     uint8_t width, uint8_t alignment, uint8_t ownership,
                                      uint8_t flags) {
     return slot && slot->value_kind == value_kind && slot->width == width &&
-           slot->alignment == alignment && slot->ownership == ownership &&
-           slot->flags == flags && bytes_are_zero(slot->reserved8,
-                                                  sizeof(slot->reserved8)) &&
-           slot->reserved64 == 0;
+           slot->alignment == alignment && slot->ownership == ownership && slot->flags == flags &&
+           bytes_are_zero(slot->reserved8, sizeof(slot->reserved8)) && slot->reserved64 == 0;
 }
 
 /* The assertion report capability is present only when the canonical IO
  * operation identity and its complete call ABI agree.  An unrelated IO
  * operation, a renamed operation, or a call-shape mutation cannot satisfy the
  * plan requirement. */
-static bool provider_has_assertion_report(
-    const XrTargetProviderContract *provider) {
-    if (!provider || provider->provider_kind != XR_TARGET_PROVIDER_IO)
+static bool provider_has_io_byte_sink(const XrTargetProviderContract *provider,
+                                      const char *operation_key) {
+    if (!provider || provider->provider_kind != XR_TARGET_PROVIDER_IO || !operation_key)
         return false;
     XrStableId expected = {{0}};
-    if (!provider_operation_id_from_key(
-            "xray.runtime.provider-operation.v1/io/assertion-report",
-            &expected))
+    if (!provider_operation_id_from_key(operation_key, &expected))
         return false;
     for (uint16_t i = 0; i < provider->operation_count; i++) {
-        const XrTargetProviderOperationContract *operation =
-            &provider->operations[i];
+        const XrTargetProviderOperationContract *operation = &provider->operations[i];
         const XrTargetProviderCallAbiContract *abi = &operation->call_abi;
         if (id_compare(operation->stable_id, expected) != 0)
             continue;
         if (operation->effect_flags != XR_TARGET_PROVIDER_EFFECT_IO ||
             operation->lifetime_flags != XR_TARGET_PROVIDER_LIFETIME_BORROWS ||
-            operation->failure_flags !=
-                XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS ||
-            abi->schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION ||
-            abi->parameter_count != 3 ||
-            abi->calling_convention !=
-                XR_TARGET_PROVIDER_CALLING_CONVENTION_C ||
+            operation->failure_flags != XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS ||
+            abi->schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION || abi->parameter_count != 3 ||
+            abi->calling_convention != XR_TARGET_PROVIDER_CALLING_CONVENTION_C ||
             abi->variadic != 0 ||
+            !provider_call_slot_exact(&abi->result, XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER,
+                                      1, 1, XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0) ||
             !provider_call_slot_exact(
-                &abi->result,
-                XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 1, 1,
-                XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0) ||
-            !provider_call_slot_exact(
-                &abi->parameters[0],
-                XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS,
-                abi->pointer_width, abi->pointer_alignment,
-                XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                &abi->parameters[0], XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, abi->pointer_width,
+                abi->pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
                 XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE) ||
             !provider_call_slot_exact(
-                &abi->parameters[1],
-                XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS,
-                abi->pointer_width, abi->pointer_alignment,
-                XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                &abi->parameters[1], XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, abi->pointer_width,
+                abi->pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
                 XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE) ||
-            !provider_call_slot_exact(
-                &abi->parameters[2],
-                XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER,
-                abi->pointer_width, abi->pointer_alignment,
-                XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0))
+            !provider_call_slot_exact(&abi->parameters[2],
+                                      XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER,
+                                      abi->pointer_width, abi->pointer_alignment,
+                                      XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0))
             return false;
         return true;
     }
     return false;
 }
 
-static XrRuntimeAbiStatus verify_provider_set(
-    const XrTargetProviderContract *providers, size_t provider_count,
-    uint64_t *derived_mask) {
+/* Reporting an assertion failure and writing ordinary program output share a
+ * byte-sink shape but are distinct identities: a provider offering one has not
+ * offered the other. */
+static bool provider_has_assertion_report(const XrTargetProviderContract *provider) {
+    return provider_has_io_byte_sink(provider,
+                                     "xray.runtime.provider-operation.v1/io/assertion-report");
+}
+
+static bool provider_has_output_write(const XrTargetProviderContract *provider) {
+    return provider_has_io_byte_sink(provider,
+                                     "xray.runtime.provider-operation.v1/io/output-write");
+}
+
+static XrRuntimeAbiStatus verify_provider_set(const XrTargetProviderContract *providers,
+                                              size_t provider_count, uint64_t *derived_mask) {
     if (!providers)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     if (provider_count > XR_RUNTIME_ABI_MAX_PROVIDERS)
@@ -1465,23 +1407,22 @@ static XrRuntimeAbiStatus verify_provider_set(
         mask |= XR_TARGET_PROVIDER_MASK(providers[i].provider_kind);
         if (providers[i].provider_kind == XR_TARGET_PROVIDER_PANIC &&
             providers[i].panic_behavior == XR_TARGET_PROVIDER_PANIC_UNWINDS)
-            mask |= XR_TARGET_CAPABILITY_MASK(
-                XR_TARGET_CAPABILITY_PANIC_BOUNDARY);
+            mask |= XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_PANIC_BOUNDARY);
         if (provider_has_assertion_report(&providers[i]))
-            mask |= XR_TARGET_CAPABILITY_MASK(
-                XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+            mask |= XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+        if (provider_has_output_write(&providers[i]))
+            mask |= XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE);
     }
     uint64_t required = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
     if ((mask & required) != required ||
-        (mask & ~(XR_TARGET_PROVIDER_MASK_ALL |
-                  XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK)) != 0)
+        (mask & ~(XR_TARGET_PROVIDER_MASK_ALL | XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK)) != 0)
         return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
     *derived_mask = mask;
     return XR_RUNTIME_ABI_OK;
 }
 
-static void hash_provider_operation(
-    XrSHA256Context *ctx, const XrTargetProviderOperationContract *operation) {
+static void hash_provider_operation(XrSHA256Context *ctx,
+                                    const XrTargetProviderOperationContract *operation) {
     hash_id(ctx, operation->stable_id);
     hash_provider_call_abi(ctx, &operation->call_abi);
     hash_u32(ctx, operation->effect_flags);
@@ -1489,8 +1430,7 @@ static void hash_provider_operation(
     hash_u32(ctx, operation->failure_flags);
 }
 
-static void hash_provider(XrSHA256Context *ctx,
-                          const XrTargetProviderContract *provider) {
+static void hash_provider(XrSHA256Context *ctx, const XrTargetProviderContract *provider) {
     hash_u32(ctx, provider->schema_version);
     hash_u8(ctx, provider->runtime_profile);
     hash_u8(ctx, provider->provider_kind);
@@ -1507,14 +1447,14 @@ static void hash_provider(XrSHA256Context *ctx,
         hash_provider_operation(ctx, &provider->operations[i]);
 }
 
-XrRuntimeAbiStatus xr_target_provider_set_fingerprint(
-    const XrTargetProviderContract *providers, size_t provider_count,
-    uint64_t *out_provider_mask, XrFingerprint *out) {
+XrRuntimeAbiStatus xr_target_provider_set_fingerprint(const XrTargetProviderContract *providers,
+                                                      size_t provider_count,
+                                                      uint64_t *out_provider_mask,
+                                                      XrFingerprint *out) {
     if (!out_provider_mask || !out)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     uint64_t provider_mask = 0;
-    XrRuntimeAbiStatus status =
-        verify_provider_set(providers, provider_count, &provider_mask);
+    XrRuntimeAbiStatus status = verify_provider_set(providers, provider_count, &provider_mask);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     XrSHA256Context ctx;
