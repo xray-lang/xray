@@ -124,6 +124,22 @@ typedef struct XaBuiltinEnum {
     uint32_t layout_id;
 } XaBuiltinEnum;
 
+// Native class declared by a stdlib module (`native_class` / `class` in
+// stdlib/defs/*.def). The name is what the analyzer needs to make the class
+// nameable inside the module's own .xr body; shape, slots and methods stay
+// owned by the runtime class registry.
+//
+// is_internal is carried rather than re-derived from the name. The older
+// native types answer that question through xa_stdlib_native_type_is_internal,
+// which tests for a `__` prefix, but a class name is a user-visible type name
+// that reaches diagnostics and LSP completion, so a class says it in the .def
+// `visibility:` key instead. Reading the answer the .def already gives keeps
+// one authority for it rather than two spellings that can disagree.
+typedef struct XaBuiltinClass {
+    const char *name;
+    bool is_internal;
+} XaBuiltinClass;
+
 // Built-in C module info (for net, ws, http, etc.)
 typedef struct XaBuiltinModule {
     const char *name;  // Module name (e.g., "net")
@@ -135,6 +151,11 @@ typedef struct XaBuiltinModule {
     int object_shape_count;
     const XaBuiltinEnum *enums;
     int enum_count;
+    /* Appended last on purpose: the hand-written g_rt_builtin_modules table
+     * uses positional initializers, so trailing fields stay zero there without
+     * touching it. */
+    const XaBuiltinClass *classes;
+    int class_count;
 } XaBuiltinModule;
 
 // Convert XrType to unified XrTypeId (O(1) enum mapping)

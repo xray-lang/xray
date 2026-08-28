@@ -379,6 +379,7 @@ def merge_pure_xray_modules(module_results, pure_modules):
             'handles': [],
             'object_shapes': [],
             'enums': [],
+            'classes': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -611,6 +612,33 @@ def load_def_module_object_shapes():
     return modules
 
 
+def load_def_module_classes():
+    """Load native class declarations from stdlib/defs/*.def.
+
+    `native_class` and `class` differ only in whether the runtime attaches a
+    native body; for naming a type inside the module's own .xr source they are
+    the same thing, so both kinds land in one list.
+    """
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_classes, parse_native_classes
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
+
+    modules = {}
+    for entry in list(parse_native_classes(PROJECT_ROOT)) + list(parse_classes(PROJECT_ROOT)):
+        modules.setdefault(entry.module, []).append({
+            'name': entry.name,
+            'is_internal': entry.is_internal,
+        })
+    return modules
+
+
 def load_def_module_enums():
     """Load native module enum declarations from stdlib/defs/*.def."""
     sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
@@ -670,6 +698,7 @@ def merge_def_module_methods(module_results, def_methods):
             'handles': [],
             'object_shapes': [],
             'enums': [],
+            'classes': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -698,6 +727,7 @@ def merge_def_module_constants(module_results, def_constants):
             'handles': [],
             'object_shapes': [],
             'enums': [],
+            'classes': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -726,6 +756,7 @@ def merge_def_module_handles(module_results, def_handles):
             'handles': [],
             'object_shapes': [],
             'enums': [],
+            'classes': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -753,6 +784,7 @@ def merge_def_module_object_shapes(module_results, def_object_shapes):
             'handles': [],
             'object_shapes': [],
             'enums': [],
+            'classes': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -775,6 +807,7 @@ def merge_def_module_enums(module_results, def_enums):
             'handles': [],
             'object_shapes': [],
             'enums': [],
+            'classes': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -785,6 +818,29 @@ def merge_def_module_enums(module_results, def_enums):
                 raise SystemExit(f"duplicate native enum declaration: {mod_name}.{enum['name']}")
             mod_data.setdefault('enums', []).append(enum)
             existing.add(enum['name'])
+            added += 1
+    return added
+
+
+def merge_def_module_classes(module_results, def_classes):
+    """Overlay .def native class declarations onto module metadata."""
+    added = 0
+    for mod_name, classes in sorted(def_classes.items()):
+        mod_data = module_results.setdefault(mod_name, {
+            'handles': [],
+            'object_shapes': [],
+            'enums': [],
+            'classes': [],
+            'methods': [],
+            'handle_methods': {},
+            'constants': [],
+        })
+        existing = {class_decl['name'] for class_decl in mod_data.get('classes', [])}
+        for class_decl in classes:
+            if class_decl['name'] in existing:
+                raise SystemExit(f"duplicate native class declaration: {mod_name}.{class_decl['name']}")
+            mod_data.setdefault('classes', []).append(class_decl)
+            existing.add(class_decl['name'])
             added += 1
     return added
 
@@ -1093,6 +1149,18 @@ def generate_header(type_results, module_results):
                 lines.append(f"#define GEN_{mod_macro}_ENUM_COUNT {len(mod_data['enums'])}")
                 lines.append("")
 
+            # Native classes. Only the name travels: it is what lets the
+            # module's own .xr body name the type. Internal classes are emitted
+            # too -- the analyzer registers them unexported.
+            if mod_data.get('classes'):
+                lines.append(f"static const XaBuiltinClass g_gen_{mod_ident}_classes[] = {{")
+                for class_decl in mod_data['classes']:
+                    internal = "true" if class_decl.get("is_internal") else "false"
+                    lines.append(f'    {{"{c_string(class_decl["name"])}", {internal}}},')
+                lines.append("};")
+                lines.append(f"#define GEN_{mod_macro}_CLASS_COUNT {len(mod_data['classes'])}")
+                lines.append("")
+
             # Function declarations.
             #
             # Methods (functions with signatures) come first, followed by
@@ -1166,10 +1234,12 @@ def generate_header(type_results, module_results):
             object_shape_count = f"GEN_{mod_macro}_OBJECT_SHAPE_COUNT" if mod_data.get('object_shapes') else "0"
             enum_ref = f"g_gen_{mod_ident}_enums" if mod_data.get('enums') else "NULL"
             enum_count = f"GEN_{mod_macro}_ENUM_COUNT" if mod_data.get('enums') else "0"
+            class_ref = f"g_gen_{mod_ident}_classes" if mod_data.get('classes') else "NULL"
+            class_count = f"GEN_{mod_macro}_CLASS_COUNT" if mod_data.get('classes') else "0"
             lines.append(
                 f'    {{"{c_string(mod_name)}", {func_ref}, {func_count}, '
                 f'{handle_ref}, {handle_count}, {object_shape_ref}, {object_shape_count}, '
-                f'{enum_ref}, {enum_count}}},')
+                f'{enum_ref}, {enum_count}, {class_ref}, {class_count}}},')
         lines.append("};")
         lines.append(f"#define GEN_BUILTIN_MODULE_COUNT {len(module_results)}")
         lines.append("")
@@ -1386,6 +1456,7 @@ def main():
     handle_replaced, handle_added = merge_def_module_handles(module_results, def_handles)
     object_shape_added = merge_def_module_object_shapes(module_results, load_def_module_object_shapes())
     enum_added = merge_def_module_enums(module_results, load_def_module_enums())
+    class_added = merge_def_module_classes(module_results, load_def_module_classes())
     def_type_methods = load_def_type_methods()
     type_method_replaced, type_method_added = merge_def_type_methods(
         type_results, def_type_methods
@@ -1412,6 +1483,7 @@ def main():
           f"({handle_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def object shapes: {object_shape_added} object shapes loaded from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def enums: {enum_added} enums loaded from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def classes: {class_added} native classes loaded from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def type methods: {type_method_added} methods loaded "
           f"({type_method_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
     print(f"Pure-Xray modules: {pure_added} exported symbols loaded "
