@@ -51,21 +51,12 @@
  * Output: 128-bit (16 bytes) digest.
  * NOTE: MD5 is cryptographically broken, use only for compatibility.
  */
-XR_FUNC void xr_md5_init(XrMD5Context *ctx);  // Initialize context
-XR_FUNC void xr_md5_update(XrMD5Context *ctx, const uint8_t *data,
-                           size_t len);                                    // Process data chunk
-XR_FUNC void xr_md5_final(XrMD5Context *ctx, uint8_t digest[16]);          // Finalize and output
-XR_FUNC void xr_md5(const uint8_t *data, size_t len, uint8_t digest[16]);  // One-shot hash
 
 /*
  * SHA-1 hash functions.
  * Output: 160-bit (20 bytes) digest.
  * NOTE: SHA-1 is considered weak, use SHA-256 for security-critical applications.
  */
-XR_FUNC void xr_sha1_init(XrSHA1Context *ctx);
-XR_FUNC void xr_sha1_update(XrSHA1Context *ctx, const uint8_t *data, size_t len);
-XR_FUNC void xr_sha1_final(XrSHA1Context *ctx, uint8_t digest[20]);
-XR_FUNC void xr_sha1(const uint8_t *data, size_t len, uint8_t digest[20]);
 
 /*
  * SHA-256 hash functions.
@@ -82,10 +73,6 @@ XR_FUNC void xr_sha256(const uint8_t *data, size_t len, uint8_t digest[32]);
  * Output: 512-bit (64 bytes) digest.
  * Uses 64-bit operations, suitable for large data or when extra security margin needed.
  */
-XR_FUNC void xr_sha512_init(XrSHA512Context *ctx);
-XR_FUNC void xr_sha512_update(XrSHA512Context *ctx, const uint8_t *data, size_t len);
-XR_FUNC void xr_sha512_final(XrSHA512Context *ctx, uint8_t digest[64]);
-XR_FUNC void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]);
 
 /* ========== HMAC (Hash-based Message Authentication Code) ========== */
 
@@ -100,20 +87,14 @@ XR_FUNC void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]);
  */
 
 // HMAC-MD5: 128-bit output
-XR_FUNC void xr_hmac_md5(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                         uint8_t digest[16]);
 
 // HMAC-SHA1: 160-bit output
-XR_FUNC void xr_hmac_sha1(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                          uint8_t digest[20]);
 
 // HMAC-SHA256: 256-bit output (recommended)
 XR_FUNC void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data,
                             size_t data_len, uint8_t digest[32]);
 
 // HMAC-SHA512: 512-bit output
-XR_FUNC void xr_hmac_sha512(const uint8_t *key, size_t key_len, const uint8_t *data,
-                            size_t data_len, uint8_t digest[64]);
 
 /* ========== AES Encryption ========== */
 

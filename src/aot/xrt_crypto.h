@@ -40,33 +40,6 @@ static inline XrValue xrt_crypto_hex_result(const uint8_t *digest, size_t digest
     return result;
 }
 
-static inline XrValue xrt_crypto_hash_string(const char *data, int64_t len,
-                                             XrCryptoCoreHashAlg alg) {
-    if ((!data && len != 0) || len < 0)
-        return XR_NULL_VAL;
-    uint8_t digest[64];
-    size_t digest_len = 0;
-    if (!xr_crypto_core_hash(alg, (const uint8_t *) data, (size_t) len, digest, &digest_len))
-        return XR_NULL_VAL;
-    return xrt_crypto_hex_result(digest, digest_len);
-}
-
-static inline XrValue xrt_crypto_md5(const char *data, int64_t len) {
-    return xrt_crypto_hash_string(data, len, XR_CRYPTO_CORE_HASH_MD5);
-}
-
-static inline XrValue xrt_crypto_sha1(const char *data, int64_t len) {
-    return xrt_crypto_hash_string(data, len, XR_CRYPTO_CORE_HASH_SHA1);
-}
-
-static inline XrValue xrt_crypto_sha256(const char *data, int64_t len) {
-    return xrt_crypto_hash_string(data, len, XR_CRYPTO_CORE_HASH_SHA256);
-}
-
-static inline XrValue xrt_crypto_sha512(const char *data, int64_t len) {
-    return xrt_crypto_hash_string(data, len, XR_CRYPTO_CORE_HASH_SHA512);
-}
-
 static inline XrValue xrt_crypto_random_bytes(XrValue len_value) {
     if (!XR_IS_INT(len_value))
         return XR_NULL_VAL;
@@ -194,21 +167,6 @@ static inline XrValue xrt_crypto_decrypt(const char *key, int64_t key_len, const
     if (plain != stack_plain)
         XRT_FREE(plain);
     return result;
-}
-
-static inline XrValue xrt_crypto_hmac(const char *algo, int64_t algo_len, const char *key,
-                                      int64_t key_len, const char *data, int64_t data_len) {
-    if ((!algo && algo_len != 0) || (!key && key_len != 0) || (!data && data_len != 0) ||
-        algo_len < 0 || key_len < 0 || data_len < 0)
-        return XR_NULL_VAL;
-
-    XrCryptoCoreHashAlg alg = xr_crypto_core_hash_alg_from_name(algo, (size_t) algo_len);
-    uint8_t digest[64];
-    size_t digest_len = 0;
-    if (!xr_crypto_core_hmac(alg, (const uint8_t *) key, (size_t) key_len, (const uint8_t *) data,
-                             (size_t) data_len, digest, &digest_len))
-        return XR_NULL_VAL;
-    return xrt_crypto_hex_result(digest, digest_len);
 }
 
 static inline XrValue xrt_crypto_timing_safe_equal(const char *a, int64_t a_len, const char *b,

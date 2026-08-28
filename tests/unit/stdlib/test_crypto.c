@@ -29,37 +29,7 @@ static int digest_matches_hex(const uint8_t *digest, size_t digest_len, const ch
 
 /* ========== MD5 ========== */
 
-TEST(crypto_md5_empty) {
-    uint8_t digest[16];
-    xr_md5((const uint8_t *) "", 0, digest);
-    ASSERT_TRUE(digest_matches_hex(digest, 16, "d41d8cd98f00b204e9800998ecf8427e"));
-}
-
-TEST(crypto_md5_abc) {
-    uint8_t digest[16];
-    xr_md5((const uint8_t *) "abc", 3, digest);
-    ASSERT_TRUE(digest_matches_hex(digest, 16, "900150983cd24fb0d6963f7d28e17f72"));
-}
-
-TEST(crypto_md5_hello) {
-    uint8_t digest[16];
-    xr_md5((const uint8_t *) "Hello, World!", 13, digest);
-    ASSERT_TRUE(digest_matches_hex(digest, 16, "65a8e27d8879283831b664bd8b7f0ad4"));
-}
-
 /* ========== SHA-1 ========== */
-
-TEST(crypto_sha1_empty) {
-    uint8_t digest[20];
-    xr_sha1((const uint8_t *) "", 0, digest);
-    ASSERT_TRUE(digest_matches_hex(digest, 20, "da39a3ee5e6b4b0d3255bfef95601890afd80709"));
-}
-
-TEST(crypto_sha1_abc) {
-    uint8_t digest[20];
-    xr_sha1((const uint8_t *) "abc", 3, digest);
-    ASSERT_TRUE(digest_matches_hex(digest, 20, "a9993e364706816aba3e25717850c26c9cd0d89d"));
-}
 
 /* ========== SHA-256 ========== */
 
@@ -87,24 +57,6 @@ TEST(crypto_sha256_long) {
 }
 
 /* ========== SHA-512 ========== */
-
-TEST(crypto_sha512_empty) {
-    uint8_t digest[64];
-    xr_sha512((const uint8_t *) "", 0, digest);
-    ASSERT_TRUE(
-        digest_matches_hex(digest, 64,
-                           "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce"
-                           "47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"));
-}
-
-TEST(crypto_sha512_abc) {
-    uint8_t digest[64];
-    xr_sha512((const uint8_t *) "abc", 3, digest);
-    ASSERT_TRUE(
-        digest_matches_hex(digest, 64,
-                           "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
-                           "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"));
-}
 
 /* ========== HMAC-SHA256 ========== */
 
@@ -269,81 +221,13 @@ TEST(crypto_core_uuid_v4_write) {
     ASSERT_TRUE(!xr_crypto_core_uuid_v4_write(bytes, uuid, 36));
 }
 
-TEST(crypto_core_hash_selector) {
-    uint8_t digest[64];
-    size_t len = 0;
-    char hex[129];
-
-    XrCryptoCoreHashAlg alg = xr_crypto_core_hash_alg_from_name("md5", 3);
-    ASSERT_EQ_INT(alg, XR_CRYPTO_CORE_HASH_MD5);
-    ASSERT_TRUE(xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
-    ASSERT_EQ_INT(len, 16);
-    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
-    ASSERT_STR_EQ(hex, "900150983cd24fb0d6963f7d28e17f72");
-
-    alg = xr_crypto_core_hash_alg_from_name("sha1", 4);
-    ASSERT_EQ_INT(xr_crypto_core_hash_digest_len(alg), 20);
-    ASSERT_TRUE(xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
-    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
-    ASSERT_STR_EQ(hex, "a9993e364706816aba3e25717850c26c9cd0d89d");
-
-    alg = xr_crypto_core_hash_alg_from_name("sha256", 6);
-    ASSERT_EQ_INT(xr_crypto_core_hash_digest_len(alg), 32);
-    ASSERT_TRUE(xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
-    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
-    ASSERT_STR_EQ(hex, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-
-    alg = xr_crypto_core_hash_alg_from_name("sha512", 6);
-    ASSERT_EQ_INT(xr_crypto_core_hash_digest_len(alg), 64);
-    ASSERT_TRUE(xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
-    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
-    ASSERT_STR_EQ(hex, "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
-                       "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
-
-    alg = xr_crypto_core_hash_alg_from_name("sha224", 6);
-    ASSERT_EQ_INT(alg, XR_CRYPTO_CORE_HASH_NONE);
-    ASSERT_TRUE(!xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
-}
-
-TEST(crypto_core_hmac_selector) {
-    uint8_t digest[64];
-    size_t len = 0;
-    char hex[129];
-
-    XrCryptoCoreHashAlg alg = xr_crypto_core_hash_alg_from_name("sha256", 6);
-    ASSERT_TRUE(xr_crypto_core_hmac(alg, (const uint8_t *) "Jefe", 4,
-                                    (const uint8_t *) "what do ya want for nothing?", 28, digest,
-                                    &len));
-    ASSERT_EQ_INT(len, 32);
-    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
-    ASSERT_STR_EQ(hex, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
-
-    ASSERT_TRUE(!xr_crypto_core_hmac(XR_CRYPTO_CORE_HASH_NONE, (const uint8_t *) "key", 3,
-                                     (const uint8_t *) "data", 4, digest, &len));
-}
-
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
-
-RUN_TEST_SUITE("Crypto - MD5");
-RUN_TEST(crypto_md5_empty);
-RUN_TEST(crypto_md5_abc);
-RUN_TEST(crypto_md5_hello);
-
-RUN_TEST_SUITE("Crypto - SHA-1");
-RUN_TEST(crypto_sha1_empty);
-RUN_TEST(crypto_sha1_abc);
-
 RUN_TEST_SUITE("Crypto - SHA-256");
 RUN_TEST(crypto_sha256_empty);
 RUN_TEST(crypto_sha256_abc);
 RUN_TEST(crypto_sha256_long);
-
-RUN_TEST_SUITE("Crypto - SHA-512");
-RUN_TEST(crypto_sha512_empty);
-RUN_TEST(crypto_sha512_abc);
-
 RUN_TEST_SUITE("Crypto - HMAC-SHA256");
 RUN_TEST(crypto_hmac_sha256_basic);
 
@@ -361,7 +245,5 @@ RUN_TEST_SUITE("Crypto - Utility");
 RUN_TEST(crypto_bytes_to_hex);
 RUN_TEST(crypto_core_bytes_hex);
 RUN_TEST(crypto_core_uuid_v4_write);
-RUN_TEST(crypto_core_hash_selector);
-RUN_TEST(crypto_core_hmac_selector);
 
 TEST_MAIN_END()

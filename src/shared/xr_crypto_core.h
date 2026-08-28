@@ -80,18 +80,6 @@ static inline bool xr_crypto_core_alg_eq(const char *data, size_t len, const cha
     return data && len == lit_len && memcmp(data, lit, lit_len) == 0;
 }
 
-static inline XrCryptoCoreHashAlg xr_crypto_core_hash_alg_from_name(const char *data, size_t len) {
-    if (xr_crypto_core_alg_eq(data, len, "md5"))
-        return XR_CRYPTO_CORE_HASH_MD5;
-    if (xr_crypto_core_alg_eq(data, len, "sha1"))
-        return XR_CRYPTO_CORE_HASH_SHA1;
-    if (xr_crypto_core_alg_eq(data, len, "sha256"))
-        return XR_CRYPTO_CORE_HASH_SHA256;
-    if (xr_crypto_core_alg_eq(data, len, "sha512"))
-        return XR_CRYPTO_CORE_HASH_SHA512;
-    return XR_CRYPTO_CORE_HASH_NONE;
-}
-
 static inline size_t xr_crypto_core_hash_digest_len(XrCryptoCoreHashAlg alg) {
     switch (alg) {
         case XR_CRYPTO_CORE_HASH_MD5:
@@ -111,74 +99,6 @@ static inline size_t xr_crypto_core_hash_digest_len(XrCryptoCoreHashAlg alg) {
 static inline const uint8_t *xr_crypto_core_bytes_or_empty(const uint8_t *data) {
     static const uint8_t empty = 0;
     return data ? data : &empty;
-}
-
-static inline bool xr_crypto_core_hash(XrCryptoCoreHashAlg alg, const uint8_t *data, size_t len,
-                                       uint8_t digest[64], size_t *out_len) {
-    if ((!data && len != 0) || !digest)
-        return false;
-    data = xr_crypto_core_bytes_or_empty(data);
-
-    size_t digest_len = xr_crypto_core_hash_digest_len(alg);
-    if (digest_len == 0)
-        return false;
-
-    switch (alg) {
-        case XR_CRYPTO_CORE_HASH_MD5:
-            xr_md5(data, len, digest);
-            break;
-        case XR_CRYPTO_CORE_HASH_SHA1:
-            xr_sha1(data, len, digest);
-            break;
-        case XR_CRYPTO_CORE_HASH_SHA256:
-            xr_sha256(data, len, digest);
-            break;
-        case XR_CRYPTO_CORE_HASH_SHA512:
-            xr_sha512(data, len, digest);
-            break;
-        case XR_CRYPTO_CORE_HASH_NONE:
-        default:
-            return false;
-    }
-
-    if (out_len)
-        *out_len = digest_len;
-    return true;
-}
-
-static inline bool xr_crypto_core_hmac(XrCryptoCoreHashAlg alg, const uint8_t *key, size_t key_len,
-                                       const uint8_t *data, size_t data_len, uint8_t digest[64],
-                                       size_t *out_len) {
-    if ((!key && key_len != 0) || (!data && data_len != 0) || !digest)
-        return false;
-    key = xr_crypto_core_bytes_or_empty(key);
-    data = xr_crypto_core_bytes_or_empty(data);
-
-    size_t digest_len = xr_crypto_core_hash_digest_len(alg);
-    if (digest_len == 0)
-        return false;
-
-    switch (alg) {
-        case XR_CRYPTO_CORE_HASH_MD5:
-            xr_hmac_md5(key, key_len, data, data_len, digest);
-            break;
-        case XR_CRYPTO_CORE_HASH_SHA1:
-            xr_hmac_sha1(key, key_len, data, data_len, digest);
-            break;
-        case XR_CRYPTO_CORE_HASH_SHA256:
-            xr_hmac_sha256(key, key_len, data, data_len, digest);
-            break;
-        case XR_CRYPTO_CORE_HASH_SHA512:
-            xr_hmac_sha512(key, key_len, data, data_len, digest);
-            break;
-        case XR_CRYPTO_CORE_HASH_NONE:
-        default:
-            return false;
-    }
-
-    if (out_len)
-        *out_len = digest_len;
-    return true;
 }
 
 static inline bool xr_crypto_core_digest_hex(const uint8_t *digest, size_t digest_len, char *out,

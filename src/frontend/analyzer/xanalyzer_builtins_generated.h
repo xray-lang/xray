@@ -240,28 +240,23 @@ static const XaBuiltinMember g_gen_compress_functions[] = {
 };
 #define GEN_COMPRESS_FUNCTION_COUNT 10
 
-static const char *g_gen_crypto_randombytes_5_errors[] = {
+static const char *g_gen_crypto_randombytes_0_errors[] = {
     "CryptoError.InvalidLength",
 };
 
-static const char *g_gen_crypto_decrypt_8_errors[] = {
+static const char *g_gen_crypto_decrypt_3_errors[] = {
     "CryptoError.InvalidLength",
 };
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
-    {"md5", "(data: string): string", "Compute MD5 hash", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"sha1", "(data: string): string", "Compute SHA-1 hash", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"sha256", "(data: string): string", "Compute SHA-256 hash", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"sha512", "(data: string): string", "Compute SHA-512 hash", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"hmac", "(algo: string, key: string, data: string): string?", "Compute HMAC", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"randomBytes", "(n: i64): string", "Generate random bytes", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_randombytes_5_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"randomBytes", "(n: i64): string", "Generate random bytes", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_randombytes_0_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"uuid", "(): string", "Generate UUID v4", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_decrypt_8_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_decrypt_3_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_CRYPTO_FUNCTION_COUNT 10
+#define GEN_CRYPTO_FUNCTION_COUNT 5
 
 // http2 module functions
 static const XaBuiltinMember g_gen_http2_functions[] = {

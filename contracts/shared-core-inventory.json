@@ -563,12 +563,9 @@
         "xr_crypto_core_bytes_hex",
         "xr_crypto_core_bytes_or_empty",
         "xr_crypto_core_digest_hex",
-        "xr_crypto_core_hash",
-        "xr_crypto_core_hash_alg_from_name",
         "xr_crypto_core_hash_digest_len",
         "xr_crypto_core_hex_digit",
         "xr_crypto_core_hex_to_bytes",
-        "xr_crypto_core_hmac",
         "xr_crypto_core_timing_safe_equal",
         "xr_crypto_core_uuid_v4_write"
       ],

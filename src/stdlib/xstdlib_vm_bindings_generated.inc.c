@@ -46,11 +46,6 @@ static void xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule 
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_CRYPTO
 static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "md5", crypto_md5);
-    XRS_EXPORT(module, isolate, "sha1", crypto_sha1);
-    XRS_EXPORT(module, isolate, "sha256", crypto_sha256);
-    XRS_EXPORT(module, isolate, "sha512", crypto_sha512);
-    XRS_EXPORT(module, isolate, "hmac", crypto_hmac);
     XRS_EXPORT(module, isolate, "randomBytes", crypto_random_bytes);
     XRS_EXPORT(module, isolate, "uuid", crypto_uuid);
     XRS_EXPORT(module, isolate, "encrypt", crypto_encrypt);

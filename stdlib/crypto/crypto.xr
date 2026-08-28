@@ -1,0 +1,360 @@
+// crypto — hash and MAC kernels written in Xray.
+//
+// The four digests and the MAC built on them need nothing from the host: they
+// are byte arithmetic, and the language carries the 32-bit and 64-bit shifts
+// and wrapping addition they are defined in terms of. Only the entropy source
+// stays native, because a CSPRNG is a property of the operating system rather
+// than of the algorithm.
+//
+// The kernels work on Array<u8> and answer Array<u8>. The public surface takes
+// and answers strings because that is what the module has always published;
+// the conversion is stated once, here.
+
+const MASK32: i64 = 4294967295
+
+const MD5_K: Array<i64> = [
+    3614090360, 3905402710, 606105819, 3250441966, 4118548399, 1200080426,
+    2821735955, 4249261313, 1770035416, 2336552879, 4294925233, 2304563134,
+    1804603682, 4254626195, 2792965006, 1236535329, 4129170786, 3225465664,
+    643717713, 3921069994, 3593408605, 38016083, 3634488961, 3889429448,
+    568446438, 3275163606, 4107603335, 1163531501, 2850285829, 4243563512,
+    1735328473, 2368359562, 4294588738, 2272392833, 1839030562, 4259657740,
+    2763975236, 1272893353, 4139469664, 3200236656, 681279174, 3936430074,
+    3572445317, 76029189, 3654602809, 3873151461, 530742520, 3299628645,
+    4096336452, 1126891415, 2878612391, 4237533241, 1700485571, 2399980690,
+    4293915773, 2240044497, 1873313359, 4264355552, 2734768916, 1309151649,
+    4149444226, 3174756917, 718787259, 3951481745]
+
+const MD5_S: Array<i64> = [
+    7, 12, 17, 22, 7, 12, 17, 22,
+    7, 12, 17, 22, 7, 12, 17, 22,
+    5, 9, 14, 20, 5, 9, 14, 20,
+    5, 9, 14, 20, 5, 9, 14, 20,
+    4, 11, 16, 23, 4, 11, 16, 23,
+    4, 11, 16, 23, 4, 11, 16, 23,
+    6, 10, 15, 21, 6, 10, 15, 21,
+    6, 10, 15, 21, 6, 10, 15, 21]
+
+const K256: Array<i64> = [
+    1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993,
+    2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987,
+    1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774,
+    264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986,
+    2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711,
+    113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291,
+    1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411,
+    3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344,
+    430227734, 506948616, 659060556, 883997877, 958139571, 1322822218,
+    1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424,
+    2428436474, 2756734187, 3204031479, 3329325298]
+
+const K512: Array<u64> = [
+    4794697086780616226, 8158064640168781261, 13096744586834688815, 16840607885511220156,
+    4131703408338449720, 6480981068601479193, 10538285296894168987, 12329834152419229976,
+    15566598209576043074, 1334009975649890238, 2608012711638119052, 6128411473006802146,
+    8268148722764581231, 9286055187155687089, 11230858885718282805, 13951009754708518548,
+    16472876342353939154, 17275323862435702243, 1135362057144423861, 2597628984639134821,
+    3308224258029322869, 5365058923640841347, 6679025012923562964, 8573033837759648693,
+    10970295158949994411, 12119686244451234320, 12683024718118986047, 13788192230050041572,
+    14330467153632333762, 15395433587784984357, 489312712824947311, 1452737877330783856,
+    2861767655752347644, 3322285676063803686, 5560940570517711597, 5996557281743188959,
+    7280758554555802590, 8532644243296465576, 9350256976987008742, 10552545826968843579,
+    11727347734174303076, 12113106623233404929, 14000437183269869457, 14369950271660146224,
+    15101387698204529176, 15463397548674623760, 17586052441742319658, 1182934255886127544,
+    1847814050463011016, 2177327727835720531, 2830643537854262169, 3796741975233480872,
+    4115178125766777443, 5681478168544905931, 6601373596472566643, 7507060721942968483,
+    8399075790359081724, 8693463985226723168, 9568029438360202098, 10144078919501101548,
+    10430055236837252648, 11840083180663258601, 13761210420658862357, 14299343276471374635,
+    14566680578165727644, 15097957966210449927, 16922976911328602910, 17689382322260857208,
+    500013540394364858, 748580250866718886, 1242879168328830382, 1977374033974150939,
+    2944078676154940804, 3659926193048069267, 4368137639120453308, 4836135668995329356,
+    5532061633213252278, 6448918945643986474, 6902733635092675308, 7801388544844847127]
+
+const H512_INIT: Array<u64> = [
+    7640891576956012808, 13503953896175478587, 4354685564936845355, 11912009170470909681,
+    5840696475078001361, 11170449401992604703, 2270897969802886507, 6620516959819538809]
+
+const HEX_DIGITS: string = "0123456789abcdef"
+
+fn rotl32(x: i64, n: i64) -> i64 {
+    return ((x << n) | (x >> (32 - n))) & MASK32
+}
+
+fn rotr32(x: i64, n: i64) -> i64 {
+    return ((x >> n) | (x << (32 - n))) & MASK32
+}
+
+fn rotr64(x: u64, n: u64) -> u64 {
+    return (x >> n) | (x << (64 - n))
+}
+
+fn hexOf(bytes: Array<u8>) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < len(bytes); i++) {
+        var b = bytes[i] as i64
+        var hi = (b >> 4) & 15
+        var lo = b & 15
+        out.append(HEX_DIGITS.slice(hi, hi + 1))
+        out.append(HEX_DIGITS.slice(lo, lo + 1))
+    }
+    return out.toString()
+}
+
+// Append the message length in bits, big-endian over eight bytes.
+fn appendLengthBE(msg: ref Array<u8>, bitLen: i64) {
+    for (var i = 7; i >= 0; i--) { msg.push(((bitLen >> (i * 8)) & 255) as u8) }
+}
+
+// Materialize a borrowed byte view. The kernels below own a working copy
+// anyway, so taking the view first costs nothing and keeps the public entry
+// points from calling an allocating method directly on their parameter.
+fn toArray(view: Slice<u8>) -> Array<u8> {
+    var out: Array<u8> = []
+    for (var i = 0; i < len(view); i++) { out.push(view[i]) }
+    return out
+}
+
+fn md5Bytes(data: Array<u8>) -> Array<u8> {
+    var msg: Array<u8> = []
+    for (var i = 0; i < len(data); i++) { msg.push(data[i]) }
+    var bitLen = len(data) * 8
+    msg.push(128)
+    while (len(msg) % 64 != 56) { msg.push(0) }
+    // MD5 is the one of the four that records its length little-endian.
+    for (var i = 0; i < 8; i++) { msg.push(((bitLen >> (i * 8)) & 255) as u8) }
+
+    var h = [1732584193, 4023233417, 2562383102, 271733878]
+    var m = Array<i64>(16)
+    var block = 0
+    while (block < len(msg)) {
+        for (var t = 0; t < 16; t++) {
+            var o = block + t * 4
+            m[t] = ((msg[o] as i64) | ((msg[o + 1] as i64) << 8) |
+                    ((msg[o + 2] as i64) << 16) | ((msg[o + 3] as i64) << 24)) & MASK32
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]
+        for (var i = 0; i < 64; i++) {
+            var fv = 0
+            var g = 0
+            if (i < 16) { fv = (b & c) | ((b ^ MASK32) & d); g = i }
+            else if (i < 32) { fv = (d & b) | ((d ^ MASK32) & c); g = (5 * i + 1) % 16 }
+            else if (i < 48) { fv = b ^ c ^ d; g = (3 * i + 5) % 16 }
+            else { fv = c ^ (b | (d ^ MASK32)); g = (7 * i) % 16 }
+            var tmp = d
+            d = c
+            c = b
+            b = (b + rotl32((a + fv + MD5_K[i] + m[g]) & MASK32, MD5_S[i])) & MASK32
+            a = tmp
+        }
+        h[0] = (h[0] + a) & MASK32; h[1] = (h[1] + b) & MASK32
+        h[2] = (h[2] + c) & MASK32; h[3] = (h[3] + d) & MASK32
+        block = block + 64
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < 4; i++) {
+        for (var b = 0; b < 4; b++) { out.push(((h[i] >> (b * 8)) & 255) as u8) }
+    }
+    return out
+}
+
+fn sha1Bytes(data: Array<u8>) -> Array<u8> {
+    var msg: Array<u8> = []
+    for (var i = 0; i < len(data); i++) { msg.push(data[i]) }
+    var bitLen = len(data) * 8
+    msg.push(128)
+    while (len(msg) % 64 != 56) { msg.push(0) }
+    appendLengthBE(ref msg, bitLen)
+
+    var h = [1732584193, 4023233417, 2562383102, 271733878, 3285377520]
+    var w = Array<i64>(80)
+    var block = 0
+    while (block < len(msg)) {
+        for (var t = 0; t < 16; t++) {
+            var o = block + t * 4
+            w[t] = (((msg[o] as i64) << 24) | ((msg[o + 1] as i64) << 16) |
+                    ((msg[o + 2] as i64) << 8) | (msg[o + 3] as i64)) & MASK32
+        }
+        for (var t = 16; t < 80; t++) {
+            w[t] = rotl32(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1)
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]; var e = h[4]
+        for (var t = 0; t < 80; t++) {
+            var fv = 0
+            var k = 0
+            if (t < 20) { fv = (b & c) | ((b ^ MASK32) & d); k = 1518500249 }
+            else if (t < 40) { fv = b ^ c ^ d; k = 1859775393 }
+            else if (t < 60) { fv = (b & c) | (b & d) | (c & d); k = 2400959708 }
+            else { fv = b ^ c ^ d; k = 3395469782 }
+            var tmp = (rotl32(a, 5) + fv + e + k + w[t]) & MASK32
+            e = d; d = c
+            c = rotl32(b, 30)
+            b = a
+            a = tmp
+        }
+        h[0] = (h[0] + a) & MASK32; h[1] = (h[1] + b) & MASK32
+        h[2] = (h[2] + c) & MASK32; h[3] = (h[3] + d) & MASK32
+        h[4] = (h[4] + e) & MASK32
+        block = block + 64
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < 5; i++) {
+        for (var b = 3; b >= 0; b--) { out.push(((h[i] >> (b * 8)) & 255) as u8) }
+    }
+    return out
+}
+
+fn sha256Bytes(data: Array<u8>) -> Array<u8> {
+    var msg: Array<u8> = []
+    for (var i = 0; i < len(data); i++) { msg.push(data[i]) }
+    var bitLen = len(data) * 8
+    msg.push(128)
+    while (len(msg) % 64 != 56) { msg.push(0) }
+    appendLengthBE(ref msg, bitLen)
+
+    var h = [1779033703, 3144134277, 1013904242, 2773480762,
+             1359893119, 2600822924, 528734635, 1541459225]
+    var w = Array<i64>(64)
+    var block = 0
+    while (block < len(msg)) {
+        for (var t = 0; t < 16; t++) {
+            var o = block + t * 4
+            w[t] = (((msg[o] as i64) << 24) | ((msg[o + 1] as i64) << 16) |
+                    ((msg[o + 2] as i64) << 8) | (msg[o + 3] as i64)) & MASK32
+        }
+        for (var t = 16; t < 64; t++) {
+            var x = w[t - 15]
+            var y = w[t - 2]
+            var s0 = rotr32(x, 7) ^ rotr32(x, 18) ^ (x >> 3)
+            var s1 = rotr32(y, 17) ^ rotr32(y, 19) ^ (y >> 10)
+            w[t] = (w[t - 16] + s0 + w[t - 7] + s1) & MASK32
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]
+        var e = h[4]; var fv = h[5]; var g = h[6]; var hh = h[7]
+        for (var t = 0; t < 64; t++) {
+            var S1 = rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25)
+            var ch = (e & fv) ^ ((e ^ MASK32) & g)
+            var t1 = (hh + S1 + ch + K256[t] + w[t]) & MASK32
+            var S0 = rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22)
+            var maj = (a & b) ^ (a & c) ^ (b & c)
+            var t2 = (S0 + maj) & MASK32
+            hh = g; g = fv; fv = e
+            e = (d + t1) & MASK32
+            d = c; c = b; b = a
+            a = (t1 + t2) & MASK32
+        }
+        h[0] = (h[0] + a) & MASK32; h[1] = (h[1] + b) & MASK32
+        h[2] = (h[2] + c) & MASK32; h[3] = (h[3] + d) & MASK32
+        h[4] = (h[4] + e) & MASK32; h[5] = (h[5] + fv) & MASK32
+        h[6] = (h[6] + g) & MASK32; h[7] = (h[7] + hh) & MASK32
+        block = block + 64
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < 8; i++) {
+        for (var b = 3; b >= 0; b--) { out.push(((h[i] >> (b * 8)) & 255) as u8) }
+    }
+    return out
+}
+
+fn sha512Bytes(data: Array<u8>) -> Array<u8> {
+    var msg: Array<u8> = []
+    for (var i = 0; i < len(data); i++) { msg.push(data[i]) }
+    var bitLen = len(data) * 8
+    msg.push(128)
+    while (len(msg) % 128 != 112) { msg.push(0) }
+    // The length field is 128 bits wide; the high half is always zero for any
+    // message this runtime can hold.
+    for (var i = 0; i < 8; i++) { msg.push(0) }
+    appendLengthBE(ref msg, bitLen)
+
+    var h: Array<u64> = []
+    for (var i = 0; i < 8; i++) { h.push(H512_INIT[i]) }
+    var w = Array<u64>(80)
+    var block = 0
+    while (block < len(msg)) {
+        for (var t = 0; t < 16; t++) {
+            var o = block + t * 8
+            var v: u64 = 0
+            for (var j = 0; j < 8; j++) { v = (v << 8) | (msg[o + j] as u64) }
+            w[t] = v
+        }
+        for (var t = 16; t < 80; t++) {
+            var x = w[t - 15]
+            var y = w[t - 2]
+            var s0 = rotr64(x, 1) ^ rotr64(x, 8) ^ (x >> 7)
+            var s1 = rotr64(y, 19) ^ rotr64(y, 61) ^ (y >> 6)
+            w[t] = w[t - 16] + s0 + w[t - 7] + s1
+        }
+        var a = h[0]; var b = h[1]; var c = h[2]; var d = h[3]
+        var e = h[4]; var fv = h[5]; var g = h[6]; var hh = h[7]
+        for (var t = 0; t < 80; t++) {
+            var S1 = rotr64(e, 14) ^ rotr64(e, 18) ^ rotr64(e, 41)
+            var ch = (e & fv) ^ ((~e) & g)
+            var t1 = hh + S1 + ch + K512[t] + w[t]
+            var S0 = rotr64(a, 28) ^ rotr64(a, 34) ^ rotr64(a, 39)
+            var maj = (a & b) ^ (a & c) ^ (b & c)
+            var t2 = S0 + maj
+            hh = g; g = fv; fv = e
+            e = d + t1
+            d = c; c = b; b = a
+            a = t1 + t2
+        }
+        h[0] = h[0] + a; h[1] = h[1] + b; h[2] = h[2] + c; h[3] = h[3] + d
+        h[4] = h[4] + e; h[5] = h[5] + fv; h[6] = h[6] + g; h[7] = h[7] + hh
+        block = block + 128
+    }
+    var out: Array<u8> = []
+    for (var i = 0; i < 8; i++) {
+        for (var b = 7; b >= 0; b--) { out.push(((h[i] >> ((b * 8) as u64)) & 255) as u8) }
+    }
+    return out
+}
+
+export fn md5(data: string) -> string { return hexOf(md5Bytes(toArray(data.bytes()))) }
+export fn sha1(data: string) -> string { return hexOf(sha1Bytes(toArray(data.bytes()))) }
+export fn sha256(data: string) -> string { return hexOf(sha256Bytes(toArray(data.bytes()))) }
+export fn sha512(data: string) -> string { return hexOf(sha512Bytes(toArray(data.bytes()))) }
+
+fn digestOf(algo: string, data: Array<u8>) -> Array<u8>? {
+    if (algo == "md5") { return md5Bytes(data) }
+    if (algo == "sha1") { return sha1Bytes(data) }
+    if (algo == "sha256") { return sha256Bytes(data) }
+    if (algo == "sha512") { return sha512Bytes(data) }
+    return null
+}
+
+fn blockSizeOf(algo: string) -> i64 {
+    if (algo == "sha512") { return 128 }
+    return 64
+}
+
+// HMAC as RFC 2104 defines it: the key is reduced by the hash when it is longer
+// than a block and zero-extended when it is shorter, then the message is hashed
+// under the inner pad and that digest under the outer pad.
+export fn hmac(algo: string, key: string, data: string) -> string? {
+    var blockSize = blockSizeOf(algo)
+    var k = toArray(key.bytes())
+    if (len(k) > blockSize) {
+        var reduced = digestOf(algo, k)
+        if (reduced == null) { return null }
+        k = reduced!
+    }
+    while (len(k) < blockSize) { k.push(0) }
+
+    var inner: Array<u8> = []
+    var outer: Array<u8> = []
+    for (var i = 0; i < blockSize; i++) {
+        inner.push((((k[i] as i64) ^ 54) & 255) as u8)
+        outer.push((((k[i] as i64) ^ 92) & 255) as u8)
+    }
+    var msg = toArray(data.bytes())
+    for (var i = 0; i < len(msg); i++) { inner.push(msg[i]) }
+
+    var innerDigest = digestOf(algo, inner)
+    if (innerDigest == null) { return null }
+    var id = innerDigest!
+    for (var i = 0; i < len(id); i++) { outer.push(id[i]) }
+
+    var outerDigest = digestOf(algo, outer)
+    if (outerDigest == null) { return null }
+    return hexOf(outerDigest!)
+}

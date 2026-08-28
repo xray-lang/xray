@@ -392,12 +392,12 @@ perf_suite = "stdlib/http2"
 name = "crypto"
 public = true
 layer = "L3"
-policy = "native_library"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/crypto/crypto.xr"
 factory_source = "stdlib/crypto/crypto.c"
-public_native = ["decrypt", "encrypt", "hmac", "md5", "randomBytes", "sha1", "sha256", "sha512", "timingSafeEqual", "uuid"]
+public_native = ["decrypt", "encrypt", "randomBytes", "timingSafeEqual", "uuid"]
 private_native_sources = ["stdlib/crypto/*.c"]
-private_native_reason = "Platform CSPRNG, constant-time operations and mature cryptographic kernels"
+private_native_reason = "Platform CSPRNG, constant-time comparison and the AES block cipher consumed by crypto.xr"
 perf_suite = "stdlib/crypto"
 
 [[module]]
