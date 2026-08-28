@@ -329,6 +329,83 @@ XR_SEM_0019: Array intrinsic authority is not exact
 它们的源码模式类用例已全绿，剩下的 parity 用例要 `build --native`，
 属 AOT 线的 fail-closed，不是本 lane 的残留。
 
+## 9d. 缺陷本体已修四处（授权解除 `src/` 边界之后）
+
+| 缺陷 | 修法 | 验证 |
+|---|---|---|
+| entry plan 退化（本文第 4 节） | 核心内建从 closure 种类分出来，走密封叶子那一档 | `test_xglobal_summary` 从失败清单消失 |
+| bundle 写身份串当路径（第 5 节） | 改写 `authority.namespace_id` | `bytecode_build_stdio` 消失；产物输出 `BYTECODE_BUILD_READY` 并卡在 sleep（rc=124） |
+| `RawPtr` 过时注释 | 改成 `Ptr` | 门转绿；全仓 `RawPtr` 残留归零 |
+| throw 位治理门 | 判据从"任何提及"改成"只拦写"，单文件白名单消失 | 门转绿，且**比原来更严** |
+
+**差集：消失 2 项、新增 0 项，零回归**（506 项跑到汇总行，63 → 61）。
+
+**throw 门那条值得单独看**：它的 docstring 一边说 backend「may **fold** already-emitted
+checks」，一边说「must not **inspect** or independently reconstruct」——**fold 必须先 inspect**。
+那个单文件白名单就是为容纳这个矛盾打的补丁。实测整个 `src/aot/` + `src/ir/` 只有两处命中、
+**都是读比较、零个写**。判据改成只匹配 setter 与字段赋值后，白名单整个删掉，
+而豁免文件里若出现写现在会被抓——**净收紧**。
+
+**一个会伪装成回归的陷阱**：跑全量时若工作树有未提交的 `src/` 改动，
+`test_xtp_fuzz_evidence` 会报 `runtime identity is dirty` 而失败。它**不说**原因是树脏了，
+做清单差集时极易记成自己的回归。提交 + 重新 configure 后即恢复。
+
+## 9e. 未修但已定位到底：私有 native leaf 没有对应的 call target 种类
+
+`export fn platform() -> string { return __platform() }` 这个形状——**stdlib 自举的主要形状**
+——编不出 native：
+
+```
+XR_TARGET_1003: call-shaped operation has no exact target authority
+  operation=82 function=3 opcode=116 selector=  ...
+```
+
+`selector=` 是空的：**目标层连名字都没拿到，因为语义层没产出这一行**。
+
+**根因不是"判据漏判"，是分类体系缺了一整类。** `XrSemanticCallTargetKind`
+（`src/plan/semantic/xr_semantic_plan.h:138`）里凡是 native 的都带 YIELDABLE：
+
+```
+XR_SEM_CALL_TARGET_NATIVE_YIELDABLE
+XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE
+XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE
+```
+
+于是 `xr_semantic_builder.c` 那个三元链**没有可选的第四个值**：
+
+```c
+record->kind = function >= 0      ? DIRECT_LOCAL
+               : native_yieldable ? NATIVE_YIELDABLE
+                                  : INDIRECT_CALLABLE;
+```
+
+`resolve_native_yieldable_callee` 要 `vm_binding == "yieldable"`，而 `__platform` 是 `normal`。
+
+**旁边那条看似该接住它的路径也接不住**：`xi_native_target_leaf_scalar_call_exact` 处理非
+yieldable native，但要求返回 int（`__platform` 返回 string），且要 def 里有 `target_leaf`
+字段——**整个 `core.def` 里 `target_leaf:` 只出现 1 次**，那条路径实际是空的。
+
+**修法方案**（给接手的人，四条都有理由）：
+
+1. 补一个 `XR_SEM_CALL_TARGET_NATIVE_LEAF`，**追加在枚举末尾**。不要插中间——
+   本轮 `AST_PRINT_STMT` 从枚举中间被删导致全树身份漂移，就是插中间的反面教训。
+2. resolve 函数照 `resolve_native_yieldable_callee` 复制，**只把 `vm_binding` 那一个字段的
+   期望值换掉**，grounded 判定与 arity 校验逐字保留——两个函数必须问同一组问题，
+   否则又制造一处"同一事实两处表述"。
+3. `canonical_key` 沿用 `:native=<module>.<member>`，靠末尾 `:kind=%u` 区分，
+   使漂移只来自 kind 值本身。
+4. **不要给 `__platform` 补 `target_leaf` 字段**去挤进现有那条路——那条路要求返回 int，
+   而这一族多数返回 string，硬挤会把一个 def 字段变成第二个资格判据。
+
+**为什么本 lane 不做**：它直接改 `canonical_key` 的构造串，**必然改 SemanticPlan 指纹**，
+而指纹重算是本 lane 的职责。自己改产品、自己算真值、自己验证是一个闭环，
+本轮反复在治的正是这类。**定位与方案交出，验证方可以由本 lane 承担——那才是分开。**
+
+**预计漂移面**：所有含私有 native leaf 调用的 SemanticPlan。
+`test_semantic_plan` / `test_target_plan` 的 digest 必动；两个 closure 层测试**未必**动
+（fixture 是 2 模块 scalar i64 图与手工构造，都不含私有 native leaf 调用）——
+**这个"未必"要实测确认，不可当结论。**
+
 ## 10. 复跑方式
 
 ```bash
