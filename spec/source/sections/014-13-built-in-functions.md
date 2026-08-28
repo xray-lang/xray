@@ -16,7 +16,7 @@ order: 014
 
 | 函数 | 签名 | 说明 |
 |--|--|--|
-| `print` | `(...values) -> ()` | 输出到 stdout，自动追加换行；多参以空格分隔 |
+| `print` | `(...values) -> ()` | 输出到 stdout，追加恰好一个换行；多参以恰好一个空格分隔；`print()` 只输出换行 |
 | `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
 | `len` | `(value) -> i64` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
 
@@ -100,7 +100,7 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function | Signature | Description |
 |--|--|--|
-| `print` | `(...values) -> ()` | print to stdout, automatically appending a newline; multiple arguments are separated by spaces |
+| `print` | `(...values) -> ()` | print to stdout, appending exactly one newline; arguments are separated by exactly one space; `print()` writes just the newline |
 | `dump` | `(value, indent?) -> ()` | structured debug output |
 | `len` | `(value) -> i64` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
 
