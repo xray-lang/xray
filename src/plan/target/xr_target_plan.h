@@ -325,6 +325,11 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_NEXT,
     XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT,
     XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR,
+    /* A yieldable native member reached as a plain call rather than through a
+     * module namespace. Same suspension ABI as the namespace convention; the
+     * two differ only in whether operand zero is a namespace receiver or the
+     * resolved callee, which is why they are separate rows rather than one. */
+    XR_TARGET_CALL_CONVENTION_NATIVE_YIELDABLE,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -403,6 +408,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_NEXT,
     XR_TARGET_CALL_TARGET_PROGRAM_DIRECT,
     XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR,
+    XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetArrayHofKind {
