@@ -28,7 +28,60 @@ used to read `XR_TARGET_1000 program authority` now reads as a specific target
 or semantic refusal naming what is actually missing. The measurement below
 replaces the masked column with the real distribution.
 
-The remaining wall is documented as an architecture diagnosis in
+### Measured, same probe corpus, both sides
+
+`scripts/probe_stdlib_backends.py` run twice on the same machine, once with a
+compiler built from `00f665c5c` and once from `f781680de`. Both runs report
+`baseline_ok`, so both are attributable to the modules.
+
+| AOT outcome | `00f665c5c` | after | change |
+|---|---:|---:|---|
+| generated C | 0 | 0 | — |
+| `XR_TARGET_1000` program authority | **20** | **0** | the guard is gone |
+| `XR_TARGET_1003` target/call authority | 5 | 24 | +19, exactly what was masked |
+| `XR_TARGET_1001` | 0 | 1 | |
+| `XR_SEM_0019` semantic layer | 3 | 3 | — |
+| refusal with no code | 5 | 5 | — |
+| VM passes | 26/33 | 26/33 | untouched |
+
+No module regressed and no module newly reaches generated C. The 20 masked
+refusals became measurable ones, and they are not one gap but five distinct
+judgements:
+
+| refusal | count |
+|---|---:|
+| `call target has no consumable adapter authority` | 10 |
+| `call-shaped operation has no exact target authority` | 10 |
+| `direct-local argument contract needs unsupported storage or ownership` | 2 |
+| `direct-local managed aggregate needs frozen clone` | 1 |
+| `source-export call authority is incomplete` | 1 |
+
+The earlier table in this packet reports one module (`time`) reaching generated
+C. That was measured on `bb6eac777369`; by `00f665c5c` `time` was already
+refused at `XR_TARGET_1000`, so the "1" is not a baseline this change can be
+compared against. Measured against `00f665c5c` the count is 0 on both sides.
+
+### The generator this blocks is past the guard too
+
+The build-time `xray_stdlib_bcgen native-fastpaths` step, whose 1439-line
+harness closes over 22 stdlib modules, no longer stops at the program-authority
+guard. It now reaches per-module Xi compilation and stops at
+
+```
+Error: Xi pipeline failed for 'stdlib/http/http.xr' at semantic-plan:
+  XR_SEM_0019: coroutine state count disagrees with grounded call authority
+  function=77 operation=3785 opcode=117 selector=sleep expected=0 actual=1
+```
+
+That is the same judgement that fails `tests/unit/aot/test_xaot_driver.c:1001`,
+whose source is `import time` + `time.sleep(1)` inside `await go`, and that test
+fails identically on `00f665c5c`, on the first commit here, and on the last. So
+the generator's next wall is a pre-existing coroutine-state defect, not a
+multi-module one.
+
+### The remaining multi-module wall
+
+Documented as an architecture diagnosis in
 `analysis/multi-module-program-authority.md` section 8.2: the ordinary
 TargetPlan verify path interprets one merged table through the entry
 SemanticPlan alone, and the two-module graph family reaches past that by
