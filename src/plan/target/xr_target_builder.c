@@ -12085,7 +12085,11 @@ static bool materialize_coroutine_roots_and_string_cleanups(XrTargetPlanBuilder 
         return fail(error, error_size, "XR_EXEC_5003",
                     "coroutine lifecycle projection budget exhausted");
     }
-    qsort(projection, projection_count, sizeof(*projection), compare_target_lifecycle_projection);
+    /* Empty projections allocate nothing, and qsort's base is declared
+     * non-null on glibc; sorting nothing is undefined behaviour there. */
+    if (projection_count > 1u)
+        qsort(projection, projection_count, sizeof(*projection),
+              compare_target_lifecycle_projection);
     materialized->root_maps = (XrTargetRootMapRecord *) allocate_records(
         root_entity_count, sizeof(*materialized->root_maps));
     materialized->root_slots =

@@ -234,6 +234,18 @@ typedef enum XiPlaceOrigin {
 #define XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION 2
 #define XI_LOCAL_ADDR_AUX_CLEANUP_LIVE 4
 
+/* Whether an address operation names its operand's own storage, which is the
+ * question every layer asks when it wants to know if a value must keep a
+ * distinct C local.  It is not the same question as which kind of address the
+ * operation is: a cleanup capture and a plain `ref` argument both name the
+ * operand itself, while the two borrowing forms above name a place their
+ * operand already points into.  Layers that judged this by comparing the whole
+ * auxiliary word against one expected kind disagreed with each other about the
+ * same address. */
+static inline bool xi_local_addr_names_operand_storage(int64_t aux) {
+    return (aux & (XI_LOCAL_ADDR_AUX_RAW_DEREF | XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION)) == 0;
+}
+
 /* XI_TRY.aux_int discriminator for compiler-generated cleanup panic regions.
  * Source-level try/catch uses its ordinary metadata and must never be treated
  * as a cancellation cleanup target. */

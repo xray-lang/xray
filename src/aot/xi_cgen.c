@@ -11555,6 +11555,31 @@ static const XiValue *cg_rep_alias_exact_source(XiCgenCtx *ctx, const XiValue *a
     return source;
 }
 
+/* An ordinary local-address operation names the alias's own storage, so an
+ * addressed alias must keep a C local of its own.  The two provenance-qualified
+ * forms do not name it: a raw dereference addresses the original pointer
+ * target, and a direct projection borrows a field inside the source
+ * aggregate's place -- both resolve to storage the source already owns. */
+static bool cg_alias_c_address_is_taken(const XiFunc *f, const XiValue *alias) {
+    if (!f || !alias)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks ? f->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values ? blk->values[vi] : NULL;
+            if (!user || user->op != XI_LOCAL_ADDR || user->nargs != 1 || !user->args ||
+                user->args[0] != alias)
+                continue;
+            if (!xi_local_addr_names_operand_storage(user->aux_int))
+                continue;
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool cg_rep_identical_alias_can_share_c_local(XiCgenCtx *ctx, const XiFunc *f,
                                                      const XiValue *alias, const XiValue *source) {
     if (!ctx || !f || !alias || !source ||
@@ -11595,6 +11620,8 @@ static bool cg_rep_identical_alias_can_share_c_local(XiCgenCtx *ctx, const XiFun
     const char *alias_ctype = local_ctype_str_ctx(ctx, f, alias);
     const char *source_ctype = local_ctype_str_ctx(ctx, f, source);
     if (!alias_ctype || !source_ctype || strcmp(alias_ctype, source_ctype) != 0)
+        return false;
+    if (cg_alias_c_address_is_taken(f, alias))
         return false;
     return true;
 }

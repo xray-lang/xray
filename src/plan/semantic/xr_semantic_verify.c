@@ -705,7 +705,12 @@ static bool verify_coroutine_entity_sequence(const XrSemanticPlan *plan) {
             entity->ordinal,
         };
     }
-    qsort(keys, count, sizeof(*keys), compare_coroutine_entity_key);
+    /* A zero-length projection deliberately allocates nothing, and glibc
+     * declares qsort's base non-null, so an empty sort is undefined behaviour
+     * even though no implementation reads the base. macOS does not carry the
+     * attribute, which is why three sanitizer runs there saw nothing. */
+    if (count > 1u)
+        qsort(keys, count, sizeof(*keys), compare_coroutine_entity_key);
     bool valid = true;
     for (uint32_t i = 0; i < count; i++) {
         uint32_t expected =
@@ -859,8 +864,9 @@ static bool verify_coroutine_lifecycle_entities(const XrSemanticPlan *plan,
         }
         owner_entities[record->subject] = entity;
     }
-    qsort(entities, lifecycle_count, sizeof(*entities),
-          compare_coroutine_lifecycle_entity_projection);
+    if (lifecycle_count > 1u)
+        qsort(entities, lifecycle_count, sizeof(*entities),
+              compare_coroutine_lifecycle_entity_projection);
     bool complete = projection.count <= UINT32_MAX / 3u && lifecycle_count == projection.count * 3u;
     for (uint32_t i = 0; complete && i < projection.count; i++) {
         const XrSemanticCoroutineLifecycleShape *shape = &projection.rows[i];
@@ -2981,7 +2987,8 @@ static bool frozen_shared_store_index_build(const XrSemanticPlan *plan,
             .operation = operation,
         };
     }
-    qsort(index->rows, index->count, sizeof(*index->rows), compare_frozen_shared_store_rows);
+    if (index->count > 1u)
+        qsort(index->rows, index->count, sizeof(*index->rows), compare_frozen_shared_store_rows);
     return true;
 }
 

@@ -8447,7 +8447,11 @@ static bool verify_roots_and_cleanups(const XrTargetPlan *plan, char *error, siz
                                                                           : "XR_EXEC_5003",
                       "root lifecycle projection is unavailable");
     }
-    qsort(projection, projection_count, sizeof(*projection), verify_compare_lifecycle_projection);
+    /* Empty projections allocate nothing, and qsort's base is declared
+     * non-null on glibc; sorting nothing is undefined behaviour there. */
+    if (projection_count > 1u)
+        qsort(projection, projection_count, sizeof(*projection),
+              verify_compare_lifecycle_projection);
     uint32_t next_root = 0;
     uint32_t next_root_slot = 0;
     uint32_t next_cleanup = 0;

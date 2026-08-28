@@ -136,6 +136,6 @@ failure is a null result with no error allocation or pending-error traffic.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 82dbe6329f95db4b2ecd0eba6f2bf33e353a0814cd9e253528be6ce540a3c9d1
-anchor-sha256: src/aot/xi_cgen.c 835082148176e139f9000256617666710973fe14176f53b601e3f3a03c0e1a22
+anchor-sha256: src/aot/xi_cgen.c 300ac0b31c39310af9ac2a328eb13b675aaaac0ae72736e73003a0573102cd28
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 325ba4faa1d79320f0f63ae76e52ce9e0a166697b33904c7a34abf4102e2321d
 anchor-sha256: src/app/cli/xcmd_verify.c 4d806bacb7a94efeba2d3d05e1ef657596fb7cbac2f315aff0d40f0e4de49629

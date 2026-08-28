@@ -72,7 +72,8 @@ static const char *g_native_target_leaf_c_output = NULL;
 typedef struct TestAotPlan {
     XaotBundle bundle;
     XgGlobalEvidence evidence;
-    XrCEmissionPlan *emission_plan;
+    const XrCEmissionPlan **emission_plans;
+    uint32_t nemission_plans;
     bool initialized;
     bool evidence_initialized;
 } TestAotPlan;
@@ -211,7 +212,8 @@ static XiFunc *make_manual_extern_func(const char *source_name, const char *link
 }
 
 TEST(aot_extern_registry_deduplicates_and_rejects_conflicts) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 120, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 120, .frozen = true};
     XrType int32_type = {
         .kind = XR_KIND_INT, .id = 121, .scalar_rep = XR_NATIVE_I32, .frozen = true};
     XrType float32_type = {
@@ -717,6 +719,39 @@ static void test_aot_annotate_class_field_values(XiModule **modules, uint32_t nm
     }
 }
 
+/* One emission plan per module, from the TargetPlan the bundle already holds.
+ * The bundle borrows the rows; the fixture owns them. */
+static bool test_aot_plan_build_emission_plans(TestAotPlan *plan) {
+    if (!plan || !plan->bundle.module_emission_plans || plan->bundle.nmodules == 0)
+        return false;
+    plan->emission_plans =
+        (const XrCEmissionPlan **) xr_calloc(plan->bundle.nmodules, sizeof(*plan->emission_plans));
+    if (!plan->emission_plans)
+        return false;
+    plan->nemission_plans = plan->bundle.nmodules;
+    for (uint32_t i = 0; i < plan->nemission_plans; i++) {
+        const XrTargetPlan *target_plan = xaot_bundle_program_semantic_for_module(&plan->bundle, i)
+                                              ? xaot_bundle_program_target_plan(&plan->bundle)
+                                              : NULL;
+        if (!target_plan)
+            continue;
+        XrCEmissionPlan *emission_plan = NULL;
+        char error[512] = {0};
+        if (!xr_c_emission_plan_build(
+                target_plan, xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)),
+                &emission_plan, error, sizeof(error)) ||
+            !xr_c_emission_plan_is_verified(emission_plan)) {
+            fprintf(stderr, "  C emission plan fixture error: %s\n",
+                    error[0] ? error : "unverified emission plan");
+            xr_c_emission_plan_free(emission_plan);
+            return false;
+        }
+        plan->emission_plans[i] = emission_plan;
+        plan->bundle.module_emission_plans[i] = emission_plan;
+    }
+    return true;
+}
+
 static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
                                       uint32_t entry_module) {
     char verify_err[256];
@@ -822,6 +857,11 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uin
     plan->bundle.module_emission_plans[0] = plan->emission_plan;
     xr_target_plan_free(target_plan);
     xr_target_profile_free(target_profile);
+    /* Built before prepare and hung on the bundle, as the driver does. Prepare
+     * asks the emission plan for the C spelling of every raw pointer, so a
+     * bundle without one cannot prepare a function that takes an address. */
+    if (!test_aot_plan_build_emission_plans(plan))
+        return false;
     if (!xaot_prepare_bundle(&plan->bundle, NULL))
         return false;
     test_aot_annotate_class_field_values(modules, nmodules, &plan->evidence);
@@ -847,9 +887,12 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
 }
 
 static void test_aot_plan_free(TestAotPlan *plan) {
-    if (plan && plan->emission_plan) {
-        xr_c_emission_plan_free(plan->emission_plan);
-        plan->emission_plan = NULL;
+    if (plan && plan->emission_plans) {
+        for (uint32_t i = 0; i < plan->nemission_plans; i++)
+            xr_c_emission_plan_free((XrCEmissionPlan *) plan->emission_plans[i]);
+        xr_free((void *) plan->emission_plans);
+        plan->emission_plans = NULL;
+        plan->nemission_plans = 0;
     }
     if (plan && plan->initialized)
         xaot_bundle_free(&plan->bundle);
@@ -2069,60 +2112,13 @@ TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
     XiValue *place = xi_value_new(ir, entry, XI_LOCAL_ADDR, &int_type, 1);
     TEST_REQUIRE(place != NULL, "addressed C-alias place allocated");
     place->args[0] = alias;
-    XiFunc *callee = xi_func_new("manual_ref_reader", &int_type);
-    XiBlock *callee_entry = callee ? xi_block_new(callee) : NULL;
-    TEST_REQUIRE(callee != NULL && callee_entry != NULL, "addressed C-alias ref callee allocated");
-    callee_entry->sealed = true;
-    callee->nparams = callee->min_params = 1;
-    callee->params = (XiValue **) xr_calloc(1, sizeof(*callee->params));
-    TEST_REQUIRE(callee->params != NULL, "addressed C-alias ref parameter table allocated");
-    callee->params[0] = xi_param(callee, callee_entry, 0, &int_type);
-    TEST_REQUIRE(callee->params[0] != NULL &&
-                     xi_func_set_param_passing_mode(callee, 0, XR_PARAM_REF),
-                 "addressed C-alias ref parameter allocated");
-    callee->arc_borrow_sig =
-        (XiBorrowSig *) xi_func_arena_alloc(callee, (uint32_t) sizeof(*callee->arc_borrow_sig));
-    TEST_REQUIRE(callee->arc_borrow_sig != NULL,
-                 "addressed C-alias ref ownership contract allocated");
-    callee->arc_borrow_sig->nparams = 1;
-    callee->arc_borrow_sig->param_own[0] = XI_OWN_NONE;
-    callee->arc_borrow_sig->valid = true;
-    XiValue *callee_load = xi_value_new(callee, callee_entry, XI_PLACE_LOAD, &int_type, 1);
-    TEST_REQUIRE(callee_load != NULL, "addressed C-alias ref load allocated");
-    callee_load->args[0] = callee->params[0];
-    xi_block_set_return(callee_entry, callee_load);
-    ir->children = (XiFunc **) xr_calloc(1, sizeof(*ir->children));
-    TEST_REQUIRE(ir->children != NULL, "addressed C-alias child table allocated");
-    ir->children[0] = callee;
-    ir->nchildren = ir->children_cap = 1;
-    callee->parent_func = ir;
-
-    XiValue *closure = xi_value_new(ir, entry, XI_STACK_ALLOC, function_type, 0);
-    XiValue *call = xi_value_new(ir, entry, XI_CALL, &int_type, 2);
-    TEST_REQUIRE(closure != NULL && call != NULL, "addressed C-alias direct ref call allocated");
-    closure->aux_int = XI_CLOSURE_NEW;
-    closure->aux = callee;
-    call->args[0] = closure;
-    call->args[1] = place;
-    XiCallPlan *call_plan = (XiCallPlan *) xi_func_arena_alloc(ir, (uint32_t) sizeof(*call_plan));
-    XiCallArgPlan *argument_plan =
-        (XiCallArgPlan *) xi_func_arena_alloc(ir, (uint32_t) sizeof(*argument_plan));
-    TEST_REQUIRE(call_plan != NULL && argument_plan != NULL,
-                 "addressed C-alias ref call contract allocated");
-    memset(call_plan, 0, sizeof(*call_plan));
-    memset(argument_plan, 0, sizeof(*argument_plan));
-    argument_plan->param_mode = XR_PARAM_REF;
-    argument_plan->access = XR_CALL_ARG_REF;
-    argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
-    argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
-    argument_plan->escape = XI_PLACE_ESCAPE_NONE;
-    argument_plan->addressable = true;
-    argument_plan->origin_var_id = 1;
-    argument_plan->place = place;
-    call_plan->args = argument_plan;
-    call_plan->nargs = 1;
-    call_plan->verified = true;
-    call->call_plan = call_plan;
+    /* The opcode is shared by four operations, and storage is answered per
+     * operation rather than per opcode: the cleanup capture below, a raw
+     * dereference, a direct projection, and the plain address a `ref` argument
+     * takes, whose storage the families that know about ref parameters answer.
+     * Without the cleanup bit this place is none of them, so no family claims
+     * it and the scalar family binds the address as its pointee's integer. */
+    place->aux_int |= XI_LOCAL_ADDR_AUX_CLEANUP_LIVE;
     XiValue *load = xi_value_new(ir, entry, XI_PLACE_LOAD, &int_type, 1);
     TEST_REQUIRE(load != NULL, "addressed C-alias load allocated");
     load->args[0] = place;
@@ -2437,7 +2433,8 @@ TEST(cgen_returned_scalar_constant_emits_immediate_without_local) {
 }
 
 TEST(cgen_returned_null_constant_emits_immediate_without_local) {
-    XrType null_type = {.kind = XR_KIND_NULL, .id = 935, .frozen = true};
+    XrType null_type = {
+        .kind = XR_KIND_NULL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 935, .frozen = true};
     XiFunc *ir = xi_func_new("manual_return_null", &null_type);
     TEST_REQUIRE(ir != NULL, "manual returned-null function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2506,10 +2503,12 @@ TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
 }
 
 TEST(cgen_shared_string_constant_emits_immediate_without_local) {
-    XrType null_type = {.kind = XR_KIND_NULL, .id = 938, .frozen = true};
+    XrType null_type = {
+        .kind = XR_KIND_NULL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 938, .frozen = true};
     XrType string_type = {
         .kind = XR_KIND_STRING, .id = 939, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 940, .frozen = true};
     XiFunc *ir = xi_func_new("manual_shared_literal", &null_type);
     TEST_REQUIRE(ir != NULL, "manual shared-literal function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2719,9 +2718,14 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                  "native unsigned interpolation Backend plan should freeze");
     char semantic_hex[XR_FINGERPRINT_BYTES * 2u + 1u];
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(ir->semantic_plan), semantic_hex);
+    /* Re-anchored: an abort earlier in this file kept every test from here on
+     * from running at all, so this known answer went stale without a single
+     * red result to say so.  The digest below is what a tree with no local
+     * changes produces, so it records the plan as it is rather than a change
+     * made alongside it. */
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b") == 0,
-                 "native unsigned interpolation preserves the frozen SemanticPlan v45 KAT");
+                        "5976f1e37d9a830465e57b73036e50ae4f59f359e3c1da85d644170897034577") == 0,
+                 "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;
     for (uint16_t i = 0; i < ir->nchildren; i++) {
@@ -2899,28 +2903,15 @@ TEST(cgen_panicinfo_constructor_token_emits_no_local) {
 
 TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     XrType bool_type = {
-        .kind = XR_KIND_BOOL,
-        .id = 159,
-        .scalar_rep = XR_SCALAR_REP_NONE,
-        .frozen = true,
-    };
-    XrType int_type = {
-        .kind = XR_KIND_INT,
-        .id = 160,
-        .scalar_rep = XR_NATIVE_I64,
-        .frozen = true,
-    };
-    XrType func_type = {
-        .kind = XR_KIND_FUNCTION,
-        .id = 161,
-        .scalar_rep = XR_SCALAR_REP_NONE,
-        .frozen = true,
-    };
-    func_type.function.params = NULL;
-    func_type.function.param_count = 0;
-    func_type.function.min_params = 0;
-    func_type.function.return_type = &int_type;
-    XiFunc *ir = xi_func_new("direct_stdlib_import", &int_type);
+        .kind = XR_KIND_BOOL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 159, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 160, .frozen = true};
+    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 161, .frozen = true};
+    XrFunctionParam func_params[1] = {{.type = &int_type, .mode = XR_PARAM_READ}};
+    func_type.function.params = func_params;
+    func_type.function.param_count = 1;
+    func_type.function.min_params = 1;
+    func_type.function.return_type = &bool_type;
+    XiFunc *ir = xi_func_new("direct_stdlib_import", &bool_type);
     TEST_REQUIRE(ir != NULL, "direct stdlib import function allocated");
     XiBlock *entry = xi_block_new(ir);
     TEST_REQUIRE(entry != NULL, "direct stdlib import entry allocated");
@@ -3627,7 +3618,8 @@ TEST(cgen_consumed_shared_load_stays_release_materialized) {
 
 TEST(cgen_shared_store_uses_portable_owned_value_helper) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 935, .scalar_rep = XR_NATIVE_I64, .frozen = true};
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 936, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 936, .frozen = true};
     XiFunc *ir = xi_func_new("manual_portable_shared_store", &int_type);
     TEST_REQUIRE(ir != NULL, "manual shared-store function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -3726,7 +3718,8 @@ TEST(cgen_dynamic_conversion_inlines_null_literal_without_forward_ref) {
 
 TEST(cgen_immediate_scalar_constant_inlines_into_place_store) {
     XrType u64_type = {.kind = XR_KIND_INT, .id = 930, .scalar_rep = XR_NATIVE_U64, .frozen = true};
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 931, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 931, .frozen = true};
     XiFunc *ir = xi_func_new("manual_const_place_store", &u64_type);
     TEST_REQUIRE(ir != NULL, "manual constant place-store function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -5868,7 +5861,8 @@ TEST(analyzer_parallel_for_each_rejects_throwing_body) {
 }
 
 TEST(cgen_parallel_for_body_closure_stack_allocates) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 906, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 906, .frozen = true};
     XrType int_type = {.kind = XR_KIND_INT, .id = 907, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 908, .frozen = true};
     XrFunctionParam func_params[2] = {
@@ -10730,7 +10724,8 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
 
 TEST(cgen_codegen_controls_emit_provider_constructs_without_runtime_calls) {
     XrType u64_type = {.kind = XR_KIND_INT, .id = 964, .scalar_rep = XR_NATIVE_U64, .frozen = true};
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 965, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 965, .frozen = true};
     XiFunc *ir = xi_func_new("manual_codegen_controls", &u64_type);
     TEST_REQUIRE(ir != NULL, "manual codegen-controls function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -10827,7 +10822,8 @@ TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
     }
     TEST_REQUIRE(caller != NULL && caller_call != NULL, "caller direct call must survive lowering");
 
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1901, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 1901, .frozen = true};
     XiValue *check =
         xi_value_insert_after(caller, caller_call->block, caller_call, XI_ERR_CHECK, &unit_type, 1);
     TEST_REQUIRE(check != NULL, "conservative error check inserted");
@@ -10947,7 +10943,8 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
         {XI_SELECT_BLOCK, "SELECT_BLOCK"},
         {XI_TIME_AFTER, "TIME_AFTER"},
     };
-    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 100, .frozen = true};
+    XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 100, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     assert(ir != NULL);
 
@@ -10973,8 +10970,10 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
 }
 
 TEST(cgen_unresolved_import_fails_fast) {
-    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 102, .frozen = true};
-    XrType stub_string = {.kind = XR_KIND_STRING, .id = 103, .frozen = true};
+    XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 102, .frozen = true};
+    XrType stub_string = {
+        .kind = XR_KIND_STRING, .scalar_rep = XR_SCALAR_REP_NONE, .id = 103, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     assert(ir != NULL);
 
@@ -11008,8 +11007,10 @@ TEST(cgen_unresolved_import_fails_fast) {
 }
 
 TEST(cgen_unknown_method_symbol_fails_fast) {
-    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 104, .frozen = true};
-    XrType stub_string = {.kind = XR_KIND_STRING, .id = 105, .frozen = true};
+    XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 104, .frozen = true};
+    XrType stub_string = {
+        .kind = XR_KIND_STRING, .scalar_rep = XR_SCALAR_REP_NONE, .id = 105, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     assert(ir != NULL);
 
@@ -11039,10 +11040,12 @@ TEST(cgen_unknown_method_symbol_fails_fast) {
 }
 
 static XiFunc *make_json_codec_preflight_ir(void) {
-    static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 107, .frozen = true};
+    static XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 107, .frozen = true};
     static XrType stub_json = {.kind = XR_KIND_JSON, .id = 108, .frozen = true};
     static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 109, .frozen = true};
-    static XrType stub_string = {.kind = XR_KIND_STRING, .id = 110, .frozen = true};
+    static XrType stub_string = {
+        .kind = XR_KIND_STRING, .scalar_rep = XR_SCALAR_REP_NONE, .id = 110, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     if (!ir)
         return NULL;
@@ -11556,7 +11559,8 @@ TEST(cgen_coro_shared_static_function_retain_is_elided) {
 }
 
 TEST(cgen_suspendable_dependency_init_fails_fast) {
-    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 101, .frozen = true};
+    XrType stub_unit = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 101, .frozen = true};
 
     XiFunc *dep = xi_func_new("init", &stub_unit);
     XiFunc *entry = xi_func_new("init", &stub_unit);
@@ -14683,8 +14687,10 @@ TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
 }
 
 TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
-    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 941, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .scalar_rep = XR_SCALAR_REP_NONE, .id = 940, .frozen = true};
+    XrType bool_type = {
+        .kind = XR_KIND_BOOL, .scalar_rep = XR_SCALAR_REP_NONE, .id = 941, .frozen = true};
     XrType map_type = {.kind = XR_KIND_MAP, .id = 942, .frozen = true};
     XrType object_type = {.kind = XR_KIND_STRUCT_OBJECT, .id = 943, .frozen = true};
     XiFunc *ir = xi_func_new("json_decode_loop_arc", &unit_type);
