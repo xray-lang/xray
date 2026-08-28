@@ -3986,7 +3986,7 @@ static void test_native_module_scalar_call_authority(void) {
      * operand carries the whole callsite contract, and the registry answers on
      * the module path and selector alone. */
     XrSemanticPlan *nullary = build_native_module_scalar_call_plan(
-        "mem", NULL, "cacheLineSize", 0,
+        "mem", NULL, "__cacheLineSize", 0,
         NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64);
     const XrSemanticOperationRecord *nullary_call = native_module_call_operation(nullary);
     REQUIRE(nullary_call->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
@@ -4077,11 +4077,11 @@ static void test_native_module_scalar_call_authority(void) {
     /* `mem?.cacheLineSize()` -- the odd immediate is the optional chaining bit,
      * and a callsite that may not dispatch at all names no single target. */
     expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
-        "mem", NULL, "cacheLineSize", 0,
+        "mem", NULL, "__cacheLineSize", 0,
         NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 1), &stub_i64));
     /* A zero immediate is a callsite whose method symbol never resolved. */
     expect_no_native_module_scalar_call(
-        build_native_module_scalar_call_plan("mem", NULL, "cacheLineSize", 0, 0, &stub_i64));
+        build_native_module_scalar_call_plan("mem", NULL, "__cacheLineSize", 0, 0, &stub_i64));
     /* The registry is the only authority over the selector: an invented member
      * has no frozen row and therefore no single implementation. */
     expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
@@ -4090,7 +4090,7 @@ static void test_native_module_scalar_call_authority(void) {
     /* Arity is part of the identity, not a detail the row tolerates: the
      * registry is asked for the member at this callsite's argument count. */
     expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
-        "mem", NULL, "cacheLineSize", 1,
+        "mem", NULL, "__cacheLineSize", 1,
         NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64));
     /* `import { cacheLineSize } from mem` publishes a member reference, not the
      * module namespace, so the receiver it stores is a different value even
@@ -4103,7 +4103,7 @@ static void test_native_module_scalar_call_authority(void) {
      * registry still names one implementation and this is the boundary
      * judgement refusing on its own rather than the lookup refusing for it. */
     expect_no_native_module_scalar_call(build_native_module_scalar_call_plan(
-        "mem", NULL, "cacheLineSize", 0,
+        "mem", NULL, "__cacheLineSize", 0,
         NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_unrepresented_int));
 }
 
