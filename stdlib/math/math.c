@@ -494,14 +494,3 @@ static XrValue math_isFinite(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Module Loading ========== */
 
-XR_FUNC XrModule *xr_native_module_create_math(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_math: NULL isolate");
-
-    XrModule *mod = xr_module_create_native(isolate, "math");
-    if (!mod)
-        return NULL;
-
-    xr_stdlib_vm_bind_math_generated(isolate, mod);
-
-    return mod;
-}

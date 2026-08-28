@@ -96,13 +96,10 @@ TEST(resolver_new_free) {
 
 /* ========== Stdlib Resolution Tests ========== */
 
+/* The stdlib module set is the generated descriptor table, not something a
+ * caller supplies, so these cases assert against the real one. */
 TEST(resolve_bare_stdlib_known) {
-    XrHashMap *factories = xr_hashmap_new();
-    xr_hashmap_set(factories, "time", (void *) 1);
-    xr_hashmap_set(factories, "math", (void *) 1);
-
-    XrModuleResolverConfig cfg = {
-        .native_factories = factories, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     XrModuleId mid;
@@ -122,15 +119,10 @@ TEST(resolve_bare_stdlib_known) {
     xr_module_id_cleanup(&mid);
 
     xr_module_resolver_free(r);
-    xr_hashmap_free(factories);
 }
 
 TEST(resolve_bare_stdlib_unknown) {
-    XrHashMap *factories = xr_hashmap_new();
-    xr_hashmap_set(factories, "time", (void *) 1);
-
-    XrModuleResolverConfig cfg = {
-        .native_factories = factories, .stdlib_path = NULL, .lockfile = NULL};
+    XrModuleResolverConfig cfg = {.stdlib_path = NULL, .lockfile = NULL};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
 
     XrModuleId mid;
@@ -141,7 +133,6 @@ TEST(resolve_bare_stdlib_unknown) {
     xr_free(err);
 
     xr_module_resolver_free(r);
-    xr_hashmap_free(factories);
 }
 
 /* ========== Relative File Resolution Tests ========== */

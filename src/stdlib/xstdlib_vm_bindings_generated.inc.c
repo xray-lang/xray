@@ -12,6 +12,11 @@
  * and after the module's static
  * C functions have been declared, then define exactly one
  * XR_STDLIB_VM_BIND_MODULE_<MODULE> macro before including it.
+ *
+ * Every binder has one shape: it installs the module's whole native
+ * entry set and answers whether the installed count is the declared
+ * one, so the generic loader can fail closed without knowing which
+ * module it is loading.
  */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_CLUSTER
@@ -19,6 +24,7 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__start", cluster_start_primitive);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__join", cluster_join);
@@ -48,6 +54,7 @@ XR_FUNC bool xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__gzip", compress_gzip);
     expected_count++;
     XRS_EXPORT(module, isolate, "__gunzip", compress_gunzip);
@@ -69,6 +76,7 @@ XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__randomBytes", crypto_random_bytes_raw);
     expected_count++;
     XRS_EXPORT(module, isolate, "__timingSafeEqualBytes", crypto_timing_safe_equal_bytes);
@@ -82,6 +90,7 @@ XR_FUNC bool xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *m
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__supported", h2_supported);
     expected_count++;
     XRS_EXPORT(module, isolate, "__request", h2_request_typed);
@@ -95,6 +104,7 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__appendFile", io_appendFile);
     expected_count++;
     XRS_EXPORT(module, isolate, "__chmod", io_chmod);
@@ -166,92 +176,183 @@ XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modu
 #endif  /* XR_STDLIB_VM_BIND_MODULE_IO */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_MATH
-static void xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "abs", math_abs);
+    expected_count++;
     XRS_EXPORT(module, isolate, "floor", math_floor);
+    expected_count++;
     XRS_EXPORT(module, isolate, "ceil", math_ceil);
+    expected_count++;
     XRS_EXPORT(module, isolate, "round", math_round);
+    expected_count++;
     XRS_EXPORT(module, isolate, "sqrt", math_sqrt);
+    expected_count++;
     XRS_EXPORT(module, isolate, "pow", math_pow);
+    expected_count++;
     XRS_EXPORT(module, isolate, "sin", math_sin);
+    expected_count++;
     XRS_EXPORT(module, isolate, "cos", math_cos);
+    expected_count++;
     XRS_EXPORT(module, isolate, "tan", math_tan);
+    expected_count++;
     XRS_EXPORT(module, isolate, "asin", math_asin);
+    expected_count++;
     XRS_EXPORT(module, isolate, "acos", math_acos);
+    expected_count++;
     XRS_EXPORT(module, isolate, "atan", math_atan);
+    expected_count++;
     XRS_EXPORT(module, isolate, "atan2", math_atan2);
+    expected_count++;
     XRS_EXPORT(module, isolate, "log", math_log);
+    expected_count++;
     XRS_EXPORT(module, isolate, "log10", math_log10);
+    expected_count++;
     XRS_EXPORT(module, isolate, "log2", math_log2);
+    expected_count++;
     XRS_EXPORT(module, isolate, "exp", math_exp);
+    expected_count++;
     XRS_EXPORT(module, isolate, "min", math_min);
+    expected_count++;
     XRS_EXPORT(module, isolate, "max", math_max);
+    expected_count++;
     XRS_EXPORT(module, isolate, "clamp", math_clamp);
+    expected_count++;
     XRS_EXPORT(module, isolate, "random", math_random);
+    expected_count++;
     XRS_EXPORT(module, isolate, "randomInt", math_randomInt);
+    expected_count++;
     XRS_EXPORT(module, isolate, "sign", math_sign);
+    expected_count++;
     XRS_EXPORT(module, isolate, "sinh", math_sinh);
+    expected_count++;
     XRS_EXPORT(module, isolate, "cosh", math_cosh);
+    expected_count++;
     XRS_EXPORT(module, isolate, "tanh", math_tanh);
+    expected_count++;
     XRS_EXPORT(module, isolate, "hypot", math_hypot);
+    expected_count++;
     XRS_EXPORT(module, isolate, "cbrt", math_cbrt);
+    expected_count++;
     XRS_EXPORT(module, isolate, "trunc", math_trunc);
+    expected_count++;
     XRS_EXPORT(module, isolate, "fmod", math_fmod);
+    expected_count++;
     XRS_EXPORT(module, isolate, "log1p", math_log1p);
+    expected_count++;
     XRS_EXPORT(module, isolate, "expm1", math_expm1);
+    expected_count++;
     XRS_EXPORT(module, isolate, "lerp", math_lerp);
+    expected_count++;
     XRS_EXPORT(module, isolate, "degToRad", math_degToRad);
+    expected_count++;
     XRS_EXPORT(module, isolate, "radToDeg", math_radToDeg);
+    expected_count++;
     XRS_EXPORT(module, isolate, "isNaN", math_isNaN);
+    expected_count++;
     XRS_EXPORT(module, isolate, "isFinite", math_isFinite);
+    expected_count++;
     xr_module_add_export(isolate, module, "PI", xr_float(M_PI));
+    expected_count++;
     xr_module_add_export(isolate, module, "E", xr_float(M_E));
+    expected_count++;
     xr_module_add_export(isolate, module, "TAU", xr_float(2.0 * M_PI));
+    expected_count++;
     xr_module_add_export(isolate, module, "SQRT2", xr_float(M_SQRT2));
+    expected_count++;
     xr_module_add_export(isolate, module, "LN2", xr_float(M_LN2));
+    expected_count++;
     xr_module_add_export(isolate, module, "LN10", xr_float(M_LN10));
+    expected_count++;
     xr_module_add_export(isolate, module, "LOG2E", xr_float(M_LOG2E));
+    expected_count++;
     xr_module_add_export(isolate, module, "LOG10E", xr_float(M_LOG10E));
+    expected_count++;
     xr_module_add_export(isolate, module, "EPSILON", xr_float(DBL_EPSILON));
+    expected_count++;
     xr_module_add_export(isolate, module, "MAX_I64", xr_int(INT64_MAX));
+    expected_count++;
     xr_module_add_export(isolate, module, "MIN_I64", xr_int(INT64_MIN));
+    expected_count++;
     xr_module_add_export(isolate, module, "MAX_F64", xr_float(DBL_MAX));
+    expected_count++;
     xr_module_add_export(isolate, module, "INF", xr_float(INFINITY));
+    expected_count++;
     xr_module_add_export(isolate, module, "NAN", xr_float(NAN));
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MATH */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_MEM
-static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    (void) expected_count;
+    xr_stdlib_vm_register_buffer_class_generated(isolate);
     XRS_EXPORT(module, isolate, "__fence", mem_fence);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__prefetch", mem_prefetch);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__cacheFlush", mem_cache_flush);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__cacheInvalidate", mem_cache_invalidate);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__nontemporalStore", mem_nontemporal_store);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__cacheLineSize", mem_cache_line_size);
+    expected_count++;
     XRS_EXPORT(module, isolate, "sizeOf", mem_size_of);
+    expected_count++;
     XRS_EXPORT(module, isolate, "alignOf", mem_align_of);
+    expected_count++;
     XRS_EXPORT(module, isolate, "offsetOf", mem_offset_of);
+    expected_count++;
     XRS_EXPORT(module, isolate, "slice", mem_slice_intrinsic);
+    expected_count++;
     XRS_EXPORT(module, isolate, "assumeInitialized", mem_assume_initialized_intrinsic);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__alloc", mem_alloc);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__allocZeroed", mem_alloc_zeroed);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__allocAligned", mem_alloc_aligned);
+    expected_count++;
     XRS_EXPORT(module, isolate, "pageAlloc", mem_page_alloc);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__pageProtect", mem_page_protect);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__pageFree", mem_page_free);
+    expected_count++;
     XRS_EXPORT(module, isolate, "ptr", mem_ptr);
+    expected_count++;
     XRS_EXPORT(module, isolate, "withSliceMut", mem_with_slice_mut_intrinsic);
+    expected_count++;
     XRS_EXPORT(module, isolate, "mutPtr", mem_mut_ptr);
+    expected_count++;
     XRS_EXPORT(module, isolate, "addr", mem_addr);
+    expected_count++;
     XRS_EXPORT(module, isolate, "load", mem_load_intrinsic);
+    expected_count++;
     XRS_EXPORT(module, isolate, "store", mem_store_intrinsic);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__copy", mem_copy);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__move", mem_move);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__set", mem_set);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__compare", mem_compare);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__volatileLoad", mem_volatile_load);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__volatileStore", mem_volatile_store);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MEM */
 
@@ -260,6 +361,7 @@ XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *mod
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT_YIELDABLE(module, isolate, "__resolveAll", net_resolve_all_yieldable);
     expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__connectFd", net_connect_fd_yieldable);
@@ -325,6 +427,7 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__platform", os_platform);
     expected_count++;
     XRS_EXPORT(module, isolate, "__arch", os_arch);
@@ -380,20 +483,38 @@ XR_FUNC bool xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modu
 #endif  /* XR_STDLIB_VM_BIND_MODULE_OS */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_REGEX
-static void xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_regex_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__compile", regex_compile);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__test", regex_test);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__count", regex_count);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__findText", regex_find_text);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__findGroup", regex_find_group);
+    expected_count++;
     XRS_EXPORT(module, isolate, "find", regex_find);
+    expected_count++;
     XRS_EXPORT(module, isolate, "fullFind", regex_full_match);
+    expected_count++;
     XRS_EXPORT(module, isolate, "findAll", regex_find_all);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__replace", regex_replace);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__replaceAll", regex_replace_all);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__split", regex_split);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__escape", regex_escape);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__isValid", regex_is_valid);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_REGEX */
 
@@ -402,6 +523,7 @@ XR_FUNC bool xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule 
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
     size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__stats", runtime_stats);
     expected_count++;
     XRS_EXPORT(module, isolate, "__liveBytes", runtime_live_bytes);
@@ -416,43 +538,139 @@ XR_FUNC bool xr_stdlib_vm_bind_runtime_generated(XrVMRuntime *isolate, XrModule 
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_RUNTIME */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_SYNC
+XR_FUNC bool xr_stdlib_vm_bind_sync_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    (void) expected_count;
+    xr_module_export_native_type_class(isolate, module, "CountdownLatch", XR_TCOUNTDOWNLATCH);
+    expected_count++;
+    xr_module_export_native_type_class(isolate, module, "EventCount", XR_TEVENTCOUNT);
+    expected_count++;
+    xr_module_export_native_type_class(isolate, module, "ResultGroup", XR_TRESULTGROUP);
+    expected_count++;
+    xr_module_export_native_type_class(isolate, module, "Semaphore", XR_TSEMAPHORE);
+    expected_count++;
+    xr_module_export_native_type_class(isolate, module, "WorkQueue", XR_TWORKQUEUE);
+    expected_count++;
+    return module->export_count == expected_count;
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_SYNC */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_SYS
-static void xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_sys_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "OsMutex", sys_mutex_new);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__osMutexNew", sys_mutex_new);
+    expected_count++;
     XRS_EXPORT(module, isolate, "OsRwLock", sys_rwlock_new);
+    expected_count++;
     XRS_EXPORT(module, isolate, "OsCondvar", sys_condvar_new);
+    expected_count++;
     XRS_EXPORT(module, isolate, "OsBarrier", sys_barrier_new);
+    expected_count++;
     XRS_EXPORT(module, isolate, "OsOnce", sys_once_new);
+    expected_count++;
     XRS_EXPORT(module, isolate, "cpuCount", sys_cpu_count);
+    expected_count++;
     XRS_EXPORT(module, isolate, "threadYield", sys_thread_yield);
+    expected_count++;
     XRS_EXPORT(module, isolate, "sleepMs", sys_sleep_ms);
+    expected_count++;
     XRS_EXPORT(module, isolate, "pinToCpu", sys_pin_to_cpu);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__threadLocalId", sys_thread_local_id);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__threadLocalAlive", sys_thread_local_alive);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__onSignal", sys_on_signal);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__dylibOpen", sys_dylib_open);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__dylibSymbol", sys_dylib_symbol);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__dylibClose", sys_dylib_close);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__dylibLastError", sys_dylib_last_error);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__processSpawn", sys_process_spawn);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__processWait", sys_process_wait_yieldable);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__processTryWait", sys_process_try_wait);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__processKill", sys_process_kill);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__pipeOpen", sys_pipe_open);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__pipeRead", sys_pipe_read_yieldable);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "__pipeWrite", sys_pipe_write_yieldable);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__pipeClose", sys_pipe_close);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_SYS */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_TEST_YIELD
+XR_FUNC bool xr_stdlib_vm_bind_test_yield_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    (void) expected_count;
+    XRS_EXPORT_YIELDABLE(module, isolate, "simple", test_yield_simple);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "add", test_yield_add);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "sync", test_yield_sync);
+    expected_count++;
+    XRS_EXPORT_SLOW(module, isolate, "blocking_sleep", test_yield_blocking_sleep);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "multi_yield", test_yield_multi);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "chain", test_yield_chain);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "error_test", test_yield_error);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "cancel_test", test_yield_cancel);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "nested", test_yield_nested);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "long_task", test_yield_long_task);
+    expected_count++;
+    XRS_EXPORT_YIELDABLE(module, isolate, "counter_inc", test_yield_counter_inc);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "counter_get", test_yield_counter_get);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "counter_reset", test_yield_counter_reset);
+    expected_count++;
+    return module->export_count == expected_count;
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_TEST_YIELD */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_TIME
-static void xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *module) {
+XR_FUNC bool xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    (void) expected_count;
     XRS_EXPORT(module, isolate, "__realtimeNanos", time_realtimeNanos);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__monotonicNanos", time_monotonicNanos);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__cpuNanos", time_cpuNanos);
+    expected_count++;
     XRS_EXPORT(module, isolate, "__utcOffsetAt", time_utcOffsetAt);
+    expected_count++;
     XRS_EXPORT_YIELDABLE(module, isolate, "sleep", xr_time_sleep);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_TIME */
 

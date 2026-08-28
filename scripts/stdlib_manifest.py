@@ -16,11 +16,6 @@ import tomllib
 MANIFEST_PATH = Path("stdlib/stdlib_boundary.toml")
 VALID_LAYERS = {"L0", "L1", "L2", "L3", "L4", "L5"}
 VALID_POLICIES = {"xray_semantic", "native_primitive", "native_library"}
-REGISTRY_ENTRY_RE = re.compile(
-    r'\{\s*"(?P<name>[A-Za-z_][A-Za-z0-9_]*)"\s*,\s*'
-    r'xr_native_module_create_(?P<factory>[A-Za-z_][A-Za-z0-9_]*)\s*\}'
-)
-
 
 @dataclass(frozen=True)
 class BoundaryManifest:
@@ -70,19 +65,17 @@ def load_manifest(root: Path) -> BoundaryManifest:
     )
 
 
-def registry_modules(root: Path) -> dict[str, str]:
-    path = root / "src/module/xmodule.c"
-    text = path.read_text(encoding="utf-8")
-    return {match.group("name"): match.group("factory") for match in REGISTRY_ENTRY_RE.finditer(text)}
+def native_entry_binder_modules(root: Path) -> dict[str, str]:
+    """Modules whose native entries the generic loader installs via a binder.
 
-
-def private_leaf_binder_modules(root: Path) -> dict[str, str]:
+    There is no registry of hand-written factories to read any more: a module
+    has native entries exactly when stdlibgen generates a binder for it, which
+    it decides from the .def rows and the manifest's loader declarations.
+    """
     stdlibgen = load_stdlibgen(root)
-    entries, constants, *_ = stdlibgen.parse_def_metadata(root)
-    modules = stdlibgen.derive_private_leaf_modules(root, entries, constants)
     return {
         name: f"xr_stdlib_vm_bind_{name}_generated"
-        for name in modules
+        for name in stdlibgen.derive_binder_modules(root)
     }
 
 
@@ -96,7 +89,17 @@ def source_modules(root: Path) -> set[str]:
 
 
 def loadable_modules(root: Path) -> set[str]:
-    return set(registry_modules(root)) | source_modules(root)
+    """Every module an import can resolve.
+
+    A module is loadable when it has an Xray source, native entries, or both.
+    `sourceless_loadable` covers the remaining case of a module with neither,
+    which nothing else can imply and which therefore has to be declared.
+    """
+    manifest = load_manifest(root)
+    declared = {
+        str(module["name"]) for module in manifest.modules if module.get("sourceless_loadable")
+    }
+    return set(native_entry_binder_modules(root)) | source_modules(root) | declared
 
 
 def load_stdlibgen(root: Path):

@@ -194,6 +194,5 @@ XR_FUNC XrContentEncoding xr_detect_content_encoding(const char *encoding);
 struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_native_module_create_compress(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_COMPRESS_H

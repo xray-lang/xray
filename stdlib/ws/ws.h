@@ -20,6 +20,5 @@
 struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_native_module_create_ws(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_WS_H

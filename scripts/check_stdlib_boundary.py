@@ -19,9 +19,9 @@ from stdlib_manifest import (
     dynamic_public_items,
     loadable_modules,
     load_manifest,
+    load_stdlibgen,
     load_toml,
-    private_leaf_binder_modules,
-    registry_modules,
+    native_entry_binder_modules,
     source_modules,
 )
 
@@ -50,8 +50,7 @@ def check_manifest(root: Path) -> list[str]:
         errors.append(f"{MANIFEST_PATH}: must declare at least one loadable module")
     if len(names) != len(set(names)):
         errors.append(f"{MANIFEST_PATH}: module names must be unique")
-    source_registry = registry_modules(root)
-    private_leaf_binders = private_leaf_binder_modules(root)
+    native_entry_binders = native_entry_binder_modules(root)
     canonical_sources = source_modules(root)
     loadable = loadable_modules(root)
     if set(names) != loadable:
@@ -83,34 +82,26 @@ def check_manifest(root: Path) -> list[str]:
         for field in ("semantic_source", "perf_suite"):
             if not module.get(field):
                 errors.append(f"module {name}: missing {field}")
-        for field in ("semantic_source", "factory_source"):
-            value = module.get(field)
-            if value and not (root / str(value)).is_file():
-                errors.append(f"module {name}: {field} does not exist: {value}")
-        expected_factory = source_registry.get(name)
-        expected_binder = private_leaf_binders.get(name)
-        factory_source = module.get("factory_source")
-        if expected_factory and not factory_source:
-            errors.append(f"module {name}: native factory requires factory_source")
-        if not expected_factory and factory_source:
+        value = module.get("semantic_source")
+        if value and not (root / str(value)).is_file():
+            errors.append(f"module {name}: semantic_source does not exist: {value}")
+        has_binder = name in native_entry_binders
+        if has_binder and name in canonical_sources and not module.get("private_native_sources"):
             errors.append(
-                f"module {name}: module without native factory must not declare factory_source"
+                f"module {name}: a module with an Xray source reaches its native entries through "
+                f"private C sources, which it must declare"
             )
-        if expected_binder and name not in canonical_sources:
-            errors.append(f"module {name}: private-leaf binder requires canonical Xray source")
-        if expected_binder and not module.get("private_native_sources"):
-            errors.append(f"module {name}: private-leaf binder requires private_native_sources")
-        if expected_binder and policy != "xray_semantic":
-            errors.append(f"module {name}: private-leaf binder requires xray_semantic policy")
-        if (
-            expected_binder
-            and not expected_factory
-            and (module.get("public_native") or module.get("manual_public_native"))
-        ):
+        loader_declarations = [
+            field
+            for field in ("native_type_exports", "native_fn_exports", "load_time_classes")
+            if module.get(field)
+        ]
+        if loader_declarations and not has_binder:
             errors.append(
-                f"module {name}: generic private-leaf binder cannot publish native API"
+                f"module {name}: {', '.join(loader_declarations)} declared but stdlibgen emits "
+                f"no binder for this module"
             )
-        if name in canonical_sources and not expected_factory and not expected_binder:
+        if name in canonical_sources and not has_binder:
             for field in (
                 "public_native",
                 "manual_public_native",
@@ -118,30 +109,105 @@ def check_manifest(root: Path) -> list[str]:
             ):
                 if module.get(field):
                     errors.append(f"module {name}: source-only module must not declare {field}")
-        declared_factory = str(
-            module.get("factory_symbol") or Path(str(factory_source or "")).stem
-        )
-        if expected_factory and declared_factory != expected_factory:
+        if module.get("sourceless_loadable") and (name in canonical_sources or has_binder):
             errors.append(
-                f"module {name}: factory {declared_factory!r} does not match registry symbol "
-                f"xr_native_module_create_{expected_factory}"
+                f"module {name}: sourceless_loadable is only for a module with neither an Xray "
+                f"source nor native entries"
+            )
+        errors.extend(check_loader_declarations(root, module, name))
+    return errors
+
+
+def check_loader_declarations(root: Path, module: dict, name: str) -> list[str]:
+    """Keep the loader declarations honest about what they name.
+
+    These rows replaced hand-written factories, so each one has to be checked
+    against the thing it claims to bind rather than trusted as free text.
+    """
+    errors: list[str] = []
+
+    for row in module.get("native_type_exports", ()):
+        builtin = str(row.get("builtin_type", ""))
+        if not re.fullmatch(r"XR_T[A-Z0-9_]+", builtin):
+            errors.append(
+                f"module {name}: native_type_exports {row.get('name')!r} has a malformed "
+                f"builtin_type {builtin!r}"
+            )
+        elif not builtin_type_is_declared(root, builtin):
+            errors.append(
+                f"module {name}: native_type_exports {row.get('name')!r} names an unknown "
+                f"builtin type {builtin}"
+            )
+
+    private_sources = [
+        path
+        for pattern in module.get("private_native_sources", ())
+        for path in root.glob(str(pattern))
+    ]
+    private_text = "\n".join(path.read_text(encoding="utf-8") for path in private_sources)
+    for row in module.get("native_fn_exports", ()):
+        symbol = str(row.get("vm", ""))
+        if not re.search(rf"\b{re.escape(symbol)}\b", private_text):
+            errors.append(
+                f"module {name}: native_fn_exports {row.get('name')!r} names {symbol!r}, which "
+                f"no private_native_sources file defines"
+            )
+
+    declared_classes = def_native_classes(root).get(name, set())
+    for class_name in module.get("load_time_classes", ()):
+        if str(class_name) not in declared_classes:
+            errors.append(
+                f"module {name}: load_time_classes names {class_name!r}, which is not a "
+                f"native_class of this module in stdlib/defs"
+            )
+
+    # manual_public_native used to be checked by grepping the factory source.
+    # The declarations are the registration now, so they are what it checks.
+    declared_names = {str(row.get("name")) for row in module.get("native_type_exports", ())}
+    declared_names |= {str(row.get("name")) for row in module.get("native_fn_exports", ())}
+    for symbol in sorted(set(module.get("manual_public_native", ()))):
+        if symbol.rsplit(".", 1)[-1] not in declared_names:
+            errors.append(
+                f"module {name}: manual public native {symbol!r} is not declared by any "
+                f"native_type_exports or native_fn_exports row"
             )
     return errors
+
+
+def builtin_type_is_declared(root: Path, builtin: str) -> bool:
+    for path in sorted((root / "src").rglob("*.h")):
+        if re.search(rf"\b{re.escape(builtin)}\b", path.read_text(encoding="utf-8")):
+            return True
+    return False
+
+
+def def_native_classes(root: Path) -> dict[str, set[str]]:
+    stdlibgen = load_stdlibgen(root)
+    parts = stdlibgen.parse_def_metadata(root)
+    classes: dict[str, set[str]] = {}
+    for part in parts:
+        for entry in part:
+            module = getattr(entry, "module", None)
+            entry_name = getattr(entry, "name", None)
+            if module and entry_name and type(entry).__name__ == "StdlibNativeClassEntry":
+                classes.setdefault(module, set()).add(entry_name)
+    return classes
 
 
 def check_builtin_distribution(root: Path) -> list[str]:
     """Keep the retained native-library modules inside the one stdlib boundary.
 
     ws left this set once its connection layer became pure Xray: it now has no
-    core.def binding block and, like http, carries only a script factory.
+    core.def binding block and, like http, is loaded from its source alone.
     """
     errors: list[str] = []
     expected = {"cluster", "http2", "compress", "crypto"}
     manifest = load_manifest(root)
     names = set(manifest.by_name)
     core_def = (root / "stdlib/defs/core.def").read_text(encoding="utf-8")
-    registry = (root / "src/module/xmodule.c").read_text(encoding="utf-8")
+    loader = (root / "src/module/xmodule.c").read_text(encoding="utf-8")
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
+    binders = native_entry_binder_modules(root)
     for name in sorted(expected):
         if name not in names:
             errors.append(f"built-in standard module {name}: missing boundary entry")
@@ -150,8 +216,11 @@ def check_builtin_distribution(root: Path) -> list[str]:
             errors.append(f"built-in standard module {name}: missing stdlib/{name}")
         if not re.search(rf"^module\s+{re.escape(name)}\s*\{{", core_def, re.M):
             errors.append(f"built-in standard module {name}: binding block missing from core.def")
-        if f'{{"{name}",' not in registry:
-            errors.append(f"built-in standard module {name}: bare-name factory registration missing")
+        if name not in binders:
+            errors.append(
+                f"built-in standard module {name}: no generated native-entry binder, so nothing "
+                f"binds its core.def block"
+            )
         entry = manifest.by_name.get(name, {})
         if entry.get("perf_suite") != f"stdlib/{name}":
             errors.append(f"built-in standard module {name}: perf_suite must be stdlib/{name}")
@@ -164,7 +233,7 @@ def check_builtin_distribution(root: Path) -> list[str]:
     )
     checked = {
         "CMakeLists.txt": cmake,
-        "src/module/xmodule.c": registry,
+        "src/module/xmodule.c": loader,
         "stdlib/defs/core.def": core_def,
     }
     for label, text in checked.items():
@@ -367,14 +436,6 @@ def check_semantic_owners(root: Path) -> list[str]:
                 errors.append(f"module {name}: public_native misses .def symbols: {', '.join(missing)}")
             if stale:
                 errors.append(f"module {name}: public_native has stale symbols: {', '.join(stale)}")
-        if manual:
-            factory_text = (root / str(module["factory_source"])).read_text(encoding="utf-8")
-            for symbol in sorted(manual):
-                leaf = symbol.rsplit(".", 1)[-1]
-                if f'"{leaf}"' not in factory_text:
-                    errors.append(
-                        f"module {name}: manual public native {symbol!r} is not registered by factory"
-                    )
         private_sources = module.get("private_native_sources", ())
         if private_sources and not module.get("private_native_reason"):
             errors.append(f"module {name}: private native sources require private_native_reason")

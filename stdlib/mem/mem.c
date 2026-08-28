@@ -585,15 +585,3 @@ static XrValue mem_nontemporal_store(XrVMRuntime *isolate, XrValue *args, int ar
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_MEM
 
-XR_FUNC XrModule *xr_native_module_create_mem(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_mem: NULL isolate");
-
-    XrModule *module = xr_module_create_native(isolate, "mem");
-    if (!module)
-        return NULL;
-
-    xr_stdlib_vm_register_buffer_class_generated(isolate);
-    xr_stdlib_vm_bind_mem_generated(isolate, module);
-
-    return module;
-}

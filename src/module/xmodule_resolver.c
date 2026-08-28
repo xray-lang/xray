@@ -216,10 +216,7 @@ static void copy_module_id(XrModuleId *dst, const XrModuleId *src) {
 
 static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out_id,
                           char **err_buf) {
-    bool has_native_factory =
-        r->config.native_factories && xr_hashmap_has(r->config.native_factories, name);
-    bool has_embedded_source = xr_get_embedded_stdlib(name) != NULL;
-    if (has_native_factory || has_embedded_source) {
+    if (xr_stdlib_module_descriptor(name)) {
         char logical_path[XR_PATH_MAX];
         int logical_length = snprintf(logical_path, sizeof(logical_path), "%s/%s.xr", name, name);
         if (logical_length <= 0 || (size_t) logical_length >= sizeof(logical_path)) {

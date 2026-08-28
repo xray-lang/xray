@@ -26,8 +26,7 @@ from stdlib_manifest import (  # noqa: E402
     load_manifest,
     loadable_modules,
     load_stdlibgen,
-    private_leaf_binder_modules,
-    registry_modules,
+    native_entry_binder_modules,
     source_modules,
 )
 from report_stdlib_self_hosting import build_report  # noqa: E402
@@ -40,35 +39,46 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertEqual(loadable_modules(ROOT), set(manifest.by_name))
         self.assertEqual([], check_manifest(ROOT))
 
-    def test_source_only_module_needs_no_native_factory(self) -> None:
+    def test_source_only_module_declares_no_native_entries(self) -> None:
         manifest = load_manifest(ROOT)
         for name in ("base64", "csv"):
             module = manifest.by_name[name]
             self.assertIn(name, source_modules(ROOT))
-            self.assertNotIn(name, registry_modules(ROOT))
-            self.assertNotIn(name, private_leaf_binder_modules(ROOT))
-            self.assertNotIn("factory_source", module)
+            self.assertNotIn(name, native_entry_binder_modules(ROOT))
             self.assertEqual([], module.get("public_native", []))
 
-    def test_source_module_private_leaves_use_generic_binder(self) -> None:
+    def test_module_native_entries_are_bound_by_a_generated_binder(self) -> None:
         manifest = load_manifest(ROOT)
         os_module = manifest.by_name["os"]
-        binders = private_leaf_binder_modules(ROOT)
-        self.assertEqual({"io", "net", "os"}, set(binders))
+        binders = native_entry_binder_modules(ROOT)
+        self.assertIn("os", binders)
         self.assertIn("os", source_modules(ROOT))
-        self.assertNotIn("os", registry_modules(ROOT))
         self.assertEqual(
             "xr_stdlib_vm_bind_os_generated",
             binders.get("os"),
         )
-        self.assertNotIn("factory_source", os_module)
         self.assertTrue(os_module.get("private_native_sources"))
 
-    def test_generic_private_leaf_module_rejects_stale_factory_source(self) -> None:
+    def test_no_module_is_loaded_by_a_c_factory(self) -> None:
+        """The loader is generic: no module may have a C factory written for it."""
+        loader = (ROOT / "src/module/xmodule.c").read_text(encoding="utf-8")
+        self.assertNotIn("xr_native_module_create_", loader)
+        self.assertFalse(list(ROOT.glob("stdlib/*/*.c*")) and [
+            path
+            for path in ROOT.glob("stdlib/**/*.c")
+            if "xr_native_module_create_" in path.read_text(encoding="utf-8")
+        ])
+        for module in load_manifest(ROOT).modules:
+            self.assertNotIn("factory_source", module)
+            self.assertNotIn("factory_symbol", module)
+
+    def test_loader_declarations_must_name_something_real(self) -> None:
         manifest = load_manifest(ROOT)
         raw = copy.deepcopy(manifest.raw)
-        os_module = next(module for module in raw["module"] if module["name"] == "os")
-        os_module["factory_source"] = "stdlib/os/os.c"
+        sync_module = next(module for module in raw["module"] if module["name"] == "sync")
+        sync_module["native_type_exports"] = [
+            {"name": "Semaphore", "builtin_type": "XR_TNOSUCHTYPE"}
+        ]
         mutated = BoundaryManifest(
             root=ROOT,
             raw=raw,
@@ -78,7 +88,8 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         with mock.patch("check_stdlib_boundary.load_manifest", return_value=mutated):
             errors = check_manifest(ROOT)
         self.assertIn(
-            "module os: module without native factory must not declare factory_source",
+            "module sync: native_type_exports 'Semaphore' names an unknown builtin type "
+            "XR_TNOSUCHTYPE",
             errors,
         )
 

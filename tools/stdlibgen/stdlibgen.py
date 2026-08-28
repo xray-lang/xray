@@ -18,6 +18,7 @@ import difflib
 import hashlib
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 
@@ -161,29 +162,106 @@ class StdlibEntry:
         return self.visibility == "internal"
 
 
-def derive_private_leaf_modules(
-    root: Path,
-    entries: list[StdlibEntry],
-    constants: list[StdlibConstEntry],
-) -> set[str]:
-    """Return canonical source modules whose .def VM rows are all private."""
-    entries_by_module: dict[str, list[StdlibEntry]] = {}
-    constants_by_module: dict[str, list[StdlibConstEntry]] = {}
-    for entry in entries:
-        entries_by_module.setdefault(entry.module, []).append(entry)
-    for constant in constants:
-        constants_by_module.setdefault(constant.module, []).append(constant)
+VM_BINDING_KINDS = ("normal", "yieldable", "slow")
 
-    selected: set[str] = set()
-    for name, module_entries in entries_by_module.items():
-        canonical_source = root / "stdlib" / name / f"{name}.xr"
-        if not canonical_source.is_file():
-            continue
-        if constants_by_module.get(name):
-            continue
-        if module_entries and all(entry.is_internal for entry in module_entries):
-            selected.add(name)
-    return selected
+
+@dataclasses.dataclass(frozen=True)
+class ModuleNativeTypeExport:
+    name: str
+    builtin_type: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ModuleNativeFnExport:
+    name: str
+    vm: str
+    vm_binding: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ModuleDeclaration:
+    """The parts of one stdlib_boundary.toml module the loader is built from.
+
+    A module used to be created by a C factory written for it. The three fields
+    below are what those factories did beyond binding .def rows, restated as
+    declarations so that one generic load path can carry every module.
+    """
+
+    name: str
+    native_type_exports: tuple[ModuleNativeTypeExport, ...]
+    native_fn_exports: tuple[ModuleNativeFnExport, ...]
+    load_time_classes: tuple[str, ...]
+
+    @property
+    def is_empty(self) -> bool:
+        return not (self.native_type_exports or self.native_fn_exports or self.load_time_classes)
+
+
+def parse_module_declarations(root: Path) -> dict[str, ModuleDeclaration]:
+    """Read the loader-facing declarations out of stdlib_boundary.toml."""
+    manifest_path = root / "stdlib" / "stdlib_boundary.toml"
+    if not manifest_path.is_file():
+        raise SystemExit(f"missing stdlib boundary manifest: {manifest_path}")
+    with manifest_path.open("rb") as handle:
+        manifest = tomllib.load(handle)
+
+    declarations: dict[str, ModuleDeclaration] = {}
+    for module in manifest.get("module", ()):
+        name = str(module.get("name", ""))
+        if not name:
+            raise SystemExit(f"{manifest_path}: module entry without a name")
+
+        type_exports: list[ModuleNativeTypeExport] = []
+        for row in module.get("native_type_exports", ()):
+            missing = [key for key in ("name", "builtin_type") if not row.get(key)]
+            if missing:
+                raise SystemExit(
+                    f"{manifest_path}: {name}.native_type_exports missing {', '.join(missing)}"
+                )
+            type_exports.append(ModuleNativeTypeExport(str(row["name"]), str(row["builtin_type"])))
+
+        fn_exports: list[ModuleNativeFnExport] = []
+        for row in module.get("native_fn_exports", ()):
+            missing = [key for key in ("name", "vm", "vm_binding") if not row.get(key)]
+            if missing:
+                raise SystemExit(
+                    f"{manifest_path}: {name}.native_fn_exports missing {', '.join(missing)}"
+                )
+            binding = str(row["vm_binding"])
+            if binding not in VM_BINDING_KINDS:
+                raise SystemExit(
+                    f"{manifest_path}: {name}.native_fn_exports {row['name']}: "
+                    f"unsupported vm_binding {binding!r}"
+                )
+            fn_exports.append(ModuleNativeFnExport(str(row["name"]), str(row["vm"]), binding))
+
+        load_time_classes = tuple(str(cls) for cls in module.get("load_time_classes", ()))
+        declarations[name] = ModuleDeclaration(
+            name=name,
+            native_type_exports=tuple(type_exports),
+            native_fn_exports=tuple(fn_exports),
+            load_time_classes=load_time_classes,
+        )
+    return declarations
+
+
+def derive_binder_modules(root: Path) -> set[str]:
+    """Return every module stdlibgen emits a VM binder for.
+
+    The generic module loader looks a module up in this set to decide whether it
+    has native entries to install, so the answer has to come from the same
+    declarations the binder itself is generated from: .def rows and constants,
+    plus the boundary manifest's loader declarations.
+    """
+    entries, constants, *_ = parse_def_metadata(root)
+    modules = {entry.module for entry in unique_vm_binding_entries(entries)}
+    modules.update(constant.module for constant in constants if constant.vm_value)
+    modules.update(
+        name
+        for name, declaration in parse_module_declarations(root).items()
+        if not declaration.is_empty
+    )
+    return modules
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1554,7 +1632,7 @@ def unique_vm_binding_entries(entries: list[StdlibEntry]) -> list[StdlibEntry]:
 def emit_vm_bindings(
     entries: list[StdlibEntry],
     constants: list[StdlibConstEntry],
-    private_leaf_modules: set[str],
+    declarations: dict[str, ModuleDeclaration],
 ) -> str:
     rows_by_module: dict[str, list[StdlibEntry]] = {}
     consts_by_module: dict[str, list[StdlibConstEntry]] = {}
@@ -1564,6 +1642,8 @@ def emit_vm_bindings(
         if c.vm_value:
             consts_by_module.setdefault(c.module, []).append(c)
 
+    declared = {name for name, decl in declarations.items() if not decl.is_empty}
+
     lines = generated_header("xstdlib_vm_bindings_generated.inc.c - VM stdlib binding shell")
     lines.extend(
         [
@@ -1572,26 +1652,32 @@ def emit_vm_bindings(
             " * and after the module's static",
             " * C functions have been declared, then define exactly one",
             " * XR_STDLIB_VM_BIND_MODULE_<MODULE> macro before including it.",
+            " *",
+            " * Every binder has one shape: it installs the module's whole native",
+            " * entry set and answers whether the installed count is the declared",
+            " * one, so the generic loader can fail closed without knowing which",
+            " * module it is loading.",
             " */",
             "",
         ]
     )
-    for module in sorted(set(rows_by_module) | set(consts_by_module)):
+    for module in sorted(set(rows_by_module) | set(consts_by_module) | declared):
         module_ident = c_module_ident(module)
         macro = f"XR_STDLIB_VM_BIND_MODULE_{module_ident.upper()}"
-        is_private_leaf_module = module in private_leaf_modules
+        declaration = declarations.get(module)
         func = f"xr_stdlib_vm_bind_{module_ident}_generated"
         lines.append(f"#ifdef {macro}")
-        if is_private_leaf_module:
-            lines.append(f"XR_FUNC bool {func}(XrVMRuntime *isolate, XrModule *module) {{")
-            lines.append(
-                "    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || "
-                "module->export_count != 0)"
-            )
-            lines.append("        return false;")
-            lines.append("    size_t expected_count = 0;")
-        else:
-            lines.append(f"static void {func}(XrVMRuntime *isolate, XrModule *module) {{")
+        lines.append(f"XR_FUNC bool {func}(XrVMRuntime *isolate, XrModule *module) {{")
+        lines.append(
+            "    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || "
+            "module->export_count != 0)"
+        )
+        lines.append("        return false;")
+        lines.append("    size_t expected_count = 0;")
+        lines.append("    (void) expected_count;")
+        for class_name in declaration.load_time_classes if declaration else ():
+            helper = f"xr_stdlib_vm_register_{c_snake(class_name)}_class_generated"
+            lines.append(f"    {helper}(isolate);")
         for e in rows_by_module.get(module, []):
             export_macro = {
                 "normal": "XRS_EXPORT",
@@ -1604,16 +1690,32 @@ def emit_vm_bindings(
                 f"    {export_macro}(module, isolate, {c_string(e.name)}, "
                 f"{c_ident(e.vm, e.symbol)});"
             )
-            if is_private_leaf_module:
-                lines.append("    expected_count++;")
+            lines.append("    expected_count++;")
             if e.vm_ifdef:
                 lines.append(f"#endif  /* {e.vm_ifdef} */")
         for c in consts_by_module.get(module, []):
             lines.append(
                 f"    xr_module_add_export(isolate, module, {c_string(c.name)}, {c.vm_value});"
             )
-        if is_private_leaf_module:
-            lines.append("    return module->export_count == expected_count;")
+            lines.append("    expected_count++;")
+        for type_export in declaration.native_type_exports if declaration else ():
+            lines.append(
+                "    xr_module_export_native_type_class(isolate, module, "
+                f"{c_string(type_export.name)}, {type_export.builtin_type});"
+            )
+            lines.append("    expected_count++;")
+        for fn_export in declaration.native_fn_exports if declaration else ():
+            export_macro = {
+                "normal": "XRS_EXPORT",
+                "yieldable": "XRS_EXPORT_YIELDABLE",
+                "slow": "XRS_EXPORT_SLOW",
+            }[fn_export.vm_binding]
+            lines.append(
+                f"    {export_macro}(module, isolate, {c_string(fn_export.name)}, "
+                f"{fn_export.vm});"
+            )
+            lines.append("    expected_count++;")
+        lines.append("    return module->export_count == expected_count;")
         lines.append("}")
         lines.append(f"#endif  /* {macro} */")
         lines.append("")
@@ -2160,7 +2262,7 @@ def output_paths(root: Path) -> dict[Path, str]:
         class_methods,
         class_fields,
     ) = parse_def_metadata(root)
-    private_leaf_modules = derive_private_leaf_modules(root, entries, constants)
+    declarations = parse_module_declarations(root)
     return {
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
             entries, constants, enums
@@ -2169,7 +2271,7 @@ def output_paths(root: Path) -> dict[Path, str]:
             entries, constants
         ),
         root / "src" / "stdlib" / "xstdlib_vm_bindings_generated.inc.c": emit_vm_bindings(
-            entries, constants, private_leaf_modules
+            entries, constants, declarations
         ),
         root / "src" / "stdlib" / "xstdlib_class_bindings_generated.inc.c": emit_class_bindings(
             native_classes, classes, class_methods, class_fields

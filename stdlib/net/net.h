@@ -24,6 +24,5 @@ struct XrModule;
 
 /* ========== Module Loader ========== */
 
-XR_FUNC struct XrModule *xr_native_module_create_net(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_NET_H

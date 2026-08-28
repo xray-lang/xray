@@ -274,10 +274,18 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
     }
 }
 
-/* ========== Module loader ========== */
+/* ========== Isolate installation ========== */
 
-XrModule *xr_native_module_create_prelude(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_prelude: NULL isolate");
+/*
+ * Everything the prelude stands for is isolate state, not module state: the
+ * symbol table pointer, the runtime-owned native XrClasses and the canonical
+ * builtin enums. Installing it is therefore a step of isolate setup rather
+ * than something a module load has to trigger, which is why the `prelude`
+ * module itself exports nothing and only exists so an explicit import
+ * resolves.
+ */
+void xr_prelude_install(XrVMRuntime *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_prelude_install: NULL isolate");
 
     /* Wire isolate to the (process-wide const) symbol table. Idempotent
      * because the right-hand side is constant and the field is just a
@@ -292,15 +300,6 @@ XrModule *xr_native_module_create_prelude(XrVMRuntime *isolate) {
     /* Bind canonical Ordering enum type into VM builtin slot so
      * every module shares one identity (replaces per-module AST injection). */
     xr_prelude_register_builtin_enums(isolate);
-
-    XrModule *module = xr_module_create_native(isolate, "prelude");
-    if (!module)
-        return NULL;
-
-    /* No exports yet. Marking loaded prevents the module subsystem from
-     * re-entering the loader if user code does an explicit
-     * `import prelude`. */
-    return module;
 }
 
 /* ========== Public accessors (consumed by frontend / tests) ========== */

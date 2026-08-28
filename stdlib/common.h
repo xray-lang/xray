@@ -28,14 +28,16 @@
  *         return xrs_string_value_c(X, s);
  *     }
  *
- *     XrModule* xr_native_module_create_example(XrVMRuntime *X) {
- *         XrModule *m = xr_module_create_native(X, "example");
- *         XRS_EXPORT(m, X, "myFn", my_fn);
- *         return m;
- *     }
+ *     #define XR_STDLIB_VM_BIND_MODULE_EXAMPLE 1
+ *     #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+ *     #undef XR_STDLIB_VM_BIND_MODULE_EXAMPLE
  *
- * Native factories only construct exports. The module registry owns the single
- * INITIALIZING -> PUBLISHED transition after any script extension succeeds.
+ * A module never writes its own loader. `my_fn` is reached because a
+ * declaration names it -- a `vm:` row in stdlib/defs, or a native_fn_exports
+ * row in stdlib_boundary.toml -- and stdlibgen turns that declaration into the
+ * binder included above. The generic loader in src/module/xmodule.c calls it
+ * and owns the single INITIALIZING -> PUBLISHED transition after any script
+ * layer succeeds.
  */
 
 #ifndef XR_STDLIB_COMMON_H

@@ -19,6 +19,5 @@ struct XrVMRuntime;
 struct XrModule;
 
 // Load yaml module
-XR_FUNC struct XrModule *xr_native_module_create_yaml(XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_YAML_H
