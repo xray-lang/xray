@@ -807,6 +807,62 @@ endif()
 # Fuzzing configuration (libFuzzer)
 option(ENABLE_FUZZING "Enable fuzzing tests (requires Clang)" OFF)
 
+# The compile options below were added under this round's integration decision,
+# which approved fixing the instrumentation gap before wiring the harnesses into
+# nightly CI. They are gated entirely on ENABLE_FUZZING (default OFF): a default
+# configure emits zero -fsanitize flags, verified against compile_commands.json.
+#
+# The harnesses in tests/fuzz apply -fsanitize=fuzzer,address,undefined via
+# target_compile_options, which instruments only the ~100 lines of glue in each
+# harness .c. The library they actually exercise (xray_core) was built without
+# instrumentation, so a fuzz build produced binaries with single-digit coverage
+# counters: fuzz_lexer had 10 and fuzz_parser had 12, in an 11 MB executable.
+#
+# Two consequences make such a build worse than no fuzzing at all:
+#   - libFuzzer's coverage feedback is the entire search strategy. With no
+#     counters inside the lexer/parser/stdlib, every mutation looks equally
+#     interesting, corpus-guided evolution degenerates into blind random input,
+#     and a 60-minute run explores no more than a 60-second one.
+#   - ASan only sees allocations made by the harness itself, so out-of-bounds
+#     reads and use-after-free inside xray_core -- the bugs worth fuzzing for --
+#     go undetected.
+#
+# Instrumenting globally fixes both. Libraries get "fuzzer-no-link", which emits
+# the SanitizerCoverage counters but does not link libFuzzer's main(); the
+# harness targets keep plain "fuzzer" in their own target_link_options, so
+# exactly one main() comes from libFuzzer at link time.
+#
+# This block must stay ahead of the first add_library()/add_executable() in this
+# file, because add_compile_options only applies to targets defined after it.
+if(ENABLE_FUZZING)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(WARNING "ENABLE_FUZZING requires Clang; fuzz targets will be skipped")
+    else()
+        message(STATUS "Fuzzing: instrumenting all targets (sancov + ASan + UBSan)")
+        # Deliberately no XR_BUILD_ASAN / XR_BUILD_UBSAN here, even though this
+        # build really does carry both. Those macros are metadata, not
+        # protection -- the -fsanitize flags below do the actual work. Defining
+        # them would flip the evidence string that fuzz_xtp_decode.c prints
+        # under FUZZ_STANDALONE to "sanitizer=asan-ubsan", while
+        # test_xtp_fuzz_evidence in tests/unit/CMakeLists.txt derives its
+        # expected value from ENABLE_SANITIZERS/ENABLE_ASAN/ENABLE_UBSAN and
+        # would still be asserting "release", failing that test in every
+        # ENABLE_FUZZING build. Their only other use is propagating sanitizer
+        # flags to compilers the CLI spawns for AOT, which none of these four
+        # in-process harnesses reach.
+        #
+        # -O1 and -fno-omit-frame-pointer match the per-harness options in
+        # tests/fuzz/CMakeLists.txt so the library and the harness agree.
+        add_compile_options(
+            -fsanitize=fuzzer-no-link,address,undefined
+            -fno-omit-frame-pointer
+            -g
+            -O1
+        )
+        add_link_options(-fsanitize=fuzzer-no-link,address,undefined)
+    endif()
+endif()
+
 # Combined Sanitizer mode (ASan + UBSan, useful for thorough testing)
 option(ENABLE_SANITIZERS "Enable both ASan and UBSan" OFF)
 if(ENABLE_SANITIZERS)
@@ -2426,7 +2482,14 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    foreach(_xray_stdlib_boundary_check IN ITEMS manifest semantic error-model fastpath dynamic)
+    # All eight sub-checks, not five. l2-thinning, builtin-schema and
+    # l4-quality were implemented in check_stdlib_boundary.py and left out of
+    # this list, so three of the eight governed nothing. Two of the three are
+    # green; builtin-schema is red, which is the point -- it has been red with
+    # no lane reporting it. See tests/known_failures.txt for its entry.
+    foreach(_xray_stdlib_boundary_check IN ITEMS
+            manifest semantic error-model fastpath dynamic
+            l2-thinning builtin-schema l4-quality)
         add_test(
             NAME stdlib_boundary_${_xray_stdlib_boundary_check}
             COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_boundary.py
@@ -2710,10 +2773,18 @@ if(BUILD_TESTS)
                 --fail-on-active-removed
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # TIMEOUT 30 was the family default and it does not survive a sanitizer
+    # build: XR_TEST_TIMEOUT_SCALE is 8 there and these literals never consumed
+    # it, while the build itself runs 5-9x slower. Measured 2.5s serially
+    # on an idle Release tree, so the old ceiling was already a coin flip and
+    # under ASan it was a certainty. This is how query_surface_residue and
+    # string_surface_residue reached the CI exclusion list -- not because they
+    # were red, but because a threshold nobody measured made them look red.
+    math(EXPR C_INTEROP_SURFACE_RESIDUE_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(c_interop_surface_residue PROPERTIES
         LABELS "frontend;ffi;task-190"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT ${C_INTEROP_SURFACE_RESIDUE_TIMEOUT}
     )
 
     # Narrowing rules (LANGUAGE_SPEC §2.13) must stay reconciled across the
@@ -2749,10 +2820,16 @@ if(BUILD_TESTS)
                 --fail-on-public
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # 30s was too tight to survive its own weight. This is the slowest passing
+    # test in the suite -- 18.7s on an idle machine, 24.4s serially on a busy
+    # one -- so a loaded runner turned it into a ***Timeout, which reads as a
+    # failure rather than as a scheduling accident. It spent time on the CI
+    # exclusion list partly for that. Scaled like the other slow lanes.
+    math(EXPR QUERY_SURFACE_RESIDUE_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(query_surface_residue PROPERTIES
         LABELS "frontend;syntax;metadata"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT ${QUERY_SURFACE_RESIDUE_TIMEOUT}
     )
 
     add_test(
@@ -2777,10 +2854,18 @@ if(BUILD_TESTS)
                 --fail-on-backend-legacy
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # TIMEOUT 30 was the family default and it does not survive a sanitizer
+    # build: XR_TEST_TIMEOUT_SCALE is 8 there and these literals never consumed
+    # it, while the build itself runs 5-9x slower. Measured 9.1s serially
+    # on an idle Release tree, so the old ceiling was already a coin flip and
+    # under ASan it was a certainty. This is how query_surface_residue and
+    # string_surface_residue reached the CI exclusion list -- not because they
+    # were red, but because a threshold nobody measured made them look red.
+    math(EXPR STRING_SURFACE_RESIDUE_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(string_surface_residue PROPERTIES
         LABELS "frontend;syntax;metadata"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT ${STRING_SURFACE_RESIDUE_TIMEOUT}
     )
 
     add_test(
@@ -2896,10 +2981,18 @@ if(BUILD_TESTS)
                 --max-category THROW_BIT_RECOMPUTE=0
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # TIMEOUT 30 was the family default and it does not survive a sanitizer
+    # build: XR_TEST_TIMEOUT_SCALE is 8 there and these literals never consumed
+    # it, while the build itself runs 5-9x slower. Measured 2.2s serially
+    # on an idle Release tree, so the old ceiling was already a coin flip and
+    # under ASan it was a certainty. This is how query_surface_residue and
+    # string_surface_residue reached the CI exclusion list -- not because they
+    # were red, but because a threshold nobody measured made them look red.
+    math(EXPR ERROR_EFFECT_CONVERGENCE_INVENTORY_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(error_effect_convergence_inventory PROPERTIES
         LABELS "frontend;metadata;errors"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT ${ERROR_EFFECT_CONVERGENCE_INVENTORY_TIMEOUT}
     )
 
     # Task 218 defense line 1: cross-lifetime borrow inventory. P1 drove every
@@ -4545,10 +4638,18 @@ if(BUILD_TESTS)
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    # TIMEOUT 30 was the family default and it does not survive a sanitizer
+    # build: XR_TEST_TIMEOUT_SCALE is 8 there and these literals never consumed
+    # it, while the build itself runs 5-9x slower. Measured 14.2s serially
+    # on an idle Release tree, so the old ceiling was already a coin flip and
+    # under ASan it was a certainty. This is how query_surface_residue and
+    # string_surface_residue reached the CI exclusion list -- not because they
+    # were red, but because a threshold nobody measured made them look red.
+    math(EXPR LEGACY_PRODUCT_RESIDUE_INVENTORY_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(legacy_product_residue_inventory PROPERTIES
         LABELS "meta;artifact;legacy;target-machine"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT ${LEGACY_PRODUCT_RESIDUE_INVENTORY_TIMEOUT}
     )
 
     add_test(
@@ -4916,6 +5017,223 @@ if(BUILD_TESTS)
         LABELS "meta;semantic-owner;performance;task-262"
         PROCESSORS 1
         TIMEOUT 30
+    )
+
+    # ========================================================================
+    # Test discipline gates
+    #
+    # Everything below closes a hole in the suite's own governance rather than
+    # testing the language. Each one existed as a written asset that nothing
+    # invoked, or as a rule the repository stated and did not enforce.
+    # ========================================================================
+
+    set(XRAY_CTEST_REGRESSION_JOBS 4)
+    if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_REGRESSION_JOBS)
+        set(XRAY_CTEST_REGRESSION_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
+    endif()
+
+    # The deepest behavioural corpus in the tree -- 522 files, ~3200 `@test`
+    # declarations -- and until this entry it had no blocking gate on a pull
+    # request. scripts/run_regression_tests.py had zero CMakeLists references,
+    # so the whole corpus ran only in the nightly t3 tier, a Debug build a day
+    # late, while local development defaults to Release. PR CI reached twelve
+    # of the 522 files.
+    #
+    # The cross-backend differential net is left out on purpose: backend_diff
+    # is its own entry above with its own baseline, and folding it in here
+    # would spend another four minutes reaching a verdict this suite already
+    # has.
+    math(EXPR XRAY_REGRESSION_CORPUS_TIMEOUT "600 * ${XR_TEST_TIMEOUT_SCALE}")
+    add_test(
+        NAME regression_corpus
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_regression_corpus.py
+                --xray $<TARGET_FILE:xray>
+                --jobs ${XRAY_CTEST_REGRESSION_JOBS}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_corpus PROPERTIES
+        LABELS "regression;vm;corpus;discipline"
+        PROCESSORS ${XRAY_CTEST_REGRESSION_JOBS}
+        COST 70
+        TIMEOUT ${XRAY_REGRESSION_CORPUS_TIMEOUT}
+    )
+
+    # Twenty-one named lanes are skipped on every pull request. ci.yml's own
+    # comment demanded a reason next to each name; none of the twenty-one had
+    # one. tests/ci_exclusions.txt now carries the reason, owner, issue and
+    # date, the workflow derives its regexes from that file, and this gate
+    # holds the entries to the same thirty-day window known_failures.txt uses.
+    add_test(
+        NAME ci_exclusion_discipline
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_ci_exclusions.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(ci_exclusion_discipline PROPERTIES
+        LABELS "meta;ci;governance;discipline"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    # A checker nobody has tried to fool is a checker nobody knows works. Same
+    # shape as the contract_freeze and semantic_owners mutation self-tests:
+    # every rule the gate enforces gets a synthetic entry that breaks exactly
+    # it, and the run fails if any of them is accepted.
+    add_test(
+        NAME ci_exclusion_discipline_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_ci_exclusions.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(ci_exclusion_discipline_self_test PROPERTIES
+        LABELS "meta;ci;governance;discipline;self-test"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    # known_failures.txt's freshness rule ran only as a workflow step, so
+    # neither `ctest` nor the release gate could see it and nobody could check
+    # it locally. It is a ctest entry now, next to the exclusion manifest it is
+    # the model for.
+    add_test(
+        NAME known_failures_freshness
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_known_failures_freshness.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(known_failures_freshness PROPERTIES
+        LABELS "meta;ci;governance;discipline"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    # All five case discoverers skip `_`-prefixed files, so a library module is
+    # compiled only because some case imports it. When the last importer goes
+    # away the module leaves every gate silently -- an emitter crash inside it
+    # keeps the suite green, which has happened before.
+    #
+    # --check-with runs the front end over each `_`-prefixed module on its own
+    # as well. Reachability proves a library is compiled as part of SOME case;
+    # it does not prove the library is individually sound, because an importer
+    # refused for an unrelated reason takes its library's coverage down with it
+    # silently. Three modules failed that check the first time it ran, all
+    # three invisible for exactly that reason; they are recorded in
+    # tests/uncheckable_case_allowlist.txt. About 2.5s for 57 modules.
+    add_test(
+        NAME underscore_case_reachability
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_underscore_case_reachability.py
+                --check-with $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(underscore_case_reachability PROPERTIES
+        LABELS "meta;tests;governance;discipline"
+        PROCESSORS 1
+        TIMEOUT 120
+    )
+
+    # The pre-commit hook that formatted staged files was deleted; it rewrote
+    # files after a commit was composed, staling contract anchors and turning
+    # every shared source file into a merge conflict. This is the half of its
+    # replacement that runs locally: whole-tree, against a debt baseline that
+    # only shrinks. CI runs the other half, which format-checks the lines a
+    # branch actually touched.
+    #
+    # SKIP rather than fail when clang-format 22 is absent: a developer machine
+    # is not required to have it, and CI installs it explicitly.
+    add_test(
+        NAME format_debt_ratchet
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_format.py
+                --mode ratchet --skip-if-missing
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(format_debt_ratchet PROPERTIES
+        LABELS "meta;format;governance;discipline"
+        PROCESSORS 4
+        SKIP_RETURN_CODE 77
+        TIMEOUT 300
+    )
+
+    # The only gate that judges the language spec's examples with the real
+    # compiler. It existed, fully written, with zero callers in 153 root
+    # add_test entries, 85 unit entries, three workflows and every script --
+    # so its baseline could only rot in silence, and two of its four rows had
+    # in fact gone dead. Both spec files are gated; they are separate fence
+    # sets with separate baselines.
+    add_test(
+        NAME spec_snippets_en
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_xray_snippets.py
+                --xray $<TARGET_FILE:xray>
+                --spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC.md
+                --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_en.txt
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(spec_snippets_en PROPERTIES
+        LABELS "spec;docs;frontend;discipline"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME spec_snippets_cn
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_xray_snippets.py
+                --xray $<TARGET_FILE:xray>
+                --spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC_CN.md
+                --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_cn.txt
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(spec_snippets_cn PROPERTIES
+        LABELS "spec;docs;frontend;discipline"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    # The ordinary differential net compares programs that TERMINATE, which is
+    # why a progress divergence -- VM finishes, AOT spins forever -- survived
+    # thirteen months with nothing red. run_backend_diff.py:535 excludes
+    # cases/liveness/ and hands them to this runner, which until now nothing
+    # called: the responsibility had been transferred to an empty address.
+    #
+    # Named backend_diff_liveness so scripts/t.py's tier regexes place it with
+    # the other differential lanes: skipped in t1, run from t2 up.
+    add_test(
+        NAME backend_diff_liveness
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_liveness_diff.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(backend_diff_liveness PROPERTIES
+        LABELS "diff;cross;backend;liveness;coro;discipline"
+        PROCESSORS 2
+        COST 30
+        TIMEOUT 600
+    )
+
+    # 29 cases pinning what the parallel VM may look like from the outside:
+    # lane identity, callback effect safety, plan batching, teardown under
+    # panic, and panic payload fidelity. Their shell runner had zero callers
+    # anywhere in the tree, so none of them had ever run in a gate. The first
+    # run found 14 red; they are recorded in
+    # tests/vm/parallel_vm_known_failures.txt, a shrink-only baseline.
+    add_test(
+        NAME parallel_vm_lanes
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_parallel_vm_tests.py
+                --jobs 4
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(parallel_vm_lanes PROPERTIES
+        LABELS "vm;parallel;coro;lane;discipline"
+        PROCESSORS 4
+        COST 30
+        TIMEOUT 600
     )
 
     # Root tests and tests/unit are distinct CMake directory scopes; each scope

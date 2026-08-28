@@ -1,0 +1,52 @@
+# Liveness differential ratchet baseline
+#
+# Every line is a case that fails today and is tracked, not forgotten. The
+# suite gates the rest; these are excluded from the verdict so that a red
+# baseline cannot hide a fresh regression.
+#
+# Rules, the same ratchet as known_failures.txt
+#   - The list may only shrink. run_liveness_diff.py fails when a case outside
+#     this list fails AND when a listed case starts passing, so a fix must
+#     delete its line in the same change.
+#   - Adding a line requires a written reason under one of the groups below.
+#   - Never add a line to make an unrelated change go green.
+#
+# Established 2026-08-28, when tests/diff/run_liveness_diff.sh was ported to
+# Python and registered. The shell runner had existed with no callers at all:
+# run_backend_diff.py:535-540 explicitly excludes cases/liveness/ and hands the
+# responsibility to a script nothing invoked. So these eight cases had never
+# run in any gate -- which is the same shape as the thirteen-month blind spot
+# the suite's own header describes, one level up.
+#
+# THE VM HALF IS GREEN: all eight pass, in 12-150ms each against sidecar
+# budgets of 10-15s. Everything below is the AOT half.
+#
+# --- AOT half: the native line refuses to build these (7) -------------------
+# Three distinct compile-time refusals, none of them a liveness result:
+#
+#   XR_SEM_0019: coroutine state count disagrees with grounded call authority
+#     ... selector=sleep expected=0 actual=1
+#       busy_poll_progress, busy_poll_progress_single_worker,
+#       cancel_reaches_cpu_loop, cancel_responsive_blocking, orphan_warned
+#
+#   XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE value=17 operation=19
+#       blocking_recv_progress
+#
+#   XR_TARGET_1001: direct-local go callee storage authority is not exact
+#     -> XR_TARGET_1000
+#       channel_handoff_not_deadlock
+#
+# This is the branch-level state of the AOT native line, not something these
+# cases did: backend_diff on the same tree compares 29 of 586. When that line
+# comes back these lines go away, and the ratchet forces it -- a case here that
+# starts building fails the run until its line is deleted.
+#
+# deadlock_reported is absent from this list because its sidecar sets
+# vm_only=1: it never had an AOT half to lose.
+blocking_recv_progress
+busy_poll_progress
+busy_poll_progress_single_worker
+cancel_reaches_cpu_loop
+cancel_responsive_blocking
+channel_handoff_not_deadlock
+orphan_warned

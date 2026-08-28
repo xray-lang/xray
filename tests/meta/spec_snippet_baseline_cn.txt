@@ -1,0 +1,19 @@
+# Known-deviating spec snippets: sha:<sha12> of the fence body per row.
+# Rows are removed as the spec or the compiler converges;
+# regenerate with --update-baseline only alongside a written reason.
+#
+# All four rows below were checked by hand and are benign: the fence is an
+# excerpt, not a program. Each one announces a compile error in a comment and
+# then comments out the line that would trip it, so `xray check` accepts the
+# fence and the classifier records a deviation. Rewritten as complete programs
+# the compiler does reject them.
+#
+# Re-anchored 2026-08-28 when this gate was wired into ctest. Two of the four
+# keys had gone dead: the fences had been edited, their bodies rehashed, and
+# nothing reported it -- the STALE check only fires when a baselined snippet
+# starts passing, never when its key stops matching any fence at all. Both
+# replacements were re-read by hand and are the same benign shape.
+sha:84d75c95a996  # near line 1116, error-demo: <no output>
+sha:77b178e7773b  # near line 3486, error-demo: <no output>
+sha:1e282353faf7  # near line 4267, error-demo: <no output>
+sha:230d115261b4  # near line 5089, error-demo: <no output>

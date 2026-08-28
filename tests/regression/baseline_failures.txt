@@ -4,74 +4,133 @@
 #
 # WHY THIS FILE EXISTS
 #
-# scripts/run_regression_tests.py has zero CMakeLists references and no ctest
-# entry: 457 regression cases had no gate at all, and 48 of them had rotted
-# unnoticed. Wiring the corpus straight in as a hard gate would have made every
-# tier red on arrival and taught everyone to ignore it.
+# The corpus is the deepest behavioural evidence in the tree -- 522 files, 502
+# collected cases, 3043 assertions executed -- and for most of its life nothing
+# gated it. The 2026-08-19 header of this file recorded the reason:
+# scripts/run_regression_tests.py had zero CMakeLists references and no ctest
+# entry, so the whole corpus ran only in one non-blocking nightly lane, and
+# cases had rotted unnoticed.
 #
-# So the corpus is gated from today forward: scripts/t.py fails on any failure
-# NOT listed here, and also fails when a listed case starts passing without
-# being removed. The list can only shrink.
+# That is fixed as of 2026-08-28: `regression_corpus` is a registered ctest
+# entry (scripts/check_regression_corpus.py), which means the corpus now blocks
+# pull requests through the same gate every other suite goes through. Before
+# that, PR CI reached twelve of the 522 files.
 #
-# PROVENANCE: re-captured 2026-08-19 against
-# rewrite/vm-aot-unified-target-machine. The 2026-07-31 capture was taken before
-# the unified-target-machine migration and had stopped describing this tree: of
-# its 36 lines, 28 had started passing, while 74 real failures were not listed
-# at all. A ratchet that neither catches new breakage nor reports its own fixes
-# gates nothing, so the list is re-pinned to measured truth.
+# The rule is unchanged and it is the whole contract: a failure NOT listed here
+# fails the run, and a listed case that starts passing ALSO fails the run, so a
+# fix deletes its line in the same change. The list only shrinks.
 #
-# WHAT THESE 54 ARE: not a backlog of regressions but the work of tasks 269-283
-# seen from the test corpus. Classified by running each case the way this
-# runner does -- `xray test`, not `xray run`, which does not execute @test
-# files at all and reports them as silently passing.
+# PROVENANCE: re-captured 2026-08-28 against
+# rewrite/vm-aot-unified-target-machine at 00f665c5c, Release build with
+# XRAY_STDLIB_VM_FASTPATHS=OFF, `xray test` per case, VM only, 4 jobs, 30s per
+# case. 502 cases, roughly 457 passing and 45 failing in about 25 seconds.
 #
-#     18  XR_SEM_0019          12 are coroutine state count (same root as the
-#                              unresolved-import family: stdlib loads from
-#                              bytecode and carries no compile-time IR)
-#     10  (test assertion)     7 of them are network cases whose source is
-#                              stale against the current go-argument rule
-#      7  XR_SEM_0018          capture with no storage domain (see known_bugs)
-#      4  ownership-lowering   coroutine lowering fails closed
-#      3  XR_OWN_3001          ownership balance goes negative (see known_bugs)
-#      3  parse                syntax the front end does not accept
-#      2  XR_OWN_3002 / 2 error[E0356] / 5 assorted single cases
+# "Roughly", because three of the entries do not decide the same way twice.
+# 1305_csv_basic, 1308_xml_basic and 1309_xml_advanced crash intermittently --
+# SIGSEGV or SIGBUS, two runs in eight -- on what the fuzz harness wired up in
+# the same change identified as an uninitialized pointer in VM teardown
+# (src/mem/xcoro_heap.h:346). They are listed here AND in
+# tests/regression/nondeterministic_cases.txt, which makes the gate treat them
+# as skipped: a case that decides at random produced no verdict, so it is
+# neither a new failure nor evidence that a baselined entry is fixed. Without
+# that, this gate reported a coin flip. See
+# blockers/r3-8-stdlib-data-fuzzer-crashes-on-its-own-seed.md.
 #
-# So this file doubles as the 269-283 coverage worklist: each construct the plan
-# layer learns to state should delete lines from here, and the list only shrinks.
+# WHAT THE RE-CAPTURE MOVED
+#
+# The 2026-08-19 capture had 43 entries and was already wrong in both
+# directions after nine days:
+#
+#   12 listed cases now pass and were deleted:
+#     0140_special_values, 0511_tail_recursion, 0830_getter_setter, 1020_math,
+#     1123_channel_timeout, 1124_coro_stats, 1155_channel_close_timeout_fanout,
+#     1156_select_close_wake, 1167_channel_explicit_transfer,
+#     1174_channel_tuple_buffer_transfer, 1175_channel_tuple_scalar_transfer,
+#     1203_nullable_type
+#
+#   14 cases were failing and were not listed. This is the number that matters:
+#   for nine days nothing in the tree could have told anyone. They are not
+#   permission to regress, they are the arrears the gate was installed to stop
+#   accruing:
+#     0380_optional_chain, 0430_for_in, 0720_stringbuilder,
+#     0731_string_byte_rune_surface, 0840_operator_overload,
+#     1037_cross_module_owned_transfer_summary,
+#     1038_cross_module_return_ownership_summary, 1150_string_byte_ops,
+#     1207_runtime_stress, 1308_xml_basic, 1309_xml_advanced,
+#     1413_shared_provenance_imported_readonly_function_value_param,
+#     1414_shared_provenance_reexported_readonly_function_value_param,
+#     1436_param_mode_imported_contracts
+#
+#   Note 1038: it is driven by a pinned ctest entry of its own
+#   (regression_cross_module_return_ownership_summary), so that lane is red
+#   too. The corpus gate is not the only thing that was not being read.
+#
+# WHAT THE 45 ARE, by the diagnostic each one stops at:
+#
+#     15  Xi IR pipeline failed at semantic-plan
+#           6 XR_SEM_0019 (coroutine state count vs grounded call authority),
+#           3 XR_OWN_3001, 2 XR_OWN_3002, and one each of XR_SEM_0009,
+#           XR_SEM_0016, XR_SEM_0018, XR_OWN_3005
+#      7  test assertion failed (the program runs; an @test disagrees)
+#      6  net / http / ws cases failing against loopback
+#      5  error[E0352]
+#      4  Xi IR pipeline failed at ownership (coroutine lowering fails closed)
+#      4  runtime assertion
+#      2  error[E0356]
+#      2  crash in the XML path (1308, 1309) -- 1309 is intermittent: six
+#         serial runs of 1308 all fail, while 1309 alternates between exit 0
+#         and SIGSEGV. An intermittent crash is listed here because it is a
+#         defect, not because the flake is tolerated.
+#
+# So this file doubles as a coverage worklist: each construct the plan layer
+# learns to state should delete lines from here, and the list only shrinks.
 #
 # One test path per line. Comments and blanks ignored.
+# ----------------------------------------------------------------------------#
+# THIS RE-CAPTURE IS A ONE-TIME RECONCILIATION AND IS NOT A PRECEDENT.
+#
+# The only reason the 2026-08-19 capture could be cited as precedent today is
+# that nobody wrote this sentence then. From 2026-08-28 forward the shrink-only
+# rule is enforced literally: a failure that is not listed here fails the run,
+# and the answer is to fix it, not to add a line. Adding lines in bulk again
+# needs the integrator's decision on the record, as this one has.
+#
+# The two groups below are machine-distinguishable on purpose, so a later
+# reader can tell arrears from regressions without reading prose: entries under
+# the `exposed-on-gate-install` heading are the backlog this gate found when it
+# was installed, and are open to being questioned or fixed by anyone; entries
+# added under any other heading after 2026-08-28 are regressions somebody
+# introduced and must be explained.
+#
+# WHEN DID THE 12 TURN GREEN? Unknown, and that is the finding. Nothing
+# recorded the corpus's state between 2026-08-19 and 2026-08-28, because the
+# only thing that would have recorded it is the gate being installed by this
+# change. Twelve cases went green in nine days and no artifact in the tree
+# knows which change did it -- a fix landed, took some red with it, and the
+# information was lost for want of anything watching.
 # ----------------------------------------------------------------------------
-0140_special_values.xr
+# --- carried over from the 2026-08-19 capture (32, incl. 1305_csv_basic
+#     which only surfaced once the gate ran repeatedly) --------------------------
 0381_optional_call.xr
-0511_tail_recursion.xr
 0740_context_auto_select.xr
 0741_context_buffer_isolation.xr
-0830_getter_setter.xr
 0841_operator_overload_compat.xr
 0911_dump_builtin.xr
 0940_edge_cases.xr
 0950_exception.xr
-1020_math.xr
 1106_select.xr
 1111_comprehensive.xr
 1113_select_send.xr
-1123_channel_timeout.xr
-1124_coro_stats.xr
-1155_channel_close_timeout_fanout.xr
-1156_select_close_wake.xr
 1157_work_queue_generic_class.xr
 1161_multiple_task_awaiters.xr
 1162_overlapping_await_any_waiters.xr
-1167_channel_explicit_transfer.xr
 1172_enum_descriptor_erased_transfer.xr
 1172_module_readonly_capture.xr
-1174_channel_tuple_buffer_transfer.xr
-1175_channel_tuple_scalar_transfer.xr
-1203_nullable_type.xr
 1205_typeof_operator.xr
 1208_tostring.xr
 1224_generic_methods.xr
 1302_is_builtin_native_class.xr
+1305_csv_basic.xr
 1370_tuple_generic_args.xr
 1410_shared_provenance_rebind_reset.xr
 1418_shared_provenance_readonly_closure_capture.xr
@@ -84,3 +143,26 @@
 1509_ws_pure_protocol.xr
 1510_http2_client.xr
 1601_narrowing_facts.xr
+#
+# --- exposed-on-gate-install 2026-08-28 (14) --------------------------------
+# Failing before this change and listed nowhere. Nine days without a gate.
+# Arrears, not permission to regress. Note 1038: it has a pinned ctest entry
+# of its own (regression_cross_module_return_ownership_summary, CMakeLists
+# :4098) which is NOT on any CI exclusion list -- so that lane has simply
+# been red inside the 82-failure floor with nobody reading it. `no gate` and
+# `a gate nobody reads` are different failures, and the second is worse: it
+# leaves people believing the coverage exists.
+0380_optional_chain.xr
+0430_for_in.xr
+0720_stringbuilder.xr
+0731_string_byte_rune_surface.xr
+0840_operator_overload.xr
+1037_cross_module_owned_transfer_summary.xr
+1038_cross_module_return_ownership_summary.xr
+1150_string_byte_ops.xr
+1207_runtime_stress.xr
+1308_xml_basic.xr
+1309_xml_advanced.xr
+1413_shared_provenance_imported_readonly_function_value_param.xr
+1414_shared_provenance_reexported_readonly_function_value_param.xr
+1436_param_mode_imported_contracts.xr

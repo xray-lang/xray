@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check_platform_layering.sh — enforce the platform-layer
 # refactor's three core rules. Designed to be cheap enough to run
-# in CI on every push and as part of a pre-commit hook.
+# in CI on every push.
 #
 #   R1  Public headers (include/*.h) must not include any system
 #       OS header. Embedders should be able to consume xray.h
