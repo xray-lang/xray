@@ -3217,7 +3217,12 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
 
     XrTargetI64OverflowPredicateRecord *mutable_predicates = target->i64_overflow_predicates;
     uint8_t saved_kind = mutable_predicates[0].kind;
-    mutable_predicates[0].kind = XR_TARGET_I64_OVERFLOW_PREDICATE_MUL;
+    /* Pick a kind this row does not already hold. Hard-coding one assumed an
+     * ordering of the predicate rows, so the mutation silently became a no-op
+     * whenever that row happened to carry it. */
+    mutable_predicates[0].kind = saved_kind == XR_TARGET_I64_OVERFLOW_PREDICATE_MUL
+                                     ? (uint8_t) XR_TARGET_I64_OVERFLOW_PREDICATE_ADD
+                                     : (uint8_t) XR_TARGET_I64_OVERFLOW_PREDICATE_MUL;
     xr_target_plan_compute_fingerprint(target, &target->fingerprint);
     ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
     mutable_predicates[0].kind = saved_kind;
