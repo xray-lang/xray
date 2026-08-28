@@ -435,7 +435,7 @@ roots, or general product activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 1cf11ea13e8dc488227f8a537bef196cd0ce212eeebcfb6507a248482fe120e6
+anchor-sha256: CMakeLists.txt 3cf4dd617ccfb59a0467f6caeb18ac332bb9989258a7c7a358dae5d9b3401027
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
@@ -444,7 +444,7 @@ anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b1
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h 5251d8acc6f982535e09c9f8722a17f0676bf7ee574e96d5eafd2136044b1bb9
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c d24b7b8b8755d07db5d45a4ed0059e7f5666c36309aec54d974c0c176bd14a97
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c f38daf7df0d061e199b99f1b274b1909de4c44c1484302913b3a45650c846053
 anchor-sha256: src/plan/format/xr_xtp_schema.h 89d92d64e991ece240512ee7192935f083a2f465a1f6fccc09ba7ca6079f55f6
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
@@ -466,8 +466,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h 402046722e05c94a26ae05d5ee00f
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h 4b8d44029c2e4e61a1e33b0099d604c7ba8c9153a91cdd9bb4ea5b7855afddd1
 anchor-sha256: src/plan/target/xr_target_plan.c f3d99cd79629dae0ca5dec7239cfe1e3533a9a2044a0aae6df11762cf132b459
-anchor-sha256: src/plan/target/xr_target_builder.c 199e96dd9d73efbc65af2bdfb29b3857bcdd71615a986cd9b41ac4b23acce6fb
-anchor-sha256: src/plan/target/xr_target_verify.c a51ff6556ad9815e8303f6081b734d5dbf0d511efe18bcaa19a1a1ea61bf61c1
+anchor-sha256: src/plan/target/xr_target_builder.c ebe2a51802a1cba0edbcc52dcfd3953cadd4c49268874dcc292c2ead781f6d33
+anchor-sha256: src/plan/target/xr_target_verify.c dbc071e6c6d7017f278f051275e2675202e3c4e140e34d296bdd581bdfb587e1
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 97413cd1fd368e8a61f9ae14c75c321b3b956b8313da7519bae361af4c24a894
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 5e81f18c79504cd7876910b0ad0d88b270fd19fbc6de7a44d5daa2bf47263692
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 47203f0c178dc46872e6d6ec8c680a8e0cbd0f5e4670e7a4380f030b2d61a043
