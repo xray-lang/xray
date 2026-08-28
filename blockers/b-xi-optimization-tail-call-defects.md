@@ -1,8 +1,9 @@
 # Blocker: the Xi optimization pipeline miscompiles tail calls, and no gate sees most of it
 
 - **Lane**: B (current census / refusal evidence)
-- **Status**: `PARTIALLY FIXED` in this branch — two of the three defects are closed;
-  see "What was fixed" at the end. One case remains, from an unrelated ownership defect.
+- **Status**: `FIXED` in this branch for the VM side, `PARTIALLY FIXED` for the native
+  side. Three defects closed, all the same omission at different layers; see "What was
+  fixed". One case still refuses natively, at the next layer down.
 - **Requested owner**: H (compiler / unified target machine)
 - **Severity**: highest of anything this lane found. One case produces a **silently wrong
   program** — correct exit status, missing output — rather than a refusal. Three of the
@@ -234,6 +235,7 @@ Both defects in this document are the same omission at different layers. Occurre
 | file | count | consequence |
 |---|---:|---|
 | `src/ir/xi_opt_inline.c` | **0** | inlining leaves a tail call mid-function; VM miscompiles |
+| `src/ir/xi_arc.c` | **0** | callee unresolved after promotion; ownership balance goes negative |
 | `src/ir/xi_opt.c` (representation selection) | 1, unrelated | falls to tagged default; BOX/UNBOX breaks tail position; AOT refuses |
 | `src/ir/xi_verify.c` | 10 | four invariants checked, tail position not among them |
 | `src/aot/refine/xr_aot_representation_refinement.c` | 6 | handles it correctly, paired with `XI_CALL` |
@@ -333,15 +335,15 @@ Measured on the four affected cases, with Xi optimization enabled:
 | | before | after |
 |---|---|---|
 | `aot=full` | 0 passed, 4 refused | **3 passed, 1 refused** |
-| `vm=full` | 2 passed, 2 differential failures | **3 passed, 1 failure** |
+| `vm=full` | 2 passed, 2 differential failures | **4 passed, 0 failures** |
 
 The silent miscompilation is gone: `unit_enum_return_value.xr` prints all eight values
 under `--xi-opt vm=full`, and the simplest general tail call now builds natively where
 before none ever had.
 
-## What remains
+## The ownership imbalance, also fixed
 
-`semantics/functions/string_result_direct_call.xr`, both sides, from a different defect:
+`semantics/functions/string_result_direct_call.xr` failed on both sides with
 
 ```
 XR_OWN_3001: ownership balance becomes negative
@@ -349,8 +351,31 @@ XR_OWN_3001: ownership balance becomes negative
    events=[TAIL_CALL@4:0,TAIL_CALL@4:-1])
 ```
 
-The imbalance is inside `forward`, not at an inlined site, so it is ownership accounting
-for the tail-call form rather than either defect fixed above. Not investigated further.
+Same omission, a fourth layer, and the subtlest form of it. ARC itself was not at fault:
+it runs before promotion, sees an ordinary call, and correctly inserts nothing, because a
+call whose result is returned is a move. The semantic plan then re-asks ARC's contract
+functions *after* promotion has rewritten the opcode.
+
+Those functions resolve the callee to read its whole-program return ABI, and a site that
+fails to resolve does not fail — it falls back to the weaker contract lowering recorded at
+the call site. For a callee returning a string literal that weaker fact is
+`BORROWED_STATIC`, so the definition was classified as a borrow worth zero while the
+function-level return contract, computed before promotion, still said owned and charged
+the return -1.
+
+That asymmetry is why it stayed hidden: it needs a callee whose call-site fact and
+whole-program fact disagree. A callee returning `"pos"` reproduces it; one returning
+`"pos" + "x"` does not, because then both facts say owned. This corpus contains exactly
+one such case.
+
+Four sites did this resolution, each with its own copy of the opcode test, and three knew
+only the unpromoted form. They now share one resolver, so the promoted form cannot be
+recognized in one place and missed in another.
+
+With this, `vm=full` passes all four cases. On the native side
+`string_result_direct_call.xr` now advances to a different refusal
+(`XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE`), which is the next layer down and
+was not investigated.
 
 ## A fix that was tried and reverted
 
