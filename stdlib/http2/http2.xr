@@ -1,0 +1,23 @@
+// http2 — typed public HTTP/2 surface over the private native data plane.
+//
+// Framing, HPACK, flow control and the TLS/ALPN connection pool stay in C.
+// They are a wire protocol implementation rather than a policy, and every
+// admission rule the binding still applies is either a precondition of that C
+// code's own memory safety or a rule http.xr already owns. Restating one here
+// would give a single rule two owners that can drift apart, so this module
+// publishes the surface and forwards; it does not re-decide.
+
+// Whether this build can speak HTTP/2 at all. The answer is a property of the
+// host binary's TLS/ALPN support, so the capability probe stays native.
+export fn supported() -> bool { return __supported() }
+
+// Execute one HTTP/2 request and answer (status, headerNames, headerValues,
+// body), or null when the request could not be completed.
+//
+// The two header arrays are parallel: entry i of `headerNames` pairs with
+// entry i of `headerValues`.
+export fn request(url: string, method: string, headerNames: Array<string>,
+                  headerValues: Array<string>, body: Array<u8>,
+                  timeoutMs: i64) -> (i64, Array<string>, Array<string>, Array<u8>)? {
+    return __request(url, method, headerNames, headerValues, body, timeoutMs)
+}

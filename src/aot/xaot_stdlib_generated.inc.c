@@ -38,48 +38,44 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "math.random";
     if (strcmp(symbol, "math.randomInt") == 0)
         return "math.randomInt";
-    if (strcmp(symbol, "compress.gzip") == 0)
-        return "compress.gzip";
-    if (strcmp(symbol, "compress.gunzip") == 0)
-        return "compress.gunzip";
-    if (strcmp(symbol, "compress.deflate") == 0)
-        return "compress.deflate";
-    if (strcmp(symbol, "compress.inflate") == 0)
-        return "compress.inflate";
-    if (strcmp(symbol, "compress.zlibCompress") == 0)
-        return "compress.zlibCompress";
-    if (strcmp(symbol, "compress.zlibDecompress") == 0)
-        return "compress.zlibDecompress";
-    if (strcmp(symbol, "compress.isGzip") == 0)
-        return "compress.isGzip";
-    if (strcmp(symbol, "compress.isZlib") == 0)
-        return "compress.isZlib";
+    if (strcmp(symbol, "compress.__gzip") == 0)
+        return "compress.__gzip";
+    if (strcmp(symbol, "compress.__gunzip") == 0)
+        return "compress.__gunzip";
+    if (strcmp(symbol, "compress.__deflate") == 0)
+        return "compress.__deflate";
+    if (strcmp(symbol, "compress.__inflate") == 0)
+        return "compress.__inflate";
+    if (strcmp(symbol, "compress.__zlibCompress") == 0)
+        return "compress.__zlibCompress";
+    if (strcmp(symbol, "compress.__zlibDecompress") == 0)
+        return "compress.__zlibDecompress";
     if (strcmp(symbol, "crypto.__randomBytes") == 0)
         return "crypto.__randomBytes";
-    if (strcmp(symbol, "regex.compile") == 0)
-        return "regex.compile";
-    if (strcmp(symbol, "regex.test") == 0)
-        return "regex.test";
-    if (strcmp(symbol, "regex.count") == 0)
-        return "regex.count";
-    if (strcmp(symbol, "regex.findText") == 0)
-        return "regex.findText";
-    if (strcmp(symbol, "regex.findGroup") == 0)
-        return "regex.findGroup";
+    if (strcmp(symbol, "regex.__compile") == 0)
+        return "regex.__compile";
+    if (strcmp(symbol, "regex.__test") == 0)
+        return "regex.__test";
+    if (strcmp(symbol, "regex.__count") == 0)
+        return "regex.__count";
+    if (strcmp(symbol, "regex.__findText") == 0)
+        return "regex.__findText";
+    if (strcmp(symbol, "regex.__findGroup") == 0)
+        return "regex.__findGroup";
     if (strcmp(symbol, "regex.find") == 0)
         return "regex.find";
     if (strcmp(symbol, "regex.fullFind") == 0)
         return "regex.fullFind";
     if (strcmp(symbol, "regex.findAll") == 0)
         return "regex.findAll";
-    if (strcmp(symbol, "regex.replace") == 0)
-        return "regex.replace";
-    if (strcmp(symbol, "regex.replaceAll") == 0)
-        return "regex.replaceAll";
-    if (strcmp(symbol, "regex.split") == 0)
-        return "regex.split";
-    if (strcmp(symbol, "regex.isValid") == 0)
-        return "regex.isValid";
+    if (strcmp(symbol, "regex.__replace") == 0)
+        return "regex.__replace";
+    if (strcmp(symbol, "regex.__replaceAll") == 0)
+        return "regex.__replaceAll";
+    if (strcmp(symbol, "regex.__split") == 0)
+        return "regex.__split";
+    if (strcmp(symbol, "regex.__isValid") == 0)
+        return "regex.__isValid";
     if (strcmp(symbol, "cluster.__start") == 0)
         return "cluster.__start";
     if (strcmp(symbol, "cluster.__join") == 0)
@@ -96,15 +92,15 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
 static const char *xaot_stdlib_generated_define_for_symbol(const char *symbol) {
     if (!symbol)
         return NULL;
-    if (strcmp(symbol, "regex.compile") == 0)
+    if (strcmp(symbol, "regex.__compile") == 0)
         return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.test") == 0)
+    if (strcmp(symbol, "regex.__test") == 0)
         return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.count") == 0)
+    if (strcmp(symbol, "regex.__count") == 0)
         return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.findText") == 0)
+    if (strcmp(symbol, "regex.__findText") == 0)
         return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.findGroup") == 0)
+    if (strcmp(symbol, "regex.__findGroup") == 0)
         return "XRT_ENABLE_REGEX";
     if (strcmp(symbol, "regex.find") == 0)
         return "XRT_ENABLE_REGEX";
@@ -112,11 +108,11 @@ static const char *xaot_stdlib_generated_define_for_symbol(const char *symbol) {
         return "XRT_ENABLE_REGEX";
     if (strcmp(symbol, "regex.findAll") == 0)
         return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.replace") == 0)
+    if (strcmp(symbol, "regex.__replace") == 0)
         return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.replaceAll") == 0)
+    if (strcmp(symbol, "regex.__replaceAll") == 0)
         return "XRT_ENABLE_REGEX";
-    if (strcmp(symbol, "regex.split") == 0)
+    if (strcmp(symbol, "regex.__split") == 0)
         return "XRT_ENABLE_REGEX";
     return NULL;
 }
@@ -264,14 +260,6 @@ static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
         return true;
     if (strcmp(symbol, "math.NAN") == 0)
         return true;
-    if (strcmp(symbol, "mem.PROT_NONE") == 0)
-        return true;
-    if (strcmp(symbol, "mem.PROT_READ") == 0)
-        return true;
-    if (strcmp(symbol, "mem.PROT_WRITE") == 0)
-        return true;
-    if (strcmp(symbol, "mem.PROT_EXEC") == 0)
-        return true;
     return false;
 }
 
@@ -307,31 +295,23 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "math.NAN") == 0)
         return true;
-    if (strcmp(symbol, "mem.PROT_NONE") == 0)
-        return true;
-    if (strcmp(symbol, "mem.PROT_READ") == 0)
-        return true;
-    if (strcmp(symbol, "mem.PROT_WRITE") == 0)
-        return true;
-    if (strcmp(symbol, "mem.PROT_EXEC") == 0)
-        return true;
     if (strcmp(symbol, "math.min") == 0)
         return true;
     if (strcmp(symbol, "math.max") == 0)
         return true;
     if (strcmp(symbol, "math.clamp") == 0)
         return true;
-    if (strcmp(symbol, "mem.fence") == 0)
+    if (strcmp(symbol, "mem.__fence") == 0)
         return true;
-    if (strcmp(symbol, "mem.prefetch") == 0)
+    if (strcmp(symbol, "mem.__prefetch") == 0)
         return true;
-    if (strcmp(symbol, "mem.cacheFlush") == 0)
+    if (strcmp(symbol, "mem.__cacheFlush") == 0)
         return true;
-    if (strcmp(symbol, "mem.cacheInvalidate") == 0)
+    if (strcmp(symbol, "mem.__cacheInvalidate") == 0)
         return true;
-    if (strcmp(symbol, "mem.nontemporalStore") == 0)
+    if (strcmp(symbol, "mem.__nontemporalStore") == 0)
         return true;
-    if (strcmp(symbol, "mem.cacheLineSize") == 0)
+    if (strcmp(symbol, "mem.__cacheLineSize") == 0)
         return true;
     if (strcmp(symbol, "mem.sizeOf") == 0)
         return true;
@@ -339,11 +319,11 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.offsetOf") == 0)
         return true;
-    if (strcmp(symbol, "mem.alloc") == 0)
+    if (strcmp(symbol, "mem.__alloc") == 0)
         return true;
-    if (strcmp(symbol, "mem.allocZeroed") == 0)
+    if (strcmp(symbol, "mem.__allocZeroed") == 0)
         return true;
-    if (strcmp(symbol, "mem.allocAligned") == 0)
+    if (strcmp(symbol, "mem.__allocAligned") == 0)
         return true;
     if (strcmp(symbol, "mem.ptr") == 0)
         return true;
@@ -355,17 +335,17 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.store") == 0)
         return true;
-    if (strcmp(symbol, "mem.copy") == 0)
+    if (strcmp(symbol, "mem.__copy") == 0)
         return true;
-    if (strcmp(symbol, "mem.move") == 0)
+    if (strcmp(symbol, "mem.__move") == 0)
         return true;
-    if (strcmp(symbol, "mem.set") == 0)
+    if (strcmp(symbol, "mem.__set") == 0)
         return true;
-    if (strcmp(symbol, "mem.compare") == 0)
+    if (strcmp(symbol, "mem.__compare") == 0)
         return true;
-    if (strcmp(symbol, "mem.volatileLoad") == 0)
+    if (strcmp(symbol, "mem.__volatileLoad") == 0)
         return true;
-    if (strcmp(symbol, "mem.volatileStore") == 0)
+    if (strcmp(symbol, "mem.__volatileStore") == 0)
         return true;
     return false;
 }
