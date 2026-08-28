@@ -1,0 +1,33 @@
+// anchor: print-arg-evaluation-order
+// The subject here is print itself: a variadic intrinsic, not an ordinary
+// call. Its arguments must still be evaluated left to right and exactly once
+// each, and every argument must be evaluated before any byte of the line is
+// written. Each probe announces itself on its own line, so the lines emitted
+// by the probes appear ahead of the line the outer print writes, in argument
+// order. The call counter proves no argument was evaluated twice or skipped.
+var calls = 0
+
+fn t(tag: string, v: i64) -> i64 {
+    calls = calls + 1
+    print(tag)
+    return v
+}
+
+fn main() {
+    print("-- three args --")
+    print(t("a1", 1), t("a2", 2), t("a3", 3))
+
+    print("-- repeated expression --")
+    print(t("b1", 4), t("b1", 5), t("b1", 6))
+
+    print("-- mixed shapes --")
+    print(t("c1", 7), "lit", t("c2", 8))
+
+    print("-- single arg --")
+    print(t("d1", 9))
+
+    print("-- calls --")
+    print(calls)
+}
+
+main()

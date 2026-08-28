@@ -515,20 +515,6 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_newline(ctx);
             break;
 
-        case AST_PRINT_STMT: {
-            xfmt_write_indent(ctx);
-            xfmt_write_str(ctx, "print(");
-            PrintNode *p = &node->as.print_stmt;
-            for (int i = 0; i < p->expr_count; i++) {
-                if (i > 0)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, p->exprs[i]);
-            }
-            xfmt_write_str(ctx, ")");
-            xfmt_write_newline(ctx);
-            break;
-        }
-
         case AST_ASSIGNMENT:
             xfmt_write_indent(ctx);
             xfmt_write_str(ctx, node->as.assignment.name);

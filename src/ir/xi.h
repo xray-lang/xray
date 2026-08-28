@@ -45,6 +45,7 @@
 #include "../base/xstable_id.h"
 #include "../shared/xr_conversion.h"
 #include "../shared/xr_assertion_plan.h"
+#include "../shared/xr_print_plan.h"
 #include "../shared/xr_copy_core.h"
 #include "../shared/xr_param_mode.h"
 #include "../shared/xr_elem_type.h"
@@ -176,6 +177,7 @@ typedef enum {
     XI_AUX_KIND_ENUM_CASE = 8,
     XI_AUX_KIND_BIGINT_DIGITS = 9,
     XI_AUX_KIND_ASSERTION_PLAN = 10,
+    XI_AUX_KIND_PRINT_PLAN = 11,
 } XiAuxKind;
 
 /* Source-variable IDs are carried on XiValue for backend register/cell
@@ -346,7 +348,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_STORE_UPVAL   —                    upvalue index
  *  XI_GET_SHARED    —                    shared slot index (relative)
  *  XI_SET_SHARED    —                    shared slot index (relative)
- *  XI_PRINT         —                    print flags
+ *  XI_PRINT         XrPrintPlan*         —
  *  XI_CLOSURE_NEW   XiFunc* (child)      —
  *  XI_CLASS_CREATE  XiClassData*         —
  *  XI_SCOPE_ENTER   —                    scope mode
@@ -573,7 +575,7 @@ typedef enum {
     XI_SET_GLOBAL, /* store to globals dict: aux=name, args[0]=val */
 
     /* Print (builtin, kept as dedicated op for convenience) */
-    XI_PRINT, /* print: args[0..n]=values, aux_int=flags */
+    XI_PRINT, /* print: args[0..n]=values, aux=XrPrintPlan* */
 
     /* Coroutine */
     XI_GO,           /* go expr: args[0]=callee, args[1..n]=params */
@@ -1391,6 +1393,12 @@ static inline const XiCallPlan *xi_call_plan(const XiValue *v) {
 static inline const XrAssertionPlan *xi_assertion_plan(const XiValue *v) {
     return v && v->op == XI_ASSERTION && v->aux_kind == XI_AUX_KIND_ASSERTION_PLAN
                ? (const XrAssertionPlan *) v->aux
+               : NULL;
+}
+
+static inline const XrPrintPlan *xi_print_plan(const XiValue *v) {
+    return v && v->op == XI_PRINT && v->aux_kind == XI_AUX_KIND_PRINT_PLAN
+               ? (const XrPrintPlan *) v->aux
                : NULL;
 }
 

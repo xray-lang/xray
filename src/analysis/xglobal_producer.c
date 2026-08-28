@@ -888,9 +888,8 @@ static bool class_field_fill_type_facts(XgClassFieldSummary *row, const XrTypeRe
     switch ((XrTypeRefKind) type->kind) {
         case XR_TREF_SCALAR:
             row->semantic_kind = xr_scalar_rep_is_float(type->scalar_rep)
-                                     ? (type->scalar_rep == XR_NATIVE_F32
-                                            ? XG_CLASS_FIELD_TYPE_F32
-                                            : XG_CLASS_FIELD_TYPE_F64)
+                                     ? (type->scalar_rep == XR_NATIVE_F32 ? XG_CLASS_FIELD_TYPE_F32
+                                                                          : XG_CLASS_FIELD_TYPE_F64)
                                      : class_field_int_semantic_kind(type->scalar_rep);
             break;
         case XR_TREF_BOOL:
@@ -1221,8 +1220,7 @@ static XgFuncNameRow *producer_lookup_func_row_scoped(const XgProducer *p, XgMod
     return NULL;
 }
 
-static XgModuleId producer_module_id_for_identity(const XgProducer *p,
-                                                  const char *identity) {
+static XgModuleId producer_module_id_for_identity(const XgProducer *p, const char *identity) {
     uint32_t name_id;
     uint64_t canonical_hash;
     if (!p || !p->evidence || !identity || !xr_module_identity_valid(identity, NULL))
@@ -1270,9 +1268,8 @@ static XgModuleId producer_module_id_for_coordinate(const XgProducer *p,
         xr_module_identity_authority_valid(&importer->authority)) {
         XrModuleId resolved = {0};
         char *error = NULL;
-        if (xr_module_resolver_resolve(p->module_graph->resolver, coordinate,
-                                       importer->source_path, &importer->authority, &resolved,
-                                       &error) == 0) {
+        if (xr_module_resolver_resolve(p->module_graph->resolver, coordinate, importer->source_path,
+                                       &importer->authority, &resolved, &error) == 0) {
             direct = producer_module_id_for_identity(p, resolved.canonical);
             xr_module_id_cleanup(&resolved);
         }
@@ -1283,8 +1280,7 @@ static XgModuleId producer_module_id_for_coordinate(const XgProducer *p,
     if (p->module_graph) {
         for (int i = 0; i < p->module_graph->spec_count; i++) {
             const XrModuleSpec *spec = &p->module_graph->specs[i];
-            if (!spec->canonical ||
-                !xr_module_identity_authority_valid(&spec->authority) ||
+            if (!spec->canonical || !xr_module_identity_authority_valid(&spec->authority) ||
                 !spec->authority.namespace_id ||
                 strcmp(spec->authority.namespace_id, coordinate) != 0)
                 continue;
@@ -2462,9 +2458,6 @@ static void capture_scan_node(XgCaptureScan *scan, const AstNode *node) {
         case AST_EXPR_STMT:
             capture_scan_node(scan, node->as.expr_stmt);
             break;
-        case AST_PRINT_STMT:
-            capture_scan_node_list(scan, node->as.print_stmt.exprs, node->as.print_stmt.expr_count);
-            break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
             capture_scan_node(scan, node->as.var_decl.initializer);
@@ -3130,9 +3123,8 @@ static bool body_global_builtin_call_is_leaf_intrinsic(const char *name, int arg
     if (!name)
         return false;
     if (arg_count == 1 &&
-        (strcmp(name, "bool") == 0 || strcmp(name, "rune") == 0 ||
-         strcmp(name, "string") == 0 || strcmp(name, "typeOf") == 0 ||
-         strcmp(name, "typeName") == 0))
+        (strcmp(name, "bool") == 0 || strcmp(name, "rune") == 0 || strcmp(name, "string") == 0 ||
+         strcmp(name, "typeOf") == 0 || strcmp(name, "typeName") == 0))
         return true;
     return false;
 }
@@ -8385,14 +8377,13 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         const char *callee_name = callee->as.variable.name;
         const XgStdlibImportRow *import =
             producer_lookup_stdlib_import(bc->producer, bc->module_id, callee_name);
-        XgFuncNameRow *target =
-            import && import->member_name
-                ? producer_lookup_func_row_scoped(
-                      bc->producer,
-                      producer_module_id_for_coordinate(bc->producer, bc->module_id,
-                                                        import->module_name),
-                      import->member_name)
-                : NULL;
+        XgFuncNameRow *target = import && import->member_name
+                                    ? producer_lookup_func_row_scoped(
+                                          bc->producer,
+                                          producer_module_id_for_coordinate(
+                                              bc->producer, bc->module_id, import->module_name),
+                                          import->member_name)
+                                    : NULL;
         if (!target)
             target = producer_lookup_func_row(bc->producer, callee_name);
         const XgPendingBody *child_target =
@@ -9184,10 +9175,6 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                         bc->producer, bc->module_id, bc->owner_func_id, (uint32_t) node->line,
                         import->module_name, import->member_name);
             }
-            break;
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                walk_body_for_calls(bc, node->as.print_stmt.exprs[i]);
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL: {

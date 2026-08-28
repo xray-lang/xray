@@ -1,0 +1,14 @@
+// anchor: print-separator-single-space
+// Adjacent arguments are joined by exactly one ASCII space (0x20). The
+// separator is positional and unconditional: an empty string argument still
+// occupies a position, so `print("", "")` is one space and nothing else, and a
+// single argument gets no separator at all. Spaces inside a value's own text
+// are part of the value and are neither trimmed nor collapsed.
+print("x")
+print("", "")
+print("a", "")
+print("", "b")
+print("a", 1, true)
+print("p", "q", "r", "s")
+print("a b", "c")
+print(1, 2)

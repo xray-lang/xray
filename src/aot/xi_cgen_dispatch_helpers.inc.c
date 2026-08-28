@@ -6061,10 +6061,10 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
 }
 
 static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFunc *f,
-                                                     const XiValue *v) {
-    if (!ctx || !v || v->nargs != 1)
+                                                     const XiValue *v, const XiValue *operand) {
+    if (!ctx || !v || v->nargs == 0)
         return NULL;
-    const XiValue *arg = v->args[0];
+    const XiValue *arg = operand;
     if (!arg)
         return NULL;
     const XiValue *boxed = NULL;
@@ -6083,10 +6083,10 @@ static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFun
 }
 
 static const XiValue *xicgen_native_bool_print_source(XiCgenCtx *ctx, const XiFunc *f,
-                                                      const XiValue *v) {
-    if (!ctx || !v || v->nargs != 1)
+                                                      const XiValue *v, const XiValue *operand) {
+    if (!ctx || !v || v->nargs == 0)
         return NULL;
-    const XiValue *arg = v->args[0];
+    const XiValue *arg = operand;
     if (!arg)
         return NULL;
     const XiValue *boxed = NULL;
@@ -6183,8 +6183,10 @@ static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc 
             for (uint16_t ai = 0; ai < user->nargs; ai++) {
                 if (user->args[ai] != box)
                     continue;
-                if (user->op == XI_PRINT && ai == 0 &&
-                    xicgen_native_int_print_source(ctx, f, user) == box->args[0]) {
+                /* A group renders each operand independently, so a box feeding
+                 * any operand position is eliminable, not just the first. */
+                if (user->op == XI_PRINT &&
+                    xicgen_native_int_print_source(ctx, f, user, user->args[ai]) == box->args[0]) {
                     saw_print = true;
                     continue;
                 }
@@ -6195,17 +6197,19 @@ static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc 
     return saw_print;
 }
 
-static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                   const char *span_view_name) {
-    XR_DCHECK(v->nargs >= 1, "xicgen_emit_print_expr: missing print value");
-    int flags = (int) v->aux_int;
-    bool add_space = (flags & 1) != 0;
-    bool newline = (flags & 2) != 0;
-    const XiValue *native_int = xicgen_native_int_print_source(ctx, f, v);
-    const XiValue *native_bool =
-        ctx && !ctx->freestanding_profile ? xicgen_native_bool_print_source(ctx, f, v) : NULL;
-    bool print_span = !native_int && !native_bool && v->args[0] &&
-                      cg_value_plan_is_span_aggregate(ctx, v->args[0]);
+/* Emit one operand of a print group. The separator and terminator decisions
+ * arrive from the group's plan; this function never derives them. */
+static void xicgen_emit_print_operand(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      uint16_t ordinal, bool add_space, bool newline,
+                                      const char *span_view_name) {
+    XR_DCHECK(ordinal < v->nargs, "xicgen_emit_print_operand: operand out of range");
+    const XiValue *operand = v->args[ordinal];
+    const XiValue *native_int = xicgen_native_int_print_source(ctx, f, v, operand);
+    const XiValue *native_bool = ctx && !ctx->freestanding_profile
+                                     ? xicgen_native_bool_print_source(ctx, f, v, operand)
+                                     : NULL;
+    bool print_span =
+        !native_int && !native_bool && operand && cg_value_plan_is_span_aggregate(ctx, operand);
 
     if (ctx && ctx->freestanding_profile) {
         if (add_space)
@@ -6236,7 +6240,7 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 }
                 fprintf(out, ", XR_TAG_ARRAY)");
             } else {
-                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+                emit_value_as_rep_ctx(ctx, out, operand, XR_REP_TAGGED);
             }
             fprintf(out, ")");
         }
@@ -6280,7 +6284,7 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             }
             fprintf(out, ", XR_TAG_ARRAY)");
         } else {
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, operand, XR_REP_TAGGED);
         }
         fprintf(out, ")");
     }
@@ -6288,16 +6292,50 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, ")");
 }
 
+/* One source call is one group. The plan states the separator and terminator;
+ * operands are joined with the C comma operator so the whole group stays a
+ * single expression and its operands keep source order. */
 static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) prefix;
-    xicgen_emit_print_expr(ctx, out, f, v, NULL);
+    const XrPrintPlan *plan = xi_print_plan(v);
+    if (!plan || plan->arity != v->nargs) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: print group lacks its verified plan\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    bool terminates = plan->terminator != XR_PRINT_TERMINATOR_NONE;
+    if (v->nargs == 0) {
+        /* A group with no operands renders nothing and still writes its frame. */
+        if (!terminates)
+            fprintf(out, "(void)0");
+        else if (ctx && ctx->freestanding_profile)
+            fprintf(out, "xrt_write_char('\\n')");
+        else
+            fprintf(out, "putchar('\\n')");
+        return;
+    }
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        if (a > 0)
+            fprintf(out, ", ");
+        xicgen_emit_print_operand(ctx, out, f, v, a, xr_print_plan_operand_needs_separator(plan, a),
+                                  (uint16_t) (a + 1u) == v->nargs && terminates, NULL);
+    }
 }
 
+/* A Slice operand renders through a borrowed view that must live in a scope,
+ * so a group containing one is emitted as a statement. Only a single-operand
+ * group needs this today; a wider group with a Slice operand is refused rather
+ * than silently rendered through a second path. */
 static bool emit_span_print_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                        const XiValue *v) {
-    if (!ctx || !out || !v || v->op != XI_PRINT || v->nargs < 1 || !v->args[0] ||
+    if (!ctx || !out || !v || v->op != XI_PRINT || v->nargs != 1 || !v->args[0] ||
         !cg_value_plan_is_span_aggregate(ctx, v->args[0]))
+        return false;
+    const XrPrintPlan *span_plan = xi_print_plan(v);
+    if (!span_plan || span_plan->arity != 1)
         return false;
 
     char view_name[48];
@@ -6312,7 +6350,8 @@ static bool emit_span_print_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return true;
     }
     fprintf(out, "        (void)(");
-    xicgen_emit_print_expr(ctx, out, f, v, view_name);
+    xicgen_emit_print_operand(ctx, out, f, v, 0, false,
+                              span_plan->terminator != XR_PRINT_TERMINATOR_NONE, view_name);
     fprintf(out, ");\n    }\n");
     emit_value_generated_line_reset(ctx, out, v);
     return true;
@@ -7653,8 +7692,6 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
 
     if (bn[0] == '\0' && v->aux_int == 0 && v->nargs == 0) {
         fprintf(out, "XR_FROM_BOOL(false)");
-    } else if (strcmp(bn, "print") == 0) {
-        xicgen_emit_print_expr(ctx, out, f, v, NULL);
     } else if (strcmp(bn, "str_concat") == 0) {
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {

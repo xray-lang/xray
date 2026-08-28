@@ -8554,6 +8554,18 @@ static bool accumulate_semantic_capability_requirements(const XrSemanticPlan *se
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
     for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_OUTPUT) {
+            XrPrintPlan print_plan;
+            if (!xr_semantic_operation_print_plan(operation, &print_plan))
+                return report(error, error_size, "XR_TARGET_1004",
+                              "output capability requirement is not exact");
+            /* Hosted output writes to the stream the executor already owns;
+             * only freestanding negotiates an output-write provider. */
+            if (facts && facts->machine.runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING &&
+                (print_plan.required_capabilities & XR_PRINT_CAPABILITY_OUTPUT_WRITE) != 0)
+                *expected_mask |= xr_target_capability_mask(XR_TARGET_CAPABILITY_OUTPUT_WRITE);
+            continue;
+        }
         if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_ASSERTION)
             continue;
         XrAssertionPlan assertion;

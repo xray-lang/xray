@@ -697,12 +697,6 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             collect_tokens_ast(ctx, node->as.expr_stmt);
             break;
 
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                collect_tokens_ast(ctx, node->as.print_stmt.exprs[i]);
-            }
-            break;
-
         // Binary expressions
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:

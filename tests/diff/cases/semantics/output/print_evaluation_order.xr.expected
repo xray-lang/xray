@@ -1,0 +1,19 @@
+-- three args --
+a1
+a2
+a3
+1 2 3
+-- repeated expression --
+b1
+b1
+b1
+4 5 6
+-- mixed shapes --
+c1
+c2
+7 lit 8
+-- single arg --
+d1
+9
+-- calls --
+9

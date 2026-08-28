@@ -64,6 +64,38 @@ bool xr_semantic_operation_assertion_plan(const XrSemanticOperationRecord *opera
            out->equality_authority == operation->evidence[XR_SEM_ASSERT_EVIDENCE_EQUALITY];
 }
 
+bool xr_semantic_operation_print_plan(const XrSemanticOperationRecord *operation,
+                                      XrPrintPlan *out) {
+    if (!operation || !out || operation->opcode != XI_PRINT ||
+        operation->auxiliary_kind != XI_AUX_KIND_PRINT_PLAN ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_OUTPUT || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE || !operation->source_file ||
+        !operation->source_file[0] ||
+        operation->evidence[XR_SEM_PRINT_EVIDENCE_SCHEMA] != XR_PRINT_PLAN_SCHEMA_VERSION)
+        return false;
+    XrLocation source = {
+        .file = operation->source_file,
+        .line = operation->source_start_line,
+        .column = operation->source_start_column,
+        .end_line = operation->source_end_line,
+        .end_column = operation->source_end_column,
+    };
+    if (operation->operand_count > UINT16_MAX ||
+        xr_print_plan_build((XrCoreBuiltinId) operation->evidence[XR_SEM_PRINT_EVIDENCE_BUILTIN_ID],
+                            (uint16_t) operation->operand_count, source,
+                            operation->evidence[XR_SEM_PRINT_EVIDENCE_TARGET],
+                            operation->evidence[XR_SEM_PRINT_EVIDENCE_CAPABILITIES],
+                            out) != XR_PRINT_PLAN_OK)
+        return false;
+    /* The rebuilt plan must reproduce the recorded framing exactly; a record
+     * that disagrees is not a projection of this group. */
+    return out->separator ==
+               (XrPrintSeparator) operation->evidence[XR_SEM_PRINT_EVIDENCE_SEPARATOR] &&
+           out->terminator ==
+               (XrPrintTerminator) operation->evidence[XR_SEM_PRINT_EVIDENCE_TERMINATOR];
+}
+
 static int compare_id_key_ref(const void *left, const void *right) {
     const XrSemanticIdKeyRef *a = (const XrSemanticIdKeyRef *) left;
     const XrSemanticIdKeyRef *b = (const XrSemanticIdKeyRef *) right;
@@ -473,7 +505,8 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
                    sizeof(provenance->program_fingerprint.bytes));
         hash_bytes(&ctx, provenance->generation_identity.bytes,
                    sizeof(provenance->generation_identity.bytes));
-        hash_bytes(&ctx, provenance->program_module.bytes, sizeof(provenance->program_module.bytes));
+        hash_bytes(&ctx, provenance->program_module.bytes,
+                   sizeof(provenance->program_module.bytes));
         hash_u64(&ctx, plan->program_type_binding_count);
         for (uint32_t i = 0; i < plan->program_type_binding_count; i++) {
             const XrSemanticProgramTypeBinding *binding = &plan->program_type_bindings[i];
@@ -642,16 +675,15 @@ bool xr_semantic_plan_set_program_provenance(
     const XrSemanticProgramTypeFieldBinding *type_field_bindings, uint32_t type_field_binding_count,
     const XrSemanticProgramFunctionBinding *function_bindings, uint32_t function_binding_count,
     const XrSemanticProgramDependencyBinding *dependency_bindings,
-    uint32_t dependency_binding_count,
-    const XrSemanticProgramCallBinding *call_bindings, uint32_t call_binding_count) {
+    uint32_t dependency_binding_count, const XrSemanticProgramCallBinding *call_bindings,
+    uint32_t call_binding_count) {
     if (!plan || plan->frozen || !provenance ||
         provenance->schema != XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
         provenance->program_schema != XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
         provenance->type_count != type_binding_count ||
         provenance->type_field_count != type_field_binding_count ||
         provenance->program_dependency_binding_count != dependency_binding_count ||
-        provenance->reserved != 0 ||
-        type_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPES ||
+        provenance->reserved != 0 || type_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPES ||
         type_field_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPE_FIELDS ||
         function_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_FUNCTIONS ||
         dependency_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES ||
@@ -700,8 +732,7 @@ bool xr_semantic_plan_set_program_provenance(
                            : NULL;
     XrSemanticProgramDependencyBinding *dependency_copy =
         dependency_binding_count ? (XrSemanticProgramDependencyBinding *) xr_malloc(
-                                       (size_t) dependency_binding_count *
-                                       sizeof(*dependency_copy))
+                                       (size_t) dependency_binding_count * sizeof(*dependency_copy))
                                  : NULL;
     if ((type_binding_count && !type_copy) || (type_field_binding_count && !type_field_copy) ||
         (function_binding_count && !function_copy) ||
@@ -902,8 +933,7 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_constant, XrSemanticConstantRecord, con
                         constant_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_entity, XrSemanticEntityRecord, entities, entity_count)
 
-const XrSemanticEntityRecord *
-xr_semantic_plan_unique_module_entity(const XrSemanticPlan *plan) {
+const XrSemanticEntityRecord *xr_semantic_plan_unique_module_entity(const XrSemanticPlan *plan) {
     const XrSemanticEntityRecord *found = NULL;
     for (uint32_t i = 0; plan && i < plan->entity_count; i++) {
         const XrSemanticEntityRecord *entity = &plan->entities[i];

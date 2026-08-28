@@ -169,7 +169,7 @@ static ParseRule rules[] = {
     [TK_RAW_TEMPLATE_STRING] = {xr_parse_template_string, NULL, PREC_NONE},
     [TK_NAME] = {xr_parse_variable, NULL, PREC_NONE},
 
-    // Exact scalar type namespaces. Numeric conversion is expressed with `as`.
+// Exact scalar type namespaces. Numeric conversion is expressed with `as`.
 #define XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family, range_class, flags)       \
     [TK_##id] = {xr_parse_scalar_namespace, NULL, PREC_NONE},
 #include "../../shared/xr_exact_scalar_registry.def"
@@ -997,30 +997,6 @@ bool xr_lbrace_starts_destructure_assignment(Parser *parser) {
     return false;
 }
 
-// Parse print statement: print(expr1, expr2, ...)
-AstNode *xr_parse_print_statement(Parser *parser) {
-    int line = parser->previous.line;
-
-    if (xr_parser_check(parser, TK_RPAREN)) {
-        return xr_ast_print_stmt(parser->compiler_session, NULL, 0, line);
-    }
-
-    int capacity = 8;
-    int count = 0;
-    AstNode **exprs = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
-                                                   (size_t) capacity);
-
-    exprs[count++] = xr_parse_expression(parser);
-
-    while (xr_parser_check(parser, TK_COMMA)) {
-        xr_parser_advance(parser);
-        XR_PARSE_PUSH(parser, exprs, count, capacity, xr_parse_expression(parser));
-    }
-
-    AstNode *node = xr_ast_print_stmt(parser->compiler_session, exprs, count, line);
-    return node;
-}
-
 // Parse statement
 AstNode *xr_parse_statement(Parser *parser) {
     if (parser->current.type == TK_NAME) {
@@ -1177,16 +1153,6 @@ AstNode *xr_parse_statement(Parser *parser) {
                                    "prefix ++/-- not supported, use postfix form (x++, x--)");
         xr_parser_advance(parser); /* consume ++/-- so the parser can recover */
         return NULL;
-    }
-
-    // Recognize print builtin (as NAME token)
-    if (parser->current.type == TK_NAME && parser->current.length == 5 &&
-        memcmp(parser->current.start, "print", 5) == 0) {
-        xr_parser_advance(parser);
-        xr_parser_consume(parser, TK_LPAREN, "expected '(' after print");
-        AstNode *stmt = xr_parse_print_statement(parser);
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' after print expression");
-        return stmt;
     }
 
     return xr_parse_expr_statement(parser);

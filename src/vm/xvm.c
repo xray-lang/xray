@@ -52,6 +52,7 @@
 #include "../runtime/xstdlib_bridge.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/xshared.h"
+#include "../shared/xr_print_plan.h"
 #include "../runtime/xglobal_dict.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../shared/xr_length_source_core.h"

@@ -2805,9 +2805,11 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     ASSERT_TRUE(xr_target_instruction_program_verify(target, error, sizeof(error)));
     assert_leaf_projection_architecture_boundary(semantic, profile);
     XrRuntimeTargetAuthority freestanding_authority;
-    const uint64_t freestanding_providers = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                                            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
-                                            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
+    const uint64_t freestanding_providers =
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
     ASSERT_EQ_UINT(xr_runtime_target_authority_native_freestanding(freestanding_providers,
                                                                    &freestanding_authority),
                    XR_RUNTIME_ABI_OK);
@@ -3215,7 +3217,12 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
 
     XrTargetI64OverflowPredicateRecord *mutable_predicates = target->i64_overflow_predicates;
     uint8_t saved_kind = mutable_predicates[0].kind;
-    mutable_predicates[0].kind = XR_TARGET_I64_OVERFLOW_PREDICATE_MUL;
+    /* Pick a kind this row does not already hold. Hard-coding one assumed an
+     * ordering of the predicate rows, so the mutation silently became a no-op
+     * whenever that row happened to carry it. */
+    mutable_predicates[0].kind = saved_kind == XR_TARGET_I64_OVERFLOW_PREDICATE_MUL
+                                     ? (uint8_t) XR_TARGET_I64_OVERFLOW_PREDICATE_ADD
+                                     : (uint8_t) XR_TARGET_I64_OVERFLOW_PREDICATE_MUL;
     xr_target_plan_compute_fingerprint(target, &target->fingerprint);
     ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
     mutable_predicates[0].kind = saved_kind;

@@ -1,0 +1,47 @@
+// anchor: print-canonical-value-shapes
+// The canonical formatter print uses must render each value shape the same way
+// on every backend. Only primitive shapes appear here, built without stdlib
+// imports and without containers, so the case stays comparable on the native
+// lane instead of collapsing into a VM-only run; the bodies live inside a
+// function for the same reason, since a top-level nullable has been refused by
+// the native lane before. Float coverage is deliberately thin - float_fmt owns
+// the digit-level oracle; what this case pins is that a whole-valued f64 keeps
+// its fractional part rather than rendering as an integer.
+fn nothing() { }
+
+fn main() {
+    var zero: i64 = 0
+    var pos: i64 = 42
+    var neg: i64 = -7
+    var imax: i64 = 9223372036854775807
+    var fhalf: f64 = 1.5
+    var fwhole: f64 = 3.0
+    var fneg: f64 = -2.25
+    var yes: bool = true
+    var no: bool = false
+    var text: string = "hi"
+    var empty: string = ""
+    var nullText: string? = null
+    var nullInt: i64? = null
+
+    print(zero)
+    print(pos)
+    print(neg)
+    print(imax)
+    print(fhalf)
+    print(fwhole)
+    print(fneg)
+    print(yes)
+    print(no)
+    print(text)
+    print(empty)
+    print(nullText)
+    print(nullInt)
+    print(nothing())
+
+    // The same shapes on one line, to pin that the separator does not depend
+    // on the shape of the value sitting next to it.
+    print(pos, fhalf, yes, text, nullText, nothing())
+}
+
+main()

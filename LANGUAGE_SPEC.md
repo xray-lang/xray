@@ -2738,16 +2738,18 @@ fn late_binding_and_copy() {
 `print` / `dump` are **built-in global functions** (not keywords; see §13.1), listed here for convenience:
 
 ```xray
-print("hello")                 // auto-appends a newline
-print("a:", a, "b:", b)        // multiple arguments separated by spaces
+print("hello")                 // appends exactly one newline
+print("a:", a, "b:", b)        // arguments separated by exactly one space
+print()                        // writes just that newline
 dump(some_obj)                 // debug output, with type info and structure
 ```
 
 **Behavior**:
 - Accepts any type and any number of arguments (variadic); each argument is automatically converted via its `toString()` or built-in formatter.
-- Output goes to stdout; not part of the exception mechanism.
-- Multiple arguments are separated by single spaces.
-- `print` appends a newline by default (different from C/Python; consistent with regression tests).
+- Arguments are evaluated left to right, exactly once each, before rendering begins.
+- Multiple arguments are separated by exactly one space.
+- Exactly one newline is appended; `print()` with no arguments writes that newline and nothing else.
+- Output goes to stdout. Formatting runs user code, so `print` can panic through it; it has no error channel of its own.
 - `dump` is for debugging; output includes type tags and internal structure.
 ### 4.11 Worked Examples
 
@@ -5969,7 +5971,7 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function | Signature | Description |
 |--|--|--|
-| `print` | `(...values) -> ()` | print to stdout, automatically appending a newline; multiple arguments are separated by spaces |
+| `print` | `(...values) -> ()` | print to stdout, appending exactly one newline; arguments are separated by exactly one space; `print()` writes just the newline |
 | `dump` | `(value, indent?) -> ()` | structured debug output |
 | `len` | `(value) -> i64` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
 

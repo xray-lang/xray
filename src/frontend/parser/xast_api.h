@@ -49,8 +49,6 @@ XR_FUNC AstNode *xr_ast_unary(XrCompilerSession *session, AstNodeType type, AstN
 
 XR_FUNC AstNode *xr_ast_grouping(XrCompilerSession *session, AstNode *expr, int line);
 XR_FUNC AstNode *xr_ast_expr_stmt(XrCompilerSession *session, AstNode *expr, int line);
-XR_FUNC AstNode *xr_ast_print_stmt(XrCompilerSession *session, AstNode **exprs, int expr_count,
-                                   int line);
 XR_FUNC AstNode *xr_ast_program(XrCompilerSession *session);
 XR_FUNC void xr_ast_program_add(XrCompilerSession *session, AstNode *program, AstNode *stmt);
 XR_FUNC AstNode *xr_ast_block(XrCompilerSession *session, int line);

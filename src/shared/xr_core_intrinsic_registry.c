@@ -10,15 +10,16 @@
 
 #include "xr_core_intrinsic.h"
 #include "xr_assertion_plan.h"
+#include "xr_print_plan.h"
 
 #include <stdio.h>
 #include <string.h>
 
 static const XrCoreIntrinsicDesc g_core_intrinsics[] = {
-#define XR_CORE_INTRINSIC(id, stable_id, source_name, category, call_form, parameter_shape,       \
-                          min_arity, max_arity, result_shape, effect_kind, flow_rule,               \
-                          expected_failure_channel, semantic_op, target_applicability,              \
-                          diagnostic_name)                                                          \
+#define XR_CORE_INTRINSIC(id, stable_id, source_name, category, call_form, parameter_shape,        \
+                          min_arity, max_arity, result_shape, effect_kind, flow_rule,              \
+                          expected_failure_channel, semantic_op, target_applicability,             \
+                          diagnostic_name)                                                         \
     {XR_CORE_BUILTIN_##id,                                                                         \
      source_name,                                                                                  \
      XR_CORE_INTRINSIC_CATEGORY_##category,                                                        \
@@ -41,8 +42,7 @@ _Static_assert(sizeof(g_core_intrinsics) / sizeof(g_core_intrinsics[0]) == XR_CO
                "core intrinsic descriptor count must match the stable ID domain");
 
 static const char *const g_removed_core_intrinsic_names[] = {
-    "likely",      "unlikely",    "assert_true", "assert_false",
-    "assert_eq",   "assert_ne",   "assert_throws",
+    "likely", "unlikely", "assert_true", "assert_false", "assert_eq", "assert_ne", "assert_throws",
 };
 
 static bool set_error(char *error, size_t error_size, const char *format, const char *detail) {
@@ -170,23 +170,21 @@ static uint32_t assertion_required_capabilities(XrAssertionKind kind) {
 }
 
 static bool assertion_target_is_valid(uint32_t target) {
-    const uint32_t targets = XR_CORE_INTRINSIC_TARGET_VM |
-                             XR_CORE_INTRINSIC_TARGET_AOT_HOSTED |
+    const uint32_t targets = XR_CORE_INTRINSIC_TARGET_VM | XR_CORE_INTRINSIC_TARGET_AOT_HOSTED |
                              XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER;
     return (target & targets) != 0 && (target & ~targets) == 0;
 }
 
 bool xr_assertion_plan_validate(const XrAssertionPlan *plan) {
     if (!plan || plan->schema_version != XR_ASSERTION_PLAN_SCHEMA_VERSION ||
-        !xr_assertion_location_is_complete(plan->source) ||
-        !assertion_target_is_valid(plan->target) ||
+        !xr_location_is_complete(plan->source) || !assertion_target_is_valid(plan->target) ||
         plan->kind <= XR_ASSERTION_KIND_NONE || plan->kind >= XR_ASSERTION_KIND_COUNT ||
         plan->equality_authority >= XR_ASSERTION_EQUALITY_COUNT ||
         plan->expected_failure_channel >= XR_CORE_INTRINSIC_FAILURE_CHANNEL_COUNT ||
         plan->flow_rule >= XR_CORE_INTRINSIC_FLOW_COUNT ||
         plan->effect <= XR_CORE_INTRINSIC_EFFECT_NONE ||
-        plan->effect >= XR_CORE_INTRINSIC_EFFECT_COUNT ||
-        plan->evaluation_count != plan->arity || plan->evaluation_count > 3 ||
+        plan->effect >= XR_CORE_INTRINSIC_EFFECT_COUNT || plan->evaluation_count != plan->arity ||
+        plan->evaluation_count > 3 ||
         (plan->flags & ~XR_ASSERTION_PLAN_FLAG_FAILURE_EDGE_COLD) != 0 ||
         plan->flags != XR_ASSERTION_PLAN_FLAG_FAILURE_EDGE_COLD ||
         (plan->required_capabilities & ~XR_ASSERTION_CAPABILITY_ALL) != 0)
@@ -249,7 +247,7 @@ XrAssertionPlanStatus xr_assertion_plan_build(XrCoreBuiltinId builtin_id, uint16
                                               XrLocation source, uint32_t target,
                                               uint32_t available_capabilities,
                                               XrAssertionPlan *out) {
-    if (!out || !xr_assertion_location_is_complete(source) || !assertion_target_is_valid(target))
+    if (!out || !xr_location_is_complete(source) || !assertion_target_is_valid(target))
         return XR_ASSERTION_PLAN_INVALID_ARGUMENT;
     memset(out, 0, sizeof(*out));
     const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(builtin_id);
@@ -267,8 +265,7 @@ XrAssertionPlanStatus xr_assertion_plan_build(XrCoreBuiltinId builtin_id, uint16
      * freestanding plan request may claim provider availability here; the
      * TargetPlan builder later proves mixed/portable plans against the frozen
      * target profile. */
-    if (target ==
-            XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER &&
+    if (target == XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER &&
         (available_capabilities & required_capabilities) != required_capabilities)
         return XR_ASSERTION_PLAN_MISSING_CAPABILITY;
 
@@ -276,9 +273,8 @@ XrAssertionPlanStatus xr_assertion_plan_build(XrCoreBuiltinId builtin_id, uint16
     out->builtin_id = builtin_id;
     out->kind = kind;
     out->source = source;
-    out->equality_authority = kind == XR_ASSERTION_KIND_EQUAL
-                                  ? XR_ASSERTION_EQUALITY_LANGUAGE_DEEP
-                                  : XR_ASSERTION_EQUALITY_NONE;
+    out->equality_authority = kind == XR_ASSERTION_KIND_EQUAL ? XR_ASSERTION_EQUALITY_LANGUAGE_DEEP
+                                                              : XR_ASSERTION_EQUALITY_NONE;
     out->expected_failure_channel = desc->expected_failure_channel;
     out->flow_rule = desc->flow_rule;
     out->effect = desc->effect;
@@ -310,9 +306,9 @@ XrAssertionPlanStatus xr_assertion_plan_build(XrCoreBuiltinId builtin_id, uint16
                                            : XR_ASSERTION_PLAN_INVALID_SCHEMA;
 }
 
-bool xr_assertion_classify_action_outcome(
-    const XrAssertionPlan *plan, XrCoreIntrinsicExpectedFailureChannel observed_channel,
-    XrAssertionFailureKind *failure_kind) {
+bool xr_assertion_classify_action_outcome(const XrAssertionPlan *plan,
+                                          XrCoreIntrinsicExpectedFailureChannel observed_channel,
+                                          XrAssertionFailureKind *failure_kind) {
     if (!failure_kind || !xr_assertion_plan_validate(plan) ||
         (plan->kind != XR_ASSERTION_KIND_THROWS && plan->kind != XR_ASSERTION_KIND_PANICS) ||
         observed_channel >= XR_CORE_INTRINSIC_FAILURE_CHANNEL_COUNT)
@@ -343,6 +339,66 @@ bool xr_assertion_classify_action_result(const XrAssertionPlan *plan,
                                                  failure_kind);
 }
 
+static bool print_target_is_valid(uint32_t target) {
+    const uint32_t targets = XR_CORE_INTRINSIC_TARGET_VM | XR_CORE_INTRINSIC_TARGET_AOT_HOSTED |
+                             XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_OUTPUT_PROVIDER;
+    return (target & targets) != 0 && (target & ~targets) == 0;
+}
+
+bool xr_print_plan_validate(const XrPrintPlan *plan) {
+    if (!plan || plan->schema_version != XR_PRINT_PLAN_SCHEMA_VERSION ||
+        !xr_location_is_complete(plan->source) || !print_target_is_valid(plan->target) ||
+        plan->separator != XR_PRINT_SEPARATOR_SPACE ||
+        plan->terminator != XR_PRINT_TERMINATOR_NEWLINE ||
+        plan->effect <= XR_CORE_INTRINSIC_EFFECT_NONE ||
+        plan->effect >= XR_CORE_INTRINSIC_EFFECT_COUNT || plan->flags != XR_PRINT_PLAN_FLAG_NONE ||
+        (plan->required_capabilities & ~XR_PRINT_CAPABILITY_ALL) != 0 ||
+        plan->required_capabilities != XR_PRINT_CAPABILITY_OUTPUT_WRITE)
+        return false;
+
+    const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(plan->builtin_id);
+    return desc && desc->category == XR_CORE_INTRINSIC_CATEGORY_OUTPUT &&
+           desc->semantic_op == XR_CORE_INTRINSIC_SEMANTIC_OP_PRINT_GROUP &&
+           plan->arity >= desc->min_arity && plan->arity <= desc->max_arity &&
+           (desc->target_applicability & plan->target) == plan->target &&
+           plan->effect == desc->effect;
+}
+
+XrPrintPlanStatus xr_print_plan_build(XrCoreBuiltinId builtin_id, uint16_t arity, XrLocation source,
+                                      uint32_t target, uint32_t available_capabilities,
+                                      XrPrintPlan *out) {
+    if (!out || !xr_location_is_complete(source) || !print_target_is_valid(target))
+        return XR_PRINT_PLAN_INVALID_ARGUMENT;
+    memset(out, 0, sizeof(*out));
+    const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(builtin_id);
+    if (!desc || desc->category != XR_CORE_INTRINSIC_CATEGORY_OUTPUT ||
+        desc->semantic_op != XR_CORE_INTRINSIC_SEMANTIC_OP_PRINT_GROUP)
+        return XR_PRINT_PLAN_NOT_OUTPUT;
+    if (arity < desc->min_arity || arity > desc->max_arity)
+        return XR_PRINT_PLAN_INVALID_ARITY;
+    if ((desc->target_applicability & target) != target)
+        return XR_PRINT_PLAN_UNSUPPORTED_TARGET;
+
+    /* A target-neutral plan records what it requires.  Only an exact
+     * freestanding request may claim provider availability here; the TargetPlan
+     * builder later proves mixed/portable plans against the frozen profile. */
+    if (target == XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_OUTPUT_PROVIDER &&
+        (available_capabilities & XR_PRINT_CAPABILITY_OUTPUT_WRITE) == 0)
+        return XR_PRINT_PLAN_MISSING_CAPABILITY;
+
+    out->schema_version = XR_PRINT_PLAN_SCHEMA_VERSION;
+    out->builtin_id = builtin_id;
+    out->source = source;
+    out->separator = XR_PRINT_SEPARATOR_SPACE;
+    out->terminator = XR_PRINT_TERMINATOR_NEWLINE;
+    out->effect = desc->effect;
+    out->target = target;
+    out->required_capabilities = XR_PRINT_CAPABILITY_OUTPUT_WRITE;
+    out->flags = XR_PRINT_PLAN_FLAG_NONE;
+    out->arity = arity;
+    return xr_print_plan_validate(out) ? XR_PRINT_PLAN_OK : XR_PRINT_PLAN_INVALID_SCHEMA;
+}
+
 bool xr_core_intrinsic_registry_validate(char *error, size_t error_size) {
     bool seen_ids[XR_CORE_BUILTIN_ID_LIMIT] = {false};
     bool seen_ops[XR_CORE_INTRINSIC_SEMANTIC_OP_COUNT] = {false};
@@ -352,9 +408,9 @@ bool xr_core_intrinsic_registry_validate(char *error, size_t error_size) {
 
     for (size_t i = 0; i < xr_core_intrinsic_count(); i++) {
         const XrCoreIntrinsicDesc *a = &g_core_intrinsics[i];
-        if (a->id <= XR_CORE_BUILTIN_NONE || a->id >= XR_CORE_BUILTIN_ID_LIMIT ||
-            !a->source_name || !a->source_name[0] || !a->diagnostic_name ||
-            !a->diagnostic_name[0] || a->call_form != XR_CORE_INTRINSIC_CALL_FORM_DIRECT_ONLY ||
+        if (a->id <= XR_CORE_BUILTIN_NONE || a->id >= XR_CORE_BUILTIN_ID_LIMIT || !a->source_name ||
+            !a->source_name[0] || !a->diagnostic_name || !a->diagnostic_name[0] ||
+            a->call_form != XR_CORE_INTRINSIC_CALL_FORM_DIRECT_ONLY ||
             a->min_arity > a->max_arity || a->result_shape != XR_CORE_INTRINSIC_RESULT_SHAPE_UNIT ||
             a->effect == XR_CORE_INTRINSIC_EFFECT_NONE ||
             a->effect >= XR_CORE_INTRINSIC_EFFECT_COUNT ||
@@ -383,10 +439,9 @@ bool xr_core_intrinsic_registry_validate(char *error, size_t error_size) {
         if (a->category == XR_CORE_INTRINSIC_CATEGORY_ASSERTION) {
             XrLocation source = {"<core-intrinsic-registry>", 1, 1, 1, 1};
             XrAssertionPlan plan;
-            if (xr_assertion_plan_build(a->id, a->max_arity, source,
-                                        XR_CORE_INTRINSIC_TARGET_VM,
-                                        XR_ASSERTION_CAPABILITY_NONE, &plan) !=
-                    XR_ASSERTION_PLAN_OK ||
+            if (xr_assertion_plan_build(a->id, a->max_arity, source, XR_CORE_INTRINSIC_TARGET_VM,
+                                        XR_ASSERTION_CAPABILITY_NONE,
+                                        &plan) != XR_ASSERTION_PLAN_OK ||
                 !xr_assertion_plan_validate(&plan))
                 return set_error(error, error_size,
                                  "core intrinsic cannot produce an assertion plan: %s",
@@ -404,8 +459,8 @@ bool xr_core_intrinsic_registry_validate(char *error, size_t error_size) {
         if (!seen_ids[id])
             return set_error(error, error_size, "missing core intrinsic stable ID: %s", "registry");
     }
-    for (int op = XR_CORE_INTRINSIC_SEMANTIC_OP_NONE + 1;
-         op < XR_CORE_INTRINSIC_SEMANTIC_OP_COUNT; op++) {
+    for (int op = XR_CORE_INTRINSIC_SEMANTIC_OP_NONE + 1; op < XR_CORE_INTRINSIC_SEMANTIC_OP_COUNT;
+         op++) {
         if (!seen_ops[op])
             return set_error(error, error_size, "missing core intrinsic semantic operation: %s",
                              "registry");

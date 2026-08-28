@@ -134,19 +134,6 @@ typedef struct ProgramNode {
     bool owns_arena;
 } ProgramNode;
 
-// print statement node
-typedef struct PrintNode {
-    AstNode **exprs;
-    int expr_count;
-    /* Runtime behaviour modifier.  When true, every argument is
-     * evaluated but arguments that evaluate to null are silently
-     * skipped (no output, no newline).  Set by the REPL auto-echo
-     * rewrite so `f()` returning null does not clutter the prompt
-     * with "null".  User-written `print()` always has this as
-     * false, preserving `print(null)` -> "null". */
-    bool skip_null;
-} PrintNode;
-
 // Block node
 typedef struct BlockNode {
     AstNode **statements;

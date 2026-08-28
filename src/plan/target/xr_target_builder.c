@@ -15451,9 +15451,18 @@ static bool materialize_capabilities(const XrTargetPlanBuilder *builder,
     const XrSemanticOperandRecord *operands =
         xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
     uint32_t assertion_requirements = XR_ASSERTION_CAPABILITY_NONE;
+    uint32_t print_requirements = XR_PRINT_CAPABILITY_NONE;
     for (uint32_t i = 0; i < xr_semantic_plan_operation_count(builder->semantic_plan); i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_OUTPUT) {
+            XrPrintPlan print_plan;
+            if (!xr_semantic_operation_print_plan(operation, &print_plan))
+                return fail(error, error_size, "XR_TARGET_1004",
+                            "output capability requirement is not exact");
+            print_requirements |= print_plan.required_capabilities;
+            continue;
+        }
         if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_ASSERTION)
             continue;
         XrAssertionPlan assertion;
@@ -15492,7 +15501,11 @@ static bool materialize_capabilities(const XrTargetPlanBuilder *builder,
                                    XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY)) != 0)
         return fail(error, error_size, "XR_TARGET_1004",
                     "freestanding assertion action requires a capturable failure boundary");
-    materialized->capability_count = 2u + assertion_count;
+    uint32_t output_count = (machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING &&
+                             (print_requirements & XR_PRINT_CAPABILITY_OUTPUT_WRITE) != 0)
+                                ? 1u
+                                : 0u;
+    materialized->capability_count = 2u + assertion_count + output_count;
     materialized->capabilities = (XrTargetCapabilityRecord *) allocate_records(
         materialized->capability_count, sizeof(*materialized->capabilities));
     if (!materialized->capabilities)
@@ -15510,16 +15523,16 @@ static bool materialize_capabilities(const XrTargetPlanBuilder *builder,
         .flags = XR_TARGET_CAPABILITY_REQUIRED,
     };
     uint32_t next = 2;
-#define XR_APPEND_ASSERTION_CAPABILITY(assertion_bit, target_capability)                           \
+#define XR_APPEND_REQUIRED_CAPABILITY(is_required, target_capability)                              \
     do {                                                                                           \
-        if ((assertion_requirements & (assertion_bit)) != 0) {                                     \
+        if (is_required) {                                                                         \
             uint64_t capability_bit = xr_target_capability_mask(target_capability);                \
             uint16_t provider = xr_target_capability_provider(target_capability);                  \
             if (capability_bit == 0 ||                                                             \
                 (target_capability != XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY &&                 \
                  (facts->provider_mask & capability_bit) == 0))                                    \
                 return fail(error, error_size, "XR_TARGET_1004",                                   \
-                            "target profile lacks a required assertion capability");               \
+                            "target profile lacks a required capability");                         \
             materialized->capabilities[next] = (XrTargetCapabilityRecord) {                        \
                 .id = next,                                                                        \
                 .capability = target_capability,                                                   \
@@ -15530,17 +15543,23 @@ static bool materialize_capabilities(const XrTargetPlanBuilder *builder,
         }                                                                                          \
     } while (0)
     if (machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING) {
-        XR_APPEND_ASSERTION_CAPABILITY(XR_ASSERTION_CAPABILITY_FAILURE_REPORT,
-                                       XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+        XR_APPEND_REQUIRED_CAPABILITY(
+            (assertion_requirements & XR_ASSERTION_CAPABILITY_FAILURE_REPORT) != 0,
+            XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+        /* An assertion report provider is a distinct identity and must not
+         * stand in for ordinary program output. */
+        XR_APPEND_REQUIRED_CAPABILITY((print_requirements & XR_PRINT_CAPABILITY_OUTPUT_WRITE) != 0,
+                                      XR_TARGET_CAPABILITY_OUTPUT_WRITE);
     }
-    XR_APPEND_ASSERTION_CAPABILITY(XR_ASSERTION_CAPABILITY_TYPED_ERROR_BOUNDARY,
-                                   XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY);
-    XR_APPEND_ASSERTION_CAPABILITY(XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY,
-                                   XR_TARGET_CAPABILITY_PANIC_BOUNDARY);
-#undef XR_APPEND_ASSERTION_CAPABILITY
+    XR_APPEND_REQUIRED_CAPABILITY(
+        (assertion_requirements & XR_ASSERTION_CAPABILITY_TYPED_ERROR_BOUNDARY) != 0,
+        XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY);
+    XR_APPEND_REQUIRED_CAPABILITY(
+        (assertion_requirements & XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY) != 0,
+        XR_TARGET_CAPABILITY_PANIC_BOUNDARY);
+#undef XR_APPEND_REQUIRED_CAPABILITY
     if (next != materialized->capability_count)
-        return fail(error, error_size, "XR_TARGET_1004",
-                    "assertion capability closure is incomplete");
+        return fail(error, error_size, "XR_TARGET_1004", "capability closure is incomplete");
     return true;
 }
 

@@ -325,16 +325,18 @@ fn late_binding_and_copy() {
 `print` / `dump` 是**内置全局函数**（非关键字，详见 §13.1），列于此处便于查阅：
 
 ```xray @id=stmt-print-dump
-print("hello")                 // 自动追加换行
-print("a:", a, "b:", b)        // 多参用空格分隔
+print("hello")                 // 追加恰好一个换行
+print("a:", a, "b:", b)        // 多参以恰好一个空格分隔
+print()                        // 只输出一个换行
 dump(some_obj)                 // 调试输出，含类型信息与结构布局
 ```
 
 **行为说明**：
 - 接受任意类型与任意数量参数（变长）；每个参数自动调用其 `toString()` 或内置格式化。
-- 输出到 stdout；不参与异常机制。
-- 多参时以单空格分隔。
-- `print` 默认会追加换行（与 C/Python 不同，与回归测试一致）。
+- 参数从左到右求值，各求值一次，全部求值完成后才开始渲染。
+- 多参时以恰好一个空格分隔。
+- 末尾恰好追加一个换行；`print()` 无参数时只输出这一个换行。
+- 输出到 stdout。格式化会调用用户代码，因此 `print` 可能因此 panic；它没有自己的错误通道。
 - `dump` 用于调试，输出格式包含类型标注与对象内部结构。
 ### 4.11 完整可运行示例
 
@@ -694,16 +696,18 @@ fn late_binding_and_copy() {
 `print` / `dump` are **built-in global functions** (not keywords; see §13.1), listed here for convenience:
 
 ```xray @id=stmt-print-dump
-print("hello")                 // auto-appends a newline
-print("a:", a, "b:", b)        // multiple arguments separated by spaces
+print("hello")                 // appends exactly one newline
+print("a:", a, "b:", b)        // arguments separated by exactly one space
+print()                        // writes just that newline
 dump(some_obj)                 // debug output, with type info and structure
 ```
 
 **Behavior**:
 - Accepts any type and any number of arguments (variadic); each argument is automatically converted via its `toString()` or built-in formatter.
-- Output goes to stdout; not part of the exception mechanism.
-- Multiple arguments are separated by single spaces.
-- `print` appends a newline by default (different from C/Python; consistent with regression tests).
+- Arguments are evaluated left to right, exactly once each, before rendering begins.
+- Multiple arguments are separated by exactly one space.
+- Exactly one newline is appended; `print()` with no arguments writes that newline and nothing else.
+- Output goes to stdout. Formatting runs user code, so `print` can panic through it; it has no error channel of its own.
 - `dump` is for debugging; output includes type tags and internal structure.
 ### 4.11 Worked Examples
 

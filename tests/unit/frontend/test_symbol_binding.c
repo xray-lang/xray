@@ -120,10 +120,6 @@ static int count_unresolved_vars(AstNode *node) {
             count += count_unresolved_vars(node->as.for_in_stmt.collection);
             count += count_unresolved_vars(node->as.for_in_stmt.body);
             break;
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                count += count_unresolved_vars(node->as.print_stmt.exprs[i]);
-            break;
         case AST_THROW_STMT:
             count += count_unresolved_vars(node->as.throw_stmt.expression);
             break;
@@ -395,6 +391,10 @@ static bool check_bindings(const char *source, const char *label) {
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    /* Analysis clears the file cursor on its way out, but lowering attributes
+     * plans to exact source and reads it. A real compile is inside a file scope
+     * at this point; this harness has to say so too. */
+    analyzer->current_file = "binding_test.xr";
     XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     xa_typed_program_free(typed.program);
 #ifdef _WIN32

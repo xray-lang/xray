@@ -8207,7 +8207,8 @@ static void test_assertion_target_capability_authority(void) {
     const uint64_t freestanding_provider_mask =
         XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
         XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
-        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO) |
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
     REQUIRE(xr_runtime_target_authority_native_freestanding(freestanding_provider_mask,
                                                             &freestanding) == XR_RUNTIME_ABI_OK);
     profile = build_native_profile_with_provider_count(&freestanding, freestanding.provider_count);

@@ -166,9 +166,8 @@ static int xa_fixed_array_elem_native_lane(XrType *elem) {
 static const char *xa_intrinsic_owner_module(const XaInferContext *ctx) {
     if (!ctx || !ctx->analyzer)
         return NULL;
-    return ctx->analyzer->current_module_is_stdlib
-               ? ctx->analyzer->current_stdlib_module_name
-               : NULL;
+    return ctx->analyzer->current_module_is_stdlib ? ctx->analyzer->current_stdlib_module_name
+                                                   : NULL;
 }
 
 static void xa_bind_registry_intrinsic(XaInferContext *ctx, AstNode *node, XaSymbol *symbol,
@@ -1334,10 +1333,6 @@ static void xa_summary_mark_capture_refs(XaParamEscapeSummary *summary, AstNode 
                 xa_summary_mark_capture_refs(summary, node->as.map_literal.values[i]);
             }
             break;
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                xa_summary_mark_capture_refs(summary, node->as.print_stmt.exprs[i]);
-            break;
         case AST_IF_STMT:
             xa_summary_mark_capture_refs(summary, node->as.if_stmt.condition);
             xa_summary_mark_capture_refs(summary, node->as.if_stmt.then_branch);
@@ -1622,10 +1617,6 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
         }
         case AST_FUNCTION_EXPR:
             xa_summary_walk_function_expr(summary, node);
-            break;
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                xa_summary_walk(summary, node->as.print_stmt.exprs[i]);
             break;
         case AST_IF_STMT:
             xa_summary_walk(summary, node->as.if_stmt.condition);

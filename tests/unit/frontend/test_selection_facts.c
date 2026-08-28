@@ -90,13 +90,6 @@ static AstNode *find_member_access(AstNode *node) {
             }
             break;
         }
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                AstNode *r = find_member_access(node->as.print_stmt.exprs[i]);
-                if (r)
-                    return r;
-            }
-            break;
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
             return find_member_access(node->as.function_decl.body);
@@ -136,13 +129,6 @@ static AstNode *find_enum_access(AstNode *node) {
             return find_enum_access(node->as.var_decl.initializer);
         case AST_EXPR_STMT:
             return find_enum_access(node->as.expr_stmt);
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                AstNode *r = find_enum_access(node->as.print_stmt.exprs[i]);
-                if (r)
-                    return r;
-            }
-            break;
         default:
             break;
     }
@@ -175,13 +161,6 @@ static AstNode *find_call_with_variable_callee(AstNode *node, const char *name) 
             return find_call_with_variable_callee(node->as.var_decl.initializer, name);
         case AST_EXPR_STMT:
             return find_call_with_variable_callee(node->as.expr_stmt, name);
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                AstNode *r = find_call_with_variable_callee(node->as.print_stmt.exprs[i], name);
-                if (r)
-                    return r;
-            }
-            break;
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
             return find_call_with_variable_callee(node->as.function_decl.body, name);

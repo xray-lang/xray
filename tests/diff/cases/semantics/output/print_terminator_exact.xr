@@ -1,0 +1,18 @@
+// anchor: print-terminator-exact-newline
+// A logical print ends with exactly one newline (0x0A) - never zero, never
+// two. The terminator is unconditional, so a value whose own text contains a
+// newline, or already ends with one, still gets its own terminator appended.
+// Consecutive prints leave no blank line and no extra padding between them.
+print("l1")
+print("l2")
+print("l3")
+print("m1\nm2")
+print("z\n")
+print("t ")
+
+var i = 0
+while (i < 3) {
+    print(i)
+    i = i + 1
+}
+print("end")

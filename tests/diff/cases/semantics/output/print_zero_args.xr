@@ -1,0 +1,5 @@
+// anchor: print-zero-args-newline
+// A print with no arguments is still a complete logical print: it renders an
+// empty value list and writes the line terminator. The program therefore emits
+// exactly one newline (0x0A) and nothing else - not zero bytes.
+print()

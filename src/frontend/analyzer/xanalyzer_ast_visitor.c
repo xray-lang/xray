@@ -127,12 +127,6 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.expr_stmt, v);
             break;
 
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                visit_node(node->as.print_stmt.exprs[i], v);
-            }
-            break;
-
         case AST_ASSIGNMENT:
             visit_node(node->as.assignment.value, v);
             break;

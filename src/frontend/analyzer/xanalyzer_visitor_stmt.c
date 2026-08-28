@@ -2242,10 +2242,6 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
         case AST_INDEX_SET:
             xa_thread_lint_scan_expr(states, stmt, false, can_escape);
             return;
-        case AST_PRINT_STMT:
-            xa_thread_lint_scan_expr_array(states, stmt->as.print_stmt.exprs,
-                                           stmt->as.print_stmt.expr_count, false, can_escape);
-            return;
         case AST_RETURN_STMT:
             xa_thread_lint_scan_expr_array(states, stmt->as.return_stmt.values,
                                            stmt->as.return_stmt.value_count, true, can_escape);
@@ -4890,10 +4886,6 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
         case AST_INDEX_SET:
             xa_os_resource_lint_scan_expr(states, stmt, false, can_escape);
             return;
-        case AST_PRINT_STMT:
-            xa_os_resource_lint_scan_expr_array(states, stmt->as.print_stmt.exprs,
-                                                stmt->as.print_stmt.expr_count, false, can_escape);
-            return;
         case AST_RETURN_STMT:
             xa_os_resource_lint_scan_expr_array(states, stmt->as.return_stmt.values,
                                                 stmt->as.return_stmt.value_count, true, can_escape);
@@ -6370,9 +6362,6 @@ XR_FUNC bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
 
         case AST_EXPR_STMT:
             return xa_node_uses_symbol_name(node->as.expr_stmt, name);
-        case AST_PRINT_STMT:
-            return xa_node_array_uses_symbol_name(node->as.print_stmt.exprs,
-                                                  node->as.print_stmt.expr_count, name);
         case AST_BLOCK:
             return xa_block_uses_symbol_name_from(node, name, 0);
 

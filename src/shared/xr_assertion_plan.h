@@ -25,7 +25,9 @@
 
 #define XR_ASSERTION_PLAN_SCHEMA_VERSION UINT32_C(1)
 #define XR_ASSERTION_OPERAND_NONE UINT8_MAX
-enum { XR_ASSERTION_MAX_OPERANDS = 3 };
+enum {
+    XR_ASSERTION_MAX_OPERANDS = 3
+};
 
 typedef enum XrAssertionKind {
     XR_ASSERTION_KIND_NONE = 0,
@@ -132,27 +134,27 @@ XR_FUNC XrAssertionPlanStatus xr_assertion_plan_build(XrCoreBuiltinId builtin_id
                                                       uint32_t available_capabilities,
                                                       XrAssertionPlan *out);
 XR_FUNC bool xr_assertion_plan_validate(const XrAssertionPlan *plan);
-XR_FUNC bool xr_assertion_classify_action_outcome(
-    const XrAssertionPlan *plan, XrCoreIntrinsicExpectedFailureChannel observed_channel,
-    XrAssertionFailureKind *failure_kind);
+XR_FUNC bool
+xr_assertion_classify_action_outcome(const XrAssertionPlan *plan,
+                                     XrCoreIntrinsicExpectedFailureChannel observed_channel,
+                                     XrAssertionFailureKind *failure_kind);
 XR_FUNC bool xr_assertion_classify_action_result(const XrAssertionPlan *plan,
                                                  XrAssertionActionOutcome outcome,
                                                  XrAssertionFailureKind *failure_kind);
 
-static inline bool xr_assertion_classify_action_channels(
-    XrCoreIntrinsicExpectedFailureChannel expected_channel, XrAssertionActionOutcome outcome,
-    XrAssertionFailureKind *failure_kind) {
-    if (!failure_kind ||
-        (expected_channel != XR_CORE_INTRINSIC_FAILURE_CHANNEL_TYPED_ERROR &&
-         expected_channel != XR_CORE_INTRINSIC_FAILURE_CHANNEL_PANIC))
+static inline bool
+xr_assertion_classify_action_channels(XrCoreIntrinsicExpectedFailureChannel expected_channel,
+                                      XrAssertionActionOutcome outcome,
+                                      XrAssertionFailureKind *failure_kind) {
+    if (!failure_kind || (expected_channel != XR_CORE_INTRINSIC_FAILURE_CHANNEL_TYPED_ERROR &&
+                          expected_channel != XR_CORE_INTRINSIC_FAILURE_CHANNEL_PANIC))
         return false;
     if (!outcome.returned_normally && outcome.has_typed_error && outcome.has_panic) {
         *failure_kind = XR_ASSERTION_FAILURE_CONFLICTING_CHANNELS;
         return true;
     }
     unsigned observations = (outcome.returned_normally ? 1u : 0u) +
-                            (outcome.has_typed_error ? 1u : 0u) +
-                            (outcome.has_panic ? 1u : 0u);
+                            (outcome.has_typed_error ? 1u : 0u) + (outcome.has_panic ? 1u : 0u);
     if (observations != 1u)
         return false;
     XrCoreIntrinsicExpectedFailureChannel observed = XR_CORE_INTRINSIC_FAILURE_CHANNEL_NONE;
@@ -172,12 +174,6 @@ static inline bool xr_assertion_classify_action_channels(
                             : XR_ASSERTION_FAILURE_EXPECTED_PANIC;
     }
     return true;
-}
-
-static inline bool xr_assertion_location_is_complete(XrLocation source) {
-    return source.file && source.file[0] && source.line != 0 && source.column != 0 &&
-           source.end_line != 0 && source.end_column != 0 && source.end_line >= source.line &&
-           (source.end_line != source.line || source.end_column >= source.column);
 }
 
 static inline const char *xr_assertion_failure_kind_name(XrAssertionFailureKind kind) {
@@ -202,7 +198,7 @@ static inline const char *xr_assertion_failure_kind_name(XrAssertionFailureKind 
 }
 
 static inline bool xr_assertion_failure_validate(const XrAssertionFailure *failure) {
-    if (!failure || !xr_assertion_location_is_complete(failure->source) ||
+    if (!failure || !xr_location_is_complete(failure->source) ||
         !xr_assertion_failure_kind_name(failure->kind))
         return false;
     switch (failure->kind) {

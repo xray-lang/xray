@@ -29,50 +29,40 @@
  */
 
 vmcase(OP_PRINT) {
-    /* OP_PRINT: print value with toString support
-    ** A: value register
-    ** B: 1=add space before (not first argument)
-    ** C: bit0=newline, bit1-2=slot_type hint (0=ANY, 1=I64, 2=F64),
-    **    bit3=skip_null (REPL auto-echo: print nothing if val is null)
+    /* OP_PRINT: one operand of one print group.
+    ** A: value register (unused when the group has no operands)
+    ** B: 1=this operand is preceded by the group separator
+    ** C: XR_PRINT_BC_TERMINATE | XR_PRINT_BC_NO_OPERAND
     **
-    ** If value is instance with toString() method, call it first
+    ** Emission derives B and C from the group's plan, so this dispatch never
+    ** decides where a separator goes. A value whose class defines toString()
+    ** renders by calling it, which leaves this dispatch and resumes below.
     */
     int a = GETARG_A(i);
     int add_space = GETARG_B(i);
-    int c_field = GETARG_C(i);
-    int newline = c_field & 1;
-    int slot_hint = (c_field >> 1) & 3;
-    int skip_null = (c_field >> 3) & 1;
-
-    // Reconstruct tagged value from raw slot if hint provided.
-    XrValue val = XR_NULL_VAL;
-    if (slot_hint == 1) {
-        val = XR_FROM_INT(R(a).i);
-    } else if (slot_hint == 2) {
-        val = XR_FROM_FLOAT(R(a).f);
-    } else if (slot_hint != 3) {
-        val = R(a);
-    } else {
-        /* slot_hint=3 is uint64: the register stores raw bits in i64 form,
-         * but formatting must interpret them as unsigned. */
-    }
-
-    /* REPL auto-echo suppression: bare expressions that evaluate to
-     * null are silently dropped so the prompt stays clean.  Explicit
-     * `print(null)` does not set skip_null and still prints "null". */
-    if (slot_hint != 3 && skip_null && XR_IS_NULL(val))
-        vmbreak;
+    uint32_t c_field = GETARG_C(i);
+    int newline = (c_field & XR_PRINT_BC_TERMINATE) != 0;
 
     FILE *print_stream = xr_isolate_stdout(isolate);
+    /* A group with no operands renders nothing and still writes its frame. */
+    if ((c_field & XR_PRINT_BC_NO_OPERAND) != 0) {
+        if (newline)
+            fputc('\n', print_stream);
+        vmbreak;
+    }
+
     if (add_space)
         fputc(' ', print_stream);
-
-    if (slot_hint == 3) {
+    /* The slot holds raw bits; only the operand's static type says whether they
+     * denote an unsigned value. */
+    if ((c_field & XR_PRINT_BC_UNSIGNED) != 0) {
         fprintf(print_stream, "%llu", (unsigned long long) (uint64_t) R(a).i);
         if (newline)
             fputc('\n', print_stream);
         vmbreak;
     }
+
+    XrValue val = R(a);
 
     // Check if instance has toString method
     if (xr_value_is_instance(val)) {

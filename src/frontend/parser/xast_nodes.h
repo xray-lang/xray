@@ -68,7 +68,6 @@ struct AstNode {
         UnaryNode unary;
         AstNode *grouping;
         AstNode *expr_stmt;
-        PrintNode print_stmt;
         BlockNode block;
         VarDeclNode var_decl;
         VariableNode variable;

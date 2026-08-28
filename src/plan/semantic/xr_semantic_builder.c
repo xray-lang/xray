@@ -4764,6 +4764,24 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->evidence[XR_SEM_ASSERT_EVIDENCE_TARGET] = plan->target;
         record->evidence[XR_SEM_ASSERT_EVIDENCE_CAPABILITIES] = plan->required_capabilities;
     }
+    if (value->op == XI_PRINT) {
+        const XrPrintPlan *plan = xi_print_plan(value);
+        if (!plan || !xr_print_plan_validate(plan) || plan->arity != value->nargs ||
+            !xi_source_span_is_complete(value->source_span) ||
+            plan->source.line != value->source_span.start_line ||
+            plan->source.column != value->source_span.start_column ||
+            plan->source.end_line != value->source_span.end_line ||
+            plan->source.end_column != value->source_span.end_column)
+            return fail(ctx, "XR_SEM_0019", "print plan authority is incomplete");
+        record->semantic_immediate = 0;
+        record->intrinsic_kind = XR_SEM_INTRINSIC_OUTPUT;
+        record->evidence[XR_SEM_PRINT_EVIDENCE_SCHEMA] = plan->schema_version;
+        record->evidence[XR_SEM_PRINT_EVIDENCE_BUILTIN_ID] = plan->builtin_id;
+        record->evidence[XR_SEM_PRINT_EVIDENCE_SEPARATOR] = plan->separator;
+        record->evidence[XR_SEM_PRINT_EVIDENCE_TERMINATOR] = plan->terminator;
+        record->evidence[XR_SEM_PRINT_EVIDENCE_TARGET] = plan->target;
+        record->evidence[XR_SEM_PRINT_EVIDENCE_CAPABILITIES] = plan->required_capabilities;
+    }
     if (value->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
         const XiViewEvidence *view = &value->view_evidence;
         XrType *element = value->type && XR_TYPE_IS_SLICE(value->type)
@@ -4810,6 +4828,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         XrAssertionPlan semantic_plan;
         if (!xr_semantic_operation_assertion_plan(record, &semantic_plan))
             return fail(ctx, "XR_SEM_0019", "assertion semantic projection is not exact");
+    }
+    if (value->op == XI_PRINT) {
+        XrPrintPlan semantic_print;
+        if (!xr_semantic_operation_print_plan(record, &semantic_print))
+            return fail(ctx, "XR_SEM_0019", "print semantic projection is not exact");
     }
     if (xi_string_runes_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRING_RUNES;

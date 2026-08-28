@@ -3240,6 +3240,8 @@ static uint32_t xaot_cli_provider_hook_by_name(const char *name) {
         return XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE;
     if (strcmp(name, "assertion_report") == 0)
         return XAOT_PROVIDER_HOOK_ASSERTION_REPORT;
+    if (strcmp(name, "output_write") == 0)
+        return XAOT_PROVIDER_HOOK_OUTPUT_WRITE;
     if (strcmp(name, "alloc") == 0)
         return XAOT_PROVIDER_HOOK_ALLOC;
     if (strcmp(name, "free") == 0)
@@ -3293,6 +3295,8 @@ static bool xaot_cli_provider_from_target_config(
     out->abi_version = XAOT_PROVIDER_ABI_VERSION;
     bool assertion_report_capability = false;
     bool assertion_report_hook = false;
+    bool output_write_capability = false;
+    bool output_write_hook = false;
     bool allocator_capability = false;
     bool panic_capability = false;
     bool alloc_hook = false;
@@ -3302,6 +3306,10 @@ static bool xaot_cli_provider_from_target_config(
         const char *name = config->runtime_capabilities[i];
         if (name && strcmp(name, "assertion-report") == 0) {
             assertion_report_capability = true;
+            continue;
+        }
+        if (name && strcmp(name, "output-write") == 0) {
+            output_write_capability = true;
             continue;
         }
         if (name && strcmp(name, "allocator") == 0) {
@@ -3328,6 +3336,8 @@ static bool xaot_cli_provider_from_target_config(
         }
         if (hook == XAOT_PROVIDER_HOOK_ASSERTION_REPORT)
             assertion_report_hook = true;
+        else if (hook == XAOT_PROVIDER_HOOK_OUTPUT_WRITE)
+            output_write_hook = true;
         else if (hook == XAOT_PROVIDER_HOOK_ALLOC)
             alloc_hook = true;
         else if (hook == XAOT_PROVIDER_HOOK_FREE)
@@ -3340,6 +3350,11 @@ static bool xaot_cli_provider_from_target_config(
         snprintf(
             err, err_size,
             "freestanding assertion-report capability and exact hook must be declared together");
+        return false;
+    }
+    if (output_write_capability != output_write_hook) {
+        snprintf(err, err_size,
+                 "freestanding output-write capability and exact hook must be declared together");
         return false;
     }
     if (allocator_capability != (alloc_hook && free_hook) || alloc_hook != free_hook) {
@@ -3360,8 +3375,18 @@ static bool xaot_cli_provider_from_target_config(
         *out_runtime_provider_mask |= XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
                                       XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
     }
-    if (assertion_report_capability && out_runtime_provider_mask)
+    if ((assertion_report_capability || output_write_capability) && out_runtime_provider_mask) {
+        /* The provider kind alone does not say which IO operations exist. Carry
+         * the exact ones so an assertion reporter is never mistaken for an
+         * output sink, or the reverse. */
         *out_runtime_provider_mask |= XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
+        if (assertion_report_capability)
+            *out_runtime_provider_mask |=
+                XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+        if (output_write_capability)
+            *out_runtime_provider_mask |=
+                XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_OUTPUT_WRITE);
+    }
     uint64_t hash = XR_FNV64_OFFSET_BASIS;
     hash = xaot_hash_fold_str(hash, "xray-target-runtime-provider-v1");
     hash = xaot_hash_fold_str(hash, config->runtime_provider);

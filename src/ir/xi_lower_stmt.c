@@ -191,37 +191,6 @@ static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
     }
 }
 
-static bool stmt_type_is_unsigned_int(struct XrType *type) {
-    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
-        return false;
-    switch (type->scalar_rep) {
-        case XR_NATIVE_U8:
-        case XR_NATIVE_U16:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_U64:
-        case XR_NATIVE_USIZE:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static int stmt_print_slot_hint_for_value(XiValue *v) {
-    if (!v || !v->type)
-        return 0;
-    // Nullable primitives must print through the tagged path so a `null`
-    // value renders as "null" rather than its raw numeric payload (0).
-    if (v->type->is_nullable)
-        return 0;
-    if (v->type->kind == XR_KIND_FLOAT)
-        return 2;
-    if (stmt_type_is_unsigned_int(v->type))
-        return 3;
-    if (v->type->kind == XR_KIND_INT)
-        return 1;
-    return 0;
-}
-
 static bool lower_cleanup_discard_empty_panic_interval(XiLower *l, XiCleanupScope *scope) {
     if (!l || !scope || !scope->active_try || !scope->active_try->block || !l->cur_block)
         return false;
@@ -3873,60 +3842,6 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     stmt_write_decl_value(l, var_id, init_val);
 }
 
-static void lower_print(XiLower *l, AstNode *node) {
-    PrintNode *p = &node->as.print_stmt;
-    int nargs = (int) p->expr_count;
-    if (nargs < 0 || nargs > (int) UINT16_MAX) {
-        fprintf(stderr, "[LOWER] print argument count exceeds %u at line %d\n",
-                (unsigned) UINT16_MAX, (int) node->line);
-        l->had_error = true;
-        return;
-    }
-
-    XiValue *stack_args[32];
-    XiValue **arg_vals = stack_args;
-    if (nargs > 32) {
-        arg_vals = (XiValue **) xi_func_arena_alloc(
-            l->func, (uint32_t) ((size_t) nargs * sizeof(XiValue *)));
-        if (!arg_vals)
-            return;
-    }
-    for (int i = 0; i < nargs; i++) {
-        arg_vals[i] = xi_lower_expr(l, p->exprs[i]);
-        if (!arg_vals[i])
-            return;
-        /* Unit shares null's runtime tag, so a unit-typed argument would print
-         * as `null`. Render it as `()` from its static type instead: the
-         * expression above still runs for its side effects, only the shown
-         * value changes. This mirrors how a function value renders as `<fn>`
-         * rather than exposing its representation. */
-        if (arg_vals[i]->type && arg_vals[i]->type->kind == XR_KIND_UNIT)
-            arg_vals[i] = xi_const_str(l->func, l->cur_block, "()", l->type_string);
-    }
-
-    /* Emit one XI_PRINT per argument with correct spacing/newline flags.
-     * aux_int encoding:
-     *   bit0 = add_space   → OP_PRINT B field
-     *   bit1 = newline     → OP_PRINT C bit0
-     *   bits 2..3 = slot type hint → OP_PRINT C bits 1..2 (unused here)
-     *   bit4 = skip_null   → OP_PRINT C bit3 (REPL auto-echo only) */
-    int skip_null = p->skip_null ? 1 : 0;
-    for (int i = 0; i < nargs; i++) {
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
-        if (!v)
-            return;
-        v->args[0] = arg_vals[i];
-
-        int add_space = (i > 0) ? 1 : 0;
-        int newline = (i == nargs - 1) ? 1 : 0;
-        int slot_hint = stmt_print_slot_hint_for_value(arg_vals[i]);
-        v->aux_int = add_space | (newline << 1) | (slot_hint << 2) | (skip_null << 4);
-
-        v->flags = xi_op_default_effects(XI_PRINT);
-        v->line = (uint32_t) node->line;
-    }
-}
-
 /* An enum variant constructed at the throw is the error value itself, so it is
  * allocated straight into the shared band. A unit variant needs no such
  * marking: it is an immutable per-enum singleton that is already shared. */
@@ -4521,10 +4436,6 @@ static void xi_lower_stmt_impl(XiLower *l, AstNode *node) {
             if (expr && expr->op == XI_GO)
                 expr->flags |= XI_FLAG_FIRE_AND_FORGET;
         } break;
-
-        case AST_PRINT_STMT:
-            lower_print(l, node);
-            break;
 
         case AST_RETURN_STMT:
             lower_return(l, node);
