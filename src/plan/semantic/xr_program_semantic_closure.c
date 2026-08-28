@@ -15,6 +15,7 @@
 
 #include "xr_program_semantic_closure_internal.h"
 #include "xr_i64_overflow_predicate_semantics.h"
+#include "xr_semantic_ids.h"
 #include "xr_source_semantic_identity.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"

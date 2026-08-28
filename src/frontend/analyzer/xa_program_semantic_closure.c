@@ -26,6 +26,7 @@
 #include "../../runtime/value/xtype.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include "../../plan/semantic/xr_scalar_call_semantics.h"
+#include "../../plan/semantic/xr_semantic_ids.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <string.h>
