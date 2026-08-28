@@ -16,6 +16,7 @@
 #include "xray_vm.h"
 #include "../stdlib/xstdlib_vm_fastpath.h"
 #include "xmodule_graph.h"
+#include "xmodule_factories.h"
 #include "xmodule_resolver.h"
 #include "xproject.h"
 #include "../base/xchecks.h"
@@ -649,8 +650,7 @@ static const XrModuleSpec *module_spec_for_locator(const XrModuleRegistry *regis
         *claimed_out = false;
     if (!registry || !registry->compiler_session || !locator || !locator[0])
         return NULL;
-    const XrModuleGraph *graph =
-        xr_compiler_session_module_graph(registry->compiler_session);
+    const XrModuleGraph *graph = xr_compiler_session_module_graph(registry->compiler_session);
     if (!graph)
         return NULL;
     const XrModuleSpec *match = NULL;
@@ -684,8 +684,8 @@ static const XrModuleSpec *module_spec_for_locator(const XrModuleRegistry *regis
     return invalid_match ? NULL : match;
 }
 
-static const XrModuleIdentityAuthority *module_authority_for_source(
-    const XrModuleRegistry *registry, const char *source_path) {
+static const XrModuleIdentityAuthority *
+module_authority_for_source(const XrModuleRegistry *registry, const char *source_path) {
     const XrModuleSpec *spec = module_spec_for_locator(registry, source_path, NULL);
     return spec ? &spec->authority : NULL;
 }
@@ -699,9 +699,9 @@ typedef enum {
 /* An active graph owns every named import from one of its modules. Package
  * source spelling omits the locked version, so only the unique exact edge may
  * supply it. A claimed invalid import must never fall back to another resolver. */
-static XrNamedImportResult module_spec_for_named_import(
-    const XrModuleRegistry *registry, const char *importer, const char *specifier,
-    const XrModuleSpec **out_spec) {
+static XrNamedImportResult module_spec_for_named_import(const XrModuleRegistry *registry,
+                                                        const char *importer, const char *specifier,
+                                                        const XrModuleSpec **out_spec) {
     if (out_spec)
         *out_spec = NULL;
     if (!registry || !registry->compiler_session || !importer || !specifier || !specifier[0] ||
@@ -711,8 +711,7 @@ static XrNamedImportResult module_spec_for_named_import(
     if (!graph)
         return XR_NAMED_IMPORT_UNHANDLED;
     bool importer_claimed = false;
-    const XrModuleSpec *owner =
-        module_spec_for_locator(registry, importer, &importer_claimed);
+    const XrModuleSpec *owner = module_spec_for_locator(registry, importer, &importer_claimed);
     if (!importer_claimed)
         return XR_NAMED_IMPORT_UNHANDLED;
     if (!owner)
@@ -820,8 +819,8 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(resolver, module_name, importer, importer_authority, &mid,
-                                        &err);
+    int rc =
+        xr_module_resolver_resolve(resolver, module_name, importer, importer_authority, &mid, &err);
     if (err)
         xr_free(err);
 
@@ -1042,10 +1041,12 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
                 xr_module_embedded_execution_failure_identity(code, module_name);
             if (identity.has_source_file) {
                 xr_log_warning(
-                    "module", "failed to execute embedded stdlib bytecode from '%s' for module '%s'",
+                    "module",
+                    "failed to execute embedded stdlib bytecode from '%s' for module '%s'",
                     identity.source_file, identity.module_name);
             } else {
-                xr_log_warning("module", "failed to execute embedded stdlib bytecode for module '%s'",
+                xr_log_warning("module",
+                               "failed to execute embedded stdlib bytecode for module '%s'",
                                identity.module_name);
             }
         } else {
@@ -1067,9 +1068,10 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
 ** Load a standard library module
 **
 ** Flow:
-** 1. Create a module through its native factory or the generic source shell
-** 2. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
-** 3. Script extension can access C module exports and add/override exports
+** 1. Create a module through its legacy native factory or the generic source shell
+** 2. Bind private native leaves to the generic shell when declared
+** 3. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
+** 4. Script extension can access private C leaves and publish source-owned exports
 */
 static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_name) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
@@ -1090,6 +1092,11 @@ static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_nam
         xr_log_warning("module", "failed to create standard library module '%s'", module_name);
         return NULL;
     }
+    if (!factory && !xr_stdlib_embedded_private_leaves_install(isolate, module, module_name)) {
+        xr_log_warning("module", "failed to bind private native leaves for '%s'", module_name);
+        xr_module_free(module);
+        return NULL;
+    }
 
     // 2. Add to cache BEFORE loading script extension as an in-progress marker.
     //    Recursive imports observe INITIALIZING and fail with E0504 instead of
@@ -1102,8 +1109,7 @@ static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_nam
         return NULL;
     }
     if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
-        xr_log_warning("module", "out of memory caching standard library module '%s'",
-                       module_name);
+        xr_log_warning("module", "out of memory caching standard library module '%s'", module_name);
         xr_module_fail(module);
         xr_module_free(module);
         return NULL;
@@ -1153,7 +1159,8 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
 
     if (embedded) {
         XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
-        code = xr_bootstrap_container_read(isolate, embedded->bytecode, embedded->bytecode_size, &error);
+        code = xr_bootstrap_container_read(isolate, embedded->bytecode, embedded->bytecode_size,
+                                           &error);
         if (!code) {
             xr_log_warning("module", "failed to load embedded bytecode '%s': %s", path,
                            xr_bootstrap_container_error_string(error));
@@ -1451,8 +1458,6 @@ bool xr_module_is_export_const(XrVMRuntime *isolate, XrModule *module, const cha
 
 /* ========== Module System Initialization (Standard Library Registration) ========== */
 
-#include "xmodule_factories.h"
-
 typedef struct {
     const char *name;
     XrNativeModuleFactory factory;
@@ -1466,7 +1471,6 @@ static const StdlibEntry stdlib_core[] = {
     {"time", xr_native_module_create_time},
     {"math", xr_native_module_create_math},
     {"path", xr_native_module_create_path},
-    {"base64", xr_native_module_create_base64},
     {"regex", xr_native_module_create_regex},
     {"mem", xr_native_module_create_mem},
     {"runtime", xr_native_module_create_runtime},
@@ -1488,7 +1492,6 @@ static const StdlibEntry stdlib_core[] = {
 #if defined(XR_HAS_FILESYSTEM)
 static const StdlibEntry stdlib_filesystem[] = {
     {"io", xr_native_module_create_io},
-    {"os", xr_native_module_create_os},
 };
 #endif
 

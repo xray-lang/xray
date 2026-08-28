@@ -45,10 +45,10 @@ from stdlib_symbol_inventory import (  # noqa: E402
 SCHEMA = 2
 
 CURRENT_PLAN_SCHEMAS = {
-    "psc_schema": 8,
-    "semantic_schema": 44,
-    "target_schema": 54,
-    "xtp_schema": 54,
+    "psc_schema": 9,
+    "semantic_schema": 45,
+    "target_schema": 55,
+    "xtp_schema": 55,
 }
 
 HEX_32_RE = re.compile(r"^[0-9a-f]{32}$")

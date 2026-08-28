@@ -30,8 +30,7 @@
 XR_STATIC_ASSERT(XR_RUNTIME_GENERATION_CLOSURE_ID_SIZE == XR_STABLE_ID_BYTES,
                  "runtime verifier GCI width must match stable identities");
 
-static bool reject(char *diagnostic, size_t diagnostic_size,
-                   const char *code, const char *detail) {
+static bool reject(char *diagnostic, size_t diagnostic_size, const char *code, const char *detail) {
     if (diagnostic && diagnostic_size)
         snprintf(diagnostic, diagnostic_size, "%s: %s", code, detail);
     return false;
@@ -58,9 +57,8 @@ static void verifier_hash_u64(XrSHA256Context *context, uint64_t value) {
     xr_sha256_update(context, bytes, sizeof(bytes));
 }
 
-static void verifier_generation_fingerprint(
-    const XrModuleGenerationIdentity *identity,
-    uint8_t out[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE]) {
+static void verifier_generation_fingerprint(const XrModuleGenerationIdentity *identity,
+                                            uint8_t out[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE]) {
     static const uint8_t domain[] = "xray-module-generation-v3\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
@@ -93,16 +91,14 @@ static void verifier_generation_fingerprint(
 
 static bool snapshot_shape_valid(const XrModuleGenerationSnapshot *snapshot) {
     if (!snapshot || snapshot->state >= XR_MODULE_GENERATION_STATE_COUNT ||
-        snapshot->poisoned > 1 || snapshot->rollback_requested > 1 ||
-        snapshot->reserved != 0 || snapshot->revision == 0 ||
-        snapshot->identity.schema_version !=
-            XR_RUNTIME_GENERATION_SCHEMA_VERSION ||
+        snapshot->poisoned > 1 || snapshot->rollback_requested > 1 || snapshot->reserved != 0 ||
+        snapshot->revision == 0 ||
+        snapshot->identity.schema_version != XR_RUNTIME_GENERATION_SCHEMA_VERSION ||
         snapshot->identity.generation_number == 0 ||
         !nonzero_bytes(snapshot->identity.generation_fingerprint,
                        XR_RUNTIME_GENERATION_FINGERPRINT_SIZE) ||
         snapshot->poisoned !=
-            (nonzero_bytes(snapshot->poison_fingerprint,
-                           XR_RUNTIME_GENERATION_FINGERPRINT_SIZE)
+            (nonzero_bytes(snapshot->poison_fingerprint, XR_RUNTIME_GENERATION_FINGERPRINT_SIZE)
                  ? 1u
                  : 0u))
         return false;
@@ -115,9 +111,8 @@ static bool snapshot_shape_valid(const XrModuleGenerationSnapshot *snapshot) {
          snapshot->state >= XR_MODULE_GENERATION_RETIRED) &&
         snapshot->total_pins != 0)
         return false;
-    if (snapshot->rollback_requested &&
-        (snapshot->state == XR_MODULE_GENERATION_READY ||
-         snapshot->state == XR_MODULE_GENERATION_ACTIVE))
+    if (snapshot->rollback_requested && (snapshot->state == XR_MODULE_GENERATION_READY ||
+                                         snapshot->state == XR_MODULE_GENERATION_ACTIVE))
         return false;
     return true;
 }
@@ -128,21 +123,17 @@ static void locked_snapshot(const XrLoadedModuleGeneration *generation,
     snapshot->identity = generation->identity;
     snapshot->state = generation->state;
     snapshot->poisoned = generation->poisoned ? 1u : 0u;
-    snapshot->rollback_requested =
-        generation->rollback_requested ? 1u : 0u;
+    snapshot->rollback_requested = generation->rollback_requested ? 1u : 0u;
     snapshot->revision = generation->revision;
     snapshot->total_pins = generation->total_pins;
-    memcpy(snapshot->pins_by_kind, generation->pins_by_kind,
-           sizeof(snapshot->pins_by_kind));
+    memcpy(snapshot->pins_by_kind, generation->pins_by_kind, sizeof(snapshot->pins_by_kind));
     memcpy(snapshot->poison_fingerprint, generation->poison_fingerprint,
            sizeof(snapshot->poison_fingerprint));
 }
 
-static bool verifier_identity_exact(
-    const XrModuleGenerationIdentity *left,
-    const XrModuleGenerationIdentity *right) {
-    return left && right &&
-           left->schema_version == right->schema_version &&
+static bool verifier_identity_exact(const XrModuleGenerationIdentity *left,
+                                    const XrModuleGenerationIdentity *right) {
+    return left && right && left->schema_version == right->schema_version &&
            left->target_plan_schema_version == right->target_plan_schema_version &&
            left->generation_number == right->generation_number &&
            left->completed_family_mask == right->completed_family_mask &&
@@ -151,64 +142,50 @@ static bool verifier_identity_exact(
                   sizeof(left->semantic_fingerprint)) == 0 &&
            memcmp(left->program_fingerprint, right->program_fingerprint,
                   sizeof(left->program_fingerprint)) == 0 &&
-           memcmp(left->program_module_set_fingerprint,
-                  right->program_module_set_fingerprint,
+           memcmp(left->program_module_set_fingerprint, right->program_module_set_fingerprint,
                   sizeof(left->program_module_set_fingerprint)) == 0 &&
            memcmp(left->generation_closure_id, right->generation_closure_id,
                   sizeof(left->generation_closure_id)) == 0 &&
-           memcmp(left->target_profile_fingerprint,
-                  right->target_profile_fingerprint,
+           memcmp(left->target_profile_fingerprint, right->target_profile_fingerprint,
                   sizeof(left->target_profile_fingerprint)) == 0 &&
-           memcmp(left->target_plan_fingerprint,
-                  right->target_plan_fingerprint,
+           memcmp(left->target_plan_fingerprint, right->target_plan_fingerprint,
                   sizeof(left->target_plan_fingerprint)) == 0 &&
-           memcmp(left->runtime_abi_fingerprint,
-                  right->runtime_abi_fingerprint,
+           memcmp(left->runtime_abi_fingerprint, right->runtime_abi_fingerprint,
                   sizeof(left->runtime_abi_fingerprint)) == 0 &&
-           memcmp(left->provider_set_fingerprint,
-                  right->provider_set_fingerprint,
+           memcmp(left->provider_set_fingerprint, right->provider_set_fingerprint,
                   sizeof(left->provider_set_fingerprint)) == 0 &&
-           memcmp(left->object_header_fingerprint,
-                  right->object_header_fingerprint,
+           memcmp(left->object_header_fingerprint, right->object_header_fingerprint,
                   sizeof(left->object_header_fingerprint)) == 0 &&
-           memcmp(left->generation_fingerprint,
-                  right->generation_fingerprint,
+           memcmp(left->generation_fingerprint, right->generation_fingerprint,
                   sizeof(left->generation_fingerprint)) == 0;
 }
 
-static bool verifier_live_manifest_exact_locked(
-    const XrLoadedModuleGeneration *generation) {
+static bool verifier_live_manifest_exact_locked(const XrLoadedModuleGeneration *generation) {
     const XrRuntimeGenerationAuthority *authority = generation->authority;
     uint32_t count = 0;
     uint32_t matches = 0;
-    for (const XrLoadedModuleGeneration *current =
-             authority->active_generations;
-         current; current = current->active_next) {
+    for (const XrLoadedModuleGeneration *current = authority->active_generations; current;
+         current = current->active_next) {
         count++;
         matches += current == generation ? 1u : 0u;
-        if (count > authority->budget.max_loaded_generations ||
-            current->authority != authority ||
-            current->state != XR_MODULE_GENERATION_ACTIVE ||
-            !current->active_manifest_published ||
+        if (count > authority->budget.max_loaded_generations || current->authority != authority ||
+            current->state != XR_MODULE_GENERATION_ACTIVE || !current->active_manifest_published ||
             current->active_program_target_plan != current->plan ||
-            !verifier_identity_exact(&current->active_identity,
-                                     &current->identity))
+            !verifier_identity_exact(&current->active_identity, &current->identity))
             return false;
     }
-    if (count != authority->active_generation_count ||
-        count > authority->live_generations || matches > 1u)
+    if (count != authority->active_generation_count || count > authority->live_generations ||
+        matches > 1u)
         return false;
     if (generation->state == XR_MODULE_GENERATION_ACTIVE)
         return matches == 1u && generation->active_manifest_published;
     return matches == 0u && !generation->active_manifest_published &&
-           generation->active_next == NULL &&
-           generation->active_program_target_plan == NULL &&
+           generation->active_next == NULL && generation->active_program_target_plan == NULL &&
            !nonzero_bytes((const uint8_t *) &generation->active_identity,
                           sizeof(generation->active_identity));
 }
 
-static bool verify_native_identity(const XrLoadedModuleGeneration *generation,
-                                   char *diagnostic,
+static bool verify_native_identity(const XrLoadedModuleGeneration *generation, char *diagnostic,
                                    size_t diagnostic_size) {
     const XrTargetPlan *plan = generation->plan;
     const XrModuleGenerationIdentity *identity = &generation->identity;
@@ -225,22 +202,16 @@ static bool verify_native_identity(const XrLoadedModuleGeneration *generation,
     XrFingerprint provider_fingerprint;
     XrFingerprint object_fingerprint;
     uint64_t provider_mask = 0;
-    if (!facts ||
-        xr_runtime_target_authority_native_hosted(&runtime) !=
+    if (!facts || xr_runtime_target_authority_native_hosted(&runtime) != XR_RUNTIME_ABI_OK ||
+        !xr_runtime_target_authority_machine_matches(&runtime, &facts->machine) ||
+        xr_runtime_abi_contract_fingerprint(&runtime.runtime_abi, &runtime_fingerprint) !=
             XR_RUNTIME_ABI_OK ||
-        !xr_runtime_target_authority_machine_matches(&runtime,
-                                                     &facts->machine) ||
-        xr_runtime_abi_contract_fingerprint(&runtime.runtime_abi,
-                                            &runtime_fingerprint) !=
-            XR_RUNTIME_ABI_OK ||
-        xr_target_provider_set_fingerprint(
-            runtime.providers, runtime.provider_count, &provider_mask,
-            &provider_fingerprint) != XR_RUNTIME_ABI_OK ||
-        xr_runtime_object_header_abi_materialize(
-            &runtime.object_header_materialization, &object_header) !=
-            XR_RUNTIME_ABI_OK ||
-        xr_runtime_object_header_abi_fingerprint(&object_header,
-                                                 &object_fingerprint) !=
+        xr_target_provider_set_fingerprint(runtime.providers, runtime.provider_count,
+                                           &provider_mask,
+                                           &provider_fingerprint) != XR_RUNTIME_ABI_OK ||
+        xr_runtime_object_header_abi_materialize(&runtime.object_header_materialization,
+                                                 &object_header) != XR_RUNTIME_ABI_OK ||
+        xr_runtime_object_header_abi_fingerprint(&object_header, &object_fingerprint) !=
             XR_RUNTIME_ABI_OK)
         return reject(diagnostic, diagnostic_size, "XR_TARGET_1000",
                       "generation native runtime identity is unavailable");
@@ -271,18 +242,14 @@ static bool verify_native_identity(const XrLoadedModuleGeneration *generation,
                    sizeof(identity->generation_closure_id)) == 0;
     }
     uint64_t expected_capability_mask = 0;
-    const XrSemanticPlan *ordinary_module[1] = {
-        xr_target_plan_semantic_plan(plan)};
+    const XrSemanticPlan *ordinary_module[1] = {xr_target_plan_semantic_plan(plan)};
     const XrSemanticPlan *const *semantic_modules =
-        plan->semantic_module_count
-            ? (const XrSemanticPlan *const *) plan->semantic_modules
-            : ordinary_module;
-    uint32_t semantic_module_count =
-        plan->semantic_module_count ? plan->semantic_module_count : 1u;
+        plan->semantic_module_count ? (const XrSemanticPlan *const *) plan->semantic_modules
+                                    : ordinary_module;
+    uint32_t semantic_module_count = plan->semantic_module_count ? plan->semantic_module_count : 1u;
     if (!xr_target_semantic_capability_requirements(
-            semantic_modules, semantic_module_count,
-            xr_target_plan_profile(plan), &expected_capability_mask,
-            nested, sizeof(nested)))
+            semantic_modules, semantic_module_count, xr_target_plan_profile(plan),
+            &expected_capability_mask, nested, sizeof(nested)))
         return reject(diagnostic, diagnostic_size, "XR_TARGET_1004",
                       "generation semantic capability closure is invalid");
     if (!program_identity_exact ||
@@ -347,15 +314,11 @@ static bool verifier_has_no_non_scalar_execution_authority(const XrTargetPlan *p
 static bool verifier_typed_generation_eligible(const XrLoadedModuleGeneration *generation) {
     char nested[512] = {0};
     const XrTargetPlan *plan = generation ? generation->plan : NULL;
-    if (!plan || !xr_target_plan_is_verified(plan) ||
-        !xr_target_plan_fingerprint_is_intact(plan) ||
+    if (!plan || !xr_target_plan_is_verified(plan) || !xr_target_plan_fingerprint_is_intact(plan) ||
         !xr_target_plan_verify(plan, nested, sizeof(nested)) ||
-        xr_target_plan_schema_version(plan) !=
-            XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION ||
-        xr_target_plan_completed_family_mask(plan) !=
-            XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK ||
-        memcmp(generation->identity.target_plan_fingerprint,
-               xr_target_plan_fingerprint(plan).bytes,
+        xr_target_plan_schema_version(plan) != XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION ||
+        xr_target_plan_completed_family_mask(plan) != XR_TYPED_FRAME_SUPPORTED_FAMILY_MASK ||
+        memcmp(generation->identity.target_plan_fingerprint, xr_target_plan_fingerprint(plan).bytes,
                XR_RUNTIME_GENERATION_FINGERPRINT_SIZE) != 0 ||
         !xr_target_instruction_program_verify(plan, nested, sizeof(nested)))
         return false;
@@ -366,8 +329,7 @@ static bool verifier_typed_generation_eligible(const XrLoadedModuleGeneration *g
     const XrTargetModulePartitionRecord *partitions =
         xr_target_plan_module_partitions(plan, &partition_count);
     uint32_t function_count = 0;
-    const XrTargetFunctionRecord *functions =
-        xr_target_plan_functions(plan, &function_count);
+    const XrTargetFunctionRecord *functions = xr_target_plan_functions(plan, &function_count);
     if (graph_count == 0 && partition_count == 0) {
         uint32_t instruction_count = 0;
         const XrTargetInstructionRecord *instructions =
@@ -384,9 +346,17 @@ static bool verifier_typed_generation_eligible(const XrLoadedModuleGeneration *g
                    XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
                verifier_has_no_non_scalar_execution_authority(plan, 0u, 0u);
     }
+    bool private_leaf =
+        graphs && graph_count == 1u &&
+        graphs[0].family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
+    bool family_shape =
+        graphs && graph_count == 1u &&
+        ((graphs[0].family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+          graphs[0].argument_count == 1u) ||
+         (private_leaf && graphs[0].argument_count == 0u));
     if (!graphs || graph_count != 1u || !partitions || partition_count != 2u ||
         graphs[0].module_count != 2u || graphs[0].function_count != 2u ||
-        graphs[0].call_count != 1u || graphs[0].argument_count != 1u ||
+        graphs[0].call_count != 1u || !family_shape ||
         graphs[0].flags !=
             (XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN | XR_TARGET_PROGRAM_GRAPH_DIRECT_I64) ||
         !functions || function_count < 2u || graphs[0].entry_target_function >= function_count ||
@@ -396,6 +366,26 @@ static bool verifier_typed_generation_eligible(const XrLoadedModuleGeneration *g
     uint32_t expectation_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
     (void) xr_target_plan_entry_expectations(plan, &expectation_count);
+    uint32_t program_direct_calls = 0u;
+    uint32_t native_leaf_calls = 0u;
+    bool calls_exact = calls != NULL;
+    for (uint32_t i = 0u; calls_exact && i < call_count; i++) {
+        if (calls[i].target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
+            calls[i].calling_convention == XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT) {
+            program_direct_calls++;
+            calls_exact = calls[i].id == graphs[0].target_call &&
+                          calls[i].callee_function == graphs[0].producer_target_function;
+        } else if (private_leaf &&
+                   calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR &&
+                   calls[i].calling_convention ==
+                       XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR) {
+            native_leaf_calls++;
+            calls_exact = calls[i].caller_function == graphs[0].producer_target_function &&
+                          calls[i].argument_count == 0u;
+        } else {
+            calls_exact = false;
+        }
+    }
     bool only_graph_functions_execute = true;
     for (uint32_t i = 0; i < function_count; i++) {
         uint64_t family = xr_target_plan_function_execution_family_mask(plan, i);
@@ -405,21 +395,21 @@ static bool verifier_typed_generation_eligible(const XrLoadedModuleGeneration *g
         else
             only_graph_functions_execute = only_graph_functions_execute && family == 0u;
     }
-    return only_graph_functions_execute && calls && call_count == 1u && expectation_count == 0u &&
-           graphs[0].target_call == 0u &&
-           calls[0].calling_convention == XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT &&
-           calls[0].target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
-           calls[0].callee_function == graphs[0].producer_target_function &&
+    uint32_t expected_call_count = private_leaf ? 2u : 1u;
+    uint32_t expected_argument_count = private_leaf ? 0u : 1u;
+    return only_graph_functions_execute && calls_exact && call_count == expected_call_count &&
+           expectation_count == 0u && program_direct_calls == 1u &&
+           native_leaf_calls == (private_leaf ? 1u : 0u) &&
            xr_target_plan_function_execution_family_mask(plan, graphs[0].entry_target_function) ==
                XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
            xr_target_plan_function_execution_family_mask(
                plan, graphs[0].producer_target_function) == XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
-           verifier_has_no_non_scalar_execution_authority(plan, 1u, 1u);
+           verifier_has_no_non_scalar_execution_authority(plan, expected_call_count,
+                                                          expected_argument_count);
 }
 
-XRAY_API bool xr_module_generation_verify(
-    const XrLoadedModuleGeneration *generation, char *diagnostic,
-    size_t diagnostic_size) {
+XRAY_API bool xr_module_generation_verify(const XrLoadedModuleGeneration *generation,
+                                          char *diagnostic, size_t diagnostic_size) {
     if (!generation || !generation->authority)
         return reject(diagnostic, diagnostic_size, "XR_EXEC_5008",
                       "generation authority is missing");
@@ -428,20 +418,14 @@ XRAY_API bool xr_module_generation_verify(
     XrModuleGenerationSnapshot snapshot;
     locked_snapshot(generation, &snapshot);
     bool shape_ok = snapshot_shape_valid(&snapshot);
-    bool budget_ok = snapshot.total_pins <=
-                         authority->budget.max_pins_per_generation &&
-                     authority->total_pins <=
-                         authority->budget.max_total_pins &&
-                     generation->identity.generation_number <
-                         authority->next_generation;
+    bool budget_ok = snapshot.total_pins <= authority->budget.max_pins_per_generation &&
+                     authority->total_pins <= authority->budget.max_total_pins &&
+                     generation->identity.generation_number < authority->next_generation;
     for (uint32_t i = 0; i < XR_MODULE_GENERATION_PIN_KIND_COUNT; i++)
-        budget_ok = budget_ok &&
-                    snapshot.pins_by_kind[i] <=
-                        authority->budget.max_pins_by_kind[i];
+        budget_ok = budget_ok && snapshot.pins_by_kind[i] <= authority->budget.max_pins_by_kind[i];
     bool manifest_ok = verifier_live_manifest_exact_locked(generation);
     bool identity_ok = shape_ok && budget_ok && manifest_ok &&
-                       verify_native_identity(generation, diagnostic,
-                                              diagnostic_size);
+                       verify_native_identity(generation, diagnostic, diagnostic_size);
     bool unavailable_state =
         snapshot.state >= XR_MODULE_GENERATION_READY &&
         snapshot.state <= XR_MODULE_GENERATION_DRAINING &&
@@ -449,8 +433,7 @@ XRAY_API bool xr_module_generation_verify(
     bool cache_identity_ok = true;
     if (generation->decoded_cache) {
         XrFingerprint fingerprint = {{0}};
-        memcpy(fingerprint.bytes,
-               generation->identity.target_plan_fingerprint,
+        memcpy(fingerprint.bytes, generation->identity.target_plan_fingerprint,
                sizeof(fingerprint.bytes));
         cache_identity_ok = xr_typed_decoded_cache_require_exact(
                                 generation->decoded_cache, generation->plan, &fingerprint,
@@ -505,8 +488,7 @@ static bool identity_equal(const XrModuleGenerationSnapshot *before,
 static bool pins_equal(const XrModuleGenerationSnapshot *before,
                        const XrModuleGenerationSnapshot *after) {
     return before->total_pins == after->total_pins &&
-           memcmp(before->pins_by_kind, after->pins_by_kind,
-                  sizeof(before->pins_by_kind)) == 0;
+           memcmp(before->pins_by_kind, after->pins_by_kind, sizeof(before->pins_by_kind)) == 0;
 }
 
 static bool flags_equal(const XrModuleGenerationSnapshot *before,
@@ -517,14 +499,13 @@ static bool flags_equal(const XrModuleGenerationSnapshot *before,
                   sizeof(before->poison_fingerprint)) == 0;
 }
 
-XR_FUNCDEF bool xr_module_generation_verify_transition(
-    const XrModuleGenerationSnapshot *before,
-    const XrModuleGenerationSnapshot *after,
-    XrModuleGenerationMutation mutation, XrModuleGenerationPinKind pin_kind,
-    char *diagnostic, size_t diagnostic_size) {
+XR_FUNCDEF bool xr_module_generation_verify_transition(const XrModuleGenerationSnapshot *before,
+                                                       const XrModuleGenerationSnapshot *after,
+                                                       XrModuleGenerationMutation mutation,
+                                                       XrModuleGenerationPinKind pin_kind,
+                                                       char *diagnostic, size_t diagnostic_size) {
     if (!snapshot_shape_valid(before) || !snapshot_shape_valid(after) ||
-        !identity_equal(before, after) ||
-        before->revision == UINT64_MAX ||
+        !identity_equal(before, after) || before->revision == UINT64_MAX ||
         after->revision != before->revision + 1u)
         return reject(diagnostic, diagnostic_size, "XR_EXEC_5005",
                       "generation mutation changed immutable identity or revision");
@@ -532,39 +513,36 @@ XR_FUNCDEF bool xr_module_generation_verify_transition(
     switch (mutation) {
         case XR_MODULE_GENERATION_MUTATION_VERIFY:
             legal = before->state == XR_MODULE_GENERATION_LOADING &&
-                    after->state == XR_MODULE_GENERATION_VERIFIED &&
-                    pins_equal(before, after) && flags_equal(before, after);
+                    after->state == XR_MODULE_GENERATION_VERIFIED && pins_equal(before, after) &&
+                    flags_equal(before, after);
             break;
         case XR_MODULE_GENERATION_MUTATION_PREPARE:
             legal = before->state == XR_MODULE_GENERATION_VERIFIED &&
-                    after->state == XR_MODULE_GENERATION_READY &&
-                    !before->poisoned && !before->rollback_requested &&
-                    pins_equal(before, after) && flags_equal(before, after);
+                    after->state == XR_MODULE_GENERATION_READY && !before->poisoned &&
+                    !before->rollback_requested && pins_equal(before, after) &&
+                    flags_equal(before, after);
             break;
         case XR_MODULE_GENERATION_MUTATION_ACTIVATE:
             legal = before->state == XR_MODULE_GENERATION_READY &&
-                    after->state == XR_MODULE_GENERATION_ACTIVE &&
-                    !before->poisoned && !before->rollback_requested &&
-                    pins_equal(before, after) && flags_equal(before, after);
+                    after->state == XR_MODULE_GENERATION_ACTIVE && !before->poisoned &&
+                    !before->rollback_requested && pins_equal(before, after) &&
+                    flags_equal(before, after);
             break;
         case XR_MODULE_GENERATION_MUTATION_BEGIN_DRAIN:
             legal = before->state == XR_MODULE_GENERATION_ACTIVE &&
-                    after->state == XR_MODULE_GENERATION_DRAINING &&
-                    pins_equal(before, after) && flags_equal(before, after);
+                    after->state == XR_MODULE_GENERATION_DRAINING && pins_equal(before, after) &&
+                    flags_equal(before, after);
             break;
         case XR_MODULE_GENERATION_MUTATION_RETIRE:
             legal = before->state == XR_MODULE_GENERATION_DRAINING &&
-                    after->state == XR_MODULE_GENERATION_RETIRED &&
-                    before->total_pins == 0 && pins_equal(before, after) &&
-                    flags_equal(before, after);
+                    after->state == XR_MODULE_GENERATION_RETIRED && before->total_pins == 0 &&
+                    pins_equal(before, after) && flags_equal(before, after);
             break;
         case XR_MODULE_GENERATION_MUTATION_POISON:
-            legal = before->state < XR_MODULE_GENERATION_RETIRED &&
-                    after->state == before->state && !before->poisoned &&
-                    after->poisoned &&
+            legal = before->state < XR_MODULE_GENERATION_RETIRED && after->state == before->state &&
+                    !before->poisoned && after->poisoned &&
                     after->rollback_requested == before->rollback_requested &&
-                    nonzero_bytes(after->poison_fingerprint,
-                                  sizeof(after->poison_fingerprint)) &&
+                    nonzero_bytes(after->poison_fingerprint, sizeof(after->poison_fingerprint)) &&
                     pins_equal(before, after);
             break;
         case XR_MODULE_GENERATION_MUTATION_ROLLBACK: {
@@ -573,35 +551,26 @@ XR_FUNCDEF bool xr_module_generation_verify_transition(
                 expected = XR_MODULE_GENERATION_RETIRED;
             else if (before->state == XR_MODULE_GENERATION_ACTIVE)
                 expected = XR_MODULE_GENERATION_DRAINING;
-            legal = before->state < XR_MODULE_GENERATION_RETIRED &&
-                    after->state == expected &&
-                    after->rollback_requested &&
-                    after->poisoned == before->poisoned &&
-                    memcmp(after->poison_fingerprint,
-                           before->poison_fingerprint,
+            legal = before->state < XR_MODULE_GENERATION_RETIRED && after->state == expected &&
+                    after->rollback_requested && after->poisoned == before->poisoned &&
+                    memcmp(after->poison_fingerprint, before->poison_fingerprint,
                            sizeof(after->poison_fingerprint)) == 0 &&
                     pins_equal(before, after) &&
-                    (before->state >= XR_MODULE_GENERATION_ACTIVE ||
-                     before->total_pins == 0);
+                    (before->state >= XR_MODULE_GENERATION_ACTIVE || before->total_pins == 0);
             break;
         }
         case XR_MODULE_GENERATION_MUTATION_PIN_ACQUIRE:
         case XR_MODULE_GENERATION_MUTATION_PIN_RELEASE: {
             if (pin_kind >= XR_MODULE_GENERATION_PIN_KIND_COUNT)
                 break;
-            int delta = mutation == XR_MODULE_GENERATION_MUTATION_PIN_ACQUIRE
-                            ? 1
-                            : -1;
+            int delta = mutation == XR_MODULE_GENERATION_MUTATION_PIN_ACQUIRE ? 1 : -1;
             bool other_equal = true;
             for (uint32_t i = 0; i < XR_MODULE_GENERATION_PIN_KIND_COUNT; i++) {
-                if (i != (uint32_t) pin_kind &&
-                    before->pins_by_kind[i] != after->pins_by_kind[i])
+                if (i != (uint32_t) pin_kind && before->pins_by_kind[i] != after->pins_by_kind[i])
                     other_equal = false;
             }
-            legal = after->state == before->state && flags_equal(before, after) &&
-                    other_equal &&
-                    (int64_t) after->total_pins ==
-                        (int64_t) before->total_pins + delta &&
+            legal = after->state == before->state && flags_equal(before, after) && other_equal &&
+                    (int64_t) after->total_pins == (int64_t) before->total_pins + delta &&
                     (int64_t) after->pins_by_kind[pin_kind] ==
                         (int64_t) before->pins_by_kind[pin_kind] + delta;
             if (mutation == XR_MODULE_GENERATION_MUTATION_PIN_ACQUIRE)
@@ -616,9 +585,8 @@ XR_FUNCDEF bool xr_module_generation_verify_transition(
         }
         case XR_MODULE_GENERATION_MUTATION_UNLOAD:
             legal = before->state == XR_MODULE_GENERATION_RETIRED &&
-                    after->state == XR_MODULE_GENERATION_UNLOADED &&
-                    before->total_pins == 0 && pins_equal(before, after) &&
-                    flags_equal(before, after);
+                    after->state == XR_MODULE_GENERATION_UNLOADED && before->total_pins == 0 &&
+                    pins_equal(before, after) && flags_equal(before, after);
             break;
     }
     if (!legal)

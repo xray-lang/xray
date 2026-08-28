@@ -5,12 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmodule_factories.h - Standard library module factory declarations
+ * xmodule_factories.h - Legacy standard library module factory declarations
  *
  * KEY CONCEPT:
- *   Standard library modules with native leaves provide a factory that
- *   creates and populates an XrModule. Source-only modules use the generic
- *   loader and do not need declarations here.
+ *   Native-owned modules construct their own XrModule. Source-owned modules
+ *   use the generic loader and generated private-leaf registry instead.
  */
 
 #ifndef XMODULE_FACTORIES_H
@@ -25,7 +24,6 @@ XR_FUNC struct XrModule *xr_native_module_create_prelude(struct XrVMRuntime *iso
 XR_FUNC struct XrModule *xr_native_module_create_time(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_native_module_create_math(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_native_module_create_path(struct XrVMRuntime *isolate);
-XR_FUNC struct XrModule *xr_native_module_create_base64(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_native_module_create_regex(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_native_module_create_mem(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_native_module_create_runtime(struct XrVMRuntime *isolate);
@@ -44,7 +42,6 @@ XR_FUNC struct XrModule *xr_native_module_create_encoding(struct XrVMRuntime *is
 
 #if defined(XR_HAS_FILESYSTEM) || !defined(XR_STDLIB_MODULAR)
 XR_FUNC struct XrModule *xr_native_module_create_io(struct XrVMRuntime *isolate);
-XR_FUNC struct XrModule *xr_native_module_create_os(struct XrVMRuntime *isolate);
 #endif
 
 /* ========== Network Modules ========== */

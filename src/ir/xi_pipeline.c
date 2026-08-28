@@ -732,8 +732,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
      * them first it creates a RELEASE, making the dead PHI artificially live
      * and forcing every backend to represent a value the program discarded. */
     xi_opt_dce_recursive(ir);
-    if (enum_type_lookup_changed &&
-        !xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
+    if (enum_type_lookup_changed && !xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
         return res;
 
     /* Escape analysis: compute escape levels for heap-allocating values.
@@ -1173,16 +1172,17 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (cfg->program_semantic_closure) {
         if (!cfg->module_name || !cfg->module_name[0] ||
             xa_typed_program_scalar_authority(typed.program) || published ||
-            xr_program_semantic_closure_family(cfg->program_semantic_closure) !=
-                XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+            (xr_program_semantic_closure_family(cfg->program_semantic_closure) !=
+                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+             xr_program_semantic_closure_family(cfg->program_semantic_closure) !=
+                 XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL) ||
             !xr_program_semantic_closure_verify(cfg->program_semantic_closure, scalar_error,
                                                 sizeof(scalar_error))) {
             xa_typed_program_free(typed.program);
             xa_analyzer_pop_file_scope(analyzer, &file_scope);
-            xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
-                                  XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
-                                  scalar_error[0] ? scalar_error
-                                                  : "borrowed graph PSC is not exact");
+            xi_pipeline_set_error(
+                &gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER, XI_VERIFY_STRUCTURE, NULL, NULL,
+                NULL, scalar_error[0] ? scalar_error : "borrowed graph PSC is not exact");
             return gate;
         }
         program_closure = xr_program_semantic_closure_retain(
@@ -1232,21 +1232,18 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
                 XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) {
                 target_profile = session ? xr_compiler_session_target_profile(session) : NULL;
                 if (!target_profile ||
-                    !xr_target_profile_verify(target_profile, scalar_error,
-                                              sizeof(scalar_error)) ||
+                    !xr_target_profile_verify(target_profile, scalar_error, sizeof(scalar_error)) ||
                     !xr_i64_overflow_decision_build(
-                        program_closure,
-                        xr_program_semantic_closure_generation_id(program_closure),
-                        target_profile, &overflow_decisions, scalar_error,
-                        sizeof(scalar_error))) {
+                        program_closure, xr_program_semantic_closure_generation_id(program_closure),
+                        target_profile, &overflow_decisions, scalar_error, sizeof(scalar_error))) {
                     xr_program_semantic_closure_free(program_closure);
                     xa_typed_program_free(typed.program);
                     xa_analyzer_pop_file_scope(analyzer, &file_scope);
-                    xi_pipeline_set_error(
-                        &gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER, XI_VERIFY_STRUCTURE,
-                        NULL, NULL, NULL,
-                        scalar_error[0] ? scalar_error
-                                        : "overflow program requires exact target decisions");
+                    xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
+                                          XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
+                                          scalar_error[0]
+                                              ? scalar_error
+                                              : "overflow program requires exact target decisions");
                     return gate;
                 }
             }
@@ -1254,8 +1251,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     }
     if (program_closure &&
         !xi_program_semantic_input_prepare(
-            program_closure, xa_typed_program_scalar_authority(typed.program) ? &scalar_decision
-                                                                             : NULL,
+            program_closure,
+            xa_typed_program_scalar_authority(typed.program) ? &scalar_decision : NULL,
             overflow_decisions.sealed ? &overflow_decisions : NULL, target_profile,
             xa_typed_program_source_module_authority(typed.program), &program_input, scalar_error,
             sizeof(scalar_error))) {
@@ -1263,10 +1260,9 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
         xr_i64_overflow_decision_dispose(&overflow_decisions);
         xa_typed_program_free(typed.program);
         xa_analyzer_pop_file_scope(analyzer, &file_scope);
-        xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
-                              XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
-                              scalar_error[0] ? scalar_error
-                                              : "published PSC partition selection failed");
+        xi_pipeline_set_error(
+            &gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER, XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
+            scalar_error[0] ? scalar_error : "published PSC partition selection failed");
         return gate;
     }
     if (program_closure)
@@ -1288,10 +1284,9 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     }
     if (ir && program_input_ptr &&
         (!ir->module ||
-         !xi_module_take_program_semantics(ir->module, &program_closure, program_input.decision,
-                                           program_input.overflow_decisions,
-                                           target_profile, program_input.module_index, scalar_error,
-                                           sizeof(scalar_error)) ||
+         !xi_module_take_program_semantics(
+             ir->module, &program_closure, program_input.decision, program_input.overflow_decisions,
+             target_profile, program_input.module_index, scalar_error, sizeof(scalar_error)) ||
          !xi_program_semantic_verify_partition(ir->module, target_profile, scalar_error,
                                                sizeof(scalar_error)))) {
         xi_func_free(ir);

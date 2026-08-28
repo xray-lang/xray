@@ -76,6 +76,16 @@ def registry_modules(root: Path) -> dict[str, str]:
     return {match.group("name"): match.group("factory") for match in REGISTRY_ENTRY_RE.finditer(text)}
 
 
+def private_leaf_binder_modules(root: Path) -> dict[str, str]:
+    stdlibgen = load_stdlibgen(root)
+    entries, constants, *_ = stdlibgen.parse_def_metadata(root)
+    modules = stdlibgen.derive_private_leaf_modules(root, entries, constants)
+    return {
+        name: f"xr_stdlib_vm_bind_{name}_generated"
+        for name in modules
+    }
+
+
 def source_modules(root: Path) -> set[str]:
     stdlib_root = root / "stdlib"
     return {

@@ -26,7 +26,7 @@
 #include <stdint.h>
 
 #define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(3)
-#define XR_TARGET_PLAN_SCHEMA_VERSION UINT32_C(54)
+#define XR_TARGET_PLAN_SCHEMA_VERSION UINT32_C(55)
 
 typedef struct XrTargetProfile XrTargetProfile;
 
@@ -49,19 +49,17 @@ typedef struct XrTargetProfileBuildInput {
     size_t provider_count;
 } XrTargetProfileBuildInput;
 
-XR_FUNC bool xr_target_profile_build(const XrTargetProfileBuildInput *input,
-                                     XrTargetProfile **out, char *error,
-                                     size_t error_size);
+XR_FUNC bool xr_target_profile_build(const XrTargetProfileBuildInput *input, XrTargetProfile **out,
+                                     char *error, size_t error_size);
 XR_FUNC bool xr_target_profile_require_exact(const XrTargetProfile *expected,
-                                             const XrTargetProfile *actual,
-                                             char *error, size_t error_size);
+                                             const XrTargetProfile *actual, char *error,
+                                             size_t error_size);
 XR_FUNC XrTargetProfile *xr_target_profile_retain(XrTargetProfile *profile);
 XR_FUNC void xr_target_profile_free(XrTargetProfile *profile);
 XR_FUNC bool xr_target_profile_is_frozen(const XrTargetProfile *profile);
 XR_FUNC bool xr_target_profile_verify(const XrTargetProfile *profile, char *error,
                                       size_t error_size);
 XR_FUNC XrFingerprint xr_target_profile_fingerprint(const XrTargetProfile *profile);
-XR_FUNC const XrTargetMachineFacts *xr_target_profile_machine_facts(
-    const XrTargetProfile *profile);
+XR_FUNC const XrTargetMachineFacts *xr_target_profile_machine_facts(const XrTargetProfile *profile);
 
 #endif  // XR_TARGET_PROFILE_H

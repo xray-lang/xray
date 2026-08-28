@@ -1138,6 +1138,7 @@
       ],
       "status": "production",
       "test_callers": [
+        "tests/unit/frontend/test_xa_program_semantic_closure.c",
         "tests/unit/ir/test_xi_cgen.c",
         "tests/unit/stdlib/test_os_core.c"
       ]

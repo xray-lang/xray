@@ -21,7 +21,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_XTP_SCHEMA_VERSION UINT32_C(54)
+#define XR_XTP_SCHEMA_VERSION UINT32_C(55)
 #define XR_XTP_HEADER_SIZE UINT32_C(448)
 #define XR_XTP_DIRECTORY_ENTRY_SIZE UINT32_C(80)
 #define XR_XTP_SECTION_ALIGNMENT UINT32_C(16)
@@ -92,13 +92,11 @@ typedef struct XrXtpCandidate XrXtpCandidate;
 XR_FUNC bool xr_xtp_encode_plan(const XrTargetPlan *plan, uint8_t **bytes, size_t *size,
                                 char *error, size_t error_size);
 XR_FUNC void xr_xtp_encoded_free(uint8_t *bytes);
-XR_FUNC bool xr_xtp_decode_candidate(const uint8_t *bytes, size_t size,
-                                     XrXtpCandidate **candidate, char *error,
-                                     size_t error_size);
+XR_FUNC bool xr_xtp_decode_candidate(const uint8_t *bytes, size_t size, XrXtpCandidate **candidate,
+                                     char *error, size_t error_size);
 XR_FUNC XrXtpCandidate *xr_xtp_candidate_retain(XrXtpCandidate *candidate);
 XR_FUNC void xr_xtp_candidate_release(XrXtpCandidate *candidate);
-XR_FUNC bool xr_xtp_candidate_identity(const XrXtpCandidate *candidate,
-                                       XrXtpIdentity *identity);
+XR_FUNC bool xr_xtp_candidate_identity(const XrXtpCandidate *candidate, XrXtpIdentity *identity);
 XR_FUNC bool xr_xtp_candidate_resources(const XrXtpCandidate *candidate,
                                         XrXtpResourceManifest *resources);
 

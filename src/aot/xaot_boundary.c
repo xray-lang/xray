@@ -59,19 +59,22 @@ static bool direct_i64_machine_rep(const XrTargetPlan *target, uint16_t rep) {
  * Xi drift still fails closed instead of falling through to name-based AOT
  * dispatch. */
 static XaotDirectI64TargetStatus direct_i64_exclude_native_target_leaf(
-    const XaotBundle *bundle, const XiFunc *caller, const XiValue *call,
-    const XrTargetPlan *target, const XrTargetFunctionRecord *caller_row,
-    bool *excluded, char *errbuf, size_t errbuf_len) {
+    const XaotBundle *bundle, const XiFunc *caller, const XiValue *call, const XrTargetPlan *target,
+    const XrTargetFunctionRecord *caller_row, bool *excluded, char *errbuf, size_t errbuf_len) {
     if (excluded)
         *excluded = false;
     if (!bundle || !caller || !call || !target || !caller_row || !excluded)
         return direct_i64_error(errbuf, errbuf_len,
                                 "native target leaf exclusion input is incomplete");
 
+    uint32_t partition = UINT32_MAX;
+    const XrSemanticPlan *semantic =
+        xaot_bundle_program_semantic_for_func(bundle, caller, &partition);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-    if (!xr_aot_scalar_semantic_value_id(target, caller, call, &semantic_function,
-                                         &semantic_value, NULL, 0))
+    if (!semantic ||
+        !xr_aot_scalar_program_semantic_value_id(target, partition, caller_row->id, caller, call,
+                                                 &semantic_function, &semantic_value, NULL, 0))
         return XAOT_DIRECT_I64_TARGET_UNCOVERED;
 
     uint32_t call_count = 0;
@@ -82,8 +85,7 @@ static XaotDirectI64TargetStatus direct_i64_exclude_native_target_leaf(
         if (candidate->caller_function != caller_row->id ||
             candidate->result_value != semantic_value ||
             candidate->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
-            candidate->calling_convention !=
-                XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR)
+            candidate->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR)
             continue;
         if (match)
             return direct_i64_error(errbuf, errbuf_len,
@@ -93,8 +95,6 @@ static XaotDirectI64TargetStatus direct_i64_exclude_native_target_leaf(
     if (!match)
         return XAOT_DIRECT_I64_TARGET_UNCOVERED;
 
-    const XrSemanticPlan *semantic =
-        xaot_bundle_program_semantic_for_func(bundle, caller, NULL);
     const XrSemanticOperationRecord *operation =
         semantic ? xr_semantic_plan_operation(semantic, match->semantic_operation) : NULL;
     const XrStdlibDefEntry *entry = NULL;
@@ -105,32 +105,28 @@ static XaotDirectI64TargetStatus direct_i64_exclude_native_target_leaf(
     uint32_t callee_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t callee_value = XR_SEMANTIC_INDEX_NONE;
     const XiValue *callee = call->nargs == 1 && call->args ? call->args[0] : NULL;
-    const XiImportRef *ref =
-        callee && callee->op == XI_IMPORT_REF && callee->aux
-            ? (const XiImportRef *) callee->aux
-            : NULL;
-    bool exact = semantic && operation && operands &&
-                 semantic_function == caller_row->semantic_function &&
-                 operation->function == semantic_function &&
-                 operation->result_value == semantic_value &&
-                 xr_semantic_native_target_leaf_call_is_exact(
-                     semantic, operation, &entry, &native_identity) &&
-                 operation->operand_begin < operand_count && call->op == XI_CALL &&
-                 call->nargs == 1 && callee && ref && ref->module_path &&
-                 ref->member_name && entry && strcmp(ref->module_path, entry->module) == 0 &&
-                 strcmp(ref->member_name, entry->name) == 0 &&
-                 xr_aot_scalar_semantic_value_id(target, caller, callee, &callee_function,
-                                                 &callee_value, NULL, 0) &&
-                 callee_function == semantic_function &&
-                 callee_value == operands[operation->operand_begin].value &&
-                 match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
-                 match->callee_function == XR_SEMANTIC_INDEX_NONE &&
-                 match->argument_count == 0 && match->adapter_count == 0 &&
-                 match->native_leaf == entry->target_leaf &&
-                 xr_stable_id_equal(match->native_callee_identity, native_identity);
+    const XiImportRef *ref = callee && callee->op == XI_IMPORT_REF && callee->aux
+                                 ? (const XiImportRef *) callee->aux
+                                 : NULL;
+    bool exact =
+        semantic && operation && operands && semantic_function == caller_row->semantic_function &&
+        operation->function == semantic_function && operation->result_value == semantic_value &&
+        xr_semantic_native_target_leaf_call_is_exact(semantic, operation, &entry,
+                                                     &native_identity) &&
+        operation->operand_begin < operand_count && call->op == XI_CALL && call->nargs == 1 &&
+        callee && ref && ref->module_path && ref->member_name && entry &&
+        strcmp(ref->module_path, entry->module) == 0 &&
+        strcmp(ref->member_name, entry->name) == 0 &&
+        xr_aot_scalar_program_semantic_value_id(target, partition, caller_row->id, caller, callee,
+                                                &callee_function, &callee_value, NULL, 0) &&
+        callee_function == semantic_function &&
+        callee_value == operands[operation->operand_begin].value &&
+        match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+        match->callee_function == XR_SEMANTIC_INDEX_NONE && match->argument_count == 0 &&
+        match->adapter_count == 0 && match->native_leaf == entry->target_leaf &&
+        xr_stable_id_equal(match->native_callee_identity, native_identity);
     if (!exact)
-        return direct_i64_error(errbuf, errbuf_len,
-                                "native target leaf live binding is inexact");
+        return direct_i64_error(errbuf, errbuf_len, "native target leaf live binding is inexact");
 
     *excluded = true;
     return XAOT_DIRECT_I64_TARGET_UNCOVERED;
@@ -147,8 +143,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
         return XAOT_DIRECT_I64_TARGET_UNCOVERED;
 
-    const XrSemanticPlan *semantic =
-        xaot_bundle_program_semantic_for_func(bundle, function, NULL);
+    const XrSemanticPlan *semantic = xaot_bundle_program_semantic_for_func(bundle, function, NULL);
     const XrTargetPlan *target = semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
     if (!target || semantic != function->semantic_plan ||
         xr_target_plan_completed_family_mask(target) != XR_TARGET_REQUIRED_FAMILIES ||
@@ -159,8 +154,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
     uint32_t function_count = 0;
     const XrTargetFunctionRecord *functions = xr_target_plan_functions(target, &function_count);
     uint32_t index = XR_SEMANTIC_INDEX_NONE;
-    if (!xr_target_plan_find_function(target, semantic,
-                                      function->semantic_plan_function_index, &index))
+    if (!xr_target_plan_find_function(target, semantic, function->semantic_plan_function_index,
+                                      &index))
         return direct_i64_error(errbuf, errbuf_len,
                                 "direct-i64 function has no canonical program function row");
     if (!functions || index >= function_count || functions[index].id != index ||
@@ -179,21 +174,17 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
 }
 
 XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
-    const XaotBundle *bundle, const XiFunc *function,
-    XrCAbiBoundaryKind *boundary_out, char *errbuf, size_t errbuf_len) {
+    const XaotBundle *bundle, const XiFunc *function, XrCAbiBoundaryKind *boundary_out,
+    char *errbuf, size_t errbuf_len) {
     if (boundary_out)
         *boundary_out = XR_C_ABI_BOUNDARY_INVALID;
     uint32_t partition = UINT32_MAX;
     const XrSemanticPlan *semantic =
         xaot_bundle_program_semantic_for_func(bundle, function, &partition);
-    const XrTargetPlan *program_target =
-        semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
+    const XrTargetPlan *program_target = semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
     uint32_t program_graph_count = 0;
     const XrTargetProgramGraphRecord *program_graphs =
-        program_target
-            ? xr_target_plan_program_graphs(program_target,
-                                            &program_graph_count)
-            : NULL;
+        program_target ? xr_target_plan_program_graphs(program_target, &program_graph_count) : NULL;
     if (program_graph_count != 0u) {
         XrCProgramDirectI64EmissionBinding binding = {0};
         XrCFunctionAbiEmissionView return_abi = {0};
@@ -201,33 +192,34 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
         uint32_t function_count = 0;
         const XrTargetFunctionRecord *functions =
             xr_target_plan_functions(program_target, &function_count);
-        bool bound = program_graphs && program_graph_count == 1u &&
-                     bundle && bundle->modules &&
-                     xr_c_program_direct_i64_emission_bind(
-                         program_target, bundle->modules, bundle->nmodules,
-                         &binding, error, sizeof(error));
+        bool bound =
+            program_graphs && program_graph_count == 1u && bundle && bundle->modules &&
+            xr_c_program_direct_i64_emission_bind(program_target, bundle->modules, bundle->nmodules,
+                                                  &binding, error, sizeof(error));
         const XrCProgramXiFunctionBinding *function_binding =
-            bound ? xr_c_program_direct_i64_function_binding(&binding,
-                                                              function)
-                  : NULL;
-        bool exact = function_binding && functions &&
-                     function_binding->target_partition == partition &&
-                     function_binding->target_function < function_count &&
-                     functions[function_binding->target_function].id ==
-                         function_binding->target_function &&
-                     functions[function_binding->target_function]
-                             .semantic_function ==
-                         function_binding->semantic_function &&
-                     xr_c_program_direct_i64_function_abi_view(
-                         &binding, function, 0u, &return_abi) &&
-                     return_abi.semantic_function ==
-                         function_binding->semantic_function;
-        xr_c_program_direct_i64_emission_release(&binding);
-        if (!exact)
+            bound ? xr_c_program_direct_i64_function_binding(&binding, function) : NULL;
+        if (!bound) {
+            xr_c_program_direct_i64_emission_release(&binding);
             return direct_i64_error(
                 errbuf, errbuf_len,
-                error[0] ? error
-                         : "program direct-i64 ABI has no exact global binding");
+                error[0] ? error : "program direct-i64 ABI has no exact global binding");
+        }
+        if (!function_binding) {
+            xr_c_program_direct_i64_emission_release(&binding);
+            return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+        }
+        bool exact =
+            function_binding && functions && function_binding->target_partition == partition &&
+            function_binding->target_function < function_count &&
+            functions[function_binding->target_function].id == function_binding->target_function &&
+            functions[function_binding->target_function].semantic_function ==
+                function_binding->semantic_function &&
+            xr_c_program_direct_i64_function_abi_view(&binding, function, 0u, &return_abi) &&
+            return_abi.semantic_function == function_binding->semantic_function;
+        xr_c_program_direct_i64_emission_release(&binding);
+        if (!exact)
+            return direct_i64_error(errbuf, errbuf_len,
+                                    "program direct-i64 ABI has no exact function binding");
         if (boundary_out)
             *boundary_out = return_abi.boundary_kind;
         return XAOT_DIRECT_I64_TARGET_FOUND;
@@ -288,8 +280,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
     if (status != XAOT_DIRECT_I64_TARGET_FOUND)
         return status;
     bool native_target_leaf = false;
-    status = direct_i64_exclude_native_target_leaf(
-        bundle, caller, call, target, caller_row, &native_target_leaf, errbuf, errbuf_len);
+    status = direct_i64_exclude_native_target_leaf(bundle, caller, call, target, caller_row,
+                                                   &native_target_leaf, errbuf, errbuf_len);
     if (status == XAOT_DIRECT_I64_TARGET_INVALID || native_target_leaf)
         return status;
     uint32_t program_graph_count = 0;
@@ -298,20 +290,16 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
     if (program_graph_count != 0u) {
         XrCProgramDirectI64EmissionBinding binding = {0};
         char error[256] = {0};
-        bool bound = program_graphs && program_graph_count == 1u &&
-                     bundle->modules &&
+        bool bound = program_graphs && program_graph_count == 1u && bundle->modules &&
                      xr_c_program_direct_i64_emission_bind(
-                         target, bundle->modules, bundle->nmodules, &binding,
-                         error, sizeof(error));
-        bool exact = bound &&
-                     xr_c_program_direct_i64_call_is_exact(&binding, caller, call) &&
+                         target, bundle->modules, bundle->nmodules, &binding, error, sizeof(error));
+        bool exact = bound && xr_c_program_direct_i64_call_is_exact(&binding, caller, call) &&
                      caller_row == binding.caller_target_row;
         if (!exact) {
             xr_c_program_direct_i64_emission_release(&binding);
             return direct_i64_error(
                 errbuf, errbuf_len,
-                error[0] ? error
-                         : "program direct-i64 call has no exact global binding");
+                error[0] ? error : "program direct-i64 call has no exact global binding");
         }
         out->target_plan = target;
         out->caller_function = binding.caller_target_row;
@@ -333,8 +321,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t argument_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t argument_value = XR_SEMANTIC_INDEX_NONE;
-    if (!xr_aot_scalar_semantic_value_id(target, caller, call, &semantic_function,
-                                         &semantic_value, errbuf, errbuf_len) ||
+    if (!xr_aot_scalar_semantic_value_id(target, caller, call, &semantic_function, &semantic_value,
+                                         errbuf, errbuf_len) ||
         !xr_aot_scalar_semantic_value_id(target, caller, call->args[1], &argument_function,
                                          &argument_value, errbuf, errbuf_len) ||
         semantic_function != caller_row->semantic_function ||
@@ -342,8 +330,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
         return direct_i64_error(errbuf, errbuf_len,
                                 "covered direct-i64 call lacks exact semantic value identity");
 
-    const XrSemanticPlan *semantic =
-        xaot_bundle_program_semantic_for_func(bundle, caller, NULL);
+    const XrSemanticPlan *semantic = xaot_bundle_program_semantic_for_func(bundle, caller, NULL);
     const XrSemanticOperationRecord *operation = NULL;
     uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
@@ -413,8 +400,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
     const XrTargetCallArgumentRecord *arguments =
         xr_target_plan_call_arguments(target, &argument_count);
     if (!arguments || target_call->argument_begin >= argument_count)
-        return direct_i64_error(errbuf, errbuf_len,
-                                "covered direct-i64 argument row is missing");
+        return direct_i64_error(errbuf, errbuf_len, "covered direct-i64 argument row is missing");
     const XrTargetCallArgumentRecord *argument = &arguments[target_call->argument_begin];
     if (argument->call != target_call->id || argument->ordinal != 0 ||
         argument->semantic_value != argument_value || argument->mode != XR_TARGET_CALL_VALUE ||
@@ -434,8 +420,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
     for (uint32_t i = 0; i < bundle->nmodules; i++) {
         const XiModule *module = bundle->modules ? bundle->modules[i] : NULL;
         if (module && module->init && module->init->semantic_plan == semantic)
-            direct_i64_find_function(module->init, semantic, callee_row->semantic_function,
-                                     &callee, &callee_count);
+            direct_i64_find_function(module->init, semantic, callee_row->semantic_function, &callee,
+                                     &callee_count);
     }
     if (!callee || callee_count != 1)
         return direct_i64_error(errbuf, errbuf_len,
@@ -443,8 +429,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
 
     const XrTargetInstructionRecord *call_instruction = NULL;
     uint32_t instruction_count = 0;
-    const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
-        target, caller_row->id, &instruction_count);
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(target, caller_row->id, &instruction_count);
     for (uint32_t i = 0; instructions && i < instruction_count; i++) {
         if (instructions[i].opcode != XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
             instructions[i].immediate_bits != target_call->id)
@@ -475,22 +461,19 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
 }
 
 static XaotLeafAggregateTargetStatus leaf_aggregate_error(char *errbuf, size_t errbuf_len,
-                                                           const char *message) {
+                                                          const char *message) {
     if (errbuf && errbuf_len > 0)
-        snprintf(errbuf, errbuf_len, "%s",
-                 message ? message : "invalid leaf-aggregate TargetPlan");
+        snprintf(errbuf, errbuf_len, "%s", message ? message : "invalid leaf-aggregate TargetPlan");
     return XAOT_LEAF_AGGREGATE_TARGET_INVALID;
 }
 
-static bool leaf_source_locator_equal(XiSourceLocator live,
-                                      XrProgramSemanticSourceLocator frozen) {
+static bool leaf_source_locator_equal(XiSourceLocator live, XrProgramSemanticSourceLocator frozen) {
     return live.kind == frozen.kind && live.span.start_line == frozen.start_line &&
-           live.span.start_column == frozen.start_column &&
-           live.span.end_line == frozen.end_line && live.span.end_column == frozen.end_column;
+           live.span.start_column == frozen.start_column && live.span.end_line == frozen.end_line &&
+           live.span.end_column == frozen.end_column;
 }
 
-static bool leaf_value_locator_equal(const XiValue *live,
-                                     XrProgramSemanticSourceLocator frozen) {
+static bool leaf_value_locator_equal(const XiValue *live, XrProgramSemanticSourceLocator frozen) {
     return live && live->source_kind == frozen.kind &&
            live->source_span.start_line == frozen.start_line &&
            live->source_span.start_column == frozen.start_column &&
@@ -498,8 +481,8 @@ static bool leaf_value_locator_equal(const XiValue *live,
            live->source_span.end_column == frozen.end_column;
 }
 
-static const XrSemanticProgramFunctionBinding *leaf_program_function_for_row(
-    const XrSemanticPlan *semantic, uint32_t program_row) {
+static const XrSemanticProgramFunctionBinding *
+leaf_program_function_for_row(const XrSemanticPlan *semantic, uint32_t program_row) {
     const XrSemanticProgramFunctionBinding *match = NULL;
     size_t count = xr_semantic_plan_program_function_binding_count(semantic);
     for (uint32_t i = 0; i < count; i++) {
@@ -531,9 +514,8 @@ static XaotLeafAggregateTargetStatus leaf_function_authority(
 
     const XiModule *module = bundle_module_for_func(bundle, function);
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
-    if (closure &&
-        xr_program_semantic_closure_family(closure) ==
-            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
+    if (closure && xr_program_semantic_closure_family(closure) ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
         return leaf_aggregate_error(
             errbuf, errbuf_len,
             "leaf value-product execution cannot enter the legacy aggregate boundary");
@@ -560,9 +542,8 @@ static XaotLeafAggregateTargetStatus leaf_function_authority(
         module_index = i;
     }
     const XrSemanticPlan *semantic =
-        module_index != UINT32_MAX
-            ? xaot_bundle_program_semantic_for_module(bundle, module_index)
-            : NULL;
+        module_index != UINT32_MAX ? xaot_bundle_program_semantic_for_module(bundle, module_index)
+                                   : NULL;
     const XrTargetPlan *target = semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
     const XrSemanticProgramProvenance *provenance =
         semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
@@ -571,8 +552,7 @@ static XaotLeafAggregateTargetStatus leaf_function_authority(
         xr_target_plan_completed_family_mask(target) != XR_TARGET_REQUIRED_FAMILIES ||
         !xr_target_plan_is_verified(target) || !xr_target_plan_fingerprint_is_intact(target) ||
         provenance->program_schema != xr_program_semantic_closure_schema(closure) ||
-        provenance->program_family !=
-            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
         provenance->type_count != xr_program_semantic_closure_type_count(closure) ||
         provenance->type_field_count != xr_program_semantic_closure_type_field_count(closure) ||
         provenance->function_count != xr_program_semantic_closure_function_count(closure) ||
@@ -680,12 +660,11 @@ leaf_semantic_value_identity(const XrTargetPlan *target, const XiFunc *function,
     if (parameter_match && (!operation_match || value->op != XI_PARAM))
         return XAOT_LEAF_AGGREGATE_TARGET_INVALID;
     const XrSemanticProgramTypeBinding *type_binding =
-        definition_exact
-            ? xr_semantic_plan_program_type_for_semantic_type(semantic, semantic_type)
-            : NULL;
+        definition_exact ? xr_semantic_plan_program_type_for_semantic_type(semantic, semantic_type)
+                         : NULL;
     if (!type_binding)
         return value->psc_type_index == XI_PSC_ROW_NONE ? XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED
-                                                       : XAOT_LEAF_AGGREGATE_TARGET_INVALID;
+                                                        : XAOT_LEAF_AGGREGATE_TARGET_INVALID;
     if (value->psc_type_index != type_binding->program_row)
         return XAOT_LEAF_AGGREGATE_TARGET_INVALID;
     *semantic_value_out = semantic_value;
@@ -705,13 +684,12 @@ static void leaf_find_program_function(const XiFunc *function, uint32_t program_
         leaf_find_program_function(function->children[i], program_row, match, match_count);
 }
 
-static bool leaf_aggregate_rep(const XrTargetPlan *target, uint16_t rep,
-                               uint32_t semantic_type) {
+static bool leaf_aggregate_rep(const XrTargetPlan *target, uint16_t rep, uint32_t semantic_type) {
     const XrTargetMachineRepRecord *machine = xr_target_plan_machine_rep(target, rep);
     XrCAggregateProjection projection = {0};
-    return machine && machine->kind == XR_MACHINE_REP_AGGREGATE &&
-           machine->register_bits == 128 && machine->memory_size == 16 &&
-           machine->memory_align == 8 && machine->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+    return machine && machine->kind == XR_MACHINE_REP_AGGREGATE && machine->register_bits == 128 &&
+           machine->memory_size == 16 && machine->memory_align == 8 &&
+           machine->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
            xr_c_leaf_aggregate_projection(target, semantic_type, &projection) &&
            machine->detail == projection.layout;
 }
@@ -734,8 +712,7 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_function_stat
     uint32_t index = program_function->semantic_function;
     if (!functions || index >= count || functions[index].id != index ||
         functions[index].semantic_function != index)
-        return leaf_aggregate_error(errbuf, errbuf_len,
-                                    "leaf-aggregate function row is inexact");
+        return leaf_aggregate_error(errbuf, errbuf_len, "leaf-aggregate function row is inexact");
     if (target_out)
         *target_out = target;
     if (function_out)
@@ -745,8 +722,8 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_function_stat
 
 XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_semantic_value(
     const XaotBundle *bundle, const XiFunc *function, const XiValue *value,
-    const XrTargetPlan **target_out, uint32_t *semantic_function_out,
-    uint32_t *semantic_value_out, char *errbuf, size_t errbuf_len) {
+    const XrTargetPlan **target_out, uint32_t *semantic_function_out, uint32_t *semantic_value_out,
+    char *errbuf, size_t errbuf_len) {
     if (target_out)
         *target_out = NULL;
     if (semantic_function_out)
@@ -763,9 +740,9 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_semantic_valu
     if (status != XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         return status;
     uint32_t semantic_type = XR_SEMANTIC_INDEX_NONE;
-    XaotLeafAggregateTargetStatus value_status = leaf_semantic_value_identity(
-        target, function, function_row->semantic_function, value, semantic_value_out,
-        &semantic_type);
+    XaotLeafAggregateTargetStatus value_status =
+        leaf_semantic_value_identity(target, function, function_row->semantic_function, value,
+                                     semantic_value_out, &semantic_type);
     if (value_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
         return value_status;
     if (value_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND)
@@ -791,9 +768,8 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_abi_status(
     for (uint32_t i = 0; calls && i < call_count; i++) {
         if (calls[i].callee_function != function_row->semantic_function)
             continue;
-        const XrSemanticProgramCallBinding *binding =
-            xr_semantic_plan_program_call_for_operation(xr_target_plan_semantic_plan(target),
-                                                        calls[i].semantic_operation);
+        const XrSemanticProgramCallBinding *binding = xr_semantic_plan_program_call_for_operation(
+            xr_target_plan_semantic_plan(target), calls[i].semantic_operation);
         if (!binding || binding->target_function != function_row->semantic_function ||
             calls[i].target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
             calls[i].calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL)
@@ -840,8 +816,8 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_call_view(
     if (leaf_semantic_value_identity(target, caller, semantic_function, call, &semantic_value,
                                      &result_type) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
         leaf_semantic_value_identity(target, caller, semantic_function, call->args[1],
-                                     &argument_value, &argument_type) !=
-            XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+                                     &argument_value,
+                                     &argument_type) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
         result_type != argument_type)
         return leaf_aggregate_error(errbuf, errbuf_len,
                                     "leaf-aggregate call lacks exact semantic identities");
@@ -866,8 +842,8 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_call_view(
     const XrSemanticProgramFunctionBinding *caller_binding = NULL;
     if (!operation || operation->result_type != result_type || !program_call ||
         program_call->operation != operation_index ||
-        leaf_function_authority(bundle, caller, &module, &closure, NULL, &caller_binding, NULL, 0) !=
-            XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+        leaf_function_authority(bundle, caller, &module, &closure, NULL, &caller_binding, NULL,
+                                0) != XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         return leaf_aggregate_error(errbuf, errbuf_len,
                                     "leaf-aggregate call lacks its typed program binding");
     const XrProgramSemanticCallRecord *psc_call =
@@ -944,23 +920,21 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_call_view(
     const XrTargetCallArgumentRecord *argument = &arguments[target_call->argument_begin];
     const XrSemanticParameterRecord *parameter =
         xr_semantic_plan_parameter(semantic, argument->callee_parameter);
-    const XrTargetValueRepRecord *argument_rep =
-        xr_target_plan_value_rep(target, argument_value);
+    const XrTargetValueRepRecord *argument_rep = xr_target_plan_value_rep(target, argument_value);
     const XrTargetValueRepRecord *parameter_rep =
         parameter ? xr_target_plan_value_rep(target, parameter->value) : NULL;
-    const XrTargetValueRepRecord *result_rep =
-        xr_target_plan_value_rep(target, semantic_value);
+    const XrTargetValueRepRecord *result_rep = xr_target_plan_value_rep(target, semantic_value);
     if (!parameter || parameter->function != target_call->callee_function ||
-        parameter->type != result_type ||
-        argument->call != target_call->id || argument->ordinal != 0 ||
-        argument->semantic_value != argument_value || argument->mode != XR_TARGET_CALL_VALUE ||
-        argument->ownership != XR_TARGET_CALL_READ ||
+        parameter->type != result_type || argument->call != target_call->id ||
+        argument->ordinal != 0 || argument->semantic_value != argument_value ||
+        argument->mode != XR_TARGET_CALL_VALUE || argument->ownership != XR_TARGET_CALL_READ ||
         argument->transfer_mode != XR_TRANSFER_SHARE || argument->flags != 0 ||
         argument->register_rep != argument->memory_rep ||
         argument->register_rep != argument->callee_register_rep ||
-        argument->register_rep != argument->callee_memory_rep || !argument_rep ||
-        !parameter_rep || !result_rep || argument_rep->slot != argument->caller_slot ||
-        parameter_rep->slot != argument->callee_slot || result_rep->slot != target_call->result_slot ||
+        argument->register_rep != argument->callee_memory_rep || !argument_rep || !parameter_rep ||
+        !result_rep || argument_rep->slot != argument->caller_slot ||
+        parameter_rep->slot != argument->callee_slot ||
+        result_rep->slot != target_call->result_slot ||
         target_call->result_register_rep != argument->register_rep ||
         target_call->result_memory_rep != argument->register_rep ||
         !leaf_aggregate_rep(target, argument->register_rep, operation->result_type))
@@ -991,8 +965,8 @@ XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_call_view(
                                     "leaf-aggregate Xi callee identity is not unique");
     const XrTargetInstructionRecord *call_instruction = NULL;
     uint32_t instruction_count = 0;
-    const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
-        target, semantic_function, &instruction_count);
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(target, semantic_function, &instruction_count);
     for (uint32_t i = 0; instructions && i < instruction_count; i++) {
         if (instructions[i].opcode != XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE ||
             instructions[i].immediate_bits != target_call->id)
@@ -1548,8 +1522,8 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
         xaot_boundary_leaf_aggregate_function_status(bundle, current, NULL, NULL, NULL, 0);
     if (leaf_aggregate != XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
         return NULL;
-    XaotDirectI64TargetStatus direct_i64 = xaot_boundary_direct_i64_function_status(
-        bundle, current, NULL, NULL, NULL, 0);
+    XaotDirectI64TargetStatus direct_i64 =
+        xaot_boundary_direct_i64_function_status(bundle, current, NULL, NULL, NULL, 0);
     if (direct_i64 != XAOT_DIRECT_I64_TARGET_UNCOVERED)
         return NULL;
     if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) {

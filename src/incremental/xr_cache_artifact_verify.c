@@ -39,29 +39,28 @@ static void copy_fingerprint(XrFingerprint source, XrCacheFingerprint *target) {
 
 static bool verified_authorities(const XrCacheXtpArtifactVerifyContext *context,
                                  const XrTargetProfileDraft **profile_facts) {
-    if (!context || !context->semantic_plan || !context->target_profile ||
-        !profile_facts)
+    if (!context || !context->semantic_plan || !context->target_profile || !profile_facts)
         return false;
     char error[512] = {0};
     bool graph = context->program_semantic_module_count != 0u;
     const XrSemanticProgramProvenance *program =
         xr_semantic_plan_program_provenance(context->semantic_plan);
     bool graph_authority =
-        program && program->program_family ==
-                       XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
-    if (!xr_semantic_plan_is_verified(context->semantic_plan) ||
-        graph != graph_authority ||
-        !xr_semantic_plan_verify_module_set(
-            context->semantic_plan, context->semantic_dependencies,
-            context->semantic_dependency_count, error, sizeof(error)) ||
-        (graph &&
-         (!context->program_semantic_modules ||
-          program->program_module_row >= context->program_semantic_module_count ||
-          context->program_semantic_modules[program->program_module_row] !=
-              context->semantic_plan ||
-          !xr_target_semantic_program_module_set_verify(
-              context->program_semantic_modules,
-              context->program_semantic_module_count, error, sizeof(error)))) ||
+        program &&
+        (program->program_family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+         program->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL);
+    if (!xr_semantic_plan_is_verified(context->semantic_plan) || graph != graph_authority ||
+        !xr_semantic_plan_verify_module_set(context->semantic_plan, context->semantic_dependencies,
+                                            context->semantic_dependency_count, error,
+                                            sizeof(error)) ||
+        (graph && (!context->program_semantic_modules ||
+                   program->program_module_row >= context->program_semantic_module_count ||
+                   context->program_semantic_modules[program->program_module_row] !=
+                       context->semantic_plan ||
+                   !xr_target_semantic_program_module_set_verify(
+                       context->program_semantic_modules, context->program_semantic_module_count,
+                       error, sizeof(error)))) ||
         (!graph && context->program_semantic_modules) ||
         !xr_target_profile_verify(context->target_profile, error, sizeof(error)))
         return false;
@@ -69,50 +68,40 @@ static bool verified_authorities(const XrCacheXtpArtifactVerifyContext *context,
     return *profile_facts != NULL;
 }
 
-bool xr_cache_verify_xsm_artifact(XrCacheArtifactKind kind, XrCacheKey key,
-                                  const uint8_t *bytes, size_t size, void *context) {
+bool xr_cache_verify_xsm_artifact(XrCacheArtifactKind kind, XrCacheKey key, const uint8_t *bytes,
+                                  size_t size, void *context) {
     const XrCacheXsmArtifactVerifyContext *requirements =
         (const XrCacheXsmArtifactVerifyContext *) context;
-    if (!requirements || kind != XR_CACHE_ARTIFACT_XSM ||
-        (!bytes && size != 0) ||
-        !xr_cache_key_equal(key, requirements->expected_key) ||
-        !requirements->semantic_plan) {
+    if (!requirements || kind != XR_CACHE_ARTIFACT_XSM || (!bytes && size != 0) ||
+        !xr_cache_key_equal(key, requirements->expected_key) || !requirements->semantic_plan) {
         return false;
     }
     char error[512] = {0};
     if (!xr_semantic_plan_is_verified(requirements->semantic_plan) ||
         !xr_semantic_plan_verify_module_set(
-            requirements->semantic_plan,
-            requirements->semantic_dependencies,
+            requirements->semantic_plan, requirements->semantic_dependencies,
             requirements->semantic_dependency_count, error, sizeof(error))) {
         return false;
     }
 
     XrSemanticPlan *plan = NULL;
     bool decoded = requirements->semantic_dependency_count == 0
-                       ? xr_xsm_decode(bytes, size, &plan, error,
-                                       sizeof(error))
-                       : xr_xsm_decode_module_set(
-                             bytes, size,
-                             requirements->semantic_dependencies,
-                             requirements->semantic_dependency_count, &plan,
-                             error, sizeof(error));
+                       ? xr_xsm_decode(bytes, size, &plan, error, sizeof(error))
+                       : xr_xsm_decode_module_set(bytes, size, requirements->semantic_dependencies,
+                                                  requirements->semantic_dependency_count, &plan,
+                                                  error, sizeof(error));
     if (!decoded)
         return false;
-    bool verified = xr_semantic_plan_verify_module_set(
-                        plan, requirements->semantic_dependencies,
-                        requirements->semantic_dependency_count, error,
-                        sizeof(error)) &&
-                    xr_fingerprint_equal(
-                        xr_semantic_plan_fingerprint(plan),
-                        xr_semantic_plan_fingerprint(
-                            requirements->semantic_plan));
+    bool verified = xr_semantic_plan_verify_module_set(plan, requirements->semantic_dependencies,
+                                                       requirements->semantic_dependency_count,
+                                                       error, sizeof(error)) &&
+                    xr_fingerprint_equal(xr_semantic_plan_fingerprint(plan),
+                                         xr_semantic_plan_fingerprint(requirements->semantic_plan));
     xr_semantic_plan_free(plan);
     return verified;
 }
 
-bool xr_cache_xtp_key(const XrCacheXtpArtifactVerifyContext *context,
-                      XrCacheKey *key) {
+bool xr_cache_xtp_key(const XrCacheXtpArtifactVerifyContext *context, XrCacheKey *key) {
     if (key)
         memset(key, 0, sizeof(*key));
     const XrTargetProfileDraft *profile_facts = NULL;
@@ -123,18 +112,14 @@ bool xr_cache_xtp_key(const XrCacheXtpArtifactVerifyContext *context,
     const XrSemanticProgramProvenance *program =
         xr_semantic_plan_program_provenance(context->semantic_plan);
     if (program && program->schema != 0) {
-        copy_fingerprint(program->program_fingerprint,
-                         &input.program_semantic_closure);
+        copy_fingerprint(program->program_fingerprint, &input.program_semantic_closure);
         xr_cache_fingerprint_bytes(program->generation_identity.bytes,
                                    sizeof(program->generation_identity.bytes),
                                    &input.generation_closure);
     }
-    copy_fingerprint(xr_semantic_plan_fingerprint(context->semantic_plan),
-                     &input.semantic_plan);
-    copy_fingerprint(xr_target_profile_fingerprint(context->target_profile),
-                     &input.target_profile);
-    copy_fingerprint(profile_facts->provider_set_fingerprint,
-                     &input.provider_capabilities);
+    copy_fingerprint(xr_semantic_plan_fingerprint(context->semantic_plan), &input.semantic_plan);
+    copy_fingerprint(xr_target_profile_fingerprint(context->target_profile), &input.target_profile);
+    copy_fingerprint(profile_facts->provider_set_fingerprint, &input.provider_capabilities);
     copy_fingerprint(profile_facts->runtime_abi_fingerprint, &input.runtime_abi);
 
     uint8_t schema[XR_CACHE_XTP_SCHEMA_DESCRIPTOR_SIZE] = {0};
@@ -149,15 +134,15 @@ bool xr_cache_xtp_key(const XrCacheXtpArtifactVerifyContext *context,
     return true;
 }
 
-static bool materialize_verified_xtp(
-    XrCacheArtifactKind kind, XrCacheKey key, const uint8_t *bytes, size_t size,
-    const XrCacheXtpArtifactVerifyContext *requirements, XrTargetPlan **out) {
+static bool materialize_verified_xtp(XrCacheArtifactKind kind, XrCacheKey key, const uint8_t *bytes,
+                                     size_t size,
+                                     const XrCacheXtpArtifactVerifyContext *requirements,
+                                     XrTargetPlan **out) {
     if (out)
         *out = NULL;
     XrCacheKey expected = {{0}};
     if (!out || kind != XR_CACHE_ARTIFACT_XTP || (!bytes && size != 0) ||
-        !xr_cache_xtp_key(requirements, &expected) ||
-        !xr_cache_key_equal(key, expected))
+        !xr_cache_xtp_key(requirements, &expected) || !xr_cache_key_equal(key, expected))
         return false;
 
     XrXtpCandidate *candidate = NULL;
@@ -165,19 +150,16 @@ static bool materialize_verified_xtp(
     if (!xr_xtp_decode_candidate(bytes, size, &candidate, error, sizeof(error)))
         return false;
     XrTargetPlan *plan = NULL;
-    bool materialized = requirements->program_semantic_module_count
-                            ? xr_xtp_materialize_target_plan_program_graph(
-                                  candidate,
-                                  requirements->program_semantic_modules,
-                                  requirements->program_semantic_module_count,
-                                  requirements->target_profile, &plan, error,
-                                  sizeof(error))
-                            : xr_xtp_materialize_target_plan_module_set(
-                                  candidate, requirements->semantic_plan,
-                                  requirements->semantic_dependencies,
-                                  requirements->semantic_dependency_count,
-                                  requirements->target_profile, &plan, error,
-                                  sizeof(error));
+    bool materialized =
+        requirements->program_semantic_module_count
+            ? xr_xtp_materialize_target_plan_program_graph(
+                  candidate, requirements->program_semantic_modules,
+                  requirements->program_semantic_module_count, requirements->target_profile, &plan,
+                  error, sizeof(error))
+            : xr_xtp_materialize_target_plan_module_set(
+                  candidate, requirements->semantic_plan, requirements->semantic_dependencies,
+                  requirements->semantic_dependency_count, requirements->target_profile, &plan,
+                  error, sizeof(error));
     bool verified = materialized && plan && xr_target_plan_is_verified(plan) &&
                     xr_target_plan_fingerprint_is_intact(plan) &&
                     xr_target_plan_verify(plan, error, sizeof(error));
@@ -190,24 +172,20 @@ static bool materialize_verified_xtp(
     return true;
 }
 
-bool xr_cache_verify_xtp_artifact(XrCacheArtifactKind kind, XrCacheKey key,
-                                  const uint8_t *bytes, size_t size, void *context) {
+bool xr_cache_verify_xtp_artifact(XrCacheArtifactKind kind, XrCacheKey key, const uint8_t *bytes,
+                                  size_t size, void *context) {
     XrTargetPlan *plan = NULL;
     bool verified = materialize_verified_xtp(
-        kind, key, bytes, size,
-        (const XrCacheXtpArtifactVerifyContext *) context, &plan);
+        kind, key, bytes, size, (const XrCacheXtpArtifactVerifyContext *) context, &plan);
     xr_target_plan_free(plan);
     return verified;
 }
 
 bool xr_cache_materialize_xtp_artifact(XrCacheArtifactKind kind, XrCacheKey key,
-                                       const uint8_t *bytes, size_t size,
-                                       void *context) {
-    XrCacheXtpArtifactLoadContext *load =
-        (XrCacheXtpArtifactLoadContext *) context;
+                                       const uint8_t *bytes, size_t size, void *context) {
+    XrCacheXtpArtifactLoadContext *load = (XrCacheXtpArtifactLoadContext *) context;
     if (!load || load->accepted_plan)
         return false;
-    return materialize_verified_xtp(kind, key, bytes, size,
-                                    &load->requirements,
+    return materialize_verified_xtp(kind, key, bytes, size, &load->requirements,
                                     &load->accepted_plan);
 }

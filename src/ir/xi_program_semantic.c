@@ -72,8 +72,10 @@ static bool source_module_matches_psc(const XiModule *module,
         closure ? xr_program_semantic_closure_module(closure, module_index) : NULL;
     const XrProgramSemanticModuleInput *source =
         module && module->source_semantic_module_present ? &module->source_semantic_module : NULL;
-    bool graph = closure && xr_program_semantic_closure_family(closure) ==
-                                XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    bool graph = closure && (xr_program_semantic_closure_family(closure) ==
+                                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+                             xr_program_semantic_closure_family(closure) ==
+                                 XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL);
     return row && source && same_id(row->module_identity, source->module_identity) &&
            same_bytes(row->module_authority_fingerprint.bytes,
                       source->module_authority_fingerprint.bytes,
@@ -102,6 +104,11 @@ static bool stable_id_is_zero(XrStableId id) {
     return same_id(id, zero);
 }
 
+static bool source_private_leaf_family(const XrProgramSemanticClosure *closure) {
+    return closure && xr_program_semantic_closure_family(closure) ==
+                          XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
+}
+
 static bool function_belongs_to_module(const XrProgramSemanticClosure *closure,
                                        const XrProgramSemanticFunctionRecord *function,
                                        uint32_t module_index) {
@@ -111,11 +118,10 @@ static bool function_belongs_to_module(const XrProgramSemanticClosure *closure,
 }
 
 static const XrProgramSemanticTypeRecord *find_type(const XrProgramSemanticClosure *closure,
-                                                     XrStableId identity, uint32_t *index) {
+                                                    XrStableId identity, uint32_t *index) {
     const XrProgramSemanticTypeRecord *answer = NULL;
     for (uint32_t i = 0; closure && i < xr_program_semantic_closure_type_count(closure); i++) {
-        const XrProgramSemanticTypeRecord *candidate =
-            xr_program_semantic_closure_type(closure, i);
+        const XrProgramSemanticTypeRecord *candidate = xr_program_semantic_closure_type(closure, i);
         if (!candidate || !same_id(candidate->id, identity))
             continue;
         if (answer)
@@ -142,10 +148,10 @@ static bool xr_type_matches_program_type(const XrProgramSemanticClosure *closure
     if (row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT) {
         if (xr_program_semantic_closure_family(closure) !=
                 XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
-            type->kind != XR_KIND_TUPLE || row->field_count != 6 || row->field_begin >
-                xr_program_semantic_closure_type_field_count(closure) ||
-            row->field_count > xr_program_semantic_closure_type_field_count(closure) -
-                                   row->field_begin ||
+            type->kind != XR_KIND_TUPLE || row->field_count != 6 ||
+            row->field_begin > xr_program_semantic_closure_type_field_count(closure) ||
+            row->field_count >
+                xr_program_semantic_closure_type_field_count(closure) - row->field_begin ||
             xr_type_tuple_count((XrType *) type) != (int) row->field_count)
             return false;
         for (uint32_t i = 0; i < row->field_count; i++) {
@@ -300,12 +306,12 @@ bool xi_program_semantic_input_prepare(const XrProgramSemanticClosure *closure,
         memset(out, 0, sizeof(*out));
     if (!closure || !source_module || !out)
         return scalar_fail(error, error_size, "Xi input selection authority is incomplete");
-    bool graph = xr_program_semantic_closure_family(closure) ==
-                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    XrProgramSemanticFamily family = xr_program_semantic_closure_family(closure);
+    bool graph = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+                 family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
     uint32_t match = XI_PSC_ROW_NONE;
     for (uint32_t i = 0; i < xr_program_semantic_closure_module_count(closure); i++) {
-        const XrProgramSemanticModuleRecord *row =
-            xr_program_semantic_closure_module(closure, i);
+        const XrProgramSemanticModuleRecord *row = xr_program_semantic_closure_module(closure, i);
         if (!row || !same_id(row->module_identity, source_module->module_identity) ||
             !same_bytes(row->module_authority_fingerprint.bytes,
                         source_module->module_authority_fingerprint.bytes,
@@ -351,6 +357,7 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
     XrProgramSemanticFamily family = xr_program_semantic_closure_family(input->closure);
     bool scalar = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
     bool graph = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    bool private_leaf = family == XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL;
     bool product = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     bool overflow = family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     bool aggregate = false;
@@ -372,8 +379,8 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
     size_t module_count = xr_program_semantic_closure_module_count(input->closure);
     size_t function_count = xr_program_semantic_closure_function_count(input->closure);
     size_t call_count = xr_program_semantic_closure_call_count(input->closure);
-    if ((!scalar && !graph && !product && !overflow && (!aggregate || decision)) ||
-        ((graph || product || aggregate) && (decision || overflow_decisions)) ||
+    if ((!scalar && !graph && !private_leaf && !product && !overflow && (!aggregate || decision)) ||
+        ((graph || private_leaf || product || aggregate) && (decision || overflow_decisions)) ||
         (overflow && (decision || !overflow_decisions || !input->target_profile ||
                       !xr_i64_overflow_decision_verify(overflow_decisions, input->closure,
                                                        input->target_profile, NULL, 0))) ||
@@ -381,11 +388,20 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
                     decision->sealed != 1 || overflow_decisions)) ||
         input->module_index >= module_count ||
         ((scalar || aggregate || product || overflow) &&
-         (module_count != 1 || xr_program_semantic_closure_dependency_count(input->closure) != 0)) ||
+         (module_count != 1 ||
+          xr_program_semantic_closure_dependency_count(input->closure) != 0)) ||
         (graph &&
          (module_count != 2 || xr_program_semantic_closure_dependency_count(input->closure) != 1 ||
-          type_count != 1 ||
-          !xr_program_semantic_closure_type(input->closure, 0) ||
+          type_count != 1 || !xr_program_semantic_closure_type(input->closure, 0) ||
+          xr_program_semantic_closure_type(input->closure, 0)->kind !=
+              XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
+          xr_program_semantic_closure_type(input->closure, 0)->exact_scalar !=
+              XR_EXACT_SCALAR_I64)) ||
+        (private_leaf &&
+         (module_count != 2 || xr_program_semantic_closure_dependency_count(input->closure) != 1 ||
+          type_count != 1 || function_count != 2 ||
+          xr_program_semantic_closure_function_parameter_count(input->closure) != 0 ||
+          call_count != 2 || !xr_program_semantic_closure_type(input->closure, 0) ||
           xr_program_semantic_closure_type(input->closure, 0)->kind !=
               XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
           xr_program_semantic_closure_type(input->closure, 0)->exact_scalar !=
@@ -393,15 +409,15 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
         (product &&
          (type_count != 3 || xr_program_semantic_closure_type_field_count(input->closure) != 6 ||
           function_count != 3 || call_count != 2)) ||
-        (overflow &&
-         (type_count != 1 || function_count != 1 || call_count == 0 ||
-          !xr_program_semantic_closure_type(input->closure, 0) ||
-          xr_program_semantic_closure_type(input->closure, 0)->kind !=
-              XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
-          xr_program_semantic_closure_type(input->closure, 0)->exact_scalar !=
-              XR_EXACT_SCALAR_I64 ||
-          overflow_decisions->row_count != call_count)) ||
-        (!product && !overflow && (function_count != 2 || call_count != 1 || !call)) ||
+        (overflow && (type_count != 1 || function_count != 1 || call_count == 0 ||
+                      !xr_program_semantic_closure_type(input->closure, 0) ||
+                      xr_program_semantic_closure_type(input->closure, 0)->kind !=
+                          XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
+                      xr_program_semantic_closure_type(input->closure, 0)->exact_scalar !=
+                          XR_EXACT_SCALAR_I64 ||
+                      overflow_decisions->row_count != call_count)) ||
+        (!product && !overflow && !private_leaf &&
+         (function_count != 2 || call_count != 1 || !call)) ||
         (scalar &&
          (!same_bytes(decision->generation_id.bytes, generation.bytes, sizeof(generation.bytes)) ||
           !same_bytes(decision->closure_fingerprint.bytes, fingerprint.bytes,
@@ -410,9 +426,56 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
           !same_id(decision->callsite_identity, call->callsite_identity) ||
           !same_id(decision->caller_function, call->caller_function) ||
           !same_id(decision->callee_function, call->callee_function))) ||
-        (!product && !overflow && (!find_function(input->closure, call->caller_function, NULL) ||
-                      !find_function(input->closure, call->callee_function, NULL))))
+        (!product && !overflow && !private_leaf &&
+         (!find_function(input->closure, call->caller_function, NULL) ||
+          !find_function(input->closure, call->callee_function, NULL))))
         return scalar_fail(error, error_size, "Xi input does not bind its PSC partition");
+    if (private_leaf) {
+        const XrProgramSemanticFunctionRecord *entry = NULL;
+        const XrProgramSemanticFunctionRecord *wrapper = NULL;
+        const XrProgramSemanticCallRecord *source_call = NULL;
+        const XrProgramSemanticCallRecord *leaf_call = NULL;
+        const XrProgramSemanticDependencyRecord *dependency =
+            xr_program_semantic_closure_dependency(input->closure, 0);
+        const XrProgramSemanticTypeRecord *i64 =
+            xr_program_semantic_closure_type(input->closure, 0);
+        for (uint32_t i = 0; i < function_count; i++) {
+            const XrProgramSemanticFunctionRecord *row =
+                xr_program_semantic_closure_function(input->closure, i);
+            if (!row || row->parameter_count != 0 || !same_id(row->return_type, i64->id))
+                return scalar_fail(error, error_size,
+                                   "Xi private-leaf function authority is not nullary i64");
+            if (row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY)
+                entry = entry ? NULL : row;
+            else if (row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED)
+                wrapper = wrapper ? NULL : row;
+            else
+                return scalar_fail(error, error_size,
+                                   "Xi private-leaf function role is unsupported");
+        }
+        for (uint32_t i = 0; i < call_count; i++) {
+            const XrProgramSemanticCallRecord *row =
+                xr_program_semantic_closure_call(input->closure, i);
+            if (!row)
+                return scalar_fail(error, error_size,
+                                   "Xi private-leaf call authority is incomplete");
+            if (find_function(input->closure, row->callee_function, NULL))
+                source_call = source_call ? NULL : row;
+            else
+                leaf_call = leaf_call ? NULL : row;
+        }
+        if (!entry || !wrapper || !source_call || !leaf_call || !dependency ||
+            dependency->kind != XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE ||
+            !same_id(source_call->caller_function, entry->id) ||
+            !same_id(source_call->callee_function, wrapper->id) ||
+            stable_id_is_zero(source_call->resolver_binding) ||
+            !same_id(source_call->resolver_binding, dependency->resolver_binding) ||
+            !same_id(leaf_call->caller_function, wrapper->id) ||
+            stable_id_is_zero(leaf_call->callee_function) ||
+            !stable_id_is_zero(leaf_call->resolver_binding))
+            return scalar_fail(error, error_size,
+                               "Xi private-leaf source and native calls are not exact");
+    }
     if (product) {
         uint32_t product_rows = 0;
         for (uint32_t i = 0; i < type_count; i++) {
@@ -445,8 +508,7 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
                 !same_id(row->program_call, overflow_call->id) ||
                 !same_id(row->caller_function, overflow_call->caller_function) ||
                 !same_id(row->builtin_identity, overflow_call->callee_function))
-                return scalar_fail(error, error_size,
-                                   "Xi overflow decision rows are not exact");
+                return scalar_fail(error, error_size, "Xi overflow decision rows are not exact");
         }
     }
     return true;
@@ -467,14 +529,15 @@ bool xi_program_semantic_bind_function(XiFunc *function, const XiProgramSemantic
     for (uint32_t i = 0; i < count; i++) {
         const XrProgramSemanticFunctionRecord *row =
             xr_program_semantic_closure_function(input->closure, i);
-        if (!row || !module_row ||
-            !same_id(row->module_identity, module_row->module_identity) ||
+        if (!row || !module_row || !same_id(row->module_identity, module_row->module_identity) ||
             !locator_matches(locator, row->declaration_locator))
             continue;
         if (match != XI_PSC_ROW_NONE)
             return scalar_fail(error, error_size, "PSC declaration locator is ambiguous");
         match = i;
     }
+    if (match == XI_PSC_ROW_NONE && source_private_leaf_family(input->closure))
+        return true;
     if (match == XI_PSC_ROW_NONE)
         return scalar_fail(error, error_size, "Xi declaration has no exact PSC function row");
     function->psc_function_index = match;
@@ -488,22 +551,26 @@ bool xi_program_semantic_bind_import(XiImportRef *ref, const XiProgramSemanticIn
         !locator_is_complete(ref->psc_import_locator) ||
         !stable_id_is_zero(ref->psc_resolver_binding) ||
         !xi_program_semantic_input_is_consistent(input, NULL, 0) ||
-        xr_program_semantic_closure_family(input->closure) !=
-            XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+        (xr_program_semantic_closure_family(input->closure) !=
+             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+         !source_private_leaf_family(input->closure)))
         return scalar_fail(error, error_size, "Xi import authority input is incomplete");
     const XrProgramSemanticCallRecord *call =
         xr_program_semantic_closure_call(input->closure, call_index);
     const XrProgramSemanticModuleRecord *source =
         xr_program_semantic_closure_module(input->closure, input->module_index);
     uint32_t match = XI_PSC_ROW_NONE;
-    for (uint32_t i = 0; call && source &&
-                         i < xr_program_semantic_closure_dependency_count(input->closure);
-         i++) {
+    for (uint32_t i = 0;
+         call && source && i < xr_program_semantic_closure_dependency_count(input->closure); i++) {
         const XrProgramSemanticDependencyRecord *dependency =
             xr_program_semantic_closure_dependency(input->closure, i);
+        bool source_edge = source_private_leaf_family(input->closure);
         if (!dependency || !same_id(dependency->source_module, source->module_identity) ||
             !locator_matches(ref->psc_import_locator, dependency->import_locator) ||
-            !same_id(dependency->exported_function, call->callee_function) ||
+            (source_edge ? (dependency->kind != XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE ||
+                            !stable_id_is_zero(dependency->exported_declaration) ||
+                            !stable_id_is_zero(dependency->exported_function))
+                         : !same_id(dependency->exported_function, call->callee_function)) ||
             !same_id(dependency->resolver_binding, call->resolver_binding))
             continue;
         if (match != XI_PSC_ROW_NONE)
@@ -609,8 +676,7 @@ static bool canonicalize_value_product_function(XiFunc *function,
                 return false;
             if (value->op == XI_TUPLE_NEW && value->psc_type_index == product_index) {
                 if (value->nargs != product->field_count || !value->args ||
-                    (value->aux_int & XI_TUPLE_AUX_ARITY_MASK) !=
-                        (int64_t) product->field_count ||
+                    (value->aux_int & XI_TUPLE_AUX_ARITY_MASK) != (int64_t) product->field_count ||
                     value->aux || value->aux_kind != XI_AUX_KIND_NONE || value->call_plan ||
                     value->xg_callsite_id != 0 || value->error_region ||
                     value->transfer_mode != 0 || value->param_mode != XR_PARAM_READ ||
@@ -620,8 +686,7 @@ static bool canonicalize_value_product_function(XiFunc *function,
                     return false;
                 for (uint32_t i = 0; i < product->field_count; i++) {
                     const XrProgramSemanticTypeFieldRecord *field =
-                        xr_program_semantic_closure_type_field(closure,
-                                                               product->field_begin + i);
+                        xr_program_semantic_closure_type_field(closure, product->field_begin + i);
                     uint32_t member_index = XI_PSC_ROW_NONE;
                     if (!field || field->declaration_ordinal != i || !value->args[i] ||
                         !find_type(closure, field->field_type, &member_index) ||
@@ -673,10 +738,10 @@ bool xi_program_semantic_finalize(XiFunc *root, const XiProgramSemanticInput *in
         !xi_program_semantic_input_is_consistent(input, NULL, 0) ||
         !source_module_matches_psc(root->module, input->closure, input->module_index))
         return scalar_fail(error, error_size, "Xi function partition is incomplete");
-    uint32_t function_count =
-        (uint32_t) xr_program_semantic_closure_function_count(input->closure);
+    uint32_t function_count = (uint32_t) xr_program_semantic_closure_function_count(input->closure);
     bool *seen = (bool *) xr_calloc(function_count, sizeof(*seen));
     uint32_t local_count = 0;
+    bool private_leaf = source_private_leaf_family(input->closure);
     XiFunc *preserved_callee = NULL;
     if (!seen)
         return scalar_fail(error, error_size, "Xi function partition allocation failed");
@@ -685,14 +750,28 @@ bool xi_program_semantic_finalize(XiFunc *root, const XiProgramSemanticInput *in
             xr_program_semantic_closure_function(input->closure, i);
         local_count += function_belongs_to_module(input->closure, row, input->module_index);
     }
-    if (root->module->nfuncs != local_count) {
+    if ((!private_leaf && root->module->nfuncs != local_count) ||
+        (private_leaf && root->module->nfuncs < local_count)) {
         xr_free(seen);
         return scalar_fail(error, error_size, "Xi function partition inventory is not exact");
     }
     for (uint16_t i = 0; i < root->module->nfuncs; i++) {
         XiFunc *function = root->module->functions[i];
-        if (!function || function->psc_function_index >= function_count ||
-            seen[function->psc_function_index]) {
+        if (!function) {
+            xr_free(seen);
+            return scalar_fail(error, error_size,
+                               "Xi function partition rows are incomplete or duplicated");
+        }
+        if (function->psc_function_index == XI_PSC_ROW_NONE && private_leaf) {
+            if (function->psc_declaration_locator.kind != 0 ||
+                !xi_source_span_is_empty(function->psc_declaration_locator.span)) {
+                xr_free(seen);
+                return scalar_fail(error, error_size,
+                                   "Xi function outside the capability carries PSC authority");
+            }
+            continue;
+        }
+        if (function->psc_function_index >= function_count || seen[function->psc_function_index]) {
             xr_free(seen);
             return scalar_fail(error, error_size,
                                "Xi function partition rows are incomplete or duplicated");
@@ -725,8 +804,16 @@ bool xi_program_semantic_finalize(XiFunc *root, const XiProgramSemanticInput *in
         preserved_callee->inline_policy = XI_INLINE_PRESERVE_CALL;
     if (!bind_aggregate_class(root->module, input->closure, error, error_size))
         return false;
-    if (!bind_function_types(root, root->module, input->closure))
+    if (private_leaf) {
+        for (uint16_t i = 0; i < root->module->nfuncs; i++) {
+            XiFunc *function = root->module->functions[i];
+            if (function && function->psc_function_index != XI_PSC_ROW_NONE &&
+                !bind_function_types(function, root->module, input->closure))
+                return scalar_fail(error, error_size, "Xi PSC type bindings are incomplete");
+        }
+    } else if (!bind_function_types(root, root->module, input->closure)) {
         return scalar_fail(error, error_size, "Xi PSC type bindings are incomplete");
+    }
     if (xr_program_semantic_closure_family(input->closure) ==
             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
         !canonicalize_value_product_function(root, input->closure))
@@ -748,11 +835,9 @@ const XiFunc *xi_program_semantic_function_for_row(const XiModule *module,
     return match;
 }
 
-const XiValue *xi_program_semantic_call_for_row(const XiFunc *function,
-                                                uint32_t program_call) {
+const XiValue *xi_program_semantic_call_for_row(const XiFunc *function, uint32_t program_call) {
     const XiValue *match = NULL;
-    for (uint32_t block_index = 0; function && block_index < function->nblocks;
-         block_index++) {
+    for (uint32_t block_index = 0; function && block_index < function->nblocks; block_index++) {
         const XiBlock *block = function->blocks[block_index];
         for (uint32_t value_index = 0; block && value_index < block->nvalues; value_index++) {
             const XiValue *candidate = block->values[value_index];
@@ -773,8 +858,7 @@ bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure
                                       char *error, size_t error_size) {
     if (!module || !closure || !*closure || module->program_semantic_closure ||
         module->psc_module_index != XI_PSC_ROW_NONE || module->scalar_call_decision ||
-        module->i64_overflow_decisions ||
-        module->scalar_target_profile ||
+        module->i64_overflow_decisions || module->scalar_target_profile ||
         !module_identity_matches_source(module) ||
         !source_module_matches_psc(module, *closure, module_index)) {
         return scalar_fail(error, error_size, "Xi authority ownership transfer is invalid");
@@ -794,18 +878,18 @@ bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure
                    XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     bool graph = xr_program_semantic_closure_family(*closure) ==
                  XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    bool private_leaf = source_private_leaf_family(*closure);
     bool overflow = xr_program_semantic_closure_family(*closure) ==
                     XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     if (!xi_program_semantic_input_is_consistent(&input, error, error_size) ||
         (scalar &&
          (!target_profile || !xr_scalar_call_decision_verify(decision, *closure, target_profile,
                                                              error, error_size))) ||
-        (overflow &&
-         (!target_profile || !xr_i64_overflow_decision_verify(
-                                overflow_decisions, *closure, target_profile, error,
-                                error_size))) ||
-        (!aggregate && !product && !scalar && !graph && !overflow) ||
-        ((aggregate || product || graph) &&
+        (overflow && (!target_profile ||
+                      !xr_i64_overflow_decision_verify(overflow_decisions, *closure, target_profile,
+                                                       error, error_size))) ||
+        (!aggregate && !product && !scalar && !graph && !private_leaf && !overflow) ||
+        ((aggregate || product || graph || private_leaf) &&
          (decision || overflow_decisions || target_profile)))
         return false;
     if (!scalar && !overflow) {
@@ -818,8 +902,7 @@ bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure
         XrI64OverflowDecisionTable *owned =
             (XrI64OverflowDecisionTable *) xr_calloc(1, sizeof(*owned));
         XrI64OverflowDecisionRow *rows =
-            (XrI64OverflowDecisionRow *) xr_calloc(overflow_decisions->row_count,
-                                                    sizeof(*rows));
+            (XrI64OverflowDecisionRow *) xr_calloc(overflow_decisions->row_count, sizeof(*rows));
         XrTargetProfile *retained_profile =
             xr_target_profile_retain((XrTargetProfile *) target_profile);
         if (!owned || !rows || !retained_profile) {
@@ -830,8 +913,7 @@ bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure
                                "Xi overflow decision ownership allocation failed");
         }
         *owned = *overflow_decisions;
-        memcpy(rows, overflow_decisions->rows,
-               overflow_decisions->row_count * sizeof(*rows));
+        memcpy(rows, overflow_decisions->rows, overflow_decisions->row_count * sizeof(*rows));
         owned->rows = rows;
         module->program_semantic_closure = *closure;
         module->psc_module_index = module_index;

@@ -345,8 +345,11 @@ static XaAllocationContractKind alloc_module_contract(XaSymbol *symbol) {
     const char *module = symbol->links.module_name;
     const char *name =
         symbol->links.import_member_name ? symbol->links.import_member_name : symbol->name;
-    return module && name ? xa_builtin_get_module_func_allocation_contract(module, name)
-                          : XA_ALLOCATION_CONTRACT_MISSING;
+    if (!module || !name)
+        return XA_ALLOCATION_CONTRACT_MISSING;
+    return symbol->links.import_member_name
+               ? xa_builtin_get_module_func_abi_allocation_contract(module, name)
+               : xa_builtin_get_module_func_allocation_contract(module, name);
 }
 
 typedef struct XaAllocIntrinsicContract {

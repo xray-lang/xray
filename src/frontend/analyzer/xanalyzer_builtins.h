@@ -244,6 +244,10 @@ XR_FUNC const XaEffectContract *
 xa_builtin_get_module_func_abi_effect_contract(const char *module_name, const char *func_name);
 XR_FUNC XaAllocationContractKind
 xa_builtin_get_module_func_allocation_contract(const char *module_name, const char *func_name);
+// Get the ABI allocation contract of a registered native primitive, including
+// private primitives used only by an Xray stdlib implementation.
+XR_FUNC XaAllocationContractKind
+xa_builtin_get_module_func_abi_allocation_contract(const char *module_name, const char *func_name);
 XR_FUNC XaBuiltinReturnOwnership
 xa_builtin_get_module_func_return_ownership(const char *module_name, const char *func_name);
 

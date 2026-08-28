@@ -92,6 +92,39 @@ TARGET_LEAF_KINDS = {
 }
 
 
+def validate_target_leaf_source_owner(
+    root: Path,
+    module: str,
+    name: str,
+    target_leaf: str,
+    visibility: str,
+    effect: str,
+    allocation: str,
+    owners: dict[str, str],
+) -> None:
+    """Require each target leaf to be one audited private source-owned row."""
+    if not target_leaf:
+        return
+    symbol = f"{module}.{name}"
+    if visibility != "internal":
+        raise SystemExit(f"{symbol} target_leaf must have internal visibility")
+    if effect != "nothrow":
+        raise SystemExit(f"{symbol} target_leaf must declare effect = nothrow")
+    if allocation != "no_heap":
+        raise SystemExit(f"{symbol} target_leaf must declare allocation = no_heap")
+    canonical_source = root / "stdlib" / module / f"{module}.xr"
+    if not canonical_source.is_file():
+        raise SystemExit(
+            f"{symbol} target_leaf requires canonical source module {canonical_source}"
+        )
+    previous = owners.get(target_leaf)
+    if previous is not None:
+        raise SystemExit(
+            f"target_leaf {target_leaf} has duplicate providers: {previous}, {symbol}"
+        )
+    owners[target_leaf] = symbol
+
+
 @dataclasses.dataclass(frozen=True)
 class StdlibEntry:
     module: str
@@ -126,6 +159,31 @@ class StdlibEntry:
     @property
     def is_internal(self) -> bool:
         return self.visibility == "internal"
+
+
+def derive_private_leaf_modules(
+    root: Path,
+    entries: list[StdlibEntry],
+    constants: list[StdlibConstEntry],
+) -> set[str]:
+    """Return canonical source modules whose .def VM rows are all private."""
+    entries_by_module: dict[str, list[StdlibEntry]] = {}
+    constants_by_module: dict[str, list[StdlibConstEntry]] = {}
+    for entry in entries:
+        entries_by_module.setdefault(entry.module, []).append(entry)
+    for constant in constants:
+        constants_by_module.setdefault(constant.module, []).append(constant)
+
+    selected: set[str] = set()
+    for name, module_entries in entries_by_module.items():
+        canonical_source = root / "stdlib" / name / f"{name}.xr"
+        if not canonical_source.is_file():
+            continue
+        if constants_by_module.get(name):
+            continue
+        if module_entries and all(entry.is_internal for entry in module_entries):
+            selected.add(name)
+    return selected
 
 
 @dataclasses.dataclass(frozen=True)
@@ -489,6 +547,7 @@ def parse_def_metadata(
     classes: list[StdlibClassEntry] = []
     class_methods: list[StdlibClassMethodEntry] = []
     class_fields: list[StdlibClassFieldEntry] = []
+    target_leaf_owners: dict[str, str] = {}
     if not defs_dir.exists():
         raise SystemExit(f"missing stdlib defs directory: {defs_dir}")
 
@@ -647,6 +706,7 @@ def parse_def_metadata(
                     f"type {signature_return!r} and requires explicit return_ownership"
                 )
             target_leaf = str(props.get("target_leaf", ""))
+            effect = str(props.get("effect", ""))
             if target_leaf not in TARGET_LEAF_KINDS:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported target_leaf for "
@@ -669,6 +729,16 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} target_leaf "
                     "requires one unconditional direct `(): i64` scalar member"
                 )
+            validate_target_leaf_source_owner(
+                root,
+                current_module,
+                current_name,
+                target_leaf,
+                visibility,
+                effect,
+                allocation,
+                target_leaf_owners,
+            )
 
             entries.append(
                 StdlibEntry(
@@ -690,7 +760,7 @@ def parse_def_metadata(
                     define=str(props.get("define", "")),
                     layer=str(props.get("layer", "")),
                     visibility=visibility,
-                    effect=str(props.get("effect", "")),
+                    effect=effect,
                     allocation=allocation,
                     return_ownership=return_ownership,
                     semantic_intrinsic=semantic_intrinsic,
@@ -1456,23 +1526,39 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     return "\n".join(lines)
 
 
-def emit_vm_bindings(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
-    rows_by_module: dict[str, list[StdlibEntry]] = {}
-    consts_by_module: dict[str, list[StdlibConstEntry]] = {}
-    seen: dict[tuple[str, str, str], tuple[str, str]] = {}
+def unique_vm_binding_entries(entries: list[StdlibEntry]) -> list[StdlibEntry]:
+    seen: dict[tuple[str, str], tuple[str, str, str]] = {}
+    unique: list[StdlibEntry] = []
     for e in entries:
-        key = (e.module, e.name, e.vm)
+        key = (e.module, e.name)
         existing = seen.get(key)
         if existing is not None:
-            existing_binding, existing_ifdef = existing
-            if existing_binding != e.vm_binding or existing_ifdef != e.vm_ifdef:
+            existing_vm, existing_binding, existing_ifdef = existing
+            if (
+                existing_vm != e.vm
+                or existing_binding != e.vm_binding
+                or existing_ifdef != e.vm_ifdef
+            ):
                 raise SystemExit(
                     f"{e.symbol}: duplicate VM binding rows disagree: "
-                    f"{existing_binding}/{existing_ifdef} vs {e.vm_binding}/{e.vm_ifdef}"
+                    f"{existing_vm}/{existing_binding}/{existing_ifdef} vs "
+                    f"{e.vm}/{e.vm_binding}/{e.vm_ifdef}"
                 )
             continue
-        seen[key] = (e.vm_binding, e.vm_ifdef)
+        seen[key] = (e.vm, e.vm_binding, e.vm_ifdef)
         c_ident(e.vm, e.symbol)
+        unique.append(e)
+    return unique
+
+
+def emit_vm_bindings(
+    entries: list[StdlibEntry],
+    constants: list[StdlibConstEntry],
+    private_leaf_modules: set[str],
+) -> str:
+    rows_by_module: dict[str, list[StdlibEntry]] = {}
+    consts_by_module: dict[str, list[StdlibConstEntry]] = {}
+    for e in unique_vm_binding_entries(entries):
         rows_by_module.setdefault(e.module, []).append(e)
     for c in constants:
         if c.vm_value:
@@ -1493,9 +1579,19 @@ def emit_vm_bindings(entries: list[StdlibEntry], constants: list[StdlibConstEntr
     for module in sorted(set(rows_by_module) | set(consts_by_module)):
         module_ident = c_module_ident(module)
         macro = f"XR_STDLIB_VM_BIND_MODULE_{module_ident.upper()}"
+        is_private_leaf_module = module in private_leaf_modules
         func = f"xr_stdlib_vm_bind_{module_ident}_generated"
         lines.append(f"#ifdef {macro}")
-        lines.append(f"static void {func}(XrVMRuntime *isolate, XrModule *module) {{")
+        if is_private_leaf_module:
+            lines.append(f"XR_FUNC bool {func}(XrVMRuntime *isolate, XrModule *module) {{")
+            lines.append(
+                "    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || "
+                "module->export_count != 0)"
+            )
+            lines.append("        return false;")
+            lines.append("    size_t expected_count = 0;")
+        else:
+            lines.append(f"static void {func}(XrVMRuntime *isolate, XrModule *module) {{")
         for e in rows_by_module.get(module, []):
             export_macro = {
                 "normal": "XRS_EXPORT",
@@ -1508,12 +1604,16 @@ def emit_vm_bindings(entries: list[StdlibEntry], constants: list[StdlibConstEntr
                 f"    {export_macro}(module, isolate, {c_string(e.name)}, "
                 f"{c_ident(e.vm, e.symbol)});"
             )
+            if is_private_leaf_module:
+                lines.append("    expected_count++;")
             if e.vm_ifdef:
                 lines.append(f"#endif  /* {e.vm_ifdef} */")
         for c in consts_by_module.get(module, []):
             lines.append(
                 f"    xr_module_add_export(isolate, module, {c_string(c.name)}, {c.vm_value});"
             )
+        if is_private_leaf_module:
+            lines.append("    return module->export_count == expected_count;")
         lines.append("}")
         lines.append(f"#endif  /* {macro} */")
         lines.append("")
@@ -2060,6 +2160,7 @@ def output_paths(root: Path) -> dict[Path, str]:
         class_methods,
         class_fields,
     ) = parse_def_metadata(root)
+    private_leaf_modules = derive_private_leaf_modules(root, entries, constants)
     return {
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
             entries, constants, enums
@@ -2068,7 +2169,7 @@ def output_paths(root: Path) -> dict[Path, str]:
             entries, constants
         ),
         root / "src" / "stdlib" / "xstdlib_vm_bindings_generated.inc.c": emit_vm_bindings(
-            entries, constants
+            entries, constants, private_leaf_modules
         ),
         root / "src" / "stdlib" / "xstdlib_class_bindings_generated.inc.c": emit_class_bindings(
             native_classes, classes, class_methods, class_fields

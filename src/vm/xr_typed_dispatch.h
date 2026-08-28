@@ -30,7 +30,7 @@ typedef struct XrTypedLeafAggregateI64x2 {
 } XrTypedLeafAggregateI64x2;
 
 /* Exact pointer-free tuple6 carrier.  Padding is part of the x64 ABI layout
- * proved by schema-54 TargetPlan rows; callers never expose plan slots. */
+ * proved by schema-55 TargetPlan rows; callers never expose plan slots. */
 typedef struct XrTypedLeafValueProductTuple6 {
     int64_t field0;
     int64_t field1;
@@ -177,13 +177,13 @@ typedef struct XrTypedCoroutineI64Request {
 
 /* Proves that one provider's generated binding exactly matches the canonical
  * opcode contract. It grants no authority to verify or execute a plan. */
-XR_FUNC bool xr_typed_dispatch_provider_contract_is_exact(
-    XrTypedDispatchProvider provider, uint16_t opcode,
-    const XrTargetInstructionContract *contract);
-XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
-    const XrTypedDispatchI64Request *request);
-XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_values(
-    const XrTypedDispatchValueRequest *request);
+XR_FUNC bool
+xr_typed_dispatch_provider_contract_is_exact(XrTypedDispatchProvider provider, uint16_t opcode,
+                                             const XrTargetInstructionContract *contract);
+XR_FUNC XrTypedDispatchStatus
+xr_typed_dispatch_execute_i64(const XrTypedDispatchI64Request *request);
+XR_FUNC XrTypedDispatchStatus
+xr_typed_dispatch_execute_values(const XrTypedDispatchValueRequest *request);
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_aggregate_i64x2(
     const XrTypedDispatchLeafAggregateI64x2Request *request);
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_value_product_tuple6(
@@ -192,14 +192,11 @@ XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_value_product_tuple
  * success transfers the sole coroutine owner into it. Free is the only API
  * that releases the owned frame/cache/plan and clears the slot. */
 XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_create(
-    const XrTypedCoroutineI64Request *request,
-    XrTypedCoroutineI64 **coroutine);
-XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_resume(
-    XrTypedCoroutineI64 *coroutine, int64_t *result,
-    uint32_t *suspended_state);
-XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_cancel(
-    XrTypedCoroutineI64 *coroutine);
-XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_free(
-    XrTypedCoroutineI64 **coroutine);
+    const XrTypedCoroutineI64Request *request, XrTypedCoroutineI64 **coroutine);
+XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_resume(XrTypedCoroutineI64 *coroutine,
+                                                            int64_t *result,
+                                                            uint32_t *suspended_state);
+XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_cancel(XrTypedCoroutineI64 *coroutine);
+XR_FUNC XrTypedDispatchStatus xr_typed_coroutine_i64_free(XrTypedCoroutineI64 **coroutine);
 
 #endif  // XR_TYPED_DISPATCH_H

@@ -20,6 +20,7 @@ from stdlib_manifest import (
     loadable_modules,
     load_manifest,
     load_toml,
+    private_leaf_binder_modules,
     registry_modules,
     source_modules,
 )
@@ -50,6 +51,7 @@ def check_manifest(root: Path) -> list[str]:
     if len(names) != len(set(names)):
         errors.append(f"{MANIFEST_PATH}: module names must be unique")
     source_registry = registry_modules(root)
+    private_leaf_binders = private_leaf_binder_modules(root)
     canonical_sources = source_modules(root)
     loadable = loadable_modules(root)
     if set(names) != loadable:
@@ -86,13 +88,34 @@ def check_manifest(root: Path) -> list[str]:
             if value and not (root / str(value)).is_file():
                 errors.append(f"module {name}: {field} does not exist: {value}")
         expected_factory = source_registry.get(name)
+        expected_binder = private_leaf_binders.get(name)
         factory_source = module.get("factory_source")
         if expected_factory and not factory_source:
             errors.append(f"module {name}: native factory requires factory_source")
-        if name in canonical_sources and not expected_factory:
-            if factory_source:
-                errors.append(f"module {name}: source-only module must not declare factory_source")
-            for field in ("public_native", "manual_public_native", "private_native_sources"):
+        if not expected_factory and factory_source:
+            errors.append(
+                f"module {name}: module without native factory must not declare factory_source"
+            )
+        if expected_binder and name not in canonical_sources:
+            errors.append(f"module {name}: private-leaf binder requires canonical Xray source")
+        if expected_binder and not module.get("private_native_sources"):
+            errors.append(f"module {name}: private-leaf binder requires private_native_sources")
+        if expected_binder and policy != "xray_semantic":
+            errors.append(f"module {name}: private-leaf binder requires xray_semantic policy")
+        if (
+            expected_binder
+            and not expected_factory
+            and (module.get("public_native") or module.get("manual_public_native"))
+        ):
+            errors.append(
+                f"module {name}: generic private-leaf binder cannot publish native API"
+            )
+        if name in canonical_sources and not expected_factory and not expected_binder:
+            for field in (
+                "public_native",
+                "manual_public_native",
+                "private_native_sources",
+            ):
                 if module.get(field):
                     errors.append(f"module {name}: source-only module must not declare {field}")
         declared_factory = str(

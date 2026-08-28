@@ -351,7 +351,7 @@ bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const char *me
     if (!receiver || !method_name || receiver->kind != XR_KIND_INT || receiver->is_nullable)
         return false;
     if (receiver->scalar_rep == XR_NATIVE_I64)
-            return false;  // i64 semantics are exact
+        return false;  // i64 semantics are exact
 
     static const char *const blocked[] = {
         "checkedAdd",    "checkedSub",   "checkedMul",   "saturatingAdd", "saturatingSub",
@@ -984,6 +984,12 @@ XaAllocationContractKind xa_builtin_get_module_func_allocation_contract(const ch
     return member ? member->allocation_contract : XA_ALLOCATION_CONTRACT_MISSING;
 }
 
+XaAllocationContractKind xa_builtin_get_module_func_abi_allocation_contract(const char *module_name,
+                                                                            const char *func_name) {
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, false);
+    return member ? member->allocation_contract : XA_ALLOCATION_CONTRACT_MISSING;
+}
+
 XaBuiltinReturnOwnership xa_builtin_get_module_func_return_ownership(const char *module_name,
                                                                      const char *func_name) {
     const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, true);
@@ -1445,8 +1451,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     } else if (base_len == 9 && strncmp(s, "Utf8Error", 9) == 0) {
         type = xr_type_new_enum(X, "Utf8Error");
     } else if (base_len == sizeof(XR_NUMBER_PARSE_ERROR_NAME) - 1 &&
-               strncmp(s, XR_NUMBER_PARSE_ERROR_NAME,
-                       sizeof(XR_NUMBER_PARSE_ERROR_NAME) - 1) == 0) {
+               strncmp(s, XR_NUMBER_PARSE_ERROR_NAME, sizeof(XR_NUMBER_PARSE_ERROR_NAME) - 1) ==
+                   0) {
         type = xr_type_new_enum(X, XR_NUMBER_PARSE_ERROR_NAME);
     } else if (base_len == 16 && strncmp(s, "StringSliceError", 16) == 0) {
         type = xr_type_new_enum(X, "StringSliceError");

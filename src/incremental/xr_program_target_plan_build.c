@@ -48,9 +48,8 @@ bool xr_program_target_plan_cancellation_token_is_requested(
     return token && atomic_load_explicit(&token->requested, memory_order_acquire);
 }
 
-static bool cancellation_requested_at(
-    XrProgramTargetPlanCancellationToken *token,
-    XrProgramTargetPlanCancellationCheckpoint checkpoint) {
+static bool cancellation_requested_at(XrProgramTargetPlanCancellationToken *token,
+                                      XrProgramTargetPlanCancellationCheckpoint checkpoint) {
     if (!token)
         return false;
     if (atomic_load_explicit(&token->scheduled_checkpoint, memory_order_acquire) ==
@@ -67,6 +66,14 @@ static void set_error(char *error, size_t error_size, const char *format, ...) {
     (void) vsnprintf(error, error_size, format, args);
     va_end(args);
     error[error_size - 1u] = '\0';
+}
+
+static bool program_graph_family_is_supported(const XrSemanticPlan *semantic_plan) {
+    const XrSemanticProgramProvenance *program = xr_semantic_plan_program_provenance(semantic_plan);
+    return program &&
+           (program->program_family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+            program->program_family ==
+                XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL);
 }
 
 static bool rejected_load_status(XrCacheLoadStatus status) {
@@ -96,19 +103,17 @@ static bool program_authority_is_verified(const XrProgramTargetPlanBuildRequest 
                request->semantic_dependency_count, error, sizeof(error));
 }
 
-static bool collect_program_graph_semantics(
-    const XrProgramTargetPlanBuildRequest *request,
-    const XrSemanticPlan **semantic_modules, uint32_t *semantic_module_count,
-    char *error, size_t error_size) {
+static bool collect_program_graph_semantics(const XrProgramTargetPlanBuildRequest *request,
+                                            const XrSemanticPlan **semantic_modules,
+                                            uint32_t *semantic_module_count, char *error,
+                                            size_t error_size) {
     if (semantic_module_count)
         *semantic_module_count = 0u;
-    if (!request || !request->semantic_plan || !semantic_modules ||
-        !semantic_module_count)
+    if (!request || !request->semantic_plan || !semantic_modules || !semantic_module_count)
         return false;
     const XrSemanticProgramProvenance *entry =
         xr_semantic_plan_program_provenance(request->semantic_plan);
-    if (!entry || entry->program_family !=
-                      XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+    if (!program_graph_family_is_supported(request->semantic_plan))
         return true;
     if (entry->module_count != 2u || request->semantic_dependency_count != 1u ||
         !request->semantic_dependencies) {
@@ -122,19 +127,16 @@ static bool collect_program_graph_semantics(
     };
     for (uint32_t candidate = 0; candidate < 2u; candidate++) {
         const XrSemanticProgramProvenance *program =
-            candidates[candidate]
-                ? xr_semantic_plan_program_provenance(candidates[candidate])
-                : NULL;
+            candidates[candidate] ? xr_semantic_plan_program_provenance(candidates[candidate])
+                                  : NULL;
         if (!program || program->program_module_row >= 2u ||
             semantic_modules[program->program_module_row]) {
-            set_error(error, error_size,
-                      "program TargetPlan graph authority is not canonical");
+            set_error(error, error_size, "program TargetPlan graph authority is not canonical");
             return false;
         }
         semantic_modules[program->program_module_row] = candidates[candidate];
     }
-    if (!xr_target_semantic_program_module_set_verify(
-            semantic_modules, 2u, error, error_size))
+    if (!xr_target_semantic_program_module_set_verify(semantic_modules, 2u, error, error_size))
         return false;
     *semantic_module_count = 2u;
     return true;
@@ -166,18 +168,15 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
 
     const XrSemanticPlan *program_semantic_modules[XR_TARGET_MAX_PROGRAM_MODULES] = {0};
     uint32_t program_semantic_module_count = 0u;
-    if (!collect_program_graph_semantics(
-            request, program_semantic_modules, &program_semantic_module_count,
-            error, error_size))
+    if (!collect_program_graph_semantics(request, program_semantic_modules,
+                                         &program_semantic_module_count, error, error_size))
         return false;
 
     XrCacheXtpArtifactVerifyContext requirements = {
         .semantic_plan = request->semantic_plan,
         .semantic_dependencies = request->semantic_dependencies,
         .semantic_dependency_count = request->semantic_dependency_count,
-        .program_semantic_modules = program_semantic_module_count
-                                        ? program_semantic_modules
-                                        : NULL,
+        .program_semantic_modules = program_semantic_module_count ? program_semantic_modules : NULL,
         .program_semantic_module_count = program_semantic_module_count,
         .target_profile = request->profile,
         .optimization_budget = request->optimization_budget,
@@ -215,23 +214,21 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
     }
 
     if (!plan) {
-        bool built = program_semantic_module_count
-                         ? xr_target_plan_build_program_graph(
-                               program_semantic_modules,
-                               program_semantic_module_count, request->profile,
-                               &plan, error, error_size)
-                         : xr_target_plan_build_module_set(
-                               request->semantic_plan,
-                               request->semantic_dependencies,
-                               request->semantic_dependency_count,
-                               request->profile, &plan, error, error_size);
+        bool built =
+            program_semantic_module_count
+                ? xr_target_plan_build_program_graph(program_semantic_modules,
+                                                     program_semantic_module_count,
+                                                     request->profile, &plan, error, error_size)
+                : xr_target_plan_build_module_set(request->semantic_plan,
+                                                  request->semantic_dependencies,
+                                                  request->semantic_dependency_count,
+                                                  request->profile, &plan, error, error_size);
         if (!built)
             return false;
         result->built = true;
     }
 
-    if (cancellation_requested_at(request->cancellation,
-                                  XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_BUILD))
+    if (cancellation_requested_at(request->cancellation, XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_BUILD))
         return cancel_build(result, plan, error, error_size);
 
     if (request->cache_store && !result->cache_hit) {

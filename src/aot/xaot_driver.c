@@ -1728,26 +1728,20 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
     if (!bundle || !bundle->modules || !bundle->nmodules ||
         bundle->entry_module >= bundle->nmodules || !stats) {
         if (bundle)
-            bundle->error_msg =
-                "XR_TARGET_1000: product TargetPlan build input is incomplete";
+            bundle->error_msg = "XR_TARGET_1000: product TargetPlan build input is incomplete";
         return false;
     }
     if (!profile || !xr_target_profile_verify(profile, NULL, 0)) {
-        bundle->error_msg =
-            "XR_TARGET_1000: product TargetPlan requires an exact target profile";
+        bundle->error_msg = "XR_TARGET_1000: product TargetPlan requires an exact target profile";
         return false;
     }
     XiModule *module = bundle->modules[bundle->entry_module];
-    const XrSemanticPlan *semantic = module && module->init
-                                         ? module->init->semantic_plan
-                                         : NULL;
+    const XrSemanticPlan *semantic = module && module->init ? module->init->semantic_plan : NULL;
     const XrSemanticPlan **dependencies = NULL;
     uint32_t dependency_count = 0;
     if (!semantic ||
-        !xaot_resolve_semantic_dependencies(bundle, semantic, &dependencies,
-                                            &dependency_count)) {
-        bundle->error_msg =
-            "XR_TARGET_1000: product semantic dependency authority is incomplete";
+        !xaot_resolve_semantic_dependencies(bundle, semantic, &dependencies, &dependency_count)) {
+        bundle->error_msg = "XR_TARGET_1000: product semantic dependency authority is incomplete";
         return false;
     }
 
@@ -1763,10 +1757,8 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
     };
     XrProgramTargetPlanBuildResult build = {0};
     char error[512] = {0};
-    bool planned = xr_program_target_plan_build(&request, &build, error,
-                                                sizeof(error));
-    if (build.cache_enabled &&
-        (build.cache_load_attempted || build.rebuild_requested)) {
+    bool planned = xr_program_target_plan_build(&request, &build, error, sizeof(error));
+    if (build.cache_enabled && (build.cache_load_attempted || build.rebuild_requested)) {
         stats->hits = build.cache_hit ? 1u : 0u;
         stats->misses = build.cache_hit ? 0u : 1u;
         stats->rejected = build.cache_candidate_rejected ? 1u : 0u;
@@ -1798,8 +1790,7 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
         else
             fprintf(stderr, "[target-plan-cache] miss %s status=%d\n", name,
                     (int) build.load_status);
-        if (build.cache_publish_attempted &&
-            build.publish_status == XR_CACHE_PUBLISH_IO_ERROR)
+        if (build.cache_publish_attempted && build.publish_status == XR_CACHE_PUBLISH_IO_ERROR)
             fprintf(stderr, "[target-plan-cache] publish unavailable %s\n", name);
     }
     if (!build.plan || !xaot_bundle_set_program_target_plan(bundle, build.plan)) {
@@ -1809,10 +1800,10 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
     }
     const XrTargetPlan *bound = xaot_bundle_program_target_plan(bundle);
     if (installed &&
-        (!bound || !xr_target_profile_require_exact(profile, xr_target_plan_profile(bound),
-                                                    error, sizeof(error)))) {
-        fprintf(stderr, "Error: program TargetPlan profile mismatch for '%s': %s\n",
-                name, error[0] ? error : "missing exact profile authority");
+        (!bound || !xr_target_profile_require_exact(profile, xr_target_plan_profile(bound), error,
+                                                    sizeof(error)))) {
+        fprintf(stderr, "Error: program TargetPlan profile mismatch for '%s': %s\n", name,
+                error[0] ? error : "missing exact profile authority");
         installed = false;
     }
     xr_program_target_plan_build_result_release(&build);
@@ -1824,8 +1815,8 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
  * plan built by this stage is attributable in diagnostics. */
 #define XAOT_DIRECT_CALL_REFINEMENT_PASS_ID UINT32_C(27902)
 
-static bool xaot_verify_program_direct_call_authority(const XrTargetPlan *target_plan,
-                                                      char *error, size_t error_size) {
+static bool xaot_verify_program_direct_call_authority(const XrTargetPlan *target_plan, char *error,
+                                                      size_t error_size) {
     XrAotRefinementPlan *refinement = NULL;
     XrAotRefinementDiagnostic diagnostic = {0};
     bool verified = false;
@@ -1868,23 +1859,16 @@ static bool xaot_verify_program_direct_call_authority(const XrTargetPlan *target
 static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
     if (!bundle || !bundle->modules || bundle->nmodules == 0)
         return false;
-    const XrTargetPlan *program_target =
-        xaot_bundle_program_target_plan(bundle);
+    const XrTargetPlan *program_target = xaot_bundle_program_target_plan(bundle);
     uint32_t program_graph_count = 0;
     const XrTargetProgramGraphRecord *program_graphs =
-        program_target
-            ? xr_target_plan_program_graphs(program_target,
-                                            &program_graph_count)
-            : NULL;
+        program_target ? xr_target_plan_program_graphs(program_target, &program_graph_count) : NULL;
     if (program_graph_count != 0u) {
         char error[512] = {0};
         if (!program_graphs || program_graph_count != 1u ||
-            !xaot_verify_program_direct_call_authority(
-                program_target, error, sizeof(error))) {
-            fprintf(stderr,
-                    "Error: program direct-call validation failed: %s\n",
-                    error[0] ? error
-                             : "XR_TARGET_1001: global call authority is not exact");
+            !xaot_verify_program_direct_call_authority(program_target, error, sizeof(error))) {
+            fprintf(stderr, "Error: program direct-call validation failed: %s\n",
+                    error[0] ? error : "XR_TARGET_1001: global call authority is not exact");
             return false;
         }
         return true;
@@ -1967,9 +1951,8 @@ static bool xaot_install_module_representation_refinements(XaotBundle *bundle,
         XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
         if (!xr_aot_representation_materialization_verify(&view, module->init, target_plan, policy,
                                                           &diag)) {
-            const char *code = diag.issue == XR_AOT_REFINEMENT_REPRESENTATION
-                                   ? "XR_TARGET_1006: "
-                                   : "";
+            const char *code =
+                diag.issue == XR_AOT_REFINEMENT_REPRESENTATION ? "XR_TARGET_1006: " : "";
             fprintf(stderr,
                     "Error: %smodule representation materialization failed for '%s': "
                     "%s record=%u value=%u operation=%u\n",
@@ -2065,7 +2048,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (!options->entry_module_authority.physical_root ||
         !options->entry_module_authority.physical_root[0] ||
         !xr_module_identity_authority_valid(&options->entry_module_authority)) {
-        fprintf(stderr, "Error: exact typed entry module identity authority is missing or invalid\n");
+        fprintf(stderr,
+                "Error: exact typed entry module identity authority is missing or invalid\n");
         return 1;
     }
     if (!xaot_target_profile_matches_options(options)) {
@@ -2151,8 +2135,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
 
     char *build_err = NULL;
-    int graph_rc = xr_module_graph_build(
-        graph, input_path, &options->entry_module_authority, &build_err);
+    int graph_rc =
+        xr_module_graph_build(graph, input_path, &options->entry_module_authority, &build_err);
     if (graph_rc != 0) {
         fprintf(stderr, "Error: module graph build failed: %s\n", build_err ? build_err : "?");
         xr_free(build_err);
@@ -2380,13 +2364,19 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     {
         char closure_error[512] = {0};
         XaProgramSemanticClosurePublishStatus closure_status =
-            xa_program_semantic_closure_publish_scalar_module_graph(
+            xa_program_semantic_closure_publish_source_module_scalar_private_leaf_call(
                 shared_analyzer, graph, &source_program_closure, closure_error,
                 sizeof(closure_error));
+        if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED) {
+            memset(closure_error, 0, sizeof(closure_error));
+            closure_status = xa_program_semantic_closure_publish_scalar_module_graph(
+                shared_analyzer, graph, &source_program_closure, closure_error,
+                sizeof(closure_error));
+        }
         if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_INVALID ||
             closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE) {
-            fprintf(stderr, "Error: product program closure publication failed: %s\n",
-                    closure_error[0] ? closure_error : "incomplete two-module scalar authority");
+            fprintf(stderr, "Error: source program closure publication failed: %s\n",
+                    closure_error[0] ? closure_error : "incomplete source program authority");
             goto fail_free_analyzer;
         }
     }
@@ -2556,8 +2546,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     for (int ti = 0; ti < nmodules; ti++) {
         xi_resolve_imports(ir_funcs[ti], graph, paths[ti], modules, nmodules);
     }
-    if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules,
-                          (uint32_t) entry_index)) {
+    if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules, (uint32_t) entry_index)) {
         fprintf(stderr, "Error: failed to initialize AOT bundle plan\n");
         goto fail_free_ir;
     }
@@ -2573,16 +2562,16 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (source_program_closure) {
         char graph_semantic_error[512] = {0};
         if (!xi_program_semantic_verify_module_set(
-                modules, (uint32_t) nmodules, (uint32_t) entry_index, NULL,
-                graph_semantic_error, sizeof(graph_semantic_error))) {
+                modules, (uint32_t) nmodules, (uint32_t) entry_index, NULL, graph_semantic_error,
+                sizeof(graph_semantic_error))) {
             fprintf(stderr, "Error: Xi graph PSC verification failed: %s\n",
                     graph_semantic_error[0] ? graph_semantic_error
                                             : "incomplete resolved module-set authority");
             goto fail_free_ir;
         }
         if (!xi_program_semantic_plan_verify_module_set(
-                modules, (uint32_t) nmodules, (uint32_t) entry_index,
-                graph_semantic_error, sizeof(graph_semantic_error))) {
+                modules, (uint32_t) nmodules, (uint32_t) entry_index, graph_semantic_error,
+                sizeof(graph_semantic_error))) {
             fprintf(stderr, "Error: SemanticPlan graph PSC verification failed: %s\n",
                     graph_semantic_error[0] ? graph_semantic_error
                                             : "incomplete resolved module-set authority");
@@ -2590,49 +2579,42 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         }
     }
     if (!xaot_build_program_target_plan(
-            &aot_bundle, options->target_profile,
-            xr_compiler_session_cache_store(session), evidence_cache_rebuild,
-            evidence_cache_verbose, options->program_target_plan_cancellation,
-            &result->target_plan_cache)) {
+            &aot_bundle, options->target_profile, xr_compiler_session_cache_store(session),
+            evidence_cache_rebuild, evidence_cache_verbose,
+            options->program_target_plan_cancellation, &result->target_plan_cache)) {
         fprintf(stderr, "Error: product Program TargetPlan build failed: %s\n",
                 aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;
     }
     if (source_program_closure) {
         char graph_target_error[512] = {0};
-        if (!xaot_verify_program_direct_call_authority(
-                xaot_bundle_program_target_plan(&aot_bundle), graph_target_error,
-                sizeof(graph_target_error))) {
+        if (!xaot_verify_program_direct_call_authority(xaot_bundle_program_target_plan(&aot_bundle),
+                                                       graph_target_error,
+                                                       sizeof(graph_target_error))) {
             fprintf(stderr, "Error: program AOT direct-call authority failed: %s\n",
-                    graph_target_error[0]
-                        ? graph_target_error
-                        : "unverified source program AOT binding authority");
+                    graph_target_error[0] ? graph_target_error
+                                          : "unverified source program AOT binding authority");
             goto fail_free_ir;
         }
     }
-    if (!xaot_publish_module_summaries(session, graph, modules, nmodules,
-                                       source_program_closure, options,
-                                       evidence_cache_verbose, &result->module_summary_cache))
+    if (!xaot_publish_module_summaries(session, graph, modules, nmodules, source_program_closure,
+                                       options, evidence_cache_verbose,
+                                       &result->module_summary_cache))
         goto fail_free_ir;
     xr_program_semantic_closure_free(source_program_closure);
     source_program_closure = NULL;
     /* --- AOT target prepare: build sidecar rep/ABI plan before C emission --- */
     {
         uint32_t program_graph_count = 0;
-        const XrTargetProgramGraphRecord *program_graphs =
-            xr_target_plan_program_graphs(
-                xaot_bundle_program_target_plan(&aot_bundle),
-                &program_graph_count);
+        const XrTargetProgramGraphRecord *program_graphs = xr_target_plan_program_graphs(
+            xaot_bundle_program_target_plan(&aot_bundle), &program_graph_count);
         program_graph_product = program_graph_count != 0u;
-        if (program_graph_product &&
-            (!program_graphs || program_graph_count != 1u)) {
-            fprintf(stderr,
-                    "Error: XR_TARGET_1001: program graph authority is not exact\n");
+        if (program_graph_product && (!program_graphs || program_graph_count != 1u)) {
+            fprintf(stderr, "Error: XR_TARGET_1001: program graph authority is not exact\n");
             goto fail_free_ir;
         }
     }
-    if (!program_graph_product &&
-        !xaot_bundle_require_representation_refinements(&aot_bundle)) {
+    if (!program_graph_product && !xaot_bundle_require_representation_refinements(&aot_bundle)) {
         fprintf(stderr, "Error: failed to require immutable representation authorities\n");
         goto fail_free_ir;
     }
@@ -2658,33 +2640,28 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                 aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;
     }
-    const XrTargetPlan *program_target_plan =
-        xaot_bundle_program_target_plan(&aot_bundle);
+    const XrTargetPlan *program_target_plan = xaot_bundle_program_target_plan(&aot_bundle);
     if (program_graph_product) {
         char program_target_error[512] = {0};
         if (!program_target_plan || aot_bundle.nmodules < 2u ||
             !xr_target_plan_verify(program_target_plan, program_target_error,
                                    sizeof(program_target_error)) ||
-            !xr_target_profile_require_exact(
-                options->target_profile,
-                xr_target_plan_profile(program_target_plan),
-                program_target_error, sizeof(program_target_error)) ||
-            !xaot_verify_program_direct_call_authority(
-                program_target_plan, program_target_error,
-                sizeof(program_target_error))) {
+            !xr_target_profile_require_exact(options->target_profile,
+                                             xr_target_plan_profile(program_target_plan),
+                                             program_target_error, sizeof(program_target_error)) ||
+            !xaot_verify_program_direct_call_authority(program_target_plan, program_target_error,
+                                                       sizeof(program_target_error))) {
             aot_bundle.error_msg =
                 "XR_TARGET_1000: installed program TargetPlan authority is not exact";
             fprintf(stderr, "Error: product Program TargetPlan verification failed: %s\n",
-                    program_target_error[0] ? program_target_error
-                                            : aot_bundle.error_msg);
+                    program_target_error[0] ? program_target_error : aot_bundle.error_msg);
             goto fail_free_ir;
         }
     }
     if (!xaot_validate_module_direct_calls(&aot_bundle))
         goto fail_free_ir;
     if (!program_graph_product &&
-        !xaot_install_module_representation_refinements(&aot_bundle,
-                                                        &cfg.rep_policy))
+        !xaot_install_module_representation_refinements(&aot_bundle, &cfg.rep_policy))
         goto fail_free_ir;
     /* Built before prepare, not after. The plans depend only on the retained
      * TargetPlans and the target profile -- neither of which prepare produces
@@ -2692,8 +2669,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
      * lets the passes that follow read one ABI model instead of rebuilding a
      * second per-function one. */
     if (!program_graph_product) {
-        if (!xaot_build_module_emission_plans(
-                &aot_bundle, options->target_profile, &emission_plans))
+        if (!xaot_build_module_emission_plans(&aot_bundle, options->target_profile,
+                                              &emission_plans))
             goto fail_free_ir;
         for (uint32_t mi = 0; mi < aot_bundle.nmodules; mi++)
             aot_bundle.module_emission_plans[mi] = emission_plans[mi];
@@ -2779,8 +2756,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                nmodules, entry_index);
     if (!program_graph_product &&
         !xi_cgen_ctx_set_value_emission_plans(
-            cg_ctx, (const XrCEmissionPlan *const *) emission_plans,
-            (uint32_t) nmodules)) {
+            cg_ctx, (const XrCEmissionPlan *const *) emission_plans, (uint32_t) nmodules)) {
         fprintf(stderr, "Error: failed to install module C emission authorities\n");
         xi_cgen_ctx_free(cg_ctx);
         goto fail_free_ir;

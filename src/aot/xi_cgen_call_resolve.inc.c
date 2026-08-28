@@ -17,13 +17,16 @@ static XaotDirectI64TargetStatus cg_direct_i64_call_view(XiCgenCtx *ctx, const X
         const XrCProgramDirectI64EmissionBinding *binding = &ctx->program_direct_i64;
         if (!ctx->program_direct_i64_bound)
             goto invalid_program_binding;
-        if (current == binding->callee.xi_function)
+        if (current == binding->callee.xi_function) {
+            if (call && call->op == XI_CALL && call->nargs == 1u && call->args &&
+                call->args[0] == binding->xi_native_leaf_callee_operand)
+                return XAOT_DIRECT_I64_TARGET_UNCOVERED;
             goto invalid_program_binding;
+        }
         if (current != binding->caller.xi_function)
             goto invalid_program_binding;
         const XrTargetPlan *target = xaot_bundle_program_target_plan(ctx->aot_bundle);
-        if (!out || !target ||
-            !xr_c_program_direct_i64_call_is_exact(binding, current, call))
+        if (!out || !target || !xr_c_program_direct_i64_call_is_exact(binding, current, call))
             goto invalid_program_binding;
         out->target_plan = target;
         out->caller_function = binding->caller_target_row;
@@ -55,9 +58,10 @@ invalid_program_binding:
     return XAOT_DIRECT_I64_TARGET_INVALID;
 }
 
-static XaotLeafAggregateTargetStatus cg_leaf_aggregate_call_view(
-    XiCgenCtx *ctx, const XiFunc *current, const XiValue *call,
-    XaotLeafAggregateTargetView *out) {
+static XaotLeafAggregateTargetStatus cg_leaf_aggregate_call_view(XiCgenCtx *ctx,
+                                                                 const XiFunc *current,
+                                                                 const XiValue *call,
+                                                                 XaotLeafAggregateTargetView *out) {
     char error[256] = {0};
     XaotLeafAggregateTargetStatus status = xaot_boundary_leaf_aggregate_call_view(
         cg_ctx_aot_bundle(ctx), current, call, out, error, sizeof(error));
@@ -127,9 +131,9 @@ static CgStaticFunctionCall cg_resolve_module_export_static_call(XiCgenCtx *ctx,
                                                                  const char *member_name) {
     if (!ctx || !module_ref || !member_name)
         return cg_no_static_function_call();
-    if (module_ref->resolved_mod_index >= 0 && module_ref->resolved_mod_index < ctx->all_nmodules) {
-        CgStaticFunctionCall call = cg_module_export_static_call(
-            ctx->all_modules[module_ref->resolved_mod_index], member_name);
+    const XiModule *resolved_module = cg_import_ref_resolved_module(ctx, module_ref);
+    if (resolved_module) {
+        CgStaticFunctionCall call = cg_module_export_static_call(resolved_module, member_name);
         if (call.func || call.is_class_constructor)
             return call;
     }
@@ -271,9 +275,8 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
     /* A covered caller may resolve a call only with the complete call row.
      * A bare callee value is insufficient authority, so the legacy shape
      * resolver is deliberately unreachable for this execution family. */
-    XaotLeafAggregateTargetStatus leaf_aggregate =
-        xaot_boundary_leaf_aggregate_function_status(cg_ctx_aot_bundle(ctx), current, NULL, NULL,
-                                                     NULL, 0);
+    XaotLeafAggregateTargetStatus leaf_aggregate = xaot_boundary_leaf_aggregate_function_status(
+        cg_ctx_aot_bundle(ctx), current, NULL, NULL, NULL, 0);
     if (leaf_aggregate != XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
         return cg_no_static_function_call();
     if (cg_program_direct_i64_function_binding(ctx, current))

@@ -15,9 +15,13 @@
 #ifndef XSTDLIB_EMBEDDED_H
 #define XSTDLIB_EMBEDDED_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include "../base/xdefs.h"
+
+struct XrModule;
+struct XrVMRuntime;
 
 // Get pre-compiled bytecode for a stdlib module.
 // Returns NULL if module not found or no bytecode available.
@@ -26,5 +30,11 @@ XR_FUNC const uint8_t *xr_get_embedded_stdlib_bytecode(const char *module_name, 
 // Get source code for a stdlib module (fallback).
 // Returns NULL if module not found.
 XR_FUNC const char *xr_get_embedded_stdlib(const char *module_name);
+
+// Install generated private leaves for one embedded source module.
+// Source-only modules without private leaves succeed without adding exports.
+XR_FUNC bool xr_stdlib_embedded_private_leaves_install(struct XrVMRuntime *isolate,
+                                                       struct XrModule *module,
+                                                       const char *requested_module_name);
 
 #endif

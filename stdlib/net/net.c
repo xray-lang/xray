@@ -1304,12 +1304,12 @@ static void net_publish_error(XrVMRuntime *X, uint8_t error) {
     XrEnumType *type = net_error_type(X);
     if (!type)
         return;
-    XrEnumAggregateValue *value = xr_enum_zero_payload_value(
-        xr_isolate_get_runtime_core(X), type, net_error_variant_index(error));
+    XrEnumAggregateValue *value = xr_enum_zero_payload_value(xr_isolate_get_runtime_core(X), type,
+                                                             net_error_variant_index(error));
     if (value) {
         XrValue owned_error = XR_FROM_PTR(value);
-        XrExecutionErrorPublishStatus publish = xr_exec_context_publish_error_owned(
-            xr_isolate_get_runtime_core(X), &owned_error);
+        XrExecutionErrorPublishStatus publish =
+            xr_exec_context_publish_error_owned(xr_isolate_get_runtime_core(X), &owned_error);
         if (publish != XR_EXEC_ERROR_PUBLISH_OK) {
             xr_rc_release_value(xr_current_coro_heap(), owned_error);
             owned_error = xr_null();
@@ -2430,11 +2430,16 @@ void xr_netlistener_register_class(XrVMRuntime *isolate) {
 XrModule *xr_native_module_create_net(XrVMRuntime *isolate) {
     net_platform_init();
     XrModule *mod = xr_module_create_native(isolate, "net");
+    if (!mod)
+        return NULL;
 
     // NetConn / NetListener XrClasses are registered up front by the
     // prelude module; nothing to do here.
 
-    xr_stdlib_vm_bind_net_generated(isolate, mod);
+    if (!xr_stdlib_vm_bind_net_generated(isolate, mod)) {
+        xr_module_free(mod);
+        return NULL;
+    }
 
     return mod;
 }

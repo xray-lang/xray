@@ -71,6 +71,7 @@ static const char *g_native_target_leaf_c_output = NULL;
 typedef struct TestAotPlan {
     XaotBundle bundle;
     XgGlobalEvidence evidence;
+    XrCEmissionPlan *emission_plan;
     bool initialized;
     bool evidence_initialized;
 } TestAotPlan;
@@ -715,8 +716,8 @@ static void test_aot_annotate_class_field_values(XiModule **modules, uint32_t nm
     }
 }
 
-static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules,
-                                      uint32_t nmodules, uint32_t entry_module) {
+static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
+                                      uint32_t entry_module) {
     char verify_err[256];
 
     TEST_REQUIRE(plan != NULL, "AOT plan holder is NULL");
@@ -789,25 +790,35 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules,
     }
     if (!xaot_bundle_set_global_evidence(&plan->bundle, &plan->evidence, XG_BUILD_NATIVE_RELEASE))
         return false;
-    XrTargetProfile *target_profile = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *target_profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     if (!target_profile)
         return false;
     XiModule *module = nmodules == 1u ? modules[0] : NULL;
     XrTargetPlan *target_plan = NULL;
     char target_error[512] = {0};
     if (!module || !module->init || !module->init->semantic_plan ||
-        !xr_target_plan_build(module->init->semantic_plan, target_profile,
-                              &target_plan, target_error,
-                              sizeof(target_error)) ||
+        !xr_target_plan_build(module->init->semantic_plan, target_profile, &target_plan,
+                              target_error, sizeof(target_error)) ||
         !xaot_bundle_set_program_target_plan(&plan->bundle, target_plan)) {
         fprintf(stderr, "  Program TargetPlan fixture error: %s\n",
-                target_error[0] ? target_error
-                                : "multi-module fixture lacks program authority");
+                target_error[0] ? target_error : "multi-module fixture lacks program authority");
         xr_target_plan_free(target_plan);
         xr_target_profile_free(target_profile);
         return false;
     }
+    const XrTargetPlan *installed_target = xaot_bundle_program_target_plan(&plan->bundle);
+    if (!installed_target ||
+        !xr_c_emission_plan_build(installed_target, xr_target_profile_fingerprint(target_profile),
+                                  &plan->emission_plan, target_error, sizeof(target_error)) ||
+        !xr_c_emission_plan_is_verified(plan->emission_plan)) {
+        fprintf(stderr, "  CEmission fixture error: %s\n",
+                target_error[0] ? target_error : "unverified CEmission plan");
+        xr_target_plan_free(target_plan);
+        xr_target_profile_free(target_profile);
+        return false;
+    }
+    plan->bundle.module_emission_plans[0] = plan->emission_plan;
     xr_target_plan_free(target_plan);
     xr_target_profile_free(target_profile);
     if (!xaot_prepare_bundle(&plan->bundle, NULL))
@@ -835,6 +846,10 @@ static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_
 }
 
 static void test_aot_plan_free(TestAotPlan *plan) {
+    if (plan && plan->emission_plan) {
+        xr_c_emission_plan_free(plan->emission_plan);
+        plan->emission_plan = NULL;
+    }
     if (plan && plan->initialized)
         xaot_bundle_free(&plan->bundle);
     if (plan && plan->evidence_initialized)
@@ -855,30 +870,25 @@ static void test_c_emission_registry_free(TestCEmissionRegistry *registry) {
     memset(registry, 0, sizeof(*registry));
 }
 
-static bool test_c_emission_registry_install(TestCEmissionRegistry *registry,
-                                             XiCgenCtx *ctx,
+static bool test_c_emission_registry_install(TestCEmissionRegistry *registry, XiCgenCtx *ctx,
                                              const XaotBundle *bundle) {
-    if (!registry || !ctx || !bundle || !bundle->program_target_plan ||
-        bundle->nmodules == 0)
+    if (!registry || !ctx || !bundle || !bundle->program_target_plan || bundle->nmodules == 0)
         return false;
     memset(registry, 0, sizeof(*registry));
-    registry->plans = (const XrCEmissionPlan **) xr_calloc(
-        bundle->nmodules, sizeof(*registry->plans));
+    registry->plans =
+        (const XrCEmissionPlan **) xr_calloc(bundle->nmodules, sizeof(*registry->plans));
     if (!registry->plans)
         return false;
     registry->count = bundle->nmodules;
     for (uint32_t i = 0; i < registry->count; i++) {
-        const XrTargetPlan *target_plan =
-            xaot_bundle_program_semantic_for_module(bundle, i)
-                ? xaot_bundle_program_target_plan(bundle)
-                : NULL;
+        const XrTargetPlan *target_plan = xaot_bundle_program_semantic_for_module(bundle, i)
+                                              ? xaot_bundle_program_target_plan(bundle)
+                                              : NULL;
         XrCEmissionPlan *emission_plan = NULL;
         char error[512] = {0};
         if (!target_plan ||
             !xr_c_emission_plan_build(
-                target_plan,
-                xr_target_profile_fingerprint(
-                    xr_target_plan_profile(target_plan)),
+                target_plan, xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)),
                 &emission_plan, error, sizeof(error))) {
             fprintf(stderr, "  C emission registry fixture error: %s\n",
                     error[0] ? error : "missing TargetPlan authority");
@@ -887,8 +897,7 @@ static bool test_c_emission_registry_install(TestCEmissionRegistry *registry,
         }
         registry->plans[i] = emission_plan;
     }
-    if (!xi_cgen_ctx_set_value_emission_plans(ctx, registry->plans,
-                                               registry->count)) {
+    if (!xi_cgen_ctx_set_value_emission_plans(ctx, registry->plans, registry->count)) {
         test_c_emission_registry_free(registry);
         return false;
     }
@@ -962,41 +971,33 @@ TEST(target_plan_owned_string_lifecycle_from_source) {
                          "}\n"
                          "print(probe())\n";
     XiFunc *ir = compile_to_ir(source);
-    TEST_REQUIRE(ir && ir->semantic_plan,
-                 "source lifecycle fixture froze SemanticPlan authority");
-    XrTargetProfile *profile = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    TEST_REQUIRE(ir && ir->semantic_plan, "source lifecycle fixture froze SemanticPlan authority");
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
-    TEST_REQUIRE(profile && xr_target_plan_build(
-                                ir->semantic_plan, profile, &plan, error,
-                                sizeof(error)),
+    TEST_REQUIRE(profile &&
+                     xr_target_plan_build(ir->semantic_plan, profile, &plan, error, sizeof(error)),
                  "source lifecycle fixture built exact TargetPlan authority");
 
     uint32_t root_count = 0;
     uint32_t root_slot_count = 0;
     uint32_t cleanup_count = 0;
-    const XrTargetRootMapRecord *roots =
-        xr_target_plan_root_maps(plan, &root_count);
-    const uint32_t *root_slots =
-        xr_target_plan_root_slots(plan, &root_slot_count);
-    const XrTargetCleanupRecord *cleanups =
-        xr_target_plan_cleanups(plan, &cleanup_count);
-    TEST_REQUIRE(roots && root_slots && cleanups && root_count == 1 &&
-                     root_slot_count == 1 && cleanup_count == 2 &&
+    const XrTargetRootMapRecord *roots = xr_target_plan_root_maps(plan, &root_count);
+    const uint32_t *root_slots = xr_target_plan_root_slots(plan, &root_slot_count);
+    const XrTargetCleanupRecord *cleanups = xr_target_plan_cleanups(plan, &cleanup_count);
+    TEST_REQUIRE(roots && root_slots && cleanups && root_count == 1 && root_slot_count == 1 &&
+                     cleanup_count == 2 &&
                      roots[0].flags ==
-                         (XR_TARGET_ROOT_SUSPEND | XR_TARGET_ROOT_CANCEL |
-                          XR_TARGET_ROOT_EXIT) &&
+                         (XR_TARGET_ROOT_SUSPEND | XR_TARGET_ROOT_CANCEL | XR_TARGET_ROOT_EXIT) &&
                      roots[0].slot_begin == 0 && roots[0].slot_count == 1,
                  "source lifecycle fixture froze one exact root set");
     uint32_t slot_count = 0;
-    const XrTargetSlotRecord *slots =
-        xr_target_plan_slots(plan, &slot_count);
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
     const XrTargetSlotRecord *slot =
         slots && root_slots[0] < slot_count ? &slots[root_slots[0]] : NULL;
-    const XrTargetMachineRepRecord *rep = slot
-        ? xr_target_plan_machine_rep(plan, slot->memory_rep)
-        : NULL;
+    const XrTargetMachineRepRecord *rep =
+        slot ? xr_target_plan_machine_rep(plan, slot->memory_rep) : NULL;
     TEST_REQUIRE(slot && rep && rep->kind == XR_MACHINE_REP_DYN_VALUE &&
                      rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
                      rep->ownership == XR_TARGET_OWNERSHIP_OWNED,
@@ -1009,8 +1010,7 @@ TEST(target_plan_owned_string_lifecycle_from_source) {
                          cleanups[i].provider == 0,
                      "source lifecycle cleanup names the exact rooted slot");
         normal += cleanups[i].flags == 0;
-        terminal += cleanups[i].flags ==
-                    (XR_TARGET_CLEANUP_CANCEL | XR_TARGET_CLEANUP_EXIT);
+        terminal += cleanups[i].flags == (XR_TARGET_CLEANUP_CANCEL | XR_TARGET_CLEANUP_EXIT);
     }
     TEST_REQUIRE(normal == 1 && terminal == 1,
                  "source lifecycle freezes normal and terminal release");
@@ -1094,8 +1094,7 @@ static XiFunc *compile_to_ir_with_module_graph_config(const char *source, XiPipe
      * lets the production resolver close named native imports: an absent
      * source module is then an exact native-registry lookup, while a graph
      * source dependency has no XiModule pointer and remains fail-closed. */
-    graph_modules = (XiModule **) xr_calloc((size_t) graph->topo_count,
-                                            sizeof(*graph_modules));
+    graph_modules = (XiModule **) xr_calloc((size_t) graph->topo_count, sizeof(*graph_modules));
     if (!graph_modules)
         goto cleanup;
     cfg.module_identity = entry->canonical;
@@ -1141,18 +1140,16 @@ TEST(target_plan_scalar_ref_c_emission_from_source) {
                          "}\n"
                          "print(run())\n";
     XiFunc *ir = compile_to_ir(source);
-    TEST_REQUIRE(ir && ir->semantic_plan,
-                 "source scalar-ref fixture froze SemanticPlan authority");
+    TEST_REQUIRE(ir && ir->semantic_plan, "source scalar-ref fixture froze SemanticPlan authority");
 
-    XrTargetProfile *profile = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     XrTargetPlan *target = NULL;
     XrCEmissionPlan *emission = NULL;
     char error[512] = {0};
-    TEST_REQUIRE(profile &&
-                     xr_target_plan_build(ir->semantic_plan, profile, &target, error,
-                                          sizeof(error)),
-                 "source scalar-ref fixture built TargetPlan authority");
+    TEST_REQUIRE(
+        profile && xr_target_plan_build(ir->semantic_plan, profile, &target, error, sizeof(error)),
+        "source scalar-ref fixture built TargetPlan authority");
 
     uint32_t argument_count = 0;
     const XrTargetCallArgumentRecord *arguments =
@@ -1165,27 +1162,25 @@ TEST(target_plan_scalar_ref_c_emission_from_source) {
     TEST_REQUIRE(calls && argument->call < call_count,
                  "source scalar-ref argument names its frozen call");
 
-    TEST_REQUIRE(xr_c_emission_plan_build(
-                     target, xr_target_profile_fingerprint(profile), &emission, error,
-                     sizeof(error)),
+    TEST_REQUIRE(xr_c_emission_plan_build(target, xr_target_profile_fingerprint(profile), &emission,
+                                          error, sizeof(error)),
                  "source scalar-ref fixture built C-emission authority");
     XrCCallArgumentEmissionView view = {0};
-    TEST_REQUIRE(xr_c_emission_plan_call_argument_view(
-                     emission, calls[argument->call].result_value, argument->ordinal, &view,
-                     error, sizeof(error)) &&
-                     view.semantic_operand == argument->semantic_operand &&
-                     view.semantic_value == argument->semantic_value &&
-                     view.mode == XR_TARGET_CALL_REFERENCE &&
-                     view.ownership == XR_TARGET_CALL_BORROW &&
-                     view.transfer_mode == XR_TRANSFER_SHARE &&
-                     view.flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
-                     view.caller_register_kind == XR_MACHINE_REP_I64 &&
-                     view.caller_memory_kind == XR_MACHINE_REP_I64 &&
-                     view.callee_register_kind == XR_MACHINE_REP_I64 &&
-                     view.callee_memory_kind == XR_MACHINE_REP_I64 &&
-                     view.array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
-                     view.c_type && strcmp(view.c_type, "int64_t *") == 0,
-                 "source scalar-ref fixture projects one exact immutable C row");
+    TEST_REQUIRE(
+        xr_c_emission_plan_call_argument_view(emission, calls[argument->call].result_value,
+                                              argument->ordinal, &view, error, sizeof(error)) &&
+            view.semantic_operand == argument->semantic_operand &&
+            view.semantic_value == argument->semantic_value &&
+            view.mode == XR_TARGET_CALL_REFERENCE && view.ownership == XR_TARGET_CALL_BORROW &&
+            view.transfer_mode == XR_TRANSFER_SHARE &&
+            view.flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+            view.caller_register_kind == XR_MACHINE_REP_I64 &&
+            view.caller_memory_kind == XR_MACHINE_REP_I64 &&
+            view.callee_register_kind == XR_MACHINE_REP_I64 &&
+            view.callee_memory_kind == XR_MACHINE_REP_I64 &&
+            view.array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE && view.c_type &&
+            strcmp(view.c_type, "int64_t *") == 0,
+        "source scalar-ref fixture projects one exact immutable C row");
 
     xr_c_emission_plan_free(emission);
     xr_target_plan_free(target);
@@ -1231,8 +1226,7 @@ TEST(aot_semantic_snapshot_survives_analyzer_pool_churn) {
     char *code = generate_c_with_status(ir, "snapshot", &had_error);
     TEST_REQUIRE(code != NULL && !had_error,
                  "AOT planning and C generation use only the detached snapshot");
-    TEST_REQUIRE(strstr(code,
-                        "xrt_enum_aggregate_box(XRT_ENUM_AGGREGATE_MAKE(") != NULL,
+    TEST_REQUIRE(strstr(code, "xrt_enum_aggregate_box(XRT_ENUM_AGGREGATE_MAKE(") != NULL,
                  "payload enum constructor consumes the immutable C recipe");
     TEST_REQUIRE(strstr(code, "\"SnapshotValue\", \"Text\",") != NULL,
                  "payload enum recipe freezes the nominal type and member");
@@ -1358,8 +1352,7 @@ static char *generate_c_with_status_and_stats_for_artifact(XiFunc *ir, const cha
     if (!mod) {
         mod = xi_module_new("test.xr", module_name, ir);
         assert(mod != NULL);
-        assert(xi_module_set_identity(
-            mod, "memory-module-v1:id=18:xi-cgen-fixture-v1"));
+        assert(xi_module_set_identity(mod, "memory-module-v1:id=18:xi-cgen-fixture-v1"));
         own_mod = true;
     } else {
         if (!mod->name)
@@ -1373,8 +1366,7 @@ static char *generate_c_with_status_and_stats_for_artifact(XiFunc *ir, const cha
     assert(ctx != NULL);
     xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
     TestCEmissionRegistry emission_registry;
-    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx,
-                                                  &plan.bundle),
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx, &plan.bundle),
                  "C emission registry fixture installation failed");
     xi_cgen_ctx_set_artifact_kind(ctx, artifact_kind);
 
@@ -1425,8 +1417,7 @@ static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *modul
     if (!mod) {
         mod = xi_module_new("test.xr", module_name, ir);
         assert(mod != NULL);
-        assert(xi_module_set_identity(
-            mod, "memory-module-v1:id=18:xi-cgen-fixture-v1"));
+        assert(xi_module_set_identity(mod, "memory-module-v1:id=18:xi-cgen-fixture-v1"));
         own_mod = true;
     } else {
         if (!mod->name)
@@ -1440,8 +1431,7 @@ static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *modul
     assert(ctx != NULL);
     xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
     TestCEmissionRegistry emission_registry;
-    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx,
-                                                  &plan.bundle),
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx, &plan.bundle),
                  "C emission registry fixture installation failed");
 
     char *buf = NULL;
@@ -1511,8 +1501,7 @@ TEST(cgen_extern_symbol_binding_is_portable_and_verified) {
     TestAotPlan plan;
     test_aot_plan_prepare(&plan, modules, 1, 0);
     TEST_REQUIRE(plan.bundle.nextern_decls == 1 &&
-                     plan.bundle.extern_decls[0].c_binding ==
-                         XAOT_EXTERN_C_BINDING_PORTABLE_DIRECT,
+                     plan.bundle.extern_decls[0].c_binding == XAOT_EXTERN_C_BINDING_PORTABLE_DIRECT,
                  "valid native identifier selects one portable direct binding");
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
@@ -1529,8 +1518,7 @@ TEST(cgen_extern_symbol_binding_is_portable_and_verified) {
     TEST_REQUIRE(xr_close_memstream(mem, &code, &code_size) == 0,
                  "portable extern C output stream closed");
     TEST_REQUIRE(!xi_cgen_has_error(ctx) && code &&
-                     contains(code, "extern int32_t abs(int32_t);") &&
-                     contains(code, "abs(") &&
+                     contains(code, "extern int32_t abs(int32_t);") && contains(code, "abs(") &&
                      !contains(code, ") __asm__(XR_FFI_ASMNAME(\"abs\"))") &&
                      !contains(code, "xr_ffi_1("),
                  "MSVC ABI emits and calls the portable native symbol without GNU asm labels");
@@ -1680,8 +1668,7 @@ static size_t count_intrinsic_in_func(const XiFunc *func, XaIntrinsicId intrinsi
     return count;
 }
 
-static XiValue *find_unique_intrinsic_in_func(XiFunc *func,
-                                              XaIntrinsicId intrinsic_id) {
+static XiValue *find_unique_intrinsic_in_func(XiFunc *func, XaIntrinsicId intrinsic_id) {
     XiValue *match = NULL;
     if (!func)
         return NULL;
@@ -1697,8 +1684,7 @@ static XiValue *find_unique_intrinsic_in_func(XiFunc *func,
         }
     }
     for (uint16_t ci = 0; ci < func->nchildren; ci++) {
-        XiValue *child_match =
-            find_unique_intrinsic_in_func(func->children[ci], intrinsic_id);
+        XiValue *child_match = find_unique_intrinsic_in_func(func->children[ci], intrinsic_id);
         if (!child_match)
             continue;
         if (match)
@@ -1841,8 +1827,7 @@ TEST(cgen_simple_arith) {
 }
 
 TEST(cgen_target_layout_queries_emit_source_backed_constants) {
-    XrType int_type = {
-        .kind = XR_KIND_INT, .id = 995, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 995, .scalar_rep = XR_NATIVE_I64, .frozen = true};
     XiFunc *ir = xi_func_new("target_layout_constants", &int_type);
     TEST_REQUIRE(ir != NULL, "target-layout CGen function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -1867,8 +1852,7 @@ TEST(cgen_target_layout_queries_emit_source_backed_constants) {
     TEST_REQUIRE(first_constant && strstr(first_constant + 1, "INT64_C(8)"),
                  "CGen consumes the LP64 bundle layout for size and alignment");
     TEST_REQUIRE(!contains(code, "sizeof(size_t)") && !contains(code, "_Alignof(size_t)") &&
-                     !contains(code, "sizeof(ptrdiff_t)") &&
-                     !contains(code, "_Alignof(ptrdiff_t)"),
+                     !contains(code, "sizeof(ptrdiff_t)") && !contains(code, "_Alignof(ptrdiff_t)"),
                  "CGen does not ask the host compiler to rediscover target layout");
 
     xr_free(code);
@@ -1893,8 +1877,7 @@ TEST(cgen_rep_identical_source_alias_shares_immutable_c_local) {
     ir->source_var_count = 2;
     ir->source_var_names =
         (const char **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_names));
-    ir->source_var_types =
-        (XrType **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_types));
+    ir->source_var_types = (XrType **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_types));
     TEST_REQUIRE(ir->source_var_names && ir->source_var_types,
                  "manual C-alias source-variable tables allocated");
     ir->source_var_names[0] = "source";
@@ -2014,6 +1997,11 @@ TEST(cgen_fixed_array_alias_address_projection_shares_backing_c_local) {
 
 TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 928, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType *parameter_types[] = {&int_type};
+    XrType *function_type = xr_type_new_function(g_iso, parameter_types, 1, &int_type, false);
+    TEST_REQUIRE(function_type != NULL &&
+                     xr_type_function_set_param_mode(function_type, 0, XR_PARAM_REF),
+                 "addressed C-alias ref function type allocated");
     XiFunc *ir = xi_func_new("manual_c_addressed_alias", &int_type);
     TEST_REQUIRE(ir != NULL, "addressed C-alias function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2027,12 +2015,78 @@ TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
     XiValue *source = xi_param(ir, entry, 0, &int_type);
     TEST_REQUIRE(source != NULL, "addressed C-alias source allocated");
     ir->params[0] = source;
+    ir->source_var_count = 2;
+    ir->source_var_names =
+        (const char **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_names));
+    ir->source_var_types = (XrType **) xi_func_arena_alloc(ir, 2 * sizeof(*ir->source_var_types));
+    TEST_REQUIRE(ir->source_var_names && ir->source_var_types,
+                 "addressed C-alias source-variable tables allocated");
+    ir->source_var_names[0] = "source";
+    ir->source_var_names[1] = "alias";
+    ir->source_var_types[0] = &int_type;
+    ir->source_var_types[1] = &int_type;
+    source->var_id = 0;
     XiValue *alias = xi_value_new(ir, entry, XI_UNBOX, &int_type, 1);
     TEST_REQUIRE(alias != NULL, "addressed C-alias boundary allocated");
     alias->args[0] = source;
+    alias->var_id = 1;
     XiValue *place = xi_value_new(ir, entry, XI_LOCAL_ADDR, &int_type, 1);
     TEST_REQUIRE(place != NULL, "addressed C-alias place allocated");
     place->args[0] = alias;
+    XiFunc *callee = xi_func_new("manual_ref_reader", &int_type);
+    XiBlock *callee_entry = callee ? xi_block_new(callee) : NULL;
+    TEST_REQUIRE(callee != NULL && callee_entry != NULL, "addressed C-alias ref callee allocated");
+    callee_entry->sealed = true;
+    callee->nparams = callee->min_params = 1;
+    callee->params = (XiValue **) xr_calloc(1, sizeof(*callee->params));
+    TEST_REQUIRE(callee->params != NULL, "addressed C-alias ref parameter table allocated");
+    callee->params[0] = xi_param(callee, callee_entry, 0, &int_type);
+    TEST_REQUIRE(callee->params[0] != NULL &&
+                     xi_func_set_param_passing_mode(callee, 0, XR_PARAM_REF),
+                 "addressed C-alias ref parameter allocated");
+    callee->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(callee, (uint32_t) sizeof(*callee->arc_borrow_sig));
+    TEST_REQUIRE(callee->arc_borrow_sig != NULL,
+                 "addressed C-alias ref ownership contract allocated");
+    callee->arc_borrow_sig->nparams = 1;
+    callee->arc_borrow_sig->param_own[0] = XI_OWN_NONE;
+    callee->arc_borrow_sig->valid = true;
+    XiValue *callee_load = xi_value_new(callee, callee_entry, XI_PLACE_LOAD, &int_type, 1);
+    TEST_REQUIRE(callee_load != NULL, "addressed C-alias ref load allocated");
+    callee_load->args[0] = callee->params[0];
+    xi_block_set_return(callee_entry, callee_load);
+    ir->children = (XiFunc **) xr_calloc(1, sizeof(*ir->children));
+    TEST_REQUIRE(ir->children != NULL, "addressed C-alias child table allocated");
+    ir->children[0] = callee;
+    ir->nchildren = ir->children_cap = 1;
+    callee->parent_func = ir;
+
+    XiValue *closure = xi_value_new(ir, entry, XI_STACK_ALLOC, function_type, 0);
+    XiValue *call = xi_value_new(ir, entry, XI_CALL, &int_type, 2);
+    TEST_REQUIRE(closure != NULL && call != NULL, "addressed C-alias direct ref call allocated");
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = callee;
+    call->args[0] = closure;
+    call->args[1] = place;
+    XiCallPlan *call_plan = (XiCallPlan *) xi_func_arena_alloc(ir, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan =
+        (XiCallArgPlan *) xi_func_arena_alloc(ir, (uint32_t) sizeof(*argument_plan));
+    TEST_REQUIRE(call_plan != NULL && argument_plan != NULL,
+                 "addressed C-alias ref call contract allocated");
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, sizeof(*argument_plan));
+    argument_plan->param_mode = XR_PARAM_REF;
+    argument_plan->access = XR_CALL_ARG_REF;
+    argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    argument_plan->escape = XI_PLACE_ESCAPE_NONE;
+    argument_plan->addressable = true;
+    argument_plan->origin_var_id = 1;
+    argument_plan->place = place;
+    call_plan->args = argument_plan;
+    call_plan->nargs = 1;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
     XiValue *load = xi_value_new(ir, entry, XI_PLACE_LOAD, &int_type, 1);
     TEST_REQUIRE(load != NULL, "addressed C-alias load allocated");
     load->args[0] = place;
@@ -2048,7 +2102,7 @@ TEST(cgen_scalar_alias_materializes_when_c_address_is_taken) {
     TEST_REQUIRE(fn_end != NULL, "addressed C-alias function end emitted");
     TEST_REQUIRE(contains_between(fn, fn_end, "int64_t v1 = v0;"),
                  "a scalar alias whose C address is taken must remain materialized");
-    TEST_REQUIRE(contains_between(fn, fn_end, "(void *)(&v1)"),
+    TEST_REQUIRE(contains_between(fn, fn_end, "int64_t * v2 = (int64_t *)(&v1);"),
                  "the scalar place must address the materialized alias local");
 
     printf("  Kept addressed scalar alias in %zu bytes of C code\n", strlen(code));
@@ -2185,26 +2239,22 @@ TEST(cgen_rep_identical_span_box_shares_immutable_c_local) {
     box->args[0] = source;
     xi_block_set_return(entry, box);
 
-    TEST_REQUIRE(test_prepare_backend_ir(ir),
-                 "manual C-span-box backend prepared");
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "manual C-span-box backend prepared");
     XiValue *adapter = entry->control;
-    TEST_REQUIRE(adapter && adapter != box && adapter->op == XI_UNBOX &&
-                     adapter->nargs == 1 && adapter->args[0] == box &&
+    TEST_REQUIRE(adapter && adapter != box && adapter->op == XI_UNBOX && adapter->nargs == 1 &&
+                     adapter->args[0] == box &&
                      adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX,
                  "span return retains the exact backend adapter over its frozen BOX");
 
     XiModule *mutation_module = xi_module_new("span_box_mutation.xr", "test", ir);
-    TEST_REQUIRE(mutation_module != NULL,
-                 "span-box mutation module allocated");
+    TEST_REQUIRE(mutation_module != NULL, "span-box mutation module allocated");
     XiModule *mutation_modules[] = {mutation_module};
     TestAotPlan rejected_plan;
     adapter->backend_origin = XI_BACKEND_VALUE_NONE;
-    TEST_REQUIRE(!test_aot_plan_try_prepare(&rejected_plan, mutation_modules,
-                                            1, 0),
+    TEST_REQUIRE(!test_aot_plan_try_prepare(&rejected_plan, mutation_modules, 1, 0),
                  "missing adapter provenance must fail closed");
     TEST_REQUIRE(rejected_plan.bundle.error_msg &&
-                     strstr(rejected_plan.bundle.error_msg,
-                            "exact TargetPlan semantic identity"),
+                     strstr(rejected_plan.bundle.error_msg, "exact TargetPlan semantic identity"),
                  "mutation rejection must name the missing exact identity");
     test_aot_plan_free(&rejected_plan);
     adapter->backend_origin = XI_BACKEND_VALUE_REP_UNBOX;
@@ -2381,10 +2431,8 @@ TEST(cgen_returned_null_constant_emits_immediate_without_local) {
 }
 
 TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
-    XrType string_type = {.kind = XR_KIND_STRING,
-                          .id = 937,
-                          .scalar_rep = XR_SCALAR_REP_NONE,
-                          .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 937, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XiFunc *ir = xi_func_new("manual_concat_literals", &string_type);
     TEST_REQUIRE(ir != NULL, "manual concat-literal function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2423,10 +2471,8 @@ TEST(cgen_multi_concat_string_constants_emit_immediate_without_locals) {
 
 TEST(cgen_shared_string_constant_emits_immediate_without_local) {
     XrType null_type = {.kind = XR_KIND_NULL, .id = 938, .frozen = true};
-    XrType string_type = {.kind = XR_KIND_STRING,
-                          .id = 939,
-                          .scalar_rep = XR_SCALAR_REP_NONE,
-                          .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 939, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
     XiFunc *ir = xi_func_new("manual_shared_literal", &null_type);
     TEST_REQUIRE(ir != NULL, "manual shared-literal function allocated");
@@ -2447,14 +2493,13 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
 
     XiModule *mod = xi_module_new("test.xr", "test", ir);
     TEST_REQUIRE(mod != NULL, "manual shared-literal module allocated");
-    TEST_REQUIRE(xi_module_set_identity(
-                     mod, "memory-module-v1:id=32:manual-shared-literal-fixture-v1"),
-                 "manual shared-literal module identity published");
+    TEST_REQUIRE(
+        xi_module_set_identity(mod, "memory-module-v1:id=32:manual-shared-literal-fixture-v1"),
+        "manual shared-literal module identity published");
     mod->nslots = 1;
     ir->module = mod;
 
-    TEST_REQUIRE(test_prepare_backend_ir(ir),
-                 "shared-literal fixture reached Backend");
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "shared-literal fixture reached Backend");
     const char *saved_literal = (const char *) literal->aux;
     literal->aux = "forged-live-shared";
     bool had_error = false;
@@ -2470,29 +2515,24 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
                  "a shared string literal must not leave a dead C local");
     TEST_REQUIRE(contains_between(fn, fn_end, "xrt_array_ref_ensure_owned(xr_str_lit("),
                  "the portable shared-slot ownership handoff must retain the exact string literal");
-    TEST_REQUIRE(strstr(code, "\"shared\"") != NULL &&
-                     strstr(code, "forged-live-shared") == NULL,
+    TEST_REQUIRE(strstr(code, "\"shared\"") != NULL && strstr(code, "forged-live-shared") == NULL,
                  "shared-slot emission must use the immutable literal recipe");
 
-    XrTargetProfile *profile = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     XrTargetPlan *target_plan = NULL;
     char identity_error[512] = {0};
-    TEST_REQUIRE(profile != NULL &&
-                     xr_target_plan_build(ir->semantic_plan, profile, &target_plan,
-                                          identity_error,
-                                          sizeof(identity_error)),
+    TEST_REQUIRE(profile != NULL && xr_target_plan_build(ir->semantic_plan, profile, &target_plan,
+                                                         identity_error, sizeof(identity_error)),
                  "shared-literal mutation TargetPlan built");
     uint8_t saved_scalar_rep = string_type.scalar_rep;
     string_type.scalar_rep = XR_NATIVE_I8;
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-    TEST_REQUIRE(!xr_aot_scalar_semantic_value_id(
-                     target_plan, ir, literal, &semantic_function,
-                     &semantic_value, identity_error,
-                     sizeof(identity_error)) &&
-                     strncmp(identity_error, "XR_TARGET_1001",
-                             strlen("XR_TARGET_1001")) == 0,
+    TEST_REQUIRE(!xr_aot_scalar_semantic_value_id(target_plan, ir, literal, &semantic_function,
+                                                  &semantic_value, identity_error,
+                                                  sizeof(identity_error)) &&
+                     strncmp(identity_error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0,
                  "live String scalar identity drift must fail closed");
     string_type.scalar_rep = saved_scalar_rep;
 
@@ -2574,15 +2614,12 @@ TEST(cgen_unused_array_reserve_result_emits_effect_statement_without_local) {
                       "print(grow(true))\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "unused array reserve fixture should compile");
-    XiValue *reserve =
-        find_unique_intrinsic_in_func(ir, XA_INTRINSIC_ARRAY_RESERVE);
-    TEST_REQUIRE(reserve && reserve->op == XI_CALL_BUILTIN &&
-                     reserve->nargs == 2 && reserve->args &&
-                     reserve->args[0] && reserve->args[1] &&
-                     reserve->aux == NULL && reserve->aux_int == 0 &&
-                     reserve->aux_kind == XI_AUX_KIND_NONE &&
-                     reserve->result_alias_operand == 0,
-                 "Array.reserve lowering must preserve stable intrinsic identity without a selector");
+    XiValue *reserve = find_unique_intrinsic_in_func(ir, XA_INTRINSIC_ARRAY_RESERVE);
+    TEST_REQUIRE(
+        reserve && reserve->op == XI_CALL_BUILTIN && reserve->nargs == 2 && reserve->args &&
+            reserve->args[0] && reserve->args[1] && reserve->aux == NULL && reserve->aux_int == 0 &&
+            reserve->aux_kind == XI_AUX_KIND_NONE && reserve->result_alias_operand == 0,
+        "Array.reserve lowering must preserve stable intrinsic identity without a selector");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
@@ -2645,12 +2682,10 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
     TEST_REQUIRE(test_prepare_backend_ir(ir),
                  "native unsigned interpolation Backend plan should freeze");
     char semantic_hex[XR_FINGERPRINT_BYTES * 2u + 1u];
-    xr_fingerprint_hex(xr_semantic_plan_fingerprint(ir->semantic_plan),
-                       semantic_hex);
-    TEST_REQUIRE(strcmp(
-                     semantic_hex,
-                     "2c8996046d7c9540f212e6e270b3c8dc8d7c0f9b1442591feaa2b3a3201b6f43") == 0,
-                 "native unsigned interpolation preserves the frozen SemanticPlan v39 KAT");
+    xr_fingerprint_hex(xr_semantic_plan_fingerprint(ir->semantic_plan), semantic_hex);
+    TEST_REQUIRE(strcmp(semantic_hex,
+                        "27da2bb15e9ecaf455b1f1d95c64a6a275dd3e08ac1e1430d0b653dbf00300f2") == 0,
+                 "native unsigned interpolation preserves the frozen SemanticPlan v45 KAT");
 
     XiFunc *label = NULL;
     for (uint16_t i = 0; i < ir->nchildren; i++) {
@@ -2668,129 +2703,104 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
         for (uint32_t v = 0; block && v < block->nvalues; v++) {
             XiValue *candidate = block->values[v];
             if (candidate && candidate->op == XI_STR_CONCAT) {
-                TEST_REQUIRE(concat == NULL,
-                             "native unsigned interpolation concat is unique");
+                TEST_REQUIRE(concat == NULL, "native unsigned interpolation concat is unique");
                 concat = candidate;
             }
         }
     }
-    TEST_REQUIRE(concat && concat->nargs == 2 && concat->args[0] &&
-                     concat->args[1],
+    TEST_REQUIRE(concat && concat->nargs == 2 && concat->args[0] && concat->args[1],
                  "native unsigned interpolation concat shape is exact");
 
-    XrTargetProfile *profile = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     XrTargetPlan *target = NULL;
     char error[512] = {0};
-    TEST_REQUIRE(profile && ir->semantic_plan &&
-                     xr_target_plan_build(ir->semantic_plan, profile, &target,
-                                          error, sizeof(error)),
-                 "native unsigned interpolation TargetPlan should build");
+    TEST_REQUIRE(
+        profile && ir->semantic_plan &&
+            xr_target_plan_build(ir->semantic_plan, profile, &target, error, sizeof(error)),
+        "native unsigned interpolation TargetPlan should build");
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
     XrCEmissionPlan *same_emission = NULL;
-    TEST_REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint,
-                                           &emission, error, sizeof(error)),
-                 "native unsigned interpolation CEmission plan should build");
-    TEST_REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint,
-                                           &same_emission, error,
-                                           sizeof(error)) &&
-                     xr_fingerprint_equal(
-                         xr_c_emission_plan_fingerprint(emission),
-                         xr_c_emission_plan_fingerprint(same_emission)),
+    TEST_REQUIRE(
+        xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)),
+        "native unsigned interpolation CEmission plan should build");
+    TEST_REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &same_emission, error,
+                                          sizeof(error)) &&
+                     xr_fingerprint_equal(xr_c_emission_plan_fingerprint(emission),
+                                          xr_c_emission_plan_fingerprint(same_emission)),
                  "native unsigned interpolation CEmission fingerprint is deterministic");
 
     const XrSemanticOperationRecord *semantic_concat = NULL;
-    for (uint32_t i = 0;
-         i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
         const XrSemanticOperationRecord *candidate =
             xr_semantic_plan_operation(ir->semantic_plan, i);
         if (candidate && candidate->opcode == XI_STR_CONCAT) {
-            TEST_REQUIRE(semantic_concat == NULL,
-                         "native unsigned semantic concat is unique");
+            TEST_REQUIRE(semantic_concat == NULL, "native unsigned semantic concat is unique");
             semantic_concat = candidate;
         }
     }
     uint32_t semantic_operand_count = 0;
     const XrSemanticOperandRecord *semantic_operands =
         xr_semantic_plan_operands(ir->semantic_plan, &semantic_operand_count);
-    TEST_REQUIRE(semantic_concat && semantic_concat->operand_count == 2 &&
-                     semantic_operands &&
+    TEST_REQUIRE(semantic_concat && semantic_concat->operand_count == 2 && semantic_operands &&
                      semantic_concat->operand_begin <= semantic_operand_count &&
                      semantic_concat->operand_count <=
                          semantic_operand_count - semantic_concat->operand_begin,
                  "native unsigned semantic concat shape is exact");
-    TEST_REQUIRE(xr_semantic_string_concat_is_exact(ir->semantic_plan,
-                                                    semantic_concat),
+    TEST_REQUIRE(xr_semantic_string_concat_is_exact(ir->semantic_plan, semantic_concat),
                  "native unsigned semantic concat authority is exact");
     uint32_t concat_value = semantic_concat->result_value;
-    uint32_t literal_value =
-        semantic_operands[semantic_concat->operand_begin].value;
-    uint32_t logical_value =
-        semantic_operands[semantic_concat->operand_begin + 1u].value;
+    uint32_t literal_value = semantic_operands[semantic_concat->operand_begin].value;
+    uint32_t logical_value = semantic_operands[semantic_concat->operand_begin + 1u].value;
     XrCValueEmissionView view = {0};
-    bool view_found = xr_c_emission_plan_value_view(
-        emission, concat_value, &view, error, sizeof(error));
-    TEST_REQUIRE(view_found &&
-                     view.materialization ==
-                         XR_C_VALUE_MATERIALIZATION_STRING_CONCAT &&
+    bool view_found =
+        xr_c_emission_plan_value_view(emission, concat_value, &view, error, sizeof(error));
+    TEST_REQUIRE(view_found && view.materialization == XR_C_VALUE_MATERIALIZATION_STRING_CONCAT &&
                      view.recipe_argument_count == 2 && view.recipe_arguments &&
-                     view.recipe_arguments[0].kind ==
-                         XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
+                     view.recipe_arguments[0].kind == XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
                      view.recipe_arguments[0].semantic_value == literal_value &&
-                     view.recipe_arguments[0].source_semantic_value ==
-                         literal_value &&
-                     view.recipe_arguments[1].kind ==
-                         XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64 &&
+                     view.recipe_arguments[0].source_semantic_value == literal_value &&
+                     view.recipe_arguments[1].kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64 &&
                      view.recipe_arguments[1].semantic_value == logical_value &&
-                     view.recipe_arguments[1].source_semantic_value ==
-                         logical_value,
+                     view.recipe_arguments[1].source_semantic_value == logical_value,
                  "native unsigned interpolation CEmission recipe is exact");
 
-    XrCRecipeArgumentView *direct =
-        (XrCRecipeArgumentView *) &view.recipe_arguments[1];
+    XrCRecipeArgumentView *direct = (XrCRecipeArgumentView *) &view.recipe_arguments[1];
     uint8_t saved_kind = direct->kind;
     direct->kind = XR_C_RECIPE_ARGUMENT_STRING_VALUE;
-    TEST_REQUIRE(!xr_c_emission_plan_verify(
-                     emission, target, profile_fingerprint, error,
-                     sizeof(error)),
-                 "direct u64 recipe kind mutation fails closed");
+    TEST_REQUIRE(
+        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
+        "direct u64 recipe kind mutation fails closed");
     direct->kind = saved_kind;
     uint32_t saved_logical = direct->semantic_value;
     direct->semantic_value = literal_value;
-    TEST_REQUIRE(!xr_c_emission_plan_verify(
-                     emission, target, profile_fingerprint, error,
-                     sizeof(error)),
-                 "direct u64 logical identity mutation fails closed");
+    TEST_REQUIRE(
+        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
+        "direct u64 logical identity mutation fails closed");
     direct->semantic_value = saved_logical;
     uint32_t saved_source = direct->source_semantic_value;
     direct->source_semantic_value = literal_value;
-    TEST_REQUIRE(!xr_c_emission_plan_verify(
-                     emission, target, profile_fingerprint, error,
-                     sizeof(error)),
-                 "direct u64 source identity mutation fails closed");
+    TEST_REQUIRE(
+        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
+        "direct u64 source identity mutation fails closed");
     direct->source_semantic_value = saved_source;
     XrTargetValueRepRecord *source_binding =
-        (XrTargetValueRepRecord *) xr_target_plan_value_rep(target,
-                                                            logical_value);
-    const XrTargetValueRepRecord *literal_binding =
-        xr_target_plan_value_rep(target, literal_value);
-    TEST_REQUIRE(source_binding && literal_binding,
-                 "direct u64 Target bindings are complete");
+        (XrTargetValueRepRecord *) xr_target_plan_value_rep(target, logical_value);
+    const XrTargetValueRepRecord *literal_binding = xr_target_plan_value_rep(target, literal_value);
+    TEST_REQUIRE(source_binding && literal_binding, "direct u64 Target bindings are complete");
     uint16_t saved_register_rep = source_binding->register_rep;
     uint16_t saved_memory_rep = source_binding->memory_rep;
     source_binding->register_rep = literal_binding->register_rep;
     source_binding->memory_rep = literal_binding->memory_rep;
-    TEST_REQUIRE(!xr_c_emission_plan_verify(
-                     emission, target, profile_fingerprint, error,
-                     sizeof(error)),
-                 "direct u64 Target representation mutation fails closed");
+    TEST_REQUIRE(
+        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
+        "direct u64 Target representation mutation fails closed");
     source_binding->register_rep = saved_register_rep;
     source_binding->memory_rep = saved_memory_rep;
-    TEST_REQUIRE(xr_c_emission_plan_verify(
-                     emission, target, profile_fingerprint, error,
-                     sizeof(error)),
-                 "restored direct u64 CEmission recipe verifies");
+    TEST_REQUIRE(
+        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
+        "restored direct u64 CEmission recipe verifies");
     xr_c_emission_plan_free(same_emission);
     xr_c_emission_plan_free(emission);
     xr_target_plan_free(target);
@@ -2807,8 +2817,7 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                  "native unsigned interpolation must not materialize a box local");
     TEST_REQUIRE(contains_between(fn, fn_end, "xrt_strpart_init_u64("),
                  "native unsigned interpolation must use the direct u64 string part");
-    TEST_REQUIRE(!contains_between(fn, fn_end, "(abort()") &&
-                     strstr(code, "({") == NULL,
+    TEST_REQUIRE(!contains_between(fn, fn_end, "(abort()") && strstr(code, "({") == NULL,
                  "native unsigned interpolation must remain portable generated C11");
 
     printf("  Generated native unsigned interpolation without box %zu bytes of C code\n",
@@ -2829,8 +2838,8 @@ TEST(cgen_panicinfo_constructor_token_emits_no_local) {
     for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(ir->semantic_plan, i);
-        if (xr_semantic_panic_info_constructor_with_receiver_is_exact(
-                ir->semantic_plan, operation, NULL))
+        if (xr_semantic_panic_info_constructor_with_receiver_is_exact(ir->semantic_plan, operation,
+                                                                      NULL))
             exact_constructor_count++;
     }
     TEST_REQUIRE(exact_constructor_count == 1,
@@ -2868,8 +2877,7 @@ TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
                 const XiValue *candidate = block->values[v];
                 if (candidate && candidate->op == XI_CALL_METHOD && candidate->aux &&
                     strcmp((const char *) candidate->aux, "nanos") == 0) {
-                    TEST_REQUIRE(nanos_call == NULL,
-                                 "native time fixture has one nanos callsite");
+                    TEST_REQUIRE(nanos_call == NULL, "native time fixture has one nanos callsite");
                     nanos_call = candidate;
                 }
             }
@@ -2887,8 +2895,7 @@ TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
     for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(ir->semantic_plan, i);
-        if (!operation ||
-            operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL)
+        if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL)
             continue;
         TEST_REQUIRE(native_operation == XR_SEMANTIC_INDEX_NONE,
                      "SemanticPlan publishes one native scalar call authority");
@@ -2901,9 +2908,8 @@ TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     XrTargetPlan *target = NULL;
     char target_error[512] = {0};
-    TEST_REQUIRE(profile &&
-                     xr_target_plan_build(ir->semantic_plan, profile, &target, target_error,
-                                          sizeof(target_error)),
+    TEST_REQUIRE(profile && xr_target_plan_build(ir->semantic_plan, profile, &target, target_error,
+                                                 sizeof(target_error)),
                  "TargetPlan accepts exact time.nanos scalar authority");
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
@@ -2914,8 +2920,7 @@ TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
             calls[i].calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR)
             native_calls++;
     }
-    TEST_REQUIRE(native_calls == 1,
-                 "TargetPlan publishes one exact native module scalar call row");
+    TEST_REQUIRE(native_calls == 1, "TargetPlan publishes one exact native module scalar call row");
     xr_target_plan_free(target);
     xr_target_profile_free(profile);
 
@@ -2931,16 +2936,30 @@ TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
     TEST_REQUIRE(contains_between(stamp, stamp_end, "xrt_time_nanos()"),
                  "time helper call must remain emitted");
 
-    printf("  Generated exact native time module scalar call %zu bytes of C code\n",
-           strlen(code));
+    printf("  Generated exact native time module scalar call %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
-    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 159, .frozen = true};
-    XrType int_type = {.kind = XR_KIND_INT, .id = 160, .frozen = true};
-    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 161, .frozen = true};
+    XrType bool_type = {
+        .kind = XR_KIND_BOOL,
+        .id = 159,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+    };
+    XrType int_type = {
+        .kind = XR_KIND_INT,
+        .id = 160,
+        .scalar_rep = XR_NATIVE_I64,
+        .frozen = true,
+    };
+    XrType func_type = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 161,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+    };
     XrFunctionParam func_params[1] = {{.type = &int_type, .mode = XR_PARAM_READ}};
     func_type.function.params = func_params;
     func_type.function.param_count = 1;
@@ -2997,10 +3016,11 @@ TEST(cgen_native_target_leaf_consumes_numeric_target_authority) {
         .kind = XR_KIND_FUNCTION,
         .id = 163,
         .frozen = true,
-        .function = {
-            .return_type = &int_type,
-            .throw_effect = XR_FN_EFFECT_NO_THROW,
-        },
+        .function =
+            {
+                .return_type = &int_type,
+                .throw_effect = XR_FN_EFFECT_NO_THROW,
+            },
     };
     XiFunc *ir = xi_func_new("native_target_leaf", &int_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
@@ -3073,20 +3093,19 @@ TEST(cgen_string_literal_runes_receiver_emits_immediate_without_local) {
 }
 
 TEST(cgen_string_runes_consumes_immutable_emission_recipe) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1165,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 1166,
-                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 1167,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .id = 1165, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 1166, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType rune_type = {
+        .kind = XR_KIND_RUNE, .id = 1167, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType *iterator_args[] = {&rune_type};
     XrType iterator_type = {
         .kind = XR_KIND_INSTANCE,
         .id = 1168,
         .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
-        .instance = {.class_name = "Iterator", .type_args = iterator_args,
-                     .type_arg_count = 1},
+        .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("string_runes_recipe", &unit_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
@@ -3115,13 +3134,10 @@ TEST(cgen_string_runes_consumes_immutable_emission_recipe) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "string_runes_recipe", &had_error);
     ir->module = NULL;
-    TEST_REQUIRE(code != NULL && !had_error,
-                 "sealed String.runes recipe should generate");
-    TEST_REQUIRE(count_between(code, code + strlen(code),
-                               "xrt_string_runes(xr_str_lit(") == 1,
+    TEST_REQUIRE(code != NULL && !had_error, "sealed String.runes recipe should generate");
+    TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_string_runes(xr_str_lit(") == 1,
                  "CGen must consume the exact String.runes recipe once");
-    TEST_REQUIRE(!contains(code, "xrt_method_0(") &&
-                     !contains(code, "XRT_SYM_RUNES"),
+    TEST_REQUIRE(!contains(code, "xrt_method_0(") && !contains(code, "XRT_SYM_RUNES"),
                  "String.runes must not select a runtime member by name or symbol id");
     if (g_string_runes_c_output) {
         FILE *generated = fopen(g_string_runes_c_output, "wb");
@@ -3131,17 +3147,15 @@ TEST(cgen_string_runes_consumes_immutable_emission_recipe) {
                      "String.runes generated-C output written");
     }
 
-    printf("  Generated immutable String.runes recipe %zu bytes of C code\n",
-           strlen(code));
+    printf("  Generated immutable String.runes recipe %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_string_slice_range_consumes_immutable_emission_recipe) {
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 985,
-                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType int_type = {.kind = XR_KIND_INT, .id = 986,
-                       .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 985, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 986, .scalar_rep = XR_NATIVE_I64, .frozen = true};
     XiFunc *ir = xi_func_new("string_slice_range_recipe", &string_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "String range-slice recipe fixture allocated");
@@ -3150,8 +3164,7 @@ TEST(cgen_string_slice_range_consumes_immutable_emission_recipe) {
     XiValue *start = xi_const_int(ir, entry, 1, &int_type);
     XiValue *end = xi_const_int(ir, entry, 4, &int_type);
     XiValue *slice = xi_value_new(ir, entry, XI_CALL_METHOD, &string_type, 3);
-    TEST_REQUIRE(source && start && end && slice,
-                 "String range-slice recipe values allocated");
+    TEST_REQUIRE(source && start && end && slice, "String range-slice recipe values allocated");
     slice->args[0] = source;
     slice->args[1] = start;
     slice->args[2] = end;
@@ -3166,14 +3179,10 @@ TEST(cgen_string_slice_range_consumes_immutable_emission_recipe) {
     ir->arc_return_ownership.complete = true;
     xi_block_set_return(entry, slice);
     bool had_error = false;
-    char *code = generate_c_with_status(ir, "string_slice_range_recipe",
-                                        &had_error);
-    TEST_REQUIRE(code != NULL && !had_error,
-                 "sealed String range-slice recipe should generate");
-    size_t slice_call_count = count_between(
-        code, code + strlen(code), "xrt_string_slice_range(");
-    TEST_REQUIRE(slice_call_count == 1,
-                 "CGen must consume the exact range-slice recipe once");
+    char *code = generate_c_with_status(ir, "string_slice_range_recipe", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "sealed String range-slice recipe should generate");
+    size_t slice_call_count = count_between(code, code + strlen(code), "xrt_string_slice_range(");
+    TEST_REQUIRE(slice_call_count == 1, "CGen must consume the exact range-slice recipe once");
     TEST_REQUIRE(!contains(code, "XRT_SYM_SLICE"),
                  "CGen must not select String.slice by symbol id");
     TEST_REQUIRE(contains(code, "xrt_has_pending_error("),
@@ -3183,17 +3192,14 @@ TEST(cgen_string_slice_range_consumes_immutable_emission_recipe) {
 }
 
 TEST(cgen_iterator_rune_has_next_consumes_immutable_emission_recipe) {
-    XiFunc *ir = compile_to_ir(
-        "var iter = \"0123456789abcdef\".runes()\n"
-        "print(iter.hasNext())\n");
+    XiFunc *ir = compile_to_ir("var iter = \"0123456789abcdef\".runes()\n"
+                               "print(iter.hasNext())\n");
     TEST_REQUIRE(ir != NULL, "Iterator<rune>.hasNext recipe fixture should compile");
     bool had_error = false;
-    char *code = generate_c_with_status(ir, "iterator_rune_has_next_recipe",
-                                        &had_error);
+    char *code = generate_c_with_status(ir, "iterator_rune_has_next_recipe", &had_error);
     TEST_REQUIRE(code != NULL && !had_error,
                  "sealed Iterator<rune>.hasNext recipe should generate");
-    TEST_REQUIRE(count_between(code, code + strlen(code),
-                               "xrt_iterator_rune_has_next(") == 1,
+    TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_iterator_rune_has_next(") == 1,
                  "CGen must consume the exact hasNext recipe once");
     TEST_REQUIRE(!contains(code, "XRT_SYM_HAS_NEXT"),
                  "CGen must not select Iterator.hasNext by symbol id");
@@ -3204,20 +3210,19 @@ TEST(cgen_iterator_rune_has_next_consumes_immutable_emission_recipe) {
 }
 
 TEST(cgen_iterator_rune_next_consumes_immutable_emission_recipe) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 970,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 971,
-                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 972,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .id = 970, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 971, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType rune_type = {
+        .kind = XR_KIND_RUNE, .id = 972, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType *iterator_args[] = {&rune_type};
     XrType iterator_type = {
         .kind = XR_KIND_INSTANCE,
         .id = 973,
         .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
-        .instance = {.class_name = "Iterator", .type_args = iterator_args,
-                     .type_arg_count = 1},
+        .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("iterator_rune_next_recipe", &unit_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
@@ -3243,12 +3248,9 @@ TEST(cgen_iterator_rune_next_consumes_immutable_emission_recipe) {
     release->args[0] = runes;
     xi_block_set_return(entry, NULL);
     bool had_error = false;
-    char *code = generate_c_with_status(ir, "iterator_rune_next_recipe",
-                                        &had_error);
-    TEST_REQUIRE(code != NULL && !had_error,
-                 "sealed Iterator<rune>.next recipe should generate");
-    TEST_REQUIRE(count_between(code, code + strlen(code),
-                               "xrt_iterator_rune_next(") == 1,
+    char *code = generate_c_with_status(ir, "iterator_rune_next_recipe", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "sealed Iterator<rune>.next recipe should generate");
+    TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_iterator_rune_next(") == 1,
                  "CGen must consume the exact next recipe once");
     TEST_REQUIRE(!contains(code, "XRT_SYM_NEXT"),
                  "CGen must not select Iterator.next by symbol id");
@@ -3259,22 +3261,21 @@ TEST(cgen_iterator_rune_next_consumes_immutable_emission_recipe) {
 }
 
 TEST(cgen_iterator_rune_nth_consumes_immutable_emission_recipe) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1070,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 1071,
-                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType int_type = {.kind = XR_KIND_INT, .id = 1072,
-                       .scalar_rep = XR_NATIVE_I64, .frozen = true};
-    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 1073,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .id = 1070, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 1071, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType int_type = {
+        .kind = XR_KIND_INT, .id = 1072, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType rune_type = {
+        .kind = XR_KIND_RUNE, .id = 1073, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType *iterator_args[] = {&rune_type};
     XrType iterator_type = {
         .kind = XR_KIND_INSTANCE,
         .id = 1074,
         .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
-        .instance = {.class_name = "Iterator", .type_args = iterator_args,
-                     .type_arg_count = 1},
+        .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("iterator_rune_nth_recipe", &unit_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
@@ -3317,22 +3318,20 @@ TEST(cgen_iterator_rune_nth_consumes_immutable_emission_recipe) {
 }
 
 TEST(cgen_rune_to_uint32_consumes_immutable_emission_recipe) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 974,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 975,
-                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 976,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType u32_type = {.kind = XR_KIND_INT, .id = 977,
-                       .scalar_rep = XR_NATIVE_U32, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .id = 974, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 975, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType rune_type = {
+        .kind = XR_KIND_RUNE, .id = 976, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType u32_type = {.kind = XR_KIND_INT, .id = 977, .scalar_rep = XR_NATIVE_U32, .frozen = true};
     XrType *iterator_args[] = {&rune_type};
     XrType iterator_type = {
         .kind = XR_KIND_INSTANCE,
         .id = 978,
         .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
-        .instance = {.class_name = "Iterator", .type_args = iterator_args,
-                     .type_arg_count = 1},
+        .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("rune_to_uint32_recipe", &unit_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
@@ -3362,12 +3361,9 @@ TEST(cgen_rune_to_uint32_consumes_immutable_emission_recipe) {
     release->args[0] = runes;
     xi_block_set_return(entry, NULL);
     bool had_error = false;
-    char *code = generate_c_with_status(ir, "rune_to_uint32_recipe",
-                                        &had_error);
-    TEST_REQUIRE(code != NULL && !had_error,
-                 "sealed rune.toUInt32 recipe should generate");
-    TEST_REQUIRE(count_between(code, code + strlen(code),
-                               "xrt_rune_to_uint32(") == 1,
+    char *code = generate_c_with_status(ir, "rune_to_uint32_recipe", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "sealed rune.toUInt32 recipe should generate");
+    TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_rune_to_uint32(") == 1,
                  "CGen must consume the exact rune-to-u32 recipe once");
     TEST_REQUIRE(!contains(code, "XRT_SYM_TO_UINT32"),
                  "CGen must not select rune.toUInt32 by symbol id");
@@ -3378,22 +3374,21 @@ TEST(cgen_rune_to_uint32_consumes_immutable_emission_recipe) {
 }
 
 TEST(cgen_rune_to_string_consumes_immutable_emission_recipe) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1170,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 1171,
-                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType int_type = {.kind = XR_KIND_INT, .id = 1172,
-                       .scalar_rep = XR_NATIVE_I64, .frozen = true};
-    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 1173,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .id = 1170, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 1171, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType int_type = {
+        .kind = XR_KIND_INT, .id = 1172, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType rune_type = {
+        .kind = XR_KIND_RUNE, .id = 1173, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType *iterator_args[] = {&rune_type};
     XrType iterator_type = {
         .kind = XR_KIND_INSTANCE,
         .id = 1174,
         .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
-        .instance = {.class_name = "Iterator", .type_args = iterator_args,
-                     .type_arg_count = 1},
+        .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("rune_to_string_recipe", &unit_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
@@ -3444,8 +3439,8 @@ TEST(cgen_rune_to_string_consumes_immutable_emission_recipe) {
     const char *to_string_call = strstr(code, "xrt_rune_to_string(");
     TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_rune_to_string(") == 1,
                  "CGen must consume the exact rune-to-string recipe once");
-    TEST_REQUIRE(to_string_call && strstr(to_string_call, "xrt_rune_to_string(v3)") ==
-                                               to_string_call,
+    TEST_REQUIRE(to_string_call &&
+                     strstr(to_string_call, "xrt_rune_to_string(v3)") == to_string_call,
                  "CGen must pass the native Rune operand");
     TEST_REQUIRE(!contains(code, "XRT_SYM_TOSTRING"),
                  "CGen must not select rune.toString by symbol id");
@@ -3461,22 +3456,21 @@ TEST(cgen_rune_to_string_consumes_immutable_emission_recipe) {
 }
 
 TEST(cgen_rune_is_whitespace_consumes_immutable_emission_recipe) {
-    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 979,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType string_type = {.kind = XR_KIND_STRING, .id = 980,
-                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 981,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 982,
-                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .id = 979, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 980, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType rune_type = {
+        .kind = XR_KIND_RUNE, .id = 981, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType bool_type = {
+        .kind = XR_KIND_BOOL, .id = 982, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType *iterator_args[] = {&rune_type};
     XrType iterator_type = {
         .kind = XR_KIND_INSTANCE,
         .id = 983,
         .scalar_rep = XR_SCALAR_REP_NONE,
         .frozen = true,
-        .instance = {.class_name = "Iterator", .type_args = iterator_args,
-                     .type_arg_count = 1},
+        .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
     };
     XiFunc *ir = xi_func_new("rune_is_whitespace_recipe", &unit_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
@@ -3485,8 +3479,7 @@ TEST(cgen_rune_is_whitespace_consumes_immutable_emission_recipe) {
     XiValue *source = xi_const_str(ir, entry, " 0123456789abcdef", &string_type);
     XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
     XiValue *next = xi_value_new(ir, entry, XI_CALL_METHOD, &rune_type, 1);
-    XiValue *is_whitespace = xi_value_new(ir, entry, XI_CALL_METHOD,
-                                          &bool_type, 1);
+    XiValue *is_whitespace = xi_value_new(ir, entry, XI_CALL_METHOD, &bool_type, 1);
     XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
     XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
     TEST_REQUIRE(source && runes && next && is_whitespace && print && release,
@@ -3507,12 +3500,9 @@ TEST(cgen_rune_is_whitespace_consumes_immutable_emission_recipe) {
     release->args[0] = runes;
     xi_block_set_return(entry, NULL);
     bool had_error = false;
-    char *code = generate_c_with_status(ir, "rune_is_whitespace_recipe",
-                                        &had_error);
-    TEST_REQUIRE(code != NULL && !had_error,
-                 "sealed rune.isWhitespace recipe should generate");
-    TEST_REQUIRE(count_between(code, code + strlen(code),
-                               "xrt_rune_is_whitespace(") == 1,
+    char *code = generate_c_with_status(ir, "rune_is_whitespace_recipe", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "sealed rune.isWhitespace recipe should generate");
+    TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_rune_is_whitespace(") == 1,
                  "CGen must consume the exact whitespace recipe once");
     TEST_REQUIRE(!contains(code, "XRT_SYM_IS_WHITESPACE"),
                  "CGen must not select rune.isWhitespace by symbol id");
@@ -3882,8 +3872,7 @@ TEST(cgen_runtime_string_slice_constant_emits_immediate_without_local) {
                  "CHECKTYPE borrows the unresolved call result before promotion");
     TEST_REQUIRE(promotion && promotion->nargs == 1 && promotion->args[0] == checked_slice,
                  "return transfer promotes the checked unresolved result exactly once");
-    TEST_REQUIRE(promotion_count == 1,
-                 "return transfer has exactly one checked-result promotion");
+    TEST_REQUIRE(promotion_count == 1, "return transfer has exactly one checked-result promotion");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
@@ -3961,16 +3950,13 @@ TEST(cgen_clean_narrow_arithmetic_keeps_required_constant_local) {
 }
 
 TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
-    XrType u32_type = {
-        .kind = XR_KIND_INT, .id = 961, .scalar_rep = XR_NATIVE_U32, .frozen = true};
+    XrType u32_type = {.kind = XR_KIND_INT, .id = 961, .scalar_rep = XR_NATIVE_U32, .frozen = true};
     XrType string_type = {
         .kind = XR_KIND_STRING, .id = 964, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XrType unit_type = {
         .kind = XR_KIND_UNIT, .id = 965, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
-    XrType channel_type = {.kind = XR_KIND_CHANNEL,
-                           .id = 966,
-                           .scalar_rep = XR_SCALAR_REP_NONE,
-                           .frozen = true};
+    XrType channel_type = {
+        .kind = XR_KIND_CHANNEL, .id = 966, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     channel_type.container.element_type = &u32_type;
     XiFunc *ir = xi_func_new("scalar_emission_consumer", &u32_type);
     TEST_REQUIRE(ir != NULL, "scalar emission consumer function allocated");
@@ -3984,13 +3970,11 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiValue *parameter = xi_param(ir, entry, 0, &u32_type);
     XiValue *one = xi_const_int(ir, entry, 1, &u32_type);
     XiValue *sum = xi_value_new(ir, entry, XI_ADD, &u32_type, 2);
-    XiValue *literal = xi_const_str(ir, entry, "immutable-authority",
-                                    &string_type);
+    XiValue *literal = xi_const_str(ir, entry, "immutable-authority", &string_type);
     XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
     XiValue *capacity = xi_const_int(ir, entry, 3, &u32_type);
     XiValue *channel = xi_value_new(ir, entry, XI_CHAN_NEW, &channel_type, 1);
-    XiValue *receive =
-        xi_value_new(ir, entry, XI_CHAN_TRY_RECV, &u32_type, 1);
+    XiValue *receive = xi_value_new(ir, entry, XI_CHAN_TRY_RECV, &u32_type, 1);
     TEST_REQUIRE(parameter && one && sum && literal && print && capacity && channel && receive,
                  "value emission consumer values allocated");
     ir->params[0] = parameter;
@@ -4007,18 +3991,17 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiModule *modules[] = {module};
     TestAotPlan legacy_plan;
     test_aot_plan_prepare(&legacy_plan, modules, 1, 0);
-    XrTargetProfile *profile = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     TEST_REQUIRE(profile != NULL, "scalar emission consumer profile built");
     XrTargetPlan *target_plan = NULL;
     XrCEmissionPlan *emission_plan = NULL;
     char error[512] = {0};
-    TEST_REQUIRE(xr_target_plan_build(ir->semantic_plan, profile, &target_plan, error,
-                                      sizeof(error)),
-                 "scalar emission consumer TargetPlan built");
+    TEST_REQUIRE(
+        xr_target_plan_build(ir->semantic_plan, profile, &target_plan, error, sizeof(error)),
+        "scalar emission consumer TargetPlan built");
 
-    TEST_REQUIRE(xr_c_emission_plan_build(target_plan,
-                                          xr_target_profile_fingerprint(profile),
+    TEST_REQUIRE(xr_c_emission_plan_build(target_plan, xr_target_profile_fingerprint(profile),
                                           &emission_plan, error, sizeof(error)),
                  "scalar emission consumer C plan built");
     TEST_REQUIRE(xaot_bundle_set_program_target_plan(&legacy_plan.bundle, target_plan),
@@ -4079,17 +4062,14 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     char scalar_decl[64];
     char poisoned_scalar_decl[64];
     snprintf(scalar_decl, sizeof(scalar_decl), "uint32_t v%u =", (unsigned) sum->id);
-    snprintf(poisoned_scalar_decl, sizeof(poisoned_scalar_decl), "XrValue v%u",
-             (unsigned) sum->id);
+    snprintf(poisoned_scalar_decl, sizeof(poisoned_scalar_decl), "XrValue v%u", (unsigned) sum->id);
     TEST_REQUIRE(contains_between(fn, fn_end, scalar_decl),
                  "immutable C emission plan owns scalar local spelling");
     TEST_REQUIRE(!contains_between(fn, fn_end, poisoned_scalar_decl),
                  "poisoned legacy scalar spelling is unreachable");
-    TEST_REQUIRE(contains(buf, "immutable-authority") &&
-                     !contains(buf, "forged-live-xi"),
+    TEST_REQUIRE(contains(buf, "immutable-authority") && !contains(buf, "forged-live-xi"),
                  "String literal CGen mechanically consumes immutable plan-owned bytes");
-    TEST_REQUIRE(contains(buf, "xr_aot_channel_new(") &&
-                     !contains(buf, "xr_aot_channel_new(NULL"),
+    TEST_REQUIRE(contains(buf, "xr_aot_channel_new(") && !contains(buf, "xr_aot_channel_new(NULL"),
                  "Channel CGen mechanically consumes the immutable recipe despite poisoned Xi rep");
     char receive_assign[96];
     snprintf(receive_assign, sizeof(receive_assign),
@@ -4109,8 +4089,7 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(!xi_cgen_ctx_set_value_emission_plans(missing_install, NULL, 1) &&
                      xi_cgen_has_error(missing_install),
                  "missing value emission plan fails closed");
-    TEST_REQUIRE(!xi_cgen_ctx_set_value_emission_plans(missing_install,
-                                                        emission_plans, 1) &&
+    TEST_REQUIRE(!xi_cgen_ctx_set_value_emission_plans(missing_install, emission_plans, 1) &&
                      xi_cgen_has_error(missing_install),
                  "sticky registry error cannot be cleared by a later valid install");
     xi_cgen_ctx_free(missing_install);
@@ -5097,8 +5076,7 @@ TEST(cgen_local_value_struct_copy_consumes_named_aggregate_emission) {
     TEST_REQUIRE(!contains_between(copy, copy_end, "xrt_release("),
                  "native POD struct locals must not receive tagged cleanup");
 
-    printf("  Generated immutable named-aggregate copy %zu bytes of C code\n",
-           strlen(code));
+    printf("  Generated immutable named-aggregate copy %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -6445,15 +6423,13 @@ TEST(cgen_byte_array_copy_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
                                           XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO,
                                           XR_SEM_CONSUMER_CGEN));
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO);
     TEST_REQUIRE(adapter != NULL && strcmp(adapter, "xrt_byte_array_copy_checked_raw") == 0,
                  "byte-array copy publishes its stable CGen adapter");
 
     XrType *array_type = xr_type_new_u8_array(g_iso);
-    XrType int_type = {
-        .kind = XR_KIND_INT, .id = 946, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 946, .scalar_rep = XR_NATIVE_I64, .frozen = true};
     TEST_REQUIRE(array_type != NULL, "manual byte-array copy type allocated");
     XiFunc *ir = xi_func_new("manual_byte_array_copy_owner", array_type);
     TEST_REQUIRE(ir != NULL, "manual byte-array copy function allocated");
@@ -6500,8 +6476,7 @@ TEST(cgen_byte_array_copy_uses_stable_owner_adapter) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL && !had_error, "byte-array copy owner fixture generated C");
-    TEST_REQUIRE(count_between(code, code + strlen(code),
-                               "xrt_byte_array_copy_checked_raw(") == 2,
+    TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_byte_array_copy_checked_raw(") == 2,
                  "both byte-array copy operations call the stable owner adapter");
     TEST_REQUIRE(contains(code, "XR_BYTE_ARRAY_COPY_WITHIN") &&
                      contains(code, "XR_BYTE_ARRAY_COPY_FROM"),
@@ -6619,8 +6594,7 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
            count_between(fn, fn_end, "xrt_release(") == 0 &&
            "borrowed Array<u8>.reserve receiver must not force parameter ARC");
 
-    printf("  Generated borrowed Array<u8> reserve fast path %zu bytes of C code\n",
-           strlen(code));
+    printf("  Generated borrowed Array<u8> reserve fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -6653,9 +6627,8 @@ TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
     assert(!contains(code, "cannot pass non-aggregate") &&
            "direct call argument ABI should not reject Array<u8>-to-Slice<u8> conversion");
 
-    printf(
-        "  Generated direct Array<u8>-to-Slice<u8> argument conversion %zu bytes of C code\n",
-        strlen(code));
+    printf("  Generated direct Array<u8>-to-Slice<u8> argument conversion %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -6970,18 +6943,17 @@ TEST(cgen_span_slice_elides_dead_err_check) {
 }
 
 TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
-    const char *src =
-        "fn appendRange(out: ref Array<u8>, src: Slice<u8>, start: i64, n: i64) {\n"
-        "    out.appendFrom(src[start:start + n])\n"
-        "}\n"
-        "fn run() -> i64 {\n"
-        "    var out = Array<u8>()\n"
-        "    var src = Array<u8>(8)\n"
-        "    const view: Slice<u8> = src[:]\n"
-        "    appendRange(ref out, view, 2, 4)\n"
-        "    return len(out)\n"
-        "}\n"
-        "print(run())\n";
+    const char *src = "fn appendRange(out: ref Array<u8>, src: Slice<u8>, start: i64, n: i64) {\n"
+                      "    out.appendFrom(src[start:start + n])\n"
+                      "}\n"
+                      "fn run() -> i64 {\n"
+                      "    var out = Array<u8>()\n"
+                      "    var src = Array<u8>(8)\n"
+                      "    const view: Slice<u8> = src[:]\n"
+                      "    appendRange(ref out, view, 2, 4)\n"
+                      "    return len(out)\n"
+                      "}\n"
+                      "print(run())\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -7005,8 +6977,7 @@ TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "appendFrom(Slice<u8> slice) must not keep dead ERR_CHECKs after proven native paths");
 
-    printf("  Generated Slice<u8> append-from-slice fast path %zu bytes of C code\n",
-           strlen(code));
+    printf("  Generated Slice<u8> append-from-slice fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -8741,7 +8712,8 @@ TEST(cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare) {
            count_between(count, count_end, "XR_FROM_BOOL(") >= 1 &&
            count_between(count, count_end, "xrt_eq(") >= 1 &&
            count_between(count, count_end, "xr_truthy(") >= 1 &&
-           "unguarded Map<i64,bool>.get comparison should consume the stable truthiness owner adapter");
+           "unguarded Map<i64,bool>.get comparison should consume the stable truthiness owner "
+           "adapter");
 
     printf("  Generated unguarded bool map explicit comparison %zu bytes of C code\n",
            strlen(code));
@@ -8931,11 +8903,10 @@ TEST(cgen_typeid_uses_stable_owner_adapter) {
 
 TEST(cgen_exact_bits_use_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITS_HI,
-                                          XR_SEM_OWNER_ID_SHARED_BITS_LO,
-                                          XR_SEM_CONSUMER_CGEN) &&
+                                          XR_SEM_OWNER_ID_SHARED_BITS_LO, XR_SEM_CONSUMER_CGEN) &&
            "exact-width bits owner must publish CGen as a mechanical consumer");
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BITS_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BITS_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_bits_exact_eval") == 0 &&
            "CGen must resolve the stable exact-width bit owner adapter");
 }
@@ -8945,8 +8916,8 @@ TEST(cgen_bits_not_uses_stable_owner_adapter) {
                                           XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,
                                           XR_SEM_CONSUMER_CGEN) &&
            "bitwise-not owner must publish CGen as a mechanical consumer");
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI, XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_bits_not_eval") == 0 &&
            "CGen must resolve the stable bitwise-not owner adapter");
 
@@ -8972,8 +8943,8 @@ TEST(cgen_numeric_neg_uses_stable_owner_adapter) {
                                           XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO,
                                           XR_SEM_CONSUMER_CGEN) &&
            "numeric-neg owner must publish CGen as a mechanical consumer");
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_NUMERIC_NEG_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_numeric_neg_eval") == 0 &&
            "CGen must resolve the stable numeric-neg owner adapter");
 
@@ -9002,9 +8973,8 @@ TEST(cgen_bitwise_binary_uses_stable_owner_adapter) {
                                           XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO,
                                           XR_SEM_CONSUMER_CGEN) &&
            "bitwise-binary owner must publish CGen as a mechanical consumer");
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,
-        XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BITWISE_BINARY_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_bitwise_binary_eval") == 0 &&
            "CGen must resolve the stable bitwise-binary owner adapter");
 
@@ -9024,8 +8994,7 @@ TEST(cgen_bitwise_binary_uses_stable_owner_adapter) {
     assert(!contains(code, "xrt_bigint_and_val") && !contains(code, "xrt_bigint_or_val") &&
            !contains(code, "xrt_bigint_xor_val") &&
            "generated C must not name retired per-operation BigInt helpers");
-    assert(!contains(code, ") & (") && !contains(code, ") | (") &&
-           !contains(code, ") ^ (") &&
+    assert(!contains(code, ") & (") && !contains(code, ") | (") && !contains(code, ") ^ (") &&
            "generated C must not recreate raw bitwise-binary semantics");
 
     xr_free(code);
@@ -9033,37 +9002,34 @@ TEST(cgen_bitwise_binary_uses_stable_owner_adapter) {
 }
 
 TEST(cgen_numeric_width_uses_stable_owner_adapter) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
-               XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_CGEN) &&
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+                                          XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
            "numeric width owner must publish CGen as a mechanical consumer");
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
-        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO);
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI, XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_numeric_width_eval") == 0 &&
            "CGen must resolve the stable numeric width owner adapter");
 }
 
 TEST(cgen_byte_slice_scalar_uses_stable_owner_adapter) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_CGEN) &&
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
            "byte-slice scalar owner must publish CGen as a mechanical consumer");
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO);
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_scalar_eval") == 0 &&
            "CGen must resolve the stable byte-slice scalar owner adapter");
 }
 
 TEST(cgen_byte_slice_compare_uses_stable_owner_adapter) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_CGEN) &&
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
            "byte-slice compare owner must publish CGen as a mechanical consumer");
     const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO);
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_compare_checked_raw") == 0 &&
            "CGen must resolve the stable byte-slice compare owner adapter");
 
@@ -9092,13 +9058,12 @@ TEST(cgen_byte_slice_compare_uses_stable_owner_adapter) {
 }
 
 TEST(cgen_byte_slice_fill_uses_stable_owner_adapter) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO, XR_SEM_CONSUMER_CGEN) &&
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
            "byte-slice fill owner must publish CGen as a mechanical consumer");
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_fill_checked_raw") == 0 &&
            "CGen must resolve the stable byte-slice fill owner adapter");
 
@@ -9129,19 +9094,17 @@ TEST(cgen_byte_slice_fill_uses_stable_owner_adapter) {
 }
 
 TEST(cgen_byte_slice_mutation_uses_stable_owner_adapters) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO, XR_SEM_CONSUMER_CGEN));
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_CGEN));
-    assert(strcmp(xr_semantic_owner_cgen_adapter(
-                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
-                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO),
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    assert(strcmp(xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+                                                 XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO),
                   "xrt_byte_slice_copy_checked_raw") == 0);
-    assert(strcmp(xr_semantic_owner_cgen_adapter(
-                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
-                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO),
+    assert(strcmp(xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+                                                 XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO),
                   "xrt_byte_slice_repeat_from_checked_raw") == 0);
 
     const char *src = "fn mutate() -> i64 {\n"
@@ -9175,13 +9138,13 @@ TEST(cgen_byte_slice_mutation_uses_stable_owner_adapters) {
 }
 
 TEST(cgen_byte_slice_common_prefix_uses_stable_owner_adapter) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
-               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_CGEN) &&
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
            "byte-slice common-prefix owner must publish CGen as a mechanical consumer");
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
-        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO);
+    const char *adapter =
+        xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+                                       XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_common_prefix_checked_raw") == 0 &&
            "CGen must resolve the stable byte-slice common-prefix owner adapter");
 
@@ -9212,40 +9175,35 @@ TEST(cgen_byte_slice_common_prefix_uses_stable_owner_adapter) {
 }
 
 TEST(cgen_pod_slice_copy_compare_use_stable_owner_adapters) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
-               XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO, XR_SEM_CONSUMER_CGEN));
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
-               XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO, XR_SEM_CONSUMER_CGEN));
-    assert(strcmp(xr_semantic_owner_cgen_adapter(
-                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
-                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO),
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
+                                          XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
+                                          XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    assert(strcmp(xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_HI,
+                                                 XR_SEM_OWNER_ID_SHARED_POD_SLICE_COPY_LO),
                   "xrt_span_copy_checked_raw") == 0);
-    assert(strcmp(xr_semantic_owner_cgen_adapter(
-                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
-                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO),
+    assert(strcmp(xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_HI,
+                                                 XR_SEM_OWNER_ID_SHARED_POD_SLICE_COMPARE_LO),
                   "xrt_span_compare_checked_raw") == 0);
-
 }
 
 TEST(cgen_pod_slice_fill_uses_stable_owner_adapter) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
-               XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO, XR_SEM_CONSUMER_CGEN));
-    assert(strcmp(xr_semantic_owner_cgen_adapter(
-                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
-                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO),
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
+                                          XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    assert(strcmp(xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_HI,
+                                                 XR_SEM_OWNER_ID_SHARED_POD_SLICE_FILL_LO),
                   "xrt_span_fill_checked_raw") == 0);
 }
 
 TEST(cgen_pod_slice_view_uses_stable_owner_adapter) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
-               XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO, XR_SEM_CONSUMER_CGEN));
-    assert(strcmp(xr_semantic_owner_cgen_adapter(
-                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
-                      XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO),
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
+                                          XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    assert(strcmp(xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_HI,
+                                                 XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO),
                   "xrt_pod_slice_view_checked_raw") == 0);
 
     const char *src = "fn views(values: Array<u32>) -> i64 {\n"
@@ -9273,26 +9231,24 @@ TEST(cgen_pod_slice_view_uses_stable_owner_adapter) {
 }
 
 TEST(cgen_raw_memory_copy_owner_registry_is_stable) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
-               XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO, XR_SEM_CONSUMER_CGEN) &&
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+                                          XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
            "raw-memory-copy owner must publish CGen as a mechanical consumer");
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
-        XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_raw_memory_copy_nonoverlap") == 0 &&
            "CGen must resolve the stable raw-memory-copy owner adapter");
-
 }
 
 TEST(cgen_enum_metadata_access_uses_stable_owner_adapter) {
-    assert(xr_semantic_owner_has_consumer(
-               XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
-               XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO, XR_SEM_CONSUMER_CGEN) &&
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+                                          XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
            "enum-metadata owner must publish CGen as a mechanical consumer");
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
-        XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO);
+    const char *adapter =
+        xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_HI,
+                                       XR_SEM_OWNER_ID_SHARED_ENUM_METADATA_ACCESS_LO);
     assert(adapter != NULL && strcmp(adapter, "xrt_enum_metadata_access") == 0 &&
            "CGen must resolve the stable enum-metadata owner adapter");
 
@@ -9306,8 +9262,8 @@ TEST(cgen_enum_metadata_access_uses_stable_owner_adapter) {
     XiValue *variant_count = xi_const_int(ir, entry, 3, &int_type);
     XiValue *variant_index = xi_const_int(ir, entry, 1, &int_type);
     XiValue *variant = xi_value_new(ir, entry, XI_ENUM_VARIANT_AT, &int_type, 2);
-    XiValue *payload_view = xi_const_int(
-        ir, entry, (int64_t) ((UINT64_C(2) << 32) | UINT64_C(9)), &int_type);
+    XiValue *payload_view =
+        xi_const_int(ir, entry, (int64_t) ((UINT64_C(2) << 32) | UINT64_C(9)), &int_type);
     XiValue *payload_index = xi_const_int(ir, entry, 1, &int_type);
     XiValue *payload = xi_value_new(ir, entry, XI_ENUM_PAYLOAD_AT, &int_type, 2);
     TEST_REQUIRE(variant_count && variant_index && variant && payload_view && payload_index &&
@@ -9325,8 +9281,7 @@ TEST(cgen_enum_metadata_access_uses_stable_owner_adapter) {
     TEST_REQUIRE(contains(code, "xrt_enum_metadata_access_variant_at(") &&
                      contains(code, "xrt_enum_metadata_access_payload_at("),
                  "both enum metadata operations call the stable owner adapter");
-    TEST_REQUIRE(!contains(code, "({ int64_t _n =") &&
-                     !contains(code, "({ uint64_t _p =") &&
+    TEST_REQUIRE(!contains(code, "({ int64_t _n =") && !contains(code, "({ uint64_t _p =") &&
                      !contains(code, "enum variant index out of bounds") &&
                      !contains(code, "enum payload field index out of bounds"),
                  "generated C does not recreate enum metadata semantics");
@@ -9338,8 +9293,8 @@ TEST(cgen_cell_access_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI,
                                           XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO,
                                           XR_SEM_CONSUMER_CGEN));
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO);
     TEST_REQUIRE(adapter != NULL && strcmp(adapter, "xrt_cell_access") == 0,
                  "cell access publishes its stable CGen adapter");
 
@@ -9355,8 +9310,7 @@ TEST(cgen_cell_access_uses_stable_owner_adapter) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL && !had_error, "cell-access owner fixture generated C");
-    TEST_REQUIRE(contains(code, "xrt_cell_access_get(") &&
-                     contains(code, "xrt_cell_access_set("),
+    TEST_REQUIRE(contains(code, "xrt_cell_access_get(") && contains(code, "xrt_cell_access_set("),
                  "cell get and set call the stable owner adapter");
     TEST_REQUIRE(!contains(code, "xrt_cell_get(") && !contains(code, "xrt_cell_set("),
                  "retired cell access adapters are absent");
@@ -9368,14 +9322,16 @@ TEST(cgen_null_test_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,
                                           XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,
                                           XR_SEM_CONSUMER_CGEN));
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI, XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO);
+    const char *adapter = xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_NULL_TEST_HI,
+                                                         XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO);
     TEST_REQUIRE(adapter != NULL && strcmp(adapter, "xrt_null_test") == 0,
                  "null test publishes its stable CGen adapter");
 
-    XrType tagged_type = {
-        .kind = XR_KIND_INT, .id = 942, .scalar_rep = XR_NATIVE_I64,
-        .is_nullable = true, .frozen = true};
+    XrType tagged_type = {.kind = XR_KIND_INT,
+                          .id = 942,
+                          .scalar_rep = XR_NATIVE_I64,
+                          .is_nullable = true,
+                          .frozen = true};
     XrType bool_type = {
         .kind = XR_KIND_BOOL, .id = 944, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XiFunc *ir = xi_func_new("manual_null_test_owner", &tagged_type);
@@ -9566,8 +9522,7 @@ TEST(cgen_range_uses_direct_aot_driver) {
     assert(contains(code, ", true)") && "inclusive range must pass inclusive=true");
     assert(contains(code, "xrt_typename(") &&
            "typeName(range) must use the direct type-name helper");
-    assert(!contains(code, "xrt_range_from_i64(") &&
-           !contains(code, "xrt_range(XR_FROM_INT") &&
+    assert(!contains(code, "xrt_range_from_i64(") && !contains(code, "xrt_range(XR_FROM_INT") &&
            "range creation must not box start/end before the AOT helper");
 
     printf("  Generated range direct driver %zu bytes of C code\n", strlen(code));
@@ -9730,8 +9685,7 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
            "Array<u8> filter result reads and writes must access raw byte storage");
     assert(!contains(code, "xrt_method_1(") &&
            "Array<u8>.filter must not fall back to dynamic method dispatch");
-    assert(!contains(code, "({") &&
-           "Array<u8>.filter must emit portable C11 statements");
+    assert(!contains(code, "({") && "Array<u8>.filter must emit portable C11 statements");
     assert(!contains(code, "xrt_index_get(") &&
            "Array<u8> filter result index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_getprop(") &&
@@ -9782,8 +9736,7 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
            "Array<i64>.map result reads and writes must access raw i64 storage");
     assert(!contains(code, "xrt_method_1(") &&
            "Array<i64>.map must not fall back to dynamic method dispatch");
-    assert(!contains(code, "({") &&
-           "Array<i64>.map must emit portable C11 statements");
+    assert(!contains(code, "({") && "Array<i64>.map must emit portable C11 statements");
     assert(!contains(code, "xrt_index_get(") &&
            "Array<i64>.map result index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_getprop(") &&
@@ -9836,8 +9789,7 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
            "read-only map result scan must use the cached data pointer");
     assert(!contains(code, "xrt_index_get(") &&
            "read-only map result scan must not fall back to runtime index dispatch");
-    assert(!contains(code, "({") &&
-           "read-only Array<i64>.map must emit portable C11 statements");
+    assert(!contains(code, "({") && "read-only Array<i64>.map must emit portable C11 statements");
 
     printf("  Generated read-only typed array map scan %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -9856,8 +9808,8 @@ TEST(cgen_typed_array_map_captured_callback_fails_closed) {
                       "print(sum())\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir == NULL &&
-           "captured Array.map must fail closed before C generation until a frozen runtime adapter exists");
+    assert(ir == NULL && "captured Array.map must fail closed before C generation until a frozen "
+                         "runtime adapter exists");
 }
 
 TEST(cgen_typed_array_direct_hof_callback_extra_use_fails_closed) {
@@ -10267,8 +10219,7 @@ TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
            "read-only filter result scan must use the cached data pointer");
     assert(!contains(code, "xrt_index_get(") &&
            "read-only filter result scan must not fall back to runtime index dispatch");
-    assert(!contains(code, "({") &&
-           "read-only Array<u8>.filter must emit portable C11 statements");
+    assert(!contains(code, "({") && "read-only Array<u8>.filter must emit portable C11 statements");
 
     printf("  Generated read-only typed array filter scan %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -10287,8 +10238,8 @@ TEST(cgen_typed_array_filter_captured_callback_fails_closed) {
                       "print(sum())\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir == NULL &&
-           "captured Array.filter must fail closed before C generation until a frozen runtime adapter exists");
+    assert(ir == NULL && "captured Array.filter must fail closed before C generation until a "
+                         "frozen runtime adapter exists");
 }
 
 TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
@@ -10323,8 +10274,7 @@ TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
            "inlined Array<i64>.reduce must call the callback's native function");
     assert(!contains(code, "xrt_method_2(") &&
            "Array<i64>.reduce must not fall back to dynamic method dispatch");
-    assert(!contains(code, "({") &&
-           "Array<i64>.reduce must emit portable C11 statements");
+    assert(!contains(code, "({") && "Array<i64>.reduce must emit portable C11 statements");
 
     printf("  Generated typed array reduce fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -10332,15 +10282,14 @@ TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
 }
 
 TEST(cgen_typed_array_unused_reduce_still_executes_callback_loop) {
-    const char *src =
-        "fn run() -> i64 {\n"
-        "    var values: Array<i64> = []\n"
-        "    values.push(1)\n"
-        "    values.push(2)\n"
-        "    values.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x }, 0)\n"
-        "    return 7\n"
-        "}\n"
-        "print(run())\n";
+    const char *src = "fn run() -> i64 {\n"
+                      "    var values: Array<i64> = []\n"
+                      "    values.push(1)\n"
+                      "    values.push(2)\n"
+                      "    values.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x }, 0)\n"
+                      "    return 7\n"
+                      "}\n"
+                      "print(run())\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -10352,34 +10301,28 @@ TEST(cgen_typed_array_unused_reduce_still_executes_callback_loop) {
     assert(contains(code, "for (int64_t _i = 0; _i < _n; _i++)") &&
            contains(code, "test___anonymous__") &&
            "unused reduce must still execute every callback invocation");
-    assert(!contains(code, "xrt_array_reduce_typed(") &&
-           !contains(code, "xrt_method_2(") &&
+    assert(!contains(code, "xrt_array_reduce_typed(") && !contains(code, "xrt_method_2(") &&
            "unused reduce must consume the direct frozen recipe");
-    assert(!contains(code, "({") &&
-           "unused reduce must remain portable C11");
+    assert(!contains(code, "({") && "unused reduce must remain portable C11");
 
-    printf("  Generated unused typed array reduce loop %zu bytes of C code\n",
-           strlen(code));
+    printf("  Generated unused typed array reduce loop %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-static bool cgen_array_hof_emit_with_prepared_plan(TestAotPlan *plan,
-                                                    XiModule *module) {
+static bool cgen_array_hof_emit_with_prepared_plan(TestAotPlan *plan, XiModule *module) {
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     TEST_REQUIRE(ctx != NULL, "Array HOF mutation CGen context allocated");
     xi_cgen_ctx_set_aot_bundle(ctx, &plan->bundle);
     TestCEmissionRegistry emission_registry;
-    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx,
-                                                  &plan->bundle),
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx, &plan->bundle),
                  "Array HOF mutation C emission registry installed");
     char *buf = NULL;
     size_t bufsz = 0;
     FILE *mem = xr_open_memstream(&buf, &bufsz);
     TEST_REQUIRE(mem != NULL, "Array HOF mutation stream opened");
     xi_cgen_program(ctx, mem, module);
-    TEST_REQUIRE(xr_close_memstream(mem, &buf, &bufsz) == 0,
-                 "Array HOF mutation stream closed");
+    TEST_REQUIRE(xr_close_memstream(mem, &buf, &bufsz) == 0, "Array HOF mutation stream closed");
     bool ok = !xi_cgen_has_error(ctx);
     xr_free(buf);
     test_c_emission_registry_free(&emission_registry);
@@ -10388,14 +10331,13 @@ static bool cgen_array_hof_emit_with_prepared_plan(TestAotPlan *plan,
 }
 
 TEST(cgen_typed_array_direct_hof_requires_exact_callback_abi_plan) {
-    const char *src =
-        "fn run() -> i64 {\n"
-        "    var values: Array<i64> = []\n"
-        "    values.push(1)\n"
-        "    var mapped = values.map(fn(x: i64) -> i64 { return x + 1 })\n"
-        "    return mapped[0]\n"
-        "}\n"
-        "print(run())\n";
+    const char *src = "fn run() -> i64 {\n"
+                      "    var values: Array<i64> = []\n"
+                      "    values.push(1)\n"
+                      "    var mapped = values.map(fn(x: i64) -> i64 { return x + 1 })\n"
+                      "    return mapped[0]\n"
+                      "}\n"
+                      "print(run())\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL && test_prepare_backend_ir(ir),
                  "Array HOF ABI mutation fixture reached Backend");
@@ -10416,8 +10358,7 @@ TEST(cgen_typed_array_direct_hof_requires_exact_callback_abi_plan) {
     for (uint32_t i = 0; i < semantic_operation_count; i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(ir->semantic_plan, i);
-        if (!operation ||
-            operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF)
+        if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_HOF)
             continue;
         TEST_REQUIRE(callable_function == XR_SEMANTIC_INDEX_NONE,
                      "Array HOF ABI mutation has one semantic callback");
@@ -10428,20 +10369,15 @@ TEST(cgen_typed_array_direct_hof_requires_exact_callback_abi_plan) {
     uint32_t callee_index = UINT32_MAX;
     for (uint32_t i = 0; i < plan.bundle.nfunc_plans; i++) {
         XaotFuncPlan *candidate = &plan.bundle.func_plans[i];
-        if (!candidate->func ||
-            candidate->func->semantic_plan != ir->semantic_plan ||
-            candidate->func->semantic_plan_function_index !=
-                callable_function)
+        if (!candidate->func || candidate->func->semantic_plan != ir->semantic_plan ||
+            candidate->func->semantic_plan_function_index != callable_function)
             continue;
-        TEST_REQUIRE(callee_index == UINT32_MAX,
-                     "Array HOF ABI mutation has one callback plan");
+        TEST_REQUIRE(callee_index == UINT32_MAX, "Array HOF ABI mutation has one callback plan");
         callee_index = i;
     }
-    TEST_REQUIRE(callee_index != UINT32_MAX,
-                 "Array HOF ABI mutation callback plan found");
+    TEST_REQUIRE(callee_index != UINT32_MAX, "Array HOF ABI mutation callback plan found");
     XaotFuncPlan *callee = &plan.bundle.func_plans[callee_index];
-    TEST_REQUIRE(callee->reachable && !callee->may_suspend &&
-                     callee->abi.kind == XAOT_ABI_NATIVE &&
+    TEST_REQUIRE(callee->reachable && !callee->may_suspend && callee->abi.kind == XAOT_ABI_NATIVE &&
                      callee->abi.nparams == 1 && callee->abi.params,
                  "Array HOF callback has exact native ABI prerequisite");
     TEST_REQUIRE(cgen_array_hof_emit_with_prepared_plan(&plan, module),
@@ -10517,14 +10453,12 @@ TEST(cgen_typed_array_direct_hof_requires_exact_callback_abi_plan) {
 
     uint32_t saved_count = plan.bundle.nfunc_plans;
     XaotFuncPlan saved_callee = *callee;
-    plan.bundle.func_plans[callee_index] =
-        plan.bundle.func_plans[saved_count - 1u];
+    plan.bundle.func_plans[callee_index] = plan.bundle.func_plans[saved_count - 1u];
     plan.bundle.nfunc_plans--;
     TEST_REQUIRE(!cgen_array_hof_emit_with_prepared_plan(&plan, module),
                  "missing Array HOF callback function plan fails closed");
     plan.bundle.nfunc_plans = saved_count;
-    plan.bundle.func_plans[saved_count - 1u] =
-        plan.bundle.func_plans[callee_index];
+    plan.bundle.func_plans[saved_count - 1u] = plan.bundle.func_plans[callee_index];
     plan.bundle.func_plans[callee_index] = saved_callee;
     callee = &plan.bundle.func_plans[callee_index];
     TEST_REQUIRE(cgen_array_hof_emit_with_prepared_plan(&plan, module),
@@ -10550,8 +10484,8 @@ TEST(cgen_typed_array_reduce_captured_callback_fails_closed) {
         "print(sum())\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir == NULL &&
-           "captured Array.reduce must fail closed before C generation until a frozen runtime adapter exists");
+    assert(ir == NULL && "captured Array.reduce must fail closed before C generation until a "
+                         "frozen runtime adapter exists");
 }
 
 TEST(cgen_int_const_div_mod_uses_native_ops) {
@@ -10633,8 +10567,7 @@ TEST(cgen_shift_uses_stable_owner_adapter) {
     const char *fast = find_static_function_definition(code, "test_fast_");
     assert(fast != NULL && "fast function should be generated");
     const char *fast_end = next_static_after(fast);
-    assert(count_between(fast, fast_end,
-                         "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
+    assert(count_between(fast, fast_end, "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
            "constant right shift must use the stable owner adapter");
 
     const char *widen = find_static_function_definition(code, "test_widen_");
@@ -10646,8 +10579,7 @@ TEST(cgen_shift_uses_stable_owner_adapter) {
     const char *checked = find_static_function_definition(code, "test_checked_");
     assert(checked != NULL && "checked function should be generated");
     const char *checked_end = next_static_after(checked);
-    assert(count_between(checked, checked_end,
-                         "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
+    assert(count_between(checked, checked_end, "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
            "dynamic right shift must use the stable owner adapter");
 
     const char *checked_left = find_static_function_definition(code, "test_checkedLeft_");
@@ -10666,8 +10598,7 @@ TEST(cgen_shift_uses_stable_owner_adapter) {
     const char *wrap_right = find_static_function_definition(code, "test_wrapRight_");
     assert(wrap_right != NULL && "wrapRight function should be generated");
     const char *wrap_right_end = next_static_after(wrap_right);
-    assert(count_between(wrap_right, wrap_right_end,
-                         "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
+    assert(count_between(wrap_right, wrap_right_end, "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
            count_between(wrap_right, wrap_right_end, " >> ") == 0 &&
            "constant signed right shift must not revive raw C semantics");
 
@@ -10700,8 +10631,7 @@ TEST(cgen_unsigned_shift_uses_stable_owner_adapter) {
     const char *fast_end = next_static_after(fast);
     assert(count_between(fast, fast_end, "xrt_shift_eval(XR_SHIFT_LEFT") == 1 &&
            "u64 constant left shift must use the stable owner adapter");
-    assert(count_between(fast, fast_end,
-                         "xrt_shift_eval(XR_SHIFT_RIGHT_UNSIGNED") == 1 &&
+    assert(count_between(fast, fast_end, "xrt_shift_eval(XR_SHIFT_RIGHT_UNSIGNED") == 1 &&
            "u64 constant right shift must use the unsigned owner mode");
     assert(count_between(fast, fast_end, " << ") == 0 &&
            count_between(fast, fast_end, " >> ") == 0 &&
@@ -10710,8 +10640,7 @@ TEST(cgen_unsigned_shift_uses_stable_owner_adapter) {
     const char *dynamic = find_static_function_definition(code, "test_dynamicShift_");
     assert(dynamic != NULL && "dynamicShift function should be generated");
     const char *dynamic_end = next_static_after(dynamic);
-    assert(count_between(dynamic, dynamic_end,
-                         "xrt_shift_eval(XR_SHIFT_RIGHT_UNSIGNED") == 1 &&
+    assert(count_between(dynamic, dynamic_end, "xrt_shift_eval(XR_SHIFT_RIGHT_UNSIGNED") == 1 &&
            "dynamic unsigned shift must use the unsigned owner mode");
 
     printf("  Generated unsigned integer shift fast path %zu bytes of C code\n", strlen(code));
@@ -11190,8 +11119,7 @@ static char *generate_c_with_injected_json_codec_summary(XiFunc *ir,
                                                          const XgJsonCodecSummary *codec_summary,
                                                          bool typed_site, bool refresh_hash,
                                                          bool verify_bundle, bool make_decode_site,
-                                                         bool make_non_site,
-                                                         bool *had_error) {
+                                                         bool make_non_site, bool *had_error) {
     if (!test_prepare_backend_ir(ir))
         return test_failed_codegen_result(had_error);
     XiValue *site = find_marked_json_codec_site(ir);
@@ -11205,8 +11133,7 @@ static char *generate_c_with_injected_json_codec_summary(XiFunc *ir,
         TEST_REQUIRE(xg_global_evidence_add_json_codec(&plan.evidence, codec_summary) != NULL,
                      "Json codec evidence allocation failed");
     if (refresh_hash)
-        plan.bundle.global_evidence_plan.evidence_hash =
-            xg_global_evidence_hash(&plan.evidence);
+        plan.bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&plan.evidence);
     if (verify_bundle) {
         char verify_error[256] = {0};
         TEST_REQUIRE(xaot_verify_bundle(&plan.bundle, verify_error, sizeof(verify_error)),
@@ -11293,19 +11220,17 @@ TEST(cgen_json_codec_summary_preflight_is_exact_and_fail_closed) {
         xi_func_free(ir);
     }
 
-    for (uint32_t i = 0;
-         i < sizeof(invalid_direct_cases) / sizeof(invalid_direct_cases[0]); i++) {
+    for (uint32_t i = 0; i < sizeof(invalid_direct_cases) / sizeof(invalid_direct_cases[0]); i++) {
         XiFunc *ir = make_json_codec_preflight_ir();
         TEST_REQUIRE(ir != NULL, "direct Json.parse negative fixture should build");
         bool had_error = false;
         bool summary_is_globally_valid = i >= 3;
-        char *code = generate_c_with_injected_json_codec_summary(
-            ir, invalid_direct_cases[i], false, true, summary_is_globally_valid, false, false,
-            &had_error);
+        char *code = generate_c_with_injected_json_codec_summary(ir, invalid_direct_cases[i], false,
+                                                                 true, summary_is_globally_valid,
+                                                                 false, false, &had_error);
         TEST_REQUIRE(code != NULL, "Json codec evidence preflight should return a C buffer");
         TEST_REQUIRE(had_error, "invalid Json codec evidence must fail C generation");
-        TEST_REQUIRE(code[0] == '\0',
-                     "Json codec evidence preflight must fail before emitting C");
+        TEST_REQUIRE(code[0] == '\0', "Json codec evidence preflight must fail before emitting C");
         xr_free(code);
         xi_func_free(ir);
     }
@@ -11314,8 +11239,8 @@ TEST(cgen_json_codec_summary_preflight_is_exact_and_fail_closed) {
         XiFunc *ir = make_json_codec_preflight_ir();
         TEST_REQUIRE(ir != NULL, "typed/direct mismatch fixture should build");
         bool had_error = false;
-        char *code = generate_c_with_injected_json_codec_summary(
-            ir, &direct, true, true, true, false, false, &had_error);
+        char *code = generate_c_with_injected_json_codec_summary(ir, &direct, true, true, true,
+                                                                 false, false, &had_error);
         TEST_REQUIRE(code != NULL, "typed/direct mismatch should return a C buffer");
         TEST_REQUIRE(had_error, "typed parse must reject schema-less direct parse evidence");
         TEST_REQUIRE(code[0] == '\0', "typed/direct mismatch must fail before emitting C");
@@ -11340,8 +11265,8 @@ TEST(cgen_json_codec_summary_preflight_is_exact_and_fail_closed) {
         XiFunc *ir = make_json_codec_preflight_ir();
         TEST_REQUIRE(ir != NULL, "stale Json evidence hash fixture should build");
         bool had_error = false;
-        char *code = generate_c_with_injected_json_codec_summary(
-            ir, &direct, false, false, false, false, false, &had_error);
+        char *code = generate_c_with_injected_json_codec_summary(ir, &direct, false, false, false,
+                                                                 false, false, &had_error);
         TEST_REQUIRE(code != NULL, "stale Json evidence hash should return a C buffer");
         TEST_REQUIRE(had_error, "stale Json evidence hash must fail C generation");
         TEST_REQUIRE(code[0] == '\0', "stale Json evidence hash must fail before emitting C");
@@ -11353,8 +11278,8 @@ TEST(cgen_json_codec_summary_preflight_is_exact_and_fail_closed) {
         XiFunc *ir = make_json_codec_preflight_ir();
         TEST_REQUIRE(ir != NULL, "non-Json evidence fixture should build");
         bool had_error = false;
-        char *code = generate_c_with_injected_json_codec_summary(
-            ir, &direct, false, true, true, false, true, &had_error);
+        char *code = generate_c_with_injected_json_codec_summary(ir, &direct, false, true, true,
+                                                                 false, true, &had_error);
         TEST_REQUIRE(code != NULL, "non-Json evidence preflight should return a C buffer");
         TEST_REQUIRE(had_error, "a non-Json site carrying a codec id must fail C generation");
         TEST_REQUIRE(code[0] == '\0', "non-Json codec identity must fail before emitting C");
@@ -14666,8 +14591,7 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
            "sync WorkQueue main must create a work-queue-capable AOT runtime");
     assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
            "sync WorkQueue helpers must receive a runtime-backed global context");
-    assert(!contains(code, "xray_vm_new_full(") &&
-           "sync WorkQueue main must not use a VM isolate");
+    assert(!contains(code, "xray_vm_new_full(") && "sync WorkQueue main must not use a VM isolate");
     assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
            "WorkQueue native methods must not fall back to dynamic method dispatch");
     assert(!contains(code, "xr_aot_work_queue_push_sync(") &&

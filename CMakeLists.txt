@@ -1175,6 +1175,8 @@ else()
 endif()
 
 file(GLOB XRAY_STDLIB_SCRIPT_SOURCES CONFIGURE_DEPENDS "stdlib/*/*.xr")
+# Native type declarations are compiler inputs, not loadable source modules.
+list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX "stdlib/types/[^/]+\\.xr$")
 if(NOT XR_STDLIB_FULL)
     # The generated embedded-source table is the binary's source-module
     # descriptor set. Keep it aligned with the same feature gates that select
@@ -1240,6 +1242,8 @@ add_custom_command(
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
         ${XRAY_STDLIB_EMBED_GENERATOR}
+        ${STDLIBGEN}
+        ${XRAY_STDLIB_DEF_FILES}
         ${XRAY_STDLIB_SCRIPT_SOURCES}
     COMMENT "Generating embedded stdlib source table"
     VERBATIM
@@ -2067,6 +2071,25 @@ if(BUILD_TESTS)
             RUN_SERIAL TRUE
             TIMEOUT 30
         )
+
+        add_test(
+            NAME aot_private_leaf_public_native_msvc
+            COMMAND ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_private_leaf_public_native.py
+                    --root ${CMAKE_CURRENT_SOURCE_DIR}
+                    --build-dir ${CMAKE_BINARY_DIR}
+                    --xray $<TARGET_FILE:xray>
+                    --source ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/stdlib/os_private_leaf_generic_module.xr
+                    --compiler ${CMAKE_C_COMPILER}
+                    --core $<TARGET_FILE:xray_core>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(aot_private_leaf_public_native_msvc PROPERTIES
+            LABELS "aot;cgen;native;msvc;target-machine;stdlib"
+            PROCESSORS 1
+            RUN_SERIAL TRUE
+            TIMEOUT 120
+        )
     endif()
 
     # No Bash is required to run the test suite: every registered gate is a
@@ -2422,6 +2445,18 @@ if(BUILD_TESTS)
         LABELS "stdlib;boundary;unit"
         PROCESSORS 1
         TIMEOUT ${STDLIB_BOUNDARY_MANIFEST_TIMEOUT}
+    )
+
+    add_test(
+        NAME stdlib_embedded_generator_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py
+                --self-test
+    )
+    set_tests_properties(stdlib_embedded_generator_self_test PROPERTIES
+        LABELS "stdlib;embed;generator;unit"
+        PROCESSORS 1
+        TIMEOUT 30
     )
 
     add_test(

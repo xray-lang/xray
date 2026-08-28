@@ -9,6 +9,7 @@
  */
 
 #include "xaot_verify.h"
+#include "emit_c/xr_c_program_emission.h"
 #include "xaot_boundary.h"
 #include "xaot_prepare.h"
 #include "xaot_callable.h"
@@ -62,6 +63,39 @@ static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf, 
     return true;
 }
 
+static bool
+verify_program_function_is_excluded(const XrCProgramDirectI64EmissionBinding *program_scope,
+                                    const XiFunc *func) {
+    return program_scope && func && !xr_c_program_direct_i64_function_binding(program_scope, func);
+}
+
+static bool verify_program_callee_operand_elision(const XaotBundle *bundle, const XiFunc *func,
+                                                  const XiValue *value, bool *out_elided,
+                                                  char *errbuf, size_t errbuf_len) {
+    if (out_elided)
+        *out_elided = false;
+    if (!bundle || !func || !value || !out_elided)
+        return set_error(errbuf, errbuf_len, "AOT callee elision verifier input is incomplete");
+    if (value->op != XI_IMPORT_REF && value->op != XI_GET_SHARED)
+        return true;
+    const XrTargetPlan *target = xaot_bundle_program_target_plan(bundle);
+    uint32_t graph_count = 0;
+    if (!target)
+        return true;
+    (void) xr_target_plan_program_graphs(target, &graph_count);
+    if (graph_count == 0u)
+        return true;
+    XrCProgramDirectI64EmissionBinding binding = {0};
+    char error[256] = {0};
+    if (!xr_c_program_direct_i64_emission_bind(target, bundle->modules, bundle->nmodules, &binding,
+                                               error, sizeof(error)))
+        return set_error(errbuf, errbuf_len,
+                         "AOT callee elision has no exact program C-emission binding");
+    *out_elided = xr_c_program_direct_i64_callee_operand_is_elided(&binding, func, value);
+    xr_c_program_direct_i64_emission_release(&binding);
+    return true;
+}
+
 static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *func,
                                         const XiValue *value,
                                         const XrTargetValueRepRecord **out_binding,
@@ -86,44 +120,38 @@ static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *
         bundle, func, value, &leaf_target, &semantic_function, &semantic_value, target_error,
         sizeof(target_error));
     if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
-        return set_error(errbuf, errbuf_len,
-                         "AOT leaf-aggregate value lacks exact PSC identity");
+        return set_error(errbuf, errbuf_len, "AOT leaf-aggregate value lacks exact PSC identity");
     if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         target_plan = leaf_target;
     uint32_t target_function = UINT32_MAX;
     bool scalar_identity =
         leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
-        (xr_target_plan_find_function(
-             target_plan, semantic, func->semantic_plan_function_index,
-             &target_function) &&
-         xr_aot_scalar_program_semantic_value_id(
-             target_plan, partition, target_function, func, value,
-             &semantic_function, &semantic_value, target_error,
-             sizeof(target_error)));
+        (xr_target_plan_find_function(target_plan, semantic, func->semantic_plan_function_index,
+                                      &target_function) &&
+         xr_aot_scalar_program_semantic_value_id(target_plan, partition, target_function, func,
+                                                 value, &semantic_function, &semantic_value,
+                                                 target_error, sizeof(target_error)));
     if (!scalar_identity) {
-        if (!xr_aot_rep_adapter_value_is_exact(target_plan, func, value, target_error,
-                                               sizeof(target_error)))
-            return set_error(errbuf, errbuf_len,
-                             "AOT value lacks exact TargetPlan semantic identity");
-        *out_rep_adapter = true;
-        return true;
+        if (xr_aot_rep_adapter_value_is_exact(target_plan, func, value, target_error,
+                                              sizeof(target_error))) {
+            *out_rep_adapter = true;
+            return true;
+        }
+        return set_error(errbuf, errbuf_len, "AOT value lacks exact TargetPlan semantic identity");
     }
     (void) semantic_function;
-    *out_binding =
-        xr_target_plan_value_rep_for_module(target_plan, partition, semantic_value);
+    *out_binding = xr_target_plan_value_rep_for_module(target_plan, partition, semantic_value);
     return true;
 }
 
 /* Verification consumes the same immutable C-emission row as prepare. A Xi
  * type describes the LOCAL_ADDR subject, not the extra pointer level, so it is
  * never C spelling authority for a Target RAW_PTR value. */
-static const char *verify_exact_raw_pointer_c_type(const XaotBundle *bundle,
-                                                   const XiFunc *func,
+static const char *verify_exact_raw_pointer_c_type(const XaotBundle *bundle, const XiFunc *func,
                                                    const XrTargetValueRepRecord *binding) {
     XrCValueEmissionView view = {0};
     char error[256] = {0};
-    const XrCEmissionPlan *emission_plan =
-        xaot_bundle_emission_plan_for_func(bundle, func);
+    const XrCEmissionPlan *emission_plan = xaot_bundle_emission_plan_for_func(bundle, func);
     if (!binding || !emission_plan ||
         !xr_c_emission_plan_value_view(emission_plan, binding->semantic_value, &view, error,
                                        sizeof(error)) ||
@@ -131,8 +159,8 @@ static const char *verify_exact_raw_pointer_c_type(const XaotBundle *bundle,
         view.target_register_rep != binding->register_rep ||
         view.target_memory_rep != binding->memory_rep ||
         view.target_register_kind != XR_MACHINE_REP_RAW_PTR ||
-        view.target_memory_kind != XR_MACHINE_REP_RAW_PTR ||
-        view.rep != XR_C_VALUE_REP_RAW_PTR || !view.c_type)
+        view.target_memory_kind != XR_MACHINE_REP_RAW_PTR || view.rep != XR_C_VALUE_REP_RAW_PTR ||
+        !view.c_type)
         return NULL;
     return view.c_type;
 }
@@ -243,10 +271,9 @@ static bool verify_effective_value_rep(const XaotBundle *bundle, const XiFunc *f
                                      errbuf_len))
         return false;
     if (binding) {
-        const XrTargetPlan *target_plan =
-            xaot_bundle_program_semantic_for_func(bundle, func, NULL)
-                ? xaot_bundle_program_target_plan(bundle)
-                : NULL;
+        const XrTargetPlan *target_plan = xaot_bundle_program_semantic_for_func(bundle, func, NULL)
+                                              ? xaot_bundle_program_target_plan(bundle)
+                                              : NULL;
         if (!verify_target_machine_value_rep(bundle, func, target_plan, binding, value, out))
             return set_error(errbuf, errbuf_len, "AOT TargetPlan binding has invalid C value rep");
         return true;
@@ -344,11 +371,23 @@ static bool verify_link_dependency_name_shape(const XgLinkDependencySummary *dep
 }
 
 static bool verify_func_has_plan_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                           const XrCProgramDirectI64EmissionBinding *program_scope,
                                            char *errbuf, size_t errbuf_len) {
     uint16_t ci;
     const XgBodySummary *body;
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT bundle");
+    if (verify_program_function_is_excluded(program_scope, func)) {
+        if (xaot_bundle_find_func_plan(bundle, func))
+            return set_error(errbuf, errbuf_len,
+                             "excluded Xi function retains an AOT function plan");
+        for (ci = 0; ci < func->nchildren; ci++) {
+            if (!verify_func_has_plan_recursive(bundle, func->children[ci], program_scope, errbuf,
+                                                errbuf_len))
+                return false;
+        }
+        return true;
+    }
     if (!xaot_bundle_find_func_plan(bundle, func))
         return set_error(errbuf, errbuf_len, "Xi function has no AOT function plan");
     body = verify_find_evidence_body_by_func(bundle->global_evidence_plan.evidence,
@@ -372,7 +411,8 @@ static bool verify_func_has_plan_recursive(const XaotBundle *bundle, const XiFun
         return set_error(errbuf, errbuf_len, "AOT allocation effect metadata is stale");
     }
     for (ci = 0; ci < func->nchildren; ci++) {
-        if (!verify_func_has_plan_recursive(bundle, func->children[ci], errbuf, errbuf_len))
+        if (!verify_func_has_plan_recursive(bundle, func->children[ci], program_scope, errbuf,
+                                            errbuf_len))
             return false;
     }
     return true;
@@ -496,6 +536,8 @@ static bool verify_value_plan(const XaotBundle *bundle, const XaotValuePlan *pla
         return set_error(errbuf, errbuf_len, "AOT value plan has no Xi value");
     if (!plan->func)
         return set_error(errbuf, errbuf_len, "AOT value plan has no Xi function");
+    if (!xaot_bundle_find_func_plan(bundle, plan->func))
+        return set_error(errbuf, errbuf_len, "AOT value plan has no owning function plan");
     if (!verify_target_value_binding(bundle, plan->func, plan->value, &binding, &rep_adapter,
                                      errbuf, errbuf_len))
         return false;
@@ -1195,13 +1237,12 @@ static bool verify_transfer_value_authority(const XaotBundle *bundle, const XiFu
         if (legacy_count != 0)
             return set_error(errbuf, errbuf_len,
                              "AOT transfer Target-bound value also has legacy authority");
-        if (rep_adapter ||
-            !verify_target_machine_value_rep(
-                bundle, func,
-                xaot_bundle_program_semantic_for_func(bundle, func, NULL)
-                    ? xaot_bundle_program_target_plan(bundle)
-                    : NULL,
-                binding, value, &ignored_rep))
+        if (rep_adapter || !verify_target_machine_value_rep(
+                               bundle, func,
+                               xaot_bundle_program_semantic_for_func(bundle, func, NULL)
+                                   ? xaot_bundle_program_target_plan(bundle)
+                                   : NULL,
+                               binding, value, &ignored_rep))
             return set_error(errbuf, errbuf_len,
                              "AOT transfer Target-bound value has invalid machine rep");
         return true;
@@ -7235,13 +7276,23 @@ XR_FUNC bool xaot_verify_global_evidence_plan(const XaotBundle *bundle, char *er
     return true;
 }
 
-static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
-                                                    char *errbuf, size_t errbuf_len) {
+static bool
+verify_func_values_have_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                        const XrCProgramDirectI64EmissionBinding *program_scope,
+                                        char *errbuf, size_t errbuf_len) {
     uint32_t bi;
     uint16_t ci;
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT value verifier");
+    if (verify_program_function_is_excluded(program_scope, func)) {
+        for (ci = 0; ci < func->nchildren; ci++) {
+            if (!verify_func_values_have_plans_recursive(bundle, func->children[ci], program_scope,
+                                                         errbuf, errbuf_len))
+                return false;
+        }
+        return true;
+    }
 
     for (bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
@@ -7259,8 +7310,14 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
             if (binding && legacy)
                 return set_error(errbuf, errbuf_len,
                                  "Xi scalar phi retains a legacy AOT value plan");
-            if (!binding && !legacy)
-                return set_error(errbuf, errbuf_len, "Xi unmigrated phi has no AOT value plan");
+            if (!binding && !legacy) {
+                bool elided = false;
+                if (!verify_program_callee_operand_elision(bundle, func, &phi->value, &elided,
+                                                           errbuf, errbuf_len))
+                    return false;
+                if (!elided)
+                    return set_error(errbuf, errbuf_len, "Xi unmigrated phi has no AOT value plan");
+            }
             if (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
                 return set_error(errbuf, errbuf_len,
                                  "Xi phi representation adapter row is inexact");
@@ -7275,8 +7332,15 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
             if (binding && legacy)
                 return set_error(errbuf, errbuf_len,
                                  "Xi scalar value retains a legacy AOT value plan");
-            if (!binding && !legacy)
-                return set_error(errbuf, errbuf_len, "Xi unmigrated value has no AOT value plan");
+            if (!binding && !legacy) {
+                bool elided = false;
+                if (!verify_program_callee_operand_elision(bundle, func, blk->values[vi], &elided,
+                                                           errbuf, errbuf_len))
+                    return false;
+                if (!elided)
+                    return set_error(errbuf, errbuf_len,
+                                     "Xi unmigrated value has no AOT value plan");
+            }
             if (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
                 return set_error(errbuf, errbuf_len,
                                  "Xi value representation adapter row is inexact");
@@ -7284,28 +7348,24 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
     }
 
     for (ci = 0; ci < func->nchildren; ci++) {
-        if (!verify_func_values_have_plans_recursive(bundle, func->children[ci], errbuf,
-                                                     errbuf_len))
+        if (!verify_func_values_have_plans_recursive(bundle, func->children[ci], program_scope,
+                                                     errbuf, errbuf_len))
             return false;
     }
     return true;
 }
 
 static bool verify_zero_value_rep(XaotValueRep rep) {
-    return rep.kind == (XaotValueKind) 0 && rep.rep == (XaotRep) 0 &&
-           rep.type == NULL && rep.c_type == NULL && rep.flags == 0u &&
-           rep.vector_native_type == 0u && rep.vector_lanes == 0u &&
-           rep.vector_width_bytes == 0u;
+    return rep.kind == (XaotValueKind) 0 && rep.rep == (XaotRep) 0 && rep.type == NULL &&
+           rep.c_type == NULL && rep.flags == 0u && rep.vector_native_type == 0u &&
+           rep.vector_lanes == 0u && rep.vector_width_bytes == 0u;
 }
 
 static bool verify_target_owned_abi_is_empty(const XaotFuncAbi *abi) {
-    return abi && abi->kind == XAOT_ABI_NATIVE &&
-           abi->ret.cls == XAOT_ARG_VOID &&
-           verify_zero_value_rep(abi->ret.rep) &&
-           verify_zero_value_rep(abi->ret.pointee_rep) &&
-           abi->ret.c_type == NULL && abi->ret.flags == 0u &&
-           abi->params == NULL && abi->nparams == 0u &&
-           abi->boundary_reason == XAOT_BOUNDARY_NONE;
+    return abi && abi->kind == XAOT_ABI_NATIVE && abi->ret.cls == XAOT_ARG_VOID &&
+           verify_zero_value_rep(abi->ret.rep) && verify_zero_value_rep(abi->ret.pointee_rep) &&
+           abi->ret.c_type == NULL && abi->ret.flags == 0u && abi->params == NULL &&
+           abi->nparams == 0u && abi->boundary_reason == XAOT_BOUNDARY_NONE;
 }
 
 static bool verify_abi_plan(const XaotBundle *bundle, const XaotFuncPlan *plan, char *errbuf,
@@ -7317,16 +7377,14 @@ static bool verify_abi_plan(const XaotBundle *bundle, const XaotFuncPlan *plan, 
         if (!verify_target_owned_abi_is_empty(&plan->abi))
             return set_error(errbuf, errbuf_len,
                              "TargetPlan-owned function retains legacy AOT ABI state");
-        XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_abi_status(
-            bundle, plan->func, errbuf, errbuf_len);
+        XaotLeafAggregateTargetStatus leaf_status =
+            xaot_boundary_leaf_aggregate_abi_status(bundle, plan->func, errbuf, errbuf_len);
         if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
             return false;
         if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
-            xaot_boundary_direct_i64_abi_status(bundle, plan->func, NULL,
-                                                errbuf, errbuf_len) !=
+            xaot_boundary_direct_i64_abi_status(bundle, plan->func, NULL, errbuf, errbuf_len) !=
                 XAOT_DIRECT_I64_TARGET_FOUND)
-            return set_error(errbuf, errbuf_len,
-                             "TargetPlan-owned function authority is invalid");
+            return set_error(errbuf, errbuf_len, "TargetPlan-owned function authority is invalid");
         return true;
     }
     if (plan->abi_authority != XAOT_FUNC_ABI_AUTHORITY_LEGACY)
@@ -7359,12 +7417,12 @@ static bool verify_extern_c_identifier_is_valid(const char *name) {
         "_Alignof",      "_Atomic",  "_Bool",          "_Complex",      "_Generic", "_Imaginary",
         "_Noreturn",     "_Pragma",  "_Static_assert", "_Thread_local",
     };
-    if (!name || !((*name >= 'A' && *name <= 'Z') || (*name >= 'a' && *name <= 'z') ||
-                   *name == '_'))
+    if (!name ||
+        !((*name >= 'A' && *name <= 'Z') || (*name >= 'a' && *name <= 'z') || *name == '_'))
         return false;
     for (const char *p = name + 1; *p; p++) {
-        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
-              (*p >= '0' && *p <= '9') || *p == '_'))
+        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') ||
+              *p == '_'))
             return false;
     }
     for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
@@ -7396,8 +7454,7 @@ static bool verify_extern_registry(const XaotBundle *bundle, char *errbuf, size_
         bool renamed = !decl->source_name || strcmp(decl->source_name, decl->link_symbol) != 0;
         if (decl->symbol_qualified != decl->representative_func->extern_symbol_qualified ||
             (renamed && !decl->symbol_qualified))
-            return set_error(errbuf, errbuf_len,
-                             "AOT extern source/native qualification is stale");
+            return set_error(errbuf, errbuf_len, "AOT extern source/native qualification is stale");
         if (machine->environment == XR_TARGET_ENV_MSVC) {
             if (!verify_extern_c_identifier_is_valid(decl->link_symbol) ||
                 decl->c_binding != XAOT_EXTERN_C_BINDING_PORTABLE_DIRECT)
@@ -7444,10 +7501,19 @@ static bool verify_extern_registry(const XaotBundle *bundle, char *errbuf, size_
     return true;
 }
 
-static bool verify_func_extern_calls(const XaotBundle *bundle, const XiFunc *func, char *errbuf,
-                                     size_t errbuf_len) {
+static bool verify_func_extern_calls(const XaotBundle *bundle, const XiFunc *func,
+                                     const XrCProgramDirectI64EmissionBinding *program_scope,
+                                     char *errbuf, size_t errbuf_len) {
     if (!func)
         return true;
+    if (verify_program_function_is_excluded(program_scope, func)) {
+        for (uint16_t child = 0; child < func->nchildren; child++) {
+            if (!verify_func_extern_calls(bundle, func->children[child], program_scope, errbuf,
+                                          errbuf_len))
+                return false;
+        }
+        return true;
+    }
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *block = func->blocks ? func->blocks[bi] : NULL;
         if (!block)
@@ -7486,7 +7552,8 @@ static bool verify_func_extern_calls(const XaotBundle *bundle, const XiFunc *fun
         }
     }
     for (uint16_t ci = 0; ci < func->nchildren; ci++) {
-        if (!verify_func_extern_calls(bundle, func->children[ci], errbuf, errbuf_len))
+        if (!verify_func_extern_calls(bundle, func->children[ci], program_scope, errbuf,
+                                      errbuf_len))
             return false;
     }
     return true;
@@ -7615,14 +7682,13 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
                                               leaf_aggregate.callee, 0) ||
             xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET, func,
                                               call, NULL, leaf_aggregate.callee, UINT16_MAX))
-            return set_error(
-                errbuf, errbuf_len,
-                "TargetPlan-owned leaf-aggregate call retains legacy boundary steps");
+            return set_error(errbuf, errbuf_len,
+                             "TargetPlan-owned leaf-aggregate call retains legacy boundary steps");
         return true;
     }
     XaotDirectI64TargetView direct_i64 = {0};
-    XaotDirectI64TargetStatus direct_i64_status = xaot_boundary_direct_i64_call_view(
-        bundle, func, call, &direct_i64, errbuf, errbuf_len);
+    XaotDirectI64TargetStatus direct_i64_status =
+        xaot_boundary_direct_i64_call_view(bundle, func, call, &direct_i64, errbuf, errbuf_len);
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID)
         return false;
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
@@ -7676,14 +7742,24 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
     return true;
 }
 
-static bool verify_func_boundaries_recursive(const XaotBundle *bundle, const XiFunc *func,
-                                             char *errbuf, size_t errbuf_len) {
+static bool
+verify_func_boundaries_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                 const XrCProgramDirectI64EmissionBinding *program_scope,
+                                 char *errbuf, size_t errbuf_len) {
     uint32_t bi;
     uint16_t ci;
     const XaotFuncPlan *plan;
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT boundary verifier");
+    if (verify_program_function_is_excluded(program_scope, func)) {
+        for (ci = 0; ci < func->nchildren; ci++) {
+            if (!verify_func_boundaries_recursive(bundle, func->children[ci], program_scope, errbuf,
+                                                  errbuf_len))
+                return false;
+        }
+        return true;
+    }
 
     plan = xaot_bundle_find_func_plan(bundle, func);
     if (!plan)
@@ -7719,20 +7795,30 @@ static bool verify_func_boundaries_recursive(const XaotBundle *bundle, const XiF
     }
 
     for (ci = 0; ci < func->nchildren; ci++) {
-        if (!verify_func_boundaries_recursive(bundle, func->children[ci], errbuf, errbuf_len))
+        if (!verify_func_boundaries_recursive(bundle, func->children[ci], program_scope, errbuf,
+                                              errbuf_len))
             return false;
     }
     return true;
 }
 
-static bool verify_func_closure_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
-                                                uint32_t *out_count, char *errbuf,
-                                                size_t errbuf_len) {
+static bool
+verify_func_closure_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                    const XrCProgramDirectI64EmissionBinding *program_scope,
+                                    uint32_t *out_count, char *errbuf, size_t errbuf_len) {
     uint32_t bi;
     uint16_t ci;
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT closure verifier");
+    if (verify_program_function_is_excluded(program_scope, func)) {
+        for (ci = 0; ci < func->nchildren; ci++) {
+            if (!verify_func_closure_plans_recursive(bundle, func->children[ci], program_scope,
+                                                     out_count, errbuf, errbuf_len))
+                return false;
+        }
+        return true;
+    }
 
     for (bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
@@ -7752,20 +7838,30 @@ static bool verify_func_closure_plans_recursive(const XaotBundle *bundle, const 
     }
 
     for (ci = 0; ci < func->nchildren; ci++) {
-        if (!verify_func_closure_plans_recursive(bundle, func->children[ci], out_count, errbuf,
-                                                 errbuf_len))
+        if (!verify_func_closure_plans_recursive(bundle, func->children[ci], program_scope,
+                                                 out_count, errbuf, errbuf_len))
             return false;
     }
     return true;
 }
 
-static bool verify_func_stack_allocations_recursive(const XiFunc *func, char *errbuf,
-                                                    size_t errbuf_len) {
+static bool
+verify_func_stack_allocations_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                        const XrCProgramDirectI64EmissionBinding *program_scope,
+                                        char *errbuf, size_t errbuf_len) {
     uint32_t bi;
     uint16_t ci;
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT allocation verifier");
+    if (verify_program_function_is_excluded(program_scope, func)) {
+        for (ci = 0; ci < func->nchildren; ci++) {
+            if (!verify_func_stack_allocations_recursive(bundle, func->children[ci], program_scope,
+                                                         errbuf, errbuf_len))
+                return false;
+        }
+        return true;
+    }
 
     for (bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
@@ -7782,7 +7878,8 @@ static bool verify_func_stack_allocations_recursive(const XiFunc *func, char *er
     }
 
     for (ci = 0; ci < func->nchildren; ci++) {
-        if (!verify_func_stack_allocations_recursive(func->children[ci], errbuf, errbuf_len))
+        if (!verify_func_stack_allocations_recursive(bundle, func->children[ci], program_scope,
+                                                     errbuf, errbuf_len))
             return false;
     }
     return true;
@@ -7819,14 +7916,23 @@ static bool verify_spawn_capture_materialization(const XaotBundle *bundle, const
     return true;
 }
 
-static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
-                                                 uint32_t *out_count, char *errbuf,
-                                                 size_t errbuf_len) {
+static bool
+verify_func_transfer_plans_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                     const XrCProgramDirectI64EmissionBinding *program_scope,
+                                     uint32_t *out_count, char *errbuf, size_t errbuf_len) {
     uint32_t bi;
     uint16_t ci;
 
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT transfer verifier");
+    if (verify_program_function_is_excluded(program_scope, func)) {
+        for (ci = 0; ci < func->nchildren; ci++) {
+            if (!verify_func_transfer_plans_recursive(bundle, func->children[ci], program_scope,
+                                                      out_count, errbuf, errbuf_len))
+                return false;
+        }
+        return true;
+    }
 
     for (bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];
@@ -7863,8 +7969,8 @@ static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const
     }
 
     for (ci = 0; ci < func->nchildren; ci++) {
-        if (!verify_func_transfer_plans_recursive(bundle, func->children[ci], out_count, errbuf,
-                                                  errbuf_len))
+        if (!verify_func_transfer_plans_recursive(bundle, func->children[ci], program_scope,
+                                                  out_count, errbuf, errbuf_len))
             return false;
     }
     return true;
@@ -7959,8 +8065,60 @@ static bool verify_fixed_bytes_plans(const XaotBundle *bundle, char *errbuf, siz
     return true;
 }
 
+static bool verify_bundle_function_plans(const XaotBundle *bundle, uint32_t *closure_count,
+                                         uint32_t *transfer_count, char *errbuf,
+                                         size_t errbuf_len) {
+    const XrTargetPlan *target = xaot_bundle_program_target_plan(bundle);
+    uint32_t graph_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        target ? xr_target_plan_program_graphs(target, &graph_count) : NULL;
+    XrCProgramDirectI64EmissionBinding program_scope = {0};
+    const XrCProgramDirectI64EmissionBinding *scope = NULL;
+    char error[256] = {0};
+    if (graph_count != 0u) {
+        if (!graphs || graph_count != 1u ||
+            !xr_c_program_direct_i64_emission_bind(target, bundle->modules, bundle->nmodules,
+                                                   &program_scope, error, sizeof(error))) {
+            xr_c_program_direct_i64_emission_release(&program_scope);
+            return set_error(errbuf, errbuf_len,
+                             error[0] ? error
+                                      : "AOT verifier has no exact program C-emission scope");
+        }
+        scope = &program_scope;
+        for (uint32_t plan_index = 0; plan_index < bundle->nfunc_plans; plan_index++) {
+            const XiFunc *function = bundle->func_plans[plan_index].func;
+            if (function && xr_c_program_direct_i64_function_binding(scope, function))
+                continue;
+            xr_c_program_direct_i64_emission_release(&program_scope);
+            return set_error(errbuf, errbuf_len,
+                             "excluded Xi function retains an AOT function plan");
+        }
+    }
+
+    bool exact = true;
+    for (uint32_t module_index = 0; exact && module_index < bundle->nmodules; module_index++) {
+        const XiModule *module = bundle->modules[module_index];
+        if (!module || !module->init) {
+            exact = set_error(errbuf, errbuf_len, "AOT bundle contains an invalid module");
+            break;
+        }
+        exact = verify_func_has_plan_recursive(bundle, module->init, scope, errbuf, errbuf_len) &&
+                verify_func_values_have_plans_recursive(bundle, module->init, scope, errbuf,
+                                                        errbuf_len) &&
+                verify_func_boundaries_recursive(bundle, module->init, scope, errbuf, errbuf_len) &&
+                verify_func_stack_allocations_recursive(bundle, module->init, scope, errbuf,
+                                                        errbuf_len) &&
+                verify_func_closure_plans_recursive(bundle, module->init, scope, closure_count,
+                                                    errbuf, errbuf_len) &&
+                verify_func_transfer_plans_recursive(bundle, module->init, scope, transfer_count,
+                                                     errbuf, errbuf_len) &&
+                verify_func_extern_calls(bundle, module->init, scope, errbuf, errbuf_len);
+    }
+    xr_c_program_direct_i64_emission_release(&program_scope);
+    return exact;
+}
+
 XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
-    uint32_t mi;
     uint32_t fi;
     uint32_t closure_count = 0;
     uint32_t transfer_count = 0;
@@ -7984,27 +8142,8 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, char *errbuf, size_t e
     if (!verify_fixed_bytes_plans(bundle, errbuf, errbuf_len))
         return false;
 
-    for (mi = 0; mi < bundle->nmodules; mi++) {
-        const XiModule *mod = bundle->modules[mi];
-        if (!mod || !mod->init)
-            return set_error(errbuf, errbuf_len, "AOT bundle contains an invalid module");
-        if (!verify_func_has_plan_recursive(bundle, mod->init, errbuf, errbuf_len))
-            return false;
-        if (!verify_func_values_have_plans_recursive(bundle, mod->init, errbuf, errbuf_len))
-            return false;
-        if (!verify_func_boundaries_recursive(bundle, mod->init, errbuf, errbuf_len))
-            return false;
-        if (!verify_func_stack_allocations_recursive(mod->init, errbuf, errbuf_len))
-            return false;
-        if (!verify_func_closure_plans_recursive(bundle, mod->init, &closure_count, errbuf,
-                                                 errbuf_len))
-            return false;
-        if (!verify_func_transfer_plans_recursive(bundle, mod->init, &transfer_count, errbuf,
-                                                  errbuf_len))
-            return false;
-        if (!verify_func_extern_calls(bundle, mod->init, errbuf, errbuf_len))
-            return false;
-    }
+    if (!verify_bundle_function_plans(bundle, &closure_count, &transfer_count, errbuf, errbuf_len))
+        return false;
     if (closure_count != bundle->nclosure_plans)
         return set_error(errbuf, errbuf_len, "AOT closure plan count does not match IR");
     if (transfer_count != bundle->ntransfer_plans)

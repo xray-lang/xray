@@ -103,7 +103,7 @@ typedef enum XrTargetExecutionFamily {
     XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 = UINT64_C(1) << 4,
     /* One pointer-free six-field value product whose exact x64 layout is
      * i64/i64/u8/i64/i64/i64.  Both nullary callers and their common callee
-     * execute only after the complete schema-54 instruction groups prove the
+     * execute only after the complete schema-55 instruction groups prove the
      * layout, ordinal accesses, caller-owned result storage, and return. */
     XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6 = UINT64_C(1) << 5,
     /* One source-backed signed-i64 predicate program whose ADD/SUB/MUL answer
@@ -178,7 +178,7 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_DYNAMIC_VALUE_STORAGE |                                          \
                  XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE |                                  \
                  XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE | XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE | \
-                 XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE |                                        \
+                 XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE |                                          \
                  XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE))
 
 typedef enum XrMachineRepKind {
@@ -896,7 +896,9 @@ typedef struct XrTargetModulePartitionRecord {
     XrFingerprint semantic_fingerprint;
     uint32_t program_module_row;
     uint32_t semantic_module;
-#define XR_TARGET_PARTITION_RANGE(name) uint32_t name##_begin; uint32_t name##_count
+#define XR_TARGET_PARTITION_RANGE(name)                                                            \
+    uint32_t name##_begin;                                                                         \
+    uint32_t name##_count
     XR_TARGET_PARTITION_RANGE(value_reps);
     XR_TARGET_PARTITION_RANGE(extents);
     XR_TARGET_PARTITION_RANGE(layouts);
@@ -989,9 +991,9 @@ XR_FUNC const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTarge
 /* This unqualified lookup is intentionally unavailable for multi-module plans. */
 XR_FUNC const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
                                                                uint32_t semantic_value);
-XR_FUNC const XrTargetValueRepRecord *
-xr_target_plan_value_rep_for_module(const XrTargetPlan *plan, uint32_t partition,
-                                    uint32_t semantic_value);
+XR_FUNC const XrTargetValueRepRecord *xr_target_plan_value_rep_for_module(const XrTargetPlan *plan,
+                                                                          uint32_t partition,
+                                                                          uint32_t semantic_value);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_dependency(const XrTargetPlan *plan,
                                                                  uint32_t dependency);
 /* Every verified plan is a program plan. Ordinary plans expose their root as
@@ -1004,8 +1006,8 @@ XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_module(const XrTargetPlan 
 /* Resolve one verified SemanticPlan to its unique program-module partition.
  * Callers may interpret module-local semantic indexes only after this join. */
 XR_FUNC bool xr_target_plan_partition_for_semantic(const XrTargetPlan *plan,
-                                                    const XrSemanticPlan *semantic_plan,
-                                                    uint32_t *partition);
+                                                   const XrSemanticPlan *semantic_plan,
+                                                   uint32_t *partition);
 XR_FUNC const XrSemanticPlan *xr_target_plan_module_for_function(const XrTargetPlan *plan,
                                                                  uint32_t target_function,
                                                                  uint32_t *partition);
@@ -1015,8 +1017,7 @@ XR_FUNC bool xr_target_plan_function_semantic_binding(const XrTargetPlan *plan,
                                                       uint32_t *semantic_function);
 XR_FUNC bool xr_target_plan_find_function(const XrTargetPlan *plan,
                                           const XrSemanticPlan *semantic_plan,
-                                          uint32_t semantic_function,
-                                          uint32_t *target_function);
+                                          uint32_t semantic_function, uint32_t *target_function);
 XR_FUNC uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
                                                                uint32_t function);
 XR_FUNC const XrTargetInstructionRecord *

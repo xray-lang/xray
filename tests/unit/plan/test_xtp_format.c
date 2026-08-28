@@ -30,7 +30,7 @@
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
         if (!(condition)) {                                                                        \
-            fprintf(stderr, "requirement failed at %s:%d: %s\n", __FILE__, __LINE__, #condition); \
+            fprintf(stderr, "requirement failed at %s:%d: %s\n", __FILE__, __LINE__, #condition);  \
             abort();                                                                               \
         }                                                                                          \
     } while (0)
@@ -44,11 +44,9 @@ typedef struct XtpFixture {
     size_t size;
 } XtpFixture;
 
-static const char k_xtp_fixture_identity[] =
-    "memory-module-v1:id=21:xtp-format-fixture-v1";
+static const char k_xtp_fixture_identity[] = "memory-module-v1:id=21:xtp-format-fixture-v1";
 
-static bool xtp_fixture_build(XiFunc *root, XrSemanticPlan **plan, char *error,
-                              size_t error_size) {
+static bool xtp_fixture_build(XiFunc *root, XrSemanticPlan **plan, char *error, size_t error_size) {
     XiModule fixture = {
         .identity = (char *) k_xtp_fixture_identity,
         .path = "xtp-format-fixture.xr",
@@ -119,35 +117,24 @@ static XrType stub_string = {
 };
 
 static XrSemanticPlan *build_assertion_artifact_semantic_plan(void) {
-    XiFunc *function =
-        xi_func_new("xtp_assertion_artifact", &stub_unit);
+    XiFunc *function = xi_func_new("xtp_assertion_artifact", &stub_unit);
     XiBlock *entry = function ? xi_block_new(function) : NULL;
-    XiValue *condition = entry
-                             ? xi_const_bool(function, entry, true,
-                                             &stub_bool)
-                             : NULL;
-    XiValue *assertion = entry
-                             ? xi_value_new(function, entry, XI_ASSERTION,
-                                            &stub_unit, 1)
-                             : NULL;
+    XiValue *condition = entry ? xi_const_bool(function, entry, true, &stub_bool) : NULL;
+    XiValue *assertion = entry ? xi_value_new(function, entry, XI_ASSERTION, &stub_unit, 1) : NULL;
     REQUIRE(function && entry && condition && assertion);
     assertion->args[0] = condition;
     assertion->source_span = (XiSourceSpan) {5, 1, 5, 13};
     XrAssertionPlan assertion_plan;
     XrLocation source = {"xtp-format-fixture.xr", 5, 1, 5, 13};
     REQUIRE(xr_assertion_plan_build(
-                XR_CORE_BUILTIN_ASSERT, 1, source,
-                XR_CORE_INTRINSIC_TARGET_ASSERTION_ALL,
-                XR_ASSERTION_CAPABILITY_NONE, &assertion_plan) ==
-            XR_ASSERTION_PLAN_OK);
-    REQUIRE(xi_value_set_assertion_plan(function, assertion,
-                                        &assertion_plan));
+                XR_CORE_BUILTIN_ASSERT, 1, source, XR_CORE_INTRINSIC_TARGET_ASSERTION_ALL,
+                XR_ASSERTION_CAPABILITY_NONE, &assertion_plan) == XR_ASSERTION_PLAN_OK);
+    REQUIRE(xi_value_set_assertion_plan(function, assertion, &assertion_plan));
     xi_block_set_return(entry, assertion);
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char diagnostic[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, diagnostic,
-                                   sizeof(diagnostic)));
+    REQUIRE(xr_semantic_plan_build(function, &semantic, diagnostic, sizeof(diagnostic)));
     xi_func_free(function);
     return semantic;
 }
@@ -159,13 +146,11 @@ static XrSemanticPlan *build_string_concat_release_semantic_plan(void) {
     REQUIRE(entry != NULL);
     XiValue *left = xi_const_str(function, entry, "left", &stub_string);
     XiValue *right = xi_const_str(function, entry, "right", &stub_string);
-    XiValue *concat =
-        xi_value_new(function, entry, XI_STR_CONCAT, &stub_string, 2);
+    XiValue *concat = xi_value_new(function, entry, XI_STR_CONCAT, &stub_string, 2);
     REQUIRE(left != NULL && right != NULL && concat != NULL);
     concat->args[0] = left;
     concat->args[1] = right;
-    XiValue *release =
-        xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
     XiValue *result = xi_const_int(function, entry, 0, &stub_int);
     REQUIRE(release != NULL && result != NULL);
     release->args[0] = concat;
@@ -173,8 +158,7 @@ static XrSemanticPlan *build_string_concat_release_semantic_plan(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
-                                   sizeof(error)));
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     REQUIRE(semantic != NULL);
     xi_func_free(function);
     return semantic;
@@ -188,8 +172,7 @@ static XrSemanticPlan *build_string_coroutine_lifecycle_semantic_plan(void) {
     entry->sealed = true;
     XiValue *left = xi_const_str(function, entry, "xtp", &stub_string);
     XiValue *right = xi_const_str(function, entry, "-lifecycle", &stub_string);
-    XiValue *text =
-        xi_value_new(function, entry, XI_STR_CONCAT, &stub_string, 2);
+    XiValue *text = xi_value_new(function, entry, XI_STR_CONCAT, &stub_string, 2);
     XiValue *yield = xi_value_new(function, entry, XI_YIELD, &stub_unit, 0);
     XiValue *length = xi_value_new(function, entry, XI_LEN, &stub_int, 1);
     XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
@@ -200,8 +183,7 @@ static XrSemanticPlan *build_string_coroutine_lifecycle_semantic_plan(void) {
     release->args[0] = text;
     xi_block_set_return(entry, length);
     function->stage = XI_STAGE_SEMANTIC_LOWERED;
-    function->invariant_mask =
-        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    function->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
     REQUIRE(xi_coro_lower(function, NULL));
     REQUIRE(function->coro_plan && function->coro_plan->nstates == 1 &&
             function->coro_plan->points[0].nroots == 1 &&
@@ -209,8 +191,7 @@ static XrSemanticPlan *build_string_coroutine_lifecycle_semantic_plan(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
-                                   sizeof(error)));
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -220,8 +201,7 @@ static XrSemanticPlan *build_stringbuilder_semantic_plan(void) {
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
-    XiValue *builder =
-        xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_stringbuilder, 0);
+    XiValue *builder = xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_stringbuilder, 0);
     REQUIRE(builder != NULL);
     builder->aux = (void *) "StringBuilder";
     XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
@@ -238,8 +218,7 @@ static XrSemanticPlan *build_stringbuilder_semantic_plan(void) {
     return semantic;
 }
 
-static int source_export_call_suspendability(void *ud, const XiFunc *current,
-                                             const XiValue *call) {
+static int source_export_call_suspendability(void *ud, const XiFunc *current, const XiValue *call) {
     (void) ud;
     (void) current;
     return call && call->op == XI_CALL_METHOD && call->aux &&
@@ -248,8 +227,7 @@ static int source_export_call_suspendability(void *ud, const XiFunc *current,
                : -1;
 }
 
-static const XiFunc *source_export_resolve_method(void *ud,
-                                                  const XiFunc *current,
+static const XiFunc *source_export_resolve_method(void *ud, const XiFunc *current,
                                                   const XiValue *call) {
     (void) current;
     return ud && call && call->op == XI_CALL_METHOD && call->aux &&
@@ -289,10 +267,8 @@ static XrSemanticPlan *build_exported_semantic_plan(void) {
     root->children[0] = function;
     root->nchildren = root->children_cap = 1;
     function->parent_func = root;
-    XiValue *closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW,
-                                    &stub_function, 0);
-    XiValue *store = xi_value_new(root, root_entry, XI_SET_SHARED,
-                                  &stub_unit, 1);
+    XiValue *closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *store = xi_value_new(root, root_entry, XI_SET_SHARED, &stub_unit, 1);
     REQUIRE(closure && store);
     closure->aux = function;
     store->args[0] = closure;
@@ -307,16 +283,13 @@ static XrSemanticPlan *build_exported_semantic_plan(void) {
         xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
     REQUIRE(xi_coro_lower(root, NULL));
     root->stage = function->stage = XI_STAGE_OPTIMIZED;
-    XiModule *module = xi_module_new("fixtures/runtime_export.xr",
-                                    "runtime_export", root);
+    XiModule *module = xi_module_new("fixtures/runtime_export.xr", "runtime_export", root);
     REQUIRE(module);
-    REQUIRE(xi_module_set_identity(
-        module, "memory-module-v1:id=29:xtp-runtime-export-fixture-v1"));
+    REQUIRE(xi_module_set_identity(module, "memory-module-v1:id=29:xtp-runtime-export-fixture-v1"));
     root->module = module;
     module->nslots = 1;
     module->nexports = 1;
-    module->exports =
-        (XiModuleExport *) xr_calloc(1, sizeof(*module->exports));
+    module->exports = (XiModuleExport *) xr_calloc(1, sizeof(*module->exports));
     REQUIRE(module->exports);
     module->exports[0] = (XiModuleExport) {
         .name = "xtp_probe",
@@ -378,14 +351,10 @@ static XrSemanticPlan *build_channel_close_semantic_plan(void) {
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *capacity = xi_const_int(function, entry, 1, &stub_int);
-    XiValue *channel =
-        xi_value_new(function, entry, XI_CHAN_NEW, &stub_channel, 1);
-    XiValue *alias =
-        xi_value_new(function, entry, XI_COPY, &stub_channel, 1);
-    XiValue *close =
-        xi_value_new(function, entry, XI_CALL_METHOD, &stub_unit, 1);
-    REQUIRE(capacity != NULL && channel != NULL && alias != NULL &&
-            close != NULL);
+    XiValue *channel = xi_value_new(function, entry, XI_CHAN_NEW, &stub_channel, 1);
+    XiValue *alias = xi_value_new(function, entry, XI_COPY, &stub_channel, 1);
+    XiValue *close = xi_value_new(function, entry, XI_CALL_METHOD, &stub_unit, 1);
+    REQUIRE(capacity != NULL && channel != NULL && alias != NULL && close != NULL);
     channel->args[0] = capacity;
     alias->args[0] = channel;
     alias->aux_int = XI_COPY_KIND_IDENTITY;
@@ -396,15 +365,13 @@ static XrSemanticPlan *build_channel_close_semantic_plan(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
-                                   sizeof(error)));
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     REQUIRE(semantic != NULL);
     xi_func_free(function);
     return semantic;
 }
 
-static XrSemanticPlan *build_source_export_semantic_plan(
-    XrSemanticPlan **dependency_out) {
+static XrSemanticPlan *build_source_export_semantic_plan(XrSemanticPlan **dependency_out) {
     XiFunc *dependency_root = xi_func_new("xtp_net_init", &stub_unit);
     XiFunc *write_bytes = xi_func_new("writeBytes", &stub_unit);
     REQUIRE(dependency_root && write_bytes);
@@ -412,16 +379,14 @@ static XrSemanticPlan *build_source_export_semantic_plan(
     XiBlock *write_entry = xi_block_new(write_bytes);
     REQUIRE(dependency_entry && write_entry);
     dependency_entry->sealed = write_entry->sealed = true;
-    dependency_root->children =
-        (XiFunc **) xr_calloc(1, sizeof(*dependency_root->children));
+    dependency_root->children = (XiFunc **) xr_calloc(1, sizeof(*dependency_root->children));
     REQUIRE(dependency_root->children);
     dependency_root->children[0] = write_bytes;
     dependency_root->nchildren = dependency_root->children_cap = 1;
     write_bytes->parent_func = dependency_root;
-    XiValue *closure = xi_value_new(dependency_root, dependency_entry,
-                                    XI_CLOSURE_NEW, &stub_function, 0);
-    XiValue *store = xi_value_new(dependency_root, dependency_entry,
-                                  XI_SET_SHARED, &stub_unit, 1);
+    XiValue *closure =
+        xi_value_new(dependency_root, dependency_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *store = xi_value_new(dependency_root, dependency_entry, XI_SET_SHARED, &stub_unit, 1);
     REQUIRE(closure && store);
     closure->aux = write_bytes;
     store->args[0] = closure;
@@ -435,11 +400,10 @@ static XrSemanticPlan *build_source_export_semantic_plan(
         xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
     REQUIRE(xi_coro_lower(dependency_root, NULL));
     dependency_root->stage = write_bytes->stage = XI_STAGE_OPTIMIZED;
-    XiModule *dependency_module =
-        xi_module_new("stdlib/net/net.xr", "net", dependency_root);
+    XiModule *dependency_module = xi_module_new("stdlib/net/net.xr", "net", dependency_root);
     REQUIRE(dependency_module);
-    REQUIRE(xi_module_set_identity(
-        dependency_module, "stdlib-module-v1:module=3:net:path=10:net/net.xr"));
+    REQUIRE(xi_module_set_identity(dependency_module,
+                                   "stdlib-module-v1:module=3:net:path=10:net/net.xr"));
     dependency_root->module = dependency_module;
     dependency_module->nslots = 1;
     dependency_module->nexports = 1;
@@ -450,10 +414,8 @@ static XrSemanticPlan *build_source_export_semantic_plan(
     dependency_module->exports[0].shared_slot = 0;
     dependency_module->exports[0].function = write_bytes;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(dependency_root, error,
-                                              sizeof(error)));
-    XrSemanticPlan *dependency =
-        xr_semantic_plan_retain(dependency_root->semantic_plan);
+    REQUIRE(xr_semantic_plan_build_and_attach(dependency_root, error, sizeof(error)));
+    XrSemanticPlan *dependency = xr_semantic_plan_retain(dependency_root->semantic_plan);
     REQUIRE(dependency);
 
     XiFunc *caller_root = xi_func_new("xtp_http_init", &stub_unit);
@@ -463,8 +425,7 @@ static XrSemanticPlan *build_source_export_semantic_plan(
     XiBlock *caller_entry = xi_block_new(caller);
     REQUIRE(root_entry && caller_entry);
     root_entry->sealed = caller_entry->sealed = true;
-    caller_root->children =
-        (XiFunc **) xr_calloc(1, sizeof(*caller_root->children));
+    caller_root->children = (XiFunc **) xr_calloc(1, sizeof(*caller_root->children));
     REQUIRE(caller_root->children);
     caller_root->children[0] = caller;
     caller_root->nchildren = caller_root->children_cap = 1;
@@ -476,21 +437,18 @@ static XrSemanticPlan *build_source_export_semantic_plan(
         .resolved_export_slot = -1,
         .resolved_module = dependency_module,
     };
-    XiValue *namespace_ref = xi_value_new(caller_root, root_entry,
-                                          XI_IMPORT_REF,
-                                          &stub_module_namespace, 0);
-    XiValue *namespace_store = xi_value_new(caller_root, root_entry,
-                                            XI_SET_SHARED, &stub_unit, 1);
+    XiValue *namespace_ref =
+        xi_value_new(caller_root, root_entry, XI_IMPORT_REF, &stub_module_namespace, 0);
+    XiValue *namespace_store = xi_value_new(caller_root, root_entry, XI_SET_SHARED, &stub_unit, 1);
     REQUIRE(namespace_ref && namespace_store);
     namespace_ref->aux = &import_ref;
     namespace_store->args[0] = namespace_ref;
     namespace_store->aux_int = 0;
     caller_root->nshared = 1;
     xi_block_set_return(root_entry, NULL);
-    XiValue *receiver = xi_value_new(caller, caller_entry, XI_GET_SHARED,
-                                     &stub_module_namespace, 0);
-    XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD,
-                                   &stub_unit, 1);
+    XiValue *receiver =
+        xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_module_namespace, 0);
+    XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD, &stub_unit, 1);
     REQUIRE(receiver && method);
     receiver->aux_int = 0;
     method->args[0] = receiver;
@@ -507,18 +465,16 @@ static XrSemanticPlan *build_source_export_semantic_plan(
     };
     REQUIRE(xi_coro_lower(caller_root, &resolver));
     caller_root->stage = caller->stage = XI_STAGE_OPTIMIZED;
-    XiModule *caller_module =
-        xi_module_new("stdlib/http/http.xr", "http", caller_root);
+    XiModule *caller_module = xi_module_new("stdlib/http/http.xr", "http", caller_root);
     REQUIRE(caller_module);
-    REQUIRE(xi_module_set_identity(
-        caller_module, "stdlib-module-v1:module=4:http:path=12:http/http.xr"));
+    REQUIRE(xi_module_set_identity(caller_module,
+                                   "stdlib-module-v1:module=4:http:path=12:http/http.xr"));
     caller_root->module = caller_module;
     caller_module->nslots = 1;
     XiModule *dependency_modules[] = {dependency_module};
-    REQUIRE(xr_semantic_plan_build_and_attach_module_set(
-        caller_root, dependency_modules, 1, error, sizeof(error)));
-    XrSemanticPlan *semantic =
-        xr_semantic_plan_retain(caller_root->semantic_plan);
+    REQUIRE(xr_semantic_plan_build_and_attach_module_set(caller_root, dependency_modules, 1, error,
+                                                         sizeof(error)));
+    XrSemanticPlan *semantic = xr_semantic_plan_retain(caller_root->semantic_plan);
     REQUIRE(semantic);
     xi_func_free(caller_root);
     xi_func_free(dependency_root);
@@ -543,16 +499,14 @@ static XrSemanticPlan *build_coroutine_call_semantic_plan(void) {
     root->children[0] = child;
     root->nchildren = root->children_cap = 1;
     child->parent_func = root;
-    XiValue *closure =
-        xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
     XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 1);
     REQUIRE(closure != NULL && call != NULL);
     closure->aux = child;
     call->args[0] = closure;
     xi_block_set_return(root_entry, call);
     root->stage = child->stage = XI_STAGE_SEMANTIC_LOWERED;
-    root->invariant_mask = child->invariant_mask =
-        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    root->invariant_mask = child->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
     REQUIRE(xi_coro_lower(root, NULL));
     root->stage = child->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
@@ -565,13 +519,11 @@ static XrSemanticPlan *build_coroutine_call_semantic_plan(void) {
 
 static XrTargetProfile *build_profile(void) {
     XrRuntimeTargetAuthority authority;
-    REQUIRE(xr_runtime_target_authority_native_hosted(&authority) ==
-            XR_RUNTIME_ABI_OK);
+    REQUIRE(xr_runtime_target_authority_native_hosted(&authority) == XR_RUNTIME_ABI_OK);
     XrTargetProfileBuildInput input = {
         .machine = authority.machine,
         .runtime_abi = &authority.runtime_abi,
-        .object_header_materialization =
-            &authority.object_header_materialization,
+        .object_header_materialization = &authority.object_header_materialization,
         .string_contract = &authority.string_contract,
         .providers = authority.providers,
         .provider_count = authority.provider_count,
@@ -623,9 +575,8 @@ static void mutate_exact_machine_field(XrTargetMachineFacts *machine,
                                             : XR_TARGET_OS_WINDOWS;
             break;
         case NATIVE_MACHINE_ENVIRONMENT:
-            machine->environment = machine->environment == XR_TARGET_ENV_MSVC
-                                       ? XR_TARGET_ENV_GNU
-                                       : XR_TARGET_ENV_MSVC;
+            machine->environment =
+                machine->environment == XR_TARGET_ENV_MSVC ? XR_TARGET_ENV_GNU : XR_TARGET_ENV_MSVC;
             break;
         case NATIVE_MACHINE_ABI:
             machine->native_abi = machine->native_abi == XR_TARGET_ABI_WIN64_X86_64
@@ -651,10 +602,9 @@ static void mutate_exact_machine_field(XrTargetMachineFacts *machine,
             machine->maximum_vector_bits ^= 128u;
             break;
         case NATIVE_MACHINE_RUNTIME_PROFILE:
-            machine->runtime_profile =
-                machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED
-                    ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
-                    : XR_TARGET_RUNTIME_PROFILE_HOSTED;
+            machine->runtime_profile = machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED
+                                           ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+                                           : XR_TARGET_RUNTIME_PROFILE_HOSTED;
             break;
         case NATIVE_MACHINE_MUTATION_COUNT:
             abort();
@@ -697,8 +647,7 @@ static void set_supported_vector_profile(XrTargetMachineFacts *machine) {
     machine->maximum_vector_bits = 128;
 }
 
-static void mutate_foreign_profile(XrTargetMachineFacts *machine,
-                                   ForeignProfileMutation mutation) {
+static void mutate_foreign_profile(XrTargetMachineFacts *machine, ForeignProfileMutation mutation) {
     switch (mutation) {
         case FOREIGN_PROFILE_ARCHITECTURE_ABI:
             machine->architecture = machine->architecture == XR_TARGET_ARCH_X86_64
@@ -720,10 +669,8 @@ static void mutate_foreign_profile(XrTargetMachineFacts *machine,
             set_native_abi_for_platform(machine);
             break;
         case FOREIGN_PROFILE_DATA_LAYOUT:
-            machine->data_layout.i16.align =
-                machine->data_layout.i16.align == 1 ? 2 : 1;
-            machine->data_layout.stable_hash =
-                xr_target_data_layout_hash(&machine->data_layout);
+            machine->data_layout.i16.align = machine->data_layout.i16.align == 1 ? 2 : 1;
+            machine->data_layout.stable_hash = xr_target_data_layout_hash(&machine->data_layout);
             break;
         case FOREIGN_PROFILE_ATOMIC_WIDTHS:
             machine->atomic_width_mask ^= XR_TARGET_ATOMIC_WIDTH_128;
@@ -745,8 +692,8 @@ static void mutate_foreign_profile(XrTargetMachineFacts *machine,
     }
 }
 
-static XrTargetProfile *build_foreign_profile(
-    const XrTargetProfile *native_profile, ForeignProfileMutation mutation) {
+static XrTargetProfile *build_foreign_profile(const XrTargetProfile *native_profile,
+                                              ForeignProfileMutation mutation) {
     XrTargetProfileDraft draft = *xr_target_profile_facts(native_profile);
     mutate_foreign_profile(&draft.machine, mutation);
     XrTargetProfile *foreign = NULL;
@@ -765,12 +712,10 @@ static XtpFixture make_fixture_from_semantic(XrSemanticPlan *semantic) {
     REQUIRE(xr_target_plan_build(fixture.semantic, fixture.profile, &fixture.plan, error,
                                  sizeof(error)));
     REQUIRE(xr_target_plan_is_verified(fixture.plan));
-    REQUIRE(xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size, error,
-                               sizeof(error)));
+    REQUIRE(xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size, error, sizeof(error)));
     REQUIRE(fixture.bytes != NULL && fixture.size >= XR_XTP_HEADER_SIZE);
     return fixture;
 }
-
 
 static XtpFixture make_fixture(void) {
     return make_fixture_from_semantic(build_semantic_plan());
@@ -793,28 +738,23 @@ static XtpFixture make_stringbuilder_fixture(void) {
 }
 
 static XtpFixture make_string_concat_release_fixture(void) {
-    return make_fixture_from_semantic(
-        build_string_concat_release_semantic_plan());
+    return make_fixture_from_semantic(build_string_concat_release_semantic_plan());
 }
 
 static XtpFixture make_string_coroutine_lifecycle_fixture(void) {
-    return make_fixture_from_semantic(
-        build_string_coroutine_lifecycle_semantic_plan());
+    return make_fixture_from_semantic(build_string_coroutine_lifecycle_semantic_plan());
 }
 
 static XtpFixture make_source_export_fixture(void) {
     XtpFixture fixture = {0};
-    fixture.semantic =
-        build_source_export_semantic_plan(&fixture.dependency);
+    fixture.semantic = build_source_export_semantic_plan(&fixture.dependency);
     fixture.profile = build_profile();
     const XrSemanticPlan *dependencies[] = {fixture.dependency};
     char error[512] = {0};
-    REQUIRE(xr_target_plan_build_module_set(
-        fixture.semantic, dependencies, 1, fixture.profile, &fixture.plan,
-        error, sizeof(error)));
+    REQUIRE(xr_target_plan_build_module_set(fixture.semantic, dependencies, 1, fixture.profile,
+                                            &fixture.plan, error, sizeof(error)));
     REQUIRE(xr_target_plan_is_verified(fixture.plan));
-    REQUIRE(xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size,
-                               error, sizeof(error)));
+    REQUIRE(xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size, error, sizeof(error)));
     REQUIRE(fixture.bytes && fixture.size >= XR_XTP_HEADER_SIZE);
     return fixture;
 }
@@ -847,8 +787,7 @@ static void resign_artifact(uint8_t *bytes, size_t size) {
 }
 
 static uint8_t *directory_entry(uint8_t *bytes, XrXtpSectionKind kind) {
-    return bytes + XR_XTP_HEADER_SIZE +
-           ((size_t) kind - 1u) * XR_XTP_DIRECTORY_ENTRY_SIZE;
+    return bytes + XR_XTP_HEADER_SIZE + ((size_t) kind - 1u) * XR_XTP_DIRECTORY_ENTRY_SIZE;
 }
 
 static void resign_section(uint8_t *bytes, XrXtpSectionKind kind) {
@@ -871,26 +810,23 @@ static void expect_materialize_failure(const XtpFixture *fixture, const uint8_t 
     char error[512] = {0};
     REQUIRE(xr_xtp_decode_candidate(bytes, fixture->size, &candidate, error, sizeof(error)));
     XrTargetPlan *plan = (XrTargetPlan *) (uintptr_t) 1;
-    REQUIRE(!xr_xtp_materialize_target_plan(candidate, fixture->semantic, fixture->profile,
-                                             &plan, error, sizeof(error)));
+    REQUIRE(!xr_xtp_materialize_target_plan(candidate, fixture->semantic, fixture->profile, &plan,
+                                            error, sizeof(error)));
     REQUIRE(plan == NULL);
     REQUIRE(strncmp(error, "XR_", 3) == 0);
     xr_xtp_candidate_release(candidate);
 }
 
-static void expect_decode_or_materialize_failure(const XtpFixture *fixture,
-                                                 const uint8_t *bytes) {
+static void expect_decode_or_materialize_failure(const XtpFixture *fixture, const uint8_t *bytes) {
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
-    if (!xr_xtp_decode_candidate(bytes, fixture->size, &candidate, error,
-                                 sizeof(error))) {
+    if (!xr_xtp_decode_candidate(bytes, fixture->size, &candidate, error, sizeof(error))) {
         REQUIRE(candidate == NULL && strncmp(error, "XR_", 3) == 0);
         return;
     }
-    REQUIRE(!xr_xtp_materialize_target_plan(candidate, fixture->semantic,
-                                             fixture->profile, &plan, error,
-                                             sizeof(error)));
+    REQUIRE(!xr_xtp_materialize_target_plan(candidate, fixture->semantic, fixture->profile, &plan,
+                                            error, sizeof(error)));
     REQUIRE(plan == NULL && strncmp(error, "XR_", 3) == 0);
     xr_xtp_candidate_release(candidate);
 }
@@ -899,8 +835,7 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     XtpFixture fixture = make_fixture();
     XrXtpCandidate *candidate = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error,
-                                    sizeof(error)));
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
     REQUIRE(xr_xtp_candidate_retain(candidate) == candidate);
     xr_xtp_candidate_release(candidate);
     XrXtpIdentity identity;
@@ -909,21 +844,18 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     REQUIRE(xr_xtp_candidate_resources(candidate, &resources));
     REQUIRE(identity.plan_schema == XR_TARGET_PLAN_SCHEMA_VERSION);
     REQUIRE(identity.completed_family_mask == XR_TARGET_REQUIRED_FAMILIES);
-    REQUIRE(resources.total_rows > 1 &&
-            resources.verification_work_units > resources.total_rows);
+    REQUIRE(resources.total_rows > 1 && resources.verification_work_units > resources.total_rows);
     const XrSemanticPlan *local_modules[] = {fixture.semantic};
     XrTargetPlan *graph_plan = (XrTargetPlan *) (uintptr_t) 1;
     REQUIRE(!xr_xtp_materialize_target_plan_program_graph(
-        candidate, local_modules, 1u, fixture.profile, &graph_plan, error,
-        sizeof(error)));
+        candidate, local_modules, 1u, fixture.profile, &graph_plan, error, sizeof(error)));
     REQUIRE(graph_plan == NULL);
     error[0] = '\0';
 
     uint8_t saved = fixture.bytes[0];
     uint8_t saved_schema = fixture.bytes[4];
     uint8_t saved_digest = fixture.bytes[XR_XTP_FULL_DIGEST_OFFSET];
-    uint8_t *function_entry =
-        directory_entry(fixture.bytes, XR_XTP_SECTION_FUNCTIONS);
+    uint8_t *function_entry = directory_entry(fixture.bytes, XR_XTP_SECTION_FUNCTIONS);
     size_t function_offset = (size_t) xr_xtp_take_u64(function_entry + 8);
     uint8_t saved_function = fixture.bytes[function_offset];
     fixture.bytes[0] ^= 0xff;
@@ -932,7 +864,7 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     fixture.bytes[function_offset] ^= 0xff;
     XrTargetPlan *decoded_plan = NULL;
     REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile,
-                                            &decoded_plan, error, sizeof(error)));
+                                           &decoded_plan, error, sizeof(error)));
     REQUIRE(xr_target_plan_is_verified(decoded_plan));
     REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(decoded_plan),
                                  xr_target_plan_fingerprint(fixture.plan)));
@@ -950,13 +882,11 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     xr_target_plan_free(decoded_plan);
     xr_xtp_candidate_release(candidate);
 
-    const uint32_t rejected_schemas[] = {UINT32_C(12), UINT32_C(13), UINT32_C(14),
-                                         UINT32_C(28), UINT32_C(41), UINT32_C(42),
-                                         UINT32_C(43), UINT32_C(44), UINT32_C(45),
-                                         UINT32_C(46), UINT32_C(47), UINT32_C(48),
-                                         UINT32_C(49), UINT32_C(50), UINT32_C(51)};
-    for (size_t i = 0;
-         i < sizeof(rejected_schemas) / sizeof(rejected_schemas[0]); i++) {
+    const uint32_t rejected_schemas[] = {
+        UINT32_C(12), UINT32_C(13), UINT32_C(14), UINT32_C(28), UINT32_C(41), UINT32_C(42),
+        UINT32_C(43), UINT32_C(44), UINT32_C(45), UINT32_C(46), UINT32_C(47), UINT32_C(48),
+        UINT32_C(49), UINT32_C(50), UINT32_C(51), UINT32_C(52), UINT32_C(53), UINT32_C(54)};
+    for (size_t i = 0; i < sizeof(rejected_schemas) / sizeof(rejected_schemas[0]); i++) {
         uint8_t *old_schema = copy_artifact(&fixture);
         xr_xtp_put_u32(old_schema + 4, rejected_schemas[i]);
         resign_artifact(old_schema, fixture.size);
@@ -965,10 +895,8 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     }
 
     uint8_t *mutated_profile = copy_artifact(&fixture);
-    uint8_t *profile_entry =
-        directory_entry(mutated_profile, XR_XTP_SECTION_TARGET_PROFILE);
-    size_t profile_offset =
-        (size_t) xr_xtp_take_u64(profile_entry + 8);
+    uint8_t *profile_entry = directory_entry(mutated_profile, XR_XTP_SECTION_TARGET_PROFILE);
+    size_t profile_offset = (size_t) xr_xtp_take_u64(profile_entry + 8);
     /* Profile v2: dynamic_tag immediately follows the 292-byte v1 prefix
      * and the new literal contract schema. */
     mutated_profile[profile_offset + 296] ^= 1;
@@ -976,6 +904,14 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     resign_artifact(mutated_profile, fixture.size);
     expect_materialize_failure(&fixture, mutated_profile);
     xr_free(mutated_profile);
+    dispose_fixture(&fixture);
+}
+
+static void test_previous_schema_is_rejected(void) {
+    XtpFixture fixture = make_fixture();
+    xr_xtp_put_u32(fixture.bytes + 4, XR_XTP_SCHEMA_VERSION - UINT32_C(1));
+    resign_artifact(fixture.bytes, fixture.size);
+    expect_decode_failure(fixture.bytes, fixture.size);
     dispose_fixture(&fixture);
 }
 
@@ -988,12 +924,12 @@ typedef struct ConcurrentCandidateContext {
 } ConcurrentCandidateContext;
 
 static void *materialize_candidate_thread(void *opaque) {
-    enum { ITERATIONS = 24 };
-    ConcurrentCandidateContext *context =
-        (ConcurrentCandidateContext *) opaque;
+    enum {
+        ITERATIONS = 24
+    };
+    ConcurrentCandidateContext *context = (ConcurrentCandidateContext *) opaque;
     for (uint32_t iteration = 0; iteration < ITERATIONS; iteration++) {
-        XrXtpCandidate *retained =
-            xr_xtp_candidate_retain(context->candidate);
+        XrXtpCandidate *retained = xr_xtp_candidate_retain(context->candidate);
         XrTargetPlan *plan = NULL;
         XrXtpIdentity identity = {0};
         XrXtpResourceManifest resources = {0};
@@ -1001,14 +937,11 @@ static void *materialize_candidate_thread(void *opaque) {
         bool valid =
             retained && xr_xtp_candidate_identity(retained, &identity) &&
             xr_xtp_candidate_resources(retained, &resources) &&
-            identity.plan_schema == XR_TARGET_PLAN_SCHEMA_VERSION &&
-            resources.total_rows != 0 &&
-            xr_xtp_materialize_target_plan(
-                retained, context->semantic, context->profile, &plan, error,
-                sizeof(error)) &&
+            identity.plan_schema == XR_TARGET_PLAN_SCHEMA_VERSION && resources.total_rows != 0 &&
+            xr_xtp_materialize_target_plan(retained, context->semantic, context->profile, &plan,
+                                           error, sizeof(error)) &&
             plan && xr_target_plan_is_verified(plan) &&
-            xr_fingerprint_equal(xr_target_plan_fingerprint(plan),
-                                 context->expected_fingerprint);
+            xr_fingerprint_equal(xr_target_plan_fingerprint(plan), context->expected_fingerprint);
         xr_target_plan_free(plan);
         xr_xtp_candidate_release(retained);
         if (!valid)
@@ -1019,12 +952,13 @@ static void *materialize_candidate_thread(void *opaque) {
 }
 
 static void test_concurrent_candidate_materialization(void) {
-    enum { THREAD_COUNT = 8 };
+    enum {
+        THREAD_COUNT = 8
+    };
     XtpFixture fixture = make_fixture();
     XrXtpCandidate *candidate = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
-                                    error, sizeof(error)));
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
     ConcurrentCandidateContext contexts[THREAD_COUNT] = {0};
     xr_thread_t threads[THREAD_COUNT] = {0};
     XrFingerprint expected = xr_target_plan_fingerprint(fixture.plan);
@@ -1035,8 +969,7 @@ static void test_concurrent_candidate_materialization(void) {
             .profile = fixture.profile,
             .expected_fingerprint = expected,
         };
-        REQUIRE(xr_thread_create(&threads[i], materialize_candidate_thread,
-                                 &contexts[i]));
+        REQUIRE(xr_thread_create(&threads[i], materialize_candidate_thread, &contexts[i]));
     }
     for (uint32_t i = 0; i < THREAD_COUNT; i++) {
         REQUIRE(xr_thread_join(threads[i], NULL) == 0);
@@ -1055,11 +988,9 @@ static void test_direct_call_rows_roundtrip_and_mutate(void) {
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
-                                    error, sizeof(error)));
-    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
-                                            fixture.profile, &decoded,
-                                            error, sizeof(error)));
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &decoded,
+                                           error, sizeof(error)));
     REQUIRE(xr_target_plan_calls(decoded, &count) != NULL && count == 1);
     REQUIRE(xr_target_plan_call_arguments(decoded, &count) != NULL && count == 1);
     REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
@@ -1090,56 +1021,42 @@ static void test_direct_call_rows_roundtrip_and_mutate(void) {
 static void test_channel_close_row_roundtrip_and_mutate(void) {
     XtpFixture fixture = make_channel_close_fixture();
     uint32_t count = 0;
-    const XrTargetCallRecord *calls =
-        xr_target_plan_calls(fixture.plan, &count);
-    REQUIRE(calls != NULL && count == 1 &&
-            calls[0].semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
-            calls[0].callee_function == XR_SEMANTIC_INDEX_NONE &&
-            calls[0].caller_storage_slot == XR_SEMANTIC_INDEX_NONE &&
-            calls[0].argument_count == 0 &&
-            calls[0].calling_convention ==
-                XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
-            calls[0].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
-    REQUIRE(xr_target_plan_call_arguments(fixture.plan, &count) == NULL &&
-            count == 0);
+    const XrTargetCallRecord *calls = xr_target_plan_calls(fixture.plan, &count);
+    REQUIRE(
+        calls != NULL && count == 1 && calls[0].semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+        calls[0].callee_function == XR_SEMANTIC_INDEX_NONE &&
+        calls[0].caller_storage_slot == XR_SEMANTIC_INDEX_NONE && calls[0].argument_count == 0 &&
+        calls[0].calling_convention == XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
+        calls[0].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
+    REQUIRE(xr_target_plan_call_arguments(fixture.plan, &count) == NULL && count == 0);
 
-    uint8_t *call_entry =
-        directory_entry(fixture.bytes, XR_XTP_SECTION_CALLS);
+    uint8_t *call_entry = directory_entry(fixture.bytes, XR_XTP_SECTION_CALLS);
     size_t call_offset = (size_t) xr_xtp_take_u64(call_entry + 8);
-    REQUIRE(xr_xtp_take_u32(fixture.bytes + call_offset + 20) ==
-                XR_SEMANTIC_INDEX_NONE &&
-            xr_xtp_take_u32(fixture.bytes + call_offset + 32) ==
-                XR_SEMANTIC_INDEX_NONE &&
-            xr_xtp_take_u32(fixture.bytes + call_offset + 100) ==
-                XR_SEMANTIC_INDEX_NONE &&
+    REQUIRE(xr_xtp_take_u32(fixture.bytes + call_offset + 20) == XR_SEMANTIC_INDEX_NONE &&
+            xr_xtp_take_u32(fixture.bytes + call_offset + 32) == XR_SEMANTIC_INDEX_NONE &&
+            xr_xtp_take_u32(fixture.bytes + call_offset + 100) == XR_SEMANTIC_INDEX_NONE &&
             xr_xtp_take_u16(fixture.bytes + call_offset + 124) == 0 &&
-            fixture.bytes[call_offset + 134] ==
-                XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
-            fixture.bytes[call_offset + 135] ==
-                XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
+            fixture.bytes[call_offset + 134] == XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
+            fixture.bytes[call_offset + 135] == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
 
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
-                                    error, sizeof(error)));
-    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
-                                           fixture.profile, &decoded, error,
-                                           sizeof(error)));
-    const XrTargetCallRecord *decoded_calls =
-        xr_target_plan_calls(decoded, &count);
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &decoded,
+                                           error, sizeof(error)));
+    const XrTargetCallRecord *decoded_calls = xr_target_plan_calls(decoded, &count);
     REQUIRE(decoded != NULL && decoded_calls != NULL && count == 1 &&
-            decoded_calls[0].target_kind ==
-                XR_TARGET_CALL_TARGET_CHANNEL_CLOSE &&
+            decoded_calls[0].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE &&
             xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
                                  xr_target_plan_fingerprint(fixture.plan)));
     xr_target_plan_free(decoded);
     xr_xtp_candidate_release(candidate);
 
     static const size_t mutations[] = {
-        20, /* semantic_call_target */
-        32, /* callee_function */
-        84, /* caller_storage_slot */
+        20,  /* semantic_call_target */
+        32,  /* callee_function */
+        84,  /* caller_storage_slot */
         108, /* argument_count */
         114, /* flags */
         116, /* calling_convention */
@@ -1161,29 +1078,21 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
 static void test_stringbuilder_row_roundtrip_and_mutate(void) {
     XtpFixture fixture = make_stringbuilder_fixture();
     uint32_t count = 0;
-    const XrTargetCallRecord *calls =
-        xr_target_plan_calls(fixture.plan, &count);
-    REQUIRE(calls && count == 1 &&
-            calls[0].semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+    const XrTargetCallRecord *calls = xr_target_plan_calls(fixture.plan, &count);
+    REQUIRE(calls && count == 1 && calls[0].semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
             calls[0].argument_count == 0 && calls[0].flags == 0 &&
             calls[0].result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
-            calls[0].calling_convention ==
-                XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR &&
-            calls[0].target_kind ==
-                XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR);
+            calls[0].calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR &&
+            calls[0].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR);
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
-                                    error, sizeof(error)));
-    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
-                                            fixture.profile, &decoded, error,
-                                            sizeof(error)));
-    const XrTargetCallRecord *decoded_calls =
-        xr_target_plan_calls(decoded, &count);
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &decoded,
+                                           error, sizeof(error)));
+    const XrTargetCallRecord *decoded_calls = xr_target_plan_calls(decoded, &count);
     REQUIRE(decoded_calls && count == 1 &&
-            decoded_calls[0].target_kind ==
-                XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR &&
+            decoded_calls[0].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR &&
             decoded_calls[0].result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
             xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
                                  xr_target_plan_fingerprint(fixture.plan)));
@@ -1215,26 +1124,20 @@ static void test_stringbuilder_row_roundtrip_and_mutate(void) {
 static void test_cleanup_row_roundtrip_and_mutate(void) {
     XtpFixture fixture = make_string_concat_release_fixture();
     uint32_t count = 0;
-    const XrTargetCleanupRecord *cleanups =
-        xr_target_plan_cleanups(fixture.plan, &count);
-    REQUIRE(cleanups != NULL && count == 1 && cleanups[0].id == 0 &&
-            cleanups[0].function == 0 &&
-            cleanups[0].action == XR_TARGET_CLEANUP_RELEASE &&
-            cleanups[0].flags == 0 && cleanups[0].provider == 0);
+    const XrTargetCleanupRecord *cleanups = xr_target_plan_cleanups(fixture.plan, &count);
+    REQUIRE(cleanups != NULL && count == 1 && cleanups[0].id == 0 && cleanups[0].function == 0 &&
+            cleanups[0].action == XR_TARGET_CLEANUP_RELEASE && cleanups[0].flags == 0 &&
+            cleanups[0].provider == 0);
 
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
-                                    error, sizeof(error)));
-    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
-                                            fixture.profile, &decoded, error,
-                                            sizeof(error)));
-    const XrTargetCleanupRecord *decoded_cleanups =
-        xr_target_plan_cleanups(decoded, &count);
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &decoded,
+                                           error, sizeof(error)));
+    const XrTargetCleanupRecord *decoded_cleanups = xr_target_plan_cleanups(decoded, &count);
     REQUIRE(decoded_cleanups != NULL && count == 1 &&
-            decoded_cleanups[0].semantic_operation ==
-                cleanups[0].semantic_operation &&
+            decoded_cleanups[0].semantic_operation == cleanups[0].semantic_operation &&
             decoded_cleanups[0].slot == cleanups[0].slot &&
             decoded_cleanups[0].action == XR_TARGET_CLEANUP_RELEASE &&
             xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
@@ -1264,34 +1167,26 @@ static void test_cleanup_row_roundtrip_and_mutate(void) {
 static void test_coroutine_lifecycle_rows_roundtrip_and_mutate(void) {
     XtpFixture fixture = make_string_coroutine_lifecycle_fixture();
     uint32_t count = 0;
-    const XrTargetRootMapRecord *roots =
-        xr_target_plan_root_maps(fixture.plan, &count);
+    const XrTargetRootMapRecord *roots = xr_target_plan_root_maps(fixture.plan, &count);
     REQUIRE(roots && count == 1 && roots[0].slot_count == 1 &&
-            roots[0].flags == (XR_TARGET_ROOT_SUSPEND |
-                               XR_TARGET_ROOT_CANCEL |
-                               XR_TARGET_ROOT_EXIT));
-    const uint32_t *root_slots =
-        xr_target_plan_root_slots(fixture.plan, &count);
+            roots[0].flags ==
+                (XR_TARGET_ROOT_SUSPEND | XR_TARGET_ROOT_CANCEL | XR_TARGET_ROOT_EXIT));
+    const uint32_t *root_slots = xr_target_plan_root_slots(fixture.plan, &count);
     REQUIRE(root_slots && count == 1);
-    const XrTargetCleanupRecord *cleanups =
-        xr_target_plan_cleanups(fixture.plan, &count);
+    const XrTargetCleanupRecord *cleanups = xr_target_plan_cleanups(fixture.plan, &count);
     REQUIRE(cleanups && count == 2 &&
             cleanups[0].semantic_operation == roots[0].semantic_operation &&
             cleanups[0].slot == root_slots[0] &&
-            cleanups[0].flags ==
-                (XR_TARGET_CLEANUP_CANCEL | XR_TARGET_CLEANUP_EXIT) &&
+            cleanups[0].flags == (XR_TARGET_CLEANUP_CANCEL | XR_TARGET_CLEANUP_EXIT) &&
             cleanups[1].flags == 0);
 
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
-                                    error, sizeof(error)));
-    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
-                                            fixture.profile, &decoded, error,
-                                            sizeof(error)));
-    const XrTargetRootMapRecord *decoded_roots =
-        xr_target_plan_root_maps(decoded, &count);
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &decoded,
+                                           error, sizeof(error)));
+    const XrTargetRootMapRecord *decoded_roots = xr_target_plan_root_maps(decoded, &count);
     REQUIRE(decoded_roots && count == 1 &&
             decoded_roots[0].semantic_operation == roots[0].semantic_operation &&
             decoded_roots[0].flags == roots[0].flags &&
@@ -1324,33 +1219,25 @@ static void test_coroutine_lifecycle_rows_roundtrip_and_mutate(void) {
 static void test_source_export_row_roundtrip_and_mutate(void) {
     XtpFixture fixture = make_source_export_fixture();
     uint32_t count = 0;
-    const XrTargetCallRecord *calls =
-        xr_target_plan_calls(fixture.plan, &count);
-    REQUIRE(calls && count == 1 && calls[0].source_dependency == 0 &&
-            calls[0].source_export == 0 &&
-            calls[0].callee_function == XR_SEMANTIC_INDEX_NONE &&
-            calls[0].argument_count == 0 &&
-            calls[0].calling_convention ==
-                XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
+    const XrTargetCallRecord *calls = xr_target_plan_calls(fixture.plan, &count);
+    REQUIRE(calls && count == 1 && calls[0].source_dependency == 0 && calls[0].source_export == 0 &&
+            calls[0].callee_function == XR_SEMANTIC_INDEX_NONE && calls[0].argument_count == 0 &&
+            calls[0].calling_convention == XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
             calls[0].target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
             calls[0].flags == XR_TARGET_CALL_SUSPEND);
     const XrSemanticPlan *dependencies[] = {fixture.dependency};
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
-                                    error, sizeof(error)));
-    REQUIRE(!xr_xtp_materialize_target_plan(
-        candidate, fixture.semantic, fixture.profile, &decoded, error,
-        sizeof(error)));
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
+    REQUIRE(!xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &decoded,
+                                            error, sizeof(error)));
     REQUIRE(decoded == NULL);
-    REQUIRE(xr_xtp_materialize_target_plan_module_set(
-        candidate, fixture.semantic, dependencies, 1, fixture.profile,
-        &decoded, error, sizeof(error)));
-    const XrTargetCallRecord *decoded_calls =
-        xr_target_plan_calls(decoded, &count);
-    REQUIRE(decoded_calls && count == 1 &&
-            decoded_calls[0].source_dependency == 0 &&
+    REQUIRE(xr_xtp_materialize_target_plan_module_set(candidate, fixture.semantic, dependencies, 1,
+                                                      fixture.profile, &decoded, error,
+                                                      sizeof(error)));
+    const XrTargetCallRecord *decoded_calls = xr_target_plan_calls(decoded, &count);
+    REQUIRE(decoded_calls && count == 1 && decoded_calls[0].source_dependency == 0 &&
             xr_stable_id_equal(decoded_calls[0].source_export_identity,
                                calls[0].source_export_identity) &&
             xr_stable_id_equal(decoded_calls[0].source_callee_identity,
@@ -1361,12 +1248,12 @@ static void test_source_export_row_roundtrip_and_mutate(void) {
     xr_xtp_candidate_release(candidate);
 
     static const size_t mutations[] = {
-        36, /* source_dependency */
-        40, /* source_export */
-        44, /* source_export_identity */
-        60, /* source_callee_identity */
-        76, /* result_value */
-        80, /* result_slot */
+        36,  /* source_dependency */
+        40,  /* source_export */
+        44,  /* source_export_identity */
+        60,  /* source_callee_identity */
+        76,  /* result_value */
+        80,  /* result_slot */
         108, /* argument_count */
         114, /* flags */
         116, /* calling_convention */
@@ -1380,12 +1267,11 @@ static void test_source_export_row_roundtrip_and_mutate(void) {
         resign_section(copy, XR_XTP_SECTION_CALLS);
         resign_artifact(copy, fixture.size);
         candidate = NULL;
-        REQUIRE(xr_xtp_decode_candidate(copy, fixture.size, &candidate, error,
-                                        sizeof(error)));
+        REQUIRE(xr_xtp_decode_candidate(copy, fixture.size, &candidate, error, sizeof(error)));
         decoded = (XrTargetPlan *) (uintptr_t) 1;
-        REQUIRE(!xr_xtp_materialize_target_plan_module_set(
-            candidate, fixture.semantic, dependencies, 1, fixture.profile,
-            &decoded, error, sizeof(error)));
+        REQUIRE(!xr_xtp_materialize_target_plan_module_set(candidate, fixture.semantic,
+                                                           dependencies, 1, fixture.profile,
+                                                           &decoded, error, sizeof(error)));
         REQUIRE(decoded == NULL);
         xr_xtp_candidate_release(candidate);
         xr_free(copy);
@@ -1396,15 +1282,12 @@ static void test_source_export_row_roundtrip_and_mutate(void) {
 static void test_coroutine_rows_roundtrip_and_mutate(void) {
     XtpFixture fixture = make_coroutine_call_fixture();
     uint32_t count = 0;
-    REQUIRE(xr_target_plan_coroutines(fixture.plan, &count) != NULL &&
-            count == 2);
+    REQUIRE(xr_target_plan_coroutines(fixture.plan, &count) != NULL && count == 2);
     XrXtpCandidate *candidate = NULL;
     XrTargetPlan *decoded = NULL;
     char error[512] = {0};
-    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
-                                    error, sizeof(error)));
-    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
-                                           fixture.profile, &decoded,
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate, error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic, fixture.profile, &decoded,
                                            error, sizeof(error)));
     REQUIRE(xr_target_plan_coroutines(decoded, &count) != NULL && count == 2);
     REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
@@ -1440,68 +1323,48 @@ static void test_coroutine_rows_roundtrip_and_mutate(void) {
 
 static void test_artifact_classifier(void) {
     static const uint8_t source[] = "print(1)";
-    static const uint8_t removed_xtp_v1[] = {
-        'X', 'R', 'A', 'Y', 'X', 'T', 'P', 0};
-    static const uint8_t removed_xray_container[] = {
-        'X', 'R', 'A', 'Y', 30, 0};
-    static const uint8_t corrupt_removed[] = {
-        'X', 'R', 'A', 'Y', 'X', 'T', 'P', 1};
-    static const uint8_t unknown_reserved[] = {
-        'X', 'R', 'A', 'Y', 'Q', 'Q', 'Q', 0};
+    static const uint8_t removed_xtp_v1[] = {'X', 'R', 'A', 'Y', 'X', 'T', 'P', 0};
+    static const uint8_t removed_xray_container[] = {'X', 'R', 'A', 'Y', 30, 0};
+    static const uint8_t corrupt_removed[] = {'X', 'R', 'A', 'Y', 'X', 'T', 'P', 1};
+    static const uint8_t unknown_reserved[] = {'X', 'R', 'A', 'Y', 'Q', 'Q', 'Q', 0};
     XrArtifactProbeResult probe =
-        xr_artifact_probe("renamed.bin", xr_xsm_artifact_magic,
-                          XR_XSM_ARTIFACT_MAGIC_SIZE);
-    REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH &&
-            probe.kind == XR_ARTIFACT_KIND_XSM);
-    probe = xr_artifact_probe("renamed.bin", xr_xtp_artifact_magic,
-                              XR_XTP_ARTIFACT_MAGIC_SIZE);
-    REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH &&
-            probe.kind == XR_ARTIFACT_KIND_XTP);
-    probe = xr_artifact_probe("renamed.bin", removed_xray_container,
-                              sizeof(removed_xray_container));
+        xr_artifact_probe("renamed.bin", xr_xsm_artifact_magic, XR_XSM_ARTIFACT_MAGIC_SIZE);
+    REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH && probe.kind == XR_ARTIFACT_KIND_XSM);
+    probe = xr_artifact_probe("renamed.bin", xr_xtp_artifact_magic, XR_XTP_ARTIFACT_MAGIC_SIZE);
+    REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH && probe.kind == XR_ARTIFACT_KIND_XTP);
+    probe =
+        xr_artifact_probe("renamed.bin", removed_xray_container, sizeof(removed_xray_container));
     REQUIRE(probe.status == XR_ARTIFACT_PROBE_UNKNOWN_RESERVED);
-    REQUIRE(xr_artifact_probe("removed.container", source,
-                              sizeof(source) - 1).status ==
+    REQUIRE(xr_artifact_probe("removed.container", source, sizeof(source) - 1).status ==
             XR_ARTIFACT_PROBE_MATCH);
     probe = xr_artifact_probe("program.xr", source, sizeof(source) - 1);
-    REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH &&
-            probe.kind == XR_ARTIFACT_KIND_SOURCE);
+    REQUIRE(probe.status == XR_ARTIFACT_PROBE_MATCH && probe.kind == XR_ARTIFACT_KIND_SOURCE);
     REQUIRE(xr_artifact_probe("program.xtp", source, sizeof(source) - 1).status ==
             XR_ARTIFACT_PROBE_CONFLICT);
-    REQUIRE(xr_artifact_probe("program.xsm", xr_xtp_artifact_magic,
-                              XR_XTP_ARTIFACT_MAGIC_SIZE).status ==
-            XR_ARTIFACT_PROBE_CONFLICT);
-    REQUIRE(xr_artifact_probe("renamed.bin", removed_xtp_v1,
-                              sizeof(removed_xtp_v1)).status ==
+    REQUIRE(xr_artifact_probe("program.xsm", xr_xtp_artifact_magic, XR_XTP_ARTIFACT_MAGIC_SIZE)
+                .status == XR_ARTIFACT_PROBE_CONFLICT);
+    REQUIRE(xr_artifact_probe("renamed.bin", removed_xtp_v1, sizeof(removed_xtp_v1)).status ==
             XR_ARTIFACT_PROBE_UNKNOWN_RESERVED);
-    REQUIRE(xr_artifact_probe("renamed.bin", corrupt_removed,
-                              sizeof(corrupt_removed)).status ==
+    REQUIRE(xr_artifact_probe("renamed.bin", corrupt_removed, sizeof(corrupt_removed)).status ==
             XR_ARTIFACT_PROBE_UNKNOWN_RESERVED);
-    REQUIRE(xr_artifact_probe("renamed.bin", unknown_reserved,
-                              sizeof(unknown_reserved)).status ==
+    REQUIRE(xr_artifact_probe("renamed.bin", unknown_reserved, sizeof(unknown_reserved)).status ==
             XR_ARTIFACT_PROBE_UNKNOWN_RESERVED);
     for (size_t size = 5; size < XR_XSM_ARTIFACT_MAGIC_SIZE; size++)
-        REQUIRE(xr_artifact_probe("renamed.bin", xr_xsm_artifact_magic,
-                                  size).status ==
+        REQUIRE(xr_artifact_probe("renamed.bin", xr_xsm_artifact_magic, size).status ==
                 XR_ARTIFACT_PROBE_NEED_MORE);
 }
 
 static void test_runtime_machine_authority_is_exact_and_scalar_only(void) {
     XrRuntimeTargetAuthority authority;
-    REQUIRE(xr_runtime_target_authority_native_hosted(&authority) ==
-            XR_RUNTIME_ABI_OK);
-    REQUIRE(authority.machine.runtime_profile ==
-            XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(xr_runtime_target_authority_native_hosted(&authority) == XR_RUNTIME_ABI_OK);
+    REQUIRE(authority.machine.runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(authority.machine.vector_feature_mask == 0);
     REQUIRE(authority.machine.maximum_vector_bits == 0);
-    REQUIRE(xr_runtime_target_authority_machine_matches(
-        &authority, &authority.machine));
-    for (NativeMachineMutation mutation = 0;
-         mutation < NATIVE_MACHINE_MUTATION_COUNT; mutation++) {
+    REQUIRE(xr_runtime_target_authority_machine_matches(&authority, &authority.machine));
+    for (NativeMachineMutation mutation = 0; mutation < NATIVE_MACHINE_MUTATION_COUNT; mutation++) {
         XrTargetMachineFacts candidate = authority.machine;
         mutate_exact_machine_field(&candidate, mutation);
-        REQUIRE(!xr_runtime_target_authority_machine_matches(&authority,
-                                                              &candidate));
+        REQUIRE(!xr_runtime_target_authority_machine_matches(&authority, &candidate));
     }
 }
 
@@ -1509,16 +1372,14 @@ static void test_runtime_factory_owns_native_profile(void) {
     XtpFixture fixture = make_fixture();
     char diagnostic[512] = {0};
     XrRuntimeArtifactAuthority *authority = NULL;
-    REQUIRE(xr_runtime_artifact_authority_create_internal(
-        fixture.semantic, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_create_internal(fixture.semantic, &authority, diagnostic,
+                                                          sizeof(diagnostic)));
     REQUIRE(authority != NULL);
     REQUIRE(authority->target_profile != fixture.profile);
-    REQUIRE(xr_target_profile_require_exact(
-        fixture.profile, authority->target_profile, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(xr_target_profile_require_exact(fixture.profile, authority->target_profile, diagnostic,
+                                            sizeof(diagnostic)));
     XrRuntimeTargetAuthority runtime;
-    REQUIRE(xr_runtime_target_authority_native_hosted(&runtime) ==
-            XR_RUNTIME_ABI_OK);
+    REQUIRE(xr_runtime_target_authority_native_hosted(&runtime) == XR_RUNTIME_ABI_OK);
     REQUIRE(xr_runtime_target_authority_machine_matches(
         &runtime, xr_target_profile_machine_facts(authority->target_profile)));
     xr_runtime_artifact_authority_free(authority);
@@ -1529,8 +1390,8 @@ static void test_assertion_artifact_capability_identity(void) {
     XrSemanticPlan *semantic = build_assertion_artifact_semantic_plan();
     XrRuntimeArtifactAuthority *authority = NULL;
     char diagnostic[512] = {0};
-    REQUIRE(xr_runtime_artifact_authority_create_internal(
-        semantic, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_create_internal(semantic, &authority, diagnostic,
+                                                          sizeof(diagnostic)));
     REQUIRE(authority != NULL);
     const uint64_t expected = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
     REQUIRE(authority->identity.required_capability_mask == expected);
@@ -1538,14 +1399,12 @@ static void test_assertion_artifact_capability_identity(void) {
     authority->identity.required_capability_mask =
         XR_TARGET_FOUNDATION_CAPABILITY_MASK |
         XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
-    xr_runtime_artifact_authority_compute_fingerprint(
-        &authority->identity, authority->identity.authority_fingerprint);
-    REQUIRE(!xr_runtime_artifact_authority_verify(
-        authority, diagnostic, sizeof(diagnostic)));
+    xr_runtime_artifact_authority_compute_fingerprint(&authority->identity,
+                                                      authority->identity.authority_fingerprint);
+    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     REQUIRE(strstr(diagnostic, "XR_TARGET_1004") != NULL);
     authority->identity = saved;
-    REQUIRE(xr_runtime_artifact_authority_verify(
-        authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     xr_runtime_artifact_authority_free(authority);
     xr_semantic_plan_free(semantic);
 }
@@ -1555,16 +1414,14 @@ static void test_public_xsm_authority_loads_exact_semantics(void) {
     uint8_t *xsm = NULL;
     size_t xsm_size = 0;
     char diagnostic[512] = {0};
-    REQUIRE(xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic,
-                          sizeof(diagnostic)));
+    REQUIRE(xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic, sizeof(diagnostic)));
     REQUIRE(xr_runtime_artifact_authority_load_available());
 
     XrRuntimeArtifactAuthority *authority = NULL;
-    REQUIRE(xr_runtime_artifact_authority_load_xsm(
-        xsm, xsm_size, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_load_xsm(xsm, xsm_size, &authority, diagnostic,
+                                                   sizeof(diagnostic)));
     REQUIRE(authority != NULL);
-    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                 sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     XrRuntimeArtifactAuthorityIdentity identity;
     REQUIRE(xr_runtime_artifact_authority_identity(authority, &identity));
     REQUIRE(memcmp(identity.semantic_fingerprint,
@@ -1572,9 +1429,8 @@ static void test_public_xsm_authority_loads_exact_semantics(void) {
                    XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE) == 0);
 
     XrTargetPlan *loaded = NULL;
-    REQUIRE(xr_runtime_target_plan_load(
-        fixture.bytes, fixture.size, authority, &loaded, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_target_plan_load(fixture.bytes, fixture.size, authority, &loaded, diagnostic,
+                                        sizeof(diagnostic)));
     REQUIRE(loaded != NULL && xr_target_plan_is_verified(loaded));
     REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(loaded),
                                  xr_target_plan_fingerprint(fixture.plan)));
@@ -1582,9 +1438,8 @@ static void test_public_xsm_authority_loads_exact_semantics(void) {
     XtpFixture foreign = make_direct_call_fixture();
     XrTargetPlan *foreign_loaded = (XrTargetPlan *) (uintptr_t) 1;
     memset(diagnostic, 0, sizeof(diagnostic));
-    REQUIRE(!xr_runtime_target_plan_load(
-        foreign.bytes, foreign.size, authority, &foreign_loaded, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_target_plan_load(foreign.bytes, foreign.size, authority, &foreign_loaded,
+                                         diagnostic, sizeof(diagnostic)));
     REQUIRE(foreign_loaded == NULL);
     REQUIRE(strstr(diagnostic, "XR_TARGET_1000") != NULL);
     dispose_fixture(&foreign);
@@ -1599,26 +1454,20 @@ static void test_public_xsm_authority_loads_exact_semantics(void) {
     XrRuntimeGenerationAuthority *generation_authority = NULL;
     XrLoadedModuleGeneration *generation = NULL;
     int64_t result = 0;
-    REQUIRE(xr_runtime_generation_authority_create(
-        &budget, &generation_authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_generation_authority_create(&budget, &generation_authority, diagnostic,
+                                                   sizeof(diagnostic)));
     REQUIRE(xr_module_generation_load_verified_target_plan(
-        generation_authority, loaded, &generation, diagnostic,
-        sizeof(diagnostic)));
-    REQUIRE(xr_module_generation_prepare(generation, diagnostic,
-                                         sizeof(diagnostic)));
-    REQUIRE(xr_module_generation_activate(generation, diagnostic,
-                                          sizeof(diagnostic)));
-    REQUIRE(xr_module_generation_execute_sole_scalar_i64(
-        generation, &result, diagnostic, sizeof(diagnostic)));
+        generation_authority, loaded, &generation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_prepare(generation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_activate(generation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_execute_sole_scalar_i64(generation, &result, diagnostic,
+                                                         sizeof(diagnostic)));
     REQUIRE(result == 42);
-    REQUIRE(xr_module_generation_begin_drain(generation, diagnostic,
-                                             sizeof(diagnostic)));
-    REQUIRE(xr_module_generation_retire(generation, diagnostic,
-                                        sizeof(diagnostic)));
-    REQUIRE(xr_module_generation_unload(&generation, diagnostic,
-                                        sizeof(diagnostic)));
-    REQUIRE(xr_runtime_generation_authority_destroy(
-        &generation_authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_begin_drain(generation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_retire(generation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_unload(&generation, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_generation_authority_destroy(&generation_authority, diagnostic,
+                                                    sizeof(diagnostic)));
     xr_target_plan_free(loaded);
     xr_runtime_artifact_authority_free(authority);
 
@@ -1628,8 +1477,8 @@ static void test_public_xsm_authority_loads_exact_semantics(void) {
     old_schema[8] ^= 1;
     authority = (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
     memset(diagnostic, 0, sizeof(diagnostic));
-    REQUIRE(!xr_runtime_artifact_authority_load_xsm(
-        old_schema, xsm_size, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_artifact_authority_load_xsm(old_schema, xsm_size, &authority, diagnostic,
+                                                    sizeof(diagnostic)));
     REQUIRE(authority == NULL);
     REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2000") != NULL);
     xr_free(old_schema);
@@ -1640,16 +1489,15 @@ static void test_public_xsm_authority_loads_exact_semantics(void) {
     corrupt[XR_XSM_HEADER_SIZE] ^= 1;
     authority = (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
     memset(diagnostic, 0, sizeof(diagnostic));
-    REQUIRE(!xr_runtime_artifact_authority_load_xsm(
-        corrupt, xsm_size, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_artifact_authority_load_xsm(corrupt, xsm_size, &authority, diagnostic,
+                                                    sizeof(diagnostic)));
     REQUIRE(authority == NULL);
     REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2002") != NULL);
     xr_free(corrupt);
 
     authority = (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
-    REQUIRE(!xr_runtime_artifact_authority_load_xsm(
-        fixture.bytes, fixture.size, &authority, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_artifact_authority_load_xsm(fixture.bytes, fixture.size, &authority,
+                                                    diagnostic, sizeof(diagnostic)));
     REQUIRE(authority == NULL);
     REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2000") != NULL);
     xr_free(xsm);
@@ -1660,34 +1508,29 @@ static void test_independent_verifier_rejects_forged_machine_profiles(void) {
     XtpFixture fixture = make_fixture();
     char diagnostic[512] = {0};
     XrRuntimeArtifactAuthority *authority = NULL;
-    REQUIRE(xr_runtime_artifact_authority_create_internal(
-        fixture.semantic, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_create_internal(fixture.semantic, &authority, diagnostic,
+                                                          sizeof(diagnostic)));
     XrTargetProfile *native_profile = authority->target_profile;
     XrRuntimeArtifactAuthorityIdentity native_identity = authority->identity;
 
-    for (ForeignProfileMutation mutation = 0;
-         mutation < FOREIGN_PROFILE_MUTATION_COUNT; mutation++) {
-        XrTargetProfile *foreign =
-            build_foreign_profile(fixture.profile, mutation);
+    for (ForeignProfileMutation mutation = 0; mutation < FOREIGN_PROFILE_MUTATION_COUNT;
+         mutation++) {
+        XrTargetProfile *foreign = build_foreign_profile(fixture.profile, mutation);
         authority->target_profile = foreign;
-        XrFingerprint foreign_fingerprint =
-            xr_target_profile_fingerprint(foreign);
-        memcpy(authority->identity.target_profile_fingerprint,
-               foreign_fingerprint.bytes,
+        XrFingerprint foreign_fingerprint = xr_target_profile_fingerprint(foreign);
+        memcpy(authority->identity.target_profile_fingerprint, foreign_fingerprint.bytes,
                XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
         xr_runtime_artifact_authority_compute_fingerprint(
             &authority->identity, authority->identity.authority_fingerprint);
         memset(diagnostic, 0, sizeof(diagnostic));
-        REQUIRE(!xr_runtime_artifact_authority_verify(
-            authority, diagnostic, sizeof(diagnostic)));
+        REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
         REQUIRE(strstr(diagnostic, "canonical native machine") != NULL);
         authority->target_profile = native_profile;
         authority->identity = native_identity;
         xr_target_profile_free(foreign);
     }
 
-    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                 sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     xr_runtime_artifact_authority_free(authority);
     dispose_fixture(&fixture);
 }
@@ -1696,25 +1539,22 @@ static void test_runtime_load_rejects_foreign_profile_artifacts(void) {
     XtpFixture fixture = make_fixture();
     char diagnostic[512] = {0};
     XrRuntimeArtifactAuthority *authority = NULL;
-    REQUIRE(xr_runtime_artifact_authority_create_internal(
-        fixture.semantic, &authority, diagnostic, sizeof(diagnostic)));
-    for (ForeignProfileMutation mutation = 0;
-         mutation < FOREIGN_PROFILE_MUTATION_COUNT; mutation++) {
-        XrTargetProfile *foreign =
-            build_foreign_profile(fixture.profile, mutation);
+    REQUIRE(xr_runtime_artifact_authority_create_internal(fixture.semantic, &authority, diagnostic,
+                                                          sizeof(diagnostic)));
+    for (ForeignProfileMutation mutation = 0; mutation < FOREIGN_PROFILE_MUTATION_COUNT;
+         mutation++) {
+        XrTargetProfile *foreign = build_foreign_profile(fixture.profile, mutation);
         XrTargetPlan *foreign_plan = NULL;
         uint8_t *foreign_bytes = NULL;
         size_t foreign_size = 0;
-        REQUIRE(xr_target_plan_build(fixture.semantic, foreign, &foreign_plan,
-                                     diagnostic, sizeof(diagnostic)));
-        REQUIRE(xr_xtp_encode_plan(foreign_plan, &foreign_bytes,
-                                   &foreign_size, diagnostic,
+        REQUIRE(xr_target_plan_build(fixture.semantic, foreign, &foreign_plan, diagnostic,
+                                     sizeof(diagnostic)));
+        REQUIRE(xr_xtp_encode_plan(foreign_plan, &foreign_bytes, &foreign_size, diagnostic,
                                    sizeof(diagnostic)));
         XrTargetPlan *loaded = (XrTargetPlan *) (uintptr_t) 1;
         memset(diagnostic, 0, sizeof(diagnostic));
-        REQUIRE(!xr_runtime_target_plan_load(
-            foreign_bytes, foreign_size, authority, &loaded, diagnostic,
-            sizeof(diagnostic)));
+        REQUIRE(!xr_runtime_target_plan_load(foreign_bytes, foreign_size, authority, &loaded,
+                                             diagnostic, sizeof(diagnostic)));
         REQUIRE(loaded == NULL);
         REQUIRE(strstr(diagnostic, "XR_TARGET_1000") != NULL);
         xr_xtp_encoded_free(foreign_bytes);
@@ -1729,95 +1569,80 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
     XtpFixture fixture = make_fixture();
     char diagnostic[512] = {0};
     XrRuntimeArtifactAuthority *authority = NULL;
-    REQUIRE(xr_runtime_artifact_authority_create_internal(
-        fixture.semantic, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_create_internal(fixture.semantic, &authority, diagnostic,
+                                                          sizeof(diagnostic)));
     REQUIRE(authority != NULL);
-    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                 sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     XrRuntimeArtifactAuthorityIdentity identity;
     REQUIRE(xr_runtime_artifact_authority_identity(authority, &identity));
-    REQUIRE(identity.schema_version ==
-            XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION);
+    REQUIRE(identity.schema_version == XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION);
     REQUIRE(identity.required_family_mask == XR_TARGET_REQUIRED_FAMILIES);
-    REQUIRE(identity.required_capability_mask ==
-            XR_TARGET_FOUNDATION_CAPABILITY_MASK);
+    REQUIRE(identity.required_capability_mask == XR_TARGET_FOUNDATION_CAPABILITY_MASK);
     REQUIRE((identity.provider_mask & identity.required_capability_mask) ==
             identity.required_capability_mask);
 
     XrTargetPlan *loaded = NULL;
-    REQUIRE(xr_runtime_target_plan_load(
-        fixture.bytes, fixture.size, authority, &loaded, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_target_plan_load(fixture.bytes, fixture.size, authority, &loaded, diagnostic,
+                                        sizeof(diagnostic)));
     REQUIRE(loaded != NULL && xr_target_plan_is_verified(loaded));
     REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(loaded),
                                  xr_target_plan_fingerprint(fixture.plan)));
     xr_target_plan_free(loaded);
 
     loaded = (XrTargetPlan *) (uintptr_t) 1;
-    REQUIRE(!xr_runtime_target_plan_load(
-        fixture.bytes, fixture.size, NULL, &loaded, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_target_plan_load(fixture.bytes, fixture.size, NULL, &loaded, diagnostic,
+                                         sizeof(diagnostic)));
     REQUIRE(loaded == NULL);
     REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2004") != NULL);
 
     static const uint8_t xsm[] = {'X', 'R', 'A', 'Y', 'X', 'S', 'M', 0};
     loaded = (XrTargetPlan *) (uintptr_t) 1;
-    REQUIRE(!xr_runtime_target_plan_load(
-        xsm, sizeof(xsm), authority, &loaded, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_target_plan_load(xsm, sizeof(xsm), authority, &loaded, diagnostic,
+                                         sizeof(diagnostic)));
     REQUIRE(loaded == NULL);
     REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2000") != NULL);
 
     uint8_t *corrupt = copy_artifact(&fixture);
     corrupt[XR_XTP_FULL_DIGEST_OFFSET] ^= 1;
     loaded = (XrTargetPlan *) (uintptr_t) 1;
-    REQUIRE(!xr_runtime_target_plan_load(
-        corrupt, fixture.size, authority, &loaded, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_target_plan_load(corrupt, fixture.size, authority, &loaded, diagnostic,
+                                         sizeof(diagnostic)));
     REQUIRE(loaded == NULL);
     REQUIRE(strncmp(diagnostic, "XR_ARTIFACT_2002", 16) == 0);
     xr_free(corrupt);
 
     XrRuntimeArtifactAuthorityIdentity saved = authority->identity;
     authority->identity.semantic_fingerprint[0] ^= 1;
-    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                  sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     authority->identity = saved;
     authority->identity.target_profile_fingerprint[0] ^= 1;
-    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                  sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     authority->identity = saved;
     authority->identity.required_family_mask = 0;
-    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                  sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     authority->identity = saved;
     authority->identity.required_capability_mask &=
         ~XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
-    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                  sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     authority->identity = saved;
     authority->identity.provider_set_fingerprint[0] ^= 1;
-    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                  sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     authority->identity = saved;
     authority->identity.authority_fingerprint[0] ^= 1;
     loaded = (XrTargetPlan *) (uintptr_t) 1;
-    REQUIRE(!xr_runtime_target_plan_load(
-        fixture.bytes, fixture.size, authority, &loaded, diagnostic,
-        sizeof(diagnostic)));
+    REQUIRE(!xr_runtime_target_plan_load(fixture.bytes, fixture.size, authority, &loaded,
+                                         diagnostic, sizeof(diagnostic)));
     REQUIRE(loaded == NULL);
     authority->identity = saved;
-    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic,
-                                                 sizeof(diagnostic)));
+    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic, sizeof(diagnostic)));
     xr_runtime_artifact_authority_free(authority);
     dispose_fixture(&fixture);
 }
 
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
-        0, 448, 58, 12, 24, 108, 28, 40, 24, 12,
-        48, 58, 112, 32, 178, 58, 20, 4, 20, 44, 12, 48, 144, 132,
-        208, 340,
+        0,  448, 58, 12, 24, 108, 28, 40, 24, 12,  48,  58,  112,
+        32, 178, 58, 20, 4,  20,  44, 12, 48, 144, 132, 208, 340,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
@@ -1826,16 +1651,13 @@ static void test_wire_row_inventory(void) {
     }
     REQUIRE(xr_xtp_table_count_limit(XR_XTP_SECTION_MODULE_PARTITIONS) ==
             XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES);
-    REQUIRE(UINT64_C(256) <=
-            xr_xtp_table_count_limit(XR_XTP_SECTION_MODULE_PARTITIONS));
-    REQUIRE(UINT64_C(257) >
-            xr_xtp_table_count_limit(XR_XTP_SECTION_MODULE_PARTITIONS));
+    REQUIRE(UINT64_C(256) <= xr_xtp_table_count_limit(XR_XTP_SECTION_MODULE_PARTITIONS));
+    REQUIRE(UINT64_C(257) > xr_xtp_table_count_limit(XR_XTP_SECTION_MODULE_PARTITIONS));
     REQUIRE(xr_xtp_table_count_limit(XR_XTP_SECTION_PROGRAM_GRAPHS) == 1u);
-    REQUIRE(xr_xtp_runtime_peak_within_budget(
-        XR_XTP_MAX_ARTIFACT_SIZE, XR_XTP_MAX_DECODED_TABLE_BYTES));
-    REQUIRE(!xr_xtp_runtime_peak_within_budget(
-        XR_XTP_MAX_ARTIFACT_SIZE,
-        XR_XTP_MAX_DECODED_TABLE_BYTES + 1u));
+    REQUIRE(xr_xtp_runtime_peak_within_budget(XR_XTP_MAX_ARTIFACT_SIZE,
+                                              XR_XTP_MAX_DECODED_TABLE_BYTES));
+    REQUIRE(!xr_xtp_runtime_peak_within_budget(XR_XTP_MAX_ARTIFACT_SIZE,
+                                               XR_XTP_MAX_DECODED_TABLE_BYTES + 1u));
     REQUIRE(!xr_xtp_runtime_peak_within_budget(SIZE_MAX, 0));
 }
 
@@ -1886,53 +1708,45 @@ static void test_every_typed_row_codec(void) {
 #undef XR_XTP_ROW_ROUNDTRIP
 }
 
-static void require_instruction_stream_reencodes(
-    const uint8_t *expected, size_t expected_size,
-    const XrTargetInstructionRecord *rows, uint32_t count) {
+static void require_instruction_stream_reencodes(const uint8_t *expected, size_t expected_size,
+                                                 const XrTargetInstructionRecord *rows,
+                                                 uint32_t count) {
     size_t encoded_size = 0;
     REQUIRE(xr_xtp_instruction_stream_size(rows, count, &encoded_size));
     REQUIRE(encoded_size == expected_size);
     uint8_t encoded[64] = {0};
     REQUIRE(encoded_size <= sizeof(encoded));
-    REQUIRE(xr_xtp_instruction_stream_encode(rows, count, encoded,
-                                             encoded_size, &encoded_size));
+    REQUIRE(xr_xtp_instruction_stream_encode(rows, count, encoded, encoded_size, &encoded_size));
     REQUIRE(memcmp(encoded, expected, expected_size) == 0);
     XrTargetInstructionRecord decoded[2] = {0};
     REQUIRE(count <= 2u);
-    REQUIRE(xr_xtp_instruction_stream_decode(encoded, encoded_size, count,
-                                             decoded));
+    REQUIRE(xr_xtp_instruction_stream_decode(encoded, encoded_size, count, decoded));
     for (uint32_t index = 0; index < count; index++) {
         uint8_t source_row[32] = {0};
         uint8_t decoded_row[32] = {0};
-        REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS,
-                                   &rows[index], 1u, source_row));
-        REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS,
-                                   &decoded[index], 1u, decoded_row));
+        REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, &rows[index], 1u, source_row));
+        REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, &decoded[index], 1u, decoded_row));
         REQUIRE(memcmp(source_row, decoded_row, sizeof(source_row)) == 0);
     }
     uint8_t reencoded[64] = {0};
     size_t reencoded_size = 0;
-    REQUIRE(xr_xtp_instruction_stream_encode(decoded, count, reencoded,
-                                             sizeof(reencoded),
+    REQUIRE(xr_xtp_instruction_stream_encode(decoded, count, reencoded, sizeof(reencoded),
                                              &reencoded_size));
-    REQUIRE(reencoded_size == expected_size &&
-            memcmp(reencoded, expected, expected_size) == 0);
+    REQUIRE(reencoded_size == expected_size && memcmp(reencoded, expected, expected_size) == 0);
 }
 
 static void test_compact_instruction_stream_kat_and_mutations(void) {
     static const uint8_t const_return[] = {0x01, 0x00, 0x03, 0x01};
     static const uint8_t const_return_digest[XR_FINGERPRINT_BYTES] = {
-        0x42, 0xd1, 0xb1, 0x57, 0x31, 0x20, 0x1a, 0xfb,
-        0xc1, 0x21, 0x3b, 0x05, 0x73, 0x2b, 0xdc, 0xd8,
-        0x54, 0x80, 0x41, 0x97, 0x75, 0x85, 0x82, 0x3f,
-        0x8e, 0xf5, 0x88, 0xfc, 0x97, 0xbf, 0x07, 0xaa,
+        0x42, 0xd1, 0xb1, 0x57, 0x31, 0x20, 0x1a, 0xfb, 0xc1, 0x21, 0x3b,
+        0x05, 0x73, 0x2b, 0xdc, 0xd8, 0x54, 0x80, 0x41, 0x97, 0x75, 0x85,
+        0x82, 0x3f, 0x8e, 0xf5, 0x88, 0xfc, 0x97, 0xbf, 0x07, 0xaa,
     };
     XrTargetInstructionRecord rows[2] = {
         {.id = 0,
          .function = 0,
          .result_slot = 2,
-         .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
-                           XR_TARGET_INSTRUCTION_SLOT_NONE},
+         .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE, XR_TARGET_INSTRUCTION_SLOT_NONE},
          .immediate_bits = UINT64_MAX,
          .opcode = XR_TARGET_INSTRUCTION_CONST_I64,
          .operand_count = 0,
@@ -1946,34 +1760,27 @@ static void test_compact_instruction_stream_kat_and_mutations(void) {
          .operand_count = 1,
          .reserved = 0},
     };
-    require_instruction_stream_reencodes(const_return,
-                                         sizeof(const_return), rows, 2u);
+    require_instruction_stream_reencodes(const_return, sizeof(const_return), rows, 2u);
     uint8_t digest[XR_FINGERPRINT_BYTES] = {0};
     xr_sha256(const_return, sizeof(const_return), digest);
     REQUIRE(memcmp(digest, const_return_digest, sizeof(digest)) == 0);
 
     static const uint8_t expanded_fingerprint[XR_FINGERPRINT_BYTES] = {
-        0x3b, 0x9c, 0x9a, 0xb5, 0xa4, 0x77, 0xa8, 0xcd,
-        0xb7, 0xc1, 0x0f, 0x1e, 0x78, 0xea, 0x9e, 0x4c,
-        0xa8, 0x8a, 0xaf, 0xa1, 0xe9, 0x9f, 0x8b, 0x52,
-        0xe5, 0xe6, 0x7d, 0x8a, 0x50, 0x4e, 0x0f, 0xdd,
+        0x3b, 0x9c, 0x9a, 0xb5, 0xa4, 0x77, 0xa8, 0xcd, 0xb7, 0xc1, 0x0f,
+        0x1e, 0x78, 0xea, 0x9e, 0x4c, 0xa8, 0x8a, 0xaf, 0xa1, 0xe9, 0x9f,
+        0x8b, 0x52, 0xe5, 0xe6, 0x7d, 0x8a, 0x50, 0x4e, 0x0f, 0xdd,
     };
-    static const uint8_t expanded_domain[] =
-        "xray-xtp-expanded-instruction-kat-v1";
+    static const uint8_t expanded_domain[] = "xray-xtp-expanded-instruction-kat-v1";
     uint8_t canonical_rows[64] = {0};
-    REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, rows, 2u,
-                               canonical_rows));
+    REQUIRE(xr_xtp_encode_rows(XR_XTP_SECTION_INSTRUCTIONS, rows, 2u, canonical_rows));
     XrSHA256Context fingerprint_context;
     xr_sha256_init(&fingerprint_context);
-    xr_sha256_update(&fingerprint_context, expanded_domain,
-                     sizeof(expanded_domain) - 1u);
-    xr_sha256_update(&fingerprint_context, canonical_rows,
-                     sizeof(canonical_rows));
+    xr_sha256_update(&fingerprint_context, expanded_domain, sizeof(expanded_domain) - 1u);
+    xr_sha256_update(&fingerprint_context, canonical_rows, sizeof(canonical_rows));
     xr_sha256_final(&fingerprint_context, digest);
     REQUIRE(memcmp(digest, expanded_fingerprint, sizeof(digest)) == 0);
 
-    static const uint8_t primitive_add[] = {0x00, 0x03, 0x00,
-                                            0x03, 0x01, 0x02};
+    static const uint8_t primitive_add[] = {0x00, 0x03, 0x00, 0x03, 0x01, 0x02};
     XrTargetInstructionRecord add = {
         .id = 0,
         .function = 0,
@@ -1984,8 +1791,7 @@ static void test_compact_instruction_stream_kat_and_mutations(void) {
         .operand_count = 2,
         .reserved = 0,
     };
-    require_instruction_stream_reencodes(primitive_add,
-                                         sizeof(primitive_add), &add, 1u);
+    require_instruction_stream_reencodes(primitive_add, sizeof(primitive_add), &add, 1u);
 
     static const struct {
         uint16_t first_opcode;
@@ -1995,50 +1801,34 @@ static void test_compact_instruction_stream_kat_and_mutations(void) {
         {XR_TARGET_INSTRUCTION_PARAM_I64, 0, {0x02, 0x00, 0x03, 0x00}},
         {XR_TARGET_INSTRUCTION_CALL_DIRECT_I64, 7, {0x03, 0x00, 0x03, 0x07}},
     };
-    for (size_t index = 0; index < sizeof(super_kats) / sizeof(super_kats[0]);
-         index++) {
+    for (size_t index = 0; index < sizeof(super_kats) / sizeof(super_kats[0]); index++) {
         rows[0].opcode = super_kats[index].first_opcode;
         rows[0].immediate_bits = super_kats[index].immediate;
         require_instruction_stream_reencodes(super_kats[index].bytes,
-                                             sizeof(super_kats[index].bytes),
-                                             rows, 2u);
+                                             sizeof(super_kats[index].bytes), rows, 2u);
     }
 
     uint64_t work = 0;
     for (size_t length = 0; length < sizeof(const_return); length++)
-        REQUIRE(!xr_xtp_instruction_stream_validate(
-            const_return, length, 2u, &work));
-    REQUIRE(!xr_xtp_instruction_stream_validate(
-        const_return, sizeof(const_return), 1u, &work));
+        REQUIRE(!xr_xtp_instruction_stream_validate(const_return, length, 2u, &work));
+    REQUIRE(!xr_xtp_instruction_stream_validate(const_return, sizeof(const_return), 1u, &work));
     uint8_t trailing[] = {0x01, 0x00, 0x03, 0x01, 0x00};
-    REQUIRE(!xr_xtp_instruction_stream_validate(trailing, sizeof(trailing),
-                                                2u, &work));
+    REQUIRE(!xr_xtp_instruction_stream_validate(trailing, sizeof(trailing), 2u, &work));
     uint8_t unknown[] = {0x7f};
-    REQUIRE(!xr_xtp_instruction_stream_validate(unknown, sizeof(unknown), 1u,
-                                                &work));
+    REQUIRE(!xr_xtp_instruction_stream_validate(unknown, sizeof(unknown), 1u, &work));
     uint8_t overlong[] = {0x00, 0x81, 0x00, 0x00};
-    REQUIRE(!xr_xtp_instruction_stream_validate(overlong, sizeof(overlong), 1u,
-                                                &work));
-    uint8_t overflow[] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                          0xff, 0xff, 0xff, 0x02};
-    REQUIRE(!xr_xtp_instruction_stream_validate(overflow, sizeof(overflow),
-                                                1u, &work));
-    uint8_t no_slot_alias[] = {0x01, 0x00, 0x80, 0x80,
-                               0x80, 0x80, 0x10, 0x00};
-    REQUIRE(!xr_xtp_instruction_stream_validate(
-        no_slot_alias, sizeof(no_slot_alias), 2u, &work));
-    uint8_t primitive_pair[] = {0x00, 0x01, 0x00, 0x03, 0x01,
-                                0x00, 0x0f, 0x00, 0x03};
-    REQUIRE(!xr_xtp_instruction_stream_validate(
-        primitive_pair, sizeof(primitive_pair), 2u, &work));
+    REQUIRE(!xr_xtp_instruction_stream_validate(overlong, sizeof(overlong), 1u, &work));
+    uint8_t overflow[] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02};
+    REQUIRE(!xr_xtp_instruction_stream_validate(overflow, sizeof(overflow), 1u, &work));
+    uint8_t no_slot_alias[] = {0x01, 0x00, 0x80, 0x80, 0x80, 0x80, 0x10, 0x00};
+    REQUIRE(!xr_xtp_instruction_stream_validate(no_slot_alias, sizeof(no_slot_alias), 2u, &work));
+    uint8_t primitive_pair[] = {0x00, 0x01, 0x00, 0x03, 0x01, 0x00, 0x0f, 0x00, 0x03};
+    REQUIRE(!xr_xtp_instruction_stream_validate(primitive_pair, sizeof(primitive_pair), 2u, &work));
 
     XtpFixture fixture = make_direct_call_fixture();
-    uint8_t *instruction_entry =
-        directory_entry(fixture.bytes, XR_XTP_SECTION_INSTRUCTIONS);
-    size_t instruction_offset =
-        (size_t) xr_xtp_take_u64(instruction_entry + 8);
-    size_t instruction_length =
-        (size_t) xr_xtp_take_u64(instruction_entry + 16);
+    uint8_t *instruction_entry = directory_entry(fixture.bytes, XR_XTP_SECTION_INSTRUCTIONS);
+    size_t instruction_offset = (size_t) xr_xtp_take_u64(instruction_entry + 8);
+    size_t instruction_length = (size_t) xr_xtp_take_u64(instruction_entry + 16);
     REQUIRE(instruction_length > 0);
     for (size_t offset = 0; offset < instruction_length; offset++) {
         uint8_t *copy = copy_artifact(&fixture);
@@ -2191,14 +1981,10 @@ static void test_identity_and_typed_mutations(void) {
     xr_free(copy);
 
     static const size_t capability_mutations[] = {4, 8, 10};
-    for (size_t i = 0;
-         i < sizeof(capability_mutations) / sizeof(capability_mutations[0]);
-         i++) {
+    for (size_t i = 0; i < sizeof(capability_mutations) / sizeof(capability_mutations[0]); i++) {
         copy = copy_artifact(&fixture);
-        uint8_t *capability_entry =
-            directory_entry(copy, XR_XTP_SECTION_CAPABILITIES);
-        size_t capability_offset =
-            (size_t) xr_xtp_take_u64(capability_entry + 8);
+        uint8_t *capability_entry = directory_entry(copy, XR_XTP_SECTION_CAPABILITIES);
+        size_t capability_offset = (size_t) xr_xtp_take_u64(capability_entry + 8);
         REQUIRE(xr_xtp_take_u64(capability_entry + 24) == 2);
         copy[capability_offset + capability_mutations[i]] ^= 1;
         resign_section(copy, XR_XTP_SECTION_CAPABILITIES);
@@ -2208,15 +1994,11 @@ static void test_identity_and_typed_mutations(void) {
     }
 
     static const size_t machine_identity_offsets[] = {4, 6, 8, 10};
-    for (size_t i = 0;
-         i < sizeof(machine_identity_offsets) /
-                 sizeof(machine_identity_offsets[0]);
+    for (size_t i = 0; i < sizeof(machine_identity_offsets) / sizeof(machine_identity_offsets[0]);
          i++) {
         uint8_t *copy = copy_artifact(&fixture);
-        uint8_t *profile_entry =
-            directory_entry(copy, XR_XTP_SECTION_TARGET_PROFILE);
-        size_t profile_offset =
-            (size_t) xr_xtp_take_u64(profile_entry + 8);
+        uint8_t *profile_entry = directory_entry(copy, XR_XTP_SECTION_TARGET_PROFILE);
+        size_t profile_offset = (size_t) xr_xtp_take_u64(profile_entry + 8);
         copy[profile_offset + machine_identity_offsets[i]] ^= 1;
         resign_section(copy, XR_XTP_SECTION_TARGET_PROFILE);
         resign_artifact(copy, fixture.size);
@@ -2239,40 +2021,33 @@ static int write_fixture(const char *path) {
     return written && closed ? 0 : 1;
 }
 
-static int write_runtime_artifacts(const char *xsm_path,
-                                   const char *xtp_path) {
+static int write_runtime_artifacts(const char *xsm_path, const char *xtp_path) {
     XtpFixture fixture = make_fixture();
     uint8_t *xsm = NULL;
     size_t xsm_size = 0;
     char diagnostic[512] = {0};
-    if (!xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic,
-                       sizeof(diagnostic))) {
+    if (!xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic, sizeof(diagnostic))) {
         dispose_fixture(&fixture);
         return 1;
     }
     FILE *xsm_file = fopen(xsm_path, "wb");
-    bool xsm_written =
-        xsm_file && fwrite(xsm, 1, xsm_size, xsm_file) == xsm_size;
+    bool xsm_written = xsm_file && fwrite(xsm, 1, xsm_size, xsm_file) == xsm_size;
     bool xsm_closed = xsm_file && fclose(xsm_file) == 0;
     FILE *xtp_file = fopen(xtp_path, "wb");
-    bool xtp_written = xtp_file &&
-                       fwrite(fixture.bytes, 1, fixture.size, xtp_file) ==
-                           fixture.size;
+    bool xtp_written = xtp_file && fwrite(fixture.bytes, 1, fixture.size, xtp_file) == fixture.size;
     bool xtp_closed = xtp_file && fclose(xtp_file) == 0;
     xr_free(xsm);
     dispose_fixture(&fixture);
     return xsm_written && xsm_closed && xtp_written && xtp_closed ? 0 : 1;
 }
 
-static bool write_c_byte_array(FILE *file, const char *name,
-                               const uint8_t *bytes, size_t size) {
+static bool write_c_byte_array(FILE *file, const char *name, const uint8_t *bytes, size_t size) {
     if (fprintf(file, "static const uint8_t %s[] = {\n", name) < 0)
         return false;
     for (size_t i = 0; i < size; i++) {
         if ((i % 12u) == 0 && fputs("    ", file) == EOF)
             return false;
-        if (fprintf(file, "0x%02x%s", bytes[i],
-                    i + 1u == size ? "" : ", ") < 0)
+        if (fprintf(file, "0x%02x%s", bytes[i], i + 1u == size ? "" : ", ") < 0)
             return false;
         if ((i % 12u) == 11u || i + 1u == size) {
             if (fputc('\n', file) == EOF)
@@ -2284,17 +2059,15 @@ static bool write_c_byte_array(FILE *file, const char *name,
 
 static int write_runtime_fixture_header(const char *path) {
     XtpFixture fixture = make_fixture();
-    XtpFixture exported =
-        make_fixture_from_semantic(build_exported_semantic_plan());
+    XtpFixture exported = make_fixture_from_semantic(build_exported_semantic_plan());
     uint8_t *xsm = NULL;
     size_t xsm_size = 0;
     uint8_t *export_xsm = NULL;
     size_t export_xsm_size = 0;
     char diagnostic[512] = {0};
-    if (!xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic,
-                       sizeof(diagnostic)) ||
-        !xr_xsm_encode(exported.semantic, &export_xsm, &export_xsm_size,
-                       diagnostic, sizeof(diagnostic))) {
+    if (!xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic, sizeof(diagnostic)) ||
+        !xr_xsm_encode(exported.semantic, &export_xsm, &export_xsm_size, diagnostic,
+                       sizeof(diagnostic))) {
         xr_free(xsm);
         xr_free(export_xsm);
         dispose_fixture(&fixture);
@@ -2302,21 +2075,17 @@ static int write_runtime_fixture_header(const char *path) {
         return 1;
     }
     FILE *file = fopen(path, "wb");
-    bool written = file &&
-                   fputs("#ifndef XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n"
-                         "#define XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n"
-                         "#include <stdint.h>\n",
-                         file) != EOF &&
-                   write_c_byte_array(file, "xr_runtime_scalar_xsm", xsm,
-                                      xsm_size) &&
-                    write_c_byte_array(file, "xr_runtime_scalar_xtp",
-                                       fixture.bytes, fixture.size) &&
-                    write_c_byte_array(file, "xr_runtime_export_xsm",
-                                       export_xsm, export_xsm_size) &&
-                    write_c_byte_array(file, "xr_runtime_export_xtp",
-                                       exported.bytes, exported.size) &&
-                    fputs("#endif  // XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n",
-                          file) != EOF;
+    bool written =
+        file &&
+        fputs("#ifndef XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n"
+              "#define XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n"
+              "#include <stdint.h>\n",
+              file) != EOF &&
+        write_c_byte_array(file, "xr_runtime_scalar_xsm", xsm, xsm_size) &&
+        write_c_byte_array(file, "xr_runtime_scalar_xtp", fixture.bytes, fixture.size) &&
+        write_c_byte_array(file, "xr_runtime_export_xsm", export_xsm, export_xsm_size) &&
+        write_c_byte_array(file, "xr_runtime_export_xtp", exported.bytes, exported.size) &&
+        fputs("#endif  // XR_RUNTIME_SCALAR_ARTIFACT_FIXTURE_H\n", file) != EOF;
     bool closed = file && fclose(file) == 0;
     xr_free(xsm);
     xr_free(export_xsm);
@@ -2332,9 +2101,10 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-54-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-55-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
-        puts("XTP schema 54 cutover tests passed");
+        test_previous_schema_is_rejected();
+        puts("XTP schema 55 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();
@@ -2342,6 +2112,7 @@ int main(int argc, char **argv) {
     test_every_typed_row_codec();
     test_compact_instruction_stream_kat_and_mutations();
     test_exact_roundtrip_and_owned_candidate();
+    test_previous_schema_is_rejected();
     test_concurrent_candidate_materialization();
     test_direct_call_rows_roundtrip_and_mutate();
     test_channel_close_row_roundtrip_and_mutate();

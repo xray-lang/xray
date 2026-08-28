@@ -212,7 +212,7 @@ failed:
 }
 
 static void test_deterministic_closed_world_identity(void) {
-    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(8));
+    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(9));
     char error[256] = {0};
     ClosureFixtureIds first_ids = {0};
     ClosureFixtureIds second_ids = {0};
@@ -267,23 +267,23 @@ static void test_deterministic_closed_world_identity(void) {
         0x2e, 0x0e, 0x44, 0xb9, 0x3b, 0x0e, 0x6a, 0xe1,
         0xc7, 0x6d, 0x37, 0x7a, 0x0b, 0x97, 0x3a, 0x1a,
     };
-    static const uint8_t v8_closure_fingerprint[XR_FINGERPRINT_BYTES] = {
-        0x8d, 0xa9, 0x32, 0x9b, 0xb4, 0x4b, 0x38, 0x18, 0x34, 0x29, 0xe5,
-        0x7a, 0x03, 0xa5, 0x83, 0x8c, 0x70, 0xbc, 0x7a, 0x71, 0x3b, 0x23,
-        0x52, 0xd1, 0xf2, 0x3b, 0xff, 0xc4, 0xef, 0x16, 0x12, 0x50,
+    static const uint8_t v9_closure_fingerprint[XR_FINGERPRINT_BYTES] = {
+        0xa1, 0x6f, 0x34, 0x3e, 0xb9, 0x21, 0x9c, 0xb3, 0x4b, 0x21, 0x0a,
+        0x1b, 0x71, 0xbf, 0xe4, 0x7f, 0xcf, 0xa3, 0xae, 0x1a, 0x94, 0xdb,
+        0x64, 0x77, 0x61, 0x3a, 0x8a, 0x4b, 0xdd, 0xa6, 0xef, 0x5d,
     };
-    static const uint8_t v8_generation_id[XR_STABLE_ID_BYTES] = {
-        0x58, 0x71, 0x32, 0x53, 0x7b, 0xb6, 0x92, 0x23,
-        0xb2, 0x16, 0x5d, 0x88, 0x12, 0x3b, 0x83, 0x95,
+    static const uint8_t v9_generation_id[XR_STABLE_ID_BYTES] = {
+        0xa7, 0xe2, 0xa2, 0x12, 0x9f, 0x0d, 0xe4, 0x8c,
+        0xeb, 0x2e, 0x1e, 0x7e, 0x80, 0xd6, 0x12, 0x55,
     };
     REQUIRE(memcmp(first_ids.entry_function.bytes, canonical_entry_function_identity,
                    sizeof(canonical_entry_function_identity)) == 0);
     REQUIRE(memcmp(first_ids.helper_function.bytes, canonical_helper_function_identity,
                    sizeof(canonical_helper_function_identity)) == 0);
-    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes, v8_closure_fingerprint,
-                   sizeof(v8_closure_fingerprint)) == 0);
-    REQUIRE(memcmp(xr_program_semantic_closure_generation_id(first).bytes, v8_generation_id,
-                   sizeof(v8_generation_id)) == 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes, v9_closure_fingerprint,
+                   sizeof(v9_closure_fingerprint)) == 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_generation_id(first).bytes, v9_generation_id,
+                   sizeof(v9_generation_id)) == 0);
 
     ClosureFixtureIds alternate_locator_ids = {0};
     XrProgramSemanticClosure *alternate_locator = build_fixture(
@@ -593,9 +593,9 @@ static void test_independent_verifier_rejects_hostile_mutations(void) {
     xr_program_semantic_closure_free(closure);
 }
 
-static XrStableId overflow_function_declaration(
-    const XrProgramSemanticModuleInput *module, XrProgramSemanticSourceLocator locator,
-    XrFingerprint signature) {
+static XrStableId overflow_function_declaration(const XrProgramSemanticModuleInput *module,
+                                                XrProgramSemanticSourceLocator locator,
+                                                XrFingerprint signature) {
     static const uint8_t domain[] = "xray-source-i64-overflow-entry-declaration-v1";
     XrSHA256Context context;
     xr_sha256_init(&context);
@@ -608,17 +608,17 @@ static XrStableId overflow_function_declaration(
 #define PUT_U32(value)                                                                             \
     do {                                                                                           \
         uint32_t _v = (uint32_t) (value);                                                          \
-        uint8_t _b[4] = {(uint8_t) _v, (uint8_t) (_v >> 8u), (uint8_t) (_v >> 16u),               \
-                         (uint8_t) (_v >> 24u)};                                                    \
+        uint8_t _b[4] = {(uint8_t) _v, (uint8_t) (_v >> 8u), (uint8_t) (_v >> 16u),                \
+                         (uint8_t) (_v >> 24u)};                                                   \
         xr_sha256_update(&context, _b, sizeof(_b));                                                \
     } while (0)
 #define PUT_FRAMED(value)                                                                          \
     do {                                                                                           \
         uint64_t _n = sizeof((value).bytes);                                                       \
         uint8_t _l[8];                                                                             \
-        for (uint32_t _i = 0; _i < sizeof(_l); _i++)                                              \
-            _l[_i] = (uint8_t) (_n >> (_i * 8u));                                                 \
-        xr_sha256_update(&context, _l, sizeof(_l));                                               \
+        for (uint32_t _i = 0; _i < sizeof(_l); _i++)                                               \
+            _l[_i] = (uint8_t) (_n >> (_i * 8u));                                                  \
+        xr_sha256_update(&context, _l, sizeof(_l));                                                \
         xr_sha256_update(&context, (value).bytes, sizeof((value).bytes));                          \
     } while (0)
     PUT_U32(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
@@ -639,8 +639,7 @@ static XrStableId overflow_function_declaration(
     return result;
 }
 
-static XrStableId overflow_function_instance(XrStableId declaration,
-                                             XrFingerprint signature) {
+static XrStableId overflow_function_instance(XrStableId declaration, XrFingerprint signature) {
     static const uint8_t domain[] = "xray-source-i64-overflow-entry-instance-v1";
     XrSHA256Context context;
     xr_sha256_init(&context);
@@ -697,8 +696,7 @@ static XrProgramSemanticClosure *build_overflow_fixture(char *error, size_t erro
     XrProgramSemanticTypeInput type_input;
     XrStableId i64_type;
     if (!xr_program_semantic_exact_scalar_type_input(XR_EXACT_SCALAR_I64, &type_input) ||
-        !xr_program_semantic_closure_add_type(closure, &type_input, &i64_type, error,
-                                             error_size))
+        !xr_program_semantic_closure_add_type(closure, &type_input, &i64_type, error, error_size))
         goto failed;
     XrProgramSemanticSourceLocator function_locator = {
         .kind = AST_FUNCTION_DECL,
@@ -728,8 +726,8 @@ static XrProgramSemanticClosure *build_overflow_fixture(char *error, size_t erro
     if (!xr_program_semantic_closure_add_function(closure, &function, &function_id, error,
                                                   error_size))
         goto failed;
-    for (uint32_t raw = XR_I64_OVERFLOW_PREDICATE_ADD;
-         raw < XR_I64_OVERFLOW_PREDICATE_COUNT; raw++) {
+    for (uint32_t raw = XR_I64_OVERFLOW_PREDICATE_ADD; raw < XR_I64_OVERFLOW_PREDICATE_COUNT;
+         raw++) {
         XrI64OverflowPredicateKind kind = (XrI64OverflowPredicateKind) raw;
         XrProgramSemanticSourceLocator call_locator = {
             .kind = AST_CALL_EXPR,
@@ -743,9 +741,8 @@ static XrProgramSemanticClosure *build_overflow_fixture(char *error, size_t erro
         XrFingerprint contract;
         XrStableId call;
         XrProgramSemanticCallInput input;
-        if (!xr_source_semantic_callsite_identity(module.source_fingerprint,
-                                                  module.module_identity, declaration,
-                                                  call_locator, &callsite) ||
+        if (!xr_source_semantic_callsite_identity(module.source_fingerprint, module.module_identity,
+                                                  declaration, call_locator, &callsite) ||
             !xr_i64_overflow_predicate_builtin_identity(kind, &builtin) ||
             !xr_i64_overflow_predicate_call_contract(kind, &contract))
             goto failed;
@@ -775,14 +772,13 @@ static void test_i64_overflow_decision_is_sealed_and_independently_verified(void
     XrTargetProfile *profile = NULL;
     REQUIRE(xr_runtime_target_profile_build_native_hosted(&profile, error, sizeof(error)));
     XrI64OverflowDecisionTable table = {0};
-    REQUIRE(xr_i64_overflow_decision_build(
-        closure, xr_program_semantic_closure_generation_id(closure), profile, &table, error,
-        sizeof(error)));
+    REQUIRE(xr_i64_overflow_decision_build(closure,
+                                           xr_program_semantic_closure_generation_id(closure),
+                                           profile, &table, error, sizeof(error)));
     REQUIRE(xr_i64_overflow_decision_verify(&table, closure, profile, error, sizeof(error)));
     REQUIRE(table.row_count == 3);
     for (uint32_t i = 0; i < table.row_count; i++) {
-        const XrI64OverflowDecisionRow *row =
-            xr_i64_overflow_decision_for_program_row(&table, i);
+        const XrI64OverflowDecisionRow *row = xr_i64_overflow_decision_for_program_row(&table, i);
         REQUIRE(row != NULL);
         REQUIRE(row->method_symbol >= XR_I64_OVERFLOW_METHOD_SYMBOL_ADD);
         REQUIRE(row->method_symbol <= XR_I64_OVERFLOW_METHOD_SYMBOL_MUL);

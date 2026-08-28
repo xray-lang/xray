@@ -12,7 +12,6 @@
  *   process control, and platform detection.
  */
 
-#include "os.h"
 #include "../common.h"
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xmalloc.h"
@@ -1123,21 +1122,3 @@ static XrValue os_arch(XrVMRuntime *X, XrValue *args, int argc) {
 #define XR_STDLIB_VM_BIND_MODULE_OS 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_OS
-
-/* Private syscall declarations and VM binding names have one authority:
- * stdlib/defs/core.def. The script layer publishes the public API. */
-
-XR_FUNC XrModule *xr_native_module_create_os(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_os: NULL isolate");
-
-    // 1. Create native module
-    XrModule *mod = xr_module_create_native(isolate, "os");
-    if (!mod)
-        return NULL;
-
-    // 2. Add private native primitives.
-    xr_stdlib_vm_bind_os_generated(isolate, mod);
-
-    // 3. Mark as loaded
-    return mod;
-}

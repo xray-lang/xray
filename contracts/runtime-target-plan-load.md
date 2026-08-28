@@ -265,7 +265,7 @@ roots, or general product activation.
    binds its identity to the authority, materializes typed rows, and invokes
    independent TargetPlan verification. V54 is a breaking hard cutover from
    v53 and all earlier XTP schemas. It requires SemanticPlan schema 44 and
-   TargetPlan schema 54, including exact PSC v8 provenance, typed program
+   TargetPlan schema 55, including exact PSC v8 provenance, typed program
    bindings, and the direct-local scalar-ref v1 call-row interpretation; no
    compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
@@ -329,7 +329,7 @@ roots, or general product activation.
    therefore remains fail closed for cross-module artifacts. The bounded scalar
    module-graph family instead uses the same public TargetPlan loader with
    PROGRAM_MODULE_SET authority, which selects the unique program-graph
-   materializer. TargetPlan schema 54 carries one program-graph row and canonical
+   materializer. TargetPlan schema 55 carries one program-graph row and canonical
    module partitions over global TargetPlan tables; each partition identifies
    its SemanticPlan through the full canonical program module set and records
    pointer-free row ranges. `MODULE_PARTITIONS` uses fixed 208-byte rows and has
@@ -435,17 +435,17 @@ roots, or general product activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 04254a0dffc9b24e6812977a262b3784d70c9e0508b6af8e9dfa454875bbcba6
+anchor-sha256: CMakeLists.txt de05d8128ee3b9fe6ad24def5f178484873ea7ae07bf29f5c3c1e88da3bd2181
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 08b2b09c090a93214eb927deaed17534b360d427b68cced2db433d2fdd2d32dd
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h aa84b62300015820a6c208381d6ac17d2e8f83c3edde4a2b7af7c2a33d7d72e4
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c aeaad12aee601f2bfb982fbaa72484a3845b8382874fe84a86c88c1594458eb1
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 1637430f1abcbf408d707f224c1a589c6317dd99431ec898d6df148fc219e7e9
-anchor-sha256: src/plan/format/xr_xtp_schema.h 15c42986d879b8edd3316f46029bbad015289aeb246e2f94fee2d3c389cb9cfa
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c a99cb10c2bda0bc1a8285249fde9504a99bb992a91ba3d895b6983aa6439c946
+anchor-sha256: src/plan/format/xr_xtp_schema.h 0b435e192a0f718e359e20672b6742d0fb414d8b0fc79eecf9c109273f0211de
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
@@ -462,26 +462,26 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h ec7f8aba2e76b4e2a10
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c d0836e34b01e009e2a260b4c4c022b6a7f7a4e9ce80e77f18fc23b2d0e912ce2
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.h 8653f30d2ed073fd75d3adab9eb5e0cb27ddf538b7e0634f896ce21704382308
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.c 31918070b7e530780073a8ca0010d2b62f78afbfcdf4d610c41bf27e4da4a5d1
-anchor-sha256: src/plan/target/xr_target_profile.h 81f680104fea0f2782064f8bb39d3a0cf3384a222df9b5636ee33bdfd89cb1a0
+anchor-sha256: src/plan/target/xr_target_profile.h cad8c9c26e9ef49e692ddea00b78160ff9d060fcd5688a7ffd123fe7b6d07921
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h 4dbdf15a87a3753ca11ab29c7f4ae54476c1877d59bba97b5ab443b2dd564dbf
+anchor-sha256: src/plan/target/xr_target_plan.h af498bfae7d4c65f9e826ba6823e884a1c47a07d6e47c54b10f3e5538a1d1b3a
 anchor-sha256: src/plan/target/xr_target_plan.c 7f716592a4336cda74ab02fdb244c42209f02ee617f52a86d097d59b43e1ec4c
-anchor-sha256: src/plan/target/xr_target_builder.c 21139d575c570f89a23d9439dac3893bad05f2e0d1ca5f7ae13f63ff242a35cd
-anchor-sha256: src/plan/target/xr_target_verify.c 8aedfa88bfe85382b0c6e98bf06343f6286b72962b45facca677f278ee607b1c
+anchor-sha256: src/plan/target/xr_target_builder.c 158faf4d43812c03c2d447d0a4b7b9da87a135ba8bae044459921bed817ecc93
+anchor-sha256: src/plan/target/xr_target_verify.c 84099125af113fc40d53914c582546ff77ba20c168e2b3076b3f3ce25ecf4cf6
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 97413cd1fd368e8a61f9ae14c75c321b3b956b8313da7519bae361af4c24a894
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 5e81f18c79504cd7876910b0ad0d88b270fd19fbc6de7a44d5daa2bf47263692
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 47203f0c178dc46872e6d6ec8c680a8e0cbd0f5e4670e7a4380f030b2d61a043
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c 6769b535c81ef682bfec16f7364b2fa5991e037ed7f2e67e70b21d12f331c4a0
 anchor-sha256: src/runtime/xr_target_plan_load.c 162babb92d90b8ead7842e68de5a6bccbb0a304e3e62299de4bb64c8ccf7a22d
-anchor-sha256: src/runtime/xr_runtime_api.c 7017a587d31ef34d2e9302796839e0e68518388eb473430f2adf41e584bb5386
+anchor-sha256: src/runtime/xr_runtime_api.c b5f3de029b73e6f62f7b287934c3b4169c1f043a834d05ad8fdaf4056ad1e917
 anchor-sha256: src/app/cli/xcmd_run.c 4bbdfcfe6426abc90b411dd271bb849297a930e3c6364692225d8ba08e1c2f98
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
-anchor-sha256: tests/unit/plan/test_target_plan.c 163d9fcd471d20bc63027d96a52751e9a9c39e046837765ada026ca47807aabd
-anchor-sha256: tests/unit/plan/test_xtp_format.c 7b95d80e73ca9b26661b5bd156902f1d59bfb9bb98cc673e21123fb05d696d6e
+anchor-sha256: tests/unit/plan/test_target_plan.c 16a70e037b6e52b9182ac56efbfdb590e388d7098033883e16a42514222ce76e
+anchor-sha256: tests/unit/plan/test_xtp_format.c 2fcb8f2b0a813d442152cb9f651df7c7959355abcacb054ef7f9da38478efbe1
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c b0081b37ed5f669d0c0746b8feefcd586b52e22146c749405b76ef5111917045
-anchor-sha256: tests/unit/CMakeLists.txt 2679840b09a24c43df74255ca0cdb7011afa9b7d6b11640cfbf7f32a899ac924
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 149c7fccc99fff701e1eb7af9a6b680884928941486ee08180af77f004d42af9
+anchor-sha256: tests/unit/CMakeLists.txt 2fe46be4b0de97780996ab1d9d2ae8772dded7a680ed9d9406b9144648aed314
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 30015dd2f75ad8917788a30b367f203d15e85d037af8d394940a4d30af87e69a
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py ac10e972dbd1c43784f78fa5746c5820b999529830b223f83ec3ebbf421e095f
 anchor-sha256: tests/cli/run_plan_command_tests.py 44a924d4d39b558c0e53a04080ea3fd42071044039ad3f2de539d9d1e6299f0f
