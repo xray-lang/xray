@@ -27,10 +27,110 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from stdlib_manifest import api_inventory, load_manifest, load_stdlibgen  # noqa: E402
+from stdlib_manifest import api_inventory, load_manifest, load_stdlibgen, load_toml  # noqa: E402
 
 
 SCHEMA = 1
+
+# The per-symbol allowlist of accepted native leaves. The `leaf_class` column
+# is authoritative, so it may only be written from a record that names the
+# whole boundary: which ABI the leaf crosses, what it does with ownership,
+# which effects it has, who provides the implementation, and the condition
+# under which the leaf can be deleted. A leaf with no such record stays
+# `unclassified` and keeps failing its gate.
+NATIVE_LEAF_ALLOWLIST_PATH = Path("stdlib/native_leaf_allowlist.toml")
+
+NATIVE_LEAF_ALLOWLIST_SCHEMA = 1
+
+# The closed set of approved classes, each with the judgement that admits a
+# leaf to it. The set is closed on purpose: `leaf_class` is a free string in
+# the row, so an open column would let a misspelled class approve a leaf
+# silently -- the gate treats anything that is neither empty nor
+# `unclassified` as approved.
+#
+# A class names *which boundary* the leaf crosses and nothing else. Whether
+# that boundary is minimal, and what would have to become true for the leaf to
+# be deleted, is the record's `deletion_trigger` -- which is why the schema
+# carries one at all. Folding the two questions into the class name would
+# force a leaf that crosses the host ABI through a short-write drain loop to be
+# either misfiled or unclassified, when the honest reading is that it crosses
+# the host ABI and has a deletion trigger a filed capability gap controls.
+LEAF_CLASSES = {
+    "host_abi_leaf": (
+        "the leaf's business is crossing the operating system's ABI: a syscall, "
+        "a libc entry point or a platform API that Xray cannot issue itself"
+    ),
+    "runtime_leaf": (
+        "the leaf reads or drives a runtime-owned primitive -- scheduler, "
+        "netpoll, channel, coroutine, reclamation domain, or the representation "
+        "of a native handle -- that Xray has no surface for"
+    ),
+    "machine_intrinsic_leaf": (
+        "the leaf is a hardware instruction or a libm routine whose accuracy "
+        "contract Xray arithmetic cannot restate"
+    ),
+    "security_provider_leaf": (
+        "the leaf is the boundary to a cryptographic provider, and reimplementing "
+        "it in Xray would move a security guarantee into unaudited code"
+    ),
+    "alloc_leaf": (
+        "the leaf is an allocator or object-representation primitive that the "
+        "language's own object model is built on"
+    ),
+    "native_record_shape_leaf": (
+        "the declaration is not a call at all: it is the record layout a native "
+        "leaf's return value needs so both backends share one field schema"
+    ),
+    "build_identity_leaf": (
+        "the leaf answers a fact about the build rather than about the running "
+        "machine -- the target platform, the architecture, whether an optional "
+        "provider was linked -- fixed by the preprocessor and unobservable from "
+        "Xray source"
+    ),
+    "native_engine_leaf": (
+        "the leaf is an entry point into a self-contained algorithm engine "
+        "Xray ships in C -- a codec, a parser, a matcher -- that crosses no "
+        "external boundary at all. Exactly three things keep such an engine in "
+        "C: the language cannot represent the data it consumes or produces, "
+        "rewriting the entry point would fork a definition the engine's other "
+        "entry points share, or the engine holds runtime-owned state. The "
+        "deletion trigger has to name which of the three; a leaf kept in C for "
+        "throughput alone does not belong in this class"
+    ),
+}
+
+# Ownership is `return_ownership` from the `.def` entry when it declares one,
+# so the closed set is exactly the vocabulary that column uses plus the value
+# it omits: a leaf whose return carries no ownership at all.
+LEAF_OWNERSHIP = {
+    "none": "the return transfers no ownership (a scalar, a unit, or a bool)",
+    "fresh": "the return is newly allocated and the caller owns it",
+    "borrowed_static": "the return borrows storage with static lifetime",
+}
+
+# Effect is a comma-separated token sequence. `nothrow` is exclusive: a leaf
+# that cannot throw and cannot suspend has nothing else to state.
+LEAF_EFFECT_TOKENS = {
+    "nothrow": "cannot throw and cannot suspend",
+    "may_throw": "can raise an Xray exception",
+    "suspends": "can park the coroutine and return the worker to the scheduler",
+}
+
+# A `.def` entry may state its effect as the set of error variants it raises;
+# those variants are legal effect tokens so the allowlist can restate the
+# declaration without losing which errors it names.
+THROWN_VARIANT_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
+
+LEAF_RECORD_KEYS = {
+    "module",
+    "symbol",
+    "class",
+    "abi",
+    "ownership",
+    "effect",
+    "provider",
+    "deletion_trigger",
+}
 
 # A non-public module is test-only unless it is the prelude, which is
 # unimportable because the language installs it implicitly, not because it is
@@ -356,23 +456,278 @@ def entry_kind(entry: Any) -> str:
 def leaf_class_proposal(module: str, entry: Any) -> tuple[str, str]:
     """Propose an allowlist class for a private native leaf.
 
-    The proposal orders the migration queue. It is deliberately not written
-    into the authoritative `leaf_class` column: an approved class needs a
-    per-symbol record carrying ABI, ownership, effect, provider and deletion
-    trigger, and no such record exists in the current manifest schema.
+    The proposal orders the migration queue and is the starting point for
+    writing a leaf's allowlist record, but it never approves one by itself: it
+    is derived from the entry's layer, which says where the leaf sits and not
+    what it does. Approval is `stdlib/native_leaf_allowlist.toml`, where the
+    record has to name ABI, ownership, effect, provider and deletion trigger.
     """
     layer = str(getattr(entry, "layer", "") or "")
     if module in {"crypto"}:
         return "security_provider_leaf", "cryptographic provider boundary"
-    if layer == "alloc":
-        return "runtime_leaf", "allocator and object representation primitive"
     if layer == "runtime":
         return "runtime_leaf", "scheduler, netpoll or coroutine primitive"
     if layer == "system":
         return "host_abi_leaf", "operating-system ABI boundary"
     if module == "math":
         return "machine_intrinsic_leaf", "hardware or libm intrinsic"
+    if layer == "alloc":
+        # `alloc` used to imply an allocator primitive, and no leaf carried it.
+        # It now covers the compress coder and the regex engine as well, which
+        # allocate but are not allocators, so the layer no longer picks a class
+        # on its own and saying otherwise would propose the wrong one.
+        return (
+            "unclassified",
+            "layer 'alloc' spans allocators, coders and engines; read the module",
+        )
     return "unclassified", f"no allowlist class derivable from layer {layer!r}"
+
+
+@dataclass
+class LeafRecord:
+    """One approved-leaf record, and whether it is well-formed enough to use."""
+
+    module: str
+    symbol: str
+    leaf_class: str
+    abi: str
+    ownership: str
+    effect: str
+    provider: str
+    deletion_trigger: str
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def valid(self) -> bool:
+        return not self.errors
+
+    @property
+    def effect_tokens(self) -> list[str]:
+        return [token.strip() for token in self.effect.split(",") if token.strip()]
+
+    def reason(self) -> str:
+        """Render the record as the row's `leaf_reason`.
+
+        The five approval facts travel with the row rather than staying in the
+        manifest, so a reader of the inventory or of a gate failure sees why
+        the boundary was accepted without opening a second file.
+        """
+        return (
+            f"abi={self.abi}; ownership={self.ownership}; effect={self.effect}; "
+            f"provider={self.provider}; deletion_trigger={self.deletion_trigger}"
+        )
+
+
+def effect_token_error(token: str) -> str:
+    """Report why an effect token is not a legal one, or the empty string."""
+    if token in LEAF_EFFECT_TOKENS:
+        return ""
+    if THROWN_VARIANT_RE.fullmatch(token):
+        return ""
+    return (
+        f"effect token {token!r} is neither one of "
+        f"{sorted(LEAF_EFFECT_TOKENS)} nor an Enum.Variant an entry can raise"
+    )
+
+
+def leaf_record_errors(record: LeafRecord, raw: dict[str, Any]) -> list[str]:
+    """Validate one allowlist record against the closed vocabularies.
+
+    Every column is checked here rather than at the point of use so a record
+    that cannot be trusted is rejected once, whole, and cannot approve the leaf
+    it names through some path that skipped a check.
+    """
+    errors: list[str] = []
+    unknown = sorted(set(raw) - LEAF_RECORD_KEYS)
+    if unknown:
+        # An unrecognised key is a misspelled one far more often than it is a
+        # new fact, and a misspelled `deletion_trigger` would otherwise read as
+        # a record with an empty trigger that still approves its leaf.
+        errors.append(f"unknown key(s) {unknown}; allowed keys are {sorted(LEAF_RECORD_KEYS)}")
+    for name in ("abi", "provider", "deletion_trigger"):
+        if not getattr(record, name):
+            errors.append(f"{name} is empty; an approved class needs it stated")
+    if record.leaf_class not in LEAF_CLASSES:
+        errors.append(
+            f"class {record.leaf_class or '<empty>'!r} is not one of "
+            f"{sorted(LEAF_CLASSES)}"
+        )
+    if record.ownership not in LEAF_OWNERSHIP:
+        errors.append(
+            f"ownership {record.ownership or '<empty>'!r} is not one of "
+            f"{sorted(LEAF_OWNERSHIP)}"
+        )
+    tokens = record.effect_tokens
+    if not tokens:
+        errors.append("effect is empty; an approved class needs it stated")
+    for token in tokens:
+        problem = effect_token_error(token)
+        if problem:
+            errors.append(problem)
+    if "nothrow" in tokens and len(tokens) > 1:
+        errors.append("effect 'nothrow' is exclusive; it cannot be combined with other tokens")
+    return errors
+
+
+def load_leaf_allowlist(root: Path) -> tuple[dict[tuple[str, str], LeafRecord], list[str]]:
+    """Read the per-symbol native-leaf allowlist.
+
+    A missing or malformed file is a defect rather than an empty allowlist: an
+    unreadable manifest would otherwise quietly demote every leaf to
+    `unclassified`, which reads as unfinished migration work instead of as a
+    broken governance input.
+    """
+    path = root / NATIVE_LEAF_ALLOWLIST_PATH
+    key = NATIVE_LEAF_ALLOWLIST_PATH.as_posix()
+    if not path.is_file():
+        return {}, [f"{key}: the native-leaf allowlist is missing"]
+    try:
+        raw = load_toml(path)
+    except Exception as error:  # noqa: BLE001 - the parse error is the defect
+        return {}, [f"{key}: cannot parse the native-leaf allowlist: {error}"]
+
+    defects: list[str] = []
+    if raw.get("schema") != NATIVE_LEAF_ALLOWLIST_SCHEMA:
+        defects.append(
+            f"{key}: schema {raw.get('schema')!r} is not the current schema "
+            f"{NATIVE_LEAF_ALLOWLIST_SCHEMA}"
+        )
+    records: dict[tuple[str, str], LeafRecord] = {}
+    for index, item in enumerate(raw.get("leaf", ())):
+        if not isinstance(item, dict):
+            defects.append(f"{key}: [[leaf]] #{index + 1} is not a table")
+            continue
+        module = str(item.get("module", "")).strip()
+        symbol = str(item.get("symbol", "")).strip()
+        if not module or not symbol:
+            defects.append(
+                f"{key}: [[leaf]] #{index + 1} has no module/symbol pair to attach to"
+            )
+            continue
+        # Values are stripped so a column holding only whitespace reads as the
+        # empty column it is, rather than passing the "is it stated" checks.
+        record = LeafRecord(
+            module=module,
+            symbol=symbol,
+            leaf_class=str(item.get("class", "")).strip(),
+            abi=str(item.get("abi", "")).strip(),
+            ownership=str(item.get("ownership", "")).strip(),
+            effect=str(item.get("effect", "")).strip(),
+            provider=str(item.get("provider", "")).strip(),
+            deletion_trigger=str(item.get("deletion_trigger", "")).strip(),
+        )
+        record.errors = leaf_record_errors(record, item)
+        if (module, symbol) in records:
+            # Two records for one leaf leave which of them approves it up to
+            # file order. Marking the surviving record invalid is enough to
+            # refuse the leaf, since only the surviving record is ever read.
+            defects.append(f"{key}: {module}::{symbol} has more than one [[leaf]] record")
+            record.errors.append("duplicates an earlier record for the same leaf")
+        for error in record.errors:
+            defects.append(f"{key}: {module}::{symbol}: {error}")
+        records[(module, symbol)] = record
+    return records, defects
+
+
+def leaf_record_disagreements(entry: Any, record: LeafRecord) -> list[str]:
+    """Report where a record contradicts the `.def` entry it describes.
+
+    The `.def` declaration is the authority for ownership and effect, so the
+    allowlist restates those facts rather than asserting new ones. A record
+    that disagrees is describing a leaf other than the one it names.
+    """
+    problems: list[str] = []
+    declared_ownership = str(getattr(entry, "return_ownership", "") or "")
+    if declared_ownership and record.ownership != declared_ownership:
+        problems.append(
+            f"ownership {record.ownership!r} contradicts the .def "
+            f"return_ownership {declared_ownership!r}"
+        )
+    tokens = set(record.effect_tokens)
+    declared_effect = str(getattr(entry, "effect", "") or "")
+    missing = [
+        token
+        for token in (part.strip() for part in declared_effect.split(","))
+        if token and token not in tokens
+    ]
+    if missing:
+        problems.append(
+            f"effect drops the .def-declared effect(s) {missing}"
+        )
+    if str(getattr(entry, "vm_binding", "") or "") == "yieldable" and "suspends" not in tokens:
+        problems.append(
+            "effect omits 'suspends' for a leaf the .def binds as yieldable"
+        )
+    return problems
+
+
+def stale_leaf_record_defects(
+    records: dict[tuple[str, str], LeafRecord],
+    used: set[tuple[str, str]],
+) -> list[str]:
+    """Report allowlist records that no declared native leaf reached.
+
+    Direction 1 of the fail-closed contract. An approval nothing stands behind
+    is worse than a missing one: it reads as a reviewed boundary while there is
+    no leaf there, and the next leaf to take that name would inherit an
+    approval nobody wrote for it.
+
+    The wording stays neutral about how the record got here. It covers the
+    record left behind by a deleted leaf and the record written ahead of a
+    rename that has not landed yet, and neither is safe to leave unreported --
+    from the manifest alone the two are the same thing.
+    """
+    return [
+        f"{NATIVE_LEAF_ALLOWLIST_PATH.as_posix()}: {module}::{symbol} has an "
+        f"allowlist record that no declared native leaf reached"
+        for module, symbol in sorted(set(records) - used)
+    ]
+
+
+def classify_leaf(
+    module: str,
+    symbol: str,
+    entry: Any,
+    records: dict[tuple[str, str], LeafRecord],
+) -> tuple[str, str, list[str]]:
+    """Decide a leaf's authoritative class from the allowlist.
+
+    Three ways to fail, all closed toward `unclassified`, because the class
+    column is what the completion gate reads and an approval it cannot justify
+    is worse than an admitted gap:
+
+    1. No record for a leaf the repository has -- the leaf keeps failing its
+       gate. This is unfinished work, not a defect, so nothing is reported
+       here; the gate names it.
+    2. A record the loader rejected -- a malformed record must approve nothing.
+    3. A record that contradicts the `.def` entry -- reported as a defect,
+       because a manifest describing a different leaf is a broken input rather
+       than missing work.
+    """
+    record = records.get((module, symbol))
+    if record is None:
+        return (
+            "unclassified",
+            f"no record in {NATIVE_LEAF_ALLOWLIST_PATH.as_posix()}",
+            [],
+        )
+    if not record.valid:
+        return (
+            "unclassified",
+            f"allowlist record rejected: {'; '.join(record.errors)}",
+            [],
+        )
+    disagreements = leaf_record_disagreements(entry, record)
+    if disagreements:
+        return (
+            "unclassified",
+            f"allowlist record contradicts the declaration: {'; '.join(disagreements)}",
+            [
+                f"{NATIVE_LEAF_ALLOWLIST_PATH.as_posix()}: {module}::{symbol}: {item}"
+                for item in disagreements
+            ],
+        )
+    return record.leaf_class, record.reason(), []
 
 
 def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]:
@@ -381,6 +736,11 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
     xray_symbols = xray_public_symbols(root)
     cfuncs = c_functions(root)
     defects: list[str] = debug_output_defects(root)
+    leaf_records, leaf_defects = load_leaf_allowlist(root)
+    defects.extend(leaf_defects)
+    # Which allowlist records an actual leaf reached. Anything left over is a
+    # record for a leaf the repository no longer has.
+    leaf_records_used: set[tuple[str, str]] = set()
 
     modules: list[ModuleRow] = []
     rows: list[SymbolRow] = []
@@ -457,9 +817,20 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                 attributed_c[name].add(vm)
             if aot and aot in c_by_name:
                 attributed_c[name].add(aot)
-            leaf_class, leaf_reason = (
-                leaf_class_proposal(name, entry) if is_leaf else ("", "")
-            )
+            if is_leaf:
+                leaf_records_used.add((name, symbol))
+                leaf_class, leaf_reason, leaf_row_defects = classify_leaf(
+                    name, symbol, entry, leaf_records
+                )
+                defects.extend(leaf_row_defects)
+                if leaf_class == "unclassified":
+                    # Keep the queue-ordering proposal visible on a leaf that
+                    # has no usable record, so the failing gate still says
+                    # which class the record would most likely carry.
+                    proposal, why = leaf_class_proposal(name, entry)
+                    leaf_reason = f"{leaf_reason}; proposed {proposal}: {why}"
+            else:
+                leaf_class, leaf_reason = "", ""
             rows.append(
                 SymbolRow(
                     module=name,
@@ -471,12 +842,8 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                     handwritten_c_body=c_body or ("external" if vm else ""),
                     generated_c_only=False,
                     native_leaf=is_leaf,
-                    # Authoritative class stays unclassified until a per-symbol
-                    # leaf record exists; the proposal only orders the queue.
-                    leaf_class="unclassified" if is_leaf else "",
-                    leaf_reason=(
-                        f"proposed {leaf_class}: {leaf_reason}" if is_leaf else ""
-                    ),
+                    leaf_class=leaf_class,
+                    leaf_reason=leaf_reason,
                     factory_loader="",
                     plan_coverage="native_binding",
                     vm_binding=vm,
@@ -669,6 +1036,18 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
         for entry in defs[module]:
             symbol = entry_symbol_name(entry)
             vm = str(getattr(entry, "vm", "") or "")
+            # A leaf outside the manifest is classified through the same
+            # allowlist as any other. Skipping it here would let a leaf escape
+            # the approval requirement precisely by being ungoverned.
+            is_leaf = symbol.startswith("__")
+            if is_leaf:
+                leaf_records_used.add((module, symbol))
+                leaf_class, leaf_reason, leaf_row_defects = classify_leaf(
+                    module, symbol, entry, leaf_records
+                )
+                defects.extend(leaf_row_defects)
+            else:
+                leaf_class, leaf_reason = "", ""
             rows.append(
                 SymbolRow(
                     module=module,
@@ -679,9 +1058,9 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                     xray_body=False,
                     handwritten_c_body="external",
                     generated_c_only=False,
-                    native_leaf=symbol.startswith("__"),
-                    leaf_class="unclassified" if symbol.startswith("__") else "",
-                    leaf_reason="",
+                    native_leaf=is_leaf,
+                    leaf_class=leaf_class,
+                    leaf_reason=leaf_reason,
                     factory_loader="",
                     plan_coverage="native_binding",
                     vm_binding=vm,
@@ -690,6 +1069,8 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                     blocker="declared module is outside the stdlib boundary manifest",
                 )
             )
+
+    defects.extend(stale_leaf_record_defects(leaf_records, leaf_records_used))
 
     classify_queue(modules, rows)
     return modules, rows, defects
@@ -762,6 +1143,17 @@ def classify_queue(modules: list[ModuleRow], rows: list[SymbolRow]) -> None:
             continue
         mrow.queue = "native-leaf-only"
         mrow.queue_reason = "no handwritten C owner and no per-module loader"
+
+
+def leaf_is_approved(row: SymbolRow) -> bool:
+    """Report whether a native leaf carries an approved allowlist class.
+
+    Membership of the closed class set is the test, not "is not
+    `unclassified`". A row whose class is neither empty nor `unclassified` but
+    is also not a class anyone defined would otherwise read as approved, which
+    is exactly how a misspelling would let a leaf through.
+    """
+    return row.native_leaf and row.leaf_class in LEAF_CLASSES
 
 
 def is_semantic_c_owner(row: SymbolRow) -> bool:
@@ -838,7 +1230,7 @@ def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]
             1 for r in production_rows if r.native_leaf
         ),
         "unclassified_native_leaf": sum(
-            1 for r in rows if r.native_leaf and r.leaf_class == "unclassified"
+            1 for r in rows if r.native_leaf and not leaf_is_approved(r)
         ),
         "whole_module_native_policy": sum(
             1

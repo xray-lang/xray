@@ -33,11 +33,14 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from stdlib_symbol_inventory import (  # noqa: E402
+    LEAF_CLASSES,
+    NATIVE_LEAF_ALLOWLIST_PATH,
     QUEUE_ORDER,
     ModuleRow,
     SymbolRow,
     build_rows,
     is_semantic_c_owner,
+    leaf_is_approved,
     summarize,
 )
 
@@ -84,12 +87,16 @@ UNRUN_BANNER = (
     "UNRUN gates were not run and must not be counted as passing: {names}"
 )
 
-# A native leaf is allowlisted only once it carries a class naming why the C
-# boundary is permanent. The inventory records `unclassified` for every leaf
-# because approving one needs a per-symbol record -- ABI, ownership, effect,
-# provider, deletion trigger -- that the manifest schema cannot hold, so an
-# empty or `unclassified` class is an unapproved leaf.
-UNAPPROVED_LEAF_CLASSES = {"", "unclassified"}
+# A native leaf is allowlisted only once it carries a class naming which C
+# boundary it crosses. The inventory writes that class from a per-symbol
+# record in `stdlib/native_leaf_allowlist.toml` -- ABI, ownership, effect,
+# provider, deletion trigger -- and leaves the leaf `unclassified` when no
+# usable record reaches it.
+#
+# There is deliberately no list of unapproved spellings here. Approval is
+# membership of the inventory's closed `LEAF_CLASSES` set, so a class name
+# nobody defined fails the gate; a denylist of `{"", "unclassified"}` would
+# have approved every misspelling instead.
 
 
 # Probe field spellings. The probe writer and this reader are separate
@@ -742,8 +749,13 @@ def gate_native_leaf_allowlist(rows: list[SymbolRow], counts: dict[str, Any]) ->
     """Every native leaf has to carry an approved allowlist class.
 
     A leaf is the one form of C the completion definition keeps, so each one
-    needs a class stating why its boundary is permanent. Without that class the
-    leaf is undecided residue, not an accepted boundary.
+    needs a record stating which boundary it crosses and what would have to
+    become true for it to be deleted. Without that record the leaf is undecided
+    residue, not an accepted boundary.
+
+    Approval is membership of the closed class set the inventory defines, so a
+    class name nobody defined fails the gate rather than passing it by not
+    being one of the two known unapproved spellings.
     """
     offenders = [
         f"{row.module}::{row.symbol} (kind {row.kind}, class "
@@ -751,12 +763,14 @@ def gate_native_leaf_allowlist(rows: list[SymbolRow], counts: dict[str, Any]) ->
         + (f"; {row.leaf_reason}" if row.leaf_reason else "")
         + ")"
         for row in sorted(rows, key=lambda r: (r.module, r.symbol))
-        if row.native_leaf and row.leaf_class in UNAPPROVED_LEAF_CLASSES
+        if row.native_leaf and not leaf_is_approved(row)
     ]
     total_leaves = sum(1 for row in rows if row.native_leaf)
     notes = [
         f"{total_leaves} native leaves in total; an approved class needs a per-symbol "
-        f"record naming ABI, ownership, effect, provider and deletion trigger"
+        f"record in {NATIVE_LEAF_ALLOWLIST_PATH.as_posix()} naming ABI, ownership, "
+        f"effect, provider and deletion trigger",
+        f"approved classes: {', '.join(sorted(LEAF_CLASSES))}",
     ]
     result = counted_gate(
         "stdlib_native_leaf_allowlist",
