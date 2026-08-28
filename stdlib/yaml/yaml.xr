@@ -204,11 +204,6 @@ fn _isFatalKind(kind: YamlErrorKind) -> bool {
 // `len` cannot be shadowed by a module function (E0352), so the free function
 // keeps the toml `length` house name.
 
-fn _emptyValues() -> Array<YamlValue> {
-    var out: Array<YamlValue> = []
-    return out
-}
-
 fn _emptyStrings() -> Array<string> {
     var out: Array<string> = []
     return out
@@ -249,14 +244,6 @@ export fn asString(value: YamlValue) -> string? {
     }
 }
 
-// Ordered sequence elements (empty for non-sequence values).
-fn _sequenceItems(value: YamlValue) -> Array<YamlValue> {
-    return match (value) {
-        YamlValue.Sequence(items) -> copy(items),
-        _                         -> copy(_emptyValues())
-    }
-}
-
 // NOTE: nullable class/collection payloads are returned from block arms rather
 // than a match expression; returning the binding directly in a nullable context
 // contaminates the enum payload-field type globally.
@@ -287,9 +274,14 @@ export fn get(value: YamlValue, key: string) -> YamlValue? {
 
 // Element at `index` inside a Sequence (null when out of range / not a sequence).
 export fn at(value: YamlValue, index: i64) -> YamlValue? {
-    var items = _sequenceItems(value)
-    if (index < 0 || index >= len(items)) { return null }
-    return items[index]
+    match (value) {
+        YamlValue.Sequence(items) -> {
+            if (index < 0 || index >= len(items)) { return null }
+            return items[index]
+        }
+        _ -> { return null }
+    }
+    return null
 }
 
 // Element count of a Sequence or Mapping (0 otherwise).
