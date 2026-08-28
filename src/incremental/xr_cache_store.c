@@ -613,7 +613,11 @@ static bool collect_locked(XrCacheStore *store, XrCacheCollectStats *stats,
         else
             total += entries[i].size;
     }
-    qsort(entries, count, sizeof(*entries), compare_disk_entry);
+    /* An empty directory never allocated the array, and glibc declares qsort's
+     * base pointer nonnull, so sorting nothing is undefined behaviour there
+     * even though no implementation dereferences it. */
+    if (count)
+        qsort(entries, count, sizeof(*entries), compare_disk_entry);
     for (size_t i = 0; ok && total > byte_limit && i < count; i++) {
         if (protected_path && strcmp(entries[i].path, protected_path) == 0)
             continue;
