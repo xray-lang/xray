@@ -124,8 +124,9 @@ class StringNativeErrorAbiTest(unittest.TestCase):
             vm_runtime,
         )
         self.assertIn("xr_builtin_enum_error_construct", vm_runtime)
-        self.assertIn("if (ctx && !XR_IS_NULL(ctx->pending_error))", vm_runtime)
-        self.assertIn("ctx->pending_error.ptr == result.value.ptr", vm_runtime)
+        # The consuming half of this channel moved into the execution context and
+        # its VM-side rediscovery was deleted with it, so the runtime source read
+        # here no longer carries either. test_execution_error_channel covers it.
         self.assertIn("xr_utf8_core_scan_strict(data, len)", aot_runtime)
         self.assertIn(
             'xrt_set_builtin_enum_error("Utf8Error", "InvalidUtf8", 0);',
@@ -176,8 +177,15 @@ class StringNativeErrorAbiTest(unittest.TestCase):
             source.unlink(missing_ok=True)
 
     def test_uncaught_invalid_utf8_fails_instead_of_returning_null(self) -> None:
-        valid_source = "var valid: Array<u8> = [111, 107]\nprint(string.fromUtf8(valid[:]))"
-        output = self.run_checked([str(self.xray), "-e", valid_source]).stdout
+        valid_source = "var valid: Array<u8> = [111, 107]\nprint(string.fromUtf8(valid[:]))\n"
+        output_dir = ROOT / "build" / ".xray-test-tmp"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        valid = output_dir / f"task-198-valid-utf8_{os.getpid()}.xr"
+        valid.write_text(valid_source, encoding="utf-8")
+        try:
+            output = self.run_checked([str(self.xray), str(valid)]).stdout
+        finally:
+            valid.unlink(missing_ok=True)
         self.assertEqual(self.normalized_output(output), b"ok\n")
 
         self.assert_uncaught_pending_error(

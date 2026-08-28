@@ -170,37 +170,32 @@ native factory 表和内嵌 stdlib，查不到就因串里含 `/` 落进"第三�
 
 **测试脚本与 fixture 本身没有问题，不要改。**
 
-## 6. 半属冻结值失配、但修了也不会变绿：三个 native error ABI 测试
+## 6. 已修：三个 native error ABI 测试的源码模式那一半
 
 `test_string_native_error_abi` / `test_compress_native_error_abi` /
-`test_crypto_native_error_abi` **各自混了两类失败**，这是它们看起来难缠的原因：
+`test_crypto_native_error_abi` **各自混了两类失败**，这是它们看起来难缠的原因。
+源码模式那一类已经修完，行为那一类留给 AOT 线。
 
-**第一类，源码模式断言过时**（属冻结值失配）。测试扫 `src/runtime/object/xstring_methods.c`
-的正文，要求出现字面片段：
+**第一类，扫描的形状已经不在源里**（已修）：
 
-```python
-self.assertIn("if (ctx && !XR_IS_NULL(ctx->pending_error))", vm_runtime)
-self.assertIn("ctx->pending_error.ptr == result.value.ptr", vm_runtime)
-```
+- 两处扫 `src/runtime/object/xstring_methods.c` 找 `ctx->pending_error` 的检查。
+  发布 value error 的所有权已移交执行上下文，**VM 侧的重新发现被有意删除**
+  （提交自述"without VM context rediscovery"、"Delete the VM-private setter"），
+  同一提交新增了 `tests/unit/runtime/test_execution_error_channel.c` 守消费端，实测双绿。
+  行为测试比匹配源码文本强，所以这两条扫描是**删掉**而不是改指向。
+- crypto 的 `decrypt` 随 cipher surface 迁进 Xray：`core.def` 的 crypto 段只剩两个私有 leaf，
+  AOT 头里 `xrt_crypto_decrypt` 出现 **0 次**，生成物里 `"decrypt"` 也是 **0 次**。
+  切它 native 函数体的用例已无对象可切，按它 docstring 自述的 randomBytes 先例删除；
+  它的公开契约改从 `stdlib/crypto/crypto.xr` 读，那里抛的仍是 `CryptoError.InvalidLength`。
+- 一处用了**已不存在的 `xray -e` 开关**。同文件其它用例都是写临时文件再跑，这处也改成一样。
 
-该文件现在**一处 `pending_error` 都没有**，而这个模式活在 `src/api/xvm_exec.c:89`。
-`git log -S` 指向 `6fdc13f5e runtime: own value-error publication in execution context`
-——提交标题就说明了这是有意的所有权转移：错误发布从每个方法自查搬进了执行上下文。
-断言该跟着搬，或者改成断言那个不变量本身而不是它的字面写法。
+**第二类，真实行为差异**（未修）：剩下的全是 `*_vm_native_aot_*parity` 用例，
+它们要 `xray build --native`，而那一步拒绝在 `XR_TARGET_1003`。
+另有一条 crypto 的 VM 输出比期望少一行 `no-error`，是 decrypt 迁进 Xray 后的行为变化。
 
-**第二类，真实行为差异**（不是冻结值）。例如：
-
-```
-期望 b'true\nno-error\nCryptoError.InvalidLength\n…'
-实际 b'true\nCryptoError.InvalidLength\nCryptoError.In…'
-```
-
-少了一行 `no-error`——某个本该无错的调用现在报错了。另有多个用例以 ERROR（异常）
-而非断言失败告终。
-
-**所以这三项不能只改断言**：把第一类修好，第二类仍然红，测试不会变绿，
-**改动也就无法验证**。本 lane 的原则是不提交无法验证的改动，故记账未改。
-接手时请按两类分别处理，先修第二类。
+**一条方法论更正**：我最初判定这三项"修了也不会变绿，所以改动无法验证"，**这个判断是错的**。
+源码扫描用例不需要编译，可以逐个独立验证；把它和需要编译的用例混在一个文件里，
+不等于它们不可分。**"整个测试仍红"不是"这个改动无法验证"。**
 
 ## 7. 越界项：`test_mcp_knowledge_generation` 要写 `src/`
 
@@ -246,6 +241,70 @@ API inventory does not expose the complete Iterator schema
 （已逐项排除地址、时间、环境变量、哈希表遍历序、绝对路径——记录表在算指纹前按 stable id 全量排序），
 但它意味着**任何一次无关的 frontend 枚举增删都会静默旋转已冻结的语义身份，而版本号不会告诉你**。
 版本号的作用就是宣告值空间换代，它没做到这件事本身就是治理缺陷。
+
+## 9b. 第二轮清点：又修四项，另四项查实但不能在本边界内闭合
+
+补跑排除 `backend_diff*` 的宽范围 ctest（**490 项跑到汇总行**）拿到完整清单后逐项定性。
+
+**已修（本边界内闭合，门已变绿）**
+
+| 项 | 根因 |
+|---|---|
+| `binary_stdlib_kat_baseline` | 两个 link `.expect` 只列函数，漏了 base64 的 alphabet/padding/error 与 encoding 的两个 error 枚举 |
+| `binary_stdlib_runtime_baseline` | 同上 |
+| `bytes_type_residue` | 扫描器命中的是安装测试里嵌的 C 辅助程序自己的局部 `typedef struct Bytes`，与被移除的 Xray 类型无关；改名即消 |
+| `narrowing_conformance` | 一个用例断言 bool 与字面 null 能拼进 string，而混合操作数拼接已被有意拒绝；同批改了十一个测试漏了这个 |
+| `builtin_symbol_registry` 的 R3 | `NumberParseError` 发布为内建却没有探针覆盖 |
+
+base64/encoding 那两项有一处**无法验证的残留**：`.expect` 里符号的**排列顺序**取自
+compress/crypto 两个同格式且已 ok 的先例，而不是一次新的 plan dump——
+因为编这两个 fixture 会停在 `XR_TARGET_1000`。等两模块程序能产出 plan 后，
+比对真实 plan 的 filetest 会最终确认它。
+
+**查实但不能在 `tests/` + `contracts/` 内闭合**
+
+| 项 | 根因 | 需要改哪里 |
+|---|---|---|
+| `source_unknown_aot_baseline` | 一个 cgen `.expect` 缺 `kind=encode action=encode_field_table` 锚点 | `.expect` 在 `tests/` 内，但拿真值要 `--dump-global-evidence`，它停在 `XR_TARGET_1003`；**没有同格式先例可依，猜格式就是盲刷** |
+| `c_interop_surface_residue` | 命中的是一句文档注释：`RawPtr` 早已改名 `Ptr`，注释没跟 | `src/shared/xr_null_test_core.h:11` 一个词，或 `scripts/` 的豁免清单 |
+| `error_effect_convergence_inventory` | 一处**校验**函数类型形状的代码被当成"重算 throw 位"；例外清单是写死的单文件 `!=` | `scripts/check_error_effect_convergence.py` 的例外应从单文件改成集合 |
+| `builtin_symbol_registry` 的 R1 | 类型系统章节里的内建符号表少一行 | 有官方入口 `check_builtin_symbol_registry.py --write`，但写 `spec/`，且连锁到两份 LANGUAGE_SPEC |
+
+**新的真缺陷：`byte_receiver_effect_audit`，八个 positive 里三红、两个独立根因**
+
+根因 A（1410），**与 byte 和所有权都无关**，六行最小复现——触发条件是
+**类字段默认初始化器里的 `Array<T>(n, fill)`**：
+
+```xray
+class Box {
+    items: Array<i64> = Array<i64>(1, 0)
+}
+fn main() {
+    const box = Box()
+    print(box.items[0])
+}
+```
+```
+XR_SEM_0019: Array intrinsic authority is not exact
+  kind=2 storage=0 immediate=0 op=120 nargs=2 result-kind=14 arg0-kind=0 arg1-match=1
+```
+
+**同一句写在函数局部完全正常。** 报文里 `storage=0` 是 `XR_ELEM_ANY`，
+说明类字段默认初始化路径没把 element storage 分类传下来，
+于是那道 exactness 门 fail-closed 地拒了合法程序。
+
+根因 B（1413/1414）：`module ... escapes or lacks its identity authority`，
+属已记录的多模块身份权威族。
+
+**顺带一条治理观察**：`xray test` 对这类模块解析失败只输出 "0 passed | 1 failed"
+**而不转发诊断**，要 `xray check` 才看得到原因。任何拿 `xray test` 当门的脚本
+都会因此给出无法归因的红。
+
+**规范与实现的一处口径分歧**（不阻塞，建议单独提）
+
+类型系统章节的 N-12 例外仍写着「当 `+` 任一侧为 `string` 时，null 操作数渲染为 `"null"`」，
+但实测产品只对 **`string?`** 成立：字面 `null`、`bool?`、`i64?` 一律拒绝。
+规范的表述比实现宽。
 
 ## 10. 复跑方式
 

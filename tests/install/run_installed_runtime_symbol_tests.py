@@ -554,7 +554,7 @@ def compile_and_run_program_route(
 #include <pthread.h>
 #endif
 
-typedef struct Bytes { uint8_t *data; size_t size; } Bytes;
+typedef struct FileBlob { uint8_t *data; size_t size; } FileBlob;
 typedef struct Execution {
     const XrProgram *program;
     int64_t result;
@@ -562,7 +562,7 @@ typedef struct Execution {
     char diagnostic[256];
 } Execution;
 
-static bool read_bytes(const char *path, Bytes *bytes) {
+static bool read_bytes(const char *path, FileBlob *bytes) {
     FILE *file = fopen(path, "rb");
     if (!file) return false;
     if (fseek(file, 0, SEEK_END) != 0) { fclose(file); return false; }
@@ -608,7 +608,7 @@ static void *execute_worker(void *opaque) {
 
 static bool run_program(XrRuntime *runtime,
                         const XrRuntimeArtifactImage images[2],
-                        const Bytes *target, bool parallel) {
+                        const FileBlob *target, bool parallel) {
     char diagnostic[512] = {0};
     XrProgram *program = NULL;
     if (!xr_program_load_target_plan(runtime, images, 2u, target->data,
@@ -676,8 +676,8 @@ static bool run_program(XrRuntime *runtime,
 
 int main(int argc, char **argv) {
     if (argc != 4) return 2;
-    Bytes modules[2] = {0};
-    Bytes target = {0};
+    FileBlob modules[2] = {0};
+    FileBlob target = {0};
     bool ok = read_bytes(argv[1], &modules[0]) &&
               read_bytes(argv[2], &modules[1]) && read_bytes(argv[3], &target);
     XrRuntimeConfig config = {
