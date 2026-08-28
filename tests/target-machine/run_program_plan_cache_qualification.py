@@ -52,6 +52,10 @@ PROGRAM_RE = re.compile(
     r"psc=([0-9a-f]{64}) gci=([0-9a-f]{32})"
 )
 PLAN_CACHE_RE = re.compile(r"\[target-plan-cache\] (hit|miss|rebuild) ")
+# Printed by the collection race case in the unit suite. The product entry
+# point has no cache budget, so that is where this row is measured.
+COLLECT_RACE_RE = re.compile(
+    r"collect race: evicted=(\d+) readers=(\d+) recomputed=(\d+)")
 
 PRODUCER_V1 = "export fn add1(value: i64) -> i64 { return value + 1 }\n"
 PRODUCER_V2 = "export fn add1(value: i64) -> i64 { return value + 2 }\n"
@@ -86,6 +90,18 @@ class Report:
     missed: int
     recomputed: int
     plan_cache: str
+
+
+@dataclass(frozen=True)
+class MeasuredBuild:
+    """One timed build. `did_work` is false when it never reached its cache
+    decisions -- a provider probe timeout under load, most often -- and such a
+    sample must be discarded rather than averaged in."""
+
+    seconds: float
+    peak_rss: int
+    report: "Report | None"
+    did_work: bool
 
 
 @dataclass
@@ -363,6 +379,93 @@ def qualify_relocation(rec: report.Report, config: Config,
                else report.Status.FAIL, str(relocated))
 
 
+
+def object_paths(cache: Path, kind: str) -> list[Path]:
+    return sorted(
+        path
+        for directory in cache.rglob(kind) if directory.is_dir()
+        for path in directory.iterdir()
+        if path.is_file() and not path.name.startswith(".")
+    )
+
+
+def qualify_hostile(rec: report.Report, config: Config,
+                    ws: workspace.Workspace) -> None:
+    """Another program's objects, planted under this program's keys.
+
+    A key is an address, not a proof of what lives at it. These are the cases
+    where the planted bytes are a whole, self-consistent artifact of a
+    different program -- carrying a different PSC and generation -- so nothing
+    short of reconstructing the identity and re-verifying can reject them. A
+    miss is not a correctness fallback: the rebuild has to land back on the
+    same identity and the same bytes.
+    """
+    d = ws.subdir("hostile")
+    mine = d / "mine"
+    theirs = d / "theirs"
+    my_cache = d / "cache-mine"
+    their_cache = d / "cache-theirs"
+    my_entry = write_product(mine, PRODUCER_V1)
+    their_entry = write_product(theirs, PRODUCER_V2)
+
+    baseline = parse(build(config, my_cache, my_entry, d / "out-mine" / "app"))
+    foreign = parse(build(config, their_cache, their_entry, d / "out-theirs" / "app"))
+    if not baseline or not foreign:
+        rec.record("hostile: both programs report their cache decisions",
+                   report.Status.FAIL, "a build produced no report")
+        return
+    canonical = objects(my_cache)
+    rec.record("hostile: the two programs are distinct authorities",
+               report.Status.PASS if (baseline.identity.psc != foreign.identity.psc and
+                                      baseline.identity.gci != foreign.identity.gci)
+               else report.Status.FAIL,
+               f"mine={baseline.identity}\ntheirs={foreign.identity}")
+
+    for kind in ("xtp", "xsm"):
+        mine_objects = object_paths(my_cache, kind)
+        their_objects = object_paths(their_cache, kind)
+        if not mine_objects or not their_objects:
+            rec.record(f"hostile: {kind} objects exist to plant",
+                       report.Status.FAIL,
+                       f"mine={len(mine_objects)} theirs={len(their_objects)}")
+            return
+
+        # A whole object from the other program, at the address this program
+        # will look up.
+        mine_objects[0].write_bytes(their_objects[0].read_bytes())
+        planted = parse(build(config, my_cache, my_entry, d / f"out-{kind}-planted" / "app"))
+        if not planted:
+            rec.record(f"hostile: the build over a planted {kind} reports its decisions",
+                       report.Status.FAIL, "no report")
+            return
+        rec.record(f"hostile: a foreign {kind} does not become this program's answer",
+                   report.Status.PASS if (planted.identity == baseline.identity and
+                                          objects(my_cache) == canonical)
+                   else report.Status.FAIL,
+                   f"want={baseline.identity}\ngot={planted.identity}\n"
+                   f"objects={sorted(objects(my_cache).items())}")
+
+        # Half an object, which no verifier may complete from context.
+        whole = mine_objects[0].read_bytes()
+        mine_objects[0].write_bytes(whole[: len(whole) // 2])
+        truncated = parse(build(config, my_cache, my_entry,
+                                d / f"out-{kind}-truncated" / "app"))
+        if not truncated:
+            rec.record(f"hostile: the build over a truncated {kind} reports its decisions",
+                       report.Status.FAIL, "no report")
+            return
+        rec.record(f"hostile: a truncated {kind} costs a rebuild of the same bytes",
+                   report.Status.PASS if (truncated.identity == baseline.identity and
+                                          objects(my_cache) == canonical)
+                   else report.Status.FAIL,
+                   f"want={baseline.identity}\ngot={truncated.identity}\n"
+                   f"objects={sorted(objects(my_cache).items())}")
+
+    rec.record("hostile: no rejection leaves unfinished residue",
+               report.Status.PASS if not residue(my_cache) else report.Status.FAIL,
+               "\n".join(residue(my_cache)))
+
+
 def qualify_parallel(rec: report.Report, config: Config, ws: workspace.Workspace,
                      workers: int) -> None:
     """Builds sharing one cache root must converge on one published object.
@@ -476,80 +579,460 @@ def distribution(values: list[float], unit: str) -> dict:
     }
 
 
-def measure_build(config: Config, cache: Path, entry: Path,
-                  out: Path) -> tuple[float, int]:
-    """Wall time and peak resident size of one build.
+def measure_build(config: Config, cache: Path, entry: Path, out: Path,
+                  extra: tuple = ()) -> "MeasuredBuild":
+    """Wall time, peak resident size, and the cache report of one build.
 
     The kernel reports the child's high-water mark exactly; polling its live
     resident size at any interval under-reports a build this short. Where the
     kernel does not offer it, polling is the honest fallback and says so by
     being the only number available. The shared process helper cannot be used
-    here because neither reading needs its pid while it runs.
+    here because neither reading needs the child's pid while it runs.
     """
     import subprocess
 
     argv = [str(config.xray), "build", "--native", "-O", "0", "--verbose",
-            "--cache-dir", str(cache), "-o", str(out), str(entry)]
+            "--cache-dir", str(cache), *extra, "-o", str(out), str(entry)]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    log = out.with_suffix(".log")
     started = time.perf_counter()
-    child = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if hasattr(os, "wait4"):
-        _, status, usage = os.wait4(child.pid, 0)
-        child.returncode = os.waitstatus_to_exitcode(status)
-        # ru_maxrss is bytes on Darwin and kilobytes everywhere else POSIX.
-        peak = int(usage.ru_maxrss if sys.platform == "darwin"
-                   else usage.ru_maxrss * 1024)
-    else:
-        peak = 0
-        while True:
-            peak = max(peak, process_rss_bytes(child.pid))
-            if child.poll() is not None:
-                break
-            time.sleep(0.01)
-    return time.perf_counter() - started, peak
+    with open(log, "wb") as handle:
+        child = subprocess.Popen(argv, stdout=handle, stderr=subprocess.STDOUT)
+        if hasattr(os, "wait4"):
+            _, status, usage = os.wait4(child.pid, 0)
+            child.returncode = os.waitstatus_to_exitcode(status)
+            # ru_maxrss is bytes on Darwin and kilobytes everywhere else POSIX.
+            peak = int(usage.ru_maxrss if sys.platform == "darwin"
+                       else usage.ru_maxrss * 1024)
+        else:
+            peak = 0
+            while True:
+                peak = max(peak, process_rss_bytes(child.pid))
+                if child.poll() is not None:
+                    break
+                time.sleep(0.01)
+    elapsed = time.perf_counter() - started
+    text = log.read_bytes()
+    parsed = parse(proc.ProcResult(tuple(argv), child.returncode, text, b"", False))
+    # A build that never reached its cache decisions did not do the work being
+    # timed. Under load the native provider probe times out at ten seconds, and
+    # folding those into a median reports the probe as the cache's cost.
+    return MeasuredBuild(elapsed, peak, parsed, parsed is not None)
 
 
-def measure(config: Config, ws: workspace.Workspace) -> dict:
-    """Cold and warm cost, reported rather than gated.
+def directory_bytes(path: Path) -> int:
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
 
-    A threshold here would encode this machine. The point is a repeatable
-    number a later run can be compared against on the same hardware.
+
+def _first_line(argv: list) -> str:
+    result = proc.run(argv, timeout=30)
+    text = result.stdout_text("replace").strip()
+    return text.splitlines()[0] if result.ok and text else ""
+
+
+def load_average() -> list:
+    """The machine's run-queue length, which decides whether these numbers mean
+    anything. This host is shared with other lanes; a measurement taken under
+    someone else's compile is not a measurement of this cache."""
+    try:
+        return [round(value, 2) for value in os.getloadavg()]
+    except (OSError, AttributeError):
+        return []
+
+
+def contention(cold: dict, warm: dict, load: dict) -> dict:
+    """How much of this measurement belongs to this cache.
+
+    This host is shared. A median is robust to a handful of slow samples --
+    another lane's compile has to occupy more than half the run to move it --
+    but a p95 is not: one interrupted sample is enough. Reporting a single
+    usable/unusable verdict throws away the half that survived, so say which
+    statistic the spread condemns and which it does not.
     """
-    d = ws.subdir("measure")
-    entry = write_product(d / "src", PRODUCER_V1)
+    def spread(phase: dict) -> float:
+        seconds = phase.get("seconds", {})
+        median = seconds.get("p50") or 0.0
+        return round((seconds.get("p95") or 0.0) / median, 3) if median else 0.0
+
+    cold_spread = spread(cold)
+    warm_spread = spread(warm)
+    samples = cold.get("seconds", {}).get("samples", 0)
+    # A quiet machine holds p95 within roughly half again the median.
+    tail_usable = max(cold_spread, warm_spread) <= 1.5
+    # Fewer than five surviving samples leaves the median itself to one bad
+    # draw, and a discarded pair means a build did not run at all.
+    median_usable = samples >= 5 and cold.get("discarded_pairs", 0) == 0
+    return {
+        "cold_p95_over_p50": cold_spread,
+        "warm_p95_over_p50": warm_spread,
+        "peak_load_average_1m": max(
+            [load.get("before", [0])[0] if load.get("before") else 0,
+             load.get("after", [0])[0] if load.get("after") else 0]),
+        "surviving_samples": samples,
+        "median_usable": median_usable,
+        "tail_usable": tail_usable,
+        "note": "" if tail_usable else
+                "another lane was building during this run: p95 and max belong "
+                "to that, not to this cache. The medians, counts, byte totals "
+                "and invalidation breadth are unaffected"
+                if median_usable else
+                "too few surviving samples to trust any statistic here",
+    }
+
+
+def environment(config: Config) -> dict:
+    """What a later run has to match for these numbers to be comparable.
+
+    A measurement without its machine is a number nobody can reproduce or
+    refute, so every field that cannot be read is recorded as empty rather
+    than omitted.
+    """
+    facts = {
+        "commit": _first_line(["git", "-C", str(PROJECT_DIR), "rev-parse", "HEAD"]),
+        "tree_dirty": bool(
+            proc.run(["git", "-C", str(PROJECT_DIR), "status", "--porcelain"],
+                     timeout=30).stdout.strip()
+        ),
+        "compiler": _first_line([str(config.xray), "--version"]),
+        "host": " ".join(os.uname()[:3]) if hasattr(os, "uname") else sys.platform,
+        "logical_cpus": platform.cpu_count(),
+        "cpu": "",
+        "memory_bytes": "",
+        "filesystem": "",
+        "power_policy": "",
+    }
+    if sys.platform == "darwin":
+        facts["cpu"] = _first_line(["sysctl", "-n", "machdep.cpu.brand_string"])
+        facts["memory_bytes"] = _first_line(["sysctl", "-n", "hw.memsize"])
+        facts["power_policy"] = _first_line(["pmset", "-g", "ps"])
+        facts["filesystem"] = _first_line(
+            ["sh", "-c", f"df -P {PROJECT_DIR} | tail -1 | awk '{{print $1}}'"])
+    elif sys.platform.startswith("linux"):
+        facts["cpu"] = _first_line(["sh", "-c", "grep -m1 'model name' /proc/cpuinfo"])
+        facts["memory_bytes"] = _first_line(["sh", "-c", "grep -m1 MemTotal /proc/meminfo"])
+        facts["filesystem"] = _first_line(["stat", "-f", "-c", "%T", str(PROJECT_DIR)])
+        facts["power_policy"] = _first_line(
+            ["sh", "-c", "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"])
+    return facts
+
+
+def measure_paired(config: Config, d: Path, entry: Path) -> tuple[dict, dict]:
+    """Time cold and warm back to back inside one sample.
+
+    This machine is shared with other lanes, so its load drifts during a run.
+    Measuring all the cold samples and then all the warm ones lets that drift
+    land on one phase and not the other -- enough to report a warm build as
+    slower than a cold one. Alternating puts the same drift on both.
+
+    One cache per sample, cold first and warm immediately after it, so the warm
+    build is the same program against the objects the cold one just published.
+    The first sample is discarded: the first build of a session pays for page
+    cache and toolchain discovery that no later build repeats.
+    """
     cold_times: list[float] = []
     cold_rss: list[float] = []
     warm_times: list[float] = []
     warm_rss: list[float] = []
-    disk = {}
-    # One discarded warm-up per phase: the first build of a session pays for
-    # page cache and toolchain discovery that no later build repeats.
-    for index in range(config.samples + 1):
-        cache = d / f"cold-{index}"
-        seconds, rss = measure_build(config, cache, entry, d / f"out-cold-{index}" / "app")
-        if index:
-            cold_times.append(seconds)
-            cold_rss.append(float(rss))
-        else:
-            disk["cold_bytes"] = sum(
-                path.stat().st_size for path in cache.rglob("*") if path.is_file()
-            )
-    warm_cache = d / "warm"
-    measure_build(config, warm_cache, entry, d / "out-warm-prime" / "app")
-    for index in range(config.samples + 1):
-        seconds, rss = measure_build(config, warm_cache, entry,
-                                     d / f"out-warm-{index}" / "app")
-        if index:
-            warm_times.append(seconds)
-            warm_rss.append(float(rss))
-    disk["warm_bytes"] = sum(
-        path.stat().st_size for path in warm_cache.rglob("*") if path.is_file()
-    )
+    cold_report = None
+    warm_report = None
+    discarded = 0
+    cache = d / "paired-0"
+    for sample in range(config.samples + 1):
+        cache = d / f"paired-{sample}"
+        cold_build = measure_build(config, cache, entry, d / f"paired-cold-{sample}" / "app")
+        warm_build = measure_build(config, cache, entry, d / f"paired-warm-{sample}" / "app")
+        if sample == 0:
+            continue
+        # Both halves of a pair are kept or dropped together: half a pair says
+        # nothing about the relation the pairing exists to measure.
+        if not (cold_build.did_work and warm_build.did_work):
+            discarded += 1
+            continue
+        cold_times.append(cold_build.seconds)
+        cold_rss.append(float(cold_build.peak_rss))
+        warm_times.append(warm_build.seconds)
+        warm_rss.append(float(warm_build.peak_rss))
+        cold_report = cold_build.report or cold_report
+        warm_report = warm_build.report or warm_report
+
+    cold = {
+        "seconds": distribution(cold_times, "s"),
+        "peak_rss": distribution(cold_rss, "bytes"),
+        "objects_on_disk": len(objects(cache)),
+        "disk_bytes": directory_bytes(cache),
+        "discarded_pairs": discarded,
+    }
+    warm = {
+        "seconds": distribution(warm_times, "s"),
+        "peak_rss": distribution(warm_rss, "bytes"),
+        "objects_on_disk": len(objects(cache)),
+        "disk_bytes": directory_bytes(cache),
+    }
+    if cold_report:
+        cold["hits"] = cold_report.hits
+        cold["published"] = cold_report.published
+        cold["recomputed"] = cold_report.recomputed
+        cold["identity"] = str(cold_report.identity)
+    if warm_report:
+        warm["hits"] = warm_report.hits
+        warm["published"] = warm_report.published
+        warm["recomputed"] = warm_report.recomputed
+        warm["identity"] = str(warm_report.identity)
+        # A warm build that rewrote one byte would have had to republish.
+        warm["rewritten_bytes"] = 0 if warm_report.published == 0 else -1
+    return cold, warm
+
+
+def measure(config: Config, ws: workspace.Workspace, workers: int) -> dict:
+    """Cost and invalidation breadth, reported rather than gated.
+
+    A threshold here would encode this machine. The point is a repeatable
+    number a later run on the same hardware can be compared against, which is
+    why the environment and the machine's load travel with it.
+    """
+    d = ws.subdir("measure")
+    source = d / "src"
+    entry = write_product(source, PRODUCER_V1)
+    load_before = load_average()
+    cold, warm = measure_paired(config, d, entry)
+    warm_cache = d / f"paired-{config.samples}"
+    warm_objects = objects(warm_cache)
+
+    # The edit and its revert run against the warm cache, so their breadth is
+    # measured against a store that already holds the unedited program.
+    (source / "producer.xr").write_text(PRODUCER_V2, encoding="utf-8")
+    edit_build = measure_build(config, warm_cache, entry, d / "edit-out" / "app")
+    edit_seconds, edit_rss, edited = (edit_build.seconds, edit_build.peak_rss,
+                                      edit_build.report)
+    edited_objects = objects(warm_cache)
+    leaf_edit = {
+        "seconds": round(edit_seconds, 6),
+        "peak_rss": edit_rss,
+        "invalidated_modules": edited.missed if edited else -1,
+        "recomputed": edited.recomputed if edited else -1,
+        "modules": edited.identity.modules if edited else -1,
+        "new_objects": len(edited_objects) - len(warm_objects),
+        "disk_bytes": directory_bytes(warm_cache),
+    }
+
+    (source / "producer.xr").write_text(PRODUCER_V1, encoding="utf-8")
+    revert_build = measure_build(config, warm_cache, entry, d / "revert-out" / "app")
+    revert_seconds, revert_rss, reverted = (revert_build.seconds, revert_build.peak_rss,
+                                            revert_build.report)
+    revert = {
+        "seconds": round(revert_seconds, 6),
+        "peak_rss": revert_rss,
+        # Restored means the identity the unedited program had, not merely one
+        # that differs from the edit.
+        "identity_restored": bool(reverted and warm.get("identity") and
+                                  str(reverted.identity) == warm["identity"]),
+        "hits": reverted.hits if reverted else -1,
+        # Objects the edit and the revert added beside the warm set.
+        "extra_objects": len(objects(warm_cache)) - len(warm_objects),
+        "disk_bytes": directory_bytes(warm_cache),
+    }
+
+    load = {"before": load_before, "after": load_average()}
     return {
-        "cold_seconds": distribution(cold_times, "s"),
-        "cold_peak_rss": distribution(cold_rss, "bytes"),
-        "warm_seconds": distribution(warm_times, "s"),
-        "warm_peak_rss": distribution(warm_rss, "bytes"),
-        "disk": disk,
+        "environment": environment(config),
+        "load_average": load,
+        "contention": contention(cold, warm, load),
+        "replay": {
+            # Nothing here draws on a random source: repeats differ only in the
+            # scheduler's interleaving, and the concurrent phases align their
+            # workers with a barrier rather than a sleep. Re-running with the
+            # same samples and workers on the same commit reproduces the shape.
+            "samples": config.samples,
+            "discarded_warmups_per_phase": 1,
+            "workers": workers,
+            "random_source": "none",
+            "command": f"run_program_plan_cache_qualification.py <xray> "
+                       f"--samples {config.samples} --workers {workers} --measure",
+        },
+        "cold": cold,
+        "warm": warm,
+        "leaf_edit": leaf_edit,
+        "revert": revert,
+        "relocation": measure_relocation(config, d, workers),
+        "crash_residue": measure_crash_residue(config, d),
+        "concurrent": measure_concurrent(config, d, entry, workers),
+        "quota_gc": measure_quota_gc(config, d),
+    }
+
+
+def measure_concurrent(config: Config, d: Path, entry: Path, workers: int) -> dict:
+    """What N builds sharing one root cost, repeated like every other phase.
+
+    One sample of a concurrent phase reports whatever the scheduler happened to
+    do that time. The spread across repeats is the part worth keeping.
+    """
+    result = {}
+    discarded = 0
+    for phase in ("cold", "warm"):
+        walls: list[float] = []
+        times: list[float] = []
+        peaks: list[float] = []
+        recomputed: list[float] = []
+        for sample in range(config.samples + 1):
+            cache = d / f"concurrent-{phase}-{sample}"
+            if phase == "warm":
+                measure_build(config, cache, entry, d / f"concurrent-prime-{sample}" / "app")
+            sched = scheduler.Scheduler({scheduler.LINK: workers})
+            tasks = [
+                scheduler.Task(
+                    key=str(index),
+                    fn=(lambda i=index, c=cache, sm=sample: measure_build(
+                        config, c, entry, d / f"concurrent-{phase}-{sm}-{i}" / "app")),
+                    tag=scheduler.LINK,
+                )
+                for index in range(workers)
+            ]
+            started = time.perf_counter()
+            finished = sched.run(tasks)
+            wall = time.perf_counter() - started
+            if sample == 0:
+                continue
+            round_recomputed = 0
+            for index in range(workers):
+                value = finished.get(str(index))
+                if isinstance(value, BaseException) or value is None:
+                    continue
+                if not value.did_work:
+                    discarded += 1
+                    continue
+                times.append(value.seconds)
+                peaks.append(float(value.peak_rss))
+                round_recomputed += value.report.recomputed
+            walls.append(wall)
+            recomputed.append(float(round_recomputed))
+        result[phase] = {
+            "workers": workers,
+            "wall_seconds": distribution(walls, "s"),
+            "per_build_seconds": distribution(times, "s"),
+            "peak_rss": distribution(peaks, "bytes"),
+            # Serial cold recomputes each module once; anything beyond that is
+            # work the concurrent builds duplicated.
+            "recomputed_per_round": distribution(recomputed, "modules"),
+            "discarded": discarded,
+        }
+    return result
+
+
+def measure_relocation(config: Config, d: Path, workers: int) -> dict:
+    """What a relocated source tree costs against a warm cache.
+
+    The verified plan is path-independent, so the objects hit. The object cache
+    is not, so the native compile repeats. The gap between this and a warm
+    build in place is what relocation actually costs.
+    """
+    cache = d / "relocation-cache"
+    original = write_product(d / "relocation-src", PRODUCER_V1)
+    measure_build(config, cache, original, d / "relocation-prime" / "app")
+    before = directory_bytes(cache)
+    discarded = 0
+    times: list[float] = []
+    peaks: list[float] = []
+    hits: list[float] = []
+    for sample in range(config.samples + 1):
+        moved = write_product(d / f"relocation-moved-{sample}", PRODUCER_V1)
+        built = measure_build(config, cache, moved, d / f"relocation-out-{sample}" / "app")
+        if sample == 0:
+            continue
+        if not built.did_work:
+            discarded += 1
+            continue
+        times.append(built.seconds)
+        peaks.append(float(built.peak_rss))
+        hits.append(float(built.report.hits))
+    return {
+        "seconds": distribution(times, "s"),
+        "peak_rss": distribution(peaks, "bytes"),
+        "hits": distribution(hits, "modules"),
+        "discarded": discarded,
+        "disk_bytes_before": before,
+        "disk_bytes_after": directory_bytes(cache),
+    }
+
+
+def measure_crash_residue(config: Config, d: Path) -> dict:
+    """What an unfinished writer's leftovers cost the next build.
+
+    The residue is named the way the store names its own: a `.tmp-` prefix on
+    the key. A build that read one as an object would serve a half-written
+    plan, so the number that matters is that the next build still hits.
+    """
+    cache = d / "residue-cache"
+    entry = write_product(d / "residue-src", PRODUCER_V1)
+    measure_build(config, cache, entry, d / "residue-prime" / "app")
+    live = objects(cache)
+    discarded = 0
+    times: list[float] = []
+    peaks: list[float] = []
+    hits: list[float] = []
+    planted = 0
+    for sample in range(config.samples + 1):
+        for kind in ("xsm", "xtp"):
+            for directory in cache.rglob(kind):
+                if not directory.is_dir():
+                    continue
+                for path in sorted(directory.iterdir()):
+                    if not path.is_file() or path.name.startswith("."):
+                        continue
+                    orphan = directory / f".tmp-{path.name}-{sample}"
+                    orphan.write_bytes(b"half-written program target plan")
+                    planted += 1
+        built = measure_build(config, cache, entry, d / f"residue-out-{sample}" / "app")
+        if sample == 0:
+            continue
+        if not built.did_work:
+            discarded += 1
+            continue
+        times.append(built.seconds)
+        peaks.append(float(built.peak_rss))
+        hits.append(float(built.report.hits))
+    return {
+        "seconds": distribution(times, "s"),
+        "peak_rss": distribution(peaks, "bytes"),
+        "hits": distribution(hits, "modules"),
+        "discarded": discarded,
+        "residues_planted": planted,
+        "live_objects_intact": objects(cache) == live,
+        "disk_bytes": directory_bytes(cache),
+    }
+
+
+def measure_quota_gc(config: Config, d: Path) -> dict:
+    """Collection is driven where the store budget is owned.
+
+    The product entry point exposes no cache budget, so the numbers come from
+    the unit suite that opens the store directly. Parsing its line here keeps
+    one report rather than two, and records that this row was not measured
+    through the product path.
+    """
+    binary = PROJECT_DIR / "build" / "tests" / "unit" / platform.exe_name(
+        "test_program_plan_cache_qualification")
+    if not binary.is_file():
+        return {"measured": False, "reason": f"suite binary not built: {binary}"}
+    rounds = []
+    for _ in range(config.samples):
+        result = proc.run([binary], timeout=config.timeout)
+        match = COLLECT_RACE_RE.search(result.combined_text())
+        if not result.ok or not match:
+            return {"measured": False,
+                    "reason": "suite did not report its collection race",
+                    "exit": result.returncode}
+        rounds.append({
+            "evicted": int(match.group(1)),
+            "readers": int(match.group(2)),
+            "recomputed": int(match.group(3)),
+        })
+    return {
+        "measured": True,
+        "measured_through": "test_program_plan_cache_qualification",
+        "reason": "the product entry point exposes no cache budget",
+        "samples": len(rounds),
+        "recomputed": distribution([float(r["recomputed"]) for r in rounds], "readers"),
+        "rounds": rounds,
     }
 
 
@@ -580,6 +1063,28 @@ def self_test() -> int:
     if parse(proc.ProcResult(("x",), 1, b"nothing here", b"", False)) is not None:
         print("FAIL: a build with no report must not parse")
         return 1
+    # The collection row is read out of the unit suite's own printout, so a
+    # rename there would silently turn that row into "not measured". Pin the
+    # exact line the suite emits.
+    race = COLLECT_RACE_RE.search("    collect race: evicted=3 readers=3 recomputed=1\n")
+    if not race or race.groups() != ("3", "3", "1"):
+        print("FAIL: collection race line parsing")
+        return 1
+    # A spread that condemns the tail must not condemn the median with it.
+    verdict = contention(
+        {"seconds": {"p50": 0.7, "p95": 3.8, "samples": 7}, "discarded_pairs": 0},
+        {"seconds": {"p50": 0.4, "p95": 2.9, "samples": 7}},
+        {"before": [6.7], "after": [5.0]})
+    if verdict["tail_usable"] or not verdict["median_usable"]:
+        print(f"FAIL: contention verdict {verdict}")
+        return 1
+    thin = contention({"seconds": {"p50": 1.0, "p95": 1.1, "samples": 2},
+                       "discarded_pairs": 1},
+                      {"seconds": {"p50": 1.0, "p95": 1.1, "samples": 2}},
+                      {"before": [1.0], "after": [1.0]})
+    if thin["median_usable"]:
+        print(f"FAIL: a run that discarded a pair must not claim its median {thin}")
+        return 1
     stats = distribution([1.0, 2.0, 3.0, 4.0], "s")
     if stats["samples"] != 4 or stats["p50"] != 2.5 or stats["max"] != 4.0:
         print(f"FAIL: distribution {stats}")
@@ -594,6 +1099,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--samples", type=int, default=7)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--measure", action="store_true")
+    parser.add_argument("--report", type=Path, default=None,
+                        help="write the measurement JSON here as well as to stdout")
     parser.add_argument("--self-test", action="store_true")
     ns = parser.parse_args(argv[1:])
     if ns.self_test:
@@ -615,11 +1122,18 @@ def main(argv: list[str]) -> int:
         qualify_lifecycle(rec, config, ws)
         qualify_relocation(rec, config, ws)
         qualify_reorder(rec, config, ws)
+        qualify_hostile(rec, config, ws)
         qualify_parallel(rec, config, ws, max(2, ns.workers))
         rec.write(verbose=True)
         if ns.measure:
             import json
-            print(json.dumps(measure(config, ws), indent=2, sort_keys=True))
+            data = measure(config, ws, max(2, ns.workers))
+            text = json.dumps(data, indent=2, sort_keys=True)
+            print(text)
+            if ns.report:
+                ns.report.parent.mkdir(parents=True, exist_ok=True)
+                ns.report.write_text(text + "\n", encoding="utf-8", newline="\n")
+                print(f"measurement written to {ns.report}")
         ws.keep_on_exit(bool(rec.failed))
         if rec.failed:
             sys.stderr.write(f"Workdir kept: {ws.root}\n")

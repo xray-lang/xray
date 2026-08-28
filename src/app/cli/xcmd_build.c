@@ -2334,13 +2334,45 @@ static uint64_t xaot_hash_fold_link_dependency_stats(uint64_t h, const XaotLinkM
  * resulting object: optimization level, target, toolchain, sysroot, and every
  * semantic compile requirements plus every provider-scoped escape flag carried
  * by the link manifest. */
+/* Fold the generated C, treating a `#line` directive's file name as steering
+ * rather than input.
+ *
+ * The generated C names the source's absolute path in a `#line` directive. A
+ * build that emits no debug info does not record that name anywhere in the
+ * object: two objects compiled from the same program at two paths are
+ * byte-identical. Folding the raw text would therefore key the object cache by
+ * where the sources happen to sit, so a relocated tree recompiles every module
+ * and the objects it already published are never reclaimed.
+ *
+ * A build that does emit debug info records the name, so there the path is a
+ * real input and the raw text is folded unchanged. */
+static uint64_t xaot_hash_fold_c_source(uint64_t h, const char *c_source, bool debug_info) {
+    if (!c_source || debug_info)
+        return xaot_hash_fold_str(h, c_source);
+    const char *cursor = c_source;
+    while (*cursor) {
+        const char *line_end = strchr(cursor, '\n');
+        size_t length = line_end ? (size_t) (line_end - cursor) : strlen(cursor);
+        if (strncmp(cursor, "#line ", 6u) == 0) {
+            const char *quote = (const char *) memchr(cursor, '"', length);
+            if (quote)
+                length = (size_t) (quote - cursor);
+        }
+        h = xaot_hash_fold(h, cursor, length);
+        if (!line_end)
+            break;
+        cursor = line_end + 1;
+    }
+    return h;
+}
+
 static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag,
                                       const XrToolchainTarget *target,
                                       const XrToolchainSelection *plan,
                                       const XaotLinkManifest *manifest, const char *sysroot,
                                       XiCgenCDialect c_dialect) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = xaot_hash_fold_str(h, "xaot-obj-cache-v4");
+    h = xaot_hash_fold_str(h, "xaot-obj-cache-v5");
     h = xaot_hash_fold(h, &c_dialect, sizeof(c_dialect));
     h = xaot_hash_fold(h, &(uint64_t) {xaot_aot_runtime_source_key()}, sizeof(uint64_t));
     h = xaot_hash_fold_str(h, opt_flag);
@@ -2368,7 +2400,7 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
         for (uint32_t i = 0; i < manifest->n_cc_flags; i++)
             h = xaot_hash_fold_str(h, manifest->cc_flags[i]);
     }
-    h = xaot_hash_fold_str(h, c_source);
+    h = xaot_hash_fold_c_source(h, c_source, manifest && manifest->compile.debug_info);
     return h;
 }
 

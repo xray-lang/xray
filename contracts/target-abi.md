@@ -667,6 +667,16 @@ emission rather than falling back to compiler-host layout.
   builds cold. A cache that answered without the output would sign one
   program's binary with another's name and make a binary differ from its own
   cold build.
+- T4i: the object cache is keyed by what reaches the object, not by where the
+  sources live. The generated C names the source's absolute path in a `#line`
+  directive; a build emitting no debug info records that name nowhere in the
+  object, so two objects compiled from one program at two paths are
+  byte-identical and must share one entry. A cache that folded the raw text
+  would recompile a relocated tree in full and never reclaim what it published.
+  A build emitting debug info does record the name, so there the path is a real
+  input and the raw text is folded unchanged: the two paths must not share an
+  entry. Widening the key over that second case would be a wrong hit, which is
+  worse than the growth the first case costs.
 - T5: a scalar place may alias its source field only when the semantic value,
   AOT representation, and generated-C type are identical. A value-preserving
   conversion such as ILP32 `usize` to 64-bit `int` must materialize distinct
@@ -891,7 +901,8 @@ anchor-sha256: src/aot/xrt_core_freestanding.h d37e499639eb83c3f6b43d29085b71910
 anchor-sha256: src/aot/xrt_method.h ec377657645eeb7468eb4fe33307beaa296543911293edd03e5aabf3dc92c8e7
 anchor-sha256: src/aot/xrt_time.h 952014f00082d8ca8ab66452176fd736596819c2158efa35762c332841f9fdf9
 anchor-sha256: include/xray_hosted_fragment_abi.h 7006c7c84c50e138c7837e1737de9756c153a29fc757256e593782f52f535678
-anchor-sha256: src/app/cli/xcmd_build.c cfc45ea896baa38e049930bec6ca4eb5c170d5cb3587865a64321dd7dcb02cb0
+anchor-sha256: src/app/cli/xcmd_build.c 7bb56695d1f0bab2e0717ea2c650cf6f66ce79fc4230aaaf08e296a9429d1a42
+anchor-sha256: tests/aot/run_aot_incremental_cache.py e93b33ce73699eca5ca83c9b17f42e721f971a0f2403b5e7dd5db71ea20f2f66
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 883a5ee95f39dbf335144289a5db2b693112a5a072d96dcf85ecf4abcfd42a09
 anchor-sha256: src/ir/xi.h ee962981bf6c73f01aa2b508ce38a71e4249572e71030eb3348ea569a4447b29

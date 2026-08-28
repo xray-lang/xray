@@ -120,21 +120,17 @@ static bool ensure_directory(const char *path) {
 
 static bool cache_layout_is_regular(const XrCacheStore *store) {
     XrFsStat stat;
-    if (!store || xr_fs_stat(store->root, &stat) != 0 ||
-        stat.kind != XR_FS_DIR)
+    if (!store || xr_fs_stat(store->root, &stat) != 0 || stat.kind != XR_FS_DIR)
         return false;
-    for (XrCacheArtifactKind kind = XR_CACHE_ARTIFACT_XSM;
-         kind <= XR_CACHE_ARTIFACT_XTP; kind++) {
-        if (!store->artifact_dirs[kind] ||
-            xr_fs_stat(store->artifact_dirs[kind], &stat) != 0 ||
+    for (XrCacheArtifactKind kind = XR_CACHE_ARTIFACT_XSM; kind <= XR_CACHE_ARTIFACT_XTP; kind++) {
+        if (!store->artifact_dirs[kind] || xr_fs_stat(store->artifact_dirs[kind], &stat) != 0 ||
             stat.kind != XR_FS_DIR)
             return false;
     }
     return true;
 }
 
-static bool acquire_root_lock(const XrCacheStore *store,
-                              XrFsExclusiveLock *root_lock) {
+static bool acquire_root_lock(const XrCacheStore *store, XrFsExclusiveLock *root_lock) {
     if (xr_fs_lock_exclusive(store->lock_path, root_lock) != 0)
         return false;
     if (cache_layout_is_regular(store))
@@ -156,8 +152,8 @@ static void cache_store_free(XrCacheStore *store, bool destroy_lock) {
 }
 
 XrCacheStore *xr_cache_store_open(const XrCacheStoreConfig *config) {
-    if (!config || !config->root || !*config->root ||
-        config->max_entry_bytes == 0 || config->quota_bytes < XR_CACHE_OBJECT_HEADER_SIZE ||
+    if (!config || !config->root || !*config->root || config->max_entry_bytes == 0 ||
+        config->quota_bytes < XR_CACHE_OBJECT_HEADER_SIZE ||
         config->max_entry_bytes > SIZE_MAX - XR_CACHE_OBJECT_HEADER_SIZE ||
         config->max_entry_bytes > config->quota_bytes - XR_CACHE_OBJECT_HEADER_SIZE ||
         config->stale_temp_age_ns == 0)
@@ -176,8 +172,7 @@ XrCacheStore *xr_cache_store_open(const XrCacheStoreConfig *config) {
         return NULL;
     }
 
-    for (XrCacheArtifactKind kind = XR_CACHE_ARTIFACT_XSM; kind <= XR_CACHE_ARTIFACT_XTP;
-         kind++) {
+    for (XrCacheArtifactKind kind = XR_CACHE_ARTIFACT_XSM; kind <= XR_CACHE_ARTIFACT_XTP; kind++) {
         store->artifact_dirs[kind] = xr_path_join(store->root, artifact_dir_name(kind));
         if (!store->artifact_dirs[kind] || !ensure_directory(store->artifact_dirs[kind])) {
             cache_store_free(store, false);
@@ -228,7 +223,8 @@ static bool decode_object(const uint8_t *object, size_t object_size, XrCacheArti
         memcmp(object + 32u, key.bytes, XR_CACHE_KEY_BYTES) != 0)
         return false;
     uint64_t encoded_size = take_u64(object + 24u);
-    if (encoded_size > SIZE_MAX || (size_t) encoded_size != object_size - XR_CACHE_OBJECT_HEADER_SIZE)
+    if (encoded_size > SIZE_MAX ||
+        (size_t) encoded_size != object_size - XR_CACHE_OBJECT_HEADER_SIZE)
         return false;
     uint8_t digest[XR_CACHE_KEY_BYTES];
     xr_sha256(object + XR_CACHE_OBJECT_HEADER_SIZE, (size_t) encoded_size, digest);
@@ -239,18 +235,14 @@ static bool decode_object(const uint8_t *object, size_t object_size, XrCacheArti
     return true;
 }
 
-static bool remove_cache_path(XrCacheStore *store, XrCacheArtifactKind kind,
-                              const char *path) {
+static bool remove_cache_path(XrCacheStore *store, XrCacheArtifactKind kind, const char *path) {
     if (xr_fs_remove(path) != 0)
         return false;
-    return xr_fs_sync_directory(store->artifact_dirs[kind]) !=
-           XR_FS_SYNC_ERROR;
+    return xr_fs_sync_directory(store->artifact_dirs[kind]) != XR_FS_SYNC_ERROR;
 }
 
-static XrCacheLoadStatus load_locked(XrCacheStore *store,
-                                     XrCacheArtifactKind kind, XrCacheKey key,
-                                     XrCacheBlob *out,
-                                     XrCacheObjectSnapshot *snapshot) {
+static XrCacheLoadStatus load_locked(XrCacheStore *store, XrCacheArtifactKind kind, XrCacheKey key,
+                                     XrCacheBlob *out, XrCacheObjectSnapshot *snapshot) {
     char *path = entry_path(store, kind, key);
     if (!path)
         return XR_CACHE_LOAD_IO_ERROR;
@@ -309,9 +301,9 @@ static XrCacheLoadStatus load_locked(XrCacheStore *store,
     return XR_CACHE_LOAD_HIT;
 }
 
-static bool cleanup_rejected_snapshot_locked(
-    XrCacheStore *store, XrCacheArtifactKind kind, XrCacheKey key,
-    const XrCacheObjectSnapshot *snapshot) {
+static bool cleanup_rejected_snapshot_locked(XrCacheStore *store, XrCacheArtifactKind kind,
+                                             XrCacheKey key,
+                                             const XrCacheObjectSnapshot *snapshot) {
     char *path = entry_path(store, kind, key);
     if (!path)
         return false;
@@ -326,8 +318,7 @@ static bool cleanup_rejected_snapshot_locked(
     }
     uint8_t *object = NULL;
     size_t object_size = 0;
-    bool ok = xr_fs_read_regular_file(path, (size_t) snapshot->size, &object,
-                                      &object_size) == 0;
+    bool ok = xr_fs_read_regular_file(path, (size_t) snapshot->size, &object, &object_size) == 0;
     uint8_t digest[XR_CACHE_KEY_BYTES];
     if (ok)
         xr_sha256(object, object_size, digest);
@@ -340,10 +331,8 @@ static bool cleanup_rejected_snapshot_locked(
     return ok;
 }
 
-XrCacheLoadStatus xr_cache_store_load(XrCacheStore *store, XrCacheArtifactKind kind,
-                                      XrCacheKey key,
-                                      XrCacheArtifactVerifier verifier,
-                                      void *verifier_context,
+XrCacheLoadStatus xr_cache_store_load(XrCacheStore *store, XrCacheArtifactKind kind, XrCacheKey key,
+                                      XrCacheArtifactVerifier verifier, void *verifier_context,
                                       XrCacheBlob *out) {
     if (!store || !artifact_kind_valid(kind) || !verifier || !out)
         return XR_CACHE_LOAD_IO_ERROR;
@@ -366,12 +355,10 @@ XrCacheLoadStatus xr_cache_store_load(XrCacheStore *store, XrCacheArtifactKind k
         if (!acquire_root_lock(store, &cleanup_lock))
             return XR_CACHE_LOAD_IO_ERROR;
         xr_mutex_lock(&store->lock);
-        bool cleaned = cleanup_rejected_snapshot_locked(store, kind, key,
-                                                        &snapshot);
+        bool cleaned = cleanup_rejected_snapshot_locked(store, kind, key, &snapshot);
         xr_mutex_unlock(&store->lock);
         bool unlocked = xr_fs_unlock_exclusive(&cleanup_lock) == 0;
-        return cleaned && unlocked ? XR_CACHE_LOAD_REJECTED
-                                   : XR_CACHE_LOAD_IO_ERROR;
+        return cleaned && unlocked ? XR_CACHE_LOAD_REJECTED : XR_CACHE_LOAD_IO_ERROR;
     }
     return status;
 }
@@ -407,8 +394,8 @@ static XrCachePublishStatus compare_existing(XrCacheStore *store, XrCacheArtifac
     XrCacheBlob existing = {0};
     XrCacheLoadStatus status = load_locked(store, kind, key, &existing, NULL);
     if (status == XR_CACHE_LOAD_HIT) {
-        bool equal = existing.size == size &&
-                     (size == 0 || memcmp(existing.bytes, bytes, size) == 0);
+        bool equal =
+            existing.size == size && (size == 0 || memcmp(existing.bytes, bytes, size) == 0);
         xr_cache_blob_release(&existing);
         return equal ? XR_CACHE_PUBLISH_EXISTS : XR_CACHE_PUBLISH_CONFLICT;
     }
@@ -602,10 +589,9 @@ static bool collect_locked(XrCacheStore *store, XrCacheCollectStats *stats,
     size_t count = 0;
     size_t capacity = 0;
     uint64_t now_ns = xr_time_realtime_ns();
-    bool ok = scan_directory(store, XR_CACHE_ARTIFACT_XSM, &entries, &count, &capacity, stats,
-                             now_ns) &&
-              scan_directory(store, XR_CACHE_ARTIFACT_XTP, &entries, &count, &capacity, stats,
-                             now_ns);
+    bool ok =
+        scan_directory(store, XR_CACHE_ARTIFACT_XSM, &entries, &count, &capacity, stats, now_ns) &&
+        scan_directory(store, XR_CACHE_ARTIFACT_XTP, &entries, &count, &capacity, stats, now_ns);
     uint64_t total = 0;
     for (size_t i = 0; ok && i < count; i++) {
         if (entries[i].size > UINT64_MAX - total)
@@ -613,7 +599,11 @@ static bool collect_locked(XrCacheStore *store, XrCacheCollectStats *stats,
         else
             total += entries[i].size;
     }
-    qsort(entries, count, sizeof(*entries), compare_disk_entry);
+    /* An empty directory never allocated the array, and glibc declares qsort's
+     * base pointer nonnull, so sorting nothing is undefined behaviour there
+     * even though no implementation dereferences it. */
+    if (count)
+        qsort(entries, count, sizeof(*entries), compare_disk_entry);
     for (size_t i = 0; ok && total > byte_limit && i < count; i++) {
         if (protected_path && strcmp(entries[i].path, protected_path) == 0)
             continue;
@@ -638,8 +628,8 @@ static bool collect_locked(XrCacheStore *store, XrCacheCollectStats *stats,
     xr_free(entries);
     if (ok && (stats->removed_entries != 0 || stats->stale_temps_removed != 0 ||
                stats->corrupt_entries_removed != 0)) {
-        for (XrCacheArtifactKind kind = XR_CACHE_ARTIFACT_XSM;
-             kind <= XR_CACHE_ARTIFACT_XTP; kind++) {
+        for (XrCacheArtifactKind kind = XR_CACHE_ARTIFACT_XSM; kind <= XR_CACHE_ARTIFACT_XTP;
+             kind++) {
             if (xr_fs_sync_directory(store->artifact_dirs[kind]) == XR_FS_SYNC_ERROR)
                 ok = false;
         }
