@@ -402,12 +402,12 @@ perf_suite = "stdlib/crypto"
 name = "compress"
 public = true
 layer = "L3"
-policy = "native_library"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/compress/compress.xr"
 factory_source = "stdlib/compress/compress.c"
-public_native = ["adler32", "crc32", "deflate", "gunzip", "gzip", "inflate", "isGzip", "isZlib", "zlibCompress", "zlibDecompress"]
+public_native = []
 private_native_sources = ["stdlib/compress/*.c"]
-private_native_reason = "zlib-compatible compression and checksum kernels"
+private_native_reason = "Deflate coder and its gzip/zlib container payloads, which Xray cannot build as strings, consumed by compress.xr"
 perf_suite = "stdlib/compress"
 
 [[module]]

@@ -1227,62 +1227,6 @@ static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs
     return result;
 }
 
-// compress.isGzip(data) -> bool
-static XrValue compress_is_gzip(XrVMRuntime *X, XrValue *args, int nargs) {
-    (void) X;
-    if (nargs < 1)
-        return xr_bool(false);
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_bool(false);
-
-    return xr_bool(xr_is_gzip((const uint8_t *) data, len));
-}
-
-// compress.isZlib(data) -> bool
-static XrValue compress_is_zlib(XrVMRuntime *X, XrValue *args, int nargs) {
-    (void) X;
-    if (nargs < 1)
-        return xr_bool(false);
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_bool(false);
-
-    return xr_bool(xr_is_zlib((const uint8_t *) data, len));
-}
-
-// compress.crc32(data) -> int
-static XrValue compress_crc32(XrVMRuntime *X, XrValue *args, int nargs) {
-    (void) X;
-    if (nargs < 1)
-        return xr_int(0);
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_int(0);
-
-    return xr_int((int64_t) xr_crc32((const uint8_t *) data, len));
-}
-
-// compress.adler32(data) -> int
-static XrValue compress_adler32(XrVMRuntime *X, XrValue *args, int nargs) {
-    (void) X;
-    if (nargs < 1)
-        return xr_int(1);
-
-    size_t len;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_int(1);
-
-    return xr_int((int64_t) xr_adler32((const uint8_t *) data, len));
-}
-
 /* ========== Module Loading ========== */
 
 #define XR_STDLIB_VM_BIND_MODULE_COMPRESS 1

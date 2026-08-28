@@ -44,17 +44,23 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CLUSTER */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_COMPRESS
-static void xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "crc32", compress_crc32);
-    XRS_EXPORT(module, isolate, "adler32", compress_adler32);
-    XRS_EXPORT(module, isolate, "gzip", compress_gzip);
-    XRS_EXPORT(module, isolate, "gunzip", compress_gunzip);
-    XRS_EXPORT(module, isolate, "deflate", compress_deflate);
-    XRS_EXPORT(module, isolate, "inflate", compress_inflate);
-    XRS_EXPORT(module, isolate, "zlibCompress", compress_zlib_compress);
-    XRS_EXPORT(module, isolate, "zlibDecompress", compress_zlib_decompress);
-    XRS_EXPORT(module, isolate, "isGzip", compress_is_gzip);
-    XRS_EXPORT(module, isolate, "isZlib", compress_is_zlib);
+XR_FUNC bool xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule *module) {
+    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
+        return false;
+    size_t expected_count = 0;
+    XRS_EXPORT(module, isolate, "__gzip", compress_gzip);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__gunzip", compress_gunzip);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__deflate", compress_deflate);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__inflate", compress_inflate);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__zlibCompress", compress_zlib_compress);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__zlibDecompress", compress_zlib_decompress);
+    expected_count++;
+    return module->export_count == expected_count;
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_COMPRESS */
 
