@@ -102,6 +102,23 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_SLICE_COMPARE;
         case XA_INTRINSIC_LOWERING_SLICE_GET:
             return XI_INDEX_GET;
+        /* mem's module intrinsics have no single canonical Xi op: each one
+         * lowers to a shape built from the selected T (a folded constant, a
+         * pointer conversion, a typed load/store, or a borrowed view), so
+         * lower_resolved_intrinsic_call dispatches them before reaching the
+         * generic op path. */
+        case XA_INTRINSIC_LOWERING_MEM_SIZE_OF:
+        case XA_INTRINSIC_LOWERING_MEM_ALIGN_OF:
+        case XA_INTRINSIC_LOWERING_MEM_OFFSET_OF:
+        case XA_INTRINSIC_LOWERING_MEM_PTR:
+        case XA_INTRINSIC_LOWERING_MEM_MUT_PTR:
+        case XA_INTRINSIC_LOWERING_MEM_ADDR:
+        case XA_INTRINSIC_LOWERING_MEM_LOAD:
+        case XA_INTRINSIC_LOWERING_MEM_STORE:
+        case XA_INTRINSIC_LOWERING_MEM_SLICE:
+        case XA_INTRINSIC_LOWERING_MEM_WITH_SLICE_MUT:
+        case XA_INTRINSIC_LOWERING_MEM_ASSUME_INITIALIZED:
+            return XI_OP_COUNT;
         case XA_INTRINSIC_LOWERING_ATOMIC_LOAD:
             return XI_ATOMIC_LOAD;
         case XA_INTRINSIC_LOWERING_ATOMIC_STORE:

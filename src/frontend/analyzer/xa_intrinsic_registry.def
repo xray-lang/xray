@@ -300,6 +300,35 @@ XA_INTRINSIC(POD_SLICE_COMPARE, 3015, "core.SlicePod.compare", MEMORY, SLICE_COM
 XA_INTRINSIC(POD_SLICE_GET, 3016, "core.SlicePod.get", MEMORY, SLICE_GET, PURE, NO_ALLOC, SAFE, 1,
              1, NONE, NONE, 0, NONE, 0)
 
+/* mem's layout, pointer and borrow intrinsics.  These have no stdlib
+ * declaration and no runtime entry point to bind: the analyzer derives the
+ * result type from the explicit type argument, and lowering encodes the
+ * selected T, endian and owner evidence onto the backend operation.  The
+ * registry key is therefore the whole declaration, resolved at the call site
+ * from the callee's module and member rather than from a bound symbol. */
+XA_INTRINSIC(MEM_SIZE_OF, 3101, "mem.sizeOf", MEMORY, MEM_SIZE_OF, PURE, NO_ALLOC, SAFE, 0, 0,
+             NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(MEM_ALIGN_OF, 3102, "mem.alignOf", MEMORY, MEM_ALIGN_OF, PURE, NO_ALLOC, SAFE, 0, 0,
+             NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(MEM_OFFSET_OF, 3103, "mem.offsetOf", MEMORY, MEM_OFFSET_OF, PURE, NO_ALLOC, SAFE, 1,
+             1, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(MEM_PTR, 3104, "mem.ptr", MEMORY, MEM_PTR, PURE, NO_ALLOC, SAFE, 1, 1, NONE, NONE, 0,
+             NONE, 0)
+XA_INTRINSIC(MEM_MUT_PTR, 3105, "mem.mutPtr", MEMORY, MEM_MUT_PTR, PURE, NO_ALLOC, SAFE, 1, 1,
+             NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(MEM_ADDR, 3106, "mem.addr", MEMORY, MEM_ADDR, PURE, NO_ALLOC, SAFE, 1, 1, NONE, NONE,
+             0, NONE, 0)
+XA_INTRINSIC(MEM_LOAD, 3107, "mem.load", MEMORY, MEM_LOAD, READ_ONLY, NO_ALLOC, SAFE, 1, 3, NONE,
+             NONE, 0, NONE, 0)
+XA_INTRINSIC(MEM_STORE, 3108, "mem.store", MEMORY, MEM_STORE, WRITE_ONLY, NO_ALLOC, SAFE, 3, 4,
+             NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(MEM_SLICE, 3109, "mem.slice", MEMORY, MEM_SLICE, PURE, NO_ALLOC, SAFE, 3, 3, NONE,
+             NONE, 0, NONE, 0)
+XA_INTRINSIC(MEM_WITH_SLICE_MUT, 3110, "mem.withSliceMut", MEMORY, MEM_WITH_SLICE_MUT, MAY_THROW,
+             NO_ALLOC, SAFE, 4, 4, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(MEM_ASSUME_INITIALIZED, 3111, "mem.assumeInitialized", MEMORY, MEM_ASSUME_INITIALIZED,
+             PURE, NO_ALLOC, SAFE, 1, 1, NONE, NONE, 0, NONE, 0)
+
 /* Atomic<T> is a compiler-owned native receiver.  The analyzer resolves these
  * method declarations to stable IDs before Xi construction; backends never
  * recover the operation from the source member spelling. */
