@@ -68,7 +68,7 @@ reinterpretation identities without reassigning the existing registry.
 
 anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 2a2b5b90b2c739a55ea51207c67ab2c613396d3e3686ce0c913a1bd79ee91865
 anchor-sha256: src/ir/xi_method_sym.def 0ec1ca5390eb9be96b1a1fcfbf932787a39d6af810630f88c360538451359702
-anchor-sha256: src/plan/semantic/xr_semantic_native_module_call_shape.h a0fcc24c57573bd8187c93064d039f49898681d8e3e6c18a51fa28b29ae5445a
+anchor-sha256: src/plan/semantic/xr_semantic_native_module_call_shape.h 35d71f47cd448b0baa0980c489b6f807c5affdf0120e746f2d4cf91b81ee5194
 anchor-sha256: src/ir/xi_semantic_intrinsic.c 20a45ccefbdbda7fe02cae622bc6f64187e080ec761b288a77764473a8e86068
     shared judgement in `xr_semantic_native_module_call_shape.h`. A layer may
 anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e79c9ae5dd903770f799e0ef69c1805baa
