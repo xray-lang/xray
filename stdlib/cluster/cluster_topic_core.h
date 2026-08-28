@@ -5,12 +5,24 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * cluster_topic_core.h - Backend-neutral cluster topic rules
+ * cluster_topic_core.h - The topic language as the inbound path sees it
  *
  * KEY CONCEPT:
- *   VM and AOT transports share validation and wildcard matching exactly.
- *   Storage indexes remain backend adapters; the observable topic language
- *   has one owner here.
+ *   The topic language a cluster program can observe is stated in Xray, in
+ *   validTopicName / validTopicPattern / topicMatches in
+ *   stdlib/cluster/cluster.xr, which both backends compile. No entry point
+ *   asks these functions any more.
+ *
+ *   What is left here is the inbound path. A topic arriving on the wire came
+ *   from a peer that may be running anything, so it has never been through
+ *   cluster.xr, and both readers -- cluster_transport_handle_frame on the VM
+ *   and aot_cluster_deliver_local on AOT -- check it here before it reaches a
+ *   subscriber. That is a different question from admission, which is why it
+ *   is a different file, and the two answers are kept identical by
+ *   tests/unit/stdlib/test_cluster_proto.c and the cluster contract cases.
+ *
+ *   Storage indexes remain backend adapters: a segment trie on the VM, a
+ *   linked list on AOT.
  */
 
 #ifndef CLUSTER_TOPIC_CORE_H

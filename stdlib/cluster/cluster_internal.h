@@ -466,7 +466,9 @@ typedef struct XrClusterTlsOptions {
  * a plain TCP cluster.
  */
 int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port,
-                          const char *secret, const XrClusterTlsOptions *tls);
+                          const char *secret, const XrClusterTlsOptions *tls,
+                          int heartbeat_interval_ms, int heartbeat_timeout_ms,
+                          int max_missed_heartbeats);
 void cluster_runtime_retain(XrCluster *c);
 void cluster_runtime_release(XrCluster *c);
 
@@ -546,7 +548,8 @@ struct XrChannel *cluster_transport_listen(struct XrVMRuntime *X, const char *pa
 
 // Send an opaque canonical envelope to matching local listeners and peers.
 XrClusterDelivery cluster_transport_send(struct XrVMRuntime *X, const char *topic,
-                                         const uint8_t *envelope, uint32_t envelope_len);
+                                         const uint8_t *envelope, uint32_t envelope_len,
+                                         uint8_t hop_limit);
 
 /*
  * Handle an incoming opaque envelope frame from a remote node.

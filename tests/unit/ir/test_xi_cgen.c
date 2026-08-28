@@ -2711,9 +2711,13 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture below imports
-     * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b. */
+     * nothing.
+     * This revision moves it again: cluster's __start, __join and __send changed
+     * arity and arg_spec when the admission rules they used to apply moved into
+     * stdlib/cluster/cluster.xr.
+     * Old: fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4. */
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "fedfc7c88a77cdbee8134c13448dc6ad5fd571af159636eecf22df7a48eba1b4") == 0,
+                        "aa5cfa70e06511d4352af10b4d879826f7aca22e80cb7681a4f63e9c38dae9ec") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;

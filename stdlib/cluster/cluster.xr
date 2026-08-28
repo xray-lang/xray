@@ -1,37 +1,94 @@
-// cluster - pure-Xray cluster protocol helpers.
+// cluster - the cluster control plane, stated in Xray.
 //
-// Node lifecycle, sockets, TLS, opaque envelope transport, and frame I/O remain
-// native runtime boundaries. Protocol constants, naming rules, address parsing,
-// and topic-pattern matching live here so the cluster control-plane rules have a
-// visible Xray semantic source.
+// WHY THIS FILE EXISTS
+//   The VM and the AOT backend each carry a whole cluster transport of their
+//   own -- stdlib/cluster/cluster.c and stdlib/cluster/cluster_aot.c. Any rule
+//   restated in both of them is a rule with two answers, and the two answers
+//   have already drifted apart. Both backends compile this file, so a rule
+//   stated here has exactly one answer. Every rule that can be stated here is
+//   stated here, and the leaves below are left with no policy of their own.
+//
+// WHAT LIVES HERE
+//   The address grammar, the topic language, the node-name rule, the admission
+//   checks the four entry points apply, the wire-format constants, the
+//   handshake version, the hop limit and the heartbeat schedule.
+//
+// WHAT DOES NOT
+//   Sockets, multicast, TLS, the netpoll, OS threads, the channel subsystem,
+//   and the frame codec that runs inside a reader loop with no Xray stack
+//   above it. Those are private native leaves; stdlib/native_leaf_allowlist.toml
+//   records what each one crosses and what would let it be deleted.
+//
+// WIRE FORMAT
+//   Normative. stdlib/cluster/cluster_proto.c encodes it for both backends and
+//   tests/unit/stdlib/test_cluster_proto.c holds it to the byte.
+//
+//     frame     := u32be(1 + len(payload)) u8(type) payload
+//     transport := u8(hopLimit) u8(len(topic)) topic envelope
+//     hsReq     := u8(version) u8(len(name)) name nonce[16] u32be(flags)
+//     hsAck     := u8(version) u8(len(name)) name nonce[16] proof[32] u32be(flags)
+//     hsDone    := proof[32]
+//     heartbeat := i64be(timestampMs)
+//     coroMon   := u8(len(name)) name
+//     coroExit  := u8(len(name)) name u8(len(reason)) reason
+//
+//   Every length is one byte, so a node name is at most NODE_NAME_MAX and a
+//   topic at most TOPIC_PATTERN_MAX. Both are checked here, before a leaf sees
+//   them, which is why the leaves no longer check them. proof is
+//   HMAC-SHA256(secret, nonce): the primitive is a crypto leaf, the
+//   construction is the line above.
 
-// Node identity, membership, discovery, status and delivery are published by
-// the Xray surface over private runtime leaves; the leaves carry no cluster
-// policy of their own.
-export fn self() -> string { return __self() }
-// A node that has not joined a cluster has no membership to report, which is
-// a different answer from an empty cluster and is reported as one.
-export fn nodes() -> Array<string>? { return __nodes() }
-export fn discover() { __discover() }
-export fn info() -> ClusterInfo? { return __info() }
+// ========== Protocol constants ==========
 
-export fn send(topic: string, envelope: move Buffer) -> ClusterDelivery {
-    return __send(topic, move envelope)
-}
-
-// The monitor channel carries the node or coroutine name that ended, and the
-// termination reason for a remote coroutine; both are published as strings.
-// One argument monitors a node, two monitor a remote coroutine -- an arity
-// rule the native function encodes positionally and stated here instead.
-export fn monitor(name: string, coroName: string? = null) -> Channel<string> {
-    if (coroName == null) { return __monitor(name) }
-    return __monitor(name, coroName!)
-}
-
+// The handshake version both peers must agree on. Bumping it is a wire break:
+// there is no version negotiation and none is wanted.
 export const HANDSHAKE_VERSION = 6
+export const HANDSHAKE_TIMEOUT_MS = 5000
+
+// How many further hops a published envelope may take. Each hop decrements;
+// the frame dies when the count reaches zero.
 export const TOPIC_DEFAULT_HOP_LIMIT = 3
+export const TOPIC_MAX_HOP_LIMIT = 255
+
 export const NODE_NAME_MAX = 63
 export const TOPIC_PATTERN_MAX = 127
+export const CORO_NAME_MAX = 127
+
+// Frame layout. FRAME_HEADER_SIZE is the big-endian length prefix; the type
+// octet follows it and is counted inside the prefixed length.
+export const FRAME_HEADER_SIZE = 4
+export const FRAME_MAX_PAYLOAD = 16777216
+export const NONCE_SIZE = 16
+export const PROOF_SIZE = 32
+
+// One byte each, matching the type octet on the wire.
+export const FRAME_HANDSHAKE_REQ = 0x01
+export const FRAME_HANDSHAKE_ACK = 0x02
+export const FRAME_HANDSHAKE_DONE = 0x03
+export const FRAME_HANDSHAKE_ERR = 0x04
+export const FRAME_HEARTBEAT_PING = 0x05
+export const FRAME_HEARTBEAT_PONG = 0x06
+export const FRAME_TRANSPORT_ENVELOPE = 0x07
+export const FRAME_CORO_MONITOR = 0x08
+export const FRAME_CORO_DEMONITOR = 0x09
+export const FRAME_CORO_EXIT = 0x0A
+
+// An envelope is opaque to the transport, but it is not shapeless: the service
+// layer above puts a fixed 64-byte header on every one, and a frame shorter
+// than that cannot be a well-formed envelope.
+export const ENVELOPE_HEADER_SIZE = 64
+
+// A subscription channel is bounded. Zero would drop every message and the
+// upper bound is what the channel subsystem will allocate.
+export const SUBSCRIPTION_CAPACITY_MAX = 1048576
+
+// The heartbeat schedule. These are the values a node runs with; the leaf is
+// told them rather than holding a second copy.
+export const HEARTBEAT_INTERVAL_MS = 5000
+export const HEARTBEAT_TIMEOUT_MS = 15000
+export const MAX_MISSED_HEARTBEATS = 3
+
+// ========== Configuration ==========
 
 export type ClusterTlsOptions = {
     enabled: bool,
@@ -64,9 +121,15 @@ export class NodeAddress {
     }
 }
 
+// ========== Naming rules ==========
+
+// Byte-indexed on purpose. `s.runes().nth(i)` costs O(i), so the obvious
+// rune loop would make every one of these rules quadratic in the length of a
+// name that is checked on every join and every publish.
 fn _asciiPrintable(s: string) -> bool {
-    for (var i = 0; i < len(s); i++) {
-        var c = s.runes().nth(i).toUInt32()
+    var b: Slice<u8> = s.bytes()
+    for (var i = 0; i < len(b); i++) {
+        var c = b[i] as i64
         if (c < 0x20 || c > 0x7E) { return false }
     }
     return true
@@ -80,13 +143,16 @@ export fn validNodeName(name: string) -> bool {
     return _validName(name, NODE_NAME_MAX)
 }
 
+// ========== Address grammar ==========
+
 fn _parsePort(raw: string) -> i64 {
-    if (len(raw) == 0) { return 0 }
+    var b: Slice<u8> = raw.bytes()
+    if (len(b) == 0) { return 0 }
     var out = 0
-    for (var i = 0; i < len(raw); i++) {
-        var c = raw.runes().nth(i).toUInt32()
+    for (var i = 0; i < len(b); i++) {
+        var c = b[i] as i64
         if (c < 48 || c > 57) { return 0 }
-        out = out * 10 + ((c - 48) as i64)
+        out = out * 10 + (c - 48)
         if (out > 65535) { return 0 }
     }
     return out
@@ -99,6 +165,11 @@ fn _stripIpv6Brackets(host: string) -> string {
     return host
 }
 
+// One address grammar for the whole language. Before this file owned it there
+// were three: the VM split on the last colon and never stripped brackets, the
+// AOT half stripped brackets but handed the port text straight to
+// getaddrinfo(3), which resolves service names -- so "db:http" refused on one
+// backend and connected to port 80 on the other.
 export fn parseAddress(addr: string) -> NodeAddress {
     var colon = addr.lastIndexOf(":")
     if (colon <= 0 || colon + 1 >= len(addr)) { throw AddressError.MissingPort(addr) }
@@ -113,11 +184,14 @@ export fn parseAddress(addr: string) -> NodeAddress {
     return NodeAddress(host, port)
 }
 
+// ========== Topic language ==========
+
 fn _hasEmptyTopicSegment(s: string) -> bool {
-    if (len(s) == 0) { return true }
-    if (s.runes().nth(0) == '.' || s.runes().nth(len(s) - 1) == '.') { return true }
-    for (var i = 1; i < len(s); i++) {
-        if (s.runes().nth(i) == '.' && s.runes().nth(i - 1) == '.') { return true }
+    var b: Slice<u8> = s.bytes()
+    if (len(b) == 0) { return true }
+    if (b[0] == 0x2E || b[len(b) - 1] == 0x2E) { return true }
+    for (var i = 1; i < len(b); i++) {
+        if (b[i] == 0x2E && b[i - 1] == 0x2E) { return true }
     }
     return false
 }
@@ -159,10 +233,45 @@ export fn topicMatches(pattern: string, topic: string) -> bool {
     return ti == len(t)
 }
 
+// ========== Node identity and membership ==========
+
+// Node identity, membership, discovery, status and delivery are published over
+// private runtime leaves. The leaves carry no cluster policy of their own: what
+// counts as a legal name, a legal topic, a legal address or a legal capacity is
+// decided above them, in this file.
+export fn self() -> string { return __self() }
+
+// A node that has not joined a cluster has no membership to report, which is a
+// different answer from an empty cluster and is reported as one.
+export fn nodes() -> Array<string>? { return __nodes() }
+
+export fn discover() { __discover() }
+
+export fn info() -> ClusterInfo? { return __info() }
+
+// The monitor channel carries the node or coroutine name that ended, and the
+// termination reason for a remote coroutine; both are published as strings.
+// One argument monitors a node, two monitor a remote coroutine -- an arity rule
+// the native function encodes positionally and stated here instead.
+export fn monitor(name: string, coroName: string? = null) -> Channel<string> {
+    if (coroName == null) { return __monitor(name) }
+    return __monitor(name, coroName!)
+}
+
+// ========== Lifecycle ==========
+
+// A node whose name is not a legal node name cannot start. Neither backend
+// checked this before: the name went straight into a fixed 64-byte field and a
+// longer one was silently truncated, so two nodes with names differing past
+// byte 63 became the same node to the cluster. The heartbeat schedule is passed
+// down rather than defaulted below, so the numbers have one owner.
 export fn start(config: ClusterConfig) -> bool {
+    if (!validNodeName(config.name)) { return false }
+    if (config.port < 0 || config.port > 65535) { return false }
     var secret = config.secret ?? ""
     if (config.tls == null) {
-        return __start(config.name, config.port, secret, false, "", "", "", false)
+        return __start(config.name, config.port, secret, false, "", "", "", false,
+                       HEARTBEAT_INTERVAL_MS, HEARTBEAT_TIMEOUT_MS, MAX_MISSED_HEARTBEATS)
     }
     var tls = config.tls!
     return __start(
@@ -173,14 +282,48 @@ export fn start(config: ClusterConfig) -> bool {
         tls.caFile ?? "",
         tls.certFile ?? "",
         tls.keyFile ?? "",
-        tls.insecure
+        tls.insecure,
+        HEARTBEAT_INTERVAL_MS,
+        HEARTBEAT_TIMEOUT_MS,
+        MAX_MISSED_HEARTBEATS
     )
 }
 
-export fn join(addr: string) -> bool { return __join(addr) }
+// The address is parsed here and the leaf is handed a host and a port, so the
+// grammar has one owner. A malformed address raises AddressError rather than
+// answering false: "you spelled the address wrong" and "the peer did not
+// answer" are different facts, and both backends used to flatten them into the
+// same false.
+export fn join(addr: string) -> bool {
+    var parsed = parseAddress(addr)
+    return __join(parsed.host, parsed.port)
+}
 
 export fn stop() { __stop() }
 
+// ========== Publish and subscribe ==========
+
+// A pattern that is not a legal topic pattern, or a capacity outside what a
+// bounded channel can hold, has no subscription to create. Both were checked
+// three times before -- twice in the VM path, once in the AOT one -- and are
+// checked once here.
 export fn listen(pattern: string, capacity: i64 = 1024) -> Channel<Buffer>? {
+    if (!validTopicPattern(pattern)) { return null }
+    if (capacity <= 0 || capacity > SUBSCRIPTION_CAPACITY_MAX) { return null }
     return __listen(pattern, capacity)
+}
+
+// Topic legality and envelope shape are decided here, so the transport leaf is
+// handed a topic it does not need to re-check. The order is deliberate: a topic
+// the caller misspelled is wrong whether or not this node is running, so it is
+// reported as InvalidTopic even after stop(), where the leaf used to answer
+// Unavailable and hide the mistake.
+export fn send(topic: string, envelope: move Buffer,
+               hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT) -> ClusterDelivery {
+    if (!validTopicName(topic)) { return ClusterDelivery.InvalidTopic }
+    if (hopLimit < 0 || hopLimit > TOPIC_MAX_HOP_LIMIT) { return ClusterDelivery.InvalidTopic }
+    if (len(envelope.asBytes()) < ENVELOPE_HEADER_SIZE) {
+        return ClusterDelivery.InvalidEnvelope
+    }
+    return __send(topic, move envelope, hopLimit)
 }

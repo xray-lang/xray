@@ -70,6 +70,15 @@ struct XrAotClusterState {
     char self_name[XR_NODE_NAME_MAX + 1];
     char secret[64];
     uint16_t listen_port;
+    /* The heartbeat schedule cluster.xr decided for this node. The AOT adapter
+     * accepts the schedule but has no heartbeat coroutine to run it yet; only
+     * the VM transport in stdlib/cluster/cluster.c drives heartbeats today.
+     * These fields exist so the schedule keeps a single owner in cluster.xr:
+     * when AOT grows its own heartbeat it reads the numbers from here, with no
+     * further change to the leaf signature. */
+    int64_t heartbeat_interval_ms;
+    int64_t heartbeat_timeout_ms;
+    int64_t max_missed_heartbeats;
     xr_socket_t listen_socket;
     _Atomic(bool) running;
     xr_thread_t accept_thread;
@@ -512,33 +521,16 @@ static xr_socket_t aot_cluster_listen_socket(uint16_t port, uint16_t *actual_por
     return fd;
 }
 
-static bool aot_cluster_parse_address(const char *address, char *host, size_t host_capacity,
-                                      char *port, size_t port_capacity) {
-    const char *colon = strrchr(address, ':');
-    if (!colon || colon == address || colon[1] == '\0')
-        return false;
-    const char *host_start = address;
-    size_t host_length = (size_t) (colon - address);
-    if (host_length >= 2 && address[0] == '[' && colon[-1] == ']') {
-        host_start++;
-        host_length -= 2;
-    } else if (memchr(address, ':', host_length)) {
-        return false;
-    }
-    size_t port_length = strlen(colon + 1);
-    if (host_length == 0 || host_length >= host_capacity || port_length == 0 ||
-        port_length >= port_capacity)
-        return false;
-    memcpy(host, host_start, host_length);
-    host[host_length] = '\0';
-    memcpy(port, colon + 1, port_length + 1);
-    return true;
-}
-
-static xr_socket_t aot_cluster_connect(const char *address) {
-    char host[256];
-    char port[16];
-    if (!aot_cluster_parse_address(address, host, sizeof(host), port, sizeof(port)))
+/* Address syntax has a single owner in cluster.xr's parseAddress, so this
+ * adapter receives a host and an already parsed port number. Rendering that
+ * number back to decimal here is deliberate rather than incidental: the earlier
+ * code handed getaddrinfo(3) the raw text that followed the colon, and
+ * getaddrinfo also resolves service names, so cluster.join("db:http") silently
+ * connected to port 80 under AOT while the VM answered false for the same
+ * address. A decimal string built from an integer cannot name a service. */
+static xr_socket_t aot_cluster_connect(const char *host, uint16_t port) {
+    char service[8];
+    if (snprintf(service, sizeof(service), "%u", (unsigned) port) < 0)
         return XR_INVALID_SOCKET;
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
@@ -546,7 +538,7 @@ static xr_socket_t aot_cluster_connect(const char *address) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
     struct addrinfo *resolved = NULL;
-    if (getaddrinfo(host, port, &hints, &resolved) != 0)
+    if (getaddrinfo(host, service, &hints, &resolved) != 0)
         return XR_INVALID_SOCKET;
     xr_socket_t connected = XR_INVALID_SOCKET;
     for (struct addrinfo *candidate = resolved; candidate; candidate = candidate->ai_next) {
@@ -667,7 +659,8 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
                           const char *secret, int64_t secret_len, XrValue tls_enabled,
                           const char *ca_file, int64_t ca_file_len, const char *cert_file,
                           int64_t cert_file_len, const char *key_file, int64_t key_file_len,
-                          XrValue insecure) {
+                          XrValue insecure, XrValue heartbeat_interval_ms,
+                          XrValue heartbeat_timeout_ms, XrValue max_missed_heartbeats) {
     (void) ca_file;
     (void) ca_file_len;
     (void) cert_file;
@@ -676,14 +669,21 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
     (void) key_file_len;
     (void) insecure;
     XrAotRuntime *runtime = xr_aot_runtime_current();
-    int64_t port = XR_IS_INT(port_value) ? XR_TO_INT(port_value) : -1;
-    if (!runtime || !XR_IS_BOOL(tls_enabled) || XR_TO_BOOL(tls_enabled) || port < 0 ||
-        port > UINT16_MAX)
+    /* Shape checks on the tagged arguments only. Which port numbers a node may
+     * bind is decided in cluster.xr's start(). */
+    if (!runtime || !XR_IS_INT(port_value) || !XR_IS_BOOL(tls_enabled) || XR_TO_BOOL(tls_enabled))
         return XR_FALSE_VAL;
+    int64_t port = XR_TO_INT(port_value);
     XrAotClusterState *cluster = (XrAotClusterState *) xr_calloc(1, sizeof(*cluster));
     if (!cluster)
         return XR_FALSE_VAL;
     cluster->listen_socket = XR_INVALID_SOCKET;
+    cluster->heartbeat_interval_ms =
+        XR_IS_INT(heartbeat_interval_ms) ? XR_TO_INT(heartbeat_interval_ms) : 0;
+    cluster->heartbeat_timeout_ms =
+        XR_IS_INT(heartbeat_timeout_ms) ? XR_TO_INT(heartbeat_timeout_ms) : 0;
+    cluster->max_missed_heartbeats =
+        XR_IS_INT(max_missed_heartbeats) ? XR_TO_INT(max_missed_heartbeats) : 0;
     if (!aot_cluster_copy_text(cluster->self_name, sizeof(cluster->self_name), name, name_len,
                                false) ||
         !aot_cluster_copy_text(cluster->secret, sizeof(cluster->secret), secret, secret_len,
@@ -720,17 +720,19 @@ XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue port_value
     return XR_TRUE_VAL;
 }
 
-XrValue xrt_cluster_join(const char *address, int64_t address_len) {
+XrValue xrt_cluster_join(const char *host_text, int64_t host_len, XrValue port_value) {
     XrAotRuntime *runtime = NULL;
     XrAotClusterState *cluster = aot_cluster_acquire(&runtime);
-    char normalized[320];
+    int64_t port = XR_IS_INT(port_value) ? XR_TO_INT(port_value) : -1;
+    char host[256];
     if (!cluster)
         return XR_FALSE_VAL;
-    if (!aot_cluster_copy_text(normalized, sizeof(normalized), address, address_len, false)) {
+    if (port < 0 || port > UINT16_MAX ||
+        !aot_cluster_copy_text(host, sizeof(host), host_text, host_len, false)) {
         aot_cluster_release(runtime);
         return XR_FALSE_VAL;
     }
-    xr_socket_t socket = aot_cluster_connect(normalized);
+    xr_socket_t socket = aot_cluster_connect(host, (uint16_t) port);
     if (socket == XR_INVALID_SOCKET) {
         aot_cluster_release(runtime);
         return XR_FALSE_VAL;
@@ -762,21 +764,27 @@ XrValue xrt_cluster_stop(void) {
     return XR_NULL_VAL;
 }
 
-int64_t xrt_cluster_send(const char *topic_text, int64_t topic_len, XrValue envelope) {
+int64_t xrt_cluster_send(const char *topic_text, int64_t topic_len, XrValue envelope,
+                         XrValue hop_limit) {
     XrAotRuntime *runtime = NULL;
     XrAotClusterState *cluster = aot_cluster_acquire(&runtime);
+    int64_t hop_value = XR_IS_INT(hop_limit) ? XR_TO_INT(hop_limit) : -1;
     char topic[XR_TOPIC_PATTERN_MAX + 1];
     if (!cluster)
         return XR_CLUSTER_DELIVERY_UNAVAILABLE;
+    /* Topic legality is decided in cluster.xr's send(). What is left here is
+     * the local buffer capacity and the width of the one-byte hop field the
+     * transport frame carries. */
     if (!aot_cluster_copy_text(topic, sizeof(topic), topic_text, topic_len, false) ||
-        !xr_cluster_topic_valid(topic, false)) {
+        hop_value < 0 || hop_value > UINT8_MAX) {
         aot_cluster_release(runtime);
         return XR_CLUSTER_DELIVERY_INVALID_TOPIC;
     }
     const uint8_t *bytes = NULL;
     size_t length = 0;
+    /* The upper bound is the wire frame limit, not a policy: cluster.xr cannot
+     * see how many bytes the topic costs inside the transport frame. */
     if (!cluster->values->buffer_bytes(envelope, &bytes, &length) ||
-        length < XR_CLUSTER_ENVELOPE_HEADER_SIZE ||
         length > XR_FRAME_MAX_PAYLOAD - 2 - (size_t) topic_len) {
         aot_cluster_release(runtime);
         return XR_CLUSTER_DELIVERY_INVALID_ENVELOPE;
@@ -790,7 +798,7 @@ int64_t xrt_cluster_send(const char *topic_text, int64_t topic_len, XrValue enve
         if (!atomic_load_explicit(&node->running, memory_order_acquire))
             continue;
         connected++;
-        if (aot_cluster_node_enqueue_transport(node, XR_TOPIC_DEFAULT_HOP_LIMIT, topic,
+        if (aot_cluster_node_enqueue_transport(node, (uint8_t) hop_value, topic,
                                                (uint8_t) topic_len, bytes, (uint32_t) length) == 0)
             accepted++;
     }
@@ -812,10 +820,12 @@ XrValue xrt_cluster_listen(const char *pattern_text, int64_t pattern_len, XrValu
         return XR_NULL_VAL;
     XrAotClusterSubscription *subscription =
         (XrAotClusterSubscription *) xr_calloc(1, sizeof(*subscription));
-    if (!subscription || capacity <= 0 || capacity > XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX ||
+    /* Pattern legality and the capacity a subscription may ask for are decided
+     * in cluster.xr's listen(). What is left is the tagged-value shape, the
+     * width of the channel capacity field and the local buffer capacity. */
+    if (!subscription || capacity <= 0 || capacity > UINT32_MAX ||
         !aot_cluster_copy_text(subscription->pattern, sizeof(subscription->pattern), pattern_text,
-                               pattern_len, false) ||
-        !xr_cluster_topic_valid(subscription->pattern, true)) {
+                               pattern_len, false)) {
         xr_free(subscription);
         aot_cluster_release(runtime);
         return XR_NULL_VAL;

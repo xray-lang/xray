@@ -2329,11 +2329,14 @@ static void test_plan_snapshot_and_determinism(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d") != 0)
+     * This revision moves it again: cluster's __start, __join and __send changed
+     * arity and arg_spec when the admission rules they used to apply moved into
+     * stdlib/cluster/cluster.xr.
+     * Old: 566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d. */
+    if (strcmp(target_hex, "70258039ecf679664ea8ad814fd2fec1bbd14d6442f8ef871da4bc541293cb6c") != 0)
         fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "566e6dab16bd6faaaf85d1816bdcb919e1b5c213ce3f64c84d1dac3b6dac869d") == 0);
+                   "70258039ecf679664ea8ad814fd2fec1bbd14d6442f8ef871da4bc541293cb6c") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4494,8 +4497,11 @@ static void test_channel_close_call_authority(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f. */
-    REQUIRE(strcmp(call_hex, "23d4e50eae43bf74bde6bdf6ff008813d37c837f806229abe544e39b8392070e") ==
+     * This revision moves it again: cluster's __start, __join and __send changed
+     * arity and arg_spec when the admission rules they used to apply moved into
+     * stdlib/cluster/cluster.xr.
+     * Old: 23d4e50eae43bf74bde6bdf6ff008813d37c837f806229abe544e39b8392070e. */
+    REQUIRE(strcmp(call_hex, "72df025f04526d61d094a7afdafe1c708d3e3543b6449714fd743e122fa1cfc4") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -5253,8 +5259,11 @@ static void test_direct_local_call_adapter_family(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc. */
-    REQUIRE(strcmp(call_hex, "9347a21545b86d1447bc3afe873931c016b318be11d27235c5058b0315b6780e") ==
+     * This revision moves it again: cluster's __start, __join and __send changed
+     * arity and arg_spec when the admission rules they used to apply moved into
+     * stdlib/cluster/cluster.xr.
+     * Old: 9347a21545b86d1447bc3afe873931c016b318be11d27235c5058b0315b6780e. */
+    REQUIRE(strcmp(call_hex, "787f71a5b60b43d1b1a39a37bd9e56bbbe6292b1165dbae0fa32fb97b10fb46c") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -5776,8 +5785,11 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem and regex from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e. */
-    REQUIRE(strcmp(tail_hex, "45df332a6c8d7316367994714bdbb600729e23d91c6bdae6de869dd10ea015fe") ==
+     * This revision moves it again: cluster's __start, __join and __send changed
+     * arity and arg_spec when the admission rules they used to apply moved into
+     * stdlib/cluster/cluster.xr.
+     * Old: 45df332a6c8d7316367994714bdbb600729e23d91c6bdae6de869dd10ea015fe. */
+    REQUIRE(strcmp(tail_hex, "151c2ed33847606ec7c4a8e5b2c22d14e909f80d89754766a9b4f203f2499aa1") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;
