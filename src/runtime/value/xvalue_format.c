@@ -58,6 +58,12 @@ static bool class_is_named_datetime(XrClass *cls) {
     return name && strcmp(name, "DateTime") == 0;
 }
 
+/* The second way rendering re-enters the interpreter: this one calls back
+ * synchronously rather than through a VM frame, so it never passes the print
+ * dispatch's own toString continuation. It stays inside the print group's
+ * atomicity anyway, because it only ever appends to the caller's buffer — a
+ * failure here loses the buffer instead of publishing part of a line. Writing
+ * the rendered text out from here would be the one way to break that. */
 static bool format_datetime_method(XrVMRuntime *isolate, XrStrBuf *sb, XrInstance *inst,
                                    const char *method) {
     if (!isolate || !sb || !inst || !method)

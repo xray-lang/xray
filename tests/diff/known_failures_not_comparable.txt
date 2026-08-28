@@ -614,3 +614,11 @@ tests/diff/cases/semantics/stdlib/mem_page_alloc_overloads_shared_core.xr  # XR_
 tests/diff/cases/semantics/stdlib/mem_prefetch_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/stdlib/mem_volatile_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/stdlib/pointer_foreign_offset_lifetime_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+
+# --- print group atomicity: the AOT leg needs a user toString ------------------
+# Rendering must fail midway to test that a group is discarded rather than half
+# published, and only a user-defined toString can do that. Calling a user class
+# method has no exact target authority in the AOT target layer, so the VM leg
+# carries the behaviour and the AOT leg asserts on generated C instead.
+tests/diff/cases/semantics/output/print_group_atomic_on_panic.xr
+tests/diff/cases/semantics/output/print_group_atomic_on_fatal.xr

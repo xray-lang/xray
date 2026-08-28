@@ -1,0 +1,57 @@
+// anchor: print-group-atomic-formatter-panic
+// A group renders every operand into one buffer and reaches the output stream
+// exactly once, at the end. So a formatter that panics partway through
+// publishes nothing at all: not the operands that already rendered, not the
+// separator that would have preceded the failing one, and not the terminator.
+//
+// The marker lines are what make that observable. If any part of a failed
+// group escaped, it would appear between them, and it would appear without a
+// terminator -- so it would also corrupt the framing of the line that follows.
+//
+// The failing operand is placed in three positions because the escape routes
+// differ: first operand (nothing rendered yet), middle operand (a rendered
+// prefix and a separator are already buffered), and last operand (the whole
+// line is buffered and only the terminator is missing).
+
+class Explodes {
+    label: string
+
+    constructor(label) {
+        this.label = label
+    }
+
+    toString() -> string {
+        var zero = 0
+        var ignored = 1 / zero
+        return this.label
+    }
+}
+
+fn main() {
+    print("-- first operand --")
+    assertPanics(() -> {
+        print(Explodes("x"), "tail")
+    })
+
+    print("-- middle operand --")
+    assertPanics(() -> {
+        print("head", Explodes("x"), "tail")
+    })
+
+    print("-- last operand --")
+    assertPanics(() -> {
+        print("head", "middle", Explodes("x"))
+    })
+
+    print("-- sole operand --")
+    assertPanics(() -> {
+        print(Explodes("x"))
+    })
+
+    // A group that follows a failed one is unaffected: the discarded buffer
+    // left nothing behind for it to continue.
+    print("-- after --")
+    print("a", "b", "c")
+}
+
+main()

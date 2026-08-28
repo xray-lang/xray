@@ -21,6 +21,7 @@
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/shared/xr_print_plan.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -321,10 +322,17 @@ static void test_backend_lower_preserves_print(void) {
     XiValue *arg = xi_const_int(f, entry, 1, &stub_int);
     assert(arg != NULL);
 
-    XiValue *print = xi_value_new(f, entry, XI_PRINT, &stub_void, 1);
+    /* A print carries its plan or it is not a print: the semantic builder reads
+     * the group's separator, terminator and capability from there, and refuses a
+     * value that states them nowhere. Building it from the plan also keeps the
+     * span and the plan's location from disagreeing. */
+    XrLocation print_source = {"xi_stage_fixture.xr", 3, 1, 3, 9};
+    XrPrintPlan print_plan;
+    assert(xr_print_plan_build(XR_CORE_BUILTIN_PRINT, 1, print_source, XR_CORE_INTRINSIC_TARGET_VM,
+                               XR_PRINT_CAPABILITY_NONE, &print_plan) == XR_PRINT_PLAN_OK);
+    XiValue *print = xi_value_new_print(f, entry, &stub_void, &print_plan);
     assert(print != NULL);
     print->args[0] = arg;
-    print->flags = xi_op_default_effects(XI_PRINT);
     print->aux_int = 2;
 
     xi_block_set_return(entry, NULL);

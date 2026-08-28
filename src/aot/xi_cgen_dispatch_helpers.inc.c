@@ -874,7 +874,7 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
          * leaving an immutable imported integer marked TAGGED.  The bundle's
          * canonical literal is sufficient proof to emit the same wrapping
          * native operation as two ordinary I64 operands. */
-        if (xr_type_is_exact_unsigned_integer(v->type)) {
+        if (cg_type_is_unsigned_int(v->type)) {
             const char *ctype = cg_native_int_ctype(v->type->scalar_rep);
             if (!ctype)
                 ctype = "uint64_t";
@@ -988,7 +988,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
      * carries that proof to the shared owner and needs no zero probe; anything
      * else takes the throwing helper. emit_value_as_rep_ctx normalizes raw-i64
      * and boxed operands alike. */
-    if (result_rep == XR_REP_I64 && xr_type_is_exact_unsigned_integer(v->type)) {
+    if (result_rep == XR_REP_I64 && cg_type_is_unsigned_int(v->type)) {
         bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
         if (boxed)
             fprintf(out, "XR_FROM_INT(");
@@ -6060,48 +6060,19 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     emit_codegen_abort_expr(out);
 }
 
-static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFunc *f,
-                                                     const XiValue *v, const XiValue *operand) {
-    if (!ctx || !v || v->nargs == 0)
-        return NULL;
-    const XiValue *arg = operand;
-    if (!arg)
-        return NULL;
-    const XiValue *boxed = NULL;
-    if (arg->op == XI_BOX && arg->nargs >= 1) {
-        boxed = arg;
-        arg = arg->args[0];
+static bool xicgen_type_is_unsigned_int(const XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->scalar_rep) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
+            return true;
+        default:
+            return false;
     }
-    if (boxed && cg_func_needs_aot_coro_ctx(ctx, f) && cg_coro_value_needs_frame(ctx, f, boxed))
-        return NULL;
-    if (!arg->type || arg->type->kind != XR_KIND_INT || arg->type->is_nullable)
-        return NULL;  // nullable ints print via the tagged path so null -> "null"
-    XrRep rep = cg_value_plan_storage_rep(ctx, arg);
-    if (rep != XR_REP_I64 && rep != XR_REP_TAGGED)
-        return NULL;
-    return arg;
-}
-
-static const XiValue *xicgen_native_bool_print_source(XiCgenCtx *ctx, const XiFunc *f,
-                                                      const XiValue *v, const XiValue *operand) {
-    if (!ctx || !v || v->nargs == 0)
-        return NULL;
-    const XiValue *arg = operand;
-    if (!arg)
-        return NULL;
-    const XiValue *boxed = NULL;
-    if (arg->op == XI_BOX && arg->nargs >= 1) {
-        boxed = arg;
-        arg = arg->args[0];
-    }
-    if (boxed && cg_func_needs_aot_coro_ctx(ctx, f) && cg_coro_value_needs_frame(ctx, f, boxed))
-        return NULL;
-    if (!arg->type || arg->type->kind != XR_KIND_BOOL || arg->type->is_nullable)
-        return NULL;
-    XrRep rep = cg_value_plan_storage_rep(ctx, arg);
-    if (rep != XR_REP_I64 && rep != XR_REP_TAGGED)
-        return NULL;
-    return arg;
 }
 
 static bool xicgen_type_is_int_like(const XrType *type) {
@@ -6116,7 +6087,7 @@ static bool xicgen_compare_uses_unsigned(const XiValue *v) {
     const XrType *left = v->args[0] ? v->args[0]->type : NULL;
     const XrType *right = v->args[1] ? v->args[1]->type : NULL;
     return xicgen_type_is_int_like(left) && xicgen_type_is_int_like(right) &&
-           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
+           (xicgen_type_is_unsigned_int(left) || xicgen_type_is_unsigned_int(right));
 }
 
 static void xicgen_emit_uintptr_compare_arg(XiCgenCtx *ctx, FILE *out, const XiValue *arg) {
@@ -6144,142 +6115,74 @@ static bool xicgen_compare_uses_rawptr(XiCgenCtx *ctx, const XiValue *v) {
            cg_value_plan_storage_rep(ctx, v->args[1]) == XR_REP_RAWPTR;
 }
 
-static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc *f,
-                                                   const XiValue *box) {
-    if (!ctx || !f || !box || box->op != XI_BOX)
-        return false;
-    bool saw_print = false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        if (blk->control == box)
-            return false;
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
-                if (phi->value.args[ai] == box)
-                    return false;
-            }
-        }
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *user = blk->values[vi];
-            if (!user || user == box)
-                continue;
-            for (uint16_t ai = 0; ai < user->nargs; ai++) {
-                if (user->args[ai] != box)
-                    continue;
-                /* A group renders each operand independently, so a box feeding
-                 * any operand position is eliminable, not just the first. */
-                if (user->op == XI_PRINT &&
-                    xicgen_native_int_print_source(ctx, f, user, user->args[ai]) == box->args[0]) {
-                    saw_print = true;
-                    continue;
-                }
-                return false;
-            }
-        }
-    }
-    return saw_print;
+/* One source call is one group.
+ *
+ * The group renders into a buffer and reaches the output stream exactly once,
+ * at the flush: a formatter that fails partway publishes nothing, and two
+ * concurrent groups cannot interleave inside a line. The buffer has that single
+ * exit, so a group abandoned any other way is discarded unwritten.
+ *
+ * Operands are joined with the C comma operator, which keeps the whole group one
+ * expression whose operands evaluate in source order. The buffer is the local
+ * the statement path below declares for it; naming it from the value id is what
+ * lets the expression and its declaration agree without passing it around. */
+static void xicgen_print_group_name(char *buf, size_t size, const XiValue *v) {
+    snprintf(buf, size, "_xprint_group_%u", (unsigned) (v ? v->id : 0u));
 }
 
-/* Emit one operand of a print group. The separator and terminator decisions
- * arrive from the group's plan; this function never derives them. */
-static void xicgen_emit_print_operand(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                      uint16_t ordinal, bool add_space, bool newline,
-                                      const char *span_view_name) {
-    XR_DCHECK(ordinal < v->nargs, "xicgen_emit_print_operand: operand out of range");
-    const XiValue *operand = v->args[ordinal];
-    const XiValue *native_int = xicgen_native_int_print_source(ctx, f, v, operand);
-    const XiValue *native_bool = ctx && !ctx->freestanding_profile
-                                     ? xicgen_native_bool_print_source(ctx, f, v, operand)
-                                     : NULL;
-    bool print_span =
-        !native_int && !native_bool && operand && cg_value_plan_is_span_aggregate(ctx, operand);
+static void xicgen_print_span_view_name(char *buf, size_t size, const XiValue *v,
+                                        uint16_t ordinal) {
+    snprintf(buf, size, "_xspan_print_view_%u_%u", (unsigned) (v ? v->id : 0u), (unsigned) ordinal);
+}
 
-    if (ctx && ctx->freestanding_profile) {
-        if (add_space)
-            fprintf(out, "(xrt_write_char(' '), ");
-        if (native_int) {
-            if (xr_type_is_exact_unsigned_integer(native_int->type)) {
-                fprintf(out, "xrt_print_u64((uint64_t)");
-                emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
-                fprintf(out, ")");
-            } else {
-                fprintf(out, "xrt_print_i64((int64_t)");
-                emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
-                fprintf(out, ")");
-            }
-            if (newline)
-                fprintf(out, ", xrt_write_char('\\n')");
-        } else {
-            fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
-            if (print_span) {
-                fprintf(out, "xr_mkptr(");
-                if (span_view_name) {
-                    fprintf(out, "&%s", span_view_name);
-                } else {
-                    ctx->error = true;
-                    fprintf(stderr,
-                            "[xi_cgen] ERROR: print Slice lacks scoped borrowed-view storage\n");
-                    emit_codegen_abort_expr(out);
-                }
-                fprintf(out, ", XR_TAG_ARRAY)");
-            } else {
-                emit_value_as_rep_ctx(ctx, out, operand, XR_REP_TAGGED);
-            }
-            fprintf(out, ")");
-        }
-        if (add_space)
-            fprintf(out, ")");
+/* Emit one operand of a print group. The separator arrives from the group's
+ * plan; this function never derives it. Every operand goes through the one
+ * buffered renderer — the sole exception is a statically unsigned integer,
+ * whose sign domain is not recoverable from the slot bits. */
+static void xicgen_emit_print_operand(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      uint16_t ordinal, bool add_space, const char *group_name) {
+    XR_DCHECK(ordinal < v->nargs, "xicgen_emit_print_operand: operand out of range");
+    (void) f;
+    const XiValue *operand = v->args[ordinal];
+    bool print_span = operand && cg_value_plan_is_span_aggregate(ctx, operand);
+
+    /* The domain is a fact about the operand's type, answered in one place for
+     * both backends.  It does not depend on where the value is stored: a
+     * full-width unsigned integer in a tagged slot holds the same bits it would
+     * hold in a native one, and reading them as signed prints UINT64_MAX as
+     * -1. */
+    if (xi_print_operand_renders_unsigned(operand)) {
+        fprintf(out, "xrt_print_group_append_u64(&%s, (uint64_t)", group_name);
+        emit_value_as_rep_ctx(ctx, out, operand, XR_REP_I64);
+        fprintf(out, ", %d)", add_space ? 1 : 0);
         return;
     }
 
-    if (add_space)
-        fprintf(out, "(putchar(' '), ");
-    if (native_bool) {
-        fprintf(out, "%s((", newline ? "puts" : "fputs");
-        emit_value_as_rep_ctx(ctx, out, native_bool, XR_REP_I64);
-        fprintf(out, ") ? \"true\" : \"false\"");
-        if (!newline)
-            fprintf(out, ", stdout");
-        fprintf(out, ")");
-    } else if (native_int) {
-        if (xr_type_is_exact_unsigned_integer(native_int->type)) {
-            fprintf(out, "printf(\"%%llu\", (unsigned long long)(uint64_t)");
-            emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
-            fprintf(out, ")");
-        } else {
-            fprintf(out, "printf(\"%%lld\", (long long)");
-            emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
-            fprintf(out, ")");
-        }
-        if (newline)
-            fprintf(out, ", putchar('\\n')");
+    fprintf(out, "xrt_print_group_append(&%s, ", group_name);
+    if (print_span) {
+        char view_name[64];
+        xicgen_print_span_view_name(view_name, sizeof(view_name), v, ordinal);
+        fprintf(out, "xr_mkptr(&%s, XR_TAG_ARRAY)", view_name);
     } else {
-        fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
-        if (print_span) {
-            fprintf(out, "xr_mkptr(");
-            if (span_view_name) {
-                fprintf(out, "&%s", span_view_name);
-            } else {
-                ctx->error = true;
-                fprintf(stderr,
-                        "[xi_cgen] ERROR: print Slice lacks scoped borrowed-view storage\n");
-                emit_codegen_abort_expr(out);
-            }
-            fprintf(out, ", XR_TAG_ARRAY)");
-        } else {
-            emit_value_as_rep_ctx(ctx, out, operand, XR_REP_TAGGED);
-        }
-        fprintf(out, ")");
+        emit_value_as_rep_ctx(ctx, out, operand, XR_REP_TAGGED);
     }
-    if (add_space)
-        fprintf(out, ")");
+    fprintf(out, ", %d)", add_space ? 1 : 0);
 }
 
-/* One source call is one group. The plan states the separator and terminator;
- * operands are joined with the C comma operator so the whole group stays a
- * single expression and its operands keep source order. */
+/* The group as one comma expression. The caller owns the buffer's scope. */
+static void xicgen_emit_print_group_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, const XrPrintPlan *plan,
+                                         const char *group_name) {
+    fprintf(out, "xrt_print_group_begin(&%s)", group_name);
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        fprintf(out, ", ");
+        xicgen_emit_print_operand(ctx, out, f, v, a, xr_print_plan_operand_needs_separator(plan, a),
+                                  group_name);
+    }
+    fprintf(out, ", xrt_print_group_flush(&%s, %d)", group_name,
+            plan->terminator != XR_PRINT_TERMINATOR_NONE ? 1 : 0);
+}
+
 static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) prefix;
@@ -6291,52 +6194,50 @@ static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         emit_codegen_abort_expr(out);
         return;
     }
-    bool terminates = plan->terminator != XR_PRINT_TERMINATOR_NONE;
-    if (v->nargs == 0) {
-        /* A group with no operands renders nothing and still writes its frame. */
-        if (!terminates)
-            fprintf(out, "(void)0");
-        else if (ctx && ctx->freestanding_profile)
-            fprintf(out, "xrt_write_char('\\n')");
-        else
-            fprintf(out, "putchar('\\n')");
-        return;
-    }
-    for (uint16_t a = 0; a < v->nargs; a++) {
-        if (a > 0)
-            fprintf(out, ", ");
-        xicgen_emit_print_operand(ctx, out, f, v, a, xr_print_plan_operand_needs_separator(plan, a),
-                                  (uint16_t) (a + 1u) == v->nargs && terminates, NULL);
-    }
+    char group_name[48];
+    xicgen_print_group_name(group_name, sizeof(group_name), v);
+    xicgen_emit_print_group_expr(ctx, out, f, v, plan, group_name);
 }
 
-/* A Slice operand renders through a borrowed view that must live in a scope,
- * so a group containing one is emitted as a statement. Only a single-operand
- * group needs this today; a wider group with a Slice operand is refused rather
- * than silently rendered through a second path. */
-static bool emit_span_print_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                       const XiValue *v) {
-    if (!ctx || !out || !v || v->op != XI_PRINT || v->nargs != 1 || !v->args[0] ||
-        !cg_value_plan_is_span_aggregate(ctx, v->args[0]))
+/* A print group is emitted as a statement because its buffer needs a scope, and
+ * so does the borrowed view a Slice operand renders through. One block owns
+ * both; there is no second path for a group that happens to carry a Slice, and
+ * no arity a group is refused at. A group with no operands still opens and
+ * flushes its buffer, so arity zero is not a special case either. */
+static bool emit_print_group_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const XiValue *v) {
+    if (!ctx || !out || !v || v->op != XI_PRINT)
         return false;
-    const XrPrintPlan *span_plan = xi_print_plan(v);
-    if (!span_plan || span_plan->arity != 1)
-        return false;
-
-    char view_name[48];
-    snprintf(view_name, sizeof(view_name), "_xspan_print_view_%u", (unsigned) v->id);
-    fprintf(out, "    {\n");
-    if (!emit_span_array_view_local_init(ctx, out, v->args[0], view_name, "        ")) {
+    const XrPrintPlan *plan = xi_print_plan(v);
+    if (!plan || plan->arity != v->nargs) {
         ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: print Slice lacks typed element plan\n");
-        fprintf(out, "        ");
+        fprintf(stderr, "[xi_cgen] ERROR: print group lacks its verified plan\n");
+        fprintf(out, "    ");
         emit_codegen_abort_expr(out);
-        fprintf(out, ";\n    }\n");
+        fprintf(out, ";\n");
         return true;
     }
+
+    char group_name[48];
+    xicgen_print_group_name(group_name, sizeof(group_name), v);
+    fprintf(out, "    {\n");
+    fprintf(out, "        xrt_print_group_t %s;\n", group_name);
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        if (!cg_value_plan_is_span_aggregate(ctx, v->args[a]))
+            continue;
+        char view_name[64];
+        xicgen_print_span_view_name(view_name, sizeof(view_name), v, a);
+        if (!emit_span_array_view_local_init(ctx, out, v->args[a], view_name, "        ")) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: print Slice lacks typed element plan\n");
+            fprintf(out, "        ");
+            emit_codegen_abort_expr(out);
+            fprintf(out, ";\n    }\n");
+            return true;
+        }
+    }
     fprintf(out, "        (void)(");
-    xicgen_emit_print_operand(ctx, out, f, v, 0, false,
-                              span_plan->terminator != XR_PRINT_TERMINATOR_NONE, view_name);
+    xicgen_emit_print_group_expr(ctx, out, f, v, plan, group_name);
     fprintf(out, ");\n    }\n");
     emit_value_generated_line_reset(ctx, out, v);
     return true;
@@ -6941,7 +6842,7 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
                 fprintf(out, ")");
                 return;
             case 12:
-                if (xr_type_is_exact_unsigned_integer(v->args[0] ? v->args[0]->type : NULL)) {
+                if (xicgen_type_is_unsigned_int(v->args[0] ? v->args[0]->type : NULL)) {
                     fprintf(out, "xrt_uint64_to_string((uint64_t)");
                     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
                     fprintf(out, ")");
@@ -14972,7 +14873,7 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             emit_value_as_rep_ctx(ctx, out, v->args[0], src_rep);
         }
     } else if (v->type->kind == XR_KIND_STRING) {
-        if (xr_type_is_exact_unsigned_integer(v->args[0] ? v->args[0]->type : NULL)) {
+        if (xicgen_type_is_unsigned_int(v->args[0] ? v->args[0]->type : NULL)) {
             fprintf(out, "xrt_uint64_to_string((uint64_t)");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
             fprintf(out, ")");

@@ -7,6 +7,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_pipeline.h"
+#include "../../../src/ir/xi_emit.h"
 #include "../../../src/ir/xi_program_semantic.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -233,7 +234,7 @@ TEST(e2e_simple_const) {
      * Expect: LOADI + PRINT + RETURN */
     XrProto *p = compile_source("var x = 42\nprint(x)", NULL);
     assert(p != NULL);
-    assert(has_opcode(p, OP_PRINT));
+    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
     xr_instruction_unit_free(p);
 }
 
@@ -267,7 +268,7 @@ TEST(e2e_if_else) {
     XrProto *p = compile_source("if (true) { print(1) } else { print(2) }", NULL);
     assert(p != NULL);
     /* With const folding, the branch may be eliminated */
-    assert(has_opcode(p, OP_PRINT));
+    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
     xr_instruction_unit_free(p);
 }
 
@@ -332,7 +333,31 @@ TEST(e2e_multi_print) {
      * print(3) */
     XrProto *p = compile_source("print(1)\nprint(2)\nprint(3)", NULL);
     assert(p != NULL);
-    assert(count_opcode(p, OP_PRINT) == 3 && "should have 3 PRINT ops");
+    /* One flush per source group: the flush is what reaches the output. */
+    assert(count_opcode(p, OP_PRINT_GROUP_FLUSH) == 3 && "should have 3 print groups");
+    xr_instruction_unit_free(p);
+}
+
+/* One source `print` renders as one buffered group, and exactly one of its
+ * instructions touches the output capability. A verifier can check that
+ * mechanically: count the flushes, not the renders. */
+TEST(e2e_print_group_is_one_write) {
+    XrProto *p = compile_source("print(1, 2, 3)", NULL);
+    assert(p != NULL);
+    assert(count_opcode(p, OP_PRINT_GROUP_NEW) == 1 && "one group buffer per source print");
+    assert(count_opcode(p, OP_PRINT_GROUP_APPEND) == 3 && "one append per operand");
+    assert(count_opcode(p, OP_PRINT_GROUP_FLUSH) == 1 && "one write per source print");
+    xr_instruction_unit_free(p);
+}
+
+/* An empty group still owns a buffer and still writes its terminator through
+ * the same single exit; arity zero is not a special case with its own path. */
+TEST(e2e_print_group_zero_arity_still_flushes) {
+    XrProto *p = compile_source("print()", NULL);
+    assert(p != NULL);
+    assert(count_opcode(p, OP_PRINT_GROUP_NEW) == 1);
+    assert(count_opcode(p, OP_PRINT_GROUP_APPEND) == 0);
+    assert(count_opcode(p, OP_PRINT_GROUP_FLUSH) == 1);
     xr_instruction_unit_free(p);
 }
 
@@ -341,7 +366,7 @@ TEST(e2e_multi_print) {
 TEST(e2e_string_literal) {
     XrProto *p = compile_source("var s = \"hello\"\nprint(s)", NULL);
     assert(p != NULL);
-    assert(has_opcode(p, OP_PRINT));
+    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
     xr_instruction_unit_free(p);
 }
 
@@ -364,7 +389,7 @@ TEST(e2e_for_loop) {
                                 NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_JMP) && "for loop needs backward JMP");
-    assert(has_opcode(p, OP_PRINT));
+    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
     xr_instruction_unit_free(p);
 }
 
@@ -528,7 +553,7 @@ TEST(e2e_bitwise_shift) {
 TEST(e2e_compound_assign) {
     XrProto *p = compile_source("var x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
     assert(p != NULL);
-    assert(has_opcode(p, OP_PRINT));
+    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
     xr_instruction_unit_free(p);
 }
 
@@ -1041,11 +1066,105 @@ TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
                          "print(router.add(1))\n";
     XrProto *p = compile_source(source, NULL);
     assert(p != NULL);
-    assert(has_opcode(p, OP_PRINT));
+    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
     xr_instruction_unit_free(p);
 }
 
 /* ========== Main ========== */
+
+/* Release strips assert(), so a case whose only checks are asserts reports PASS
+ * in a Release build without having checked anything.  The emission check below
+ * is the one thing standing behind "a group publishes all of itself or none of
+ * it", so it is checked in both builds. */
+#define PIPE_CHECK(cond, what)                                                                     \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("  FAIL: %s (%s:%d)\n", (what), __FILE__, __LINE__);                            \
+            tests_failed++;                                                                        \
+        }                                                                                          \
+    } while (0)
+
+/* The emission check must reject a group that writes twice, and it must be
+ * observed rejecting it rather than assumed to.
+ *
+ * The mutation turns an append into a second flush, and the case asserts the
+ * instruction was not already a flush before doing so.  Without that step a
+ * mutation can land on an instruction that already held the target opcode: the
+ * assignment changes nothing, the verifier correctly accepts an untampered
+ * program, and the case reads as "tamper detection is broken" while nothing was
+ * ever tampered with. */
+TEST(e2e_print_group_second_write_is_refused) {
+    XrProto *p = compile_source("print(1, 2, 3)", NULL);
+    PIPE_CHECK(p != NULL, "print fixture compiles");
+    if (!p)
+        return;
+
+    char err[256];
+    PIPE_CHECK(xi_emit_verify_print_groups(p, err, sizeof(err)),
+               "an unmutated group passes the emission check");
+
+    XrInstruction *code = PROTO_CODE_BASE(p);
+    uint32_t n = (uint32_t) PROTO_CODE_COUNT(p);
+    uint32_t at = n;
+    for (uint32_t i = 0; i < n; i++) {
+        if (GET_OPCODE(code[i]) == OP_PRINT_GROUP_APPEND) {
+            at = i;
+            break;
+        }
+    }
+    PIPE_CHECK(at < n, "the fixture contains an append to mutate");
+    if (at >= n) {
+        xr_instruction_unit_free(p);
+        return;
+    }
+    PIPE_CHECK(GET_OPCODE(code[at]) != OP_PRINT_GROUP_FLUSH,
+               "the mutation must change the opcode rather than restate it");
+
+    code[at] = CREATE_ABC(OP_PRINT_GROUP_FLUSH, GETARG_A(code[at]), 0, 0);
+    PIPE_CHECK(GET_OPCODE(code[at]) == OP_PRINT_GROUP_FLUSH, "the mutation took effect");
+    PIPE_CHECK(!xi_emit_verify_print_groups(p, err, sizeof(err)),
+               "a group that reaches the output capability twice is refused");
+    /* Printing the reason is what makes a silent pass distinguishable from a
+     * check that never ran: an empty reason means nothing was refused. */
+    printf("    refused with: %s\n", err);
+
+    xr_instruction_unit_free(p);
+}
+
+/* A group that never flushes is refused for the mirror-image reason: its buffer
+ * would be discarded with the rendered text still inside. */
+TEST(e2e_print_group_without_write_is_refused) {
+    XrProto *p = compile_source("print(1, 2, 3)", NULL);
+    PIPE_CHECK(p != NULL, "print fixture compiles");
+    if (!p)
+        return;
+
+    XrInstruction *code = PROTO_CODE_BASE(p);
+    uint32_t n = (uint32_t) PROTO_CODE_COUNT(p);
+    uint32_t at = n;
+    for (uint32_t i = 0; i < n; i++) {
+        if (GET_OPCODE(code[i]) == OP_PRINT_GROUP_FLUSH) {
+            at = i;
+            break;
+        }
+    }
+    PIPE_CHECK(at < n, "the fixture contains a flush to remove");
+    if (at >= n) {
+        xr_instruction_unit_free(p);
+        return;
+    }
+    PIPE_CHECK(GET_OPCODE(code[at]) != OP_PRINT_GROUP_APPEND,
+               "the mutation must change the opcode rather than restate it");
+
+    char err[256];
+    code[at] = CREATE_ABC(OP_PRINT_GROUP_APPEND, GETARG_A(code[at]), 0, 0);
+    PIPE_CHECK(GET_OPCODE(code[at]) == OP_PRINT_GROUP_APPEND, "the mutation took effect");
+    PIPE_CHECK(!xi_emit_verify_print_groups(p, err, sizeof(err)),
+               "a group that never reaches the output capability is refused");
+    printf("    refused with: %s\n", err);
+
+    xr_instruction_unit_free(p);
+}
 
 int main(void) {
     printf("=== Xi Pipeline E2E Tests ===\n\n");
@@ -1075,6 +1194,10 @@ int main(void) {
 
     /* Multiple statements */
     run_e2e_multi_print();
+    run_e2e_print_group_is_one_write();
+    run_e2e_print_group_zero_arity_still_flushes();
+    run_e2e_print_group_second_write_is_refused();
+    run_e2e_print_group_without_write_is_refused();
 
     /* String */
     run_e2e_string_literal();

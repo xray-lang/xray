@@ -989,6 +989,15 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         }
         res.proto = proto;
 
+        char print_group_error[256];
+        if (!xi_emit_verify_print_groups(proto, print_group_error, sizeof(print_group_error))) {
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_EMIT, XI_PIPE_STAGE_EMIT, XI_VERIFY_EMISSION,
+                                  ir, NULL, NULL, print_group_error);
+            xr_instruction_unit_free(proto);
+            res.proto = NULL;
+            goto fail;
+        }
+
         /* The VM emitter consumes frozen target-neutral semantic IR. After bytecode is
          * fixed, select the VM/JIT tagged representation and close the Repped
          * transition for the IR retained by the proto. */
