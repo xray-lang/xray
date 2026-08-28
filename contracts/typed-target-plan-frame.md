@@ -358,10 +358,10 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h af498bfae7d4c65f9e826ba6823e884a1c47a07d6e47c54b10f3e5538a1d1b3a
+anchor-sha256: src/plan/target/xr_target_plan.h 4b8d44029c2e4e61a1e33b0099d604c7ba8c9153a91cdd9bb4ea5b7855afddd1
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
-anchor-sha256: src/vm/xr_typed_dispatch.c a07a0c22b71e292a8b560d93d58474973a042ea20d2446493e1dcdb0574b5683
+anchor-sha256: src/vm/xr_typed_dispatch.c 12d8182e264288f77a450741e3c59616b40dee115da0994b5e19940d3d2beb56
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 26ce3e68c82fae8c1f035ea4daff3da8bd909146ca359d7e7b56983bed68b8a3
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041
