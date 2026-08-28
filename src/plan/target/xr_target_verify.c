@@ -2376,6 +2376,45 @@ static int target_plan_layout_for_type(const XrTargetPlan *plan, uint32_t semant
                : -1;
 }
 
+/* The same two searches, scoped to the module that owns the rows. The plan-wide
+ * pair is correct only while a plan covers one module: the layout search assumes
+ * one globally sorted semantic_type space, and xr_target_plan_value_rep refuses
+ * a partitioned plan outright. A judgement still calling the plan-wide pair is
+ * one that has not been given a module yet. With a single partition the range
+ * spans the whole table and the two agree exactly. */
+static int verifier_layout_for_type(const XrTargetPlan *plan, const XrTargetPartitionView *view,
+                                    uint32_t semantic_type) {
+    uint32_t low = view->range.layouts_begin;
+    uint32_t end = low + view->range.layouts_count;
+    uint32_t high = end;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        if (plan->layouts[middle].semantic_type < semantic_type)
+            low = middle + 1u;
+        else
+            high = middle;
+    }
+    return low < end && plan->layouts[low].semantic_type == semantic_type ? (int) low : -1;
+}
+
+static const XrTargetValueRepRecord *verifier_value_rep(const XrTargetPlan *plan,
+                                                        const XrTargetPartitionView *view,
+                                                        uint32_t semantic_value) {
+    uint32_t begin = view->range.value_reps_begin;
+    uint32_t end = begin + view->range.value_reps_count;
+    while (begin < end) {
+        uint32_t middle = begin + (end - begin) / 2u;
+        const XrTargetValueRepRecord *record = &plan->value_reps[middle];
+        if (record->semantic_value == semantic_value)
+            return record;
+        if (record->semantic_value < semantic_value)
+            begin = middle + 1u;
+        else
+            end = middle;
+    }
+    return NULL;
+}
+
 static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
                                            const XrSemanticOperationRecord *operation) {
     if (!semantic || !operation || operation->opcode != XI_CLOSURE_NEW ||
@@ -4028,12 +4067,13 @@ imported_source_class_instance_storage_is_exact_verify(const XrTargetPlan *plan,
  * indices below are that module's, not the entry module's, and with one module
  * the two are the same plan. */
 static bool verify_value_binding(
-    const XrTargetPlan *plan, const XrSemanticPlan *semantic, uint32_t semantic_value,
+    const XrTargetPlan *plan, const XrTargetPartitionView *view, uint32_t semantic_value,
     uint32_t semantic_type, uint32_t semantic_function, const XrSemanticOperationRecord *operation,
     uint32_t operation_index, const uint8_t *exact_direct_callees, const uint8_t *exact_go_callees,
     const uint8_t *exact_channel_values, const uint8_t *exact_channel_receives,
     const uint8_t *exact_source_namespaces, const uint8_t *exact_native_module_namespaces,
     uint8_t *bound_slots, const uint8_t *deferred_functions, uint32_t *failure_reason) {
+    const XrSemanticPlan *semantic = view->semantic;
 #define XR_VALUE_BINDING_FAIL(reason)                                                              \
     do {                                                                                           \
         if (failure_reason)                                                                        \
@@ -4352,7 +4392,7 @@ static bool verify_value_binding(
         exact_adt_enum || exact_array_value_parameter || exact_string_value_parameter ||
         exact_direct_array_result) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
-        expected_layout = target_plan_layout_for_type(plan, semantic_type);
+        expected_layout = verifier_layout_for_type(plan, view, semantic_type);
         eligibility =
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_DYNAMIC
                 ? 1
@@ -4363,11 +4403,11 @@ static bool verify_value_binding(
          * ineligible, matching what the builder does. */
         const XrTargetValueRepRecord *forward_source =
             owner_forward_source != XR_SEMANTIC_INDEX_NONE
-                ? xr_target_plan_value_rep(plan, owner_forward_source)
+                ? verifier_value_rep(plan, view, owner_forward_source)
                 : NULL;
         if (forward_source) {
             expected_kind = plan->machine_reps[forward_source->register_rep].kind;
-            expected_layout = target_plan_layout_for_type(plan, semantic_type);
+            expected_layout = verifier_layout_for_type(plan, view, semantic_type);
             eligibility = 1;
         } else {
             eligibility = 0;
@@ -4379,11 +4419,11 @@ static bool verify_value_binding(
          * fail-closed answer the builder gives by not claiming it. */
         const XrTargetValueRepRecord *identity_source =
             identity_copy_source != XR_SEMANTIC_INDEX_NONE
-                ? xr_target_plan_value_rep(plan, identity_copy_source)
+                ? verifier_value_rep(plan, view, identity_copy_source)
                 : NULL;
         if (identity_source) {
             expected_kind = plan->machine_reps[identity_source->register_rep].kind;
-            expected_layout = target_plan_layout_for_type(plan, semantic_type);
+            expected_layout = verifier_layout_for_type(plan, view, semantic_type);
             eligibility = 1;
         } else {
             /* Not ineligible, just unclaimed: a copy whose source no family
@@ -4401,14 +4441,14 @@ static bool verify_value_binding(
         eligibility = 1;
     } else if (exact_string_byte_view || exact_string_byte_parameter || exact_range_slice_view) {
         expected_kind = XR_MACHINE_REP_VIEW;
-        expected_layout = target_plan_layout_for_type(plan, semantic_type);
+        expected_layout = verifier_layout_for_type(plan, view, semantic_type);
         eligibility =
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_VIEW
                 ? 1
                 : -1;
     } else if (exact_unit_enum) {
         expected_kind = XR_MACHINE_REP_ENUM_ORDINAL;
-        expected_layout = target_plan_layout_for_type(plan, semantic_type);
+        expected_layout = verifier_layout_for_type(plan, view, semantic_type);
         eligibility =
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_SCALAR
                 ? 1
@@ -4417,7 +4457,7 @@ static bool verify_value_binding(
         eligibility = 0;
     } else if (aggregate == 1) {
         expected_kind = XR_MACHINE_REP_AGGREGATE;
-        expected_layout = target_plan_layout_for_type(plan, semantic_type);
+        expected_layout = verifier_layout_for_type(plan, view, semantic_type);
         eligibility = expected_layout >= 0 ? 1 : -1;
     } else if (aggregate < 0) {
         eligibility = -1;
@@ -4426,7 +4466,7 @@ static bool verify_value_binding(
     }
     if (operation_result_void)
         expected_kind = XR_MACHINE_REP_VOID;
-    const XrTargetValueRepRecord *record = xr_target_plan_value_rep(plan, semantic_value);
+    const XrTargetValueRepRecord *record = verifier_value_rep(plan, view, semantic_value);
     if (eligibility < 0) {
         XR_VALUE_BINDING_FAIL(2);
     }
@@ -4497,7 +4537,7 @@ static bool verify_value_binding(
             XR_VALUE_BINDING_FAIL(8);
         return true;
     }
-    if (target_plan_layout_for_type(plan, semantic_type) < 0)
+    if (verifier_layout_for_type(plan, view, semantic_type) < 0)
         XR_VALUE_BINDING_FAIL(4);
     /* A direct-local callee is compile-time resolution authority carried by
      * the call record. Its representation remains fingerprinted, but the
@@ -4541,8 +4581,8 @@ static bool verify_value_reps_partition(
     const uint8_t *exact_channel_values, const uint8_t *exact_channel_receives,
     const uint8_t *exact_source_namespaces, const uint8_t *exact_native_module_namespaces,
     uint8_t *bound_slots, uint32_t *failed_value, uint32_t *failed_type, uint32_t *failed_opcode,
-    uint32_t *failure_reason, const XrSemanticPlan **failed_semantic, char *error,
-    size_t error_size) {
+    uint32_t *failure_reason, const XrSemanticPlan **failed_semantic, uint32_t *failed_module,
+    char *error, size_t error_size) {
     const XrSemanticPlan *semantic = view->semantic;
     uint32_t expected_values = 0;
     size_t semantic_functions = xr_semantic_plan_function_count(semantic);
@@ -4599,7 +4639,7 @@ static bool verify_value_reps_partition(
         else if (!defined[parameter->value]) {
             defined[parameter->value] = 1;
             valid = verify_value_binding(
-                plan, semantic, parameter->value, parameter->type, parameter->function, NULL,
+                plan, view, parameter->value, parameter->type, parameter->function, NULL,
                 XR_SEMANTIC_INDEX_NONE, exact_direct_callees, exact_go_callees,
                 exact_channel_values, exact_channel_receives, exact_source_namespaces,
                 exact_native_module_namespaces, bound_slots, deferred_functions, failure_reason);
@@ -4620,7 +4660,7 @@ static bool verify_value_reps_partition(
             else if (!defined[operation->result_value]) {
                 defined[operation->result_value] = 1;
                 valid = verify_value_binding(
-                    plan, semantic, operation->result_value, operation->result_type,
+                    plan, view, operation->result_value, operation->result_type,
                     operation->function, operation, index, exact_direct_callees, exact_go_callees,
                     exact_channel_values, exact_channel_receives, exact_source_namespaces,
                     exact_native_module_namespaces, bound_slots, deferred_functions,
@@ -4641,8 +4681,10 @@ static bool verify_value_reps_partition(
     }
     xr_free(defined);
     xr_free(deferred_functions);
-    if (!valid && !*failed_semantic)
+    if (!valid && !*failed_semantic) {
         *failed_semantic = semantic;
+        *failed_module = view->range.program_module_row;
+    }
     return valid;
 }
 
@@ -4664,6 +4706,7 @@ static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_dir
     uint32_t failed_opcode = XI_OP_COUNT;
     uint32_t failure_reason = 0;
     const XrSemanticPlan *failed_semantic = NULL;
+    uint32_t failed_module = 0;
     bool valid = true;
     for (uint32_t partition = 0; valid && partition < verifier_partition_count(plan); partition++) {
         XrTargetPartitionView view;
@@ -4676,7 +4719,7 @@ static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_dir
             plan, &view, exact_direct_callees, exact_go_callees, exact_channel_values,
             exact_channel_receives, exact_source_namespaces, exact_native_module_namespaces,
             bound_slots, &failed_value, &failed_type, &failed_opcode, &failure_reason,
-            &failed_semantic, error, error_size);
+            &failed_semantic, &failed_module, error, error_size);
     }
     for (uint32_t slot = 0; valid && slot < plan->slots_count; slot++)
         if (!bound_slots[slot])
@@ -4693,8 +4736,8 @@ static bool verify_value_reps(const XrTargetPlan *plan, const uint8_t *exact_dir
             snprintf(error, error_size,
                      "XR_TARGET_1001: value representation binding is incomplete, "
                      "incompatible, or unlocated "
-                     "(value=%u type=%u:%s opcode=%u:%s reason=%u)",
-                     failed_value, failed_type,
+                     "(module=%u value=%u type=%u:%s opcode=%u:%s reason=%u)",
+                     failed_module, failed_value, failed_type,
                      failed_semantic_type && failed_semantic_type->canonical_key
                          ? failed_semantic_type->canonical_key
                          : "<unknown>",
