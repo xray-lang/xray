@@ -93,6 +93,64 @@ record->effects & XI_EFFECT_MAY_SUSPEND == false   ← 问 effects 的层说「�
 
 ---
 
+### 实测影响面：163 条真实分歧，**导致的失败为 0**
+
+在 107 个最可能触发该分歧的用例上插临时探针实测（探针条件正是
+`flags.MAY_SUSPEND != effects.MAY_SUSPEND`，逐条打印 opcode、两侧取值、
+`XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS` 与函数索引）：
+
+```
+分歧记录        163 条，分布在 32 / 107 个用例
+方向            163 / 163 全部是 flags=1 effects=0（单向，无反向）
+占 call 类操作   约 6.23%（分母：各用例末条累计求和 >= 2616 个 XI_CALL/XI_CALL_METHOD）
+```
+
+**按触发点归属**（`retry` 标志与 opcode 唯一确定是四个 lowering 点中的哪个）：
+
+| 条数 | 触发点 | 闸 |
+|---|---|---|
+| **147** | `xi_lower_expr.c:5588` | `lower_call_resumes_by_netpoll_retry`（`XI_CALL`） |
+| **16** | `xi_lower_expr.c:6060` / `:7751` | `xi_lower_method_may_suspend`（`WorkQueue.pop` / `ResultGroup.recv`） |
+| **0** | `xi_lower_expr.c:7747` | `XI_CALL_METHOD` + netpoll retry（本批用例未触及） |
+
+#### 交叉验证：这些分歧一次都没有造成失败
+
+把这 32 个用例与本节那 45 条 `XR_SEM_0019` 求交集，**只有 2 个重合**，而这 2 个的失败是
+`selector=sleep`——走的是第 5 条硬编码分支，**与 flags/effects 分歧无关**：
+
+```
+1159_work_queue_blocking_pop.xr   selector=sleep expected=0 actual=1
+1160_work_queue_close_fanout.xr   selector=sleep expected=0 actual=1
+```
+
+而 147 条分歧的主要来源（net 用例）**通过了 semantic-plan 验证**，失败发生在更后面的
+`XR_TARGET_1000`（program authority，属另一条 lane）：
+
+```
+net_server_lifecycle.xr    分歧 7 条  →  XR_TARGET_1000（不是 XR_SEM_0019）
+net_byte_io_boundary.xr    分歧 7 条  →  XR_TARGET_1000
+```
+
+**结论：163 条分歧在这批用例上导致的 `XR_SEM_0019` 失败数为 0。**
+
+原因是验证层的 `expected` 是**两项析取**，`operation_is_static_suspend`（读 `effects`）判 false 时，
+`dynamic_suspend`（读 call target kind）把它补上了——net 调用的 target kind 落在
+`NATIVE_YIELDABLE` 一类里。
+
+#### 由此得出的定性：**活的，但当前无后果**
+
+这比先前的判断轻一档。分歧是真实、可测、确定性的（163 条），但**两条独立的路径碰巧对同一批
+操作给出了相同的最终答案**。它属于本报告第二节 IDENTITY 那一处同一类：**只靠巧合成立的一致性**。
+
+**所以第 1 组的修复优先级应当下调**，理由不是它不真实，而是它当前不产生失败；
+而它仍然必须修，理由是那个"补上"依赖 `dynamic_suspend` 恰好认得 net 的 target kind——
+一旦某个走 `flags` 闸的调用其 target kind 不在那份名单里，两条路就不再互相掩护。
+
+（sync/async 入口：`flags=1` 使这些操作命中
+`xi_coro_value_carries_suspend_contract`——即协程状态来源的第 2 条分支——所以 Xi 侧一律按
+async 处理；`effects=0` 使验证层的 static 判据一律说 sync。两侧的最终一致完全由
+`dynamic_suspend` 提供。）
+
 ## 一之二、挂起性的**实证最小复现**（4 行源码，确定性，与负载无关）
 
 3 号在 KAT 重算线上撞出、我独立复现了同一个诊断。这是本 packet 里唯一有最小复现的一项。
@@ -584,6 +642,16 @@ src/analysis/xglobal_summary.c:2727   xg_callsite_effects_compose
 **2、`xrt_core_freestanding.h:1271` 的 span 载体判据** —— 与 `xrt_coll.h` 那份逐字相同，
 但该文件**不 include `xrt_coll.h`**，它是 freestanding profile 的独立副本。
 这是 **profile 边界**，不是漂移。
+
+### 已定位、未收敛：pod-elem 判据的第 10 份
+
+`xi_type_is_pod_span_elem`（`src/ir/xi_lower_expr.c:2803`）是这一族的第 10 份拷贝，本轮**未收敛**
+——不是不该收，是时机：集成分支已推进，再开一次抽取会让「哪一次改动对应哪一次验证」失去对应。
+
+接手信息：形参是 `struct XrType *`（其余九份是 `const XrType *` 或 `XrType *`），
+另有配套的 `xi_pod_span_elem_type`（`:2876`）依赖它。共享版是
+`xa_builtin_type_is_pod_span_elem`（`src/frontend/analyzer/xbuiltin_receiver_registry.h:305`，
+本轮已放宽为 `const XrType *`）。**下一轮首选。**
 
 ### 由此得出的一条通则（建议纳入本 lane 的边界）
 
