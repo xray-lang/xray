@@ -1,1 +1,16 @@
-sys.Thread.spawn body cannot suspend; call to suspendable function 'lib.importedSuspends' is not allowed in an OS thread body
+# BLOCKED -- capability gap, not wording drift. A script's module identity
+# authority is rooted at the script's OWN directory
+# (src/module/xmodule_identity.c:320), so importing `../../fixtures/...` is
+# refused as "module '...' escapes or lacks its identity authority"
+# (src/module/xmodule_resolver.c:318) before the frontend ever runs. The
+# assertion below is what this case demands; it stays red until relative
+# imports may leave the entry script's directory.
+#
+# The wording and position below were confirmed against the compiler by
+# compiling the same program with the fixture copied beside it. No error code is
+# pinned: any case with an `import` takes the module-graph path, which prints
+# the uncoded `file:line:col: error: msg` form (src/app/cli/xcmd_run.c:484)
+# rather than the frontend's `error[E0352]:` rendering.
+--> 5:16
+sys.Thread.spawn body cannot suspend
+call to suspendable function 'lib.importedSuspends'

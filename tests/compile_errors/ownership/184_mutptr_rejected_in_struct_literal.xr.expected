@@ -1,1 +1,2 @@
+--> 9:35 E0352
 cannot store raw pointer borrow in struct literal

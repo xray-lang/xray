@@ -1,1 +1,2 @@
+--> 6:21 E0352
 comptime for condition must be evaluable at compile time

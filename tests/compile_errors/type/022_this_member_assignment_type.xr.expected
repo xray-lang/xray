@@ -1,1 +1,3 @@
+--> 9:1 E0352
+misplaced 9:20
 Type 'string' is not assignable to member 'age' (type 'i64')

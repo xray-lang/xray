@@ -1,1 +1,3 @@
+--> 3:26
+misplaced 3:8
 generic type alias 'Pair' expects 1 type arguments, got 2

@@ -1,1 +1,2 @@
+--> 8:5 E0352
 Variable initializer: cannot assign 'i64?' to 'i64' without null check. Use '??' default or '!' unwrap

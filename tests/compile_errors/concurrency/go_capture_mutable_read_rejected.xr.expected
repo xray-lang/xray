@@ -1,2 +1,3 @@
+--> 4:16 E0363
 go closure cannot capture mutable variable 'answer'
 hint: declare 'answer' as const, or pass the value as an explicit go argument (go worker(answer))

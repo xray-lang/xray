@@ -1,1 +1,2 @@
-error[E0208]: expression statement has no effect; its result is discarded
+--> 2:1 E0208
+expression statement has no effect; its result is discarded

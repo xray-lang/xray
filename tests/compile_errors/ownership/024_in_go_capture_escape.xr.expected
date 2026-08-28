@@ -1,1 +1,2 @@
+--> 3:20 E0363
 go closure cannot capture borrowed parameter 'data'

@@ -1,1 +1,3 @@
+--> 8:1
+misplaced 1:9
 @derive(Hash) requires Eq in the same @derive(...)

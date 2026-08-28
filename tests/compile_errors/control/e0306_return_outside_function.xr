@@ -1,0 +1,3 @@
+// `return` 需要一个可返回的调用帧。顶层语句没有帧，这条 return 无处可去。
+var total = 1 + 2
+return total

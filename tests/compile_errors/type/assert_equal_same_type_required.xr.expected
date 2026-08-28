@@ -1,0 +1,11 @@
+--> 3:21 E0356
+assertEqual requires both values to have the same type
+got 'i64' and 'f64'
+
+--> 4:16 E0356
+assertEqual requires both values to have the same type
+got 'i64' and 'f64'
+
+--> 5:18 E0356
+assertEqual requires both values to have the same type
+got 'f64' and 'i64'

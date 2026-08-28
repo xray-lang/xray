@@ -1,1 +1,2 @@
+--> 6:20 E0356
 go argument transfer of type 'JSON.Object' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value

@@ -1,1 +1,3 @@
-error: unknown attribute name
+--> 1:7
+misplaced 1:2
+unknown attribute name

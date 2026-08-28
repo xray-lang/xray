@@ -1,0 +1,3 @@
+--> 10:1 E0359
+misplaced 10:9
+super() must be the first statement

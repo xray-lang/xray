@@ -1,1 +1,4 @@
-Module 'Reflect' not found
+# `Reflect` was removed, so the import must not resolve. Module resolution
+# reports this before it has a source position, hence `--> ?`.
+--> ?
+module 'Reflect' not found

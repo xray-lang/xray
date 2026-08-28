@@ -1,1 +1,2 @@
+--> 2:1 E0352
 comptime break can only be used inside comptime loop

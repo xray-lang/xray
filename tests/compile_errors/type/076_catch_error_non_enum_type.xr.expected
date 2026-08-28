@@ -1,1 +1,2 @@
+--> 2:10 E0352
 catch error type must be an enum error type; use catch panic for runtime faults

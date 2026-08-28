@@ -1,1 +1,2 @@
+--> 6:1 E0352
 type 'Vec2Dyn' does not allow adding field 'z'

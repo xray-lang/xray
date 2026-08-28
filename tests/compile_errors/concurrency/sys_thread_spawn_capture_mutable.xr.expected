@@ -1,1 +1,2 @@
+--> 6:16 E0363
 go closure cannot capture mutable variable 'x'

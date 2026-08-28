@@ -1,1 +1,2 @@
+--> 6:21 E0352
 cannot erase raw pointer borrow provenance with mem.addr

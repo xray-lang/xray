@@ -1,1 +1,2 @@
+--> 6:13 E0382
 cannot move 'buf': a cleanup in this block reads it

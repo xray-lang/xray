@@ -1,0 +1,10 @@
+// 没有 extends 就没有父类构造函数，super() 没有可调用的目标。
+class Point {
+    x: i64
+    constructor(x: i64) {
+        super()
+        this.x = x
+    }
+}
+var p = Point(3)
+print(p.x)

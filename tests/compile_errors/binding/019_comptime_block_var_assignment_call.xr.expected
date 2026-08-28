@@ -1,1 +1,2 @@
+--> 7:5 E0352
 comptime block assignment must be evaluable at compile time

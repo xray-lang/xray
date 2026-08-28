@@ -1,2 +1,5 @@
+--> 2:12 E0354
 Array has no member 'appendFrom'
+
+--> 6:12 E0354
 Array has no member 'repeatFrom'

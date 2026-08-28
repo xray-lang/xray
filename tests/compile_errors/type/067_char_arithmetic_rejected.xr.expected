@@ -1,1 +1,2 @@
+--> 1:13 E0352
 operator '+' is not defined for 'rune' and 'i64'

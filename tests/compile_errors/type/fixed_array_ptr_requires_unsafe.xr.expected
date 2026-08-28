@@ -1,1 +1,2 @@
+--> 2:19 E0354
 Fixed array.ptr() must be inside an unsafe block

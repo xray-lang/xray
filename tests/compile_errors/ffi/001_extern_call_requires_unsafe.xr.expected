@@ -1,1 +1,2 @@
+--> 4:9 E0354
 call to extern function 'abs' must be inside an `unsafe { }` block

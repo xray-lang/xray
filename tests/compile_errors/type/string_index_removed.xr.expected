@@ -1,1 +1,3 @@
+--> 2:1 E0352
+misplaced 2:7
 string does not support integer indexing or slice syntax; use runes(), bytes(), or slice(start, end)

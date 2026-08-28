@@ -1,1 +1,2 @@
+--> 1:6 E0350
 stdlib module 'Coro' has no member 'setLocal'

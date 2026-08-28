@@ -1,1 +1,3 @@
+--> 16:1 E0352
+misplaced 16:12
 Return type mismatch: expected 'Array<u8>', got 'const Array<u8>'

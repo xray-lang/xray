@@ -1,0 +1,7 @@
+--> 8:18 E0356
+Argument 1: type 'string'
+parameter type 'i64'
+
+--> 8:27 E0356
+Argument 2: type 'string'
+parameter type 'i64'

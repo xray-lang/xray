@@ -1,1 +1,2 @@
+--> 5:10 E0385
 generator 'gen' cannot reach the scheduler; call to `Coro.yield()` is not allowed in a body that uses `yield expr`

@@ -1,1 +1,2 @@
+--> 8:1 E0350
 mem.withSliceMut callback rejects argument 'callback': it may suspend

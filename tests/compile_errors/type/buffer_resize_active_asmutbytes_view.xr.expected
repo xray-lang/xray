@@ -1,1 +1,2 @@
+--> 6:12 E0382
 cannot mutate owner 'buffer' while Slice view 'view' is active

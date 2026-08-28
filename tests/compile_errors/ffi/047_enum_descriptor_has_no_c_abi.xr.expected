@@ -1,3 +1,6 @@
+--> 7:24 E0356
 uses enum descriptor type 'EnumVariant<Color>'
 has no stable C ABI
+
+--> 8:8 E0356
 returns enum descriptor type 'EnumVariant<Color>'

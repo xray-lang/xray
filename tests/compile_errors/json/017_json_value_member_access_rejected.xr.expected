@@ -1,1 +1,2 @@
+--> 2:13 E0380
 JSON.Value does not support dot access for 'name'; use JSON.get/require with a JSON.Path or JSON.asObject

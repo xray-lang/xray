@@ -1,2 +1,5 @@
+--> 3:13 E0350
 stdlib module 'mem' has no member 'fromAddress'
+
+--> 4:11 E0350
 stdlib module 'mem' has no member 'addressOf'

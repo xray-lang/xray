@@ -1,1 +1,3 @@
+--> 4:1 E0356
+misplaced 4:14
 mem.store<T>() expects MutPtr<u8> as its first argument, got 'Ptr<u8>'

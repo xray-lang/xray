@@ -1,1 +1,2 @@
+--> 7:1 E0352
 comptime block compound assignment must be evaluable at compile time
