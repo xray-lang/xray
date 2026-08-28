@@ -1,0 +1,23 @@
+// A struct argument crossing a module boundary uses the call-bound-place ABI on
+// both sides. This module names only the functions, never the struct type, so
+// the argument slot's ABI has to be decided from the declaration-owned
+// aggregate layout rather than from a name that happens to be in scope here.
+// Deciding it from the name made the caller pass a plain instance while the
+// callee loaded it as a place. The fixed-array calls are the control: their ABI
+// rests on the type kind alone and was never affected.
+import { take, make, takeArr, makeArr } from "./_value_struct_arg_lib"
+
+fn viaLocal() -> i64 {
+    var p = make(5)
+    return take(p)
+}
+
+fn arrViaLocal() -> i64 {
+    var v = makeArr(2)
+    return takeArr(v)
+}
+
+print(viaLocal())
+print(take(make(7)))
+print(arrViaLocal())
+print(takeArr(makeArr(4)))

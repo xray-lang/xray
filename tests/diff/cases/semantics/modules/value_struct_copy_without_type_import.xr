@@ -1,0 +1,15 @@
+// Assigning a struct copies it. The copy is emitted from the same aggregate
+// layout the call ABI reads, so a module that imports the constructor without
+// naming the type used to skip the copy and alias the source instead - a wrong
+// answer with no diagnostic and no crash.
+import { make } from "./_value_struct_arg_lib"
+
+fn copies() {
+    var p = make(1)
+    var q = p
+    q.a = 99
+    print(p.a)
+    print(q.a)
+}
+
+copies()

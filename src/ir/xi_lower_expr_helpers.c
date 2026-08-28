@@ -6,12 +6,18 @@
 #include "../runtime/class/xclass_info.h"
 #include <string.h>
 
+/* A fixed aggregate layout on the declaration-owned class info is what proves
+ * a value aggregate: the layout is written only for a struct or union
+ * declaration, so its presence is exact. The value-type bit is not, because a
+ * selective import produces a nominal view that does not carry it. Asking that
+ * bit made the answer depend on whether the importing unit happened to have
+ * the type name in scope, which decided the call-bound-place ABI differently
+ * on the two sides of a cross-module call and let a plain instance reach a
+ * place load. The C backend has always read the layout directly. */
 XR_FUNC struct XrAggregateLayout *xi_lower_struct_layout_of(struct XrType *t) {
     if (!t)
         return NULL;
     if (t->kind != XR_KIND_INSTANCE && t->kind != XR_KIND_CLASS)
-        return NULL;
-    if (!t->is_value_type)
         return NULL;
     if (!t->instance.class_ref)
         return NULL;
