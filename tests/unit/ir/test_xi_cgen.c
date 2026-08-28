@@ -843,18 +843,6 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uin
         xr_target_profile_free(target_profile);
         return false;
     }
-    const XrTargetPlan *installed_target = xaot_bundle_program_target_plan(&plan->bundle);
-    if (!installed_target ||
-        !xr_c_emission_plan_build(installed_target, xr_target_profile_fingerprint(target_profile),
-                                  &plan->emission_plan, target_error, sizeof(target_error)) ||
-        !xr_c_emission_plan_is_verified(plan->emission_plan)) {
-        fprintf(stderr, "  CEmission fixture error: %s\n",
-                target_error[0] ? target_error : "unverified CEmission plan");
-        xr_target_plan_free(target_plan);
-        xr_target_profile_free(target_profile);
-        return false;
-    }
-    plan->bundle.module_emission_plans[0] = plan->emission_plan;
     xr_target_plan_free(target_plan);
     xr_target_profile_free(target_profile);
     /* Built before prepare and hung on the bundle, as the driver does. Prepare
