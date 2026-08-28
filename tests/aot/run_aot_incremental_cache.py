@@ -469,14 +469,32 @@ def code_signature_identifier(path: Path, timeout: float | None) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def link_output_entries(cache: Path) -> list[Path]:
+    """The linked binaries this cache holds, one per distinct link identity."""
+    return sorted(
+        path
+        for directory in cache.rglob("bin") if directory.is_dir()
+        for path in directory.iterdir()
+        if path.is_file()
+    )
+
+
 def run_link_output_identity(rec: Recorder, config: Config,
                              ws: workspace.Workspace) -> None:
     """A warm build must not hand one output the binary built for another.
 
     The link output cache is keyed by everything reaching the compiler and the
-    linker except the output the linker was asked to produce. Where the output
-    name reaches the artifact -- Mach-O ad-hoc signing takes its identifier
-    from it -- the second output is served the first one's bytes.
+    linker. The output the linker was asked to produce has to be part of that:
+    where the output name reaches the artifact -- Mach-O ad-hoc signing takes
+    its identifier from it -- the second output is otherwise served the first
+    one's bytes.
+
+    The assertion is on the cache's own entry count rather than on the two
+    binaries' bytes. Comparing bytes needs a baseline for "does the output name
+    reach the artifact at all", and building that baseline in two cache
+    directories varies the cache path as well, which reaches the generated C
+    and moves the bytes on its own. Entry count answers the question the key
+    actually decides, on every platform.
     """
     print("--- link-output-identity ---")
     d = ws.subdir("link-output")
@@ -487,32 +505,33 @@ def run_link_output_identity(rec: Recorder, config: Config,
     second = d / "out" / platform.exe_name("second_program")
     first.parent.mkdir(parents=True, exist_ok=True)
 
-    # Two builds that share nothing establish whether this platform and this
-    # toolchain distinguish the two outputs at all.
-    cold_first = build_quiet(config, d / "cache-a", app, first)
-    cold_second = build_quiet(config, d / "cache-b", app, second)
-    if not require_build(rec, cold_first, "link-output-cold-first"):
-        return
-    if not require_build(rec, cold_second, "link-output-cold-second"):
-        return
-    distinguishable = digest_file(first) != digest_file(second)
-
     shared = d / "cache-shared"
     primed = build_quiet(config, shared, app, first)
-    served = build_quiet(config, shared, app, second)
     if not require_build(rec, primed, "link-output-prime"):
         return
+    after_first = link_output_entries(shared)
+    expect(rec, len(after_first) == 1,
+           "link-output: the first output publishes one linked entry",
+           f"entries={[p.name for p in after_first]}")
+
+    served = build_quiet(config, shared, app, second)
     if not require_build(rec, served, "link-output-warm"):
         return
-    primed_digest = digest_file(first)
-    served_digest = digest_file(second)
+    after_second = link_output_entries(shared)
+    expect(rec, len(after_second) == 2,
+           "link-output: a second output does not reuse the first one's entry",
+           f"after-first={[p.name for p in after_first]}\n"
+           f"after-second={[p.name for p in after_second]}")
 
-    if distinguishable:
-        expect(rec, served_digest != primed_digest,
-               "link-output: a warm output is not the previous output's binary",
-               f"primed={primed_digest}\nserved={served_digest}")
-    else:
-        rec.ok("link-output: outputs are indistinguishable on this toolchain")
+    # Rebuilding the first output must reuse what it already published rather
+    # than adding a third entry, or the key would be separating on something
+    # that changes every run instead of on the output.
+    again = build_quiet(config, shared, app, first)
+    if not require_build(rec, again, "link-output-repeat"):
+        return
+    expect(rec, len(link_output_entries(shared)) == 2,
+           "link-output: repeating an output reuses its entry",
+           f"entries={[p.name for p in link_output_entries(shared)]}")
 
     # Where the platform signs, the identifier names the artifact directly and
     # says which output the served bytes were actually built for.
