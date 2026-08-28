@@ -93,7 +93,38 @@ copy   move      set         volatileStore
 `pass_ifconv_select_shape` / `object_optional_sparse_fields`）——
 `run_backend_diff.py` 明说「The list may only shrink」，它们和 mem 无关，是上一轮的遗留。
 
-## 四、留给后面的人
+## 四、A/B 对照：本分支的红全部是基线红
+
+用 `git worktree add <tmp> 34be0379c` 建了一棵基线树，同样的
+`-DXRAY_STDLIB_VM_FASTPATHS=OFF -DXRAY_PYTHON=/opt/homebrew/bin/python3` 配置构建，
+逐项对跑：
+
+| 项 | 基线 `34be0379c` | 本分支 | 判定 |
+|---|---|---|---|
+| `test_xi_cgen` | EXIT=134，PASS=**42**，止于 `cgen_span_passed_only_to_direct_call_omits_data_cache` | EXIT=134，PASS=**42**，止于同一个 | 逐字相同 |
+| `test_xi_lower` | EXIT=134，止于 `class_field_access_lowers_with_global_evidence_id` | 同上 | 逐字相同 |
+| `test_analyzer` | 130 passed / **1** failed（`gunzip_contract != NULL`，compress 迁移遗留） | 130 passed / **1** failed（同一项） | 逐字相同 |
+| `aot_filetests` | **34 passed, 531 failed, 1 skipped** | **34 passed, 531 failed, 1 skipped** | 逐字相同 |
+| `compile_error_tests` | **18** 个失败（sys_thread_spawn / reflect / gc / parallel_callback / shared_derived / slice_active_view） | **18** 个，同一批 | 逐字相同 |
+| `c_interop_surface_residue` | `ACTIVE_REMOVED_RAW_POINTER_TYPE: 1`（`src/shared/xr_null_test_core.h:11` 注释里的 "RawPtr" 一词） | 同 | 逐字相同 |
+| `run_freestanding_allowlist_tests.py` | 1 passed / **5** failed，五个模块全报 `XR_TARGET_1000: canonical freestanding hook provider contract is invalid` | 同 | 逐字相同 |
+| `xray build --native --dump-xaot-plan --profile freestanding freestanding_mem_core.xr` | `XR_TARGET_1000: canonical freestanding hook provider contract is invalid` | 同 | 逐字相同 |
+| `codegen.opaque` + `parallel.map` 探针 | `XR_SEM_0019: coroutine state count disagrees with grounded call authority` | 同 | 逐字相同 |
+
+`aot_filetests` 里 mem 那 11 个用例（6 组 link + 5 个 cgen）在两边的失败行**逐字相同**，
+包括两个负例 `freestanding_mem_free_removed` / `freestanding_mem_free_selective_removed`
+的 `missing: stdlib module 'mem' has no member 'free'`：它们在基线上就已经因为
+AOT fail-closed 而拿不到那条诊断。手工用 `xray run` 跑它们，两边都正确地输出
+`stdlib module 'mem' has no member 'free'`。
+
+唯一一处**本 lane 一度引入、已修复**的红：删掉 .def 行同时带走了
+`allocation: "no_heap"` 元数据，`alloc_module_contract` 查不到契约，
+`test_analyzer.c:1960` 的 `rawSliceProjection` 从 `ALLOC_PROVEN_NONE` 掉到 UNKNOWN。
+修法是让 `alloc_module_contract` 在 builtin 表返回 MISSING 之后回退查
+`xa_intrinsic_by_key`，读 `desc->allocation` —— registry 行既然是声明，
+就该回答 .def 行原来回答的那些问题。
+
+## 五、留给后面的人
 
 - `stdlib/mem/mem.c` 里那 11 个入口函数（3 个 `return xr_int(0)` 的 layout 桩、
   5 个自称 "never valid dynamic calls" 的 `return xr_null()` 桩、以及
