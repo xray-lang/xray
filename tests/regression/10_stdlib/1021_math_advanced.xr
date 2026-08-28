@@ -1,5 +1,8 @@
 // 1021_math_advanced.xr - Math module advanced tests
 // Tests functions not covered by 1020_math.xr
+//
+// clamp is declared (f64, f64, f64) -> f64, so its expected values are floats.
+// sign and randomInt still answer i64 and keep integer expectations.
 
 import math
 
@@ -102,23 +105,23 @@ fn test_exp() {
 
 @test
 fn test_clamp_within() {
-    assertEqual(math.clamp(5, 0, 10), 5)
+    assertEqual(math.clamp(5, 0, 10), 5.0)
 }
 
 @test
 fn test_clamp_below() {
-    assertEqual(math.clamp(-5, 0, 10), 0)
+    assertEqual(math.clamp(-5, 0, 10), 0.0)
 }
 
 @test
 fn test_clamp_above() {
-    assertEqual(math.clamp(15, 0, 10), 10)
+    assertEqual(math.clamp(15, 0, 10), 10.0)
 }
 
 @test
 fn test_clamp_boundary() {
-    assertEqual(math.clamp(0, 0, 10), 0)
-    assertEqual(math.clamp(10, 0, 10), 10)
+    assertEqual(math.clamp(0, 0, 10), 0.0)
+    assertEqual(math.clamp(10, 0, 10), 10.0)
 }
 
 // ===== randomInt =====

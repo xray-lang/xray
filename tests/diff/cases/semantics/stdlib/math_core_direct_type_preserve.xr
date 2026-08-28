@@ -1,6 +1,7 @@
-// AOT core-math direct calls must preserve the stdlib runtime's dynamic value
-// shape for integer-preserving helpers. These used to lower to double-only C
-// expressions, producing 42.0/3.0/7.0 and "f64" where the VM produced i64 values.
+// AOT core-math direct calls answer the type math.xr declares, on both backends.
+// abs/min/max/clamp are f64 in and f64 out for every call shape, including one
+// written entirely in integer literals; only floor/ceil/round/trunc and sign
+// answer i64, because that is what their signatures say.
 import math
 import { min as mmin, max as mmax, clamp as cclamp } from math
 
@@ -8,11 +9,9 @@ var a = math.abs(-42)
 print(typeName(a))
 print(a)
 
-var amin = math.abs(math.MIN_I64)
+var amin = math.abs(math.MIN_I64 as f64)
 print(typeName(amin))
-
-print(typeName(math.min()))
-print(math.min())
+print(amin > 0.0)
 
 var mn = math.min(3, 7, 5)
 print(typeName(mn))

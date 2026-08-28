@@ -51,7 +51,6 @@
 0911_dump_builtin.xr
 0940_edge_cases.xr
 0950_exception.xr
-1020_math.xr
 1106_select.xr
 1111_comprehensive.xr
 1113_select_send.xr

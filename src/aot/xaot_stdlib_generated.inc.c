@@ -34,10 +34,10 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "time.__cpuNanos";
     if (strcmp(symbol, "time.__utcOffsetAt") == 0)
         return "time.__utcOffsetAt";
-    if (strcmp(symbol, "math.random") == 0)
-        return "math.random";
-    if (strcmp(symbol, "math.randomInt") == 0)
-        return "math.randomInt";
+    if (strcmp(symbol, "math.__random") == 0)
+        return "math.__random";
+    if (strcmp(symbol, "math.__randomInt") == 0)
+        return "math.__randomInt";
     if (strcmp(symbol, "compress.__gzip") == 0)
         return "compress.__gzip";
     if (strcmp(symbol, "compress.__gunzip") == 0)
@@ -156,75 +156,57 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
 static bool xaot_stdlib_generated_symbol_is_builtin_direct(const char *symbol) {
     if (!symbol)
         return false;
-    if (strcmp(symbol, "math.abs") == 0)
+    if (strcmp(symbol, "math.__abs") == 0)
         return true;
-    if (strcmp(symbol, "math.floor") == 0)
+    if (strcmp(symbol, "math.__floor") == 0)
         return true;
-    if (strcmp(symbol, "math.ceil") == 0)
+    if (strcmp(symbol, "math.__ceil") == 0)
         return true;
-    if (strcmp(symbol, "math.round") == 0)
+    if (strcmp(symbol, "math.__round") == 0)
         return true;
-    if (strcmp(symbol, "math.sqrt") == 0)
+    if (strcmp(symbol, "math.__sqrt") == 0)
         return true;
-    if (strcmp(symbol, "math.pow") == 0)
+    if (strcmp(symbol, "math.__pow") == 0)
         return true;
-    if (strcmp(symbol, "math.sin") == 0)
+    if (strcmp(symbol, "math.__sin") == 0)
         return true;
-    if (strcmp(symbol, "math.cos") == 0)
+    if (strcmp(symbol, "math.__cos") == 0)
         return true;
-    if (strcmp(symbol, "math.tan") == 0)
+    if (strcmp(symbol, "math.__tan") == 0)
         return true;
-    if (strcmp(symbol, "math.asin") == 0)
+    if (strcmp(symbol, "math.__asin") == 0)
         return true;
-    if (strcmp(symbol, "math.acos") == 0)
+    if (strcmp(symbol, "math.__acos") == 0)
         return true;
-    if (strcmp(symbol, "math.atan") == 0)
+    if (strcmp(symbol, "math.__atan") == 0)
         return true;
-    if (strcmp(symbol, "math.atan2") == 0)
+    if (strcmp(symbol, "math.__atan2") == 0)
         return true;
-    if (strcmp(symbol, "math.log") == 0)
+    if (strcmp(symbol, "math.__log") == 0)
         return true;
-    if (strcmp(symbol, "math.log10") == 0)
+    if (strcmp(symbol, "math.__log10") == 0)
         return true;
-    if (strcmp(symbol, "math.log2") == 0)
+    if (strcmp(symbol, "math.__log2") == 0)
         return true;
-    if (strcmp(symbol, "math.exp") == 0)
+    if (strcmp(symbol, "math.__exp") == 0)
         return true;
-    if (strcmp(symbol, "math.min") == 0)
+    if (strcmp(symbol, "math.__sinh") == 0)
         return true;
-    if (strcmp(symbol, "math.max") == 0)
+    if (strcmp(symbol, "math.__cosh") == 0)
         return true;
-    if (strcmp(symbol, "math.clamp") == 0)
+    if (strcmp(symbol, "math.__tanh") == 0)
         return true;
-    if (strcmp(symbol, "math.sign") == 0)
+    if (strcmp(symbol, "math.__hypot") == 0)
         return true;
-    if (strcmp(symbol, "math.sinh") == 0)
+    if (strcmp(symbol, "math.__cbrt") == 0)
         return true;
-    if (strcmp(symbol, "math.cosh") == 0)
+    if (strcmp(symbol, "math.__trunc") == 0)
         return true;
-    if (strcmp(symbol, "math.tanh") == 0)
+    if (strcmp(symbol, "math.__fmod") == 0)
         return true;
-    if (strcmp(symbol, "math.hypot") == 0)
+    if (strcmp(symbol, "math.__log1p") == 0)
         return true;
-    if (strcmp(symbol, "math.cbrt") == 0)
-        return true;
-    if (strcmp(symbol, "math.trunc") == 0)
-        return true;
-    if (strcmp(symbol, "math.fmod") == 0)
-        return true;
-    if (strcmp(symbol, "math.log1p") == 0)
-        return true;
-    if (strcmp(symbol, "math.expm1") == 0)
-        return true;
-    if (strcmp(symbol, "math.lerp") == 0)
-        return true;
-    if (strcmp(symbol, "math.degToRad") == 0)
-        return true;
-    if (strcmp(symbol, "math.radToDeg") == 0)
-        return true;
-    if (strcmp(symbol, "math.isNaN") == 0)
-        return true;
-    if (strcmp(symbol, "math.isFinite") == 0)
+    if (strcmp(symbol, "math.__expm1") == 0)
         return true;
     return false;
 }
@@ -232,34 +214,6 @@ static bool xaot_stdlib_generated_symbol_is_builtin_direct(const char *symbol) {
 static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
     if (!symbol)
         return false;
-    if (strcmp(symbol, "math.PI") == 0)
-        return true;
-    if (strcmp(symbol, "math.E") == 0)
-        return true;
-    if (strcmp(symbol, "math.TAU") == 0)
-        return true;
-    if (strcmp(symbol, "math.SQRT2") == 0)
-        return true;
-    if (strcmp(symbol, "math.LN2") == 0)
-        return true;
-    if (strcmp(symbol, "math.LN10") == 0)
-        return true;
-    if (strcmp(symbol, "math.LOG2E") == 0)
-        return true;
-    if (strcmp(symbol, "math.LOG10E") == 0)
-        return true;
-    if (strcmp(symbol, "math.EPSILON") == 0)
-        return true;
-    if (strcmp(symbol, "math.MAX_I64") == 0)
-        return true;
-    if (strcmp(symbol, "math.MIN_I64") == 0)
-        return true;
-    if (strcmp(symbol, "math.MAX_F64") == 0)
-        return true;
-    if (strcmp(symbol, "math.INF") == 0)
-        return true;
-    if (strcmp(symbol, "math.NAN") == 0)
-        return true;
     return false;
 }
 
@@ -267,40 +221,6 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
     const char *symbol) {
     if (!symbol)
         return false;
-    if (strcmp(symbol, "math.PI") == 0)
-        return true;
-    if (strcmp(symbol, "math.E") == 0)
-        return true;
-    if (strcmp(symbol, "math.TAU") == 0)
-        return true;
-    if (strcmp(symbol, "math.SQRT2") == 0)
-        return true;
-    if (strcmp(symbol, "math.LN2") == 0)
-        return true;
-    if (strcmp(symbol, "math.LN10") == 0)
-        return true;
-    if (strcmp(symbol, "math.LOG2E") == 0)
-        return true;
-    if (strcmp(symbol, "math.LOG10E") == 0)
-        return true;
-    if (strcmp(symbol, "math.EPSILON") == 0)
-        return true;
-    if (strcmp(symbol, "math.MAX_I64") == 0)
-        return true;
-    if (strcmp(symbol, "math.MIN_I64") == 0)
-        return true;
-    if (strcmp(symbol, "math.MAX_F64") == 0)
-        return true;
-    if (strcmp(symbol, "math.INF") == 0)
-        return true;
-    if (strcmp(symbol, "math.NAN") == 0)
-        return true;
-    if (strcmp(symbol, "math.min") == 0)
-        return true;
-    if (strcmp(symbol, "math.max") == 0)
-        return true;
-    if (strcmp(symbol, "math.clamp") == 0)
-        return true;
     if (strcmp(symbol, "mem.__fence") == 0)
         return true;
     if (strcmp(symbol, "mem.__prefetch") == 0)

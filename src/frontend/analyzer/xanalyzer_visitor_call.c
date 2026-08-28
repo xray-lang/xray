@@ -4110,13 +4110,16 @@ static bool xa_all_args_are_int(XrType **arg_types, int arg_count) {
 
 static bool xa_freestanding_math_call_supported(const char *member, XrType **arg_types,
                                                 int arg_count) {
+    (void) arg_types;
+    (void) arg_count;
     if (!member)
         return true;
-    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) && arg_count > 0)
-        return xa_all_args_are_int(arg_types, arg_count);
-    if (strcmp(member, "clamp") == 0 && arg_count == 3)
-        return xa_all_args_are_int(arg_types, arg_count);
-    return false;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "math.%s", member);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return false;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(key);
+    return desc && (desc->flags & XA_INTRINSIC_FLAG_FREESTANDING) != 0;
 }
 
 static void xa_check_freestanding_math_call(XaInferContext *ctx, AstNode *node, CallExprNode *call,
@@ -4131,8 +4134,8 @@ static void xa_check_freestanding_math_call(XaInferContext *ctx, AstNode *node, 
     snprintf(feature, sizeof(feature), "math.%s", member);
     xa_freestanding_report_unavailable(
         ctx, node, feature,
-        "freestanding math currently allows literal constants and i64-only min/max/clamp; "
-        "libm-backed or floating math helpers are hosted-only");
+        "freestanding math allows literal constants and the members that emit without libm; "
+        "libm-backed and system-random math helpers are hosted-only");
 }
 
 static XrParamMode xa_call_param_mode(XrType *callee_type, int slot) {
@@ -6146,24 +6149,6 @@ static void xa_check_transfer_storage_param_arg(XaInferContext *ctx, AstNode *ca
                                &loc);
 }
 
-static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNode *call,
-                                                 XaSymbolLinks *fn_links, XrType **arg_types,
-                                                 int arg_count) {
-    const char *member = xa_math_call_member(ctx, call, fn_links);
-    if (!member)
-        return NULL;
-    if (strcmp(member, "abs") == 0 && arg_count == 1 && xa_all_args_are_int(arg_types, 1))
-        return xr_type_new_int(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
-    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) && arg_count == 0)
-        return xr_type_new_unknown(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
-    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) &&
-        xa_all_args_are_int(arg_types, arg_count))
-        return xr_type_new_int(NULL);
-    if (strcmp(member, "clamp") == 0 && arg_count == 3 && xa_all_args_are_int(arg_types, 3))
-        return xr_type_new_int(NULL);
-    return NULL;
-}
-
 /* ----------------------------------------------------------------------------
  * Function Call Type Inference
  * Handles: argument count/type checking, generic type argument validation,
@@ -7613,12 +7598,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
      * slot per element of the source tuple. Each slot is checked
      * against the next parameter; non-tuple spread sources contribute
      * zero slots (the diagnostic was already emitted above). */
-    const char *math_member = xa_math_call_member(ctx, call, fn_links);
-    bool math_preserves_numeric_shape =
-        math_member && (strcmp(math_member, "abs") == 0 || strcmp(math_member, "min") == 0 ||
-                        strcmp(math_member, "max") == 0 || strcmp(math_member, "clamp") == 0);
-    bool math_first_arg_seen = false;
-    bool math_int_shape = false;
     bool core_assert_equal = fn_sym && fn_sym->is_builtin && fn_links &&
                              fn_links->core_builtin_id == XR_CORE_BUILTIN_ASSERT_EQUAL;
     XaAssertEqualContextKind assert_equal_context_kinds[2] = {
@@ -7798,11 +7777,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     xr_type_non_nullable(ctx->analyzer->isolate, assert_equal_context_type);
             }
         }
-        if (math_preserves_numeric_shape && !math_first_arg_seen) {
-            ctx->expected_type = NULL;
-        } else if (math_preserves_numeric_shape && math_int_shape) {
-            ctx->expected_type = xr_type_new_int(ctx->analyzer->isolate);
-        } else if (assert_equal_context_type) {
+        if (assert_equal_context_type) {
             ctx->expected_type = assert_equal_context_type;
         } else if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             ctx->expected_type = param_type;
@@ -7876,12 +7851,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 arg_type = same_t;
             }
         }
-        if (math_preserves_numeric_shape && !math_first_arg_seen) {
-            math_first_arg_seen = true;
-            math_int_shape = arg_type && XR_TYPE_IS_INT(arg_type);
-        }
-        if (math_preserves_numeric_shape && math_int_shape)
-            param_type = xr_type_new_int(ctx->analyzer->isolate);
         if (effective_arg_types && slot < arg_count)
             effective_arg_types[slot] = arg_type;
         xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name, arg_node,
@@ -8268,11 +8237,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (return_type && json_path_get)
             return_type->is_nullable = true;
     }
-
-    XrType *math_shape_type =
-        xa_math_runtime_shape_return_type(ctx, call, fn_links, effective_arg_types, arg_count);
-    if (math_shape_type)
-        return_type = math_shape_type;
 
     /* copy(x): the deep-copy builtin is an identity over types and must
      * preserve the argument's static type. It is registered as any->any, so

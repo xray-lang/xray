@@ -34,8 +34,8 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"time", "__monotonicNanos", 0, "xrt_time_monotonic_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"time", "__cpuNanos", 0, "xrt_time_cpu_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"time", "__utcOffsetAt", 1, "xrt_time_utc_offset_at", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"math", "random", 0, "xrt_math_random", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"math", "randomInt", 2, "xrt_math_random_int", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"math", "__random", 0, "xrt_math_random", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"math", "__randomInt", 2, "xrt_math_random_int", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"compress", "__gzip", 2, "xrt_compress_gzip", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"compress", "__gunzip", 1, "xrt_compress_gunzip", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"compress", "__deflate", 2, "xrt_compress_deflate", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -219,20 +219,6 @@ typedef struct CgAotStdlibConst {
 } CgAotStdlibConst;
 
 static const CgAotStdlibConst g_aot_stdlib_generated_consts[] = {
-    {"math", "PI", CG_AOT_STDLIB_CONST_F64, "", "3.14159265358979323846", INT64_C(0)},
-    {"math", "E", CG_AOT_STDLIB_CONST_F64, "", "2.71828182845904523536", INT64_C(0)},
-    {"math", "TAU", CG_AOT_STDLIB_CONST_F64, "", "6.28318530717958647692", INT64_C(0)},
-    {"math", "SQRT2", CG_AOT_STDLIB_CONST_F64, "", "1.41421356237309504880", INT64_C(0)},
-    {"math", "LN2", CG_AOT_STDLIB_CONST_F64, "", "0.69314718055994530942", INT64_C(0)},
-    {"math", "LN10", CG_AOT_STDLIB_CONST_F64, "", "2.30258509299404568402", INT64_C(0)},
-    {"math", "LOG2E", CG_AOT_STDLIB_CONST_F64, "", "1.44269504088896340736", INT64_C(0)},
-    {"math", "LOG10E", CG_AOT_STDLIB_CONST_F64, "", "0.43429448190325182765", INT64_C(0)},
-    {"math", "EPSILON", CG_AOT_STDLIB_CONST_F64, "", "2.22044604925031308085e-16", INT64_C(0)},
-    {"math", "MAX_I64", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_MAX},
-    {"math", "MIN_I64", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_MIN},
-    {"math", "MAX_F64", CG_AOT_STDLIB_CONST_F64, "", "1.79769313486231570815e+308", INT64_C(0)},
-    {"math", "INF", CG_AOT_STDLIB_CONST_F64, "", "INFINITY", INT64_C(0)},
-    {"math", "NAN", CG_AOT_STDLIB_CONST_F64, "", "NAN", INT64_C(0)},
 };
 #define CG_AOT_STDLIB_GENERATED_CONST_COUNT ((int) (sizeof(g_aot_stdlib_generated_consts) / sizeof(g_aot_stdlib_generated_consts[0])))
 
@@ -267,75 +253,57 @@ static const CgAotStdlibConst *cg_aot_stdlib_generated_const_for_member(const ch
 static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, const char *name) {
     if (!module || !name)
         return false;
-    if (strcmp(module, "math") == 0 && strcmp(name, "abs") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__abs") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "floor") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__floor") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "ceil") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__ceil") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "round") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__round") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "sqrt") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__sqrt") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "pow") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__pow") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "sin") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__sin") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "cos") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__cos") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "tan") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__tan") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "asin") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__asin") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "acos") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__acos") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "atan") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__atan") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "atan2") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__atan2") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "log") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__log") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "log10") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__log10") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "log2") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__log2") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "exp") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__exp") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "min") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__sinh") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "max") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__cosh") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "clamp") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__tanh") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "sign") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__hypot") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "sinh") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__cbrt") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "cosh") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__trunc") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "tanh") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__fmod") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "hypot") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__log1p") == 0)
         return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "cbrt") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "trunc") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "fmod") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "log1p") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "expm1") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "lerp") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "degToRad") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "radToDeg") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "isNaN") == 0)
-        return true;
-    if (strcmp(module, "math") == 0 && strcmp(name, "isFinite") == 0)
+    if (strcmp(module, "math") == 0 && strcmp(name, "__expm1") == 0)
         return true;
     return false;
 }

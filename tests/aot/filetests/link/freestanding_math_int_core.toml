@@ -7,3 +7,7 @@ main = "freestanding_math_int_core.xr"
 [[export.c]]
 xray = "xray_math_int_core"
 symbol = "xray_math_int_core"
+
+[[export.c]]
+xray = "xray_math_f64_core"
+symbol = "xray_math_f64_core"

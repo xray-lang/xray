@@ -1801,3 +1801,283 @@ ownership = "none"
 effect = "nothrow"
 provider = "libc, reading the process-global time-zone state that tzset(3) installs. Both backends call the same function -- xr_time_utc_offset_at in src/shared/xr_time_offset.h -- which makes this the one leaf here with a single implementation"
 deletion_trigger = "when Xray gains a time-zone database surface, so the local-minus-UTC delta can be computed in time.xr instead of through the C library's process-global TZ state"
+
+[[leaf]]
+module = "math"
+symbol = "__abs"
+class = "machine_intrinsic_leaf"
+abi = "fabs(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_abs; AOT emits the C call from the math.abs intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the magnitude of a double to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__acos"
+class = "machine_intrinsic_leaf"
+abi = "acos(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_acos; AOT emits the C call from the math.acos intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the inverse cosine to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__asin"
+class = "machine_intrinsic_leaf"
+abi = "asin(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_asin; AOT emits the C call from the math.asin intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the inverse sine to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__atan"
+class = "machine_intrinsic_leaf"
+abi = "atan(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_atan; AOT emits the C call from the math.atan intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the inverse tangent to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__atan2"
+class = "machine_intrinsic_leaf"
+abi = "atan2(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_atan2; AOT emits the C call from the math.atan2 intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the inverse tangent of a quotient, with the quadrant taken from both signs to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__cbrt"
+class = "machine_intrinsic_leaf"
+abi = "cbrt(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_cbrt; AOT emits the C call from the math.cbrt intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the real cube root, exact for negative inputs where pow(x, 1.0/3.0) is not to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__ceil"
+class = "machine_intrinsic_leaf"
+abi = "ceil(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_ceil; AOT emits the C call from the math.ceil intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the smallest integral value not below the operand to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__cos"
+class = "machine_intrinsic_leaf"
+abi = "cos(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_cos; AOT emits the C call from the math.cos intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the cosine, with argument reduction over a correctly rounded pi to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__cosh"
+class = "machine_intrinsic_leaf"
+abi = "cosh(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_cosh; AOT emits the C call from the math.cosh intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the hyperbolic cosine to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__exp"
+class = "machine_intrinsic_leaf"
+abi = "exp(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_exp; AOT emits the C call from the math.exp intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the base-e exponential to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__expm1"
+class = "machine_intrinsic_leaf"
+abi = "expm1(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_expm1; AOT emits the C call from the math.expm1 intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state exp(x) - 1 without the cancellation that subtracting 1 afterwards causes near zero to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__floor"
+class = "machine_intrinsic_leaf"
+abi = "floor(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_floor; AOT emits the C call from the math.floor intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the largest integral value not above the operand to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__fmod"
+class = "machine_intrinsic_leaf"
+abi = "fmod(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_fmod; AOT emits the C call from the math.fmod intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the exact floating-point remainder of a division to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__hypot"
+class = "machine_intrinsic_leaf"
+abi = "hypot(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_hypot; AOT emits the C call from the math.hypot intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the Euclidean distance without the intermediate overflow that squaring causes to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__log"
+class = "machine_intrinsic_leaf"
+abi = "log(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_log; AOT emits the C call from the math.log intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the natural logarithm to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__log10"
+class = "machine_intrinsic_leaf"
+abi = "log10(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_log10; AOT emits the C call from the math.log10 intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the base-10 logarithm, more accurate than dividing by log(10) to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__log1p"
+class = "machine_intrinsic_leaf"
+abi = "log1p(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_log1p; AOT emits the C call from the math.log1p intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state log(1 + x) without the cancellation that adding 1 first causes near zero to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__log2"
+class = "machine_intrinsic_leaf"
+abi = "log2(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_log2; AOT emits the C call from the math.log2 intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the base-2 logarithm, more accurate than dividing by log(2) to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__pow"
+class = "machine_intrinsic_leaf"
+abi = "pow(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_pow; AOT emits the C call from the math.pow intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state exponentiation, including the many special cases IEEE-754 fixes for zero, one and infinity operands to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__round"
+class = "machine_intrinsic_leaf"
+abi = "round(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_round; AOT emits the C call from the math.round intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state rounding to nearest with halfway cases away from zero to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__sin"
+class = "machine_intrinsic_leaf"
+abi = "sin(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_sin; AOT emits the C call from the math.sin intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the sine, with argument reduction over a correctly rounded pi to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__sinh"
+class = "machine_intrinsic_leaf"
+abi = "sinh(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_sinh; AOT emits the C call from the math.sinh intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the hyperbolic sine to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__sqrt"
+class = "machine_intrinsic_leaf"
+abi = "sqrt(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_sqrt; AOT emits the C call from the math.sqrt intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the correctly rounded square root, which IEEE-754 requires to be exact to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__tan"
+class = "machine_intrinsic_leaf"
+abi = "tan(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_tan; AOT emits the C call from the math.tan intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the tangent, with argument reduction over a correctly rounded pi to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__tanh"
+class = "machine_intrinsic_leaf"
+abi = "tanh(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_tanh; AOT emits the C call from the math.tanh intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state the hyperbolic tangent to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__trunc"
+class = "machine_intrinsic_leaf"
+abi = "trunc(3)"
+ownership = "none"
+effect = "nothrow"
+provider = "the platform's libm. VM stdlib/math/math.c math_trunc; AOT emits the C call from the math.trunc intrinsic identity, so both halves reach the same routine"
+deletion_trigger = "when Xray arithmetic can state rounding toward zero to the accuracy libm is required to deliver. A polynomial written in Xray would answer a nearby number, and the difference is observable: the VM would then disagree with the AOT backend, which emits the libm call directly"
+
+[[leaf]]
+module = "math"
+symbol = "__random"
+class = "host_abi_leaf"
+abi = "getentropy(2) / getrandom(2); Win32 BCryptGenRandom, reached through src/os/os_random.h xr_random_bytes"
+ownership = "none"
+effect = "nothrow"
+provider = "the kernel's entropy pool. VM stdlib/math/math.c math_random; AOT src/aot/xrt_math.h xrt_math_random. Both draw bytes and reduce them with the one shared mapping in src/shared/xr_math_core.h xr_math_core_random_f64, so the bit pattern to double conversion has a single owner"
+deletion_trigger = "when Xray source can ask the operating system for entropy itself. A deterministic generator written in Xray would not replace this leaf, it would be a different function: the boundary here is the kernel's entropy pool, not the arithmetic that shapes it"
+
+[[leaf]]
+module = "math"
+symbol = "__randomInt"
+class = "host_abi_leaf"
+abi = "the same entropy source as math.__random; the rejection sampling that makes the range uniform is in src/shared/xr_math_core.h xr_math_core_random_i64"
+ownership = "none"
+effect = "nothrow"
+provider = "the kernel's entropy pool. VM stdlib/math/math.c math_randomInt; AOT src/aot/xrt_math.h xrt_math_random_int. The bound handling is shared, so an inclusive range means the same thing on both backends"
+deletion_trigger = "when Xray source can ask the operating system for entropy itself, together with math.__random -- these two describe one entropy source and neither can leave alone"

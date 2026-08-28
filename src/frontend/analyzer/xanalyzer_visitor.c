@@ -14,6 +14,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xa_intrinsic_registry.h"
 #include "xaddressability.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_errorset.h"
@@ -423,15 +424,14 @@ XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name) {
 static bool xa_freestanding_math_member_allowed(const char *member_name) {
     if (!member_name)
         return true;
-    return strcmp(member_name, "PI") == 0 || strcmp(member_name, "E") == 0 ||
-           strcmp(member_name, "TAU") == 0 || strcmp(member_name, "SQRT2") == 0 ||
-           strcmp(member_name, "LN2") == 0 || strcmp(member_name, "LN10") == 0 ||
-           strcmp(member_name, "LOG2E") == 0 || strcmp(member_name, "LOG10E") == 0 ||
-           strcmp(member_name, "EPSILON") == 0 || strcmp(member_name, "MAX_I64") == 0 ||
-           strcmp(member_name, "MIN_I64") == 0 || strcmp(member_name, "MAX_F64") == 0 ||
-           strcmp(member_name, "INF") == 0 || strcmp(member_name, "NAN") == 0 ||
-           strcmp(member_name, "min") == 0 || strcmp(member_name, "max") == 0 ||
-           strcmp(member_name, "clamp") == 0;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "math.%s", member_name);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return false;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(key);
+    if (!desc)
+        return true; /* a constant, not a call: it folds to a literal */
+    return (desc->flags & XA_INTRINSIC_FLAG_FREESTANDING) != 0;
 }
 
 XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
@@ -453,7 +453,7 @@ XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *
     }
     if (module_name && strcmp(module_name, "math") == 0) {
         return "libm-backed and system-random math helpers are not part of the freestanding "
-               "no-libc subset yet";
+               "no-libc subset; the members that emit without libm are";
     }
     return "this stdlib member is not part of the freestanding allowlist yet";
 }

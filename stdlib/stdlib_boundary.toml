@@ -102,10 +102,12 @@ perf_suite = "stdlib/time"
 name = "math"
 public = true
 layer = "L1"
-policy = "native_primitive"
-semantic_source = "stdlib/defs/core.def"
+policy = "xray_semantic"
+semantic_source = "stdlib/math/math.xr"
 factory_source = "stdlib/math/math.c"
-public_native = ["E", "EPSILON", "INF", "LN10", "LN2", "LOG10E", "LOG2E", "MAX_F64", "MAX_I64", "MIN_I64", "NAN", "PI", "SQRT2", "TAU", "abs", "acos", "asin", "atan", "atan2", "cbrt", "ceil", "clamp", "cos", "cosh", "degToRad", "exp", "expm1", "floor", "fmod", "hypot", "isFinite", "isNaN", "lerp", "log", "log10", "log1p", "log2", "max", "min", "pow", "radToDeg", "random", "randomInt", "round", "sign", "sin", "sinh", "sqrt", "tan", "tanh", "trunc"]
+public_native = []
+private_native_sources = ["stdlib/math/math.c"]
+private_native_reason = "libm routines whose accuracy contract Xray arithmetic cannot restate, plus the system entropy source, consumed by math.xr"
 perf_suite = "stdlib/math"
 
 [[module]]

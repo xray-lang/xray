@@ -3948,20 +3948,21 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     fprintf(out, "))");
 }
 
+static const XaIntrinsicDesc *xicgen_math_intrinsic_for_member(const char *member) {
+    if (!member)
+        return NULL;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "math.%s", member);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return NULL;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(key);
+    return (desc && desc->family == XA_INTRINSIC_FAMILY_MATH) ? desc : NULL;
+}
+
 static bool xicgen_import_ref_is_core_math_member(const XiImportRef *ref) {
     if (!ref || !ref->module_path || strcmp(ref->module_path, "math") != 0 || !ref->member_name)
         return false;
-    static const char *members[] = {
-        "abs",  "floor", "ceil",  "round",    "sqrt",     "pow",   "sin",   "cos",      "tan",
-        "asin", "acos",  "atan",  "atan2",    "log",      "log10", "log2",  "exp",      "sinh",
-        "cosh", "tanh",  "hypot", "cbrt",     "trunc",    "fmod",  "log1p", "expm1",    "min",
-        "max",  "clamp", "lerp",  "degToRad", "radToDeg", "sign",  "isNaN", "isFinite",
-    };
-    for (int i = 0; i < (int) (sizeof(members) / sizeof(members[0])); i++) {
-        if (strcmp(ref->member_name, members[i]) == 0)
-            return true;
-    }
-    return false;
+    return xicgen_math_intrinsic_for_member(ref->member_name) != NULL;
 }
 
 /* Both defined in xi_cgen_stdlib_helpers.inc.c (included later in this TU). */
@@ -7354,23 +7355,13 @@ static void xicgen_range(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
 }
 
 static bool xicgen_math_result_rep(const char *name, XrRep *out_rep) {
-    if (!name || !out_rep)
+    if (!out_rep)
         return false;
-    if (strcmp(name, "random") == 0) {
-        *out_rep = XR_REP_F64;
-        return true;
-    }
-    if (strcmp(name, "randomInt") == 0) {
-        *out_rep = XR_REP_I64;
-        return true;
-    }
-    if (strcmp(name, "floor") == 0 || strcmp(name, "ceil") == 0 || strcmp(name, "round") == 0 ||
-        strcmp(name, "trunc") == 0 || strcmp(name, "sign") == 0 || strcmp(name, "isNaN") == 0 ||
-        strcmp(name, "isFinite") == 0) {
-        *out_rep = XR_REP_I64;
-        return true;
-    }
-    *out_rep = XR_REP_F64;
+    const XaIntrinsicDesc *desc = xicgen_math_intrinsic_for_member(name);
+    if (!desc)
+        return false;
+    /* isNaN and isFinite answer bool, which shares the i64 representation. */
+    *out_rep = desc->shape_rule.result_native_type == XR_NATIVE_F64 ? XR_REP_F64 : XR_REP_I64;
     return true;
 }
 
@@ -7429,14 +7420,26 @@ static void xicgen_emit_math_f64_minmax(XiCgenCtx *ctx, FILE *out, const XiValue
         xicgen_emit_math_arg(ctx, out, v->args[index]);
         return;
     }
-    fprintf(out, "(isnan(");
+    fprintf(out, "(");
     xicgen_emit_math_arg(ctx, out, v->args[index]);
-    fprintf(out, ") ? NAN : (isnan(");
-    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
-    fprintf(out, ") ? NAN : f%s(", is_min ? "min" : "max");
+    fprintf(out, " != ");
     xicgen_emit_math_arg(ctx, out, v->args[index]);
-    fprintf(out, ", ");
+    fprintf(out, " ? ");
+    xicgen_emit_math_arg(ctx, out, v->args[index]);
+    fprintf(out, " : ((");
     xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ") != (");
+    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ") ? (");
+    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ") : ((");
+    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ") %s ", is_min ? "<" : ">");
+    xicgen_emit_math_arg(ctx, out, v->args[index]);
+    fprintf(out, " ? (");
+    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ") : ");
+    xicgen_emit_math_arg(ctx, out, v->args[index]);
     fprintf(out, ")))");
 }
 
@@ -7479,29 +7482,55 @@ static void xicgen_emit_math_i64_clamp(XiCgenCtx *ctx, FILE *out, const XiValue 
 
 static void xicgen_emit_math_f64_clamp(XiCgenCtx *ctx, FILE *out, const XiValue *x,
                                        const XiValue *lo, const XiValue *hi) {
-    fprintf(out, "(isnan(");
+    fprintf(out, "((");
     xicgen_emit_math_arg(ctx, out, x);
-    fprintf(out, ") || isnan(");
+    fprintf(out, " != ");
+    xicgen_emit_math_arg(ctx, out, x);
+    fprintf(out, ") || (");
     xicgen_emit_math_arg(ctx, out, lo);
-    fprintf(out, ") || isnan(");
+    fprintf(out, " != ");
+    xicgen_emit_math_arg(ctx, out, lo);
+    fprintf(out, ") || (");
     xicgen_emit_math_arg(ctx, out, hi);
-    fprintf(out, ") ? NAN : (((");
+    fprintf(out, " != ");
+    xicgen_emit_math_arg(ctx, out, hi);
+    fprintf(out, ") ? (0.0 / 0.0) : (((");
     xicgen_emit_math_arg(ctx, out, lo);
     fprintf(out, ") <= (");
     xicgen_emit_math_arg(ctx, out, hi);
-    fprintf(out, ")) ? fmin(fmax(");
+    fprintf(out, ")) ? ");
+    fprintf(out, "((");
     xicgen_emit_math_arg(ctx, out, x);
-    fprintf(out, ", ");
+    fprintf(out, ") < (");
     xicgen_emit_math_arg(ctx, out, lo);
-    fprintf(out, "), ");
-    xicgen_emit_math_arg(ctx, out, hi);
-    fprintf(out, ") : fmin(fmax(");
+    fprintf(out, ") ? (");
+    xicgen_emit_math_arg(ctx, out, lo);
+    fprintf(out, ") : ((");
     xicgen_emit_math_arg(ctx, out, x);
-    fprintf(out, ", ");
+    fprintf(out, ") > (");
     xicgen_emit_math_arg(ctx, out, hi);
-    fprintf(out, "), ");
-    xicgen_emit_math_arg(ctx, out, lo);
+    fprintf(out, ") ? (");
+    xicgen_emit_math_arg(ctx, out, hi);
+    fprintf(out, ") : (");
+    xicgen_emit_math_arg(ctx, out, x);
     fprintf(out, ")))");
+    fprintf(out, " : ");
+    fprintf(out, "((");
+    xicgen_emit_math_arg(ctx, out, x);
+    fprintf(out, ") < (");
+    xicgen_emit_math_arg(ctx, out, hi);
+    fprintf(out, ") ? (");
+    xicgen_emit_math_arg(ctx, out, hi);
+    fprintf(out, ") : ((");
+    xicgen_emit_math_arg(ctx, out, x);
+    fprintf(out, ") > (");
+    xicgen_emit_math_arg(ctx, out, lo);
+    fprintf(out, ") ? (");
+    xicgen_emit_math_arg(ctx, out, lo);
+    fprintf(out, ") : (");
+    xicgen_emit_math_arg(ctx, out, x);
+    fprintf(out, ")))");
+    fprintf(out, ")");
 }
 
 static bool xicgen_emit_math_raw_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
@@ -7601,15 +7630,19 @@ static bool xicgen_emit_math_raw_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
         return true;
     }
     if (strcmp(name, "isNaN") == 0 && v->nargs == 1) {
-        fprintf(out, "isnan(");
+        fprintf(out, "((");
         xicgen_emit_math_arg(ctx, out, v->args[0]);
-        fprintf(out, ")");
+        fprintf(out, ") != (");
+        xicgen_emit_math_arg(ctx, out, v->args[0]);
+        fprintf(out, "))");
         return true;
     }
     if (strcmp(name, "isFinite") == 0 && v->nargs == 1) {
-        fprintf(out, "isfinite(");
+        fprintf(out, "(((");
         xicgen_emit_math_arg(ctx, out, v->args[0]);
-        fprintf(out, ")");
+        fprintf(out, ") - (");
+        xicgen_emit_math_arg(ctx, out, v->args[0]);
+        fprintf(out, ")) == 0.0)");
         return true;
     }
 

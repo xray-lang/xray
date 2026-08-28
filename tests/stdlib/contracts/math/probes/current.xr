@@ -1,14 +1,24 @@
 import math
 
+// The legacy int-in/int-out shape is gone.  Every math operand is declared f64
+// and the declaration is the whole truth, so abs/min/max answer f64 no matter
+// how the argument is spelled.  Only the entry points that declare i64 --
+// floor/ceil/round/trunc, sign, randomInt -- still answer i64.
 var absolute = math.abs(-42)
 var minimum = math.min(9, 4, 6)
 var maximum = math.max(9, 4, 6)
-assert(typeName(absolute) == "i64")
-assert(absolute == 42)
-assert(typeName(minimum) == "i64")
-assert(minimum == 4)
-assert(typeName(maximum) == "i64")
-assert(maximum == 9)
+assert(typeName(absolute) == "f64")
+assert(absolute == 42.0)
+assert(typeName(minimum) == "f64")
+assert(minimum == 4.0)
+assert(typeName(maximum) == "f64")
+assert(maximum == 9.0)
+var floored = math.floor(3.7)
+assert(typeName(floored) == "i64")
+assert(floored == 3)
+var signed = math.sign(-10.0)
+assert(typeName(signed) == "i64")
+assert(signed == -1)
 print("{\"case\":\"numeric-type-preservation\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
 
 assert(math.sin(0.0) == 0.0)

@@ -1,2 +1,2 @@
-{"case":"numeric-type-preservation","classification":"required","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}
+{"case":"numeric-type-preservation","classification":"removed","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}
 {"case":"transcendental-parity","classification":"required","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}

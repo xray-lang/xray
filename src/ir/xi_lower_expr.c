@@ -2044,62 +2044,33 @@ static const char *lower_math_member_from_callee_symbol(XiLower *l, CallExprNode
 static bool lower_math_call_arity_ok(const char *name, int nargs) {
     if (!name || nargs < 0)
         return false;
-    if (strcmp(name, "min") == 0 || strcmp(name, "max") == 0)
-        return true;
-    if (strcmp(name, "pow") == 0 || strcmp(name, "atan2") == 0 || strcmp(name, "hypot") == 0 ||
-        strcmp(name, "fmod") == 0)
-        return nargs == 2;
-    if (strcmp(name, "clamp") == 0 || strcmp(name, "lerp") == 0)
-        return nargs == 3;
-    static const char *unary[] = {
-        "abs",  "floor", "ceil",  "round", "sqrt",     "sin",      "cos",  "tan",   "asin",
-        "acos", "atan",  "log",   "log10", "log2",     "exp",      "sinh", "cosh",  "tanh",
-        "cbrt", "trunc", "log1p", "expm1", "degToRad", "radToDeg", "sign", "isNaN", "isFinite",
-    };
-    for (int i = 0; i < (int) (sizeof(unary) / sizeof(unary[0])); i++) {
-        if (strcmp(name, unary[i]) == 0)
-            return nargs == 1;
-    }
-    return false;
-}
-
-static bool lower_math_args_all_int(XiValue **arg_vals, int arg_count) {
-    if (!arg_vals || arg_count <= 0)
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "math.%s", name);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
         return false;
-    for (int i = 0; i < arg_count; i++) {
-        if (!arg_vals[i] || !arg_vals[i]->type || !XR_TYPE_IS_INT(arg_vals[i]->type))
-            return false;
-    }
-    return true;
-}
-
-static bool lower_math_call_preserves_int_args(const char *member, XiValue **arg_vals,
-                                               int arg_count) {
-    if (!member || !lower_math_args_all_int(arg_vals, arg_count))
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(key);
+    if (!desc || desc->family != XA_INTRINSIC_FAMILY_MATH)
         return false;
-    return (strcmp(member, "abs") == 0 && arg_count == 1) || strcmp(member, "min") == 0 ||
-           strcmp(member, "max") == 0 || (strcmp(member, "clamp") == 0 && arg_count == 3);
+    if (desc->id == XA_INTRINSIC_MATH_MIN || desc->id == XA_INTRINSIC_MATH_MAX)
+        return nargs >= 1;
+    return nargs == (int) desc->max_arity;
 }
 
+/* The registry's result_native column is the declared return type. */
 static struct XrType *lower_math_call_result_type(XiLower *l, const char *member,
                                                   XiValue **arg_vals, int arg_count) {
-    if (strcmp(member, "abs") == 0 && arg_count == 1 &&
-        lower_math_args_all_int(arg_vals, arg_count))
-        return l->type_any;
-    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) && arg_count == 0)
-        return l->type_any;
-    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) &&
-        lower_math_args_all_int(arg_vals, arg_count))
-        return l->type_int;
-    if (strcmp(member, "clamp") == 0 && arg_count == 3 &&
-        lower_math_args_all_int(arg_vals, arg_count))
-        return l->type_int;
-    if (strcmp(member, "floor") == 0 || strcmp(member, "ceil") == 0 ||
-        strcmp(member, "round") == 0 || strcmp(member, "trunc") == 0 || strcmp(member, "sign") == 0)
-        return l->type_int;
-    if (strcmp(member, "isNaN") == 0 || strcmp(member, "isFinite") == 0)
+    (void) arg_vals;
+    (void) arg_count;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "math.%s", member ? member : "");
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return l->type_float;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(key);
+    if (!desc || desc->family != XA_INTRINSIC_FAMILY_MATH)
+        return l->type_float;
+    if (desc->id == XA_INTRINSIC_MATH_IS_NAN || desc->id == XA_INTRINSIC_MATH_IS_FINITE)
         return l->type_bool;
-    return l->type_float;
+    return desc->shape_rule.result_native_type == XR_NATIVE_F64 ? l->type_float : l->type_int;
 }
 
 static bool lower_type_has_sequence_evidence(const struct XrType *type) {
@@ -5485,23 +5456,12 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
             strcmp(callee_import->module_path, "math") == 0)
             math_callee_member = callee_import->member_name;
     }
-    bool math_preserves_int_args =
-        lower_math_call_preserves_int_args(math_callee_member, arg_vals, n);
-
     if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
         int pc = callee_type->function.param_count;
         for (int i = 0; i < n && i < pc; i++) {
             struct XrType *pt = xr_type_function_param_type(callee_type, i);
             if (!pt || !arg_vals[i] || !arg_vals[i]->type)
                 continue;
-            /* The public math registry uses a float-shaped callable signature,
-             * while abs/min/max/clamp deliberately preserve an all-int call.
-             * Analyzer inference has already selected that effective domain.
-             * Mirror it for imported-member aliases so lowering does not
-             * manufacture an int->float boundary absent from the typed
-             * program's conversion snapshot. */
-            if (math_preserves_int_args)
-                pt = l->type_int;
             if (pt->kind == XR_KIND_TYPE_PARAM && call->type_arg_count > 0 &&
                 callee_type->function.type_param_names) {
                 const char *tp_name = pt->type_param.name;
@@ -7001,7 +6961,11 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     }
     const XaIntrinsicDesc *resolved_desc =
         resolved ? xa_intrinsic_by_id(resolved->intrinsic_id) : NULL;
-    if (resolved_desc && resolved_desc->family != XA_INTRINSIC_FAMILY_PARALLEL)
+    /* A math identity names an operation the AOT backend emits directly; the VM
+     * runs math.xr's own body for it, so lowering leaves the call alone and only
+     * the backend pass consults the identity. */
+    if (resolved_desc && resolved_desc->family != XA_INTRINSIC_FAMILY_PARALLEL &&
+        resolved_desc->family != XA_INTRINSIC_FAMILY_MATH)
         return lower_resolved_intrinsic_call(l, node, call, resolved);
 
     /* The source keyword is lowercase, while the runtime's builtin class is

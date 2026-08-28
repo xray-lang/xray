@@ -1,8 +1,10 @@
 import parallel
 import math
 
+// math.abs is declared (x: f64) -> f64, and i64 does not convert implicitly,
+// so the integer index is spelled into and back out of the f64 domain.
 var values = parallel.map(0..4, (i) -> {
-    return math.abs(0 - i)
+    return math.abs((0 - i) as f64) as i64
 }, parallel.Options(2))
 
 print(values[3])

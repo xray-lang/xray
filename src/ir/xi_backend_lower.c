@@ -42,23 +42,16 @@ static bool backend_import_ref_is_module(const XiImportRef *ref, const char *mod
 static bool backend_math_call_arity_ok(const char *name, int nargs) {
     if (!name || nargs < 0)
         return false;
-    if (strcmp(name, "min") == 0 || strcmp(name, "max") == 0)
-        return true;
-    if (strcmp(name, "pow") == 0 || strcmp(name, "atan2") == 0 || strcmp(name, "hypot") == 0 ||
-        strcmp(name, "fmod") == 0)
-        return nargs == 2;
-    if (strcmp(name, "clamp") == 0 || strcmp(name, "lerp") == 0)
-        return nargs == 3;
-    static const char *unary[] = {
-        "abs",  "floor", "ceil",  "round", "sqrt",     "sin",      "cos",  "tan",   "asin",
-        "acos", "atan",  "log",   "log10", "log2",     "exp",      "sinh", "cosh",  "tanh",
-        "cbrt", "trunc", "log1p", "expm1", "degToRad", "radToDeg", "sign", "isNaN", "isFinite",
-    };
-    for (int i = 0; i < (int) (sizeof(unary) / sizeof(unary[0])); i++) {
-        if (strcmp(name, unary[i]) == 0)
-            return nargs == 1;
-    }
-    return false;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "math.%s", name);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return false;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(key);
+    if (!desc || desc->family != XA_INTRINSIC_FAMILY_MATH)
+        return false;
+    if (desc->id == XA_INTRINSIC_MATH_MIN || desc->id == XA_INTRINSIC_MATH_MAX)
+        return nargs >= 1;
+    return nargs == (int) desc->max_arity;
 }
 
 static const char *backend_math_builtin_name(XiFunc *f, const char *member) {

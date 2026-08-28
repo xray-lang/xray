@@ -381,3 +381,80 @@ XA_INTRINSIC(F64_TRY_PARSE, 6006, "core.f64.tryParse", CORE, SCALAR_PARSE, PURE,
 XA_INTRINSIC(STRING_BUILDER_APPEND, 6007,
              "core.StringBuilder." XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER, CORE,
              STRING_BUILDER_APPEND, WRITE_ONLY, MAY_ALLOC, SAFE, 1, 1, NONE, NONE, 0, NONE, 0)
+
+/* Core numeric operations.  stdlib/math/math.xr declares the public surface and
+ * its bodies are the VM/reference semantics; these canonical identities let AOT
+ * emit the operation directly instead of discovering it from a module or
+ * function spelling.  Every operand is f64: the declared signature is the whole
+ * truth, so an integer argument converts and math no longer preserves the
+ * runtime shape of its arguments.  min/max declare a single rest parameter. */
+XA_INTRINSIC(MATH_SQRT, 7001, "math.sqrt", MATH, MATH_SQRT, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_POW, 7002, "math.pow", MATH, MATH_POW, PURE, NO_ALLOC, SAFE,
+             2, 2, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_ABS, 7003, "math.abs", MATH, MATH_ABS, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_FLOOR, 7004, "math.floor", MATH, MATH_FLOOR, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, I64, 1)
+XA_INTRINSIC(MATH_CEIL, 7005, "math.ceil", MATH, MATH_CEIL, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, I64, 1)
+XA_INTRINSIC(MATH_ROUND, 7006, "math.round", MATH, MATH_ROUND, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, I64, 1)
+XA_INTRINSIC(MATH_TRUNC, 7007, "math.trunc", MATH, MATH_TRUNC, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, I64, 1)
+XA_INTRINSIC(MATH_SIN, 7008, "math.sin", MATH, MATH_SIN, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_COS, 7009, "math.cos", MATH, MATH_COS, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_TAN, 7010, "math.tan", MATH, MATH_TAN, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_ASIN, 7011, "math.asin", MATH, MATH_ASIN, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_ACOS, 7012, "math.acos", MATH, MATH_ACOS, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_ATAN, 7013, "math.atan", MATH, MATH_ATAN, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_ATAN2, 7014, "math.atan2", MATH, MATH_ATAN2, PURE, NO_ALLOC, SAFE,
+             2, 2, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_LOG, 7015, "math.log", MATH, MATH_LOG, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_LOG10, 7016, "math.log10", MATH, MATH_LOG10, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_LOG2, 7017, "math.log2", MATH, MATH_LOG2, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_EXP, 7018, "math.exp", MATH, MATH_EXP, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_SINH, 7019, "math.sinh", MATH, MATH_SINH, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_COSH, 7020, "math.cosh", MATH, MATH_COSH, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_TANH, 7021, "math.tanh", MATH, MATH_TANH, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_HYPOT, 7022, "math.hypot", MATH, MATH_HYPOT, PURE, NO_ALLOC, SAFE,
+             2, 2, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_CBRT, 7023, "math.cbrt", MATH, MATH_CBRT, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_FMOD, 7024, "math.fmod", MATH, MATH_FMOD, PURE, NO_ALLOC, SAFE,
+             2, 2, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_LOG1P, 7025, "math.log1p", MATH, MATH_LOG1P, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_EXPM1, 7026, "math.expm1", MATH, MATH_EXPM1, PURE, NO_ALLOC, SAFE,
+             1, 1, NONE, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_LERP, 7027, "math.lerp", MATH, MATH_LERP, PURE, NO_ALLOC, SAFE,
+             3, 3, FREESTANDING, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_DEG_TO_RAD, 7028, "math.degToRad", MATH, MATH_DEG_TO_RAD, PURE, NO_ALLOC, SAFE,
+             1, 1, FREESTANDING, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_RAD_TO_DEG, 7029, "math.radToDeg", MATH, MATH_RAD_TO_DEG, PURE, NO_ALLOC, SAFE,
+             1, 1, FREESTANDING, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_SIGN, 7030, "math.sign", MATH, MATH_SIGN, PURE, NO_ALLOC, SAFE,
+             1, 1, FREESTANDING, F64, 1, I64, 1)
+XA_INTRINSIC(MATH_IS_NAN, 7031, "math.isNaN", MATH, MATH_IS_NAN, PURE, NO_ALLOC, SAFE,
+             1, 1, FREESTANDING, F64, 1, NONE, 1)
+XA_INTRINSIC(MATH_IS_FINITE, 7032, "math.isFinite", MATH, MATH_IS_FINITE, PURE, NO_ALLOC, SAFE,
+             1, 1, FREESTANDING, F64, 1, NONE, 1)
+XA_INTRINSIC(MATH_MIN, 7033, "math.min", MATH, MATH_MIN, PURE, NO_ALLOC, SAFE,
+             1, 1, FREESTANDING, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_MAX, 7034, "math.max", MATH, MATH_MAX, PURE, NO_ALLOC, SAFE,
+             1, 1, FREESTANDING, F64, 1, F64, 1)
+XA_INTRINSIC(MATH_CLAMP, 7035, "math.clamp", MATH, MATH_CLAMP, PURE, NO_ALLOC, SAFE,
+             3, 3, FREESTANDING, F64, 1, F64, 1)
