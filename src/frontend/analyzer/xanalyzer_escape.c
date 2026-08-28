@@ -964,12 +964,6 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             ea_walk(ctx, node->as.throw_stmt.expression);
             break;
 
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                ea_walk(ctx, node->as.print_stmt.exprs[i]);
-            }
-            break;
-
         case AST_EXPR_STMT:
             ea_walk(ctx, node->as.expr_stmt);
             break;

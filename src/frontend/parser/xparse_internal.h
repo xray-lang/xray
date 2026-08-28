@@ -172,7 +172,6 @@ XR_FUNC AstNode *xr_parse_expr_statement(Parser *parser);
 XR_FUNC void xr_parser_reject_effectless_expr_stmt(Parser *parser, const AstNode *expr,
                                                    Token *anchor);
 XR_FUNC AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step);
-XR_FUNC AstNode *xr_parse_print_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_block(Parser *parser);
 XR_FUNC AstNode *xr_parse_if_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_while_statement(Parser *parser);

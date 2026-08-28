@@ -26,11 +26,9 @@ vmcase(OP_ASSERTION) {
     /* The primary instruction is followed by three typed metadata rows.  They
      * are one indivisible bytecode record; orphan marker execution and every
      * malformed field fail closed instead of falling back to a source name. */
-    XrInstruction *_code_end =
-        PROTO_CODE_BASE(cl->proto) + (ptrdiff_t) PROTO_CODE_COUNT(cl->proto);
+    XrInstruction *_code_end = PROTO_CODE_BASE(cl->proto) + (ptrdiff_t) PROTO_CODE_COUNT(cl->proto);
     if (pc + 3 > _code_end || GET_OPCODE(pc[0]) != OP_ASSERTION_FILE ||
-        GET_OPCODE(pc[1]) != OP_ASSERTION_SPAN_START ||
-        GET_OPCODE(pc[2]) != OP_ASSERTION_SPAN_END)
+        GET_OPCODE(pc[1]) != OP_ASSERTION_SPAN_START || GET_OPCODE(pc[2]) != OP_ASSERTION_SPAN_END)
         VM_RUNTIME_ERROR(0, "malformed typed assertion bytecode record");
 
     XrInstruction _file_inst = pc[0];
@@ -46,8 +44,7 @@ vmcase(OP_ASSERTION) {
     uint64_t _end = GETARG_Ax(_end_inst);
     if (_base_reg > MAXARG_A - 2u || _base_reg + 2u >= cl->proto->maxstacksize ||
         GETARG_A(_file_inst) != XR_ASSERTION_PLAN_SCHEMA_VERSION ||
-        _file_index >= PROTO_CONST_COUNT(cl->proto) ||
-        _failure_kind <= XR_ASSERTION_FAILURE_NONE ||
+        _file_index >= PROTO_CONST_COUNT(cl->proto) || _failure_kind <= XR_ASSERTION_FAILURE_NONE ||
         _failure_kind >= XR_ASSERTION_FAILURE_COUNT || _plan_kind <= XR_ASSERTION_KIND_NONE ||
         _plan_kind >= XR_ASSERTION_KIND_COUNT)
         VM_RUNTIME_ERROR(0, "invalid typed assertion bytecode metadata");
@@ -62,13 +59,12 @@ vmcase(OP_ASSERTION) {
         .end_line = (uint32_t) (_end >> 24u),
         .end_column = (uint32_t) (_end & UINT64_C(0xFFFFFF)),
     };
-    if (!xr_assertion_location_is_complete(_source))
+    if (!xr_location_is_complete(_source))
         VM_RUNTIME_ERROR(0, "typed assertion bytecode has an invalid source span");
 
     bool _failed = true;
     if (_plan_kind == XR_ASSERTION_KIND_CONDITION) {
-        if (_failure_kind != XR_ASSERTION_FAILURE_CONDITION_FALSE ||
-            !XR_IS_BOOL(R(_base_reg)))
+        if (_failure_kind != XR_ASSERTION_FAILURE_CONDITION_FALSE || !XR_IS_BOOL(R(_base_reg)))
             VM_RUNTIME_ERROR(0, "condition assertion bytecode violates its typed plan");
         _failed = !XR_TO_BOOL(R(_base_reg));
     } else if (_plan_kind == XR_ASSERTION_KIND_EQUAL) {
@@ -89,8 +85,7 @@ vmcase(OP_ASSERTION) {
         vmbreak;
 
     XrCoroutine *_assertion_coro = (XrCoroutine *) VM_CURRENT_CORO;
-    XrCoroHeap *_assertion_heap =
-        _assertion_coro ? _assertion_coro->heap : vm_exec_local_heap();
+    XrCoroHeap *_assertion_heap = _assertion_coro ? _assertion_coro->heap : vm_exec_local_heap();
 #define XR_VM_ASSERTION_RELEASE(value)                                                             \
     do {                                                                                           \
         if (XR_IS_PTR(value))                                                                      \
@@ -99,8 +94,7 @@ vmcase(OP_ASSERTION) {
     } while (0)
 #define XR_VM_ASSERTION_RELEASE_ACTION_OBSERVATIONS()                                              \
     do {                                                                                           \
-        if (_plan_kind == XR_ASSERTION_KIND_THROWS ||                                              \
-            _plan_kind == XR_ASSERTION_KIND_PANICS) {                                              \
+        if (_plan_kind == XR_ASSERTION_KIND_THROWS || _plan_kind == XR_ASSERTION_KIND_PANICS) {    \
             XR_VM_ASSERTION_RELEASE(R(_base_reg));                                                 \
             XR_VM_ASSERTION_RELEASE(R(_base_reg + 1u));                                            \
         }                                                                                          \
@@ -163,9 +157,7 @@ vmcase(OP_ASSERTION) {
         .caught_panic = _caught_panic_text ? _caught_panic_text->data : NULL,
     };
     int _rendered_size = xr_assertion_failure_render_size(&_failure);
-    char *_rendered = _rendered_size >= 0
-                          ? (char *) xr_malloc((size_t) _rendered_size + 1u)
-                          : NULL;
+    char *_rendered = _rendered_size >= 0 ? (char *) xr_malloc((size_t) _rendered_size + 1u) : NULL;
     const char *_render_error = NULL;
     int _render_error_code = 0;
     if (_rendered_size < 0) {

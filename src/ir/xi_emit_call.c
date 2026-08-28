@@ -1274,17 +1274,49 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         xr_free(parts);
 }
 
-/* Print */
+/* A full-width unsigned integer occupies the same slot shape as a signed one,
+ * so the renderer needs the static sign domain; narrower unsigned types are
+ * always non-negative in that slot and need no marker. */
+static bool xi_print_operand_is_unsigned(const XiValue *operand) {
+    const struct XrType *type = operand ? operand->type : NULL;
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    return type->scalar_rep == XR_NATIVE_U64 || type->scalar_rep == XR_NATIVE_USIZE;
+}
+
+/* Print
+ *
+ * The Xi operation is one group carrying one plan. Bytecode is a projection of
+ * that group: separator placement and termination are derived here from the
+ * plan and the operand ordinal, so no earlier stage encodes them per operand
+ * and the two cannot disagree. A zero-operand group is still a group and emits
+ * its terminator alone.
+ *
+ * The group stays several instructions because rendering an operand may call
+ * back into the interpreter (a user `toString`), which leaves this dispatch;
+ * a single instruction would have nowhere to keep the partially rendered group
+ * across that call. */
 XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
-    if (v->nargs < 1) {
+    const XrPrintPlan *plan = xi_print_plan(v);
+    if (!plan || plan->arity != v->nargs) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    XiEmitReg src = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK)
+    uint8_t terminates = plan->terminator != XR_PRINT_TERMINATOR_NONE ? 1u : 0u;
+    if (v->nargs == 0) {
+        /* Nothing to render; the group still writes what frames it. */
+        emit_inst(ctx, CREATE_ABC(OP_PRINT, 0, 0, (uint8_t) (terminates | XR_PRINT_BC_NO_OPERAND)));
         return;
-    int flags = (int) v->aux_int;
-    emit_inst(ctx,
-              CREATE_ABC(OP_PRINT, src, (uint8_t) (flags & 1), (uint8_t) ((flags >> 1) & 0xFF)));
+    }
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        XiEmitReg src = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint8_t separates = xr_print_plan_operand_needs_separator(plan, a) ? 1u : 0u;
+        uint8_t flags = (uint16_t) (a + 1u) == v->nargs ? terminates : 0u;
+        if (xi_print_operand_is_unsigned(v->args[a]))
+            flags |= XR_PRINT_BC_UNSIGNED;
+        emit_inst(ctx, CREATE_ABC(OP_PRINT, src, separates, flags));
+    }
 }

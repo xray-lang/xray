@@ -536,13 +536,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.expr_stmt = xr_ast_clone_ctx(node->as.expr_stmt, map, mc, clone_ctx);
             break;
 
-        // === Print ===
-        case AST_PRINT_STMT:
-            n->as.print_stmt.expr_count = node->as.print_stmt.expr_count;
-            n->as.print_stmt.exprs = clone_node_array(
-                node->as.print_stmt.exprs, node->as.print_stmt.expr_count, map, mc, clone_ctx);
-            break;
-
         // === Block ===
         case AST_BLOCK:
             n->as.block.count = node->as.block.count;
@@ -1802,11 +1795,6 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             }
             break;
         }
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                collect_instantiation_sites(node->as.print_stmt.exprs[i], registry, collector,
-                                            import_aliases, local_only);
-            break;
         case AST_ARRAY_LITERAL:
             if (node->as.array_literal.is_repeat) {
                 collect_instantiation_sites(node->as.array_literal.repeat_value, registry,
@@ -2168,11 +2156,6 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                     mono_rewrite_type_ref(em->payload_types[i], collector);
             break;
         }
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                rewrite_call_sites(node->as.print_stmt.exprs[i], registry, collector,
-                                   import_aliases);
-            break;
         case AST_ARRAY_LITERAL:
             if (node->as.array_literal.is_repeat) {
                 rewrite_call_sites(node->as.array_literal.repeat_value, registry, collector,

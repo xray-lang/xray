@@ -568,8 +568,7 @@ typedef enum XaParallelFunctionValueStatus {
     XA_PARALLEL_FN_VALUE_DYNAMIC,
 } XaParallelFunctionValueStatus;
 
-static const XrCoreIntrinsicDesc *xa_parallel_core_assertion(XaInferContext *ctx,
-                                                             AstNode *callee) {
+static const XrCoreIntrinsicDesc *xa_parallel_core_assertion(XaInferContext *ctx, AstNode *callee) {
     XaSymbol *sym = ctx && callee ? xa_resolve_variable_symbol(ctx, callee) : NULL;
     const XaSymbolLinks *links = sym ? &sym->links : NULL;
     const XrCoreIntrinsicDesc *desc =
@@ -3177,8 +3176,7 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
             return NULL;
         owner = candidate;
     }
-    if (!owner || !owner->source_path ||
-        !xr_module_identity_authority_valid(&owner->authority))
+    if (!owner || !owner->source_path || !xr_module_identity_authority_valid(&owner->authority))
         return NULL;
     XrModuleId mid;
     char *err = NULL;
@@ -6943,11 +6941,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             break;
         }
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                xa_visit_infer_expr(ctx, node->as.print_stmt.exprs[i]);
-            }
-            break;
         case AST_INDEX_SET: {
             IndexSetNode *is = &node->as.index_set;
             XrType *array_type = NULL;

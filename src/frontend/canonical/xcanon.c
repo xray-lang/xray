@@ -838,14 +838,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.defer_stmt.body);
             break;
 
-        /* ---- Print statement ---- */
-        case AST_PRINT_STMT: {
-            PrintNode *p = &node->as.print_stmt;
-            for (int i = 0; i < p->expr_count; i++)
-                canon_node(ctx, p->exprs[i]);
-            break;
-        }
-
         /* ---- Throw ---- */
         case AST_THROW_STMT:
             canon_node(ctx, node->as.throw_stmt.expression);

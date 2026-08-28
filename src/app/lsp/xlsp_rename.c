@@ -377,12 +377,6 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
             find_symbol_definition(node->as.expr_stmt, ctx);
             break;
 
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                find_symbol_definition(node->as.print_stmt.exprs[i], ctx);
-            }
-            break;
-
         case AST_CALL_EXPR:
             find_symbol_definition(node->as.call_expr.callee, ctx);
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {
@@ -731,12 +725,6 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
 
         case AST_EXPR_STMT:
             collect_rename_locations(node->as.expr_stmt, ctx);
-            break;
-
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                collect_rename_locations(node->as.print_stmt.exprs[i], ctx);
-            }
             break;
 
         case AST_CALL_EXPR:

@@ -104,9 +104,8 @@ typedef enum {
     AST_GROUPING,  // (expr)
 
     // Statement nodes
-    AST_EXPR_STMT,   // Expression statement
-    AST_PRINT_STMT,  // print statement (builtin)
-    AST_BLOCK,       // { ... }
+    AST_EXPR_STMT,  // Expression statement
+    AST_BLOCK,      // { ... }
 
     // Binding nodes
     AST_VAR_DECL,             // var x = 10

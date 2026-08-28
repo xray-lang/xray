@@ -64,7 +64,7 @@ enum {
      * 43: constructions of a class without a declared constructor carry their
      * own callsite kind instead of the open closure kind.
      * 44: nested bodies publish their frozen lexical-parent body identity. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 46,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 47,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -1568,9 +1568,9 @@ XR_FUNC const XgHashEqSummary *xg_global_evidence_find_hash_eq(const XgGlobalEvi
 XR_FUNC bool xg_body_effects_compose_closed_world_calls(const XgGlobalEvidence *evidence,
                                                         const XgBodySummary *body,
                                                         uint32_t *out_effect_bits);
-XR_FUNC bool xg_callsite_effects_compose_closed_world_calls(
-    const XgGlobalEvidence *evidence, const XgCallsiteSummary *call,
-    uint32_t *out_effect_bits);
+XR_FUNC bool xg_callsite_effects_compose_closed_world_calls(const XgGlobalEvidence *evidence,
+                                                            const XgCallsiteSummary *call,
+                                                            uint32_t *out_effect_bits);
 XR_FUNC bool xg_body_reachability_mark_closed_world_calls(const XgGlobalEvidence *evidence,
                                                           XgFuncId root_func_id, uint8_t *reachable,
                                                           uint32_t reachable_count);

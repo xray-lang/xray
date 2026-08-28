@@ -171,9 +171,6 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
         case AST_BLOCK:
             emit_array(w, n->as.block.statements, n->as.block.count);
             return true;
-        case AST_PRINT_STMT:
-            emit_array(w, n->as.print_stmt.exprs, n->as.print_stmt.expr_count);
-            return true;
         case AST_RETURN_STMT:
             emit_array(w, n->as.return_stmt.values, n->as.return_stmt.value_count);
             return true;
@@ -684,10 +681,6 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_name(s, "name", n->as.variable.name);
             return true;
         case AST_BLOCK:
-            return true;
-        case AST_PRINT_STMT:
-            sig_add(s, " skipnull=%d n=%d", n->as.print_stmt.skip_null ? 1 : 0,
-                    n->as.print_stmt.expr_count);
             return true;
         case AST_RETURN_STMT:
             sig_add(s, " n=%d", n->as.return_stmt.value_count);

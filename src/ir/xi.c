@@ -125,6 +125,22 @@ bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
     return true;
 }
 
+/* A plan outlives the AST that produced it, so the source path it points at
+ * must be owned by the same arena as the plan. Both plan families need this,
+ * so the ownership rule is written once. */
+static const char *xi_func_arena_own_source_file(XiFunc *f, const char *file) {
+    if (!f || !file)
+        return NULL;
+    size_t length = strlen(file);
+    if (length >= UINT32_MAX)
+        return NULL;
+    char *owned = (char *) xi_func_arena_alloc(f, (uint32_t) length + 1u);
+    if (!owned)
+        return NULL;
+    memcpy(owned, file, length + 1u);
+    return owned;
+}
+
 bool xi_value_set_assertion_plan(XiFunc *f, XiValue *value, const XrAssertionPlan *plan) {
     if (!f || !value || value->op != XI_ASSERTION || !plan || !xr_assertion_plan_validate(plan))
         return false;
@@ -132,18 +148,26 @@ bool xi_value_set_assertion_plan(XiFunc *f, XiValue *value, const XrAssertionPla
     if (!owned)
         return false;
     *owned = *plan;
-    size_t file_len = strlen(plan->source.file);
-    if (file_len >= UINT32_MAX)
-        return false;
-    char *file = (char *) xi_func_arena_alloc(f, (uint32_t) file_len + 1u);
-    if (!file)
-        return false;
-    memcpy(file, plan->source.file, file_len + 1u);
-    owned->source.file = file;
-    if (!xr_assertion_plan_validate(owned))
+    owned->source.file = xi_func_arena_own_source_file(f, plan->source.file);
+    if (!owned->source.file || !xr_assertion_plan_validate(owned))
         return false;
     value->aux = owned;
     value->aux_kind = XI_AUX_KIND_ASSERTION_PLAN;
+    return true;
+}
+
+bool xi_value_set_print_plan(XiFunc *f, XiValue *value, const XrPrintPlan *plan) {
+    if (!f || !value || value->op != XI_PRINT || !plan || !xr_print_plan_validate(plan))
+        return false;
+    XrPrintPlan *owned = (XrPrintPlan *) xi_func_arena_alloc(f, (uint32_t) sizeof(*owned));
+    if (!owned)
+        return false;
+    *owned = *plan;
+    owned->source.file = xi_func_arena_own_source_file(f, plan->source.file);
+    if (!owned->source.file || !xr_print_plan_validate(owned))
+        return false;
+    value->aux = owned;
+    value->aux_kind = XI_AUX_KIND_PRINT_PLAN;
     return true;
 }
 
@@ -156,12 +180,23 @@ bool xi_value_clone_assertion_plan(XiFunc *f, XiValue *dst, const XiValue *src) 
     return plan && xi_value_set_assertion_plan(f, dst, plan);
 }
 
+bool xi_value_clone_print_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
+    if (!f || !dst || !src)
+        return false;
+    if (src->op != XI_PRINT)
+        return src->aux_kind != XI_AUX_KIND_PRINT_PLAN;
+    const XrPrintPlan *plan = xi_print_plan(src);
+    return plan && xi_value_set_print_plan(f, dst, plan);
+}
+
 bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src) {
     if (!f || !dst || !src || dst->op != src->op)
         return false;
     xi_value_copy_metadata(dst, src);
     if (src->aux_kind == XI_AUX_KIND_ASSERTION_PLAN)
         return xi_value_clone_assertion_plan(f, dst, src);
+    if (src->aux_kind == XI_AUX_KIND_PRINT_PLAN)
+        return xi_value_clone_print_plan(f, dst, src);
     return true;
 }
 

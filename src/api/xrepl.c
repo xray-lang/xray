@@ -55,10 +55,8 @@
 
 static XrCompilerSession *repl_compiler_session_for_isolate(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    const XrTargetProfile *profile =
-        xr_compiler_session_target_profile(session);
-    return profile && xr_target_profile_verify(profile, NULL, 0) ? session
-                                                                  : NULL;
+    const XrTargetProfile *profile = xr_compiler_session_target_profile(session);
+    return profile && xr_target_profile_verify(profile, NULL, 0) ? session : NULL;
 }
 
 XrReplSymbolTable *xr_repl_symbols_new(void) {
@@ -164,10 +162,8 @@ static bool repl_symbol_from_analyzer(XaAnalyzer *analyzer, XrString *name, bool
     return true;
 }
 
-static bool repl_symbols_add_or_update(XrReplSymbolTable *table,
-                                       const XrReplSymbol *published) {
-    if (!table || !published || !published->name || !published->type ||
-        published->symbol_id == 0)
+static bool repl_symbols_add_or_update(XrReplSymbolTable *table, const XrReplSymbol *published) {
+    if (!table || !published || !published->name || !published->type || published->symbol_id == 0)
         return false;
     /* Update existing entry on redefinition */
     for (int i = 0; i < table->count; i++) {
@@ -273,8 +269,7 @@ static bool repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrVMRuntime *
 }
 
 static bool repl_results_append(XrReplSymbolTable *table, const XrReplSymbol *published) {
-    if (!table || !published || !published->name || !published->type ||
-        published->symbol_id == 0)
+    if (!table || !published || !published->name || !published->type || published->symbol_id == 0)
         return false;
     if (table->result_count == table->result_capacity) {
         int next_capacity = table->result_capacity ? table->result_capacity * 2 : 8;
@@ -421,14 +416,32 @@ static void repl_elaborate_last_expr(XrCompilerContext *ctx, AstNode *program, v
 
     AstNode *bind = xr_ast_var_decl(plan->session, plan->result_name, plan->expr,
                                     /*is_const=*/true, /*line=*/0);
-    AstNode *result_ref = xr_ast_variable(plan->session, plan->result_name, plan->expr->line);
+    /* Auto-display is the REPL's own behaviour, expressed in the language: a
+     * guarded ordinary call. Encoding "suppress null" as a flag on print would
+     * make the REPL a second output semantics that every backend has to carry. */
+    int echo_line = plan->expr->line;
+    AstNode *result_ref = xr_ast_variable(plan->session, plan->result_name, echo_line);
+    AstNode *guard_ref = xr_ast_variable(plan->session, plan->result_name, echo_line);
+    AstNode *print_callee = xr_ast_variable(plan->session, "print", echo_line);
     AstNode *print_args[1] = {result_ref};
+    AstNode *print_call =
+        result_ref && print_callee
+            ? xr_ast_call_expr(plan->session, print_callee, print_args, NULL, 1, echo_line)
+            : NULL;
+    AstNode *print_stmt =
+        print_call ? xr_ast_expr_stmt(plan->session, print_call, echo_line) : NULL;
+    AstNode *echo_body = print_stmt ? xr_ast_block(plan->session, echo_line) : NULL;
+    if (echo_body)
+        xr_ast_block_add(plan->session, echo_body, print_stmt);
+    AstNode *null_literal = echo_body ? xr_ast_literal_null(plan->session, echo_line) : NULL;
+    AstNode *not_null =
+        guard_ref && null_literal
+            ? xr_ast_binary(plan->session, AST_BINARY_NE, guard_ref, null_literal, echo_line)
+            : NULL;
     AstNode *print =
-        result_ref ? xr_ast_print_stmt(plan->session, print_args, 1, plan->expr->line) : NULL;
+        not_null ? xr_ast_if_stmt(plan->session, not_null, echo_body, NULL, echo_line) : NULL;
     if (!bind || !print)
         goto done;
-
-    print->as.print_stmt.skip_null = true;
     AstNode **stmts = program->as.program.statements;
     int count = program->as.program.count;
     stmts[count - 1] = bind;
@@ -586,22 +599,19 @@ static AstNode *repl_find_reserved_it_decl(AstNode *program) {
     return NULL;
 }
 
-static void repl_abandon_declaration(
-    XrCompilerSessionReplDeclarationScope *scope,
-    XrCompilerSessionReplDeclarationState state) {
+static void repl_abandon_declaration(XrCompilerSessionReplDeclarationScope *scope,
+                                     XrCompilerSessionReplDeclarationState state) {
     XR_CHECK(xr_compiler_session_repl_declaration_abandon(scope, state),
              "REPL declaration generation abandonment failed");
 }
 
-XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
-                              const char *source,
+XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host, const char *source,
                               const XrModuleIdentityAuthority *authority) {
     XrReplEvalResult result = {.proto = NULL, .status = XR_REPL_EVAL_COMPILE_ERROR};
     XR_DCHECK(session != NULL, "xr_repl_eval: NULL compiler session");
     XR_DCHECK(vm_host != NULL, "xr_repl_eval: NULL VM host");
     XR_DCHECK(source != NULL, "xr_repl_eval: NULL source");
-    const XrTargetProfile *target_profile =
-        xr_compiler_session_target_profile(session);
+    const XrTargetProfile *target_profile = xr_compiler_session_target_profile(session);
     if (!session || !vm_host || !source || !authority ||
         authority->kind != XR_MODULE_IDENTITY_MEMORY ||
         !xr_module_identity_authority_valid(authority) || !target_profile ||
@@ -618,9 +628,8 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
 
     XrReplSymbolTable *repl_symbols = xr_compiler_session_ensure_repl_symbols(session);
     if (!repl_symbols) {
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
 
@@ -628,16 +637,14 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     // repl_plan_* below), so they must not be rejected as effectless (E0208).
     AstNode *ast = xr_parse_repl_unit(session, source);
     if (!ast) {
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
     if (ast->as.program.count > UINT32_MAX) {
         xr_program_destroy(ast);
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
 
@@ -648,9 +655,8 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
                       reserved_decl->line, reserved_decl->column, 0, NULL, NULL);
         xr_diag_print_summary("<repl>", 1, 0, 0);
         xr_program_destroy(ast);
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
 
@@ -664,16 +670,14 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     XaAnalyzer *repl_analyzer = xr_compiler_session_ensure_repl_analyzer(session);
     if (!repl_analyzer) {
         xr_program_destroy(ast);
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
     if (!xr_compiler_session_retain_repl_program(session, ast)) {
         xr_program_destroy(ast);
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
 
@@ -686,9 +690,8 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     /* Create compiler context that borrows the persistent analyzer. */
     XrCompilerContext *ctx = xr_compiler_context_new_with_analyzer(session, repl_analyzer);
     if (!ctx) {
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
     ctx->source_file = "<repl>";
@@ -705,18 +708,16 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     };
     if (!xr_module_identity_from_logical(authority, NULL, &module_identity)) {
         xr_compiler_context_free(ctx);
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
     compile_identity.module_identity = module_identity;
     if (!xr_compiler_session_set_compile_unit_identity(session, &compile_identity)) {
         xr_compiler_context_free(ctx);
         xr_free(module_identity);
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
     XrProto *proto = xr_compile(ctx, ast);
@@ -737,18 +738,16 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     xr_type_set_current_pool(repl_analyzer->type_pool, &repl_analyzer->type_pool->next_type_id);
 
     if (!proto) {
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
 
     result.proto = proto;
     if (xr_execute(vm_host, proto) != 0) {
         result.status = XR_REPL_EVAL_RUNTIME_ERROR;
-        repl_abandon_declaration(
-            &declaration_scope,
-            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME);
+        repl_abandon_declaration(&declaration_scope,
+                                 XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME);
         return result;
     }
 
@@ -773,8 +772,8 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
         xa_scope_set_alias(repl_analyzer->current_scope, REPL_IT_NAME, result_symbol);
     }
 
-    XR_CHECK(xr_compiler_session_repl_declaration_publish(
-                 &declaration_scope, (uint32_t) ast->as.program.count),
+    XR_CHECK(xr_compiler_session_repl_declaration_publish(&declaration_scope,
+                                                          (uint32_t) ast->as.program.count),
              "REPL declaration generation publication failed");
     result.status = XR_REPL_EVAL_OK;
     return result;

@@ -4578,11 +4578,6 @@ static void es_walk_stmt_inner(ErrorSetCtx *ctx, AstNode *node) {
             es_walk_block(ctx, node);
             break;
 
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                es_walk_expr(ctx, node->as.print_stmt.exprs[i]);
-            break;
-
         case AST_DEFER_STMT:
             /* Cleanup errors are validated in an isolated summary after the
              * ordinary function fixpoint. They do not become errors of the

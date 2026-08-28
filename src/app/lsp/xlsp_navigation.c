@@ -354,12 +354,6 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
             collect_refs_from_ast(node->as.expr_stmt, ctx);
             break;
 
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-                collect_refs_from_ast(node->as.print_stmt.exprs[i], ctx);
-            }
-            break;
-
         case AST_CALL_EXPR:
             collect_refs_from_ast(node->as.call_expr.callee, ctx);
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {

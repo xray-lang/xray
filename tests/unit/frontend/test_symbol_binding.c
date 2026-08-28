@@ -120,10 +120,6 @@ static int count_unresolved_vars(AstNode *node) {
             count += count_unresolved_vars(node->as.for_in_stmt.collection);
             count += count_unresolved_vars(node->as.for_in_stmt.body);
             break;
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                count += count_unresolved_vars(node->as.print_stmt.exprs[i]);
-            break;
         case AST_THROW_STMT:
             count += count_unresolved_vars(node->as.throw_stmt.expression);
             break;

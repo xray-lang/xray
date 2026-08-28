@@ -3868,6 +3868,90 @@ static XrCoreBuiltinId lower_core_builtin_id(XiLower *l, AstNode *callee) {
     return symbol && symbol->is_builtin ? symbol->links.core_builtin_id : XR_CORE_BUILTIN_NONE;
 }
 
+/* Call AST nodes do not own a complete delimiter range.  The resolved builtin
+ * variable does own the stable source identity, so freeze the exact
+ * callee-token span instead of inventing a call-expression end.  Every core
+ * intrinsic plan is attributed the same way, so the rule is written once. */
+static XrLocation lower_core_builtin_source(XiLower *l, AstNode *node, CallExprNode *call,
+                                            const XrCoreIntrinsicDesc *desc) {
+    const AstNode *source_node = call ? call->callee : NULL;
+    uint32_t source_line = source_node && source_node->line > 0
+                               ? (uint32_t) source_node->line
+                               : (node && node->line > 0 ? (uint32_t) node->line : 0);
+    uint32_t source_column = source_node && source_node->column > 0
+                                 ? (uint32_t) source_node->column
+                                 : (node && node->column > 0 ? (uint32_t) node->column : 0);
+    XrLocation source = {
+        .file = l && l->analyzer ? l->analyzer->current_file : NULL,
+        .line = source_line,
+        .column = source_column,
+        .end_line = source_line,
+        .end_column = source_column ? source_column + (uint32_t) strlen(desc->source_name) : 0,
+    };
+    return source;
+}
+
+/* Lower one resolved output identity into a single typed Xi operation.
+ *
+ * One source call is one operation: the separator and the terminator are facts
+ * of the plan, so no operand carries a copy of a decision the group already
+ * made, and a zero-argument call is a complete group that still terminates. */
+static XiValue *lower_core_print_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                      XrCoreBuiltinId builtin_id) {
+    const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(builtin_id);
+    if (!desc || desc->category != XR_CORE_INTRINSIC_CATEGORY_OUTPUT)
+        return NULL;
+
+    XrLocation source = lower_core_builtin_source(l, node, call, desc);
+    XrPrintPlan plan;
+    if (xr_print_plan_build(builtin_id, (uint16_t) call->arg_count, source,
+                            XR_CORE_INTRINSIC_TARGET_OUTPUT_ALL, XR_PRINT_CAPABILITY_NONE,
+                            &plan) != XR_PRINT_PLAN_OK) {
+        l->had_error = true;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+
+    XiValue *stack_args[XI_LOWER_VALUE_LIST_STACK_CAP];
+    XiLowerValueList args;
+    xi_lower_value_list_init(&args, stack_args, XI_LOWER_VALUE_LIST_STACK_CAP);
+    for (int i = 0; i < call->arg_count; i++) {
+        XiValue *arg = xi_lower_expr(l, call->arguments[i]);
+        if (!arg) {
+            l->had_error = true;
+            return xi_const_null(l->func, l->cur_block, l->type_null);
+        }
+        /* A unit-typed operand renders as `()`; the static type decides this,
+         * so the renderer never has to distinguish unit from null at run time. */
+        if (arg->type && arg->type->kind == XR_KIND_UNIT)
+            arg = xi_const_str(l->func, l->cur_block, "()", l->type_string);
+        if (!xi_lower_value_list_push(l, &args, arg, XI_LOWER_MAX_VARIADIC_VALUES,
+                                      "print argument count", node->line))
+            return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+
+    XiValue *print =
+        xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, (uint16_t) args.count);
+    if (!print) {
+        l->had_error = true;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    for (int i = 0; i < args.count; i++)
+        print->args[i] = args.items[i];
+    if (!xi_value_set_print_plan(l->func, print, &plan)) {
+        l->had_error = true;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    print->source_span = (XiSourceSpan) {
+        .start_line = source.line,
+        .start_column = source.column,
+        .end_line = source.end_line,
+        .end_column = source.end_column,
+    };
+    print->flags = xi_op_default_effects(XI_PRINT);
+    print->line = (uint32_t) node->line;
+    return xi_const_null(l->func, l->cur_block, l->type_null);
+}
+
 /* Lower one resolved assertion identity into a single typed Xi operation.
  * Argument order is preserved by the linear loop; the optional message is an
  * ordinary operand and therefore cannot be skipped or evaluated twice. */
@@ -3877,23 +3961,7 @@ static XiValue *lower_core_assertion_call(XiLower *l, AstNode *node, CallExprNod
     if (!desc || desc->category != XR_CORE_INTRINSIC_CATEGORY_ASSERTION)
         return NULL;
 
-    /* Call AST nodes do not own a complete delimiter range.  The resolved
-     * builtin variable does own the stable source identity, so freeze the
-     * exact callee-token span instead of inventing a call-expression end. */
-    const AstNode *source_node = call->callee;
-    uint32_t source_line = source_node && source_node->line > 0
-                               ? (uint32_t) source_node->line
-                               : (node->line > 0 ? (uint32_t) node->line : 0);
-    uint32_t source_column = source_node && source_node->column > 0
-                                 ? (uint32_t) source_node->column
-                                 : (node->column > 0 ? (uint32_t) node->column : 0);
-    XrLocation source = {
-        .file = l->analyzer ? l->analyzer->current_file : NULL,
-        .line = source_line,
-        .column = source_column,
-        .end_line = source_line,
-        .end_column = source_column ? source_column + (uint32_t) strlen(desc->source_name) : 0,
-    };
+    XrLocation source = lower_core_builtin_source(l, node, call, desc);
     XrAssertionPlan plan;
     if (xr_assertion_plan_build(builtin_id, (uint16_t) call->arg_count, source,
                                 XR_CORE_INTRINSIC_TARGET_ASSERTION_ALL,
@@ -4049,51 +4117,6 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return v;
     }
-    /* print(...) in expression context (e.g. match arm body).
-     * Statement-level print is handled by AST_PRINT_STMT → lower_print(),
-     * but expression-level calls (AST_CALL_EXPR on variable "print") arrive
-     * here.  Emit XI_PRINT instructions with the same encoding. */
-    if (strcmp(fname, "print") == 0) {
-        int n = (int) call->arg_count;
-        XiValue *stack_args[XI_LOWER_VALUE_LIST_STACK_CAP];
-        XiLowerValueList args;
-        xi_lower_value_list_init(&args, stack_args, XI_LOWER_VALUE_LIST_STACK_CAP);
-        for (int i = 0; i < n; i++) {
-            XiValue *arg = xi_lower_expr(l, call->arguments[i]);
-            if (!arg)
-                return xi_const_null(l->func, l->cur_block, l->type_null);
-            /* Render a unit-typed argument as `()` rather than `null`; see
-             * lower_print for why this is driven by the static type. */
-            if (arg->type && arg->type->kind == XR_KIND_UNIT)
-                arg = xi_const_str(l->func, l->cur_block, "()", l->type_string);
-            if (!xi_lower_value_list_push(l, &args, arg, XI_LOWER_MAX_VARIADIC_VALUES,
-                                          "print argument count", line))
-                return xi_const_null(l->func, l->cur_block, l->type_null);
-        }
-        for (int i = 0; i < args.count; i++) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
-            if (!v)
-                return xi_const_null(l->func, l->cur_block, l->type_null);
-            v->args[0] = args.items[i];
-            int add_space = (i > 0) ? 1 : 0;
-            int newline = (i == args.count - 1) ? 1 : 0;
-            v->aux_int = add_space | (newline << 1);
-            v->flags = xi_op_default_effects(XI_PRINT);
-            v->line = (uint32_t) line;
-        }
-        if (args.count == 0) {
-            /* print() with no args → emit newline */
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
-            if (!v)
-                return xi_const_null(l->func, l->cur_block, l->type_null);
-            v->args[0] = xi_const_null(l->func, l->cur_block, l->type_null);
-            v->aux_int = (1 << 1) | (1 << 4); /* newline + skip_null */
-            v->flags = xi_op_default_effects(XI_PRINT);
-            v->line = (uint32_t) line;
-        }
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
-
     /* Remaining global conversions: string(x), bool(x), and rune(x).
      * Each emits XI_CONVERT with the target type set on the value. */
     if (call->arg_count == 1) {
@@ -6808,9 +6831,8 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
     if (overflow) {
         const MemberAccessNode *member =
             call->callee->type == AST_MEMBER_ACCESS ? &call->callee->as.member_access : NULL;
-        const XrI64OverflowDecisionRow *decision =
-            xr_i64_overflow_decision_for_program_row(
-                l->program_semantics->overflow_decisions, call_index);
+        const XrI64OverflowDecisionRow *decision = xr_i64_overflow_decision_for_program_row(
+            l->program_semantics->overflow_decisions, call_index);
         XiValue *receiver = member ? xi_lower_expr(l, member->object) : NULL;
         XiValue *argument = receiver ? xi_lower_expr(l, call->arguments[0]) : NULL;
         XrType *result_type = xi_lower_node_type(l, node);
@@ -6843,11 +6865,10 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
     XiValue *argument = !product && callee ? xi_lower_expr(l, call->arguments[0]) : NULL;
     XiImportRef *import_ref = callee ? lower_import_ref_from_value(l, callee) : NULL;
     XrType *result_type = xi_lower_node_type(l, node);
-    if (!callee || (!product && (!argument || !argument->type ||
-                                 XR_TYPE_IS_UNKNOWN(argument->type) ||
-                                 XR_TYPE_IS_ERROR(argument->type))) ||
-        !result_type ||
-        XR_TYPE_IS_UNKNOWN(result_type) || XR_TYPE_IS_ERROR(result_type) ||
+    if (!callee ||
+        (!product && (!argument || !argument->type || XR_TYPE_IS_UNKNOWN(argument->type) ||
+                      XR_TYPE_IS_ERROR(argument->type))) ||
+        !result_type || XR_TYPE_IS_UNKNOWN(result_type) || XR_TYPE_IS_ERROR(result_type) ||
         (!product && l->program_semantics->decision &&
          (!lower_scalar_i64_type_is_exact(argument->type) ||
           !lower_scalar_i64_type_is_exact(result_type))) ||
@@ -7853,6 +7874,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         XiValue *core_assertion = lower_core_assertion_call(l, node, call, core_builtin_id);
         if (core_assertion)
             return core_assertion;
+        XiValue *core_print = lower_core_print_call(l, node, call, core_builtin_id);
+        if (core_print)
+            return core_print;
         const XaParallelCallPlan *analyzer_parallel_plan =
             lower_analyzer_parallel_call_plan(l, node);
         if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method) {
@@ -9887,8 +9911,9 @@ static XiValue *lower_template_string(XiLower *l, AstNode *node) {
         XiValue *part = xi_lower_expr(l, ts->parts[i]);
         if (!part)
             return NULL;
-        /* Render a unit-typed interpolation as `()` rather than `null`; see
-         * lower_print for why this is driven by the static type. */
+        /* Render a unit-typed interpolation as `()` rather than `null`. The
+         * static type decides this, so no renderer has to tell unit from null
+         * at run time. */
         if (part->type && part->type->kind == XR_KIND_UNIT)
             part = xi_const_str(l->func, l->cur_block, "()", l->type_string);
         if (!xi_lower_value_list_push(l, &parts, part, XI_LOWER_MAX_VARIADIC_VALUES,

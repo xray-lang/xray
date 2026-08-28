@@ -1,0 +1,6 @@
+// anchor: print-zero-args-among-values
+// A zero-argument print is not a no-op that can be elided: it contributes its
+// own terminator to the byte stream, so it shows up as a blank line between
+// the lines written by prints that carry values.
+print("a")
+print()

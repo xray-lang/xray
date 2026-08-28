@@ -225,11 +225,6 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
             check_node(ctx, node->as.for_in_stmt.body);
             break;
 
-        case AST_PRINT_STMT:
-            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                check_node(ctx, node->as.print_stmt.exprs[i]);
-            break;
-
         case AST_THROW_STMT:
             check_node(ctx, node->as.throw_stmt.expression);
             break;
@@ -761,13 +756,6 @@ TEST(multi_var_decl) {
                             "multi_var_decl");
 }
 
-TEST(print_stmt) {
-    return assert_all_typed("var x = 42\n"
-                            "var y = \"hello\"\n"
-                            "print(x, y, x + 1)\n",
-                            "print_stmt");
-}
-
 TEST(throw_stmt) {
     return assert_all_typed("fn fail() {\n"
                             "    throw \"error\"\n"
@@ -851,7 +839,6 @@ int main(void) {
     run_match_expr();
     run_destructure();
     run_multi_var_decl();
-    run_print_stmt();
     run_throw_stmt();
     run_channel_and_go();
     run_slice_expr();

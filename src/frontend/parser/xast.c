@@ -240,26 +240,6 @@ AstNode *xr_ast_expr_stmt(XrCompilerSession *session, AstNode *expr, int line) {
     return node;
 }
 
-// Create print statement node (supports multiple arguments)
-AstNode *xr_ast_print_stmt(XrCompilerSession *session, AstNode **exprs, int expr_count, int line) {
-    AstNode *node = alloc_node(session, AST_PRINT_STMT, line);
-
-    // Copy expression array
-    if (expr_count > 0 && exprs) {
-        node->as.print_stmt.exprs =
-            (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) expr_count);
-        for (int i = 0; i < expr_count; i++) {
-            node->as.print_stmt.exprs[i] = exprs[i];
-        }
-    } else {
-        node->as.print_stmt.exprs = NULL;
-    }
-    node->as.print_stmt.expr_count = expr_count;
-    node->as.print_stmt.skip_null = false;
-
-    return node;
-}
-
 /* ========== Program Node Operations ========== */
 
 // Create program node
@@ -1527,8 +1507,6 @@ const char *xr_ast_typename(AstNodeType type) {
             return "Grouping";
         case AST_EXPR_STMT:
             return "ExprStmt";
-        case AST_PRINT_STMT:
-            return "PrintStmt";
         case AST_BLOCK:
             return "Block";
         case AST_VAR_DECL:
@@ -1785,14 +1763,6 @@ void xr_ast_print(AstNode *node, int indent) {
         case AST_EXPR_STMT:
             xr_ast_print(node->as.expr_stmt, indent + 1);
             break;
-
-        case AST_PRINT_STMT: {
-            PrintNode *print = &node->as.print_stmt;
-            for (int i = 0; i < print->expr_count; i++) {
-                xr_ast_print(print->exprs[i], indent + 1);
-            }
-            break;
-        }
 
         case AST_BLOCK:
             for (int i = 0; i < node->as.block.count; i++) {

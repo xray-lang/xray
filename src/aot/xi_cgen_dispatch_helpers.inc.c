@@ -4024,12 +4024,10 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     bool found = false;
     int64_t resolved_slot = -1;
-    const XiModule *resolved_module =
-        cg_import_ref_target_module(ctx, ref, &resolved_slot);
+    const XiModule *resolved_module = cg_import_ref_target_module(ctx, ref, &resolved_slot);
     if (resolved_module) {
         const char *tname = resolved_module->name;
-        fprintf(out, "xrt_shared_%s[%lld]", tname ? tname : "mod",
-                (long long) resolved_slot);
+        fprintf(out, "xrt_shared_%s[%lld]", tname ? tname : "mod", (long long) resolved_slot);
         found = true;
     }
     if (!found && ctx && ctx->program_direct_i64_required) {
@@ -4195,17 +4193,16 @@ static void xicgen_assertion(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
     if (adapter == CG_ASSERTION_ADAPTER_FREESTANDING) {
         if (!cg_freestanding_assertion_authorized(ctx, f, plan)) {
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: freestanding assertion has no exact TargetPlan provider binding\n");
+            fprintf(stderr, "[xi_cgen] ERROR: freestanding assertion has no exact TargetPlan "
+                            "provider binding\n");
             cg_ctx_set_error(ctx);
             emit_codegen_abort_expr(out);
             return;
         }
     }
 
-    const XiValue *message = plan->message_operand == XR_ASSERTION_OPERAND_NONE
-                                 ? NULL
-                                 : v->args[plan->message_operand];
+    const XiValue *message =
+        plan->message_operand == XR_ASSERTION_OPERAND_NONE ? NULL : v->args[plan->message_operand];
     if (plan->kind == XR_ASSERTION_KIND_CONDITION) {
         fprintf(out, "%s(",
                 adapter == CG_ASSERTION_ADAPTER_FREESTANDING
@@ -4214,9 +4211,8 @@ static void xicgen_assertion(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     } else if (plan->kind == XR_ASSERTION_KIND_EQUAL) {
         fprintf(out, "%s(",
-                adapter == CG_ASSERTION_ADAPTER_FREESTANDING
-                    ? "xrt_freestanding_assertion_equal"
-                    : "xrt_assertion_equal");
+                adapter == CG_ASSERTION_ADAPTER_FREESTANDING ? "xrt_freestanding_assertion_equal"
+                                                             : "xrt_assertion_equal");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -4230,9 +4226,8 @@ static void xicgen_assertion(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
     fprintf(out, ", ");
     emit_c_string_literal(out, plan->source.file);
-    fprintf(out, ", UINT32_C(%u), UINT32_C(%u), UINT32_C(%u), UINT32_C(%u), ",
-            plan->source.line, plan->source.column, plan->source.end_line,
-            plan->source.end_column);
+    fprintf(out, ", UINT32_C(%u), UINT32_C(%u), UINT32_C(%u), UINT32_C(%u), ", plan->source.line,
+            plan->source.column, plan->source.end_line, plan->source.end_column);
     if (message)
         emit_value_as_rep_ctx(ctx, out, message, XR_REP_TAGGED);
     else
@@ -5461,52 +5456,41 @@ static bool xicgen_generic_body_call_preflight(XiCgenCtx *ctx, FILE *out, const 
     return false;
 }
 
-static bool xicgen_emit_program_direct_i64_call(
-    XiCgenCtx *ctx, FILE *out, const XiFunc *caller, const XiValue *call,
-    const XaotDirectI64TargetView *direct_i64, const char *callee_symbol) {
+static bool xicgen_emit_program_direct_i64_call(XiCgenCtx *ctx, FILE *out, const XiFunc *caller,
+                                                const XiValue *call,
+                                                const XaotDirectI64TargetView *direct_i64,
+                                                const char *callee_symbol) {
     XrCFunctionAbiEmissionView return_abi = {0};
     XrCFunctionAbiEmissionView parameter_abi = {0};
     XrCValueEmissionView result_emission = {0};
     XrCValueEmissionView argument_emission = {0};
     const XiValue *argument = call && call->nargs == 2u ? call->args[1] : NULL;
-    bool exact = ctx && ctx->program_direct_i64_required &&
-                 ctx->program_direct_i64_bound && out && caller && call &&
-                 direct_i64 && direct_i64->callee && argument &&
-                 direct_i64->argument_value == argument && callee_symbol &&
-                 callee_symbol[0] != '\0' &&
-                 cg_program_direct_i64_abi_emission(
-                     ctx, direct_i64->callee, 0u, &return_abi) &&
-                 cg_program_direct_i64_abi_emission(
-                     ctx, direct_i64->callee, 1u, &parameter_abi) &&
-                 cg_value_emission_view(ctx, caller, call, &result_emission) ==
-                     CG_VALUE_EMISSION_FOUND &&
-                 cg_value_emission_view(ctx, caller, argument,
-                                        &argument_emission) ==
-                     CG_VALUE_EMISSION_FOUND &&
-                 return_abi.ordinal == 0u && return_abi.parameter_count == 1u &&
-                 return_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
-                 return_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
-                 return_abi.rep == XR_C_VALUE_REP_I64 && return_abi.c_type &&
-                 strcmp(return_abi.c_type, "int64_t") == 0 &&
-                 parameter_abi.ordinal == 1u &&
-                 parameter_abi.parameter_count == 1u &&
-                 parameter_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
-                 parameter_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
-                 parameter_abi.rep == XR_C_VALUE_REP_I64 &&
-                 parameter_abi.c_type &&
-                 strcmp(parameter_abi.c_type, "int64_t") == 0 &&
-                 result_emission.rep == XR_C_VALUE_REP_I64 &&
-                 result_emission.c_type &&
-                 strcmp(result_emission.c_type, "int64_t") == 0 &&
-                 argument_emission.rep == XR_C_VALUE_REP_I64 &&
-                 argument_emission.c_type &&
-                 strcmp(argument_emission.c_type, "int64_t") == 0;
+    bool exact =
+        ctx && ctx->program_direct_i64_required && ctx->program_direct_i64_bound && out && caller &&
+        call && direct_i64 && direct_i64->callee && argument &&
+        direct_i64->argument_value == argument && callee_symbol && callee_symbol[0] != '\0' &&
+        cg_program_direct_i64_abi_emission(ctx, direct_i64->callee, 0u, &return_abi) &&
+        cg_program_direct_i64_abi_emission(ctx, direct_i64->callee, 1u, &parameter_abi) &&
+        cg_value_emission_view(ctx, caller, call, &result_emission) == CG_VALUE_EMISSION_FOUND &&
+        cg_value_emission_view(ctx, caller, argument, &argument_emission) ==
+            CG_VALUE_EMISSION_FOUND &&
+        return_abi.ordinal == 0u && return_abi.parameter_count == 1u &&
+        return_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
+        return_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
+        return_abi.rep == XR_C_VALUE_REP_I64 && return_abi.c_type &&
+        strcmp(return_abi.c_type, "int64_t") == 0 && parameter_abi.ordinal == 1u &&
+        parameter_abi.parameter_count == 1u && parameter_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
+        parameter_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
+        parameter_abi.rep == XR_C_VALUE_REP_I64 && parameter_abi.c_type &&
+        strcmp(parameter_abi.c_type, "int64_t") == 0 && result_emission.rep == XR_C_VALUE_REP_I64 &&
+        result_emission.c_type && strcmp(result_emission.c_type, "int64_t") == 0 &&
+        argument_emission.rep == XR_C_VALUE_REP_I64 && argument_emission.c_type &&
+        strcmp(argument_emission.c_type, "int64_t") == 0;
     if (!exact) {
         if (ctx)
             ctx->error = true;
-        fprintf(stderr,
-                "[xi_cgen] ERROR: XR_TARGET_1001: program direct-i64 C binding "
-                "is incomplete\n");
+        fprintf(stderr, "[xi_cgen] ERROR: XR_TARGET_1001: program direct-i64 C binding "
+                        "is incomplete\n");
         emit_codegen_abort_expr(out);
         return false;
     }
@@ -5526,13 +5510,14 @@ typedef enum CgNativeTargetLeafStatus {
  * TargetPlan.  No import/module/member spelling participates in this
  * projection: the only C-specific choice is the final numeric leaf-to-symbol
  * mapping. */
-static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
-    const char **out_symbol) {
+static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(XiCgenCtx *ctx,
+                                                               const XiFunc *function,
+                                                               const XiValue *value,
+                                                               const char **out_symbol) {
     if (out_symbol)
         *out_symbol = NULL;
-    if (!ctx || !function || !value || !out_symbol || value->op != XI_CALL ||
-        value->nargs != 1 || !value->args || !value->args[0])
+    if (!ctx || !function || !value || !out_symbol || value->op != XI_CALL || value->nargs != 1 ||
+        !value->args || !value->args[0])
         return CG_NATIVE_TARGET_LEAF_UNCOVERED;
     const XrTargetPlan *target = cg_function_target_plan(ctx, function);
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
@@ -5546,8 +5531,7 @@ static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(
         if (candidate->caller_function != function->semantic_plan_function_index ||
             candidate->result_value != semantic_value ||
             candidate->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
-            candidate->calling_convention !=
-                XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR)
+            candidate->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR)
             continue;
         if (match)
             return CG_NATIVE_TARGET_LEAF_INVALID;
@@ -5555,8 +5539,7 @@ static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(
     }
     if (!match)
         return CG_NATIVE_TARGET_LEAF_UNCOVERED;
-    const XrTargetValueRepRecord *result =
-        xr_target_plan_value_rep(target, semantic_value);
+    const XrTargetValueRepRecord *result = xr_target_plan_value_rep(target, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         result ? xr_target_plan_machine_rep(target, result->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -5570,19 +5553,19 @@ static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(
             instructions[i].immediate_bits == match->id)
             matching_instructions++;
     XrCValueEmissionView emission = {0};
-    bool exact = match->id < call_count && match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
-                 match->callee_function == XR_SEMANTIC_INDEX_NONE &&
-                 match->source_dependency == XR_SEMANTIC_INDEX_NONE &&
-                 match->source_export == XR_SEMANTIC_INDEX_NONE && match->argument_count == 0 &&
-                 match->adapter_count == 0 && match->flags == 0 &&
-                 match->result_mode == XR_TARGET_CALL_VALUE &&
-                 match->result_ownership == XR_TARGET_CALL_NONE && result && register_rep &&
-                 memory_rep && register_rep->kind == XR_MACHINE_REP_I64 &&
-                 memory_rep->kind == XR_MACHINE_REP_I64 && matching_instructions == 1 &&
-                 cg_value_emission_view(ctx, function, value, &emission) ==
-                     CG_VALUE_EMISSION_FOUND &&
-                 emission.rep == XR_C_VALUE_REP_I64 && emission.c_type &&
-                 strcmp(emission.c_type, "int64_t") == 0;
+    bool exact =
+        match->id < call_count && match->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+        match->callee_function == XR_SEMANTIC_INDEX_NONE &&
+        match->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+        match->source_export == XR_SEMANTIC_INDEX_NONE && match->argument_count == 0 &&
+        match->adapter_count == 0 && match->flags == 0 &&
+        match->result_mode == XR_TARGET_CALL_VALUE &&
+        match->result_ownership == XR_TARGET_CALL_NONE && result && register_rep && memory_rep &&
+        register_rep->kind == XR_MACHINE_REP_I64 && memory_rep->kind == XR_MACHINE_REP_I64 &&
+        matching_instructions == 1 &&
+        cg_value_emission_view(ctx, function, value, &emission) == CG_VALUE_EMISSION_FOUND &&
+        emission.rep == XR_C_VALUE_REP_I64 && emission.c_type &&
+        strcmp(emission.c_type, "int64_t") == 0;
     if (!exact)
         return CG_NATIVE_TARGET_LEAF_INVALID;
     switch (match->native_leaf) {
@@ -5594,8 +5577,8 @@ static CgNativeTargetLeafStatus cg_native_target_leaf_i64_call(
     }
 }
 
-static bool cg_native_target_leaf_import_is_exact_callee(
-    XiCgenCtx *ctx, const XiFunc *function, const XiValue *import) {
+static bool cg_native_target_leaf_import_is_exact_callee(XiCgenCtx *ctx, const XiFunc *function,
+                                                         const XiValue *import) {
     if (!ctx || !function || !import || import->op != XI_IMPORT_REF)
         return false;
     bool seen = false;
@@ -5617,8 +5600,9 @@ static bool cg_native_target_leaf_import_is_exact_callee(
                 if (user->args[i] != import)
                     continue;
                 const char *symbol = NULL;
-                if (i != 0 || cg_native_target_leaf_i64_call(ctx, function, user, &symbol) !=
-                                  CG_NATIVE_TARGET_LEAF_EXACT ||
+                if (i != 0 ||
+                    cg_native_target_leaf_i64_call(ctx, function, user, &symbol) !=
+                        CG_NATIVE_TARGET_LEAF_EXACT ||
                     !symbol)
                     return false;
                 seen = true;
@@ -5634,16 +5618,14 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     XiValue *callee = v->args[0];
     XaotLeafAggregateTargetView leaf_aggregate = {0};
     XaotLeafAggregateTargetStatus leaf_status =
-        ctx->program_direct_i64_required
-            ? XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED
-            : cg_leaf_aggregate_call_view(ctx, f, v, &leaf_aggregate);
+        ctx->program_direct_i64_required ? XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED
+                                         : cg_leaf_aggregate_call_view(ctx, f, v, &leaf_aggregate);
     if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
         emit_codegen_abort_expr(out);
         return;
     }
     XaotDirectI64TargetView direct_i64 = {0};
-    XaotDirectI64TargetStatus direct_i64_status =
-        cg_direct_i64_call_view(ctx, f, v, &direct_i64);
+    XaotDirectI64TargetStatus direct_i64_status = cg_direct_i64_call_view(ctx, f, v, &direct_i64);
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
         emit_codegen_abort_expr(out);
         return;
@@ -5662,29 +5644,24 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         fprintf(out, "%s()", native_leaf_symbol);
         return;
     }
-    if (!ctx->program_direct_i64_required &&
-        leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED &&
+    if (!ctx->program_direct_i64_required && leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED &&
         direct_i64_status == XAOT_DIRECT_I64_TARGET_UNCOVERED &&
         xicgen_emit_stdlib_import_call(ctx, out, f, v))
         return;
-    const char *program_call_symbol =
-        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND
-            ? cg_program_direct_i64_symbol(ctx, direct_i64.callee)
-            : NULL;
-    if (ctx->program_direct_i64_required &&
-        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND &&
+    const char *program_call_symbol = direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND
+                                          ? cg_program_direct_i64_symbol(ctx, direct_i64.callee)
+                                          : NULL;
+    if (ctx->program_direct_i64_required && direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND &&
         !program_call_symbol) {
-        fprintf(stderr,
-                "[xi_cgen] ERROR: XR_TARGET_1001: canonical program callee "
-                "C symbol is missing\n");
+        fprintf(stderr, "[xi_cgen] ERROR: XR_TARGET_1001: canonical program callee "
+                        "C symbol is missing\n");
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return;
     }
-    if (ctx->program_direct_i64_required &&
-        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
-        (void) xicgen_emit_program_direct_i64_call(
-            ctx, out, f, v, &direct_i64, program_call_symbol);
+    if (ctx->program_direct_i64_required && direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
+        (void) xicgen_emit_program_direct_i64_call(ctx, out, f, v, &direct_i64,
+                                                   program_call_symbol);
         return;
     }
     CgStaticFunctionCall static_call =
@@ -6040,10 +6017,10 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
 }
 
 static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFunc *f,
-                                                     const XiValue *v) {
+                                                     const XiValue *v, const XiValue *operand) {
     if (!ctx || !v || v->nargs != 1)
         return NULL;
-    const XiValue *arg = v->args[0];
+    const XiValue *arg = operand;
     if (!arg)
         return NULL;
     const XiValue *boxed = NULL;
@@ -6062,10 +6039,10 @@ static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFun
 }
 
 static const XiValue *xicgen_native_bool_print_source(XiCgenCtx *ctx, const XiFunc *f,
-                                                      const XiValue *v) {
+                                                      const XiValue *v, const XiValue *operand) {
     if (!ctx || !v || v->nargs != 1)
         return NULL;
-    const XiValue *arg = v->args[0];
+    const XiValue *arg = operand;
     if (!arg)
         return NULL;
     const XiValue *boxed = NULL;
@@ -6162,8 +6139,10 @@ static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc 
             for (uint16_t ai = 0; ai < user->nargs; ai++) {
                 if (user->args[ai] != box)
                     continue;
-                if (user->op == XI_PRINT && ai == 0 &&
-                    xicgen_native_int_print_source(ctx, f, user) == box->args[0]) {
+                /* A group renders each operand independently, so a box feeding
+                 * any operand position is eliminable, not just the first. */
+                if (user->op == XI_PRINT &&
+                    xicgen_native_int_print_source(ctx, f, user, user->args[ai]) == box->args[0]) {
                     saw_print = true;
                     continue;
                 }
@@ -6174,17 +6153,19 @@ static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc 
     return saw_print;
 }
 
-static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                   const char *span_view_name) {
-    XR_DCHECK(v->nargs >= 1, "xicgen_emit_print_expr: missing print value");
-    int flags = (int) v->aux_int;
-    bool add_space = (flags & 1) != 0;
-    bool newline = (flags & 2) != 0;
-    const XiValue *native_int = xicgen_native_int_print_source(ctx, f, v);
-    const XiValue *native_bool =
-        ctx && !ctx->freestanding_profile ? xicgen_native_bool_print_source(ctx, f, v) : NULL;
-    bool print_span = !native_int && !native_bool && v->args[0] &&
-                      cg_value_plan_is_span_aggregate(ctx, v->args[0]);
+/* Emit one operand of a print group. The separator and terminator decisions
+ * arrive from the group's plan; this function never derives them. */
+static void xicgen_emit_print_operand(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      uint16_t ordinal, bool add_space, bool newline,
+                                      const char *span_view_name) {
+    XR_DCHECK(ordinal < v->nargs, "xicgen_emit_print_operand: operand out of range");
+    const XiValue *operand = v->args[ordinal];
+    const XiValue *native_int = xicgen_native_int_print_source(ctx, f, v, operand);
+    const XiValue *native_bool = ctx && !ctx->freestanding_profile
+                                     ? xicgen_native_bool_print_source(ctx, f, v, operand)
+                                     : NULL;
+    bool print_span =
+        !native_int && !native_bool && operand && cg_value_plan_is_span_aggregate(ctx, operand);
 
     if (ctx && ctx->freestanding_profile) {
         if (add_space)
@@ -6215,7 +6196,7 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 }
                 fprintf(out, ", XR_TAG_ARRAY)");
             } else {
-                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+                emit_value_as_rep_ctx(ctx, out, operand, XR_REP_TAGGED);
             }
             fprintf(out, ")");
         }
@@ -6259,7 +6240,7 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             }
             fprintf(out, ", XR_TAG_ARRAY)");
         } else {
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, operand, XR_REP_TAGGED);
         }
         fprintf(out, ")");
     }
@@ -6267,16 +6248,50 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, ")");
 }
 
+/* One source call is one group. The plan states the separator and terminator;
+ * operands are joined with the C comma operator so the whole group stays a
+ * single expression and its operands keep source order. */
 static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) prefix;
-    xicgen_emit_print_expr(ctx, out, f, v, NULL);
+    const XrPrintPlan *plan = xi_print_plan(v);
+    if (!plan || plan->arity != v->nargs) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: print group lacks its verified plan\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    bool terminates = plan->terminator != XR_PRINT_TERMINATOR_NONE;
+    if (v->nargs == 0) {
+        /* A group with no operands renders nothing and still writes its frame. */
+        if (!terminates)
+            fprintf(out, "(void)0");
+        else if (ctx && ctx->freestanding_profile)
+            fprintf(out, "xrt_write_char('\\n')");
+        else
+            fprintf(out, "putchar('\\n')");
+        return;
+    }
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        if (a > 0)
+            fprintf(out, ", ");
+        xicgen_emit_print_operand(ctx, out, f, v, a, xr_print_plan_operand_needs_separator(plan, a),
+                                  (uint16_t) (a + 1u) == v->nargs && terminates, NULL);
+    }
 }
 
+/* A Slice operand renders through a borrowed view that must live in a scope,
+ * so a group containing one is emitted as a statement. Only a single-operand
+ * group needs this today; a wider group with a Slice operand is refused rather
+ * than silently rendered through a second path. */
 static bool emit_span_print_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                        const XiValue *v) {
-    if (!ctx || !out || !v || v->op != XI_PRINT || v->nargs < 1 || !v->args[0] ||
+    if (!ctx || !out || !v || v->op != XI_PRINT || v->nargs != 1 || !v->args[0] ||
         !cg_value_plan_is_span_aggregate(ctx, v->args[0]))
+        return false;
+    const XrPrintPlan *span_plan = xi_print_plan(v);
+    if (!span_plan || span_plan->arity != 1)
         return false;
 
     char view_name[48];
@@ -6291,7 +6306,8 @@ static bool emit_span_print_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return true;
     }
     fprintf(out, "        (void)(");
-    xicgen_emit_print_expr(ctx, out, f, v, view_name);
+    xicgen_emit_print_operand(ctx, out, f, v, 0, false,
+                              span_plan->terminator != XR_PRINT_TERMINATOR_NONE, view_name);
     fprintf(out, ");\n    }\n");
     emit_value_generated_line_reset(ctx, out, v);
     return true;
@@ -6844,9 +6860,8 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
         if (cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
             xicgen_value_c_storage_rep(ctx, f, v->args[0]) != XR_REP_TAGGED) {
             ctx->error = true;
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: NumberParseError catch narrowing lacks exact ordinal "
-                    "storage\n");
+            fprintf(stderr, "[xi_cgen] ERROR: NumberParseError catch narrowing lacks exact ordinal "
+                            "storage\n");
             emit_codegen_abort_expr(out);
             return;
         }
@@ -7633,8 +7648,6 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
 
     if (bn[0] == '\0' && v->aux_int == 0 && v->nargs == 0) {
         fprintf(out, "XR_FROM_BOOL(false)");
-    } else if (strcmp(bn, "print") == 0) {
-        xicgen_emit_print_expr(ctx, out, f, v, NULL);
     } else if (strcmp(bn, "str_concat") == 0) {
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {
@@ -7890,8 +7903,7 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
         if (emit_typed_array_push_expr(ctx, out, f, prefix, v, v->args[0], v->args[1]))
             return true;
         CgArrayElemInfo info;
-        if (cg_array_value_storage_info(ctx, f, v->args[0], &info,
-                                        CG_ARRAY_STORAGE_MUTABLE) &&
+        if (cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_MUTABLE) &&
             info.rep == XR_REP_TAGGED) {
             (void) cg_value_emission_fail(
                 ctx, "tagged Array.push reached legacy selector-based emission");
@@ -9868,8 +9880,8 @@ static bool xicgen_assert_is_parallel_body_safe(XiCgenCtx *ctx, const XiFunc *cu
                                                 const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
     const XrAssertionPlan *plan = xi_assertion_plan(v);
-    if (!v || v->op != XI_ASSERTION || !plan ||
-        plan->kind != XR_ASSERTION_KIND_CONDITION || v->nargs < 1 || !v->args[0])
+    if (!v || v->op != XI_ASSERTION || !plan || plan->kind != XR_ASSERTION_KIND_CONDITION ||
+        v->nargs < 1 || !v->args[0])
         return false;
 
     const XiValue *cond = cg_unwrap_identity_value(v->args[0]);
@@ -12735,8 +12747,9 @@ static bool xicgen_emit_struct_place_field_lvalue(XiCgenCtx *ctx, FILE *out, con
     return true;
 }
 
-static const XrSemanticOperationRecord *xicgen_leaf_semantic_value_producer(
-    const XrSemanticPlan *semantic, uint32_t function, uint32_t value) {
+static const XrSemanticOperationRecord *
+xicgen_leaf_semantic_value_producer(const XrSemanticPlan *semantic, uint32_t function,
+                                    uint32_t value) {
     const XrSemanticOperationRecord *producer = NULL;
     if (!semantic || value == XR_SEMANTIC_INDEX_NONE)
         return NULL;
@@ -12764,8 +12777,7 @@ static bool xicgen_leaf_semantic_operand_value(const XrSemanticOperandRecord *op
     return true;
 }
 
-static bool xicgen_leaf_value_belongs_to_function(const XiFunc *function,
-                                                  const XiValue *value) {
+static bool xicgen_leaf_value_belongs_to_function(const XiFunc *function, const XiValue *value) {
     if (!function || !value || !value->block || value->block->func != function)
         return false;
     uint32_t block_matches = 0, value_matches = 0;
@@ -12793,8 +12805,7 @@ static bool xicgen_leaf_aggregate_place_load_source(XiCgenCtx *ctx, const XiFunc
         return false;
     const XrTargetPlan *target = cg_function_target_plan(ctx, function);
     const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
-    const XrSemanticProgramProvenance *provenance =
-        xr_semantic_plan_program_provenance(semantic);
+    const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(semantic);
     if (!target || !semantic || !provenance ||
         provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
         return false;
@@ -12822,8 +12833,7 @@ static bool xicgen_leaf_aggregate_place_load_source(XiCgenCtx *ctx, const XiFunc
             ctx->aot_bundle, function, load->args[0], &value_target, &source_function,
             &source_value, error, sizeof(error)) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
         value_target != target || source_function != semantic_function) {
-        (void) cg_value_emission_fail(ctx,
-                                      "leaf-aggregate place-load value authority is inexact");
+        (void) cg_value_emission_fail(ctx, "leaf-aggregate place-load value authority is inexact");
         return false;
     }
     uint32_t operand_count = 0;
@@ -12848,8 +12858,8 @@ static bool xicgen_leaf_aggregate_place_load_source(XiCgenCtx *ctx, const XiFunc
     }
     const XrTargetValueRepRecord *source_rep = xr_target_plan_value_rep(target, source_value);
     uint32_t instruction_count = 0, param_matches = 0, get_matches = 0;
-    const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
-        target, semantic_function, &instruction_count);
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(target, semantic_function, &instruction_count);
     for (uint32_t i = 0; instructions && i < instruction_count; i++) {
         if (source_rep && instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_AGGREGATE &&
             instructions[i].result_slot == source_rep->slot && instructions[i].operand_count == 0)
@@ -12871,13 +12881,12 @@ static bool xicgen_leaf_aggregate_place_load_source(XiCgenCtx *ctx, const XiFunc
 
 static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
                                         uint32_t *ordinal_out) {
-    if (!ctx || !f || !v || !ordinal_out ||
-        (v->op != XI_AGG_GET && v->op != XI_AGG_SET) || v->nargs < 1 || !v->args[0])
+    if (!ctx || !f || !v || !ordinal_out || (v->op != XI_AGG_GET && v->op != XI_AGG_SET) ||
+        v->nargs < 1 || !v->args[0])
         return false;
     const XrTargetPlan *target = cg_function_target_plan(ctx, f);
     const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
-    const XrSemanticProgramProvenance *provenance =
-        xr_semantic_plan_program_provenance(semantic);
+    const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(semantic);
     if (!target || !semantic || !provenance ||
         provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
         return false;
@@ -12888,8 +12897,7 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
                                                      &function_row, error, sizeof(error)) !=
             XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
         value_target != target || !function_row) {
-        (void) cg_value_emission_fail(ctx,
-                                      "leaf-aggregate field function authority is inexact");
+        (void) cg_value_emission_fail(ctx, "leaf-aggregate field function authority is inexact");
         return false;
     }
     uint32_t function_index = function_row->semantic_function;
@@ -12899,8 +12907,7 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
             ctx->aot_bundle, f, v->args[0], &value_target, &receiver_function, &receiver_value,
             error, sizeof(error)) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
         value_target != target || receiver_function != function_index) {
-        (void) cg_value_emission_fail(ctx,
-                                      "leaf-aggregate field receiver identity is inexact");
+        (void) cg_value_emission_fail(ctx, "leaf-aggregate field receiver identity is inexact");
         return false;
     }
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
@@ -12910,8 +12917,7 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
                 ctx->aot_bundle, f, v, &value_target, &result_function, &semantic_value, error,
                 sizeof(error)) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
             value_target != target || result_function != function_index) {
-            (void) cg_value_emission_fail(ctx,
-                                          "leaf-aggregate field result identity is inexact");
+            (void) cg_value_emission_fail(ctx, "leaf-aggregate field result identity is inexact");
             return false;
         }
     } else {
@@ -12920,8 +12926,7 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
         if (!semantic_function || !xicgen_leaf_value_belongs_to_function(f, v) ||
             v->id >= semantic_function->value_count ||
             semantic_function->value_begin > UINT32_MAX - v->id) {
-            (void) cg_value_emission_fail(ctx,
-                                          "leaf-aggregate set result identity is inexact");
+            (void) cg_value_emission_fail(ctx, "leaf-aggregate set result identity is inexact");
             return false;
         }
         semantic_value = semantic_function->value_begin + v->id;
@@ -12951,8 +12956,7 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
             candidate->operand_count > operand_count - candidate->operand_begin ||
             operands[candidate->operand_begin].value != receiver_value ||
             candidate->result_value != semantic_value ||
-            (v->op == XI_AGG_SET &&
-             operands[candidate->operand_begin + 1u].value != stored_value))
+            (v->op == XI_AGG_SET && operands[candidate->operand_begin + 1u].value != stored_value))
             continue;
         if (operation) {
             (void) cg_value_emission_fail(ctx,
@@ -12963,12 +12967,10 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
     }
     if (!operation || operation->semantic_immediate < 0 || operation->semantic_immediate > 1 ||
         v->aux_int != operation->semantic_immediate) {
-        (void) cg_value_emission_fail(ctx,
-                                      "leaf-aggregate field operation identity is inexact");
+        (void) cg_value_emission_fail(ctx, "leaf-aggregate field operation identity is inexact");
         return false;
     }
-    const XrTargetValueRepRecord *receiver_rep =
-        xr_target_plan_value_rep(target, receiver_value);
+    const XrTargetValueRepRecord *receiver_rep = xr_target_plan_value_rep(target, receiver_value);
     const XrTargetMachineRepRecord *receiver_machine =
         receiver_rep ? xr_target_plan_machine_rep(target, receiver_rep->register_rep) : NULL;
     uint32_t layout_count = 0;
@@ -12997,21 +12999,19 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
         return false;
     }
     uint32_t instruction_count = 0, matches = 0;
-    const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
-        target, function_index, &instruction_count);
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(target, function_index, &instruction_count);
     if (v->op == XI_AGG_GET) {
         const XrSemanticOperationRecord *receiver_producer =
             xicgen_leaf_semantic_value_producer(semantic, function_index, receiver_value);
         uint32_t receiver_source = XR_SEMANTIC_INDEX_NONE;
-        const XrTargetValueRepRecord *result_rep =
-            xr_target_plan_value_rep(target, semantic_value);
+        const XrTargetValueRepRecord *result_rep = xr_target_plan_value_rep(target, semantic_value);
         const XrTargetValueRepRecord *receiver_source_rep = NULL;
         if (!receiver_producer || receiver_producer->opcode != XI_PLACE_LOAD ||
             receiver_producer->operand_count != 1 ||
             !xicgen_leaf_semantic_operand_value(operands, operand_count, receiver_producer, 0,
                                                 &receiver_source)) {
-            (void) cg_value_emission_fail(
-                ctx, "leaf-aggregate get receiver projection is inexact");
+            (void) cg_value_emission_fail(ctx, "leaf-aggregate get receiver projection is inexact");
             return false;
         }
         receiver_source_rep = xr_target_plan_value_rep(target, receiver_source);
@@ -13041,8 +13041,7 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
                 continue;
             uint32_t candidate_ordinal = (uint32_t) candidate->semantic_immediate;
             if (stored_by_ordinal[candidate_ordinal] != XR_SEMANTIC_INDEX_NONE) {
-                (void) cg_value_emission_fail(
-                    ctx, "leaf-aggregate set projection is ambiguous");
+                (void) cg_value_emission_fail(ctx, "leaf-aggregate set projection is ambiguous");
                 return false;
             }
             stored_by_ordinal[candidate_ordinal] = candidate_stored;
@@ -13066,8 +13065,7 @@ static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const X
                 matches++;
     }
     if (matches != 1) {
-        (void) cg_value_emission_fail(ctx,
-                                      "leaf-aggregate field instruction authority is inexact");
+        (void) cg_value_emission_fail(ctx, "leaf-aggregate field instruction authority is inexact");
         return false;
     }
     *ordinal_out = ordinal;
@@ -13081,8 +13079,8 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     if (xicgen_leaf_aggregate_field(ctx, f, v, &leaf_ordinal)) {
         const XiValue *load = v->args[0];
         if (!load || load->op != XI_PLACE_LOAD || load->nargs != 1 || !load->args[0]) {
-            (void) cg_value_emission_fail(
-                ctx, "leaf-aggregate get live receiver projection is inexact");
+            (void) cg_value_emission_fail(ctx,
+                                          "leaf-aggregate get live receiver projection is inexact");
             emit_codegen_abort_expr(out);
             return;
         }
@@ -14600,7 +14598,7 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             index->aux_int >= 0 && index->aux_int < XR_NUMBER_PARSE_ERROR_MEMBER_COUNT &&
             cg_number_parse_error_member_access_is_exact(ctx, f, v) &&
             emit_static_number_parse_error_member_value_expr(ctx, out, v,
-                                                              (uint32_t) index->aux_int))
+                                                             (uint32_t) index->aux_int))
             return;
         const XaotEnumPlan *enum_plan =
             ctx && ctx->aot_bundle && v->enum_metadata_owner
@@ -14902,10 +14900,11 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ||
         v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE ||
         v->xa_intrinsic_id == XA_INTRINSIC_F64_TRY_PARSE) {
-        const char *helper = v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE       ? "xrt_i64_parse"
-                             : v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ? "xrt_i64_try_parse"
-                             : v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE      ? "xrt_f64_parse"
-                                                                                 : "xrt_f64_try_parse";
+        const char *helper = v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE ? "xrt_i64_parse"
+                             : v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE
+                                 ? "xrt_i64_try_parse"
+                             : v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE ? "xrt_f64_parse"
+                                                                            : "xrt_f64_try_parse";
         XrRep result_rep = xicgen_value_c_storage_rep(ctx, f, v);
         const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, result_rep);
         fprintf(out, "%s(", helper);
@@ -15545,8 +15544,7 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_COPY))
         return;
-    const XaotBulkPlan *bulk =
-        cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice<u8>.copyFrom");
+    const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice<u8>.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
@@ -16285,8 +16283,7 @@ static XaotValueRep xicgen_place_pointee_value_rep(XiCgenCtx *ctx, const XiFunc 
     memset(&rep, 0, sizeof(rep));
     if (place && place->op == XI_LOCAL_ADDR && place->nargs == 1 && place->args[0]) {
         XrCValueEmissionView emission = {0};
-        CgValueEmissionStatus status =
-            cg_value_emission_view(ctx, f, place->args[0], &emission);
+        CgValueEmissionStatus status = cg_value_emission_view(ctx, f, place->args[0], &emission);
         if (status == CG_VALUE_EMISSION_FOUND &&
             cg_value_emission_xaot_rep(ctx, &emission, &rep.rep)) {
             const XaotRepInfo *info = xaot_rep_info(rep.rep);
@@ -16319,8 +16316,7 @@ static const char *xicgen_place_pointee_c_type(XiCgenCtx *ctx, const XiFunc *f,
     return rep.c_type ? rep.c_type : ctype_str(xaot_value_storage_rep(rep));
 }
 
-static const char *xicgen_local_addr_c_type(XiCgenCtx *ctx, const XiFunc *f,
-                                            const XiValue *value) {
+static const char *xicgen_local_addr_c_type(XiCgenCtx *ctx, const XiFunc *f, const XiValue *value) {
     XrCValueEmissionView emission = {0};
     CgValueEmissionStatus status = cg_value_emission_view(ctx, f, value, &emission);
     if (status == CG_VALUE_EMISSION_FOUND) {
@@ -16331,8 +16327,7 @@ static const char *xicgen_local_addr_c_type(XiCgenCtx *ctx, const XiFunc *f,
     }
     if (status == CG_VALUE_EMISSION_ERROR)
         return NULL;
-    if (status != CG_VALUE_EMISSION_NOT_COVERED &&
-        status != CG_VALUE_EMISSION_BACKEND_ONLY) {
+    if (status != CG_VALUE_EMISSION_NOT_COVERED && status != CG_VALUE_EMISSION_BACKEND_ONLY) {
         (void) cg_value_emission_fail(ctx, "LOCAL_ADDR C emission authority is not configured");
         return NULL;
     }
@@ -16396,7 +16391,7 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 }
 
 static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                               const char *prefix) {
+                              const char *prefix) {
     (void) prefix;
     if (!v || v->nargs != 1 || !v->args[0]) {
         emit_codegen_abort_expr(out);
@@ -16562,11 +16557,10 @@ static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     XrCValueEmissionView stored_emission = {0};
     CgValueEmissionStatus stored_status =
         cg_value_emission_view(ctx, f, v->args[1], &stored_emission);
-    const XaotValuePlan *value_plan =
-        stored_status == CG_VALUE_EMISSION_NOT_COVERED ||
-                stored_status == CG_VALUE_EMISSION_BACKEND_ONLY
-            ? cg_value_plan_require_legacy(ctx, v->args[1])
-            : NULL;
+    const XaotValuePlan *value_plan = stored_status == CG_VALUE_EMISSION_NOT_COVERED ||
+                                              stored_status == CG_VALUE_EMISSION_BACKEND_ONLY
+                                          ? cg_value_plan_require_legacy(ctx, v->args[1])
+                                          : NULL;
     if (stored_status == CG_VALUE_EMISSION_ERROR) {
         emit_codegen_abort_expr(out);
         return;
