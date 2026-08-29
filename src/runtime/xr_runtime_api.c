@@ -65,11 +65,13 @@ struct XrProgram {
     xr_mutex_t gate;
     uint32_t inflight_executions;
     bool unloading;
+    struct XrProgram *next_retired;
 };
 
 struct XrRuntime {
     xr_mutex_t gate;
     XrRuntimeGenerationAuthority *authority;
+    XrProgram *retired_programs;
     uint32_t loaded_artifacts;
 };
 
@@ -123,6 +125,14 @@ XRAY_API bool xr_runtime_destroy(XrRuntime **runtime, char *diagnostic, size_t d
                     "runtime still owns loaded artifacts");
     if (!xr_runtime_generation_authority_destroy(&owned->authority, diagnostic, diagnostic_size))
         return false;
+    XrProgram *retired = owned->retired_programs;
+    while (retired) {
+        XrProgram *next = retired->next_retired;
+        xr_mutex_destroy(&retired->gate);
+        memset(retired, 0, sizeof(*retired));
+        xr_free(retired);
+        retired = next;
+    }
     xr_mutex_destroy(&owned->gate);
     memset(owned, 0, sizeof(*owned));
     xr_free(owned);
@@ -390,7 +400,7 @@ XRAY_API bool xr_program_execute_direct_i64(const XrProgram *program, int64_t *r
                                             char *diagnostic, size_t diagnostic_size) {
     if (result)
         *result = 0;
-    if (!program || !program->runtime || !program->generation || !result)
+    if (!program || !result)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "program execution requires a loaded program and result");
     /* The in-flight count is the program's own quiescence proof rather than
@@ -399,16 +409,17 @@ XRAY_API bool xr_program_execute_direct_i64(const XrProgram *program, int64_t *r
      * able to see that it did. */
     XrProgram *owner = (XrProgram *) program;
     xr_mutex_lock(&owner->gate);
-    if (owner->unloading) {
+    if (owner->unloading || !owner->runtime || !owner->generation) {
         xr_mutex_unlock(&owner->gate);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
                     "program execution requires a loaded program and result");
     }
     owner->inflight_executions++;
+    XrLoadedModuleGeneration *generation = owner->generation;
     xr_mutex_unlock(&owner->gate);
 
-    bool executed = xr_module_generation_execute_program_direct_i64(owner->generation, result,
-                                                                    diagnostic, diagnostic_size);
+    bool executed = xr_module_generation_execute_program_direct_i64(generation, result, diagnostic,
+                                                                    diagnostic_size);
 
     xr_mutex_lock(&owner->gate);
     owner->inflight_executions--;
@@ -453,17 +464,24 @@ XRAY_API bool xr_program_unload(XrProgram **program, char *diagnostic, size_t di
     if (!xr_module_generation_retire(owned->generation, diagnostic, diagnostic_size) ||
         !xr_module_generation_unload(&owned->generation, diagnostic, diagnostic_size))
         return false;
-    xr_mutex_destroy(&owned->gate);
     xr_target_plan_free(owned->plan);
+    owned->plan = NULL;
     xr_runtime_artifact_authority_free(owned->artifact_authority);
+    owned->artifact_authority = NULL;
     XrRuntime *runtime = owned->runtime;
     xr_mutex_lock(&runtime->gate);
     if (runtime->loaded_artifacts)
         runtime->loaded_artifacts--;
+    /* A caller may have retained the opaque pointer for its next attempted
+     * call before unload won the program gate. Keep the small facade as a
+     * fail-closed tombstone until runtime destruction, after all user threads
+     * have joined; generation, plan, and artifact ownership are still released
+     * immediately. */
+    owned->runtime = NULL;
+    owned->next_retired = runtime->retired_programs;
+    runtime->retired_programs = owned;
     xr_mutex_unlock(&runtime->gate);
     *program = NULL;
-    memset(owned, 0, sizeof(*owned));
-    xr_free(owned);
     return true;
 }
 

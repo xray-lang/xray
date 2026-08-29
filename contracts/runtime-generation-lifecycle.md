@@ -152,7 +152,11 @@ capabilities; they do not authorize general product graphs or dynamic reload.
    parallel, and unload decides quiescence before it takes a single teardown
    step: an unload that lands while a call is in flight, or while the
    generation still owns a pin, is refused with the program untouched and still
-   callable. That is a lifecycle boundary, not a concurrent reload protocol.
+   callable. Once unload wins the gate, generation, plan, and artifact ownership
+   are released immediately; the small opaque program facade remains as a
+   fail-closed tombstone until runtime destruction so a caller that had already
+   retained its address cannot race a free. That is a lifecycle boundary, not a
+   concurrent reload protocol.
 10. Export names are a semantic-artifact fact. The TargetPlan carries dense
     numeric tables and no spelling, so lookup reads the verified source export
     table the plan retains and matches an exact name in it. It never resolves an
@@ -285,7 +289,7 @@ anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 1e6e71ef7a0395595d3d26817dd925f1c5420a14a127bd73eed0bca51b114620
 anchor-sha256: tests/install/run_install_public_surface_tests.py 7573dcf14236aebbad3f3840844d14f7060618d661e64886e31fb5f5ce3820be
 anchor-sha256: include/xray_runtime_api.h a84f9ce3063c719f1ef4888b633111e0ab5baf61598c956599f1224b7498e102
-anchor-sha256: src/runtime/xr_runtime_api.c 8c21c572ff8621d6c9ab53e464991459c4d74fb3118b0d3a061fc9362321b767
+anchor-sha256: src/runtime/xr_runtime_api.c 3cbd014aa9037a69efc4eacc2bbe70e723d603fa16dea6d7f73541edb59a2744
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c b7ef1d75a66f12b0b408dcd73a672e3e7df8af4a140ce612612996b60a778b9a
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
 anchor-sha256: src/runtime/xr_entry_cell.c c2bc18e2eb0c40767bff70b0137387a81d55bbe0b767673befcdc5acce4386a0
