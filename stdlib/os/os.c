@@ -112,14 +112,6 @@ static const char *os_core_getenv(void *ctx, const char *name) {
 #endif
 }
 
-#ifndef XR_OS_WINDOWS
-static const char *os_core_system_homedir(void *ctx) {
-    (void) ctx;
-    struct passwd *pw = getpwuid(getuid());
-    return pw ? pw->pw_dir : NULL;
-}
-#endif
-
 /* ========== Environment Variables ========== */
 
 // getenv(name) - Get environment variable
@@ -320,8 +312,7 @@ static XrValue os_cpuCount(XrVMRuntime *X, XrValue *args, int argc) {
     GetSystemInfo(&si);
     return xr_int(si.dwNumberOfProcessors);
 #else
-    long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return xr_int(n > 0 ? n : 1);
+    return xr_int(xr_os_core_cpu_count(sysconf(_SC_NPROCESSORS_ONLN)));
 #endif
 }
 
@@ -345,7 +336,7 @@ static XrValue os_totalMemory(XrVMRuntime *X, XrValue *args, int argc) {
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return xr_int((int64_t) si.totalram * si.mem_unit);
+        return xr_int(xr_os_core_memory_bytes(si.totalram, si.mem_unit));
     return xr_int(0);
 #else
     return xr_int(0);
@@ -376,7 +367,7 @@ static XrValue os_freeMemory(XrVMRuntime *X, XrValue *args, int argc) {
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return xr_int((int64_t) si.freeram * si.mem_unit);
+        return xr_int(xr_os_core_memory_bytes(si.freeram, si.mem_unit));
     return xr_int(0);
 #else
     return xr_int(0);
@@ -395,12 +386,12 @@ static XrValue os_uptime(XrVMRuntime *X, XrValue *args, int argc) {
     struct timeval boottime;
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
-        time_t now = time(NULL);
-        return xr_float((double) (now - boottime.tv_sec));
+        return xr_float(
+            xr_os_core_uptime_from_boot_seconds((int64_t) time(NULL), (int64_t) boottime.tv_sec));
     }
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return xr_float((double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0);
+        return xr_float(xr_os_core_seconds_from_nsec((int64_t) ts.tv_sec, (int64_t) ts.tv_nsec));
     return xr_float(0.0);
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
@@ -408,7 +399,7 @@ static XrValue os_uptime(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_float((double) si.uptime);
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return xr_float((double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0);
+        return xr_float(xr_os_core_seconds_from_nsec((int64_t) ts.tv_sec, (int64_t) ts.tv_nsec));
     return xr_float(0.0);
 #else
     return xr_float(0.0);
@@ -424,17 +415,16 @@ static XrValue os_loadavg(XrVMRuntime *X, XrValue *args, int argc) {
     if (!arr)
         return xr_null();
 
+    double avg[3];
+    xr_os_core_loadavg_zero(avg);
 #ifndef XR_OS_WINDOWS
-    double avg[3] = {0};
-    getloadavg(avg, 3);
+    double raw[3] = {0.0, 0.0, 0.0};
+    getloadavg(raw, 3);
+    xr_os_core_loadavg_set(avg, raw[0], raw[1], raw[2]);
+#endif
     xr_array_push(arr, xr_float(avg[0]));
     xr_array_push(arr, xr_float(avg[1]));
     xr_array_push(arr, xr_float(avg[2]));
-#else
-    xr_array_push(arr, xr_float(0.0));
-    xr_array_push(arr, xr_float(0.0));
-    xr_array_push(arr, xr_float(0.0));
-#endif
 
     return xr_value_from_array(arr);
 }
@@ -540,7 +530,7 @@ typedef struct {
 static bool exec_pipe_init(XrExecPipe *pipe, int fd) {
     pipe->fd = fd;
     pipe->len = 0;
-    pipe->cap = 4096;
+    pipe->cap = (size_t) XR_OS_CORE_EXEC_INITIAL_CAP;
     pipe->open = true;
     pipe->buf = (char *) xr_malloc(pipe->cap);
     if (!pipe->buf)
@@ -570,18 +560,15 @@ static void exec_pipe_free(XrExecPipe *pipe) {
 }
 
 static bool exec_pipe_append(XrExecPipe *pipe, const char *data, size_t n) {
-    if (pipe->len + n + 1 > pipe->cap) {
-        size_t new_cap = pipe->cap;
-        while (pipe->len + n + 1 > new_cap)
-            new_cap *= 2;
+    size_t new_cap = 0;
+    if (!xr_os_core_exec_buffer_next_cap(pipe->len, pipe->cap, n, &new_cap))
+        return false;
+    if (new_cap > pipe->cap) {
         if (!XR_REALLOC(pipe->buf, new_cap))
             return false;
         pipe->cap = new_cap;
     }
-    memcpy(pipe->buf + pipe->len, data, n);
-    pipe->len += n;
-    pipe->buf[pipe->len] = '\0';
-    return true;
+    return xr_os_core_exec_buffer_append_raw(pipe->buf, &pipe->len, pipe->cap, data, n);
 }
 
 static bool exec_pipe_drain(XrExecPipe *pipe) {
@@ -674,19 +661,23 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     char buf[4096];
-    size_t len = 0, cap = 4096;
+    size_t len = 0, cap = (size_t) XR_OS_CORE_EXEC_INITIAL_CAP;
     char *output = (char *) xr_malloc(cap);
     if (!output) {
         _pclose(fp);
         return xr_null();
     }
+    output[0] = '\0';
 
     size_t n;
     while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
-        if (len + n + 1 >= cap) {
-            size_t new_cap = cap * 2;
-            while (len + n + 1 >= new_cap)
-                new_cap *= 2;
+        size_t new_cap = 0;
+        if (!xr_os_core_exec_buffer_next_cap(len, cap, n, &new_cap)) {
+            xr_free(output);
+            _pclose(fp);
+            return xr_null();
+        }
+        if (new_cap > cap) {
             if (!XR_REALLOC(output, new_cap)) {
                 xr_free(output);
                 _pclose(fp);
@@ -694,26 +685,26 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
             }
             cap = new_cap;
         }
-        memcpy(output + len, buf, n);
-        len += n;
+        if (!xr_os_core_exec_buffer_append_raw(output, &len, cap, buf, n)) {
+            xr_free(output);
+            _pclose(fp);
+            return xr_null();
+        }
     }
-    output[len] = '\0';
-    // _pclose returns the same wait-style encoding as _cwait/_spawn, so the
-    // exit code lives in the low-order byte only when the child terminated
-    // normally. Treat negative values (close itself failed) as -1.
+    // _pclose returns the same wait-style encoding as _cwait/_spawn; the
+    // decode (low-order byte, negative means close itself failed) is shared
+    // with the AOT runtime in xr_os_core.h.
     int raw_status = _pclose(fp);
-    int exit_code = raw_status;
-    if (raw_status < 0) {
-        exit_code = -1;
-    } else {
-        exit_code = raw_status & 0xFF;
-    }
+    int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
 
     XrObjectInstance *json = os_exec_result_new(X);
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_object_instance_set_by_key(X, json, "stdout", xrs_string_value_c(X, output));
-    xr_object_instance_set_by_key(X, json, "stderr", xrs_string_value_c(X, ""));
-    xr_object_instance_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
+                                  xrs_string_value_c(X, output));
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
+                                  xrs_string_value_c(X, ""));
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
+                                  xr_int(exit_code));
     xr_free(output);
     return xr_object_instance_value(json);
 #else
@@ -773,11 +764,12 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
 
     XrObjectInstance *json = os_exec_result_new(X);
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_object_instance_set_by_key(X, json, "stdout",
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
                                   xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_object_instance_set_by_key(X, json, "stderr",
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
                                   xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_object_instance_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
+                                  xr_int(exit_code));
 
     xr_free(stdout_buf);
     xr_free(stderr_buf);
@@ -982,9 +974,12 @@ static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
 
     XrObjectInstance *json = os_exec_result_new(X);
     XR_CHECK(json != NULL, "os_spawn: json alloc failed");
-    xr_object_instance_set_by_key(X, json, "stdout", xrs_string_value_c(X, out_buf ? out_buf : ""));
-    xr_object_instance_set_by_key(X, json, "stderr", xrs_string_value_c(X, err_buf ? err_buf : ""));
-    xr_object_instance_set_by_key(X, json, "exitCode", xr_int((int) code));
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
+                                  xrs_string_value_c(X, out_buf ? out_buf : ""));
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
+                                  xrs_string_value_c(X, err_buf ? err_buf : ""));
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
+                                  xr_int((int) code));
     xr_free(out_buf);
     xr_free(err_buf);
     return xr_object_instance_value(json);
@@ -1048,11 +1043,12 @@ static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
 
     XrObjectInstance *json = os_exec_result_new(X);
     XR_CHECK(json != NULL, "os_spawn: json alloc failed");
-    xr_object_instance_set_by_key(X, json, "stdout",
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
                                   xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_object_instance_set_by_key(X, json, "stderr",
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
                                   xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_object_instance_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
+                                  xr_int(exit_code));
     xr_free(stdout_buf);
     xr_free(stderr_buf);
     return xr_object_instance_value(json);
@@ -1061,39 +1057,15 @@ static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Platform Information ========== */
 
-// Report host facts used by the public Xray wrappers.
+// Report host facts used by the public Xray wrappers. The ladders themselves
+// are shared with the AOT runtime in xr_os_core.h so the two agree by
+// construction.
 static const char *get_platform(void) {
-#if defined(XR_OS_WINDOWS)
-    return "windows";
-#elif defined(XR_OS_MACOS) && defined(__MACH__)
-    return "darwin";
-#elif defined(XR_OS_LINUX)
-    return "linux";
-#elif defined(XR_OS_BSD)
-    return "freebsd";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_platform();
 }
 
 static const char *get_arch(void) {
-#if defined(XR_ARCH_ARM64) || defined(_M_ARM64)
-    return "arm64";
-#elif defined(XR_ARCH_X86_64) || defined(_M_X64)
-    return "x64";
-#elif defined(XR_ARCH_X86) || defined(_M_IX86)
-    return "x86";
-#elif defined(XR_ARCH_ARM) || defined(_M_ARM)
-    return "arm";
-#elif defined(XR_ARCH_POWERPC64)
-    return "ppc64";
-#elif defined(XR_ARCH_LOONGARCH64)
-    return "loongarch64";
-#elif defined(XR_ARCH_RISCV64)
-    return "riscv64";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_arch();
 }
 
 static XrValue os_platform(XrVMRuntime *X, XrValue *args, int argc) {

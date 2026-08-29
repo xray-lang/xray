@@ -56,51 +56,14 @@ static inline XrValue xrt_os_cstr_value(const char *s) {
     return s ? xrt_str_from_cstr(s) : XR_NULL_VAL;
 }
 
-static inline const char *xrt_os_core_getenv(void *ctx, const char *name) {
-    (void) ctx;
-    return getenv(name);
-}
-
-#ifndef _WIN32
-static inline const char *xrt_os_core_system_homedir(void *ctx) {
-    (void) ctx;
-    struct passwd *pw = getpwuid(getuid());
-    return pw ? pw->pw_dir : NULL;
-}
-#endif
-
+/* The ladders are shared with the VM stdlib in xr_os_core.h so the two agree
+ * by construction. */
 static inline const char *xrt_os_platform_cstr(void) {
-#if defined(XR_OS_WINDOWS) || defined(_WIN64)
-    return "windows";
-#elif defined(XR_OS_MACOS) && defined(__MACH__)
-    return "darwin";
-#elif defined(XR_OS_LINUX)
-    return "linux";
-#elif defined(XR_OS_BSD)
-    return "freebsd";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_platform();
 }
 
 static inline const char *xrt_os_arch_cstr(void) {
-#if defined(XR_ARCH_ARM64) || defined(_M_ARM64)
-    return "arm64";
-#elif defined(XR_ARCH_X86_64) || defined(_M_X64)
-    return "x64";
-#elif defined(XR_ARCH_X86) || defined(_M_IX86)
-    return "x86";
-#elif defined(XR_ARCH_ARM) || defined(_M_ARM)
-    return "arm";
-#elif defined(XR_ARCH_POWERPC64)
-    return "ppc64";
-#elif defined(XR_ARCH_LOONGARCH64)
-    return "loongarch64";
-#elif defined(XR_ARCH_RISCV64)
-    return "riscv64";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_arch();
 }
 
 static inline XrValue xrt_os_platform(void) {
@@ -240,8 +203,7 @@ static inline XrValue xrt_os_cpu_count(void) {
     GetSystemInfo(&si);
     return XR_FROM_INT((int64_t) si.dwNumberOfProcessors);
 #else
-    long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return XR_FROM_INT((int64_t) (n > 0 ? n : 1));
+    return XR_FROM_INT(xr_os_core_cpu_count(sysconf(_SC_NPROCESSORS_ONLN)));
 #endif
 }
 
@@ -351,7 +313,7 @@ static inline XrValue xrt_os_total_memory(void) {
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return XR_FROM_INT((int64_t) si.totalram * (int64_t) si.mem_unit);
+        return XR_FROM_INT(xr_os_core_memory_bytes(si.totalram, si.mem_unit));
     return XR_FROM_INT(0);
 #else
     return XR_FROM_INT(0);
@@ -376,7 +338,7 @@ static inline XrValue xrt_os_free_memory(void) {
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return XR_FROM_INT((int64_t) si.freeram * (int64_t) si.mem_unit);
+        return XR_FROM_INT(xr_os_core_memory_bytes(si.freeram, si.mem_unit));
     return XR_FROM_INT(0);
 #else
     return XR_FROM_INT(0);
@@ -390,12 +352,13 @@ static inline XrValue xrt_os_uptime(void) {
     struct timeval boottime;
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
-        time_t now = time(NULL);
-        return XR_FROM_FLOAT((double) (now - boottime.tv_sec));
+        return XR_FROM_FLOAT(
+            xr_os_core_uptime_from_boot_seconds((int64_t) time(NULL), (int64_t) boottime.tv_sec));
     }
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return XR_FROM_FLOAT((double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0);
+        return XR_FROM_FLOAT(
+            xr_os_core_seconds_from_nsec((int64_t) ts.tv_sec, (int64_t) ts.tv_nsec));
     return XR_FROM_FLOAT(0.0);
 #elif defined(__linux__)
     struct sysinfo si;
@@ -403,7 +366,8 @@ static inline XrValue xrt_os_uptime(void) {
         return XR_FROM_FLOAT((double) si.uptime);
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return XR_FROM_FLOAT((double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0);
+        return XR_FROM_FLOAT(
+            xr_os_core_seconds_from_nsec((int64_t) ts.tv_sec, (int64_t) ts.tv_nsec));
     return XR_FROM_FLOAT(0.0);
 #else
     return XR_FROM_FLOAT(0.0);
@@ -411,22 +375,20 @@ static inline XrValue xrt_os_uptime(void) {
 }
 
 static inline XrValue xrt_os_loadavg(void) {
-    double avg[3] = {0.0, 0.0, 0.0};
+    double avg[3];
+    xr_os_core_loadavg_zero(avg);
 #ifdef _WIN32
     /* Windows has no load average equivalent in the VM stdlib today. */
 #elif defined(__linux__)
     struct sysinfo si;
-    if (sysinfo(&si) == 0) {
-        avg[0] = (double) si.loads[0] / 65536.0;
-        avg[1] = (double) si.loads[1] / 65536.0;
-        avg[2] = (double) si.loads[2] / 65536.0;
-    }
+    if (sysinfo(&si) == 0)
+        xr_os_core_loadavg_set(avg, xr_os_core_loadavg_from_fixed(si.loads[0]),
+                               xr_os_core_loadavg_from_fixed(si.loads[1]),
+                               xr_os_core_loadavg_from_fixed(si.loads[2]));
 #else
-    if (getloadavg(avg, 3) < 0) {
-        avg[0] = 0.0;
-        avg[1] = 0.0;
-        avg[2] = 0.0;
-    }
+    double raw[3] = {0.0, 0.0, 0.0};
+    if (getloadavg(raw, 3) >= 0)
+        xr_os_core_loadavg_set(avg, raw[0], raw[1], raw[2]);
 #endif
     XrValue arr = xrt_array_new_typed(3, XR_ELEM_F64, 0);
     xrt_array_t *typed = (xrt_array_t *) arr.ptr;
@@ -468,7 +430,7 @@ static inline XrValue xrt_os_sleep(XrValue ms_value) {
 
 static inline bool xrt_os_exec_buffer_init(char **buf, size_t *len, size_t *cap) {
     *len = 0;
-    *cap = 4096;
+    *cap = (size_t) XR_OS_CORE_EXEC_INITIAL_CAP;
     *buf = (char *) XRT_MALLOC(*cap);
     if (!*buf) {
         *cap = 0;
@@ -482,33 +444,28 @@ static inline bool xrt_os_exec_buffer_append(char **buf, size_t *len, size_t *ca
                                              size_t n) {
     if (!buf || !len || !cap || !data)
         return false;
-    if (*len + n + 1 > *cap) {
-        size_t new_cap = *cap ? *cap : 4096;
-        while (*len + n + 1 > new_cap) {
-            size_t next = new_cap * 2;
-            if (next <= new_cap)
-                return false;
-            new_cap = next;
-        }
+    size_t new_cap = 0;
+    if (!xr_os_core_exec_buffer_next_cap(*len, *cap, n, &new_cap))
+        return false;
+    if (new_cap > *cap) {
         char *grown = (char *) XRT_REALLOC(*buf, new_cap);
         if (!grown)
             return false;
         *buf = grown;
         *cap = new_cap;
     }
-    memcpy(*buf + *len, data, n);
-    *len += n;
-    (*buf)[*len] = '\0';
-    return true;
+    return xr_os_core_exec_buffer_append_raw(*buf, len, *cap, data, n);
 }
 
 static inline XrValue xrt_os_exec_result(const char *stdout_buf, const char *stderr_buf,
                                          int64_t exit_code) {
-    static const char *const fields[] = {"stdout", "stderr", "exitCode"};
-    XrValue obj = xrt_struct_object_new_named(3, fields);
-    xrt_object_set_field(obj, 0, xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
-    xrt_object_set_field(obj, 1, xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
-    xrt_object_set_field(obj, 2, XR_FROM_INT(exit_code));
+    XrValue obj =
+        xrt_struct_object_new_named(XR_OS_CORE_EXEC_FIELD_COUNT, XR_OS_CORE_EXEC_FIELD_NAMES);
+    xrt_object_set_field(obj, XR_OS_CORE_EXEC_STDOUT,
+                         xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
+    xrt_object_set_field(obj, XR_OS_CORE_EXEC_STDERR,
+                         xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
+    xrt_object_set_field(obj, XR_OS_CORE_EXEC_EXIT_CODE, XR_FROM_INT(exit_code));
     return obj;
 }
 
@@ -671,7 +628,7 @@ static inline XrValue xrt_os_exec(const char *cmd_data, int64_t cmd_len) {
         XRT_FREE(output);
         return XR_NULL_VAL;
     }
-    int64_t exit_code = raw_status < 0 ? -1 : (raw_status & 0xFF);
+    int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
     XrValue result = xrt_os_exec_result(output, "", exit_code);
     XRT_FREE(output);
     return result;

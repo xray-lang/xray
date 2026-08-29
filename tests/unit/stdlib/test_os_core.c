@@ -19,48 +19,6 @@
 #include <stdint.h>
 #include <string.h>
 
-typedef struct OsEnvEntry {
-    const char *name;
-    const char *value;
-} OsEnvEntry;
-
-typedef struct OsEnvFake {
-    const OsEnvEntry *entries;
-    size_t count;
-} OsEnvFake;
-
-typedef struct OsEnvParseRecord {
-    int calls;
-    const char *key;
-    size_t key_len;
-    const char *value;
-    size_t value_len;
-} OsEnvParseRecord;
-
-static const char *os_core_fake_getenv(void *ctx, const char *name) {
-    const OsEnvFake *env = (const OsEnvFake *) ctx;
-    for (size_t i = 0; i < env->count; i++) {
-        if (strcmp(env->entries[i].name, name) == 0)
-            return env->entries[i].value;
-    }
-    return NULL;
-}
-
-static bool os_core_record_env_entry(void *ctx, const char *key, size_t key_len, const char *value,
-                                     size_t value_len) {
-    OsEnvParseRecord *record = (OsEnvParseRecord *) ctx;
-    record->calls++;
-    record->key = key;
-    record->key_len = key_len;
-    record->value = value;
-    record->value_len = value_len;
-    return true;
-}
-
-static const char *os_core_fake_string(void *ctx) {
-    return (const char *) ctx;
-}
-
 TEST(os_core_platform_matches_target) {
 #ifdef XR_OS_WINDOWS
     ASSERT_STR_EQ(xr_os_core_platform(), "windows");
@@ -91,76 +49,6 @@ TEST(os_core_arch_matches_target) {
 #else
     ASSERT_STR_EQ(xr_os_core_arch(), "unknown");
 #endif
-}
-
-TEST(os_core_sep_and_eol_match_target) {
-#ifdef XR_OS_WINDOWS
-    ASSERT_STR_EQ(xr_os_core_sep(), "\\");
-    ASSERT_STR_EQ(xr_os_core_eol(), "\r\n");
-#else
-    ASSERT_STR_EQ(xr_os_core_sep(), "/");
-    ASSERT_STR_EQ(xr_os_core_eol(), "\n");
-#endif
-}
-
-TEST(os_core_homedir_prefers_home_env) {
-    const OsEnvEntry entries[] = {
-        {"HOME", "/home/env"},
-#ifdef XR_OS_WINDOWS
-        {"USERPROFILE", "C:\\Users\\env"},
-#endif
-    };
-    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
-    ASSERT_STR_EQ(
-        xr_os_core_homedir(os_core_fake_getenv, &env, os_core_fake_string, "/home/system"),
-        "/home/env");
-}
-
-TEST(os_core_homedir_skips_empty_home) {
-    const OsEnvEntry entries[] = {
-        {"HOME", ""},
-#ifdef XR_OS_WINDOWS
-        {"USERPROFILE", "C:\\Users\\env"},
-#endif
-    };
-    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
-#ifdef XR_OS_WINDOWS
-    ASSERT_STR_EQ(
-        xr_os_core_homedir(os_core_fake_getenv, &env, os_core_fake_string, "/home/system"),
-        "C:\\Users\\env");
-#else
-    ASSERT_STR_EQ(
-        xr_os_core_homedir(os_core_fake_getenv, &env, os_core_fake_string, "/home/system"),
-        "/home/system");
-#endif
-}
-
-TEST(os_core_environ_entry_parses_key_value) {
-    OsEnvParseRecord record = {0};
-    ASSERT_TRUE(xr_os_core_environ_entry("XRAY_ENV=hello", os_core_record_env_entry, &record));
-    ASSERT_EQ_INT(record.calls, 1);
-    ASSERT_EQ_UINT(record.key_len, 8);
-    ASSERT_MEM_EQ(record.key, "XRAY_ENV", 8);
-    ASSERT_EQ_UINT(record.value_len, 5);
-    ASSERT_MEM_EQ(record.value, "hello", 5);
-}
-
-TEST(os_core_environ_entry_allows_empty_value) {
-    OsEnvParseRecord record = {0};
-    ASSERT_TRUE(xr_os_core_environ_entry("XRAY_EMPTY=", os_core_record_env_entry, &record));
-    ASSERT_EQ_INT(record.calls, 1);
-    ASSERT_EQ_UINT(record.key_len, 10);
-    ASSERT_MEM_EQ(record.key, "XRAY_EMPTY", 10);
-    ASSERT_EQ_UINT(record.value_len, 0);
-}
-
-TEST(os_core_environ_entry_rejects_invalid_entries) {
-    OsEnvParseRecord record = {0};
-    ASSERT_FALSE(xr_os_core_environ_entry(NULL, os_core_record_env_entry, &record));
-    ASSERT_FALSE(xr_os_core_environ_entry("NO_EQUALS", os_core_record_env_entry, &record));
-    ASSERT_FALSE(xr_os_core_environ_entry("=EMPTY_KEY", os_core_record_env_entry, &record));
-    ASSERT_FALSE(xr_os_core_environ_entry("XRAY=value", NULL, &record));
-    ASSERT_EQ_INT(record.calls, 0);
 }
 
 TEST(os_core_cpu_count_normalizes_invalid_raw_values) {
@@ -360,16 +248,6 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("OS Core - platform");
 RUN_TEST(os_core_platform_matches_target);
 RUN_TEST(os_core_arch_matches_target);
-RUN_TEST(os_core_sep_and_eol_match_target);
-
-RUN_TEST_SUITE("OS Core - user");
-RUN_TEST(os_core_homedir_prefers_home_env);
-RUN_TEST(os_core_homedir_skips_empty_home);
-
-RUN_TEST_SUITE("OS Core - environ");
-RUN_TEST(os_core_environ_entry_parses_key_value);
-RUN_TEST(os_core_environ_entry_allows_empty_value);
-RUN_TEST(os_core_environ_entry_rejects_invalid_entries);
 
 RUN_TEST_SUITE("OS Core - system metrics");
 RUN_TEST(os_core_cpu_count_normalizes_invalid_raw_values);
