@@ -3176,7 +3176,17 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
             return NULL;
         owner = candidate;
     }
-    if (!owner || !owner->source_path || !xr_module_identity_authority_valid(&owner->authority))
+    /* A NULL source_path is the ordinary shape of an in-memory entry module
+     * (xr_isolate_dostring), not a broken spec. It is only ever the importer
+     * path handed to the resolver, and the resolver already treats it as an
+     * absent base directory: a named module never consults it, and a relative
+     * specifier from a memory authority is rejected on the authority kind
+     * before the base directory is even needed. Requiring it here refused
+     * every export lookup an eval'd script made, so a `mod.fn(...)` call lost
+     * its callee links and, with them, the caller-side default-argument
+     * filling -- the omitted argument then reached the callee as an
+     * uninitialized register. */
+    if (!owner || !xr_module_identity_authority_valid(&owner->authority))
         return NULL;
     XrModuleId mid;
     char *err = NULL;
