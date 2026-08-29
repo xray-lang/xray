@@ -1,0 +1,230 @@
+// math — core numeric operations.
+//
+// These source bodies are the VM/reference semantics.  The analyzer binds the
+// declarations to compiler-owned intrinsic identities, so AOT emits each
+// operation directly instead of discovering it by module or function spelling.
+//
+// Every operand is f64 and the declared signature is the whole truth.  math no
+// longer preserves the runtime shape of an integer argument: math.abs(-42)
+// answers 42.0, not 42.  Integer-domain minimum, maximum and absolute value
+// belong on the integer type itself, not on a floating-point module.
+
+export const PI: f64 = 3.14159265358979323846
+export const E: f64 = 2.71828182845904523536
+export const TAU: f64 = 6.28318530717958647692
+export const SQRT2: f64 = 1.41421356237309504880
+export const LN2: f64 = 0.69314718055994530942
+export const LN10: f64 = 2.30258509299404568402
+export const LOG2E: f64 = 1.44269504088896340736
+export const LOG10E: f64 = 0.43429448190325182765
+export const EPSILON: f64 = 2.22044604925031308085e-16
+export const MAX_I64: i64 = 9223372036854775807
+// The literal 9223372036854775808 does not fit an i64, so the smallest value is
+// spelled as the largest one negated and decremented.
+export const MIN_I64: i64 = -9223372036854775807 - 1
+export const MAX_F64: f64 = 1.79769313486231570815e+308
+export const INF: f64 = 1.0 / 0.0
+export const NAN: f64 = 0.0 / 0.0
+
+export fn sqrt(x: f64) -> f64 {
+    return __sqrt(x)
+}
+
+export fn pow(base: f64, exp: f64) -> f64 {
+    return __pow(base, exp)
+}
+
+export fn abs(x: f64) -> f64 {
+    return __abs(x)
+}
+
+export fn floor(x: f64) -> i64 {
+    return __floor(x)
+}
+
+export fn ceil(x: f64) -> i64 {
+    return __ceil(x)
+}
+
+export fn round(x: f64) -> i64 {
+    return __round(x)
+}
+
+export fn trunc(x: f64) -> i64 {
+    return __trunc(x)
+}
+
+export fn sin(x: f64) -> f64 {
+    return __sin(x)
+}
+
+export fn cos(x: f64) -> f64 {
+    return __cos(x)
+}
+
+export fn tan(x: f64) -> f64 {
+    return __tan(x)
+}
+
+export fn asin(x: f64) -> f64 {
+    return __asin(x)
+}
+
+export fn acos(x: f64) -> f64 {
+    return __acos(x)
+}
+
+export fn atan(x: f64) -> f64 {
+    return __atan(x)
+}
+
+export fn atan2(y: f64, x: f64) -> f64 {
+    return __atan2(y, x)
+}
+
+export fn log(x: f64) -> f64 {
+    return __log(x)
+}
+
+export fn log10(x: f64) -> f64 {
+    return __log10(x)
+}
+
+export fn log2(x: f64) -> f64 {
+    return __log2(x)
+}
+
+export fn exp(x: f64) -> f64 {
+    return __exp(x)
+}
+
+export fn sinh(x: f64) -> f64 {
+    return __sinh(x)
+}
+
+export fn cosh(x: f64) -> f64 {
+    return __cosh(x)
+}
+
+export fn tanh(x: f64) -> f64 {
+    return __tanh(x)
+}
+
+export fn hypot(x: f64, y: f64) -> f64 {
+    return __hypot(x, y)
+}
+
+export fn cbrt(x: f64) -> f64 {
+    return __cbrt(x)
+}
+
+export fn fmod(x: f64, y: f64) -> f64 {
+    return __fmod(x, y)
+}
+
+export fn log1p(x: f64) -> f64 {
+    return __log1p(x)
+}
+
+export fn expm1(x: f64) -> f64 {
+    return __expm1(x)
+}
+
+export fn lerp(a: f64, b: f64, t: f64) -> f64 {
+    return a + (b - a) * t
+}
+
+export fn degToRad(deg: f64) -> f64 {
+    return deg * (PI / 180.0)
+}
+
+export fn radToDeg(rad: f64) -> f64 {
+    return rad * (180.0 / PI)
+}
+
+export fn sign(x: f64) -> i64 {
+    if (x > 0.0) {
+        return 1
+    }
+    if (x < 0.0) {
+        return -1
+    }
+    return 0
+}
+
+export fn isNaN(x: f64) -> bool {
+    return x != x
+}
+
+export fn isFinite(x: f64) -> bool {
+    return x - x == 0.0
+}
+
+// IEEE-754 NaN propagation: any NaN argument produces NaN.  This is not fmin
+// semantics, which returns the non-NaN operand instead.
+export fn min(...args: f64) -> f64 {
+    if (len(args) == 0) {
+        return NAN
+    }
+    var result = args[0]
+    if (result != result) {
+        return result
+    }
+    for (var i = 1; i < len(args); i++) {
+        var v = args[i]
+        if (v != v) {
+            return v
+        }
+        if (v < result) {
+            result = v
+        }
+    }
+    return result
+}
+
+export fn max(...args: f64) -> f64 {
+    if (len(args) == 0) {
+        return NAN
+    }
+    var result = args[0]
+    if (result != result) {
+        return result
+    }
+    for (var i = 1; i < len(args); i++) {
+        var v = args[i]
+        if (v != v) {
+            return v
+        }
+        if (v > result) {
+            result = v
+        }
+    }
+    return result
+}
+
+export fn clamp(x: f64, min: f64, max: f64) -> f64 {
+    if (x != x || min != min || max != max) {
+        return NAN
+    }
+    var lo = min
+    var hi = max
+    if (lo > hi) {
+        lo = max
+        hi = min
+    }
+    if (x < lo) {
+        return lo
+    }
+    if (x > hi) {
+        return hi
+    }
+    return x
+}
+
+export fn random() -> f64 {
+    return __random()
+}
+
+export fn randomInt(min: i64, max: i64) -> i64 {
+    return __randomInt(min, max)
+}

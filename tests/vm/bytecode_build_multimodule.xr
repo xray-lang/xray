@@ -21,4 +21,6 @@ scope {
 }
 done.close()
 cluster.stop()
-print(result + math.max(1, 3, 2) + reexportedBonus() + starBonus())
+// math.max is declared (...args: f64) -> f64, so the f64 answer is converted
+// before it joins the i64 sum.
+print(result + (math.max(1, 3, 2) as i64) + reexportedBonus() + starBonus())

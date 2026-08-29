@@ -8,3 +8,11 @@ fn xray_math_int_core(a: i64, b: i64) -> i64 {
     var c2 = math.clamp(b, a, 10)
     return lo + hi + c1 + c2
 }
+
+fn xray_math_f64_core(a: f64, b: f64) -> f64 {
+    var lo = min(a, b, 5.0)
+    var hi = math.max(a, b, 10.0)
+    var c1 = clamp(a, 0.0, b)
+    var c2 = math.clamp(b, a, 10.0)
+    return lo + hi + c1 + c2
+}

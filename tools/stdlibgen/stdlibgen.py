@@ -86,11 +86,7 @@ RUNTIME_CAP_BITS = {
 }
 
 
-FREESTANDING_DIRECT_BUILTINS = {
-    "math.min",
-    "math.max",
-    "math.clamp",
-}
+FREESTANDING_DIRECT_BUILTINS: set[str] = set()
 
 FREESTANDING_HEADER_ONLY_SYMBOLS = {
     "mem.__fence",

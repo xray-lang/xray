@@ -1,6 +1,6 @@
 schema = 1
 module = "math"
-contract_revision = 1
+contract_revision = 2
 legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/math/legacy_expected.jsonl"
@@ -18,11 +18,12 @@ legacy_public_surface = [
   "random",
 ]
 intentional_semantic_changes = [
-  "math is a permanent L1 native primitive; the .def signatures are the typed contract",
-  "this contract is a behavior baseline lock, not a migration",
+  "core numeric semantics are owned by stdlib/math/math.xr as the sole source; the analyzer binds those declarations to compiler-owned intrinsic identities instead of matching module or function spelling",
+  "every math operand is declared f64 and the declaration is the whole truth: abs, min, max and clamp answer f64 for any argument spelling, so math.abs(-42) is 42.0",
+  "integer-domain absolute value, minimum and maximum belong on the integer type itself, not on a floating-point module",
 ]
 known_legacy_bugs = [
-  "none recorded for the native baseline",
+  "the native math surface answered i64 for integer-shaped arguments to abs, min, max and clamp even though its .def signatures already declared f64 operands and an f64 result",
 ]
 equivalence = ["value", "error", "effect", "complexity"]
 diff_cases_manifest = "tests/stdlib/contracts/math/diff_cases.txt"
@@ -30,8 +31,8 @@ benchmark_suite = "stdlib/math"
 
 [[legacy_behavior]]
 id = "numeric-type-preservation"
-classification = "required"
-new_behavior = "math functions preserve int/float typing identically on VM and AOT"
+classification = "removed"
+new_behavior = "abs, min, max and clamp answer f64 for every argument spelling; only the entry points that declare i64 - floor, ceil, round, trunc, sign and randomInt - answer i64"
 
 [[legacy_behavior]]
 id = "transcendental-parity"

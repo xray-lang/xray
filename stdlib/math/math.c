@@ -5,12 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * math.c - Math standard library implementation
+ * math.c - `math` private native leaves.
  *
  * KEY CONCEPT:
- *   Thin wrappers over C math.h functions, exposed to xray scripts.
- *   Floating math functions accept both int and float arguments; int-signed
- *   APIs such as randomInt keep their declared int boundary.
+ *   The module's semantic truth is stdlib/math/math.xr. This file implements
+ *   only the private leaves that file forwards to: libm routines whose accuracy
+ *   contract Xray arithmetic cannot restate, plus the system random source.
+ *   Every leaf is declared over f64, so none of them inspects the runtime shape
+ *   of its argument.
  */
 
 #include "../common.h"
@@ -68,11 +70,7 @@ static double get_number(XrValue v) {
 static XrValue math_abs(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
-        return xr_int(0);
-    if (XR_IS_INT(args[0])) {
-        XrNumericCoreI64AbsResult result = xr_numeric_core_i64_math_abs(XR_TO_INT(args[0]));
-        return result.is_float ? xr_float(result.float_value) : xr_int(result.int_value);
-    }
+        return xr_float(0.0);
     return xr_float(fabs(get_number(args[0])));
 }
 
@@ -80,8 +78,6 @@ static XrValue math_floor(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_int(0);
-    if (XR_IS_INT(args[0]))
-        return args[0];
     double result = floor(get_number(args[0]));
     if (DOUBLE_FITS_INT64(result))
         return xr_int((int64_t) result);
@@ -92,8 +88,6 @@ static XrValue math_ceil(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_int(0);
-    if (XR_IS_INT(args[0]))
-        return args[0];
     double result = ceil(get_number(args[0]));
     if (DOUBLE_FITS_INT64(result))
         return xr_int((int64_t) result);
@@ -104,8 +98,6 @@ static XrValue math_round(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_int(0);
-    if (XR_IS_INT(args[0]))
-        return args[0];
     double result = round(get_number(args[0]));
     if (DOUBLE_FITS_INT64(result))
         return xr_int((int64_t) result);
@@ -294,135 +286,7 @@ static XrValue math_expm1(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_float(expm1(get_number(args[0])));
 }
 
-static XrValue math_lerp(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 3)
-        return xr_float(0.0);
-    double a = get_number(args[0]);
-    double b = get_number(args[1]);
-    double t = get_number(args[2]);
-    return xr_float(a + (b - a) * t);
-}
-
-static XrValue math_degToRad(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_float(0.0);
-    return xr_float(get_number(args[0]) * (M_PI / 180.0));
-}
-
-static XrValue math_radToDeg(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_float(0.0);
-    return xr_float(get_number(args[0]) * (180.0 / M_PI));
-}
-
 /* ========== Comparison ========== */
-
-static XrValue math_min(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 2)
-        return argc == 1 ? args[0] : xr_null();
-    bool all_int = true;
-    for (int i = 0; i < argc; i++) {
-        if (!XR_IS_INT(args[i])) {
-            all_int = false;
-            break;
-        }
-    }
-    if (all_int) {
-        int64_t result = XR_TO_INT(args[0]);
-        for (int i = 1; i < argc; i++) {
-            int64_t v = XR_TO_INT(args[i]);
-            if (v < result)
-                result = v;
-        }
-        return xr_int(result);
-    }
-    /* IEEE-754 NaN propagation: any NaN argument produces NaN. */
-    double result = get_number(args[0]);
-    if (isnan(result))
-        return xr_float(NAN);
-    for (int i = 1; i < argc; i++) {
-        double v = get_number(args[i]);
-        if (isnan(v))
-            return xr_float(NAN);
-        if (v < result)
-            result = v;
-    }
-    return xr_float(result);
-}
-
-static XrValue math_max(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 2)
-        return argc == 1 ? args[0] : xr_null();
-    bool all_int = true;
-    for (int i = 0; i < argc; i++) {
-        if (!XR_IS_INT(args[i])) {
-            all_int = false;
-            break;
-        }
-    }
-    if (all_int) {
-        int64_t result = XR_TO_INT(args[0]);
-        for (int i = 1; i < argc; i++) {
-            int64_t v = XR_TO_INT(args[i]);
-            if (v > result)
-                result = v;
-        }
-        return xr_int(result);
-    }
-    /* IEEE-754 NaN propagation: any NaN argument produces NaN. */
-    double result = get_number(args[0]);
-    if (isnan(result))
-        return xr_float(NAN);
-    for (int i = 1; i < argc; i++) {
-        double v = get_number(args[i]);
-        if (isnan(v))
-            return xr_float(NAN);
-        if (v > result)
-            result = v;
-    }
-    return xr_float(result);
-}
-
-static XrValue math_clamp(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 3)
-        return xr_null();
-    if (XR_IS_INT(args[0]) && XR_IS_INT(args[1]) && XR_IS_INT(args[2])) {
-        int64_t x = XR_TO_INT(args[0]);
-        int64_t lo = XR_TO_INT(args[1]);
-        int64_t hi = XR_TO_INT(args[2]);
-        if (lo > hi) {
-            int64_t tmp = lo;
-            lo = hi;
-            hi = tmp;
-        }
-        if (x < lo)
-            return xr_int(lo);
-        if (x > hi)
-            return xr_int(hi);
-        return xr_int(x);
-    }
-    double x = get_number(args[0]);
-    double lo = get_number(args[1]);
-    double hi = get_number(args[2]);
-    if (isnan(x) || isnan(lo) || isnan(hi))
-        return xr_float(NAN);
-    if (lo > hi) {
-        double tmp = lo;
-        lo = hi;
-        hi = tmp;
-    }
-    if (x < lo)
-        return xr_float(lo);
-    if (x > hi)
-        return xr_float(hi);
-    return xr_float(x);
-}
 
 /* ========== Random ========== */
 
@@ -452,40 +316,6 @@ static XrValue math_randomInt(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 /* ========== Utilities ========== */
-
-static XrValue math_sign(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_int(0);
-    double v = get_number(args[0]);
-    if (isnan(v))
-        return xr_float(NAN);
-    if (v > 0)
-        return xr_int(1);
-    if (v < 0)
-        return xr_int(-1);
-    return xr_int(0);
-}
-
-static XrValue math_isNaN(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    if (!XR_IS_FLOAT(args[0]))
-        return xr_bool(false);
-    double v = XR_TO_FLOAT(args[0]);
-    return xr_bool(isnan(v));
-}
-
-static XrValue math_isFinite(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    if (XR_IS_INT(args[0]))
-        return xr_bool(true); /* integers are always finite */
-    double v = get_number(args[0]);
-    return xr_bool(isfinite(v));
-}
 
 #define XR_STDLIB_VM_BIND_MODULE_MATH 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"

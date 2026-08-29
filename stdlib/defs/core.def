@@ -70,147 +70,7 @@ module time {
 }
 
 module math {
-  const PI {
-    signature: ": f64"
-    doc: "Ratio of a circle's circumference to its diameter"
-    vm: "math.PI"
-    vm_value: "xr_float(M_PI)"
-    aot_const: "float64"
-    value: 3.14159265358979323846
-    layer: "core"
-  }
-
-  const E {
-    signature: ": f64"
-    doc: "Euler's number"
-    vm: "math.E"
-    vm_value: "xr_float(M_E)"
-    aot_const: "float64"
-    value: 2.71828182845904523536
-    layer: "core"
-  }
-
-  const TAU {
-    signature: ": f64"
-    doc: "Full-circle radians, 2 * PI"
-    vm: "math.TAU"
-    vm_value: "xr_float(2.0 * M_PI)"
-    aot_const: "float64"
-    value: 6.28318530717958647692
-    layer: "core"
-  }
-
-  const SQRT2 {
-    signature: ": f64"
-    doc: "Square root of 2"
-    vm: "math.SQRT2"
-    vm_value: "xr_float(M_SQRT2)"
-    aot_const: "float64"
-    value: 1.41421356237309504880
-    layer: "core"
-  }
-
-  const LN2 {
-    signature: ": f64"
-    doc: "Natural logarithm of 2"
-    vm: "math.LN2"
-    vm_value: "xr_float(M_LN2)"
-    aot_const: "float64"
-    value: 0.69314718055994530942
-    layer: "core"
-  }
-
-  const LN10 {
-    signature: ": f64"
-    doc: "Natural logarithm of 10"
-    vm: "math.LN10"
-    vm_value: "xr_float(M_LN10)"
-    aot_const: "float64"
-    value: 2.30258509299404568402
-    layer: "core"
-  }
-
-  const LOG2E {
-    signature: ": f64"
-    doc: "Base-2 logarithm of e"
-    vm: "math.LOG2E"
-    vm_value: "xr_float(M_LOG2E)"
-    aot_const: "float64"
-    value: 1.44269504088896340736
-    layer: "core"
-  }
-
-  const LOG10E {
-    signature: ": f64"
-    doc: "Base-10 logarithm of e"
-    vm: "math.LOG10E"
-    vm_value: "xr_float(M_LOG10E)"
-    aot_const: "float64"
-    value: 0.43429448190325182765
-    layer: "core"
-  }
-
-  const EPSILON {
-    signature: ": f64"
-    doc: "Smallest representable difference above 1.0"
-    vm: "math.EPSILON"
-    vm_value: "xr_float(DBL_EPSILON)"
-    aot_const: "float64"
-    value: 2.22044604925031308085e-16
-    layer: "core"
-  }
-
-  const MAX_I64 {
-    signature: ": i64"
-    doc: "Largest signed 64-bit integer"
-    vm: "math.MAX_I64"
-    vm_value: "xr_int(INT64_MAX)"
-    aot_const: "int64"
-    value: 9223372036854775807
-    layer: "core"
-  }
-
-  const MIN_I64 {
-    signature: ": i64"
-    doc: "Smallest signed 64-bit integer"
-    vm: "math.MIN_I64"
-    vm_value: "xr_int(INT64_MIN)"
-    aot_const: "int64"
-    value: -9223372036854775808
-    layer: "core"
-  }
-
-  const MAX_F64 {
-    signature: ": f64"
-    doc: "Largest finite IEEE-754 double"
-    vm: "math.MAX_F64"
-    vm_value: "xr_float(DBL_MAX)"
-    aot_const: "float64"
-    value: 1.79769313486231570815e+308
-    layer: "core"
-  }
-
-  const INF {
-    signature: ": f64"
-    doc: "Positive infinity"
-    vm: "math.INF"
-    vm_value: "xr_float(INFINITY)"
-    aot_const: "float64"
-    value: INFINITY
-    layer: "core"
-  }
-
-  const NAN {
-    signature: ": f64"
-    doc: "Quiet NaN value"
-    vm: "math.NAN"
-    vm_value: "xr_float(NAN)"
-    aot_const: "float64"
-    value: NAN
-    layer: "core"
-  }
-
-  fn abs {
+  fn __abs {
     signature: "(x: f64): f64"
     doc: "Absolute value"
     effect: "nothrow"
@@ -223,7 +83,7 @@ module math {
     layer: "core"
   }
 
-  fn floor {
+  fn __floor {
     signature: "(x: f64): i64"
     doc: "Floor to integer"
     effect: "nothrow"
@@ -236,7 +96,7 @@ module math {
     layer: "core"
   }
 
-  fn ceil {
+  fn __ceil {
     signature: "(x: f64): i64"
     doc: "Ceiling to integer"
     effect: "nothrow"
@@ -249,7 +109,7 @@ module math {
     layer: "core"
   }
 
-  fn round {
+  fn __round {
     signature: "(x: f64): i64"
     doc: "Round to nearest integer"
     effect: "nothrow"
@@ -262,7 +122,7 @@ module math {
     layer: "core"
   }
 
-  fn sqrt {
+  fn __sqrt {
     signature: "(x: f64): f64"
     doc: "Square root"
     effect: "nothrow"
@@ -275,7 +135,7 @@ module math {
     layer: "core"
   }
 
-  fn pow {
+  fn __pow {
     signature: "(base: f64, exp: f64): f64"
     doc: "Power"
     effect: "nothrow"
@@ -288,7 +148,7 @@ module math {
     layer: "core"
   }
 
-  fn sin {
+  fn __sin {
     signature: "(x: f64): f64"
     doc: "Sine"
     effect: "nothrow"
@@ -301,7 +161,7 @@ module math {
     layer: "core"
   }
 
-  fn cos {
+  fn __cos {
     signature: "(x: f64): f64"
     doc: "Cosine"
     effect: "nothrow"
@@ -314,7 +174,7 @@ module math {
     layer: "core"
   }
 
-  fn tan {
+  fn __tan {
     signature: "(x: f64): f64"
     doc: "Tangent"
     effect: "nothrow"
@@ -327,7 +187,7 @@ module math {
     layer: "core"
   }
 
-  fn asin {
+  fn __asin {
     signature: "(x: f64): f64"
     doc: "Arc sine"
     effect: "nothrow"
@@ -340,7 +200,7 @@ module math {
     layer: "core"
   }
 
-  fn acos {
+  fn __acos {
     signature: "(x: f64): f64"
     doc: "Arc cosine"
     effect: "nothrow"
@@ -353,7 +213,7 @@ module math {
     layer: "core"
   }
 
-  fn atan {
+  fn __atan {
     signature: "(x: f64): f64"
     doc: "Arc tangent"
     effect: "nothrow"
@@ -366,7 +226,7 @@ module math {
     layer: "core"
   }
 
-  fn atan2 {
+  fn __atan2 {
     signature: "(y: f64, x: f64): f64"
     doc: "Arc tangent of y/x"
     effect: "nothrow"
@@ -379,7 +239,7 @@ module math {
     layer: "core"
   }
 
-  fn log {
+  fn __log {
     signature: "(x: f64): f64"
     doc: "Natural logarithm"
     effect: "nothrow"
@@ -392,7 +252,7 @@ module math {
     layer: "core"
   }
 
-  fn log10 {
+  fn __log10 {
     signature: "(x: f64): f64"
     doc: "Base-10 logarithm"
     effect: "nothrow"
@@ -405,7 +265,7 @@ module math {
     layer: "core"
   }
 
-  fn log2 {
+  fn __log2 {
     signature: "(x: f64): f64"
     doc: "Base-2 logarithm"
     effect: "nothrow"
@@ -418,7 +278,7 @@ module math {
     layer: "core"
   }
 
-  fn exp {
+  fn __exp {
     signature: "(x: f64): f64"
     doc: "Exponential e^x"
     effect: "nothrow"
@@ -431,46 +291,7 @@ module math {
     layer: "core"
   }
 
-  fn min {
-    signature: "(...args: f64): f64"
-    doc: "Minimum value"
-    effect: "nothrow"
-    vm: "math_min"
-    aot: "builtin"
-    argc: variadic
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
-
-  fn max {
-    signature: "(...args: f64): f64"
-    doc: "Maximum value"
-    effect: "nothrow"
-    vm: "math_max"
-    aot: "builtin"
-    argc: variadic
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
-
-  fn clamp {
-    signature: "(x: f64, min: f64, max: f64): f64"
-    doc: "Clamp to a closed interval"
-    effect: "nothrow"
-    vm: "math_clamp"
-    aot: "builtin"
-    argc: 3
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
-
-  fn random {
+  fn __random {
     signature: "(): f64"
     doc: "Random f64 in [0, 1)"
     effect: "nothrow"
@@ -483,7 +304,7 @@ module math {
     layer: "system"
   }
 
-  fn randomInt {
+  fn __randomInt {
     signature: "(min: i64, max: i64): i64"
     doc: "Random integer in [min, max]"
     effect: "nothrow"
@@ -496,20 +317,7 @@ module math {
     layer: "system"
   }
 
-  fn sign {
-    signature: "(x: f64): i64"
-    doc: "Sign of value (-1, 0, 1)"
-    effect: "nothrow"
-    vm: "math_sign"
-    aot: "builtin"
-    argc: 1
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
-
-  fn sinh {
+  fn __sinh {
     signature: "(x: f64): f64"
     doc: "Hyperbolic sine"
     effect: "nothrow"
@@ -522,7 +330,7 @@ module math {
     layer: "core"
   }
 
-  fn cosh {
+  fn __cosh {
     signature: "(x: f64): f64"
     doc: "Hyperbolic cosine"
     effect: "nothrow"
@@ -535,7 +343,7 @@ module math {
     layer: "core"
   }
 
-  fn tanh {
+  fn __tanh {
     signature: "(x: f64): f64"
     doc: "Hyperbolic tangent"
     effect: "nothrow"
@@ -548,7 +356,7 @@ module math {
     layer: "core"
   }
 
-  fn hypot {
+  fn __hypot {
     signature: "(x: f64, y: f64): f64"
     doc: "Hypotenuse sqrt(x*x+y*y)"
     effect: "nothrow"
@@ -561,7 +369,7 @@ module math {
     layer: "core"
   }
 
-  fn cbrt {
+  fn __cbrt {
     signature: "(x: f64): f64"
     doc: "Cube root"
     effect: "nothrow"
@@ -574,7 +382,7 @@ module math {
     layer: "core"
   }
 
-  fn trunc {
+  fn __trunc {
     signature: "(x: f64): i64"
     doc: "Truncate toward zero"
     effect: "nothrow"
@@ -587,7 +395,7 @@ module math {
     layer: "core"
   }
 
-  fn fmod {
+  fn __fmod {
     signature: "(x: f64, y: f64): f64"
     doc: "Floating-point remainder"
     effect: "nothrow"
@@ -600,7 +408,7 @@ module math {
     layer: "core"
   }
 
-  fn log1p {
+  fn __log1p {
     signature: "(x: f64): f64"
     doc: "log(1+x) accurate for small x"
     effect: "nothrow"
@@ -613,7 +421,7 @@ module math {
     layer: "core"
   }
 
-  fn expm1 {
+  fn __expm1 {
     signature: "(x: f64): f64"
     doc: "exp(x)-1 accurate for small x"
     effect: "nothrow"
@@ -626,70 +434,6 @@ module math {
     layer: "core"
   }
 
-  fn lerp {
-    signature: "(a: f64, b: f64, t: f64): f64"
-    doc: "Linear interpolation"
-    effect: "nothrow"
-    vm: "math_lerp"
-    aot: "builtin"
-    argc: 3
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
-
-  fn degToRad {
-    signature: "(deg: f64): f64"
-    doc: "Degrees to radians"
-    effect: "nothrow"
-    vm: "math_degToRad"
-    aot: "builtin"
-    argc: 1
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
-
-  fn radToDeg {
-    signature: "(rad: f64): f64"
-    doc: "Radians to degrees"
-    effect: "nothrow"
-    vm: "math_radToDeg"
-    aot: "builtin"
-    argc: 1
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
-
-  fn isNaN {
-    signature: "(x: f64): bool"
-    doc: "Check if NaN"
-    effect: "nothrow"
-    vm: "math_isNaN"
-    aot: "builtin"
-    argc: 1
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
-
-  fn isFinite {
-    signature: "(x: f64): bool"
-    doc: "Check if finite"
-    effect: "nothrow"
-    vm: "math_isFinite"
-    aot: "builtin"
-    argc: 1
-    aot_direct: true
-    aot_kind: "builtin"
-    link_object: false
-    layer: "core"
-  }
 }
 
 module compress {

@@ -1,8 +1,14 @@
-// 1022_math_type_preserve.xr - Math module type preservation and edge cases
+// 1022_math_type_preserve.xr - Math module declared return types and edge cases
+//
+// math no longer preserves the integer shape of its arguments. Every operand is
+// declared f64 and the declaration is the whole truth: floor/ceil/round/trunc
+// answer i64 because that is what they declare, while abs/min/max/clamp answer
+// f64 whether the argument was written 3 or 3.0. The cases below lock that
+// declared typing, not the old int-in/int-out polymorphism.
 
 import math
 
-// ===== Type preservation: floor/ceil/round return int =====
+// ===== Declared return type: floor/ceil/round answer i64 =====
 
 @test
 fn test_floor_returns_int() {
@@ -46,13 +52,13 @@ fn test_round_int_passthrough() {
     assertEqual(typeName(r) == "i64", true)
 }
 
-// ===== Type preservation: min/max preserve int =====
+// ===== Declared return type: min/max always answer f64 =====
 
 @test
-fn test_min_int_preserves_type() {
+fn test_min_int_literals_return_f64() {
     var r = math.min(3, 7)
-    assertEqual(r, 3)
-    assertEqual(typeName(r) == "i64", true)
+    assertEqual(r, 3.0)
+    assertEqual(typeName(r) == "f64", true)
 }
 
 @test
@@ -63,10 +69,10 @@ fn test_min_float_returns_float() {
 }
 
 @test
-fn test_max_int_preserves_type() {
+fn test_max_int_literals_return_f64() {
     var r = math.max(3, 7)
-    assertEqual(r, 7)
-    assertEqual(typeName(r) == "i64", true)
+    assertEqual(r, 7.0)
+    assertEqual(typeName(r) == "f64", true)
 }
 
 @test
@@ -80,39 +86,39 @@ fn test_max_float_returns_float() {
 
 @test
 fn test_min_variadic() {
-    assertEqual(math.min(5, 3, 8, 1, 9), 1)
-    assertEqual(math.min(10, 20, 30), 10)
+    assertEqual(math.min(5, 3, 8, 1, 9), 1.0)
+    assertEqual(math.min(10, 20, 30), 10.0)
 }
 
 @test
 fn test_max_variadic() {
-    assertEqual(math.max(5, 3, 8, 1, 9), 9)
-    assertEqual(math.max(10, 20, 30), 30)
+    assertEqual(math.max(5, 3, 8, 1, 9), 9.0)
+    assertEqual(math.max(10, 20, 30), 30.0)
 }
 
-// ===== clamp type preservation =====
+// ===== clamp always answers f64 =====
 
 @test
-fn test_clamp_int_preserves_type() {
+fn test_clamp_int_literals_return_f64() {
     var r = math.clamp(5, 0, 10)
-    assertEqual(r, 5)
-    assertEqual(typeName(r) == "i64", true)
+    assertEqual(r, 5.0)
+    assertEqual(typeName(r) == "f64", true)
 }
 
 @test
-fn test_clamp_below_int() {
+fn test_clamp_below_returns_f64() {
     var r = math.clamp(-5, 0, 10)
-    assertEqual(r, 0)
-    assertEqual(typeName(r) == "i64", true)
+    assertEqual(r, 0.0)
+    assertEqual(typeName(r) == "f64", true)
 }
 
-// ===== abs edge cases =====
+// ===== abs always answers f64 =====
 
 @test
-fn test_abs_int_preserves_type() {
+fn test_abs_int_literal_returns_f64() {
     var r = math.abs(-42)
-    assertEqual(r, 42)
-    assertEqual(typeName(r) == "i64", true)
+    assertEqual(r, 42.0)
+    assertEqual(typeName(r) == "f64", true)
 }
 
 @test
@@ -122,7 +128,7 @@ fn test_abs_float_returns_float() {
     assertEqual(typeName(r) == "f64", true)
 }
 
-// ===== trunc type preservation =====
+// ===== trunc answers i64 =====
 
 @test
 fn test_trunc_positive() {

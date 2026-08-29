@@ -1,8 +1,7 @@
 # Intrinsic identity contract
 
-Status: re-frozen after the xxHash AVX2 work added stable fixed-width
-`U32x8`/`U64x4` construction, widening multiply, bitwise, shift, and
-reinterpretation identities without reassigning the existing registry.
+Status: re-frozen after the `math` module gained stable identities for its 35
+core numeric operations, without reassigning the existing registry.
 
 1. Each compiler intrinsic has one canonical, stable numeric identity in the
    registry. The identity, not a spelling, import path, method name, or emitted
@@ -64,9 +63,20 @@ reinterpretation identities without reassigning the existing registry.
     exactness are verified in both directions: an exact callsite that carries no
     mark is as much a violation as a mark on an inexact row.
 
+13. The `math` module's 35 core numeric operations have stable identities
+    `7001`-`7035` in family `MATH`. `stdlib/math/math.xr` declares the public
+    surface and its bodies are the VM/reference semantics; the identity, not
+    the module or member spelling, is what lets AOT emit the operation
+    directly. Every operand is f64: the declared signature is the whole
+    contract, and an integer argument converts rather than selecting a second,
+    integer-preserving meaning. `math.random` and `math.randomInt` have no
+    identity — they are private native leaves, not compiler-owned operations.
+    The `FREESTANDING` flag records which of the 35 emit without libm and is
+    the only authority the freestanding profile consults for a math member.
+
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 2a2b5b90b2c739a55ea51207c67ab2c613396d3e3686ce0c913a1bd79ee91865
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def b6c6cb203d39b640ecf255ac06cf50dcd77e6c6ea91d88ca28e3961b64fbba43
 anchor-sha256: src/ir/xi_method_sym.def 0ec1ca5390eb9be96b1a1fcfbf932787a39d6af810630f88c360538451359702
 anchor-sha256: src/plan/semantic/xr_semantic_native_module_call_shape.h 35d71f47cd448b0baa0980c489b6f807c5affdf0120e746f2d4cf91b81ee5194
 anchor-sha256: src/ir/xi_semantic_intrinsic.c 20a45ccefbdbda7fe02cae622bc6f64187e080ec761b288a77764473a8e86068

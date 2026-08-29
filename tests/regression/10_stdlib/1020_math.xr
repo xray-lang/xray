@@ -1,6 +1,10 @@
 // 1020_math.xr
 // 作者：xingleixu@gmail.com
 // 测试：数学运算
+//
+// math declares every operand as f64, and the declaration is the whole truth.
+// abs/min/max answer f64 however the argument is spelled, so the expected
+// values below are written as floats; floor/ceil/round answer i64.
 
 import math
 
@@ -8,35 +12,35 @@ import math
 
 @test
 fn test_abs_positive() {
-    assertEqual(math.abs(5), 5)
-    assertEqual(math.abs(100), 100)
+    assertEqual(math.abs(5), 5.0)
+    assertEqual(math.abs(100), 100.0)
 }
 
 @test
 fn test_abs_negative() {
-    assertEqual(math.abs(-5), 5)
-    assertEqual(math.abs(-100), 100)
+    assertEqual(math.abs(-5), 5.0)
+    assertEqual(math.abs(-100), 100.0)
 }
 
 @test
 fn test_abs_zero() {
-    assertEqual(math.abs(0), 0)
+    assertEqual(math.abs(0), 0.0)
 }
 
 // ===== 最大最小值 =====
 
 @test
 fn test_max() {
-    assertEqual(math.max(3, 7), 7)
-    assertEqual(math.max(-5, -2), -2)
-    assertEqual(math.max(10, 10), 10)
+    assertEqual(math.max(3, 7), 7.0)
+    assertEqual(math.max(-5, -2), -2.0)
+    assertEqual(math.max(10, 10), 10.0)
 }
 
 @test
 fn test_min() {
-    assertEqual(math.min(3, 7), 3)
-    assertEqual(math.min(-5, -2), -5)
-    assertEqual(math.min(10, 10), 10)
+    assertEqual(math.min(3, 7), 3.0)
+    assertEqual(math.min(-5, -2), -5.0)
+    assertEqual(math.min(10, 10), 10.0)
 }
 
 // ===== 取整函数 =====
@@ -66,16 +70,16 @@ fn test_round() {
 
 @test
 fn test_pow() {
-    assertEqual(math.pow(2, 3), 8)
-    assertEqual(math.pow(3, 2), 9)
-    assertEqual(math.pow(10, 0), 1)
+    assertEqual(math.pow(2, 3), 8.0)
+    assertEqual(math.pow(3, 2), 9.0)
+    assertEqual(math.pow(10, 0), 1.0)
 }
 
 @test
 fn test_sqrt() {
-    assertEqual(math.sqrt(4), 2)
-    assertEqual(math.sqrt(9), 3)
-    assertEqual(math.sqrt(1), 1)
+    assertEqual(math.sqrt(4), 2.0)
+    assertEqual(math.sqrt(9), 3.0)
+    assertEqual(math.sqrt(1), 1.0)
 }
 
 // ===== 常量 =====

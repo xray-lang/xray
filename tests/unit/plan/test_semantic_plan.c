@@ -2742,7 +2742,7 @@ static void test_immutable_owned_snapshot(void) {
      * operation-owner registry, not the stdlib registry.
      * Old: 5025f53c7269ea10865ff6151b16114d0935c07e1734b7dfe002de69a5a34881. */
     REQUIRE(strcmp(semantic_hex,
-                   "824f9cd094c801ad2db105ba97ac080cbdeb79c0a50cc938ba906e10a9027aba") == 0);
+                   "01b1c8a2720377127f4d78132431cf934be5b5aceefb9dd56eba5f9b85db473b") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3807,9 +3807,9 @@ static void test_source_export_call_target_authority(void) {
      * fingerprint in the key, so it stays put.
      * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
      * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "7febb40c979d4c33d701b155035eafb2") == 0);
+    REQUIRE(strcmp(dependency_id, "03beb9979549900c1bc11e3c19c1bfb2") == 0);
     REQUIRE(strcmp(export_id, "fda3c47f9afbb56bc6f54afe0f1f2516") == 0);
-    REQUIRE(strcmp(target_id, "c4bad43487a5c6d6d3b062e88a7a2964") == 0);
+    REQUIRE(strcmp(target_id, "2df037994612a00359445a0375b439fb") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -4087,11 +4087,11 @@ static void test_native_module_scalar_call_authority(void) {
             XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL);
     xr_semantic_plan_free(other_module);
 
-    /* `math.randomInt(min, max)` carries arguments, so the argument half of the
+    /* `math.__randomInt(min, max)` carries arguments, so the argument half of the
      * boundary judgement is live: each operand states its own parameter index
      * and crosses as one plain scalar. */
     XrSemanticPlan *plan = build_native_module_scalar_call_plan(
-        "math", NULL, "randomInt", 2,
+        "math", NULL, "__randomInt", 2,
         NATIVE_MODULE_CALL_IMMEDIATE(k_native_module_method_symbol, 0), &stub_i64);
     XrSemanticOperationRecord *call = native_module_call_operation(plan);
     const XrSemanticOperationRecord *import = NULL;
@@ -4104,7 +4104,7 @@ static void test_native_module_scalar_call_authority(void) {
             (call->flags & XI_FLAG_MAY_SUSPEND) == 0 &&
             (call->effects & XI_EFFECT_MAY_SUSPEND) == 0 && call->result_alias_operand == -1 &&
             call->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT);
-    REQUIRE(strcmp(plan->metadata[call->metadata_begin], "randomInt") == 0);
+    REQUIRE(strcmp(plan->metadata[call->metadata_begin], "__randomInt") == 0);
     const XrSemanticOperandRecord *receiver = &plan->operands[call->operand_begin];
     REQUIRE(receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
             receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&

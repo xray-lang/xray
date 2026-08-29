@@ -1270,9 +1270,8 @@ endif()
 # compile would not link -- so the build states them where it states the rest of
 # its module selection.
 #   prelude - installed into the isolate itself; the module is an import no-op
-#   math    - still a whole-module native policy, so it has native entries only
 #   test_yield - scheduler test stubs, present only in test-module builds
-set(XRAY_STDLIB_SOURCELESS_MODULES prelude math)
+set(XRAY_STDLIB_SOURCELESS_MODULES prelude)
 if(XR_BUILD_TEST_MODULES)
     list(APPEND XRAY_STDLIB_SOURCELESS_MODULES test_yield)
 endif()
