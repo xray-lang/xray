@@ -1019,6 +1019,11 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int64_t start, i
     slice->elem_tid = arr->elem_tid;
     slice->contains_refs = arr->contains_refs;
     slice->data_on_region_heap = 0;  // Slice doesn't own the blob; source array marks it
+    /* Inherit the source's accounting owner. A slice borrows its buffer and so
+     * never charges or refunds bytes itself, but xr_alloc hands back memory with
+     * only the object header initialised — leaving this field unset makes every
+     * xr_array_accounting_heap() read of a slice undefined behaviour. */
+    slice->owner_heap = arr->owner_heap;
     memset(slice->_pad, 0, sizeof(slice->_pad));
 
     return slice;

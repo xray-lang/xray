@@ -49,6 +49,9 @@ add_xray_unit_test(test_arena util/test_arena.c)
 add_xray_unit_test(test_region mem/test_region.c)
 add_xray_unit_test(test_obj_header mem/test_obj_header.c)
 add_xray_unit_test(test_fixed_heap_teardown mem/test_fixed_heap_teardown.c)
+# A root-level deep copy lands on the fixed heap, so the copied array must
+# carry an initialised accounting owner or teardown dereferences garbage.
+add_xray_unit_test(test_deep_copy_array_owner_heap mem/test_deep_copy_array_owner_heap.c)
 # The runtime half of `weak`, tested before any language
 # surface exists for it (W1 read-promotes, W5 definite clearing point).
 add_xray_unit_test(test_weak_handle mem/test_weak_handle.c)

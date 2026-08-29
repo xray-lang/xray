@@ -497,6 +497,14 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_arr->elem_tid = array->elem_tid;
     new_arr->contains_refs = array->contains_refs;
     new_arr->data_on_region_heap = 0;  // data allocated via xr_malloc (system heap)
+    /* Fix the accounting owner exactly as the map and set copies do. The buffer
+     * below is charged to ctx->dst_heap, and xr_obj_destroy_array refunds
+     * whatever this field names, so the two sides must agree. Leaving it unset
+     * left the destructor reading uninitialised heap memory: copy_ctx_alloc
+     * falls back to xr_fixed_heap_alloc when there is no destination coroutine
+     * (a root-level copy), and that allocator initialises only the object
+     * header, so teardown dereferenced a garbage heap pointer. */
+    new_arr->owner_heap = ctx->dst_heap;
     memset(new_arr->_pad, 0, sizeof(new_arr->_pad));
 
     size_t alloc_size = (size_t) new_arr->elem_size * new_arr->capacity;
