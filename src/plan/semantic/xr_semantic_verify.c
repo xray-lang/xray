@@ -40,6 +40,7 @@
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
+#include "../../module/xmodule_identity.h"
 #include "../../runtime/value/xtype.h"
 #include "../../shared/xr_hash_core.h"
 #include "../../shared/xr_exact_scalar_registry.h"
@@ -2418,35 +2419,8 @@ static bool verify_array_member_reference_contract(const XrSemanticPlan *plan,
                                                    const XrSemanticOperationRecord *operation,
                                                    uint32_t element_type_index,
                                                    const XrSemanticTypeRecord *element_type) {
-    if (!plan || !shape || !operation || !element_type)
-        return false;
-    if ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
-        return true;
-    if (shape->reference_action == XR_ARRAY_MEMBER_REFERENCE_PRESERVE)
-        return shape->element_operand == 0 &&
-               (shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ ||
-                shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE) &&
-               shape->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_NONE;
-    if (shape->reference_action != XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE ||
-        shape->element_access != XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE ||
-        shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
-        shape->element_operand == 0 || shape->element_operand >= operation->operand_count ||
-        xr_semantic_class_instance_type_source_class(plan, element_type) == XR_SEMANTIC_INDEX_NONE)
-        return false;
-    bool exact_push = strcmp(shape->selector, "push") == 0 && operation->operand_count == 2 &&
-                      operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
-    bool exact_fill = strcmp(shape->selector, "fill") == 0 && operation->operand_count == 4 &&
-                      operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
-    if (!exact_push && !exact_fill)
-        return false;
-    uint32_t semantic_operand = operation->operand_begin + shape->element_operand;
-    if (semantic_operand >= plan->operand_count)
-        return false;
-    const XrSemanticOperandRecord *element = &plan->operands[semantic_operand];
-    return element->type == element_type_index && element->role == XR_SEM_OPERAND_ARGUMENT &&
-           element->parameter == (int16_t) (shape->element_operand - 1u) &&
-           element->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           element->ownership_action == XR_SEM_OPERAND_CONSUME;
+    return xr_semantic_array_member_reference_contract_is_exact(plan, shape, operation,
+                                                                element_type_index, element_type);
 }
 
 static bool verify_array_member_scalar(const XrSemanticPlan *plan,
@@ -2538,6 +2512,7 @@ static bool verify_native_module_scalar_call(const XrSemanticPlan *plan,
         exact = module_path && xr_stdlib_metadata_exact_native_direct_member(
                                    module_path, selector, (uint16_t) arity) != NULL;
     }
+    exact = exact || xr_semantic_native_direct_scalar_call_shape_is_exact(plan, operation, NULL);
     return classified == exact || report(error, error_size, "XR_SEM_0019",
                                          "native module scalar call authority is not exact");
 }
@@ -3279,12 +3254,16 @@ static bool private_leaf_source_program_operation(const XrSemanticPlan *plan, ui
 static bool resolve_frozen_native_namespace_yieldable_target(
     const XrSemanticPlan *plan, const uint32_t *definitions, uint32_t value_count,
     const XrFrozenSharedStoreIndex *stores, uint32_t operation_index, const char **module_path,
-    const char **selector) {
+    size_t *module_path_length, const char **selector, const char **refusal) {
+    if (refusal)
+        *refusal = "call shape";
     const XrSemanticOperationRecord *call = &plan->operations[operation_index];
     if (call->opcode != XI_CALL_METHOD || (call->semantic_immediate & 1) != 0 ||
         call->operand_count == 0 || call->metadata_count != 1 ||
         plan->operands[call->operand_begin].role != XR_SEM_OPERAND_RECEIVER)
         return false;
+    if (refusal)
+        *refusal = "receiver definition chain";
     uint32_t value = plan->operands[call->operand_begin].value;
     uint32_t load = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
@@ -3304,6 +3283,8 @@ static bool resolve_frozen_native_namespace_yieldable_target(
     }
     if (load == XR_SEMANTIC_INDEX_NONE)
         return false;
+    if (refusal)
+        *refusal = "root shared-store authority";
     int64_t slot = plan->operations[load].semantic_immediate;
     uint32_t store = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t owner = call->function; owner != XR_SEMANTIC_INDEX_NONE;
@@ -3321,6 +3302,8 @@ static bool resolve_frozen_native_namespace_yieldable_target(
     }
     if (store == XR_SEMANTIC_INDEX_NONE || plan->operations[store].operand_count != 1)
         return false;
+    if (refusal)
+        *refusal = "root import definition chain";
     value = plan->operands[plan->operations[store].operand_begin].value;
     for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
         if (value >= value_count || definitions[value] >= plan->operation_count)
@@ -3329,20 +3312,45 @@ static bool resolve_frozen_native_namespace_yieldable_target(
         if (producer->function != 0)
             return false;
         if (producer->opcode == XI_IMPORT_REF) {
+            bool namespace_resolution =
+                producer->import_resolution == XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
+                producer->import_resolution == XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE;
             if (producer->metadata_count != 2 || producer->metadata_begin > plan->metadata_count ||
                 producer->metadata_count > plan->metadata_count - producer->metadata_begin ||
-                producer->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
-                plan->metadata[producer->metadata_begin][0] == '\0' ||
+                !namespace_resolution || plan->metadata[producer->metadata_begin][0] == '\0' ||
                 plan->metadata[producer->metadata_begin + 1][0] != '\0')
                 return false;
             const char *candidate_module = plan->metadata[producer->metadata_begin];
             const char *candidate_selector = plan->metadata[call->metadata_begin];
-            const XrStdlibDefEntry *binding =
-                xr_stdlib_metadata_unique_func(candidate_module, candidate_selector);
-            if (!binding || !binding->signature || !binding->vm || !binding->vm_binding ||
-                strcmp(binding->vm_binding, "yieldable") != 0 ||
-                call->operand_count != (uint16_t) (binding->argc + 1u))
+            size_t candidate_module_length = strlen(candidate_module);
+            if (producer->import_resolution == XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
+                !xr_module_identity_stdlib_namespace(candidate_module, &candidate_module,
+                                                     &candidate_module_length)) {
+                if (refusal)
+                    *refusal = "source namespace is not a stdlib identity";
                 return false;
+            }
+            *module_path = candidate_module;
+            *module_path_length = candidate_module_length;
+            *selector = candidate_selector;
+            const XrStdlibDefEntry *binding = xr_stdlib_metadata_unique_func_span(
+                candidate_module, candidate_module_length, candidate_selector);
+            if (!binding) {
+                if (refusal)
+                    *refusal = "missing unique registry member";
+                return false;
+            }
+            if (!binding->signature || !binding->vm || !binding->vm_binding ||
+                strcmp(binding->vm_binding, "yieldable") != 0) {
+                if (refusal)
+                    *refusal = "incomplete yieldable registry binding";
+                return false;
+            }
+            if (call->operand_count != (uint16_t) (binding->argc + 1u)) {
+                if (refusal)
+                    *refusal = "yieldable registry arity mismatch";
+                return false;
+            }
             *module_path = candidate_module;
             *selector = candidate_selector;
             return true;
@@ -3748,11 +3756,14 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                 &source_selector,
                 program_external && private_leaf_source_program_operation(plan, operation));
         const char *native_namespace_module = NULL;
+        size_t native_namespace_module_length = 0;
         const char *native_namespace_selector = NULL;
+        const char *native_namespace_refusal = "not evaluated";
         bool native_namespace =
             !program_bound && resolve_frozen_native_namespace_yieldable_target(
                                   plan, definitions, value_count, &stores, operation,
-                                  &native_namespace_module, &native_namespace_selector);
+                                  &native_namespace_module, &native_namespace_module_length,
+                                  &native_namespace_selector, &native_namespace_refusal);
         uint32_t builtin_instance_type = XR_SEMANTIC_INDEX_NONE;
         const char *builtin_instance = program_bound
                                            ? NULL
@@ -3946,8 +3957,8 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                         stable_id_zero(target->callee_function) &&
                         target->callable_type == indirect_type;
         bool native_namespace_shape =
-            native_namespace && !source_namespace && direct_function == XR_SEMANTIC_INDEX_NONE &&
-            !native_yieldable && indirect_type == XR_SEMANTIC_INDEX_NONE &&
+            native_namespace && direct_function == XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
+            indirect_type == XR_SEMANTIC_INDEX_NONE &&
             target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE &&
             target->function == XR_SEMANTIC_INDEX_NONE &&
             target->dependency == XR_SEMANTIC_INDEX_NONE &&
@@ -4025,9 +4036,30 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
              !builtin_instance_shape && !source_instance_shape && !open_source_instance_shape &&
              !class_construction_shape && !imported_class_construction_shape) ||
             target->reserved[0] != 0 || target->reserved[1] != 0 || target->reserved[2] != 0) {
+            char detail[640];
+            snprintf(detail, sizeof(detail),
+                     "call-target authority disagrees with frozen invocation facts "
+                     "operation=%u function=%u opcode=%u target-kind=%u direct=%u native=%u "
+                     "source=%u indirect=%u native-namespace=%u builtin-instance=%u "
+                     "source-instance=%u open-source-instance=%u class-construction=%u "
+                     "imported-class-construction=%u source-namespace=%u native-namespace-fact=%u "
+                     "native-yieldable=%u indirect-type=%u native-module=%.*s native-selector=%s "
+                     "native-namespace-refusal=%s "
+                     "reserved=%u,%u,%u",
+                     operation, source_call->function, source_call->opcode, target->kind,
+                     direct ? 1u : 0u, native ? 1u : 0u, source_shape ? 1u : 0u, indirect ? 1u : 0u,
+                     native_namespace_shape ? 1u : 0u, builtin_instance_shape ? 1u : 0u,
+                     source_instance_shape ? 1u : 0u, open_source_instance_shape ? 1u : 0u,
+                     class_construction_shape ? 1u : 0u,
+                     imported_class_construction_shape ? 1u : 0u, source_namespace ? 1u : 0u,
+                     native_namespace ? 1u : 0u, native_yieldable ? 1u : 0u, indirect_type,
+                     (int) native_namespace_module_length,
+                     native_namespace_module ? native_namespace_module : "",
+                     native_namespace_selector ? native_namespace_selector : "",
+                     native_namespace_refusal ? native_namespace_refusal : "", target->reserved[0],
+                     target->reserved[1], target->reserved[2]);
             xr_free(stores.rows);
-            return report(error, error_size, "XR_SEM_0019",
-                          "call-target authority disagrees with frozen invocation facts");
+            return report(error, error_size, "XR_SEM_0019", detail);
         }
         char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
         char function_id[XR_STABLE_ID_BYTES * 2 + 1];
@@ -4065,11 +4097,11 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, type_id,
                               (unsigned) target->kind);
         } else if (native_namespace_shape) {
-            length =
-                snprintf(expected_key, sizeof(expected_key),
-                         "call-target-v5:schema=%u:operation=%s:native-namespace=%s.%s:kind=%u",
-                         XR_SEMANTIC_SCHEMA_VERSION, operation_id, native_namespace_module,
-                         native_namespace_selector, (unsigned) target->kind);
+            length = snprintf(
+                expected_key, sizeof(expected_key),
+                "call-target-v5:schema=%u:operation=%s:native-namespace=%.*s.%s:kind=%u",
+                XR_SEMANTIC_SCHEMA_VERSION, operation_id, (int) native_namespace_module_length,
+                native_namespace_module, native_namespace_selector, (unsigned) target->kind);
         } else if (builtin_instance_shape) {
             char type_id[XR_STABLE_ID_BYTES * 2 + 1];
             xr_stable_id_hex(plan->types[target->callable_type].id, type_id);
@@ -4864,8 +4896,13 @@ static bool verify_coroutine_authority(const XrSemanticPlan *plan, char *error, 
                     : "";
             snprintf(detail, sizeof(detail),
                      "coroutine state count disagrees with grounded call authority "
-                     "function=%u operation=%u opcode=%u selector=%s expected=%u actual=%u",
-                     record->function, operation, record->opcode, selector, expected ? 1u : 0u,
+                     "function=%u operation=%u opcode=%u selector=%s target=%u kind=%u "
+                     "dependency-deferred=%u expected=%u actual=%u",
+                     record->function, operation, record->opcode, selector, target_index,
+                     target_index == XR_SEMANTIC_INDEX_NONE
+                         ? (unsigned) UINT8_MAX
+                         : (unsigned) plan->call_targets[target_index].kind,
+                     dependency_deferred ? 1u : 0u, expected ? 1u : 0u,
                      work.state_counts[operation]);
             /* Each operation carries its own state-count judgement over a plan
              * this loop only reads, so surveying the rest costs nothing but the
@@ -5299,8 +5336,10 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
 /* Keep module-set verification on the canonical cross-module admission rule. */
 static bool parameter_type_admits_argument(const XrSemanticPlan *callee,
                                            const XrSemanticTypeRecord *parameter_type,
-                                           const XrSemanticTypeRecord *operand_type) {
-    return xr_semantic_parameter_type_admits_argument(callee, parameter_type, operand_type);
+                                           const XrSemanticTypeRecord *operand_type,
+                                           uint8_t parameter_mode) {
+    return xr_semantic_parameter_type_admits_argument(callee, parameter_type, operand_type,
+                                                      parameter_mode);
 }
 
 static bool verify_dependency_rows(const XrSemanticPlan *plan, char *error, size_t error_size) {
@@ -6063,7 +6102,8 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
             else if (parameter->function != source_export->function ||
                      parameter->ordinal != ordinal)
                 disagreement = "parameter-row-is-another-function";
-            else if (!parameter_type_admits_argument(match, parameter_type, operand_type))
+            else if (!parameter_type_admits_argument(match, parameter_type, operand_type,
+                                                     parameter->mode))
                 disagreement = "argument-type";
             else if (operand->role != XR_SEM_OPERAND_ARGUMENT ||
                      operand->parameter != (int16_t) ordinal)

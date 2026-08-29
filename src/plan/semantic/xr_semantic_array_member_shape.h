@@ -28,6 +28,8 @@
 
 #include <stddef.h>
 #include "xr_semantic_plan.h"
+#include "xr_semantic_class_shape.h"
+#include "xr_semantic_string_shape.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
 #include <stdint.h>
@@ -178,6 +180,55 @@ static inline bool xr_semantic_array_member_argument_is_exact(
     if (shape->string_operand != 0 && ordinal == shape->string_operand)
         return xr_semantic_array_member_string_type_is_exact(argument_type);
     return xr_semantic_array_member_i64_type_is_exact(argument_type);
+}
+
+/* Reference elements use the runtime's tagged XrValue lane. Its closed
+ * ownership roster is the same one already used by container copy: an exact
+ * String or a frozen source-class instance. Keeping this judgement beside the
+ * selector lifecycle table prevents four plan layers from narrowing the same
+ * language fact independently. */
+static inline bool
+xr_semantic_array_member_owned_reference_type_is_exact(const XrSemanticPlan *plan,
+                                                       const XrSemanticTypeRecord *type) {
+    return xr_semantic_tagged_string_type_is_exact(type) ||
+           xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE;
+}
+
+static inline bool xr_semantic_array_member_reference_contract_is_exact(
+    const XrSemanticPlan *plan, const XrArrayMemberShape *shape,
+    const XrSemanticOperationRecord *operation, uint32_t element_type_index,
+    const XrSemanticTypeRecord *element_type) {
+    if (!plan || !shape || !operation || !element_type)
+        return false;
+    if ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
+        return true;
+    if (shape->reference_action == XR_ARRAY_MEMBER_REFERENCE_PRESERVE)
+        return shape->element_operand == 0 &&
+               (shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ ||
+                shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE) &&
+               shape->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_NONE;
+    if (shape->reference_action != XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE ||
+        shape->element_access != XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE ||
+        shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
+        shape->element_operand == 0 || shape->element_operand >= operation->operand_count ||
+        !xr_semantic_array_member_owned_reference_type_is_exact(plan, element_type))
+        return false;
+    bool exact_push = strcmp(shape->selector, "push") == 0 && operation->operand_count == 2 &&
+                      operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
+    bool exact_fill = strcmp(shape->selector, "fill") == 0 && operation->operand_count == 4 &&
+                      operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
+    if (!exact_push && !exact_fill)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t semantic_operand = operation->operand_begin + shape->element_operand;
+    if (!operands || semantic_operand >= operand_count)
+        return false;
+    const XrSemanticOperandRecord *element = &operands[semantic_operand];
+    return element->type == element_type_index && element->role == XR_SEM_OPERAND_ARGUMENT &&
+           element->parameter == (int16_t) (shape->element_operand - 1u) &&
+           element->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           element->ownership_action == XR_SEM_OPERAND_CONSUME;
 }
 
 static inline bool xr_semantic_array_member_result_is_exact(

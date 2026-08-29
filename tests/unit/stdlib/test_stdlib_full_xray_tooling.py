@@ -317,7 +317,7 @@ class NativeLeafAllowlistTest(unittest.TestCase):
     def load(self, body: str) -> tuple[dict, list[str]]:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
+        root = Path(temporary.name).resolve()
         (root / "stdlib").mkdir()
         (root / inventory.NATIVE_LEAF_ALLOWLIST_PATH).write_text(body, encoding="utf-8")
         return inventory.load_leaf_allowlist(root)
@@ -334,7 +334,7 @@ class NativeLeafAllowlistTest(unittest.TestCase):
     def test_missing_allowlist_file_is_a_defect_not_an_empty_allowlist(self) -> None:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        records, defects = inventory.load_leaf_allowlist(Path(temporary.name))
+        records, defects = inventory.load_leaf_allowlist(Path(temporary.name).resolve())
         self.assertEqual({}, records)
         self.assertTrue(any("is missing" in item for item in defects))
 

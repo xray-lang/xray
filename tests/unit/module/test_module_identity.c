@@ -275,6 +275,22 @@ TEST(durable_identity_parser_rejects_raw_and_ambiguous_text) {
         "stdlib-module-v1:module=5:probe:path=15:probe/probe.xr", NULL));
 }
 
+TEST(stdlib_identity_exposes_non_owning_namespace_slice) {
+    const char *module = NULL;
+    size_t module_length = 0;
+    ASSERT_TRUE(xr_module_identity_stdlib_namespace(
+        "stdlib-module-v1:module=4:time:path=12:time/time.xr", &module, &module_length));
+    ASSERT_EQ_UINT(module_length, 4);
+    ASSERT_TRUE(module && memcmp(module, "time", module_length) == 0);
+    ASSERT_FALSE(xr_module_identity_stdlib_namespace(
+        "module-id-v1:kind=project:namespace=4:time:path=12:time/time.xr", &module,
+        &module_length));
+    ASSERT_NULL(module);
+    ASSERT_EQ_UINT(module_length, 0);
+    ASSERT_FALSE(xr_module_identity_stdlib_namespace(
+        "stdlib-module-v1:module=4:time:path=2:..", &module, &module_length));
+}
+
 TEST(resolver_publishes_typed_stdlib_identity) {
     /* `time` is in the generated descriptor table, which is the resolver's
      * only source of stdlib module names. */
@@ -551,6 +567,7 @@ RUN_TEST(stdlib_identity_is_equal_for_equal_embedded_and_dev_bytes);
 RUN_TEST(memory_identity_requires_an_explicit_valid_id);
 RUN_TEST(memory_graph_rejects_missing_or_raw_eval_identity_before_publication);
 RUN_TEST(durable_identity_parser_rejects_raw_and_ambiguous_text);
+RUN_TEST(stdlib_identity_exposes_non_owning_namespace_slice);
 RUN_TEST(resolver_publishes_typed_stdlib_identity);
 RUN_TEST(xi_and_global_evidence_reject_untyped_identity_mutations);
 RUN_TEST(source_content_fingerprint_is_domain_and_length_framed);

@@ -182,10 +182,13 @@ bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan,
                                      uint32_t *out_semantic_function,
                                      uint32_t *out_semantic_value, char *error,
                                      size_t error_size) {
-    return scalar_semantic_value_id(target_plan,
-                                    xr_target_plan_semantic_plan(target_plan), function,
-                                    value, out_semantic_function, out_semantic_value,
-                                    error, error_size);
+    uint32_t partition = UINT32_MAX;
+    const XrSemanticPlan *semantic_plan = function ? function->semantic_plan : NULL;
+    if (!xr_target_plan_partition_for_semantic(target_plan, semantic_plan, &partition))
+        return fail(error, error_size,
+                    "Xi function is not part of the verified TargetPlan module set");
+    return scalar_semantic_value_id(target_plan, semantic_plan, function, value,
+                                    out_semantic_function, out_semantic_value, error, error_size);
 }
 
 bool xr_aot_scalar_program_semantic_value_id(
@@ -370,7 +373,11 @@ XR_FUNC bool xr_aot_rep_adapter_value_is_exact(const XrTargetPlan *target_plan,
         !value_belongs_to_block(value->block, value))
         return fail(error, error_size, "backend representation adapter provenance is invalid");
 
-    const XrSemanticPlan *semantic_plan = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticPlan *semantic_plan = function->semantic_plan;
+    uint32_t partition = UINT32_MAX;
+    if (!xr_target_plan_partition_for_semantic(target_plan, semantic_plan, &partition))
+        return fail(error, error_size,
+                    "backend representation adapter has no TargetPlan module scope");
     const XrSemanticFunctionRecord *semantic_function =
         semantic_plan && function->semantic_plan_function_index != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_function(semantic_plan, function->semantic_plan_function_index)
@@ -384,7 +391,8 @@ XR_FUNC bool xr_aot_rep_adapter_value_is_exact(const XrTargetPlan *target_plan,
     if (!xr_aot_scalar_semantic_value_id(target_plan, function, value->args[0], &source_function,
                                          &source_value, error, error_size))
         return false;
-    const XrTargetValueRepRecord *binding = xr_target_plan_value_rep(target_plan, source_value);
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep_for_module(target_plan, partition, source_value);
     if (binding) {
         const XrTargetMachineRepRecord *register_rep =
             xr_target_plan_machine_rep(target_plan, binding->register_rep);

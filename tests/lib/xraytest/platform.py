@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 IS_WINDOWS = os.name == "nt"
+IS_DARWIN = sys.platform == "darwin"
 
 # Executable and static-library affixes. The AOT and toolchain code needs the
 # real on-disk names, which differ only by platform, never by suite.

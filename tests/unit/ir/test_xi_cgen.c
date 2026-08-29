@@ -738,8 +738,9 @@ static bool test_aot_plan_build_emission_plans(TestAotPlan *plan) {
         XrCEmissionPlan *emission_plan = NULL;
         char error[512] = {0};
         if (!xr_c_emission_plan_build(
-                target_plan, xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)),
-                &emission_plan, error, sizeof(error)) ||
+                target_plan, xr_target_plan_semantic_plan(target_plan),
+                xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)), &emission_plan,
+                error, sizeof(error)) ||
             !xr_c_emission_plan_is_verified(emission_plan)) {
             fprintf(stderr, "  C emission plan fixture error: %s\n",
                     error[0] ? error : "unverified emission plan");
@@ -939,10 +940,10 @@ static bool test_c_emission_registry_install(TestCEmissionRegistry *registry, Xi
                                               : NULL;
         XrCEmissionPlan *emission_plan = NULL;
         char error[512] = {0};
-        if (!target_plan ||
-            !xr_c_emission_plan_build(
-                target_plan, xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)),
-                &emission_plan, error, sizeof(error))) {
+        if (!target_plan || !xr_c_emission_plan_build(
+                                target_plan, xr_target_plan_semantic_plan(target_plan),
+                                xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)),
+                                &emission_plan, error, sizeof(error))) {
             fprintf(stderr, "  C emission registry fixture error: %s\n",
                     error[0] ? error : "missing TargetPlan authority");
             test_c_emission_registry_free(registry);
@@ -1221,8 +1222,9 @@ TEST(target_plan_scalar_ref_c_emission_from_source) {
     TEST_REQUIRE(calls && argument->call < call_count,
                  "source scalar-ref argument names its frozen call");
 
-    TEST_REQUIRE(xr_c_emission_plan_build(target, xr_target_profile_fingerprint(profile), &emission,
-                                          error, sizeof(error)),
+    TEST_REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                          xr_target_profile_fingerprint(profile), &emission, error,
+                                          sizeof(error)),
                  "source scalar-ref fixture built C-emission authority");
     XrCCallArgumentEmissionView view = {0};
     TEST_REQUIRE(
@@ -1309,8 +1311,15 @@ static bool test_prepare_backend_ir(XiFunc *ir) {
         .init = ir,
     };
     XiModule *saved_module = ir->module;
-    if (!saved_module)
+    if (!saved_module) {
         ir->module = &fixture_module;
+    } else if (!saved_module->identity &&
+               !xi_module_set_identity(saved_module,
+                                       "memory-module-v1:id=18:xi-cgen-fixture-v1")) {
+        fprintf(stderr, "  fixture module identity allocation failed for '%s'\n",
+                ir->name ? ir->name : "<anonymous>");
+        return false;
+    }
 
     char error[512] = {0};
     XiOptimizedProgram *optimized = NULL;
@@ -2749,10 +2758,11 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
     XrCEmissionPlan *same_emission = NULL;
-    TEST_REQUIRE(
-        xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)),
-        "native unsigned interpolation CEmission plan should build");
-    TEST_REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &same_emission, error,
+    TEST_REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                          profile_fingerprint, &emission, error, sizeof(error)),
+                 "native unsigned interpolation CEmission plan should build");
+    TEST_REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                          profile_fingerprint, &same_emission, error,
                                           sizeof(error)) &&
                      xr_fingerprint_equal(xr_c_emission_plan_fingerprint(emission),
                                           xr_c_emission_plan_fingerprint(same_emission)),
@@ -2796,21 +2806,21 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
     XrCRecipeArgumentView *direct = (XrCRecipeArgumentView *) &view.recipe_arguments[1];
     uint8_t saved_kind = direct->kind;
     direct->kind = XR_C_RECIPE_ARGUMENT_STRING_VALUE;
-    TEST_REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
-        "direct u64 recipe kind mutation fails closed");
+    TEST_REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                            profile_fingerprint, error, sizeof(error)),
+                 "direct u64 recipe kind mutation fails closed");
     direct->kind = saved_kind;
     uint32_t saved_logical = direct->semantic_value;
     direct->semantic_value = literal_value;
-    TEST_REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
-        "direct u64 logical identity mutation fails closed");
+    TEST_REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                            profile_fingerprint, error, sizeof(error)),
+                 "direct u64 logical identity mutation fails closed");
     direct->semantic_value = saved_logical;
     uint32_t saved_source = direct->source_semantic_value;
     direct->source_semantic_value = literal_value;
-    TEST_REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
-        "direct u64 source identity mutation fails closed");
+    TEST_REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                            profile_fingerprint, error, sizeof(error)),
+                 "direct u64 source identity mutation fails closed");
     direct->source_semantic_value = saved_source;
     XrTargetValueRepRecord *source_binding =
         (XrTargetValueRepRecord *) xr_target_plan_value_rep(target, logical_value);
@@ -2820,14 +2830,14 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
     uint16_t saved_memory_rep = source_binding->memory_rep;
     source_binding->register_rep = literal_binding->register_rep;
     source_binding->memory_rep = literal_binding->memory_rep;
-    TEST_REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
-        "direct u64 Target representation mutation fails closed");
+    TEST_REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                            profile_fingerprint, error, sizeof(error)),
+                 "direct u64 Target representation mutation fails closed");
     source_binding->register_rep = saved_register_rep;
     source_binding->memory_rep = saved_memory_rep;
-    TEST_REQUIRE(
-        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)),
-        "restored direct u64 CEmission recipe verifies");
+    TEST_REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                           profile_fingerprint, error, sizeof(error)),
+                 "restored direct u64 CEmission recipe verifies");
     xr_c_emission_plan_free(same_emission);
     xr_c_emission_plan_free(emission);
     xr_target_plan_free(target);
@@ -3462,8 +3472,8 @@ TEST(cgen_span_passed_only_to_direct_call_omits_data_cache) {
     const char *src = "fn viewLength(view: Slice<u8>) -> i64 { return len(view) }\n"
                       "fn slicedLength(bytes: Array<u8>) -> i64 {\n"
                       "    const view: Slice<u8> = bytes[1:]\n"
-                      "    var decoded = string.fromUtf8(bytes)\n"
-                      "    if (decoded == null) { return 0 }\n"
+                      "    var decoded = string.fromUtf8(bytes[:])!\n"
+                      "    if (decoded == \"\") { return 0 }\n"
                       "    return viewLength(view)\n"
                       "}\n"
                       "var bytes: Array<u8> = [1, 2, 3]\n"
@@ -3550,8 +3560,8 @@ TEST(cgen_unused_shared_load_is_debug_only_when_source_bound) {
     TEST_REQUIRE(fn != NULL, "manual debug-shared definition should be emitted");
     const char *fn_end = strstr(fn, "\n}\n");
     TEST_REQUIRE(fn_end != NULL, "manual debug-shared function end emitted");
-    TEST_REQUIRE(contains_between(fn, fn_end, "XrValue sharedValue = XR_NULL_VAL;"),
-                 "debug-local builds must declare the source-level shared slot");
+    TEST_REQUIRE(contains_between(fn, fn_end, "uint64_t sharedValue = 0;"),
+                 "debug-local builds must declare the TargetPlan-typed source shared slot");
     TEST_REQUIRE(contains_between(fn, fn_end, "#if defined(XRAY_AOT_DEBUG_LOCALS)"),
                  "the unused source-bound shared load must be debug-only");
     TEST_REQUIRE(count_between(fn, fn_end, "xrt_shared[0]") == 1,
@@ -3588,10 +3598,11 @@ TEST(cgen_consumed_shared_load_stays_release_materialized) {
     TEST_REQUIRE(fn != NULL, "manual consumed-shared definition should be emitted");
     const char *fn_end = strstr(fn, "\n}\n");
     TEST_REQUIRE(fn_end != NULL, "manual consumed-shared function end emitted");
-    TEST_REQUIRE(contains_between(fn, fn_end, "XrValue v0 = xrt_shared[0];"),
-                 "a shared load consumed by the return must remain materialized");
-    TEST_REQUIRE(contains_between(fn, fn_end, "XR_TO_INT(v0)"),
-                 "the consumed shared local must feed the native return conversion");
+    TEST_REQUIRE(contains_between(fn, fn_end, "uint64_t v0 = XR_TO_INT(xrt_shared[0]);"),
+                 "a consumed shared load must remain as its TargetPlan-typed local");
+    TEST_REQUIRE(contains_between(fn, fn_end, "uint64_t v1 = v0;") &&
+                     contains_between(fn, fn_end, "return v1;"),
+                 "the typed shared local must feed the native return value");
 
     printf("  Kept consumed shared load in %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -3767,7 +3778,8 @@ TEST(cgen_native_signed_i64_constant_emits_immediate_without_local) {
     const char *fn_end = next_static_after(fn);
     TEST_REQUIRE(!contains_between(fn, fn_end, " = INT64_C(1);"),
                  "signed wrap arithmetic must not retain a dead constant local");
-    TEST_REQUIRE(contains_between(fn, fn_end, "(uint64_t)(INT64_C(1))"),
+    TEST_REQUIRE(contains_between(fn, fn_end,
+                                  "xrt_int_wrap_eval(xr_i64_add_wrap, v0, INT64_C(1))"),
                  "signed wrap arithmetic must retain the exact immediate operand");
 
     printf("  Generated immediate signed i64 arithmetic in %zu bytes of C code\n", strlen(code));
@@ -3952,8 +3964,9 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
         xr_target_plan_build(ir->semantic_plan, profile, &target_plan, error, sizeof(error)),
         "scalar emission consumer TargetPlan built");
 
-    TEST_REQUIRE(xr_c_emission_plan_build(target_plan, xr_target_profile_fingerprint(profile),
-                                          &emission_plan, error, sizeof(error)),
+    TEST_REQUIRE(xr_c_emission_plan_build(target_plan, xr_target_plan_semantic_plan(target_plan),
+                                          xr_target_profile_fingerprint(profile), &emission_plan,
+                                          error, sizeof(error)),
                  "scalar emission consumer C plan built");
     TEST_REQUIRE(xaot_bundle_set_program_target_plan(&legacy_plan.bundle, target_plan),
                  "scalar emission TargetPlan attached to module registry");
@@ -6089,7 +6102,7 @@ TEST(cgen_err_check_releases_live_arc_owners_on_cold_edge) {
     const char *src = "fn decode(bytes: Array<u8>) -> string? {\n"
                       "    var out = StringBuilder()\n"
                       "    out.append(\"prefix\")\n"
-                      "    var decoded = string.fromUtf8(bytes)\n"
+                      "    var decoded = string.fromUtf8(bytes[:])\n"
                       "    out.append(\"suffix\")\n"
                       "    return decoded\n"
                       "}\n"

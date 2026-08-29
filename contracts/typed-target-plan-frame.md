@@ -358,7 +358,7 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 794940f065e2564f3c2c08fdb05fcea82a33076a6261f75d669ee9b0e448ddcb
+anchor-sha256: src/plan/target/xr_target_plan.h d7953b4ebe99522c473e41c4708d90dda44275261fdfce73002bcee0dcb77934
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
 anchor-sha256: src/vm/xr_typed_dispatch.c 1a1e3482e9ca79eb0c6896c410210fafec6ca3358b95911119b1d6720f5bb1be
@@ -375,4 +375,4 @@ anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53a
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 0332f8c2423f606919ffab298a69ee14b863c4f5e590b5d51aa3c39f9344f14c
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h 50a175071a41a521e11fa672b7f17663b73dda321fd6ab9703196324e642dfda
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 1c09d9175acb0870f42515071a88cdf6beb1f28becdb179fd9b3435945bed680
-anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
+anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 532959558cb72938709198f481ac42d53ec074ca0602b5d4c4512568db908f1a

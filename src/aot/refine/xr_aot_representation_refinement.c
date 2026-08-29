@@ -42,6 +42,7 @@
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
 #include "../../plan/semantic/xr_semantic_native_module_shape.h"
 #include "../../plan/semantic/xr_semantic_native_module_call_shape.h"
+#include "../../plan/semantic/xr_semantic_native_leaf_shape.h"
 #include "../../plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../plan/semantic/xr_semantic_container_copy_shape.h"
 #include "../../plan/semantic/xr_semantic_dynamic_value_shape.h"
@@ -215,6 +216,12 @@ static bool collect_target_scope_init(CollectContext *ctx) {
     if (provenance) {
         ctx->module_identity = provenance->program_module;
         ctx->program_module_row = provenance->program_module_row;
+    } else {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_unique_module_entity(ctx->semantic);
+        if (!entity)
+            return false;
+        ctx->module_identity = entity->id;
+        ctx->program_module_row = ctx->target_partition;
     }
     uint32_t partition_count = 0u;
     const XrTargetModulePartitionRecord *partitions =
@@ -409,8 +416,7 @@ typedef struct VerifyAuthority {
  * qualified by that partition. */
 static bool verify_target_scope_init(VerifyAuthority *ctx) {
     static const XrStableId zero = {{0}};
-    if (!ctx || !xr_target_plan_is_verified(ctx->target_plan) || !ctx->semantic ||
-        ctx->semantic != xr_target_plan_semantic_plan(ctx->target_plan))
+    if (!ctx || !xr_target_plan_is_verified(ctx->target_plan) || !ctx->semantic)
         return false;
     ctx->semantic_fingerprint = xr_semantic_plan_fingerprint(ctx->semantic);
     const XrSemanticProgramProvenance *provenance =
@@ -424,6 +430,11 @@ static bool verify_target_scope_init(VerifyAuthority *ctx) {
             return false;
         ctx->module_identity = provenance->program_module;
         ctx->program_module_row = provenance->program_module_row;
+    } else {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_unique_module_entity(ctx->semantic);
+        if (!entity)
+            return false;
+        ctx->module_identity = entity->id;
     }
     uint32_t partition_count = 0u;
     const XrTargetModulePartitionRecord *partitions =
@@ -443,13 +454,14 @@ static bool verify_target_scope_init(VerifyAuthority *ctx) {
         ctx->target_call_count = call_count;
         return true;
     }
-    if (!partitions || !provenance ||
-        xr_target_plan_program_module_count(ctx->target_plan) != provenance->module_count)
+    if (!partitions || (provenance && xr_target_plan_program_module_count(ctx->target_plan) !=
+                                          provenance->module_count))
         return false;
     uint32_t matches = 0u;
     for (uint32_t i = 0u; i < partition_count; i++) {
         const XrTargetModulePartitionRecord *partition = &partitions[i];
-        if (partition->program_module_row != ctx->program_module_row ||
+        uint32_t expected_row = provenance ? ctx->program_module_row : i;
+        if (partition->program_module_row != expected_row ||
             !xr_stable_id_equal(partition->module_identity, ctx->module_identity) ||
             !xr_fingerprint_equal(partition->semantic_fingerprint, ctx->semantic_fingerprint) ||
             xr_target_plan_semantic_module(ctx->target_plan, i) != ctx->semantic)
@@ -460,6 +472,7 @@ static bool verify_target_scope_init(VerifyAuthority *ctx) {
             partition->calls_count > call_count - partition->calls_begin)
             return false;
         ctx->target_partition = i;
+        ctx->program_module_row = expected_row;
         ctx->target_layout_begin = partition->layouts_begin;
         ctx->target_layout_count = partition->layouts_count;
         ctx->target_call_begin = partition->calls_begin;
@@ -474,6 +487,26 @@ static const XrTargetValueRepRecord *verify_target_value_rep(const VerifyAuthori
     return ctx ? xr_target_plan_value_rep_for_module(ctx->target_plan, ctx->target_partition,
                                                      semantic_value)
                : NULL;
+}
+
+static bool verify_target_function_index(const VerifyAuthority *ctx, uint32_t semantic_function,
+                                         uint32_t *out_target_function) {
+    if (out_target_function)
+        *out_target_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t partition_count = 0u;
+    const XrTargetModulePartitionRecord *partitions =
+        ctx ? xr_target_plan_module_partitions(ctx->target_plan, &partition_count) : NULL;
+    if (!ctx || !out_target_function)
+        return false;
+    if (!partition_count) {
+        *out_target_function = semantic_function;
+        return semantic_function < ctx->function_count;
+    }
+    if (!partitions || ctx->target_partition >= partition_count ||
+        semantic_function >= partitions[ctx->target_partition].functions_count)
+        return false;
+    *out_target_function = partitions[ctx->target_partition].functions_begin + semantic_function;
+    return true;
 }
 
 typedef enum AotI64OverflowPredicateMatch {
@@ -2786,10 +2819,14 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
     uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(ctx->semantic);
     for (uint32_t i = 0; i < target_count; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(ctx->semantic, i);
-        if (!target || target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+        bool source_export = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
+        bool mixed_native = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+        if (!source_export && !mixed_native)
             continue;
         if (target->operation >= ctx->operation_count ||
-            target->dependency >= xr_semantic_plan_dependency_count(ctx->semantic) ||
+            (source_export &&
+             target->dependency >= xr_semantic_plan_dependency_count(ctx->semantic)) ||
+            (mixed_native && target->dependency != XR_SEMANTIC_INDEX_NONE) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE)
             goto invalid;
         target_by_operation[target->operation] = i;
@@ -2807,6 +2844,7 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
         const XrSemanticCallTargetRecord *target =
             xr_semantic_plan_call_target(ctx->semantic, target_index);
         const XrSemanticOperationRecord *call = xr_semantic_plan_operation(ctx->semantic, i);
+        bool mixed_native = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         bool named_export = call && call->opcode == XI_CALL;
         if (!target || !call || (call->opcode != XI_CALL && call->opcode != XI_CALL_METHOD) ||
             call->operand_count == 0 || call->operand_begin >= operand_count)
@@ -2826,6 +2864,7 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             memset(visit_epoch, 0, ctx->value_count * sizeof(*visit_epoch));
             epoch = next_epoch++;
         }
+        uint32_t receiver_epoch = epoch;
         for (uint32_t depth = 0;; depth++) {
             if (depth >= ctx->operation_count || current_value >= ctx->value_count ||
                 visit_epoch[current_value] == epoch)
@@ -2839,7 +2878,8 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             if (!source || source->result_value != current_value ||
                 source->result_type != namespace_type || source->function != call->function ||
                 (candidate[current_value] &&
-                 (ctx->source_namespace_dependency_by_value[current_value] != target->dependency ||
+                 ((!mixed_native && ctx->source_namespace_dependency_by_value[current_value] !=
+                                        target->dependency) ||
                   consumer[current_value] != consumer_index)))
                 goto invalid;
             candidate[current_value] = 1;
@@ -2882,6 +2922,7 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             memset(visit_epoch, 0, ctx->value_count * sizeof(*visit_epoch));
             epoch = next_epoch++;
         }
+        uint32_t import_epoch = epoch;
         for (uint32_t depth = 0;; depth++) {
             if (depth >= ctx->operation_count || current_value >= ctx->value_count ||
                 visit_epoch[current_value] == epoch)
@@ -2895,7 +2936,8 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             if (!source || source->result_value != current_value ||
                 source->result_type != namespace_type || source->function != 0 ||
                 (candidate[current_value] &&
-                 (ctx->source_namespace_dependency_by_value[current_value] != target->dependency ||
+                 ((!mixed_native && ctx->source_namespace_dependency_by_value[current_value] !=
+                                        target->dependency) ||
                   consumer[current_value] != consumer_index)))
                 goto invalid;
             candidate[current_value] = 1;
@@ -2920,10 +2962,27 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             stored->parameter != -1 || stored->ownership_action != XR_SEM_OPERAND_CONSUME ||
             stored->parameter_mode != XR_PARAM_READ || stored->access != XR_CALL_ARG_PLAIN ||
             stored->flags != 0 || load->result_type != import->result_type ||
-            !aot_source_import_dependency_is_exact(ctx->semantic, import, metadata, metadata_count,
-                                                   named_export, &import_dependency) ||
-            import_dependency != target->dependency)
+            (mixed_native && import->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
+             import->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB))
             goto invalid;
+        if (mixed_native && import->import_resolution == XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB) {
+            for (uint32_t value = 0; value < ctx->value_count; value++) {
+                if (visit_epoch[value] != receiver_epoch && visit_epoch[value] != import_epoch)
+                    continue;
+                candidate[value] = 0;
+                ctx->source_namespace_dependency_by_value[value] = XR_SEMANTIC_INDEX_NONE;
+                consumer[value] = XR_SEMANTIC_INDEX_NONE;
+            }
+            continue;
+        }
+        if (!aot_source_import_dependency_is_exact(ctx->semantic, import, metadata, metadata_count,
+                                                   named_export, &import_dependency) ||
+            (!mixed_native && import_dependency != target->dependency))
+            goto invalid;
+        if (mixed_native)
+            for (uint32_t value = 0; value < ctx->value_count; value++)
+                if (visit_epoch[value] == receiver_epoch || visit_epoch[value] == import_epoch)
+                    ctx->source_namespace_dependency_by_value[value] = import_dependency;
     }
     for (uint32_t i = 0; i < ctx->operation_count; i++) {
         const XrSemanticOperationRecord *import = xr_semantic_plan_operation(ctx->semantic, i);
@@ -2989,14 +3048,22 @@ static bool aot_index_source_namespace_values(VerifyAuthority *ctx) {
             const XrSemanticOperationRecord *source =
                 xr_semantic_plan_operation(ctx->semantic, ctx->operation_by_value[operand->value]);
             bool expected = i == consumer[operand->value] && a == 0;
-            if (expected && (use->opcode == XI_CALL || use->opcode == XI_CALL_METHOD))
-                expected = target_by_operation[i] != XR_SEMANTIC_INDEX_NONE &&
-                           xr_semantic_plan_call_target(ctx->semantic, target_by_operation[i])
-                                   ->dependency ==
-                               ctx->source_namespace_dependency_by_value[operand->value] &&
+            if (expected && (use->opcode == XI_CALL || use->opcode == XI_CALL_METHOD)) {
+                uint32_t target_index = target_by_operation[i];
+                const XrSemanticCallTargetRecord *target =
+                    target_index != XR_SEMANTIC_INDEX_NONE
+                        ? xr_semantic_plan_call_target(ctx->semantic, target_index)
+                        : NULL;
+                bool target_owns_source_dependency =
+                    target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT &&
+                    target->dependency == ctx->source_namespace_dependency_by_value[operand->value];
+                bool mixed_native =
+                    target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+                expected = target && target->operation == i &&
+                           (target_owns_source_dependency || mixed_native) &&
                            operand->role == (use->opcode == XI_CALL ? XR_SEM_OPERAND_CALLEE
                                                                     : XR_SEM_OPERAND_RECEIVER);
-            else if (expected)
+            } else if (expected)
                 expected = (use->opcode == XI_COPY || use->opcode == XI_SET_SHARED) &&
                            operand->role == XR_SEM_OPERAND_VALUE;
             if (expected) {
@@ -3735,8 +3802,7 @@ static bool oracle_value_aggregate_storage(const VerifyAuthority *ctx, uint32_t 
                   (type->kind != XR_KIND_INSTANCE ||
                    xr_semantic_value_aggregate_shape_for_type(ctx->semantic, semantic_type,
                                                               &aggregate_shape));
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -3801,8 +3867,7 @@ static bool struct_object_carrier_storage_depth(const VerifyAuthority *ctx, uint
                                                 unsigned depth, XrRep *out_storage,
                                                 uint16_t *out_machine_kind) {
     if (!ctx || depth > XR_AOT_STRUCT_OBJECT_MAX_NESTING || semantic_value >= ctx->value_count ||
-        !out_storage || !out_machine_kind ||
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value) != NULL)
+        !out_storage || !out_machine_kind || verify_target_value_rep(ctx, semantic_value) != NULL)
         return false;
     /* A second name for the same object is the same allocation, so the family
      * question is asked of the value the name resolves to. The absence of a
@@ -3810,7 +3875,7 @@ static bool struct_object_carrier_storage_depth(const VerifyAuthority *ctx, uint
      * family exists only where the plan states nothing, and a rename the plan
      * did bind is not one of its members however its source was built. */
     if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value) ||
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value) != NULL)
+        verify_target_value_rep(ctx, semantic_value) != NULL)
         return false;
     uint32_t operation_index = ctx->operation_by_value[semantic_value];
     const XrSemanticOperationRecord *operation =
@@ -4087,8 +4152,7 @@ static bool oracle_fixed_array_backing_storage(const VerifyAuthority *ctx, uint3
             : NULL;
     const XrSemanticTypeRecord *type =
         operation ? xr_semantic_plan_type(ctx->semantic, operation->result_type) : NULL;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -4296,8 +4360,7 @@ static bool oracle_aggregate_field_access_is_exact(const VerifyAuthority *ctx,
         !oracle_value_aggregate_storage(ctx, receiver->value, &receiver_storage, &receiver_kind) ||
         receiver_storage != XR_REP_TAGGED || receiver_kind != XR_MACHINE_REP_AGGREGATE)
         return false;
-    const XrTargetValueRepRecord *receiver_binding =
-        xr_target_plan_value_rep(ctx->target_plan, receiver->value);
+    const XrTargetValueRepRecord *receiver_binding = verify_target_value_rep(ctx, receiver->value);
     const XrTargetMachineRepRecord *receiver_rep =
         receiver_binding
             ? xr_target_plan_machine_rep(ctx->target_plan, receiver_binding->register_rep)
@@ -4353,7 +4416,7 @@ static bool aot_array_hof_target_is_exact(const VerifyAuthority *ctx, uint32_t o
     const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
     const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
     const XrTargetValueRepRecord *result =
-        operation ? xr_target_plan_value_rep(ctx->target_plan, operation->result_value) : NULL;
+        operation ? verify_target_value_rep(ctx, operation->result_value) : NULL;
     const XrTargetMachineRepRecord *result_register =
         result ? xr_target_plan_machine_rep(ctx->target_plan, result->register_rep) : NULL;
     const XrTargetMachineRepRecord *result_memory =
@@ -4446,8 +4509,7 @@ static bool aot_array_hof_target_is_exact(const VerifyAuthority *ctx, uint32_t o
             return false;
         const XrSemanticOperandRecord *operand = &operands[semantic_operand];
         const XrSemanticTypeRecord *type = xr_semantic_plan_type(ctx->semantic, operand->type);
-        const XrTargetValueRepRecord *caller =
-            xr_target_plan_value_rep(ctx->target_plan, operand->value);
+        const XrTargetValueRepRecord *caller = verify_target_value_rep(ctx, operand->value);
         const XrTargetCallArgumentRecord *argument = &arguments[call->argument_begin + ordinal];
         uint32_t expected_value = ordinal == 0   ? shape.receiver
                                   : ordinal == 1 ? shape.callback
@@ -4508,8 +4570,7 @@ static bool oracle_dynamic_closure_storage(const VerifyAuthority *ctx, uint32_t 
     if (!operation || operation->result_value != semantic_value ||
         !semantic_heap_closure_is_exact(ctx->semantic, operation))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -4565,8 +4626,7 @@ static bool oracle_dynamic_array_fill_scalar_storage(const VerifyAuthority *ctx,
     if (!aot_array_fill_scalar_is_exact(ctx->semantic, operation, &receiver_value, &fill_value,
                                         &storage))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -4645,8 +4705,7 @@ static bool oracle_dynamic_array_fill_scalar_storage(const VerifyAuthority *ctx,
         uint32_t semantic_operand = operation->operand_begin + ordinal;
         const XrSemanticOperandRecord *operand = &operands[semantic_operand];
         const XrSemanticTypeRecord *type = xr_semantic_plan_type(ctx->semantic, operand->type);
-        const XrTargetValueRepRecord *caller =
-            xr_target_plan_value_rep(ctx->target_plan, operand->value);
+        const XrTargetValueRepRecord *caller = verify_target_value_rep(ctx, operand->value);
         const XrTargetCallArgumentRecord *argument = &arguments[call->argument_begin + ordinal];
         XrStableId expected_argument;
         if (!type || !caller || operand->value != (ordinal == 0 ? receiver_value : fill_value) ||
@@ -4693,8 +4752,7 @@ static bool oracle_dynamic_value_storage(const VerifyAuthority *ctx, uint32_t se
     uint8_t expected_ownership = xr_semantic_dynamic_value_is_borrowed(operation)
                                      ? XR_TARGET_OWNERSHIP_BORROWED
                                      : XR_TARGET_OWNERSHIP_OWNED;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -4734,8 +4792,7 @@ static bool oracle_dynamic_panic_catch_storage(const VerifyAuthority *ctx, uint3
     if (!operation || operation->result_value != semantic_value ||
         !xr_semantic_panic_catch_is_exact(ctx->semantic, operation))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -4796,8 +4853,7 @@ static bool oracle_dynamic_heap_literal_storage(const VerifyAuthority *ctx, uint
         (!xr_semantic_string_literal_is_exact(ctx->semantic, operation) &&
          !xr_semantic_bigint_value_is_exact(ctx->semantic, operation)))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -4858,8 +4914,7 @@ static bool oracle_dynamic_string_runes_storage(const VerifyAuthority *ctx, uint
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -4979,8 +5034,7 @@ static bool oracle_string_slice_parameter_receiver_storage(const VerifyAuthority
         return false;
     uint8_t ownership = parameter->ownership == XI_OWN_OWNED ? XR_TARGET_OWNERSHIP_OWNED
                                                              : XR_TARGET_OWNERSHIP_BORROWED;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -5063,8 +5117,7 @@ static bool oracle_dynamic_string_slice_range_storage(const VerifyAuthority *ctx
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -5183,8 +5236,7 @@ static bool oracle_iterator_rune_has_next_call(const VerifyAuthority *ctx, uint3
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
     const XrTargetCallRecord *call = NULL;
@@ -5254,8 +5306,7 @@ static bool oracle_iterator_rune_next_call(const VerifyAuthority *ctx, uint32_t 
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
     const XrTargetCallRecord *call = NULL;
@@ -5333,9 +5384,8 @@ static bool oracle_iterator_rune_nth_call(const VerifyAuthority *ctx, uint32_t s
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
     const XrSemanticTypeRecord *index_type =
         operand ? xr_semantic_plan_type(ctx->semantic, operand->type) : NULL;
-    const XrTargetValueRepRecord *result =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
-    const XrTargetValueRepRecord *caller = xr_target_plan_value_rep(ctx->target_plan, index_value);
+    const XrTargetValueRepRecord *result = verify_target_value_rep(ctx, semantic_value);
+    const XrTargetValueRepRecord *caller = verify_target_value_rep(ctx, index_value);
     uint32_t call_count = 0;
     uint32_t argument_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
@@ -5434,8 +5484,7 @@ static bool oracle_rune_to_string_call(const VerifyAuthority *ctx, uint32_t sema
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -5549,8 +5598,7 @@ static bool oracle_rune_to_uint32_call(const VerifyAuthority *ctx, uint32_t sema
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
     const XrTargetCallRecord *call = NULL;
@@ -5620,8 +5668,7 @@ static bool oracle_rune_is_whitespace_call(const VerifyAuthority *ctx, uint32_t 
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
     const XrTargetCallRecord *call = NULL;
@@ -5708,8 +5755,7 @@ static bool oracle_dynamic_container_copy_storage(const VerifyAuthority *ctx,
     } else if (!aot_array_element_storage_is_exact(element, &expected_storage)) {
         return false;
     }
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -5771,8 +5817,7 @@ static bool oracle_dynamic_array_allocation_storage(const VerifyAuthority *ctx,
     if (!operation || operation->result_value != semantic_value ||
         !aot_array_allocation_is_exact(ctx->semantic, operation, &array_storage))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -5832,8 +5877,7 @@ static bool oracle_dynamic_source_class_object_storage(const VerifyAuthority *ct
     if (!operation || operation->result_value != semantic_value ||
         !xr_semantic_class_object_is_exact(ctx->semantic, operation))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -5975,8 +6019,7 @@ static bool oracle_dynamic_source_class_instance_storage(const VerifyAuthority *
     if (operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED &&
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED)
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -6046,8 +6089,7 @@ static bool oracle_dynamic_source_class_parameter_storage(const VerifyAuthority 
                                                              : XR_TARGET_OWNERSHIP_BORROWED;
     if (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED)
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -6109,8 +6151,7 @@ static bool aot_scalar_array_range_fill_binding_is_exact(const VerifyAuthority *
     const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
     const XrSemanticTypeRecord *receiver_type =
         xr_semantic_plan_type(ctx->semantic, shape.receiver_type);
-    const XrTargetValueRepRecord *result =
-        xr_target_plan_value_rep(ctx->target_plan, operation->result_value);
+    const XrTargetValueRepRecord *result = verify_target_value_rep(ctx, operation->result_value);
     const XrTargetMachineRepRecord *result_register =
         result ? xr_target_plan_machine_rep(ctx->target_plan, result->register_rep) : NULL;
     const XrTargetMachineRepRecord *result_memory =
@@ -6210,8 +6251,7 @@ static bool aot_source_class_array_fill_binding_is_exact(const VerifyAuthority *
     const XrTargetCallArgumentRecord *arguments =
         xr_target_plan_call_arguments(ctx->target_plan, &argument_count);
     const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
-    const XrTargetValueRepRecord *result =
-        xr_target_plan_value_rep(ctx->target_plan, operation->result_value);
+    const XrTargetValueRepRecord *result = verify_target_value_rep(ctx, operation->result_value);
     const XrTargetMachineRepRecord *result_register =
         result ? xr_target_plan_machine_rep(ctx->target_plan, result->register_rep) : NULL;
     const XrTargetMachineRepRecord *result_memory =
@@ -6242,8 +6282,7 @@ static bool aot_source_class_array_fill_binding_is_exact(const VerifyAuthority *
         if (!semantic_operands || semantic_operand >= semantic_operand_count)
             return false;
         const XrSemanticOperandRecord *operand = &semantic_operands[semantic_operand];
-        const XrTargetValueRepRecord *caller =
-            xr_target_plan_value_rep(ctx->target_plan, operand->value);
+        const XrTargetValueRepRecord *caller = verify_target_value_rep(ctx, operand->value);
         const XrTargetMachineRepRecord *caller_register =
             caller ? xr_target_plan_machine_rep(ctx->target_plan, caller->register_rep) : NULL;
         const XrTargetMachineRepRecord *caller_memory =
@@ -6359,8 +6398,7 @@ static bool oracle_u8_slice_parameter_storage(const VerifyAuthority *ctx, uint32
         !aot_u8_slice_type_is_exact(ctx->semantic, parameter->type, NULL))
         return false;
 
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -6574,8 +6612,7 @@ static bool oracle_nullable_scalar_storage(const VerifyAuthority *ctx, uint32_t 
     uint32_t type_index = parameter ? parameter->type : operation->result_type;
     if (!aot_nullable_scalar_type_is_exact(xr_semantic_plan_type(ctx->semantic, type_index)))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -6636,8 +6673,7 @@ static bool tagged_value_temporary_rows_are_exact(const VerifyAuthority *ctx,
                                                   uint32_t semantic_value,
                                                   const XrSemanticOperationRecord *operation,
                                                   uint32_t operation_index, uint8_t ownership) {
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -6925,8 +6961,7 @@ static bool oracle_dynamic_json_namespace_value_storage(const VerifyAuthority *c
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7012,8 +7047,7 @@ static bool oracle_dynamic_panic_info_constructor_storage(const VerifyAuthority 
         return false;
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(ctx->semantic, operation->result_type);
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7089,8 +7123,7 @@ static bool oracle_dynamic_stringbuilder_storage(const VerifyAuthority *ctx,
         operation_index < ctx->operation_count
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7170,8 +7203,7 @@ static bool oracle_dynamic_array_intrinsic_storage(const VerifyAuthority *ctx,
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
     if (!aot_array_intrinsic_is_exact(ctx->semantic, operation, &kind, &storage))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7247,8 +7279,7 @@ static bool oracle_dynamic_array_intrinsic_storage(const VerifyAuthority *ctx,
         uint32_t semantic_operand = operation->operand_begin + ordinal;
         const XrSemanticOperandRecord *operand = &operands[semantic_operand];
         const XrSemanticTypeRecord *type = xr_semantic_plan_type(ctx->semantic, operand->type);
-        const XrTargetValueRepRecord *caller =
-            xr_target_plan_value_rep(ctx->target_plan, operand->value);
+        const XrTargetValueRepRecord *caller = verify_target_value_rep(ctx, operand->value);
         const XrTargetCallArgumentRecord *argument = &arguments[call->argument_begin + ordinal];
         XrStableId expected_argument;
         if (!type || !caller ||
@@ -7291,8 +7322,7 @@ static bool oracle_direct_local_tagged_ref_parameter_place_storage(const VerifyA
             ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
             : NULL;
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7331,8 +7361,7 @@ static bool tagged_value_parameter_rows_are_exact(const VerifyAuthority *ctx,
                                                   uint32_t semantic_value,
                                                   const XrSemanticParameterRecord *parameter,
                                                   uint8_t callee_ownership) {
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7425,8 +7454,7 @@ static bool oracle_dynamic_direct_local_array_result_storage(const VerifyAuthori
     if (!operation || operation->result_value != semantic_value ||
         !aot_direct_local_array_result_is_exact(ctx->semantic, operation_index))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7516,8 +7544,7 @@ static bool oracle_dynamic_array_ref_storage(const VerifyAuthority *ctx, uint32_
         return false;
     uint32_t semantic_type = operation->result_type;
     uint32_t semantic_function = operation->function;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7577,8 +7604,7 @@ static bool oracle_static_direct_local_callee_storage(const VerifyAuthority *ctx
     if (!operation || operation->result_value != semantic_value ||
         !xr_semantic_direct_local_callee_type_is_exact(ctx->semantic, operation, target_function))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7636,8 +7662,7 @@ static bool oracle_native_module_namespace_storage(const VerifyAuthority *ctx,
         operation_index < ctx->operation_count
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7689,8 +7714,7 @@ static bool oracle_source_namespace_storage(const VerifyAuthority *ctx, uint32_t
         operation_index < ctx->operation_count
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7701,16 +7725,15 @@ static bool oracle_source_namespace_storage(const VerifyAuthority *ctx, uint32_t
         binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
     uint32_t layout_count = 0;
     const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(ctx->target_plan, &layout_count);
-    const XrTargetLayoutRecord *layout = NULL;
-    for (uint32_t i = 0; i < layout_count; i++) {
-        if (operation && layouts[i].semantic_type == operation->result_type) {
-            if (layout)
-                return false;
-            layout = &layouts[i];
-        }
-    }
+    uint32_t layout_index = operation && operation->result_type < ctx->type_count
+                                ? ctx->layout_by_type[operation->result_type]
+                                : XR_SEMANTIC_INDEX_NONE;
+    const XrTargetLayoutRecord *layout =
+        layouts && layout_index < layout_count ? &layouts[layout_index] : NULL;
+    uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
     if (!operation || !binding || !register_rep || !memory_rep || !slot || !layout ||
         !aot_source_namespace_value_operation_is_exact(ctx->semantic, operation) ||
+        !verify_target_function_index(ctx, operation->function, &target_function) ||
         register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
         memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
         register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
@@ -7722,7 +7745,7 @@ static bool oracle_source_namespace_storage(const VerifyAuthority *ctx, uint32_t
         layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
         layout->root_field_count != 0 || layout->fixed_prefix_size != memory_rep->memory_size ||
         layout->align != memory_rep->memory_align || slot->semantic_value != semantic_value ||
-        slot->semantic_operation != operation_index || slot->function != operation->function ||
+        slot->semantic_operation != operation_index || slot->function != target_function ||
         slot->role != XR_TARGET_SLOT_TEMPORARY || slot->register_rep != binding->register_rep ||
         slot->memory_rep != binding->memory_rep || slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
         slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
@@ -7745,8 +7768,7 @@ static bool oracle_static_direct_local_go_callee_storage(const VerifyAuthority *
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
     uint32_t target = ctx->go_callee_target_by_value[semantic_value];
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7803,8 +7825,7 @@ static bool oracle_dynamic_channel_storage(const VerifyAuthority *ctx, uint32_t 
         ctx->exact_channel_allocation_value && ctx->exact_channel_allocation_value[semantic_value];
     uint8_t expected_ownership =
         allocation ? XR_TARGET_OWNERSHIP_OWNED : XR_TARGET_OWNERSHIP_BORROWED;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7868,8 +7889,7 @@ static bool oracle_dynamic_direct_local_go_task_storage(const VerifyAuthority *c
     if (callee_value >= ctx->value_count || !ctx->exact_go_callee_value[callee_value] ||
         !xr_semantic_direct_local_go_task_result_is_exact(ctx->semantic, operation, true, NULL))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -7935,19 +7955,46 @@ static bool oracle_direct_local_callee_use(const VerifyAuthority *ctx, uint32_t 
            match->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
 }
 
-/* An exact direct-local callee is resolution authority, not a runtime value,
- * when TargetPlan deliberately assigns it no slot. Its identity is consumed
- * by the verified call row, so representation refinement must not invent a
- * carrier that the executable plan cannot read. */
+/* A private native member is also resolution authority at its CALL edge.  Its
+ * IMPORT_REF selects one registry member; C emission invokes that member's ABI
+ * directly and never consumes the callable as a runtime value. */
+static bool oracle_native_direct_callee_use(const VerifyAuthority *ctx, uint32_t operation_index,
+                                            uint16_t operand_index, uint32_t source_value) {
+    const XrSemanticOperationRecord *operation =
+        ctx ? xr_semantic_plan_operation(ctx->semantic, operation_index) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        ctx ? xr_semantic_plan_operands(ctx->semantic, &operand_count) : NULL;
+    uint32_t call_index = ctx && operation_index < ctx->operation_count
+                              ? ctx->call_by_operation[operation_index]
+                              : XR_SEMANTIC_INDEX_NONE;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls =
+        ctx ? xr_target_plan_calls(ctx->target_plan, &call_count) : NULL;
+    const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
+    return ctx && operation && operands && operand_index == 0 && operation->operand_count != 0 &&
+           operation->operand_begin < operand_count &&
+           operands[operation->operand_begin].value == source_value &&
+           operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+           xr_semantic_native_direct_scalar_call_shape_is_exact(ctx->semantic, operation, NULL) &&
+           call && call->semantic_operation == operation_index &&
+           call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR &&
+           call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR;
+}
+
+/* Exact source and private-native callees are resolution authority, not
+ * runtime arguments. Their identity is consumed by the verified call row, so
+ * representation refinement must not invent an adapter for the callee edge. */
 static bool oracle_resolution_only_direct_callee_use(const VerifyAuthority *ctx,
                                                      uint32_t operation_index,
                                                      uint16_t operand_index,
                                                      uint32_t source_value) {
-    const XrTargetValueRepRecord *binding =
-        ctx ? xr_target_plan_value_rep(ctx->target_plan, source_value) : NULL;
-    return binding && binding->semantic_value == source_value &&
-           binding->slot == XR_SEMANTIC_INDEX_NONE &&
-           oracle_direct_local_callee_use(ctx, operation_index, operand_index, source_value);
+    const XrTargetValueRepRecord *binding = ctx ? verify_target_value_rep(ctx, source_value) : NULL;
+    bool local = binding && binding->semantic_value == source_value &&
+                 binding->slot == XR_SEMANTIC_INDEX_NONE &&
+                 oracle_direct_local_callee_use(ctx, operation_index, operand_index, source_value);
+    return local ||
+           oracle_native_direct_callee_use(ctx, operation_index, operand_index, source_value);
 }
 
 static bool oracle_direct_local_go_callee_use(const VerifyAuthority *ctx, uint32_t operation_index,
@@ -8109,8 +8156,7 @@ static bool oracle_raw_pointer_ref_place(const VerifyAuthority *ctx, uint32_t op
         storage != XR_REP_RAWPTR || machine_kind != XR_MACHINE_REP_RAW_PTR)
         return false;
     if (parameter_place) {
-        const XrTargetValueRepRecord *binding =
-            xr_target_plan_value_rep(ctx->target_plan, place->value);
+        const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, place->value);
         uint32_t slot_count = 0;
         const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
         const XrTargetSlotRecord *slot =
@@ -8233,8 +8279,7 @@ static bool oracle_raw_pointer_local_addr(const VerifyAuthority *ctx, uint32_t o
         !oracle_machine_storage(ctx, operation->result_value, &result_storage, &result_kind) ||
         result_storage != XR_REP_RAWPTR || result_kind != XR_MACHINE_REP_RAW_PTR)
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, operation->result_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, operation->result_value);
     uint32_t slot_count = 0;
     const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
     const XrTargetSlotRecord *slot =
@@ -8696,7 +8741,7 @@ static bool oracle_direct_local_tagged_ref_place_use(const VerifyAuthority *ctx,
         place->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
         !aot_direct_ref_subject_type_is_exact(ctx->semantic, place->result_type, &storage))
         return false;
-    const XrTargetValueRepRecord *caller = xr_target_plan_value_rep(ctx->target_plan, source_value);
+    const XrTargetValueRepRecord *caller = verify_target_value_rep(ctx, source_value);
     XrRep caller_storage = XR_REP_VOID;
     uint16_t caller_kind = XR_MACHINE_REP_COUNT;
     XrRep callee_storage = XR_REP_VOID;
@@ -8731,7 +8776,7 @@ static bool oracle_direct_local_tagged_ref_place_use(const VerifyAuthority *ctx,
             ? &operands[argument->semantic_operand]
             : NULL;
     const XrTargetValueRepRecord *callee =
-        parameter ? xr_target_plan_value_rep(ctx->target_plan, parameter->value) : NULL;
+        parameter ? verify_target_value_rep(ctx, parameter->value) : NULL;
     XrStableId expected_identity;
     if (!caller || !argument || !call || !target || !parameter || !call_operation ||
         !call_operand || !callee ||
@@ -8860,8 +8905,7 @@ static bool oracle_range_slice_result_storage(const VerifyAuthority *ctx, uint32
     if (!operation || operation->result_value != semantic_value ||
         !xr_semantic_range_slice_is_exact(ctx->semantic, operation, NULL))
         return false;
-    const XrTargetValueRepRecord *binding =
-        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(ctx->target_plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
@@ -9015,10 +9059,8 @@ static bool oracle_leaf_direct_local_aggregate_argument_use(const VerifyAuthorit
         call->result_ownership != XR_TARGET_CALL_NONE || call->argument_begin >= argument_count)
         return false;
     const XrTargetCallArgumentRecord *argument = &arguments[call->argument_begin];
-    const XrTargetValueRepRecord *caller_value =
-        xr_target_plan_value_rep(ctx->target_plan, source_value);
-    const XrTargetValueRepRecord *callee_value =
-        xr_target_plan_value_rep(ctx->target_plan, parameter->value);
+    const XrTargetValueRepRecord *caller_value = verify_target_value_rep(ctx, source_value);
+    const XrTargetValueRepRecord *callee_value = verify_target_value_rep(ctx, parameter->value);
     XrRep caller_storage = XR_REP_COUNT;
     XrRep callee_storage = XR_REP_COUNT;
     uint16_t caller_kind = XR_MACHINE_REP_COUNT;
@@ -10452,8 +10494,7 @@ static bool oracle_leaf_aggregate_return_storage(const VerifyAuthority *ctx, uin
                 target_function = &target_functions[i];
                 target_function_matches++;
             }
-    const XrTargetValueRepRecord *value_rep =
-        ctx ? xr_target_plan_value_rep(ctx->target_plan, value) : NULL;
+    const XrTargetValueRepRecord *value_rep = ctx ? verify_target_value_rep(ctx, value) : NULL;
     uint32_t slot_count = 0;
     const XrTargetSlotRecord *slots =
         ctx ? xr_target_plan_slots(ctx->target_plan, &slot_count) : NULL;
@@ -10731,6 +10772,7 @@ static bool authority_collect_obligations(CollectContext *ctx) {
 }
 
 bool xr_aot_representation_refinement_build_from_authority(const XrTargetPlan *target_plan,
+                                                           const XrSemanticPlan *semantic,
                                                            const XiRepPolicy *policy,
                                                            XrAotRefinementPlan **out_plan,
                                                            XrAotRefinementDiagnostic *diag) {
@@ -10738,13 +10780,13 @@ bool xr_aot_representation_refinement_build_from_authority(const XrTargetPlan *t
         *out_plan = NULL;
     if (diag)
         memset(diag, 0, sizeof(*diag));
-    if (!target_plan || !out_plan) {
+    uint32_t partition = UINT32_MAX;
+    if (!target_plan || !semantic || !out_plan ||
+        !xr_target_plan_partition_for_semantic(target_plan, semantic, &partition)) {
         set_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, 0, 0);
         return false;
     }
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
-    XrAotRefinementBuilder *builder =
-        semantic ? xr_aot_refinement_builder_create(target_plan, diag) : NULL;
+    XrAotRefinementBuilder *builder = xr_aot_refinement_builder_create(target_plan, semantic, diag);
     if (!builder) {
         if (diag && diag->issue == XR_AOT_REFINEMENT_OK)
             set_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, 0, 0, 0);
@@ -10969,14 +11011,12 @@ static bool index_materialized_callee_authority(VerifyAuthority *ctx, const XiFu
     return true;
 }
 
-static bool verify_exact_dynamic_storage_materialization(const XrAotRefinementPlanView *view,
-                                                         const XiFunc *root,
-                                                         const XrTargetPlan *target_plan,
-                                                         const XiRepPolicy *policy,
-                                                         XrAotRefinementDiagnostic *diag) {
+static bool verify_exact_dynamic_storage_materialization(
+    const XrAotRefinementPlanView *view, const XiFunc *root, const XrTargetPlan *target_plan,
+    const XrSemanticPlan *semantic, const XiRepPolicy *policy, XrAotRefinementDiagnostic *diag) {
     VerifyAuthority ctx = {
         .target_plan = target_plan,
-        .semantic = xr_target_plan_semantic_plan(target_plan),
+        .semantic = semantic,
         .policy = policy,
         .view = view,
         .diag = diag,
@@ -11137,8 +11177,8 @@ static bool verify_exact_dynamic_storage_materialization(const XrAotRefinementPl
 
 static bool verify_exact_cleanup_materialization(const XiFunc *root,
                                                  const XrTargetPlan *target_plan,
+                                                 const XrSemanticPlan *semantic,
                                                  XrAotRefinementDiagnostic *diag) {
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
     uint32_t cleanup_count = 0;
     uint32_t slot_count = 0;
     const XrTargetCleanupRecord *cleanups = xr_target_plan_cleanups(target_plan, &cleanup_count);
@@ -11214,11 +11254,12 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx);
 
 static bool verify_immutable_authority_coverage(const XrAotRefinementPlanView *view,
                                                 const XrTargetPlan *target_plan,
+                                                const XrSemanticPlan *semantic,
                                                 const XiRepPolicy *policy,
                                                 XrAotRefinementDiagnostic *diag) {
     VerifyAuthority ctx = {
         .target_plan = target_plan,
-        .semantic = xr_target_plan_semantic_plan(target_plan),
+        .semantic = semantic,
         .policy = policy,
         .view = view,
         .diag = diag,
@@ -11272,24 +11313,25 @@ bool xr_aot_representation_materialization_verify(const XrAotRefinementPlanView 
                                                   XrAotRefinementDiagnostic *diag) {
     if (diag)
         memset(diag, 0, sizeof(*diag));
-    if (!view || !root || !target_plan ||
-        root->semantic_plan != xr_target_plan_semantic_plan(target_plan) ||
-        !xr_aot_refinement_verify(view, target_plan, diag)) {
+    const XrSemanticPlan *semantic = root ? root->semantic_plan : NULL;
+    uint32_t partition = UINT32_MAX;
+    if (!view || !root || !target_plan || !semantic ||
+        !xr_target_plan_partition_for_semantic(target_plan, semantic, &partition) ||
+        !xr_aot_refinement_verify(view, target_plan, semantic, diag)) {
         if (diag && diag->issue == XR_AOT_REFINEMENT_OK)
             set_diag(diag, XR_AOT_REFINEMENT_BASELINE_FINGERPRINT, 0, 0, 0);
         return false;
     }
     XiRepPolicy default_policy = xi_rep_policy_native_boundary();
     const XiRepPolicy *effective_policy = policy ? policy : &default_policy;
-    if (!verify_immutable_authority_coverage(view, target_plan, effective_policy, diag))
+    if (!verify_immutable_authority_coverage(view, target_plan, semantic, effective_policy, diag))
         return false;
-    if (!verify_exact_dynamic_storage_materialization(view, root, target_plan, effective_policy,
-                                                      diag))
+    if (!verify_exact_dynamic_storage_materialization(view, root, target_plan, semantic,
+                                                      effective_policy, diag))
         return false;
-    if (!verify_exact_cleanup_materialization(root, target_plan, diag))
+    if (!verify_exact_cleanup_materialization(root, target_plan, semantic, diag))
         return false;
     XrFingerprint expected_policy = rep_policy_fingerprint(effective_policy);
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
     const XiValue **matched = NULL;
     if (view->record_count) {
         matched = (const XiValue **) xr_calloc(view->record_count, sizeof(*matched));

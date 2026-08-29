@@ -27,7 +27,9 @@ int main(void) {
         return 2;
     if (xr_xtp_encode_plan(NULL, &bytes, &size, error, sizeof(error)) || bytes || size)
         return 3;
-    if (xr_c_emission_plan_build(NULL, zero, &emission, error, sizeof(error)) || emission)
+    if (xr_c_emission_plan_build(NULL, xr_target_plan_semantic_plan(NULL), zero, &emission, error,
+                                 sizeof(error)) ||
+        emission)
         return 4;
     if (xr_c_leaf_aggregate_projection(NULL, 0, NULL))
         return 5;

@@ -81,15 +81,15 @@ static bool fingerprint_is_zero(XrFingerprint fingerprint) {
     return xr_fingerprint_equal(fingerprint, zero);
 }
 
-/* Resolve the root SemanticPlan through the verified program-module authority
+/* Resolve the selected SemanticPlan through the verified program-module authority
  * before any module-local semantic index is interpreted.  A local value
  * ordinal is meaningful only after this join has selected one exact TargetPlan
  * partition. */
 static bool target_index_resolve_root_scope(const XrTargetPlan *target_plan,
+                                            const XrSemanticPlan *semantic,
                                             XrAotTargetIndex *index) {
     if (!index)
         return false;
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
     uint32_t partition = UINT32_MAX;
     if (!semantic || !xr_target_plan_partition_for_semantic(
                          target_plan, semantic, &partition))
@@ -104,6 +104,13 @@ static bool target_index_resolve_root_scope(const XrTargetPlan *target_plan,
     if (provenance) {
         module_identity = provenance->program_module;
         program_module_row = provenance->program_module_row;
+    } else {
+        const XrSemanticEntityRecord *entity =
+            xr_semantic_plan_unique_module_entity(semantic);
+        if (!entity)
+            return false;
+        module_identity = entity->id;
+        program_module_row = partition;
     }
     uint32_t partition_count = 0u;
     const XrTargetModulePartitionRecord *partitions =
@@ -197,11 +204,12 @@ static void target_index_dispose(XrAotTargetIndex *index) {
 }
 
 static bool target_index_init(const XrTargetPlan *target_plan,
+                              const XrSemanticPlan *semantic_plan,
                               XrAotTargetIndex *index) {
     if (!target_plan || !index)
         return false;
     memset(index, 0, sizeof(*index));
-    if (!target_index_resolve_root_scope(target_plan, index))
+    if (!target_index_resolve_root_scope(target_plan, semantic_plan, index))
         return false;
     const XrSemanticPlan *semantic = index->semantic;
     uint32_t function_count =
@@ -820,7 +828,7 @@ static uint32_t direct_call_argument_map(
             operand ? xr_semantic_plan_type(caller_semantic, operand->type) : NULL;
         if (!parameter_type || !argument_type ||
             !xr_semantic_parameter_type_admits_argument(
-                callee_semantic, parameter_type, argument_type))
+                callee_semantic, parameter_type, argument_type, parameter->mode))
             return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
         /* Transfer mode must match the callee's declared contract: a mismatch
          * is a lost or duplicated obligation at the callee boundary. The
@@ -1398,7 +1406,8 @@ XrAotPassProtocol xr_aot_refinement_representation_protocol(uint32_t pass_id) {
 }
 
 XrAotRefinementBuilder *xr_aot_refinement_builder_create(
-    const XrTargetPlan *target_plan, XrAotRefinementDiagnostic *diag) {
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan,
+    XrAotRefinementDiagnostic *diag) {
     XrAotBaselineRef baseline;
     if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &baseline,
                                                       diag))
@@ -1412,7 +1421,7 @@ XrAotRefinementBuilder *xr_aot_refinement_builder_create(
     builder->baseline = baseline;
     builder->initial_state = xr_aot_refinement_initial_state(&baseline);
     builder->current_state = builder->initial_state;
-    if (!target_index_init(target_plan, &builder->target_index)) {
+    if (!target_index_init(target_plan, semantic_plan, &builder->target_index)) {
         fail_diag(diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET, 0, 0, 0);
         xr_aot_refinement_builder_free(builder);
         return NULL;
@@ -1928,25 +1937,41 @@ XrAotRefinementPlanView xr_aot_refinement_plan_view(
 }
 
 bool xr_aot_refinement_direct_call_authority_build(
-    const XrTargetPlan *target_plan, uint32_t pass_id,
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan, uint32_t pass_id,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag) {
     clear_diag(diag);
-    if (!target_plan || pass_id == 0 || !out_plan)
+    if (!target_plan || !semantic_plan || pass_id == 0 || !out_plan)
         return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, pass_id, 0);
+    uint32_t partition = UINT32_MAX;
+    if (!xr_target_plan_partition_for_semantic(target_plan, semantic_plan, &partition))
+        return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, 0, pass_id, 0);
     *out_plan = NULL;
     uint32_t call_count = 0;
     if (!xr_target_plan_calls(target_plan, &call_count) && call_count != 0)
         return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, 0, pass_id, 0);
     if (call_count > XR_AOT_REFINEMENT_MAX_RECORDS)
         return fail_diag(diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET, 0, pass_id, 0);
+    uint32_t call_begin = 0u;
+    uint32_t scoped_call_count = call_count;
+    uint32_t partition_count = 0u;
+    const XrTargetModulePartitionRecord *partitions =
+        xr_target_plan_module_partitions(target_plan, &partition_count);
+    if (partition_count) {
+        if (!partitions || partition >= partition_count ||
+            partitions[partition].calls_begin > call_count ||
+            partitions[partition].calls_count > call_count - partitions[partition].calls_begin)
+            return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, 0, pass_id, 0);
+        call_begin = partitions[partition].calls_begin;
+        scoped_call_count = partitions[partition].calls_count;
+    }
     XrAotRefinementBuilder *builder =
-        xr_aot_refinement_builder_create(target_plan, diag);
+        xr_aot_refinement_builder_create(target_plan, semantic_plan, diag);
     if (!builder)
         return false;
     XrAotPassProtocol protocol = xr_aot_refinement_direct_call_protocol(pass_id);
     /* Every call row is visited, so coverage is total: a row that cannot be
      * proved becomes an explicit refusal rather than an absent record. */
-    for (uint32_t i = 0; i < call_count; i++) {
+    for (uint32_t i = call_begin; i < call_begin + scoped_call_count; i++) {
         XrAotDirectCallRequest request = {.target_call_index = i};
         uint32_t decision = 0;
         if (!xr_aot_refinement_try_direct_call(builder, &protocol, target_plan,
@@ -1967,6 +1992,7 @@ bool xr_aot_refinement_direct_call_authority_build(
 
 bool xr_aot_refinement_verify(const XrAotRefinementPlanView *view,
                               const XrTargetPlan *target_plan,
+                              const XrSemanticPlan *semantic_plan,
                               XrAotRefinementDiagnostic *diag) {
     clear_diag(diag);
     XrAotBaselineRef current;
@@ -1974,7 +2000,7 @@ bool xr_aot_refinement_verify(const XrAotRefinementPlanView *view,
                                                       diag))
         return false;
     XrAotTargetIndex target_index = {0};
-    if (!target_index_init(target_plan, &target_index))
+    if (!target_index_init(target_plan, semantic_plan, &target_index))
         return fail_diag(diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET, 0, 0, 0);
     bool valid = verify_view(view, &current, target_plan, &target_index, true,
                              diag);

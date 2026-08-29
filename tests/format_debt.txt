@@ -212,15 +212,12 @@ src/plan/target/xr_i64_overflow_decision.h
 src/plan/target/xr_i64_overflow_decision_verify.c
 src/plan/target/xr_i64_overflow_target_instruction.c
 src/plan/target/xr_i64_overflow_target_instruction.h
-src/plan/target/xr_i64_overflow_target_instruction_verify.c
 src/plan/target/xr_scalar_call_decision.h
 src/plan/target/xr_target_array_storage_shape.h
 src/plan/target/xr_target_builder.h
 src/plan/target/xr_target_entry_abi.c
 src/plan/target/xr_target_entry_abi.h
-src/plan/target/xr_target_instruction_verify.c
 src/plan/target/xr_target_instruction_verify.h
-src/plan/target/xr_target_plan.c
 src/plan/target/xr_target_plan_internal.h
 src/plan/target/xr_target_profile.c
 src/plan/target/xr_target_profile_internal.h
@@ -348,5 +345,3 @@ src/vm/xvm_invoke.c
 src/vm/xvm_ops.c
 src/vm/xvm_parallel_ops.c
 src/vm/xvm_props.c
-stdlib/cluster/cluster.c
-stdlib/regex/xregex_binding.c

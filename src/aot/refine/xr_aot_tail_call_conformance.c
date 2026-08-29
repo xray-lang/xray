@@ -344,13 +344,15 @@ bool xr_aot_tail_call_conformance_verify(
     if (!root || !target_plan || !direct_call_authority || !out_conformance)
         return fail(&ctx, XR_AOT_TAIL_CALL_CONFORMANCE_INVALID_ARGUMENT,
                     0, 0, 0, 0);
-    ctx.semantic = xr_target_plan_semantic_plan(target_plan);
-    if (!ctx.semantic || root->semantic_plan != ctx.semantic ||
+    ctx.semantic = root->semantic_plan;
+    uint32_t partition = UINT32_MAX;
+    if (!ctx.semantic ||
+        !xr_target_plan_partition_for_semantic(target_plan, ctx.semantic, &partition) ||
         !xr_target_plan_is_verified(target_plan) ||
         !xr_target_plan_fingerprint_is_intact(target_plan) ||
         !xr_target_plan_verify(target_plan, error, sizeof(error)) ||
         !direct_call_authority->frozen || !direct_call_authority->verified ||
-        !xr_aot_refinement_verify(direct_call_authority, target_plan, NULL))
+        !xr_aot_refinement_verify(direct_call_authority, target_plan, ctx.semantic, NULL))
         return fail(&ctx, XR_AOT_TAIL_CALL_CONFORMANCE_PLAN_STATE,
                     0, 0, 0, 0);
     size_t function_count = xr_semantic_plan_function_count(ctx.semantic);

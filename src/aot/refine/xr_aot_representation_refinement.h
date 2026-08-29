@@ -24,7 +24,8 @@ XR_FUNC XrFingerprint xr_aot_representation_policy_fingerprint(
  * Unsupported source types or use shapes fail closed instead of producing a
  * partial plan. */
 XR_FUNC bool xr_aot_representation_refinement_build_from_authority(
-    const XrTargetPlan *target_plan, const struct XiRepPolicy *policy,
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan,
+    const struct XiRepPolicy *policy,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);
 
 /* Verify that a backend-stage Xi graph is the exact materialization of an

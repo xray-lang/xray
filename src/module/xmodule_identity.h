@@ -12,6 +12,7 @@
 #define XMODULE_IDENTITY_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "../base/xdefs.h"
 
@@ -51,5 +52,12 @@ XR_FUNC bool xr_module_identity_script_authority_from_source(
 
 /* Validate the exact typed identity grammar and optionally return its kind. */
 XR_FUNC bool xr_module_identity_valid(const char *identity, XrModuleIdentityKind *kind_out);
+
+/* Return the framed stdlib namespace as a non-owning slice.  Consumers that
+ * compare frozen identities with registries must not parse the canonical key
+ * independently or assume that the slice is NUL-terminated. */
+XR_FUNC bool xr_module_identity_stdlib_namespace(const char *identity,
+                                                 const char **namespace_out,
+                                                 size_t *namespace_length_out);
 
 #endif /* XMODULE_IDENTITY_H */

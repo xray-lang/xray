@@ -17,5 +17,4 @@ struct XrVMRuntime;
 struct XrModule;
 typedef struct XrCluster XrCluster;
 
-
 #endif

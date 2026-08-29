@@ -86,6 +86,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Ptr<T>` | 解析器内建 |
 | `Range` | prelude |
 | `Regex` | prelude |
+| `RegexMatch` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
 | `StringBuilder` | prelude |
@@ -1225,6 +1226,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Ptr<T>` | resolver built-in |
 | `Range` | prelude |
 | `Regex` | prelude |
+| `RegexMatch` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
 | `StringBuilder` | prelude |

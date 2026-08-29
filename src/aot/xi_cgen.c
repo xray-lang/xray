@@ -2808,8 +2808,11 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
         semantic_function_id != function->semantic_plan_function_index)
         return cg_value_emission_fail(ctx, "C value semantic function identity changed");
 
+    uint32_t target_partition = UINT32_MAX;
     const XrTargetValueRepRecord *target_value =
-        xr_target_plan_value_rep(target_plan, semantic_value);
+        xr_target_plan_partition_for_semantic(target_plan, semantic_plan, &target_partition)
+            ? xr_target_plan_value_rep_for_module(target_plan, target_partition, semantic_value)
+            : NULL;
     if (!target_value)
         return CG_VALUE_EMISSION_NOT_COVERED;
     /* Registry installation independently proved exact supported-row coverage.

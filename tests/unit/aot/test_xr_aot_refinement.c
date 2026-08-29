@@ -1462,7 +1462,8 @@ static bool test_pair_identity(const char *domain, XrStableId first, XrStableId 
  * plan cannot prove it is the one that will be called. */
 static XrAotRefinementPlan *build_refused_plan(const XrTargetPlan *target_plan,
                                                XrAotRefinementDiagnostic *diag) {
-    XrAotRefinementBuilder *builder = xr_aot_refinement_builder_create(target_plan, diag);
+    XrAotRefinementBuilder *builder = xr_aot_refinement_builder_create(
+        target_plan, xr_target_plan_semantic_plan(target_plan), diag);
     REQUIRE(builder != NULL);
     XrAotPassProtocol protocol = xr_aot_refinement_direct_call_protocol(27901);
     XrAotDirectCallRequest request = {.target_call_index = 0};
@@ -1502,7 +1503,8 @@ static void test_open_target_direct_call_refuses_without_baseline_change(void) {
     /* A fully completed baseline does publish call-shape evidence; the
      * refusal above is a proof failure, not a missing-evidence failure. */
     REQUIRE((view.initial_state.available & XR_AOT_INV_BIT(XR_AOT_INV_CALL_TARGET)) != 0);
-    REQUIRE(xr_aot_refinement_verify(&view, fixture.target_plan, &diag));
+    REQUIRE(xr_aot_refinement_verify(&view, fixture.target_plan,
+                                     xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(xr_fingerprint_equal(target_before, xr_target_plan_fingerprint(fixture.target_plan)));
     REQUIRE(xr_fingerprint_equal(profile_before,
                                  xr_target_profile_fingerprint(fixture.target_profile)));
@@ -1522,8 +1524,9 @@ static void test_direct_call_authority_applies_closed_local_binding(void) {
     REQUIRE(call_count == 1);
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(
-        xr_aot_refinement_direct_call_authority_build(fixture.target_plan, 27902, &plan, &diag));
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), 27902, &plan,
+        &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified);
     /* Coverage is total: one record per call row, no silent omission. */
@@ -1539,7 +1542,8 @@ static void test_direct_call_authority_applies_closed_local_binding(void) {
     REQUIRE(!fingerprint_is_zero_bytes(&binding->fingerprint));
     /* Proving a binding must not disturb the baseline it was proved against. */
     REQUIRE(xr_fingerprint_equal(target_before, xr_target_plan_fingerprint(fixture.target_plan)));
-    REQUIRE(xr_aot_refinement_verify(&view, fixture.target_plan, &diag));
+    REQUIRE(xr_aot_refinement_verify(&view, fixture.target_plan,
+                                     xr_target_plan_semantic_plan(fixture.target_plan), &diag));
 
     xr_aot_refinement_plan_free(plan);
     direct_local_callee_storage_fixture_free(&fixture);
@@ -1550,8 +1554,9 @@ static void test_tail_call_backend_conformance_is_exact(void) {
         direct_local_callee_storage_fixture_create(false, true);
     XrAotRefinementDiagnostic refinement_diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_refinement_direct_call_authority_build(fixture.target_plan, 27903, &plan,
-                                                          &refinement_diag));
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), 27903, &plan,
+        &refinement_diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 1);
     XrAotTailCallConformance first = {0};
@@ -1612,21 +1617,25 @@ static void test_direct_call_binding_mutations_fail_closed(void) {
         direct_local_callee_storage_fixture_create(false, false);
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(
-        xr_aot_refinement_direct_call_authority_build(fixture.target_plan, 27902, &plan, &diag));
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), 27902, &plan,
+        &diag));
     XrAotRefinementPlanView original = xr_aot_refinement_plan_view(plan);
     REQUIRE(original.record_count == 1);
     REQUIRE(original.records[0].decision == XR_AOT_REFINEMENT_APPLIED);
     XrAotTransformationRecord mutated_record = original.records[0];
     XrAotRefinementPlanView mutated = original;
     mutated.records = &mutated_record;
-    REQUIRE(xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                     xr_target_plan_semantic_plan(fixture.target_plan), &diag));
 
 #define REQUIRE_BINDING_MUTATION_REJECTED(field_mutation, expected_issue)                          \
     do {                                                                                           \
         mutated_record = original.records[0];                                                      \
         field_mutation;                                                                            \
-        REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));                  \
+        REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,                           \
+                                          xr_target_plan_semantic_plan(fixture.target_plan),       \
+                                          &diag));                                                 \
         REQUIRE(diag.issue == (uint32_t) (expected_issue));                                        \
     } while (0)
 
@@ -1687,7 +1696,8 @@ static void test_direct_call_binding_mutations_fail_closed(void) {
 static void test_direct_call_out_of_range_request_fails_closed(void) {
     RefinementFixture fixture = fixture_create();
     XrAotRefinementDiagnostic diag = {0};
-    XrAotRefinementBuilder *builder = xr_aot_refinement_builder_create(fixture.target_plan, &diag);
+    XrAotRefinementBuilder *builder = xr_aot_refinement_builder_create(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &diag);
     REQUIRE(builder != NULL);
     XrAotPassProtocol protocol = xr_aot_refinement_direct_call_protocol(27901);
     XrAotDirectCallRequest request = {.target_call_index = 0};
@@ -1699,8 +1709,9 @@ static void test_direct_call_out_of_range_request_fails_closed(void) {
 
     /* A callless plan still yields a verified, empty authority. */
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(
-        xr_aot_refinement_direct_call_authority_build(fixture.target_plan, 27902, &plan, &diag));
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), 27902, &plan,
+        &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
     xr_aot_refinement_plan_free(plan);
@@ -1717,33 +1728,39 @@ static void test_stale_state_and_baseline_mutations_fail_closed(void) {
     mutated_view.records = &mutated_record;
 
     mutated_record.input_state.generation[XR_AOT_INV_CALL_TARGET]++;
-    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_STALE_EVIDENCE);
     REQUIRE(diag.record_index == 0);
 
     mutated_record = original.records[0];
     mutated_record.output_state.generation[XR_AOT_INV_VALUES]++;
-    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
 
     mutated_record = original.records[0];
     mutated_record.protocol.requires &= ~XR_AOT_INV_BIT(XR_AOT_INV_CALL_TARGET);
-    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_PASS_PROTOCOL);
 
     mutated_view = original;
     mutated_view.baseline.semantic_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_BASELINE_FINGERPRINT);
 
     mutated_view = original;
     mutated_view.baseline.target_plan_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_BASELINE_FINGERPRINT);
 
     mutated_view = original;
     mutated_view.baseline.target_profile_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_BASELINE_FINGERPRINT);
 
     /* Any family bit outside the required set must invalidate the baseline;
@@ -1751,7 +1768,8 @@ static void test_stale_state_and_baseline_mutations_fail_closed(void) {
      * families are added. */
     mutated_view = original;
     mutated_view.baseline.completed_family_mask |= (uint64_t) (XR_TARGET_REQUIRED_FAMILIES + 1u);
-    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_BASELINE_FINGERPRINT);
 
     xr_aot_refinement_plan_free(plan);
@@ -1762,8 +1780,9 @@ static XrAotRefinementPlan *build_representation_plan(const RepresentationFixtur
                                                       XrAotRefinementDiagnostic *diag) {
     XrAotRefinementPlan *plan = NULL;
     XiRepPolicy policy = xi_rep_policy_native_boundary();
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(fixture->target_plan, &policy,
-                                                                  &plan, diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture->target_plan, xr_target_plan_semantic_plan(fixture->target_plan), &policy, &plan,
+        diag));
     REQUIRE(plan != NULL);
     return plan;
 }
@@ -1774,8 +1793,9 @@ static void test_immutable_authority_matches_backend_materialization(void) {
     policy.force_phi_tagged = true;
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(fixture.target_plan, &policy,
-                                                                  &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag));
     REQUIRE(plan != NULL);
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 3);
@@ -1791,8 +1811,8 @@ static void test_immutable_authority_matches_backend_materialization(void) {
     }
 
     const XrAotRepresentationAdapterRecord *first_adapter = &view.records[0].representation_adapter;
-    XrAotRefinementBuilder *partial_builder =
-        xr_aot_refinement_builder_create(fixture.target_plan, &diag);
+    XrAotRefinementBuilder *partial_builder = xr_aot_refinement_builder_create(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &diag);
     REQUIRE(partial_builder != NULL);
     XrAotPassProtocol protocol = xr_aot_refinement_representation_protocol(27902);
     XrAotRepresentationAdapterRequest partial_request = {
@@ -1915,8 +1935,9 @@ static void test_scalar_shared_boundary_is_exact_and_fail_closed(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(fixture.target_plan, &policy,
-                                                                  &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 1);
     const XrAotRepresentationAdapterRecord *adapter = &view.records[0].representation_adapter;
@@ -1973,8 +1994,8 @@ static void test_scalar_shared_boundary_is_exact_and_fail_closed(void) {
     REQUIRE(xr_target_plan_build(string_function->semantic_plan, profile, &target_plan, error,
                                  sizeof(error)));
     plan = NULL;
-    REQUIRE(
-        xr_aot_representation_refinement_build_from_authority(target_plan, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target_plan, xr_target_plan_semantic_plan(target_plan), &policy, &plan, &diag));
     view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
     xi_opt_refresh_representations_with_policy(string_function, &policy);
@@ -1992,8 +2013,9 @@ static void test_exact_heap_closure_storage_is_tagged_and_fail_closed(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(fixture.target_plan, &policy,
-                                                                  &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
 
@@ -2035,8 +2057,9 @@ static void test_exact_heap_closure_storage_is_tagged_and_fail_closed(void) {
 
     fixture = closure_storage_fixture_create(true);
     plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(fixture.target_plan, &policy,
-                                                                   &plan, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag));
     REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
     closure_storage_fixture_free(&fixture);
 }
@@ -2086,9 +2109,9 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
     fixture.target_plan->fingerprint = saved_call_plan_fingerprint;
 
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(fixture.target_plan,
-                                     xr_target_profile_fingerprint(fixture.target_profile),
-                                     &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), &emission, error, sizeof(error)));
     XrCFunctionAbiEmissionView *owned_function_abis = emission->function_abis;
     uint32_t owned_function_abi_count = emission->function_abi_count;
     REQUIRE(owned_function_abis != NULL && owned_function_abi_count != 0);
@@ -2115,9 +2138,9 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
     memmove(&emission->values[direct_row_index], &emission->values[direct_row_index + 1u],
             (saved_emission_count - direct_row_index - 1u) * sizeof(*emission->values));
     emission->value_count--;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->value_count = saved_emission_count;
     memcpy(emission->values, row_snapshot, saved_emission_count * sizeof(*row_snapshot));
     xr_free(row_snapshot);
@@ -2131,71 +2154,72 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
     extra_rows[saved_emission_count].semantic_value = UINT32_MAX;
     emission->values = extra_rows;
     emission->value_count++;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->value_count = saved_emission_count;
     emission->values = saved_rows;
     xr_free(extra_rows);
 
     XrCValueEmissionView *direct_row = &emission->values[direct_row_index];
     direct_row->target_register_kind = XR_MACHINE_REP_I64;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     direct_row->target_register_kind = XR_MACHINE_REP_DYN_VALUE;
     direct_row->rep = XR_C_VALUE_REP_I64;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     direct_row->rep = XR_C_VALUE_REP_TAGGED;
     direct_row->c_type = "int64_t";
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     direct_row->c_type = "XrValue";
     direct_row->materialization = XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     direct_row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
     emission->profile_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->profile_fingerprint.bytes[0] ^= 1u;
     emission->target_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->target_fingerprint.bytes[0] ^= 1u;
     emission->function_abis = NULL;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->function_abis = owned_function_abis;
     emission->function_abi_count = 0;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->function_abi_count = owned_function_abi_count;
     emission->fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->fingerprint.bytes[0] ^= 1u;
     REQUIRE(emission->function_abis == owned_function_abis &&
             emission->function_abi_count == owned_function_abi_count);
-    REQUIRE(xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                      xr_target_profile_fingerprint(fixture.target_profile), error,
-                                      sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     xr_c_emission_plan_free(emission);
 
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(fixture.target_plan, &policy,
-                                                                  &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
     xi_opt_refresh_representations_with_policy(fixture.function, &policy);
@@ -2329,7 +2353,8 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
     xr_target_plan_compute_fingerprint(target, &target->fingerprint);
     REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
     XrCEmissionPlan *legacy_rejected = NULL;
-    REQUIRE(!xr_c_emission_plan_build(target, xr_target_profile_fingerprint(fixture.target_profile),
+    REQUIRE(!xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                      xr_target_profile_fingerprint(fixture.target_profile),
                                       &legacy_rejected, error, sizeof(error)));
     REQUIRE(legacy_rejected == NULL && strstr(error, "XR_TARGET_1001") != NULL &&
             strstr(error, "direct-local ref argument has no exact C projection") != NULL);
@@ -2391,7 +2416,7 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
         if (mutation == 13) {
             XrCEmissionPlan *rejected = NULL;
             error[0] = '\0';
-            REQUIRE(!xr_c_emission_plan_build(target,
+            REQUIRE(!xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
                                               xr_target_profile_fingerprint(fixture.target_profile),
                                               &rejected, error, sizeof(error)));
             REQUIRE(rejected == NULL && strstr(error, "XR_TARGET_1001") != NULL &&
@@ -2406,7 +2431,8 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
 
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *direct_plan = NULL;
-    REQUIRE(xr_aot_refinement_direct_call_authority_build(target, 27902, &direct_plan, &diag));
+    REQUIRE(xr_aot_refinement_direct_call_authority_build(
+        target, xr_target_plan_semantic_plan(target), 27902, &direct_plan, &diag));
     XrAotRefinementPlanView direct_view = xr_aot_refinement_plan_view(direct_plan);
     REQUIRE(direct_view.record_count == 1 && direct_view.verified &&
             direct_view.records[0].decision == XR_AOT_REFINEMENT_APPLIED &&
@@ -2417,12 +2443,14 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
     XrAotRefinementPlanView mutated_direct = direct_view;
     mutated_direct.records = &mutated_record;
     mutated_record.direct_call_binding.argument_map_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated_direct, target, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_direct, target, xr_target_plan_semantic_plan(target),
+                                      &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING);
     xr_aot_refinement_plan_free(direct_plan);
 
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(target, xr_target_profile_fingerprint(fixture.target_profile),
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     xr_target_profile_fingerprint(fixture.target_profile),
                                      &emission, error, sizeof(error)));
     REQUIRE(xr_c_emission_plan_call_argument_count(emission) == 1);
     XrCCallArgumentEmissionView call_view = {0};
@@ -2460,11 +2488,11 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
     uint32_t saved_parameter_storage =
         emission->values[parameter_emission_index].recipe_discriminant;
     emission->values[parameter_emission_index].recipe_discriminant = XR_TARGET_ARRAY_STORAGE_I64;
-    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
                                        xr_target_profile_fingerprint(fixture.target_profile), error,
                                        sizeof(error)));
     emission->values[parameter_emission_index].recipe_discriminant = saved_parameter_storage;
-    REQUIRE(xr_c_emission_plan_verify(emission, target,
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
                                       xr_target_profile_fingerprint(fixture.target_profile), error,
                                       sizeof(error)));
 
@@ -2515,12 +2543,12 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
             default:
                 abort();
         }
-        REQUIRE(!xr_c_emission_plan_verify(emission, target,
+        REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
                                            xr_target_profile_fingerprint(fixture.target_profile),
                                            error, sizeof(error)));
     }
     emission->call_arguments[0] = saved_emission_argument;
-    REQUIRE(xr_c_emission_plan_verify(emission, target,
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
                                       xr_target_profile_fingerprint(fixture.target_profile), error,
                                       sizeof(error)));
     xr_c_emission_plan_free(emission);
@@ -2532,8 +2560,8 @@ static void expect_direct_local_scalar_ref_refinement_rejected(const XrTargetPla
                                                                const XiRepPolicy *policy) {
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *rejected = NULL;
-    REQUIRE(
-        !xr_aot_representation_refinement_build_from_authority(target, policy, &rejected, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), policy, &rejected, &diag));
     REQUIRE(rejected == NULL && diag.issue != XR_AOT_REFINEMENT_OK);
 }
 
@@ -2571,8 +2599,8 @@ static void test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed(
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    bool built =
-        xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag);
+    bool built = xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag);
     if (!built)
         fprintf(stderr, "scalar-ref refinement failed issue=%s value=%u operation=%u\n",
                 xr_aot_refinement_issue_name(diag.issue), diag.semantic_value,
@@ -2598,7 +2626,8 @@ static void test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed(
                                             &caller_function, &place_value, error, sizeof(error)));
     XrCEmissionPlan *emission = NULL;
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(fixture.target_profile);
-    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     profile_fingerprint, &emission, error, sizeof(error)));
     XrCValueEmissionView place_view = {0};
     bool place_view_found =
         xr_c_emission_plan_value_view(emission, place_value, &place_view, error, sizeof(error));
@@ -2627,7 +2656,8 @@ static void test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed(
             parameter_abi->pointee_rep == XR_C_VALUE_REP_I64 && parameter_abi->c_type &&
             strcmp(parameter_abi->c_type, "int64_t *") == 0 && parameter_abi->pointee_c_type &&
             strcmp(parameter_abi->pointee_c_type, "int64_t") == 0);
-    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      profile_fingerprint, error, sizeof(error)));
 
     XrCValueEmissionView *place_row = NULL;
     for (uint32_t i = 0; i < emission->value_count; i++)
@@ -2638,24 +2668,27 @@ static void test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed(
     REQUIRE(place_row != NULL && emission->call_argument_count == 1);
     uint16_t saved_machine_kind = place_row->target_register_kind;
     place_row->target_register_kind = XR_MACHINE_REP_U64;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     place_row->target_register_kind = saved_machine_kind;
-    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      profile_fingerprint, error, sizeof(error)));
 
     uint8_t saved_pointee_rep = parameter_abi->pointee_rep;
     parameter_abi->pointee_rep = XR_C_VALUE_REP_U64;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     parameter_abi->pointee_rep = saved_pointee_rep;
-    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      profile_fingerprint, error, sizeof(error)));
 
     uint8_t saved_parameter_mode = emission->call_arguments[0].mode;
     emission->call_arguments[0].mode = XR_TARGET_CALL_VALUE;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     emission->call_arguments[0].mode = saved_parameter_mode;
-    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      profile_fingerprint, error, sizeof(error)));
 
     XrTargetCallArgumentRecord saved_argument = *argument;
     XrTargetCallRecord saved_call = target->calls[0];
@@ -2757,9 +2790,9 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
                                             sizeof(error)));
 
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(fixture.target_plan,
-                                     xr_target_profile_fingerprint(fixture.target_profile),
-                                     &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), &emission, error, sizeof(error)));
     XrCValueEmissionView value = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &value, error, sizeof(error)));
     REQUIRE(value.rep == XR_C_VALUE_REP_TAGGED &&
@@ -2774,8 +2807,9 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(fixture.target_plan, &policy,
-                                                                  &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
     xi_opt_refresh_representations_with_policy(fixture.function, &policy);
@@ -2872,9 +2906,9 @@ static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
 
     char error[512] = {0};
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(fixture.target_plan,
-                                     xr_target_profile_fingerprint(fixture.target_profile),
-                                     &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), &emission, error, sizeof(error)));
     XrCValueEmissionView import_view = {0};
     XrCValueEmissionView load_view = {0};
     REQUIRE(
@@ -2891,38 +2925,39 @@ static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
     REQUIRE(source_row != UINT32_MAX);
     uint16_t saved_kind = emission->values[source_row].target_register_kind;
     emission->values[source_row].target_register_kind = XR_MACHINE_REP_I64;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->values[source_row].target_register_kind = saved_kind;
     const char *saved_c_type = emission->values[source_row].c_type;
     emission->values[source_row].c_type = "int64_t";
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     emission->values[source_row].c_type = saved_c_type;
     uint32_t saved_count = emission->value_count;
     XrCValueEmissionView saved_row = emission->values[source_row];
     memmove(&emission->values[source_row], &emission->values[source_row + 1u],
             (saved_count - source_row - 1u) * sizeof(*emission->values));
     emission->value_count--;
-    REQUIRE(!xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                       xr_target_profile_fingerprint(fixture.target_profile), error,
-                                       sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     memmove(&emission->values[source_row + 1u], &emission->values[source_row],
             (saved_count - source_row - 1u) * sizeof(*emission->values));
     emission->values[source_row] = saved_row;
     emission->value_count = saved_count;
-    REQUIRE(xr_c_emission_plan_verify(emission, fixture.target_plan,
-                                      xr_target_profile_fingerprint(fixture.target_profile), error,
-                                      sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(
+        emission, fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), error, sizeof(error)));
     xr_c_emission_plan_free(emission);
 
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    bool refined = xr_aot_representation_refinement_build_from_authority(fixture.target_plan,
-                                                                         &policy, &plan, &diag);
+    bool refined = xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag);
     REQUIRE(refined);
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
@@ -3004,8 +3039,9 @@ static void test_standalone_source_namespace_storage_is_exact_and_fail_closed(vo
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(fixture.target_plan, &policy,
-                                                                  &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     xi_opt_refresh_representations_with_policy(fixture.function, &policy);
     REQUIRE(fixture.namespace_ref->rep == XR_REP_TAGGED &&
@@ -3094,9 +3130,9 @@ static void test_native_namespace_yieldable_storage_uses_frozen_call_identity(vo
     REQUIRE(xr_target_plan_verify(fixture.target_plan, error, sizeof(error)));
 
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(fixture.target_plan,
-                                     xr_target_profile_fingerprint(fixture.target_profile),
-                                     &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan),
+        xr_target_profile_fingerprint(fixture.target_profile), &emission, error, sizeof(error)));
     XrCValueEmissionView load_view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, load_value, &load_view, error, sizeof(error)));
     REQUIRE(load_view.rep == XR_C_VALUE_REP_TAGGED &&
@@ -3107,8 +3143,9 @@ static void test_native_namespace_yieldable_storage_uses_frozen_call_identity(vo
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    bool refined = xr_aot_representation_refinement_build_from_authority(fixture.target_plan,
-                                                                         &policy, &plan, &diag);
+    bool refined = xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag);
     if (!refined)
         fprintf(stderr, "native namespace refinement failed: issue=%u value=%u operation=%u\n",
                 (unsigned) diag.issue, diag.semantic_value, diag.semantic_operation);
@@ -3126,8 +3163,8 @@ static void test_native_namespace_yieldable_storage_uses_frozen_call_identity(vo
     NativeNamespaceYieldableStorageFixture extra =
         native_namespace_yieldable_storage_fixture_create(true);
     plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(extra.target_plan, &policy,
-                                                                   &plan, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        extra.target_plan, xr_target_plan_semantic_plan(extra.target_plan), &policy, &plan, &diag));
     REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
     native_namespace_yieldable_storage_fixture_free(&extra);
 }
@@ -3155,8 +3192,8 @@ static void test_exact_string_literal_storage_is_tagged_and_fail_closed(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(
-        xr_aot_representation_refinement_build_from_authority(target_plan, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target_plan, xr_target_plan_semantic_plan(target_plan), &policy, &plan, &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
@@ -3210,7 +3247,8 @@ static void test_stringbuilder_constructor_refinement_is_exact(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified);
     xi_opt_refresh_representations_with_policy(function, &policy);
@@ -3242,8 +3280,9 @@ static void test_bundle_owns_empty_policy_bound_authority(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(fixture.target_plan, &policy,
-                                                                  &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &policy, &plan,
+        &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.record_count == 0);
     xi_opt_refresh_representations_with_policy(fixture.function, &policy);
@@ -3333,107 +3372,128 @@ static void test_representation_record_mutations_fail_closed(void) {
     mutated.records = records;
 
     records[0].input_state.generation[XR_AOT_INV_VALUES]++;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_STALE_EVIDENCE);
 
     memcpy(records, original.records, sizeof(records));
     records[0].protocol.pass_id++;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_RECORD_FINGERPRINT);
 
     memcpy(records, original.records, sizeof(records));
     records[0].decision = XR_AOT_REFINEMENT_REFUSED;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_operation_id.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_partition++;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_program_module_row++;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_semantic_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_module_identity.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_function_id.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_type_id.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.use_operation_id.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.use_semantic_immediate++;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.input_rep_kind = XR_MACHINE_REP_F64;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_REPRESENTATION);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.recipe = XR_AOT_REP_RECIPE_UNBOX_INTEGER;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_REPRESENTATION);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.machine_rep_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_REPRESENTATION);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.reserved = 1;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
 
     memcpy(records, original.records, sizeof(records));
     records[0].direct_call.target_call_index = 1;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.layout_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_LAYOUT);
 
     memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_RECORD_FINGERPRINT);
 
     memcpy(records, original.records, sizeof(records));
     records[0].fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_RECORD_FINGERPRINT);
 
     mutated = original;
     mutated.fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_PLAN_FINGERPRINT);
 
     memcpy(records, original.records, sizeof(records));
@@ -3442,17 +3502,20 @@ static void test_representation_record_mutations_fail_closed(void) {
     records[1] = swap;
     mutated = original;
     mutated.records = records;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_NONCANONICAL_ORDER);
 
     records[0] = original.records[0];
     records[1] = original.records[0];
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_DUPLICATE_USE);
 
     mutated = original;
     mutated.record_count = XR_AOT_REFINEMENT_MAX_RECORDS + 1u;
-    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan,
+                                      xr_target_plan_semantic_plan(fixture.target_plan), &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_RESOURCE_BUDGET);
 
     xr_aot_refinement_plan_free(plan);
@@ -3517,21 +3580,24 @@ static void test_borrowed_byte_slice_parameter_storage_is_exact_and_fail_closed(
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan != NULL && xr_aot_refinement_plan_view(plan).record_count == 0);
     xr_aot_refinement_plan_free(plan);
 
     uint32_t saved_detail = target->machine_reps[binding->register_rep].detail;
     target->machine_reps[binding->register_rep].detail = XR_SEMANTIC_INDEX_NONE;
     plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
     target->machine_reps[binding->register_rep].detail = saved_detail;
 
     uint8_t saved_root = target->slots[binding->slot].root_kind;
     target->slots[binding->slot].root_kind = XR_TARGET_ROOT_NONE;
     plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
     target->slots[binding->slot].root_kind = saved_root;
 
@@ -3582,14 +3648,15 @@ static void test_fixed_array_backing_projection_is_exact_and_fail_closed(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *refinement = NULL;
-    REQUIRE(
-        xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     REQUIRE(refinement != NULL && xr_aot_refinement_plan_view(refinement).record_count == 1);
     xr_aot_refinement_plan_free(refinement);
 
     XrCEmissionPlan *emission = NULL;
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
-    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     profile_fingerprint, &emission, error, sizeof(error)));
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view, error, sizeof(error)));
     REQUIRE(view.rep == XR_C_VALUE_REP_AGGREGATE &&
@@ -3607,15 +3674,16 @@ static void test_fixed_array_backing_projection_is_exact_and_fail_closed(void) {
     REQUIRE(row != NULL);
     uint8_t saved_native = row->backing_native_type;
     row->backing_native_type = XR_NATIVE_U64;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     row->backing_native_type = saved_native;
     uint8_t saved_projection = row->address_projection;
     row->address_projection = XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     row->address_projection = saved_projection;
-    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      profile_fingerprint, error, sizeof(error)));
 
     xr_c_emission_plan_free(emission);
     xr_target_plan_free(target);
@@ -3698,7 +3766,8 @@ static void test_named_aggregate_emission_is_exact_and_fail_closed(void) {
                                             &semantic_value, error, sizeof(error)));
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     profile_fingerprint, &emission, error, sizeof(error)));
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view, error, sizeof(error)));
     REQUIRE(view.rep == XR_C_VALUE_REP_AGGREGATE &&
@@ -3717,25 +3786,26 @@ static void test_named_aggregate_emission_is_exact_and_fail_closed(void) {
     REQUIRE(row != NULL);
     uint8_t saved_rep = row->rep;
     row->rep = XR_C_VALUE_REP_TAGGED;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     row->rep = saved_rep;
     uint8_t saved_projection = row->address_projection;
     row->address_projection = XR_C_ADDRESS_PROJECTION_NONE;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     row->address_projection = saved_projection;
     uint8_t saved_materialization = row->materialization;
     row->materialization = XR_C_VALUE_MATERIALIZATION_ARRAY_NEW;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     row->materialization = saved_materialization;
     const char *saved_c_type = row->c_type;
     row->c_type = "XrValue";
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     row->c_type = saved_c_type;
-    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      profile_fingerprint, error, sizeof(error)));
 
     xr_c_emission_plan_free(emission);
     xr_target_plan_free(target);
@@ -3785,7 +3855,8 @@ static void test_scalar_addressable_alias_recipe_is_exact_and_fail_closed(void) 
 
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     profile_fingerprint, &emission, error, sizeof(error)));
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, alias_value, &view, error, sizeof(error)));
     REQUIRE(view.materialization == XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS &&
@@ -3801,15 +3872,16 @@ static void test_scalar_addressable_alias_recipe_is_exact_and_fail_closed(void) 
     REQUIRE(row != NULL);
     uint32_t saved_source = row->recipe_operand_value;
     row->recipe_operand_value = alias_value;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     row->recipe_operand_value = saved_source;
     uint8_t saved_recipe = row->materialization;
     row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
-    REQUIRE(
-        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       profile_fingerprint, error, sizeof(error)));
     row->materialization = saved_recipe;
-    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      profile_fingerprint, error, sizeof(error)));
 
     xr_c_emission_plan_free(emission);
     xr_target_plan_free(target);
@@ -3869,7 +3941,8 @@ static void test_direct_local_tagged_ref_parameter_index_is_exact_and_fail_close
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan != NULL && xr_aot_refinement_plan_view(plan).record_count == 1);
     xr_aot_refinement_plan_free(plan);
 
@@ -3879,7 +3952,8 @@ static void test_direct_local_tagged_ref_parameter_index_is_exact_and_fail_close
     xr_target_plan_compute_fingerprint(target, &target->fingerprint);
     REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
     plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
     target->slots[binding->slot].ownership = saved_ownership;
     target->fingerprint = saved_fingerprint;
@@ -3896,7 +3970,8 @@ static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
     XrAotRefinementPlan *native_plan = build_representation_plan(&fixture, &diag);
     XrAotRefinementPlanView native_view = xr_aot_refinement_plan_view(native_plan);
     const XrAotRepresentationAdapterRecord *native = &native_view.records[0].representation_adapter;
-    XrAotRefinementBuilder *builder = xr_aot_refinement_builder_create(fixture.target_plan, &diag);
+    XrAotRefinementBuilder *builder = xr_aot_refinement_builder_create(
+        fixture.target_plan, xr_target_plan_semantic_plan(fixture.target_plan), &diag);
     REQUIRE(builder != NULL);
     XrAotPassProtocol protocol = xr_aot_refinement_representation_protocol(27903);
     XrAotRepresentationAdapterRequest request = {
@@ -4003,8 +4078,8 @@ static void test_tagged_string_array_copy_refinement_is_exact(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *refinement = NULL;
-    REQUIRE(
-        xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(refinement);
     REQUIRE(refinement != NULL && refinement_view.record_count == 0);
     xi_opt_refresh_representations_with_policy(function, &policy);
@@ -4013,12 +4088,14 @@ static void test_tagged_string_array_copy_refinement_is_exact(void) {
 
     XrCEmissionPlan *emission = NULL;
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
-    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     profile_fingerprint, &emission, error, sizeof(error)));
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, copy_value, &view, error, sizeof(error)) &&
             view.rep == XR_C_VALUE_REP_TAGGED &&
             view.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
-            xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+            xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      profile_fingerprint, error, sizeof(error)));
 
     XrTargetLayoutRecord saved_layout = target->layouts[layout_index];
     XrFingerprint saved_fingerprint = target->fingerprint;
@@ -4029,8 +4106,8 @@ static void test_tagged_string_array_copy_refinement_is_exact(void) {
     REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)) &&
             strstr(error, "XR_TARGET_1002") != NULL);
     XrAotRefinementPlan *refused = NULL;
-    REQUIRE(
-        !xr_aot_representation_refinement_build_from_authority(target, &policy, &refused, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refused, &diag));
     REQUIRE(refused == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
     target->layouts[layout_index] = saved_layout;
     target->fingerprint = saved_fingerprint;
@@ -4103,14 +4180,15 @@ static void test_scalar_array_allocation_storage_is_exact_and_fail_closed(void) 
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *refinement = NULL;
-    REQUIRE(
-        xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     REQUIRE(refinement != NULL && xr_aot_refinement_plan_view(refinement).record_count == 1);
     xr_aot_refinement_plan_free(refinement);
 
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(target, xr_target_profile_fingerprint(profile), &emission,
-                                     error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     xr_target_profile_fingerprint(profile), &emission, error,
+                                     sizeof(error)));
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, array_value, &view, error, sizeof(error)) &&
             view.rep == XR_C_VALUE_REP_TAGGED &&
@@ -4126,11 +4204,13 @@ static void test_scalar_array_allocation_storage_is_exact_and_fail_closed(void) 
         }
     REQUIRE(emission_index != XR_SEMANTIC_INDEX_NONE);
     emission->values[emission_index].recipe_discriminant = XR_TARGET_ARRAY_STORAGE_I64;
-    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_profile_fingerprint(profile),
-                                       error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       xr_target_profile_fingerprint(profile), error,
+                                       sizeof(error)));
     emission->values[emission_index].recipe_discriminant = XR_TARGET_ARRAY_STORAGE_U8;
-    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_profile_fingerprint(profile),
-                                      error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                      xr_target_profile_fingerprint(profile), error,
+                                      sizeof(error)));
     xr_c_emission_plan_free(emission);
 
     XrTargetLayoutRecord saved_layout = target->layouts[layout_index];
@@ -4142,8 +4222,8 @@ static void test_scalar_array_allocation_storage_is_exact_and_fail_closed(void) 
     REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)) &&
             strstr(error, "XR_TARGET_1002") != NULL);
     refinement = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement,
-                                                                   &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     REQUIRE(refinement == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
     target->layouts[layout_index] = saved_layout;
     target->fingerprint = saved_plan_fingerprint;
@@ -4241,7 +4321,8 @@ static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(plan);
     REQUIRE(plan != NULL && refinement_view.frozen && refinement_view.verified &&
             refinement_view.record_count == 1u);
@@ -4271,7 +4352,8 @@ static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
     XrAotRefinementPlanView mutated_view = refinement_view;
     mutated_view.records = mutated_records;
     mutated_records[0].representation_adapter.source_value = element_value;
-    REQUIRE(!xr_aot_refinement_verify(&mutated_view, target, &diag));
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, target, xr_target_plan_semantic_plan(target),
+                                      &diag));
     REQUIRE(diag.issue != XR_AOT_REFINEMENT_OK);
 
     xi_opt_refresh_representations_with_policy(function, &policy);
@@ -4281,8 +4363,9 @@ static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
 
     char error[512] = {0};
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(target, xr_target_profile_fingerprint(profile), &emission,
-                                     error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     xr_target_profile_fingerprint(profile), &emission, error,
+                                     sizeof(error)));
     XrCValueEmissionView array_view = {0};
     XrCValueEmissionView read_view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, array_semantic->result_value, &array_view,
@@ -4304,7 +4387,8 @@ static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
     REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)) &&
             strstr(error, "XR_TARGET_1003") != NULL);
     plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
     target->calls[intrinsic_call_index] = saved_call;
     target->fingerprint = saved_plan_fingerprint;
@@ -4384,15 +4468,16 @@ static void test_array_fill_scalar_authority_is_exact_and_fail_closed(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *refinement = NULL;
-    REQUIRE(
-        xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     REQUIRE(refinement != NULL && xr_aot_refinement_plan_view(refinement).record_count == 0);
     xr_aot_refinement_plan_free(refinement);
 
     char error[512] = {0};
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(target, xr_target_profile_fingerprint(profile), &emission,
-                                     error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                     xr_target_profile_fingerprint(profile), &emission, error,
+                                     sizeof(error)));
     XrCValueEmissionView fill_view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, fill_semantic->result_value, &fill_view, error,
                                           sizeof(error)) &&
@@ -4409,12 +4494,14 @@ static void test_array_fill_scalar_authority_is_exact_and_fail_closed(void) {
     uint32_t saved_recipe_argument = emission->values[emission_index].recipe_argument_value;
     emission->values[emission_index].recipe_argument_value =
         emission->values[emission_index].recipe_operand_value;
-    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_profile_fingerprint(profile),
-                                       error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       xr_target_profile_fingerprint(profile), error,
+                                       sizeof(error)));
     emission->values[emission_index].recipe_argument_value = saved_recipe_argument;
     emission->values[emission_index].recipe_discriminant = XR_TARGET_ARRAY_STORAGE_U8;
-    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_profile_fingerprint(profile),
-                                       error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                       xr_target_profile_fingerprint(profile), error,
+                                       sizeof(error)));
     xr_c_emission_plan_free(emission);
 
     XrTargetCallRecord saved_call = *call;
@@ -4425,8 +4512,8 @@ static void test_array_fill_scalar_authority_is_exact_and_fail_closed(void) {
     REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)) &&
             strstr(error, "XR_TARGET_1003") != NULL);
     refinement = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement,
-                                                                   &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     REQUIRE(refinement == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
     *call = saved_call;
     target->fingerprint = saved_plan_fingerprint;
@@ -4516,8 +4603,8 @@ static void test_scalar_array_range_fill_refinement_is_exact_and_fail_closed(voi
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *refinement = NULL;
-    REQUIRE(
-        xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
     REQUIRE(view.frozen && view.verified && view.record_count == 0);
     xi_opt_refresh_representations_with_policy(function, &policy);
@@ -4549,8 +4636,8 @@ static void test_scalar_array_range_fill_refinement_is_exact_and_fail_closed(voi
     REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)) &&
             strstr(error, "XR_TARGET_1003") != NULL);
     refinement = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement,
-                                                                   &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     REQUIRE(refinement == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
     *call = saved_call;
     target->fingerprint = saved_plan_fingerprint;
@@ -4675,8 +4762,8 @@ static void test_source_class_array_fill_refinement_is_exact_and_fail_closed(voi
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *refinement = NULL;
-    REQUIRE(
-        xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
     REQUIRE(refinement != NULL && view.frozen && view.verified && view.record_count == 0);
     xi_opt_refresh_representations_with_policy(function, &policy);
@@ -4820,8 +4907,8 @@ static XrTargetPlan *build_array_hof_refinement_fixture(uint8_t kind, XiFunc **o
 static void expect_array_hof_mutation_refused(XrTargetPlan *target, const XiRepPolicy *policy) {
     XrAotRefinementPlan *refinement = NULL;
     XrAotRefinementDiagnostic diag = {0};
-    REQUIRE(
-        !xr_aot_representation_refinement_build_from_authority(target, policy, &refinement, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), policy, &refinement, &diag));
     REQUIRE(refinement == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
 }
 
@@ -4879,8 +4966,8 @@ static void test_array_hof_refinement_is_exact_and_fail_closed(void) {
         XiRepPolicy policy = xi_rep_policy_native_boundary();
         XrAotRefinementDiagnostic diag = {0};
         XrAotRefinementPlan *refinement = NULL;
-        REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement,
-                                                                      &diag));
+        REQUIRE(xr_aot_representation_refinement_build_from_authority(
+            target, xr_target_plan_semantic_plan(target), &policy, &refinement, &diag));
         REQUIRE(refinement && xr_aot_refinement_plan_view(refinement).record_count == 0);
         xr_aot_refinement_plan_free(refinement);
 
@@ -4955,7 +5042,8 @@ static void test_string_concat_cleanup_materialization_is_exact(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     xi_opt_refresh_representations_with_policy(function, &policy);
     REQUIRE(xr_aot_representation_materialization_verify(&view, function, target, &policy, &diag));
@@ -5004,7 +5092,8 @@ static void test_assertion_plan_and_native_condition_materialization_are_exact(v
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     xi_opt_refresh_representations_with_policy(function, &policy);
     REQUIRE(condition->rep == XR_REP_I64 && condition->op != XI_BOX);
@@ -5067,7 +5156,8 @@ static void test_union_as_conversion_refinement_is_exact_and_fail_closed(void) {
     XrTargetProfile *profile = NULL;
     XrTargetPlan *target =
         build_union_as_conversion_target(XR_TID_I64, TYPE_NAME_I64, &function, &profile);
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan != NULL && xr_aot_refinement_plan_view(plan).verified);
     xr_aot_refinement_plan_free(plan);
     xr_target_plan_free(target);
@@ -5081,7 +5171,8 @@ static void test_union_as_conversion_refinement_is_exact_and_fail_closed(void) {
     function = NULL;
     profile = NULL;
     target = build_union_as_conversion_target(XR_TID_BOOL, TYPE_NAME_BOOL, &function, &profile);
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(target, &policy, &plan, &diag));
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), &policy, &plan, &diag));
     REQUIRE(plan == NULL && diag.issue == XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
     xr_target_plan_free(target);
     xr_target_profile_free(profile);

@@ -198,7 +198,9 @@ def verify(root: Path) -> list[str]:
     errors = verify_target_function(
         builder, "materialize_coroutine_roots_and_string_cleanups"
     )
-    errors.extend(verify_target_function(verifier, "verify_roots_and_cleanups"))
+    errors.extend(
+        verify_target_function(verifier, "verify_roots_and_cleanups_partition")
+    )
     semantic_builder = (
         root / "src/plan/semantic/xr_semantic_builder.c"
     ).read_text(encoding="utf-8")

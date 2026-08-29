@@ -671,6 +671,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Ptr<T>` | resolver built-in |
 | `Range` | prelude |
 | `Regex` | prelude |
+| `RegexMatch` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
 | `StringBuilder` | prelude |

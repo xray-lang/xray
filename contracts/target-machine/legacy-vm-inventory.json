@@ -18,7 +18,7 @@
   ],
   "generator": "target-machine-phase0/1",
   "legacy_artifact_symbols": [],
-  "opcode_count": 297,
+  "opcode_count": 299,
   "opcodes": [
     {
       "deletion_task": 276,
@@ -2017,9 +2017,33 @@
       "error_suspend_edges": "handler-specific",
       "family": "typed-operation",
       "observable_behavior": "description-in-xinstruction-table",
-      "opcode": "OP_PRINT",
+      "opcode": "OP_PRINT_GROUP_NEW",
       "operand_format": "FMT_A",
-      "operand_roles": "KOP_PRINT",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xinstruction-table",
+      "opcode": "OP_PRINT_GROUP_APPEND",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_PRINT_GROUP_APPEND",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xinstruction-table",
+      "opcode": "OP_PRINT_GROUP_FLUSH",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_FLAG",
       "ownership": "implicit-opcode-handler-contract",
       "tag_assumption": "XrValue-register-frame",
       "target_plan_mapping": "map-to-target-plan-op"
@@ -3590,7 +3614,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "d0db02e0d9aba1e252cf279ca57b6f04f995c8a0265b93c5e81703ddcfb346a4",
+  "source_tree_fingerprint": "81d2d62de5a4af7055a8aba67488a97b846ad432fa6b24169dc9390a4e9384b2",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xr_typed_dispatch.c",

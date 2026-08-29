@@ -37,6 +37,7 @@
 #include "../semantic/xr_semantic_class_shape.h"
 #include "../semantic/xr_semantic_coroutine_lifecycle_shape.h"
 #include "../semantic/xr_semantic_string_shape.h"
+#include "../semantic/xr_semantic_string_utf8_shape.h"
 #include "../semantic/xr_semantic_cleanup_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_string_runes_shape.h"
@@ -432,9 +433,11 @@ static void target_trace_type(const XrSemanticPlan *plan, const char *label, uin
                 type_index);
         return;
     }
-    fprintf(stderr, "[target]     %-52s type %u kind=%u builtin=%u scalar_rep=%u children=%u %s\n",
-            label, type_index, type->kind, type->builtin_type, type->scalar_rep, type->child_count,
-            type->canonical_key ? type->canonical_key : "<no canonical key>");
+    fprintf(stderr,
+            "[target]     %-52s type %u kind=%u builtin=%u scalar_rep=%u flags=0x%02x "
+            "children=%u %s\n",
+            label, type_index, type->kind, type->builtin_type, type->scalar_rep, type->flags,
+            type->child_count, type->canonical_key ? type->canonical_key : "<no canonical key>");
 }
 
 /* One equality a contract demands, printed as both sides so the reader never
@@ -1414,31 +1417,8 @@ static bool builder_array_member_reference_contract_is_exact(
     const XrSemanticPlan *plan, const XrArrayMemberShape *shape,
     const XrSemanticOperationRecord *operation, uint32_t element_type_index,
     const XrSemanticTypeRecord *element_type) {
-    if (!plan || !shape || !operation || !element_type)
-        return false;
-    if ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
-        return true;
-    if (shape->reference_action == XR_ARRAY_MEMBER_REFERENCE_PRESERVE)
-        return shape->element_operand == 0 &&
-               (shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ ||
-                shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE) &&
-               shape->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_NONE;
-    if (shape->reference_action != XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE ||
-        shape->element_access != XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE ||
-        shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
-        shape->element_operand == 0 || shape->element_operand >= operation->operand_count ||
-        xr_semantic_class_instance_type_source_class(plan, element_type) == XR_SEMANTIC_INDEX_NONE)
-        return false;
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
-    uint32_t semantic_operand = operation->operand_begin + shape->element_operand;
-    if (!operands || semantic_operand >= operand_count)
-        return false;
-    const XrSemanticOperandRecord *element = &operands[semantic_operand];
-    return element->type == element_type_index && element->role == XR_SEM_OPERAND_ARGUMENT &&
-           element->parameter == (int16_t) (shape->element_operand - 1u) &&
-           element->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           element->ownership_action == XR_SEM_OPERAND_CONSUME;
+    return xr_semantic_array_member_reference_contract_is_exact(plan, shape, operation,
+                                                                element_type_index, element_type);
 }
 
 static bool semantic_array_member_scalar_is_exact(const XrSemanticPlan *plan,
@@ -1562,7 +1542,7 @@ static bool semantic_array_member_tagged_store_is_exact(const XrSemanticPlan *pl
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, type_index);
     uint32_t operand_index = operation->operand_begin + shape->element_operand;
     if (!type || operand_index >= operand_count ||
-        xr_semantic_class_instance_type_source_class(plan, type) == XR_SEMANTIC_INDEX_NONE ||
+        !xr_semantic_array_member_owned_reference_type_is_exact(plan, type) ||
         operands[operand_index].value != element)
         return false;
     if (semantic_operand)
@@ -1614,13 +1594,21 @@ static bool semantic_native_module_scalar_call_is_exact(const XrSemanticPlan *pl
     const char *selector = NULL;
     uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t arity = 0;
-    if (!semantic_native_module_scalar_call_shape_is_exact(plan, operation, &selector,
-                                                           &receiver_value, &arity))
+    bool exact_namespace = semantic_native_module_scalar_call_shape_is_exact(
+        plan, operation, &selector, &receiver_value, &arity);
+    if (exact_namespace) {
+        const char *module_path = xr_semantic_native_module_namespace_path(plan, receiver_value);
+        exact_namespace = module_path && xr_stdlib_metadata_exact_native_direct_member(
+                                             module_path, selector, (uint16_t) arity) != NULL;
+    }
+    const XrStdlibDefEntry *direct = NULL;
+    bool exact_direct =
+        operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL &&
+        xr_semantic_native_direct_scalar_call_shape_is_exact(plan, operation, &direct);
+    if (!exact_namespace && !exact_direct)
         return false;
-    const char *module_path = xr_semantic_native_module_namespace_path(plan, receiver_value);
-    if (!module_path ||
-        !xr_stdlib_metadata_exact_native_direct_member(module_path, selector, (uint16_t) arity))
-        return false;
+    if (exact_direct)
+        arity = direct->argc;
     if (argument_count)
         *argument_count = arity;
     return true;
@@ -6134,12 +6122,12 @@ static bool builder_add_string_concat_result_storage(XrTargetPlanBuilder *builde
     return true;
 }
 
-/* Binds the String a `string(x)` conversion allocates to its own owned dynamic
- * slot, which is the same storage fact a concatenation result, a String literal
- * and the owned String a direct-local call returns already carry: String is
- * immutable and shared, so the outer tagged value is the whole fact. The
- * conversion borrows its scalar source, whose own representation the scalar
- * family froze, so this row states no borrow of its own. */
+/* Binds the String a conversion allocates to its own owned dynamic slot. This
+ * includes both `string(x)` and the exact String UTF-8 decoders: they return the
+ * same immutable, shared outer tagged value even though one consumes a scalar
+ * operation and the other has explicit call-dispatch authority. Their inputs
+ * remain owned by the families that froze those representations, so this row
+ * states no borrow of its own. */
 static bool builder_add_string_convert_result_storage(XrTargetPlanBuilder *builder, char *error,
                                                       size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_CONVERT_RESULT_STORAGE, error,
@@ -6161,7 +6149,9 @@ static bool builder_add_string_convert_result_storage(XrTargetPlanBuilder *build
             valid = fail(error, error_size, "XR_TARGET_1001", "semantic operation is missing");
             break;
         }
-        if (!xr_semantic_string_convert_is_exact(builder->semantic_plan, operation))
+        if (!xr_semantic_string_convert_is_exact(builder->semantic_plan, operation) &&
+            !xr_semantic_string_utf8_static_call_is_exact(builder->semantic_plan, operation, NULL,
+                                                          NULL))
             continue;
         if (operation->result_value >= analysis.total_values ||
             operation->result_type >= analysis.type_count ||
@@ -8040,14 +8030,13 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
         source_target_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < target_count; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
-        if (!target || target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+        bool source_export = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
+        bool mixed_native = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+        if (!source_export && !mixed_native)
             continue;
-        const XrSemanticOperationRecord *call =
-            target->operation < operation_count
-                ? xr_semantic_plan_operation(plan, target->operation)
-                : NULL;
         if (target->operation >= operation_count ||
-            target->dependency >= xr_semantic_plan_dependency_count(plan) ||
+            (source_export && target->dependency >= xr_semantic_plan_dependency_count(plan)) ||
+            (mixed_native && target->dependency != XR_SEMANTIC_INDEX_NONE) ||
             source_target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE)
             goto invalid;
         source_target_by_operation[target->operation] = i;
@@ -8063,6 +8052,7 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
             continue;
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, target_index);
         const XrSemanticOperationRecord *call = xr_semantic_plan_operation(plan, i);
+        bool mixed_native = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         bool named_export = call && call->opcode == XI_CALL;
         if (!target || !call || (call->opcode != XI_CALL && call->opcode != XI_CALL_METHOD) ||
             call->operand_count == 0 || call->operand_begin >= operand_count)
@@ -8145,6 +8135,7 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
             memset(visit_epoch, 0, analysis->value_count * sizeof(*visit_epoch));
             epoch = next_epoch++;
         }
+        uint32_t receiver_epoch = epoch;
         for (uint32_t depth = 0;; depth++) {
             if (depth >= operation_count || current_value >= analysis->value_count ||
                 visit_epoch[current_value] == epoch)
@@ -8159,7 +8150,8 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
                 definition->result_type != namespace_type ||
                 definition->function != call->function ||
                 (candidate[current_value] &&
-                 (analysis->dependency_by_value[current_value] != target->dependency ||
+                 ((!mixed_native &&
+                   analysis->dependency_by_value[current_value] != target->dependency) ||
                   consumer_by_value[current_value] != consumer_index)))
                 goto invalid;
             candidate[current_value] = 1;
@@ -8201,6 +8193,7 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
             memset(visit_epoch, 0, analysis->value_count * sizeof(*visit_epoch));
             epoch = next_epoch++;
         }
+        uint32_t import_epoch = epoch;
         for (uint32_t depth = 0;; depth++) {
             if (depth >= operation_count || current_value >= analysis->value_count ||
                 visit_epoch[current_value] == epoch)
@@ -8214,7 +8207,8 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
             if (!definition || definition->result_value != current_value ||
                 definition->result_type != namespace_type || definition->function != 0 ||
                 (candidate[current_value] &&
-                 (analysis->dependency_by_value[current_value] != target->dependency ||
+                 ((!mixed_native &&
+                   analysis->dependency_by_value[current_value] != target->dependency) ||
                   consumer_by_value[current_value] != consumer_index)))
                 goto invalid;
             candidate[current_value] = 1;
@@ -8239,10 +8233,27 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
             stored->ownership_action != XR_SEM_OPERAND_CONSUME ||
             stored->parameter_mode != XR_PARAM_READ || stored->access != XR_CALL_ARG_PLAIN ||
             stored->flags != 0 || load->result_type != import->result_type ||
-            !source_import_dependency_is_exact(plan, import, metadata, metadata_count, named_export,
-                                               &import_dependency) ||
-            import_dependency != target->dependency)
+            (mixed_native && import->import_resolution != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
+             import->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB))
             goto invalid;
+        if (mixed_native && import->import_resolution == XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB) {
+            for (uint32_t value = 0; value < analysis->value_count; value++) {
+                if (visit_epoch[value] != receiver_epoch && visit_epoch[value] != import_epoch)
+                    continue;
+                candidate[value] = 0;
+                analysis->dependency_by_value[value] = XR_SEMANTIC_INDEX_NONE;
+                consumer_by_value[value] = XR_SEMANTIC_INDEX_NONE;
+            }
+            continue;
+        }
+        if (!source_import_dependency_is_exact(plan, import, metadata, metadata_count, named_export,
+                                               &import_dependency) ||
+            (!mixed_native && import_dependency != target->dependency))
+            goto invalid;
+        if (mixed_native)
+            for (uint32_t value = 0; value < analysis->value_count; value++)
+                if (visit_epoch[value] == receiver_epoch || visit_epoch[value] == import_epoch)
+                    analysis->dependency_by_value[value] = import_dependency;
     }
     /* A namespace alias that is published but never loaded still needs an
      * exact dynamic representation for ARC.  Its identity is the frozen
@@ -8318,8 +8329,13 @@ static bool source_namespace_storage_analysis_init(const XrSemanticPlan *plan,
                     target_index != XR_SEMANTIC_INDEX_NONE
                         ? xr_semantic_plan_call_target(plan, target_index)
                         : NULL;
+                bool target_owns_source_dependency =
+                    target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT &&
+                    target->dependency == analysis->dependency_by_value[operand->value];
+                bool mixed_native =
+                    target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
                 expected = target && target->operation == i &&
-                           target->dependency == analysis->dependency_by_value[operand->value] &&
+                           (target_owns_source_dependency || mixed_native) &&
                            operand->role == (use->opcode == XI_CALL ? XR_SEM_OPERAND_CALLEE
                                                                     : XR_SEM_OPERAND_RECEIVER);
             } else if (expected) {
@@ -9844,6 +9860,44 @@ static bool collect_json_namespace_value_call_intent(XrTargetPlanBuilder *builde
     return append_call_intent(builder, &call, error, error_size);
 }
 
+/* The runtime-owned String namespace and frozen Xi method symbol already name
+ * the exact decoder.  Its Slice argument is read directly by the existing
+ * method emitter, so this row carries dispatch/result authority and does not
+ * invent a callee-parameter boundary that no source function declares. */
+static bool collect_string_utf8_static_call_intent(XrTargetPlanBuilder *builder,
+                                                   uint32_t operation_index,
+                                                   const XrSemanticOperationRecord *operation,
+                                                   char *error, size_t error_size) {
+    uint32_t method_symbol = XI_METHOD_SYMBOL_INVALID;
+    if (!xr_semantic_string_utf8_static_call_is_exact(builder->semantic_plan, operation,
+                                                      &method_symbol, NULL))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "String UTF-8 static dispatch authority is incomplete");
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_STRING_UTF8_STATIC,
+        .target_kind = XR_TARGET_CALL_TARGET_STRING_UTF8_STATIC,
+    };
+    if (!result_type ||
+        !stable_identity_from_pair("xray-target-string-utf8-static-v1", operation->id,
+                                   result_type->id, method_symbol, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "String UTF-8 static call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_panic_info_constructor_call_intent(XrTargetPlanBuilder *builder,
                                                        uint32_t operation_index,
                                                        const XrSemanticOperationRecord *operation,
@@ -10001,7 +10055,8 @@ static bool collect_native_module_scalar_call_intent(XrTargetPlanBuilder *builde
      * says why. */
     uint32_t arity = 0;
     if (!semantic_native_module_scalar_call_is_exact(builder->semantic_plan, operation, &arity) ||
-        !call_type_is_exact_scalar(builder->semantic_plan, operation->result_type))
+        !xr_semantic_native_module_boundary_type_is_exact(
+            xr_semantic_plan_type(builder->semantic_plan, operation->result_type), true))
         return fail(error, error_size, "XR_TARGET_1003",
                     "native module scalar dispatch authority is incomplete");
     const XrSemanticTypeRecord *result_type =
@@ -10302,6 +10357,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                                xr_semantic_raw_pointer_argument_satisfies_parameter(
                                    xr_semantic_plan_type(plan, operand->type),
                                    xr_semantic_plan_type(plan, parameter->type));
+        bool type_admitted =
+            parameter && xr_semantic_parameter_type_admits_argument(
+                             plan, xr_semantic_plan_type(plan, parameter->type),
+                             xr_semantic_plan_type(plan, operand->type), parameter->mode);
         bool exact_u8_slice = semantic_u8_slice_parameter_is_exact(plan, parameter) &&
                               semantic_u8_slice_type_is_exact(plan, operand->type);
         bool exact_unit_enum =
@@ -10406,8 +10465,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         uint8_t expected_role = receiver_slot ? XR_SEM_OPERAND_RECEIVER : XR_SEM_OPERAND_ARGUMENT;
         int16_t expected_parameter = method ? (int16_t) ((int32_t) ordinal - 1) : (int16_t) ordinal;
         if (!parameter || operand->role != expected_role ||
-            operand->parameter != expected_parameter ||
-            (operand->type != parameter->type && !pointer_weakens) ||
+            operand->parameter != expected_parameter || (!type_admitted && !pointer_weakens) ||
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
@@ -10655,7 +10713,8 @@ static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint
         bool addressable = (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0;
         if (!parameter || parameter->function != source_export->function ||
             parameter->ordinal != ordinal || !operand_type || !parameter_type ||
-            !xr_semantic_parameter_type_admits_argument(dependency, parameter_type, operand_type) ||
+            !xr_semantic_parameter_type_admits_argument(dependency, parameter_type, operand_type,
+                                                        parameter->mode) ||
             operand->role != XR_SEM_OPERAND_ARGUMENT || operand->parameter != (int16_t) ordinal ||
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
@@ -11171,6 +11230,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_stringbuilder_append_string_is_exact(plan, operation, NULL, NULL)) {
             valid = collect_stringbuilder_append_string_call_intent(builder, i, operation, error,
                                                                     error_size);
+        } else if (xr_semantic_string_utf8_static_call_is_exact(plan, operation, NULL, NULL)) {
+            valid =
+                collect_string_utf8_static_call_intent(builder, i, operation, error, error_size);
         } else if (semantic_json_namespace_value_is_exact(plan, operation, NULL)) {
             valid =
                 collect_json_namespace_value_call_intent(builder, i, operation, error, error_size);
@@ -11240,6 +11302,34 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                     target_trace_type(plan, "type of operand[0]", receiver->type);
                 if (argument)
                     target_trace_type(plan, "type of operand[1]", argument->type);
+                if (argument) {
+                    const XrSemanticTypeRecord *argument_type =
+                        xr_semantic_plan_type(plan, argument->type);
+                    uint32_t child_count = 0;
+                    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+                    if (argument_type && argument_type->child_count == 1 && children &&
+                        argument_type->child_begin < child_count)
+                        target_trace_type(plan, "element type of operand[1]",
+                                          children[argument_type->child_begin]);
+                }
+                if (receiver && operation->opcode == XI_CALL) {
+                    const XrSemanticOperationRecord *callee_definition =
+                        xr_semantic_unique_operation_for_value(plan, operation->function,
+                                                               receiver->value);
+                    if (callee_definition) {
+                        fprintf(stderr, "[target]   callee definition\n");
+                        target_trace_operation(plan, XR_SEMANTIC_INDEX_NONE, callee_definition);
+                    }
+                }
+                if (receiver && operation->opcode == XI_CALL_METHOD) {
+                    const XrSemanticOperationRecord *receiver_definition =
+                        xr_semantic_unique_operation_for_value(plan, operation->function,
+                                                               receiver->value);
+                    if (receiver_definition) {
+                        fprintf(stderr, "[target]   receiver definition\n");
+                        target_trace_operation(plan, XR_SEMANTIC_INDEX_NONE, receiver_definition);
+                    }
+                }
                 uint32_t result_source_class = xr_semantic_class_instance_type_source_class(
                     plan, xr_semantic_plan_type(plan, operation->result_type));
                 if (operation->opcode == XI_CALL && result_source_class != XR_SEMANTIC_INDEX_NONE &&
@@ -14826,6 +14916,17 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                     : NULL;
             const XrSemanticTypeRecord *parameter_type =
                 parameter ? xr_semantic_plan_type(callee_semantic, parameter->type) : NULL;
+            uint32_t semantic_operand_count = 0;
+            const XrSemanticOperandRecord *semantic_operands =
+                xr_semantic_plan_operands(builder->semantic_plan, &semantic_operand_count);
+            const XrSemanticOperandRecord *semantic_operand =
+                semantic_operands && argument_intent->semantic_operand < semantic_operand_count
+                    ? &semantic_operands[argument_intent->semantic_operand]
+                    : NULL;
+            const XrSemanticTypeRecord *operand_type =
+                semantic_operand
+                    ? xr_semantic_plan_type(builder->semantic_plan, semantic_operand->type)
+                    : NULL;
             bool adt_enum_borrow_boundary =
                 xr_semantic_adt_enum_type_is_exact(parameter_type) && caller && callee &&
                 caller->register_rep < materialized->machine_rep_count &&
@@ -14905,6 +15006,12 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                                                 parameter->ownership == XI_OWN_OWNED
                                                     ? XR_TARGET_OWNERSHIP_OWNED
                                                     : XR_TARGET_OWNERSHIP_BORROWED);
+            bool const_read_boundary =
+                !external_source_callee && parameter &&
+                xr_target_const_read_call_boundary(
+                    materialized->machine_reps, materialized->machine_rep_count, caller, callee,
+                    xr_semantic_type_is_const_read_admission(operand_type, parameter_type,
+                                                             parameter->mode));
             if (array_intrinsic || array_fill || array_hof || iterator_rune_nth ||
                 array_member_tagged_store) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
@@ -14944,7 +15051,8 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                   ((caller->register_rep != callee->register_rep ||
                     caller->memory_rep != callee->memory_rep) &&
                    !adt_enum_borrow_boundary && !tagged_ref_borrow_boundary &&
-                   !container_value_borrow_boundary && !class_instance_boundary)))) {
+                   !container_value_borrow_boundary && !class_instance_boundary &&
+                   !const_read_boundary)))) {
                 if (target_trace_enabled()) {
                     fprintf(stderr,
                             "[target] refused in call argument materialization: argument %u of "
@@ -14972,10 +15080,12 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                                            container_value_borrow_boundary);
                     target_trace_judgement("class instance ownership boundary",
                                            class_instance_boundary);
+                    target_trace_judgement("const-read ABI boundary", const_read_boundary);
                     fprintf(stderr,
                             "[target]   read it as: matching reps need no boundary at all. A "
                             "boundary is what lets the two sides hold the same carrier under "
-                            "different ownership, so a \"NO\" on all three with differing reps "
+                            "different ownership or qualification, so a \"NO\" on every named "
+                            "boundary with differing reps "
                             "means no family described this hand-over.\n");
                 }
                 return fail(error, error_size, "XR_TARGET_1003",

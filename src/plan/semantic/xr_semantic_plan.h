@@ -546,8 +546,10 @@ typedef struct XrSemanticOperandRecord {
  * the dependency's public export table. INDIRECT_CALLABLE freezes only an
  * open function-value dispatch domain and its conservative state obligation;
  * it is not a target identity or execution authority. NATIVE_NAMESPACE_YIELDABLE
- * is rebuilt from a resolver-proven native whole-module import plus the
- * canonical stdlib registry. BUILTIN_INSTANCE_YIELDABLE binds a reserved
+ * is rebuilt from a resolver-proven whole-module import plus the canonical
+ * stdlib registry; a mixed source/native namespace keeps source receiver
+ * storage authority while the registry row owns the native member target.
+ * BUILTIN_INSTANCE_YIELDABLE binds a reserved
  * builtin instance type, selector, and arity without asserting a machine call
  * target. SOURCE_INSTANCE_METHOD_LOCAL is an exact final-class declaration;
  * SOURCE_INSTANCE_METHOD_OPEN is a dependency-verified open dispatch domain,

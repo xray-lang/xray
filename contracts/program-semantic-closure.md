@@ -329,6 +329,16 @@ projection defined below; they never imply TargetPlan admission on their own.
     graph shapes, containers, coroutines, dynamic reload, and general product
     activation remain unavailable.
 
+Canonical stdlib identity parsing is a dependency-free module boundary shared
+by the compiler and runtime archive. It accepts only the frozen stdlib identity
+form and returns the exact namespace span without allocation or path
+normalization. Semantic native/source coexistence may consult that span only
+after resolver provenance has established the imported module identity; a
+source path, basename, selector, or malformed identity cannot manufacture
+stdlib membership. The implementation lives outside the full module object so
+runtime consumers do not pull parser, analyzer, or compiler ownership into the
+installed archive.
+
 The runtime standard-library source loader is an input boundary, not semantic
 or target authority. Its generated source-module descriptor set follows the
 same build feature gates as native factories and private-leaf binders; a source
@@ -339,7 +349,9 @@ require the independently verified program authority frozen above.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt e68592e1d5a789c8f107ef5dbe18d602c8004a97a49481a0d7c3687280af64d4
+anchor-sha256: CMakeLists.txt 5023801a0171ba677428da683dc6f7a16a3a840fd54a10f4b1e0c3d314820ce6
+anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
+anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 9eeade35f1bf2115b5c6c1b0d76453e9848f11a9916489085701f1c8319e42e1
 anchor-sha256: src/module/xmodule_graph.c fc7601efe0e40a2b5641d33cfb5f3bc6fec99d1a983c042949accd458b3a94f2
 anchor-sha256: src/frontend/parser/xparse.c 906aa94e4ae012a8534e62d771674aab960948ad45b8b78e3a19d6da63bff518
@@ -367,12 +379,12 @@ anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 5c4acf7c69c73052e8205b46b815bf150c1fb086432becf142cca0f3a76aa217
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c fcc478aff255817db427c1971e754376a99fa48416656bc2027d368517467fa1
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 86c48ef09925169c2a5ef4b1da71175285708cc3d2cb51c7b2163b99b43627d9
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 5251d8acc6f982535e09c9f8722a17f0676bf7ee574e96d5eafd2136044b1bb9
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 2845913faf5169046cc8f66cc0c48bb91f001976499adb5c3fa5cceec716ec15
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fbe1eb29e08425a629dda4c281f7a681ab48512c599cae9b63b379f4db338d2e
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c ac9c42dcd7d7b2cc6c341618ea5edc006b19b2447c1cd91a21f58a76b8bfee7b
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 6ab9f65a8ee2a89075f865156a63bd67dcda4c18d1c5446baf69984b8a29c8bd
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 642eff61fb0b06185d2aec4c0ce8d91919148de3d29d74a17e68bd1a5016b3fa
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 838f7adc60c3de52fda23ed25c07edb678a6274eb87d0deec2da033e701dca10
@@ -395,12 +407,12 @@ anchor-sha256: src/aot/emit_c/xr_c_program_emission.c d816c4bbbb9baa3399944516d3
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2b5667297212ffe1df19d87643c5045b1a6cfed11bc8683c
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 7e21230dbda209079f1d03fa75d4673b398399f782c23769f038fddfc1352fff
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 75e7f75e1d3e043a800ed24ef3d297a88e9ca7800e225ef64da7f9150466ceb8
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 405952f4bf7f109065170bbcbf997e844b493fc72fbf388b8fc93a416157926f
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
-anchor-sha256: tests/unit/module/test_module_identity.c a4cb293fbbd070bfef681b148919a100e608fe2a66530acfb984cf842db8a007
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c e4df79343bedb50366d118bce62f3dfccb73d3ad06d303d871e722a82205d1ec
+anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c cbe6f96c6b2857639e67fbeefcbe2c4fde388e6119172116fbcfe31291094a35
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 97053c4f88d4360850febc92149fbad9dc2ad8b5bb69d24f203cc80b8818d683
 anchor-sha256: tests/unit/CMakeLists.txt aa38eb96bac02a44dfb9529e7223a739396d00491912b6e488f433877c55c672
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
-anchor-sha256: src/aot/xaot_bundle.c 889e0ec0ae231d634c279ff844097667eb47957515e5b87a8cd22db18f511993
+anchor-sha256: src/aot/xaot_bundle.c 16a2e899a2c11b3c64dee5ed2fbc48d43ca967e8eba1487ffe6c9666004f55e1

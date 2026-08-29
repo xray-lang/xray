@@ -40,7 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(39)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(40)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -210,6 +210,36 @@ static bool emission_error(char *error, size_t error_size, const char *code, con
     if (error && error_size)
         snprintf(error, error_size, "%s: %s", code, detail);
     return false;
+}
+
+typedef struct XrCEmissionModuleScope {
+    const XrSemanticPlan *semantic;
+    const XrTargetModulePartitionRecord *partition;
+    uint32_t partition_index;
+} XrCEmissionModuleScope;
+
+static bool emission_module_scope(const XrTargetPlan *target_plan,
+                                  const XrSemanticPlan *semantic_plan,
+                                  XrCEmissionModuleScope *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    uint32_t partition_index = UINT32_MAX;
+    if (!target_plan || !semantic_plan || !out ||
+        !xr_target_plan_partition_for_semantic(target_plan, semantic_plan, &partition_index))
+        return false;
+    uint32_t partition_count = 0;
+    const XrTargetModulePartitionRecord *partitions =
+        xr_target_plan_module_partitions(target_plan, &partition_count);
+    if (partition_count) {
+        if (!partitions || partition_index >= partition_count)
+            return false;
+        out->partition = &partitions[partition_index];
+    } else if (partition_index != 0u) {
+        return false;
+    }
+    out->semantic = semantic_plan;
+    out->partition_index = partition_index;
+    return true;
 }
 
 static const XrSemanticTypeRecord *emission_semantic_value_type(const XrTargetPlan *target_plan,
@@ -3278,12 +3308,14 @@ static bool target_plan_has_call_result_rep(const XrTargetPlan *target_plan, uin
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v27\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v28\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
     hash_u64(&ctx, plan->schema_version);
     xr_sha256_update(&ctx, plan->target_fingerprint.bytes, sizeof(plan->target_fingerprint.bytes));
+    xr_sha256_update(&ctx, plan->semantic_fingerprint.bytes,
+                     sizeof(plan->semantic_fingerprint.bytes));
     xr_sha256_update(&ctx, plan->profile_fingerprint.bytes,
                      sizeof(plan->profile_fingerprint.bytes));
     hash_u64(&ctx, plan->value_count);
@@ -4016,10 +4048,18 @@ static bool verify_target_kind_projection(const XrTargetPlan *target_plan, uint3
     }
 }
 
-static bool verify_container_copy_call_storage(const XrTargetPlan *target_plan) {
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+static bool verify_container_copy_call_storage(const XrTargetPlan *target_plan,
+                                               const XrSemanticPlan *semantic,
+                                               const XrTargetModulePartitionRecord *partition) {
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
+    if (partition) {
+        if (partition->calls_begin > call_count ||
+            partition->calls_count > call_count - partition->calls_begin)
+            return false;
+        calls += partition->calls_begin;
+        call_count = partition->calls_count;
+    }
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
     for (uint32_t operation_index = 0; operation_index < operation_count; operation_index++) {
         const XrSemanticOperationRecord *operation =
@@ -4059,10 +4099,13 @@ static bool verify_container_copy_call_storage(const XrTargetPlan *target_plan) 
 }
 
 bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *target_plan,
+                               const XrSemanticPlan *semantic_plan,
                                XrFingerprint expected_profile_fingerprint, char *error,
                                size_t error_size) {
+    XrCEmissionModuleScope scope = {0};
     if (!plan || !target_plan || !xr_target_plan_is_verified(target_plan) ||
-        !verify_container_copy_call_storage(target_plan))
+        !emission_module_scope(target_plan, semantic_plan, &scope) ||
+        !verify_container_copy_call_storage(target_plan, semantic_plan, scope.partition))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission verification authority is missing");
     XrFingerprint target_fingerprint = xr_target_plan_fingerprint(target_plan);
@@ -4075,6 +4118,10 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
     if (!xr_fingerprint_equal(plan->target_fingerprint, target_fingerprint))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission TargetPlan fingerprint is stale");
+    if (!xr_fingerprint_equal(plan->semantic_fingerprint,
+                              xr_semantic_plan_fingerprint(semantic_plan)))
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C emission SemanticPlan fingerprint is stale");
     if (plan->schema_version != XR_C_EMISSION_PLAN_SCHEMA_VERSION ||
         (plan->value_count && !plan->values) ||
         (plan->call_argument_count && !plan->call_arguments) ||
@@ -4088,6 +4135,14 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
 
     uint32_t value_count = 0;
     const XrTargetValueRepRecord *values = xr_target_plan_value_reps(target_plan, &value_count);
+    if (scope.partition) {
+        if (scope.partition->value_reps_begin > value_count ||
+            scope.partition->value_reps_count > value_count - scope.partition->value_reps_begin)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission value partition is invalid");
+        values += scope.partition->value_reps_begin;
+        value_count = scope.partition->value_reps_count;
+    }
     if (value_count && !values)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "TargetPlan value-representation table is missing");
@@ -4545,6 +4600,15 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
     uint32_t target_argument_count = 0;
     const XrTargetCallArgumentRecord *target_arguments =
         xr_target_plan_call_arguments(target_plan, &target_argument_count);
+    if (scope.partition) {
+        if (scope.partition->call_arguments_begin > target_argument_count ||
+            scope.partition->call_arguments_count >
+                target_argument_count - scope.partition->call_arguments_begin)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission call-argument partition is invalid");
+        target_arguments += scope.partition->call_arguments_begin;
+        target_argument_count = scope.partition->call_arguments_count;
+    }
     uint32_t projected_call_arguments = 0;
     for (uint32_t i = 0; i < target_argument_count; i++) {
         const XrTargetCallArgumentRecord *target_argument = &target_arguments[i];
@@ -4608,6 +4672,15 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
     uint32_t target_cleanup_count = 0;
     const XrTargetCleanupRecord *target_cleanups =
         xr_target_plan_cleanups(target_plan, &target_cleanup_count);
+    if (scope.partition) {
+        if (scope.partition->cleanups_begin > target_cleanup_count ||
+            scope.partition->cleanups_count >
+                target_cleanup_count - scope.partition->cleanups_begin)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission cleanup partition is invalid");
+        target_cleanups += scope.partition->cleanups_begin;
+        target_cleanup_count = scope.partition->cleanups_count;
+    }
     uint32_t target_slot_count = 0;
     const XrTargetSlotRecord *target_slots = xr_target_plan_slots(target_plan, &target_slot_count);
     if (target_cleanup_count != plan->cleanup_count ||
@@ -4639,18 +4712,22 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
     return true;
 }
 
-bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
+bool xr_c_emission_plan_build(const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan,
                               XrFingerprint expected_profile_fingerprint, XrCEmissionPlan **out,
                               char *error, size_t error_size) {
     if (out)
         *out = NULL;
-    if (!target_plan || !out)
+    if (!target_plan || !semantic_plan || !out)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission plan input is missing");
     if (!xr_target_plan_is_verified(target_plan))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission plan requires a verified TargetPlan");
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    XrCEmissionModuleScope scope = {0};
+    if (!emission_module_scope(target_plan, semantic_plan, &scope))
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C emission module partition authority is missing");
+    const XrSemanticPlan *semantic = semantic_plan;
     const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(semantic);
     if (provenance &&
         provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
@@ -4690,6 +4767,15 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
     uint32_t target_value_count = 0;
     const XrTargetValueRepRecord *values =
         xr_target_plan_value_reps(target_plan, &target_value_count);
+    if (scope.partition) {
+        if (scope.partition->value_reps_begin > target_value_count ||
+            scope.partition->value_reps_count >
+                target_value_count - scope.partition->value_reps_begin)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission value partition is invalid");
+        values += scope.partition->value_reps_begin;
+        target_value_count = scope.partition->value_reps_count;
+    }
     if (target_value_count && !values)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "TargetPlan value-representation table is missing");
@@ -4697,9 +4783,29 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
     uint32_t target_call_argument_count = 0;
     const XrTargetCallArgumentRecord *target_call_arguments =
         xr_target_plan_call_arguments(target_plan, &target_call_argument_count);
+    if (scope.partition) {
+        if (scope.partition->call_arguments_begin > target_call_argument_count ||
+            scope.partition->call_arguments_count >
+                target_call_argument_count - scope.partition->call_arguments_begin)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission call-argument partition is invalid");
+        target_call_arguments += scope.partition->call_arguments_begin;
+        target_call_argument_count = scope.partition->call_arguments_count;
+    }
     uint32_t target_cleanup_count = 0;
     const XrTargetCleanupRecord *target_cleanups =
         xr_target_plan_cleanups(target_plan, &target_cleanup_count);
+    uint32_t target_cleanup_begin = 0u;
+    if (scope.partition) {
+        if (scope.partition->cleanups_begin > target_cleanup_count ||
+            scope.partition->cleanups_count >
+                target_cleanup_count - scope.partition->cleanups_begin)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission cleanup partition is invalid");
+        target_cleanup_begin = scope.partition->cleanups_begin;
+        target_cleanups += target_cleanup_begin;
+        target_cleanup_count = scope.partition->cleanups_count;
+    }
     uint32_t target_slot_count = 0;
     const XrTargetSlotRecord *target_slots = xr_target_plan_slots(target_plan, &target_slot_count);
     if ((target_cleanup_count && (!target_cleanups || !target_slots)) ||
@@ -4902,6 +5008,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
     plan->cleanup_count = target_cleanup_count;
     plan->schema_version = XR_C_EMISSION_PLAN_SCHEMA_VERSION;
     plan->target_fingerprint = xr_target_plan_fingerprint(target_plan);
+    plan->semantic_fingerprint = xr_semantic_plan_fingerprint(semantic_plan);
     plan->profile_fingerprint = actual_profile_fingerprint;
     uint32_t value_index = 0;
     uint32_t call_argument_index = 0;
@@ -5495,8 +5602,9 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         const XrTargetSlotRecord *slot =
             cleanup->slot < target_slot_count ? &target_slots[cleanup->slot] : NULL;
         XrCCleanupEmissionView *view = &plan->cleanups[i];
-        if (!slot || cleanup->id != i || cleanup->action != XR_TARGET_CLEANUP_RELEASE ||
-            cleanup->flags != 0 || cleanup->provider != 0) {
+        if (!slot || cleanup->id != target_cleanup_begin + i ||
+            cleanup->action != XR_TARGET_CLEANUP_RELEASE || cleanup->flags != 0 ||
+            cleanup->provider != 0) {
             xr_c_emission_plan_free(plan);
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "Target cleanup has no exact C projection");
@@ -5558,7 +5666,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
      * representation contributes no rows at all rather than a partial
      * signature: a caller must not be able to read half a boundary. */
     {
-        const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+        const XrSemanticPlan *semantic = semantic_plan;
         uint32_t function_count = (uint32_t) xr_semantic_plan_function_count(semantic);
         uint64_t slot_budget = 0;
         for (uint32_t f = 0; f < function_count; f++) {
@@ -5869,8 +5977,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         }
     }
     compute_fingerprint(plan, &plan->fingerprint);
-    if (!xr_c_emission_plan_verify(plan, target_plan, expected_profile_fingerprint, error,
-                                   error_size)) {
+    if (!xr_c_emission_plan_verify(plan, target_plan, semantic_plan, expected_profile_fingerprint,
+                                   error, error_size)) {
         xr_c_emission_plan_free(plan);
         return false;
     }

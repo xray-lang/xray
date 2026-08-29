@@ -1429,6 +1429,9 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     # registry.  This registry is immutable shared compiler metadata, not a
     # mutable analyzer-owned frontend graph.
     src/shared/xr_core_intrinsic_registry.c
+    # Frozen stdlib identity slicing is a dependency-free compiler authority;
+    # filesystem-based module identity construction remains outside this archive.
+    src/module/xmodule_identity_view.c
     ${PLAN_SEMANTIC_SRC}
     ${PLAN_OWNERSHIP_SRC}
     src/plan/format/xr_artifact_kind.c
@@ -1522,6 +1525,7 @@ set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
     # intrinsic registry as analyzer lowering.  The runtime archive links this
     # owner directly; it does not reconstruct assertion names or plan rules.
     src/shared/xr_core_intrinsic_registry.c
+    src/module/xmodule_identity_view.c
     src/plan/format/xr_artifact_kind.c
     src/plan/format/xr_xsm_decode.c
     src/plan/format/xr_xtp_artifact.c
@@ -3072,7 +3076,8 @@ if(BUILD_TESTS)
         # the host has no READY AOT toolchain.
         add_test(
             NAME aot_ubsan
-            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_ubsan.py
+            COMMAND ${CMAKE_COMMAND} -E env XRAY_BIN=$<TARGET_FILE:xray>
+                    ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_ubsan.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(aot_ubsan PROPERTIES

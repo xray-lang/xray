@@ -115,7 +115,9 @@ APPROVED_RUNTIME_SOURCE_DIRECTORIES = (
     "src/runtime/abi",
 )
 APPROVED_RUNTIME_SOURCES = frozenset({
+    "src/module/xmodule_identity_view.c",
     "src/shared/xr_core_intrinsic_registry.c",
+    "src/shared/xr_compress_engine.c",
     "src/shared/xr_http_url.c",
     "src/shared/xr_unicode_grapheme.c",
     "src/shared/xr_unicode_grapheme_data.c",

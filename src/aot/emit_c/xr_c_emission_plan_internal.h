@@ -31,6 +31,7 @@ struct XrCEmissionPlan {
     uint32_t function_abi_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
+    XrFingerprint semantic_fingerprint;
     XrFingerprint profile_fingerprint;
     XrFingerprint fingerprint;
     bool verified;

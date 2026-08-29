@@ -1010,7 +1010,8 @@ static void assert_leaf_product_aot_cgen(XiModule *module, XrTargetPlan *plan,
     product_binding->kind = saved_product_kind;
     XrCEmissionPlan *legacy_emission = NULL;
     ASSERT_FALSE(
-        xr_c_emission_plan_build(plan, xr_target_profile_fingerprint(xr_target_plan_profile(plan)),
+        xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan),
+                                 xr_target_profile_fingerprint(xr_target_plan_profile(plan)),
                                  &legacy_emission, authority_error, sizeof(authority_error)));
     ASSERT_NULL(legacy_emission);
 
@@ -3112,21 +3113,22 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
 
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
-    ASSERT_MSG(
-        xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)),
-        error);
+    ASSERT_MSG(xr_c_emission_plan_build(target, xr_target_plan_semantic_plan(target),
+                                        profile_fingerprint, &emission, error, sizeof(error)),
+               error);
     ASSERT_NOT_NULL(emission);
-    ASSERT_TRUE(
-        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                          profile_fingerprint, error, sizeof(error)));
     XrAotRefinementPlan *refinement = NULL;
     XrAotRefinementDiagnostic refinement_diag = {0};
-    ASSERT_TRUE(xr_aot_representation_refinement_build_from_authority(target, NULL, &refinement,
-                                                                      &refinement_diag));
+    ASSERT_TRUE(xr_aot_representation_refinement_build_from_authority(
+        target, xr_target_plan_semantic_plan(target), NULL, &refinement, &refinement_diag));
     ASSERT_NOT_NULL(refinement);
     XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(refinement);
     ASSERT_TRUE(refinement_view.verified);
     ASSERT_EQ_UINT(refinement_view.record_count, 0);
-    ASSERT_TRUE(xr_aot_refinement_verify(&refinement_view, target, &refinement_diag));
+    ASSERT_TRUE(xr_aot_refinement_verify(&refinement_view, target,
+                                         xr_target_plan_semantic_plan(target), &refinement_diag));
     for (uint32_t i = 0; i < predicate_count; i++) {
         const XrTargetI64OverflowPredicateRecord *predicate = &predicates[i];
         const XrTargetSlotRecord *result = &target->slots[predicate->result_slot];
@@ -3154,18 +3156,18 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_NOT_NULL(mutable_recipe);
     uint32_t saved_recipe_operand = mutable_recipe->recipe_operand_value;
     mutable_recipe->recipe_operand_value = mutable_recipe->recipe_argument_value;
-    ASSERT_FALSE(
-        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    ASSERT_FALSE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                           profile_fingerprint, error, sizeof(error)));
     mutable_recipe->recipe_operand_value = saved_recipe_operand;
-    ASSERT_TRUE(
-        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                          profile_fingerprint, error, sizeof(error)));
     uint32_t saved_recipe_discriminant = mutable_recipe->recipe_discriminant;
     mutable_recipe->recipe_discriminant = XR_TARGET_I64_OVERFLOW_PREDICATE_INVALID;
-    ASSERT_FALSE(
-        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    ASSERT_FALSE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                           profile_fingerprint, error, sizeof(error)));
     mutable_recipe->recipe_discriminant = saved_recipe_discriminant;
-    ASSERT_TRUE(
-        xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, xr_target_plan_semantic_plan(target),
+                                          profile_fingerprint, error, sizeof(error)));
 
     uint32_t saved_function_flags = semantic->program_function_bindings[0].flags;
     semantic->program_function_bindings[0].flags |= XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED;
@@ -3316,7 +3318,8 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_NOT_NULL(native_target);
     ASSERT_TRUE(xr_target_plan_verify(native_target, error, sizeof(error)));
     XrCEmissionPlan *native_emission = NULL;
-    ASSERT_MSG(xr_c_emission_plan_build(native_target, profile_fingerprint, &native_emission, error,
+    ASSERT_MSG(xr_c_emission_plan_build(native_target, xr_target_plan_semantic_plan(native_target),
+                                        profile_fingerprint, &native_emission, error,
                                         sizeof(error)),
                error);
     ASSERT_NOT_NULL(native_emission);
@@ -3324,7 +3327,8 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     XrAotRefinementPlan *native_refinement = NULL;
     XrAotRefinementDiagnostic native_refinement_diag = {0};
     ASSERT_TRUE(xr_aot_representation_refinement_build_from_authority(
-        native_target, &policy, &native_refinement, &native_refinement_diag));
+        native_target, xr_target_plan_semantic_plan(native_target), &policy, &native_refinement,
+        &native_refinement_diag));
     ASSERT_NOT_NULL(native_refinement);
 
     XiModule *modules[] = {native_module};

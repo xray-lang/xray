@@ -22,6 +22,7 @@
 #include "../runtime/value/xvalue.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ========== Pointer index (XiValue / XiFunc pointer -> plan row) ========== */
@@ -5442,14 +5443,32 @@ static bool rep_adapter_exact_non_scalar_legacy_source(const XaotValuePlan *sour
     }
 }
 
-static bool rep_adapter_exact_target_scalar_output(const XrTargetPlan *target_plan,
-                                                   const XrTargetValueRepRecord *binding,
-                                                   const XrType *type, const XaotValueRep *actual) {
+static bool rep_adapter_exact_target_output(const XrTargetPlan *target_plan,
+                                            const XrTargetValueRepRecord *binding,
+                                            const XrType *type, const XaotValueRep *actual) {
     const XrTargetMachineRepRecord *machine =
         binding ? xr_target_plan_machine_rep(target_plan, binding->memory_rep) : NULL;
     XaotRep rep = XAOT_REP_COUNT;
     if (!machine)
         return false;
+    /* A Slice adapter is a tagged-to-view boundary. TargetPlan already froze
+     * the view width, alignment, root semantics, and semantic layout detail;
+     * the legacy C-side row must spell that authority as the portable span
+     * aggregate rather than asking the scalar mapping to recognize a view. */
+    if (machine->kind == XR_MACHINE_REP_VIEW) {
+        bool exact = type && type->kind == XR_KIND_SLICE &&
+                     rep_adapter_fields_are_exact(actual, XAOT_VALUE_AGGREGATE, XAOT_REP_SLICE,
+                                                  type, "xr_span_t", XAOT_VALUE_FLAG_SLICE);
+        if (!exact && getenv("XRAY_AOT_REFINE_TRACE"))
+            fprintf(stderr,
+                    "[aot-bundle] TargetPlan view adapter output mismatch type-kind=%u "
+                    "actual-kind=%u actual-rep=%u same-type=%u c-type=%s flags=0x%x\n",
+                    type ? type->kind : UINT32_MAX, actual ? actual->kind : UINT32_MAX,
+                    actual ? actual->rep : UINT32_MAX, actual && actual->type == type ? 1u : 0u,
+                    actual && actual->c_type ? actual->c_type : "<null>",
+                    actual ? actual->flags : UINT32_MAX);
+        return exact;
+    }
     if (!target_machine_scalar_rep(machine->kind, &rep))
         return false;
     const XaotRepInfo *info = xaot_rep_info(rep);
@@ -5496,12 +5515,18 @@ XR_FUNC bool xaot_value_plan_is_exact_rep_adapter(const XaotBundle *bundle,
     if (plan->value->op == XI_BOX || plan->value->op == XI_ENUM_DESCRIPTOR_BOX)
         return rep_adapter_fields_are_exact(&plan->rep, XAOT_VALUE_TAGGED, XAOT_REP_TAGGED,
                                             plan->value->type, "XrValue", 0);
+    if (target_source &&
+        rep_adapter_exact_target_output(target_plan, binding, plan->value->type, &plan->rep))
+        return true;
+    /* Tagged String and enum-descriptor sources legitimately unbox to a raw
+     * pointer even though their frozen source carrier is dynamic. Ask this
+     * only after the TargetPlan machine-rep mapping, so a Slice VIEW is not
+     * mistaken for the older generic pointer path. */
     if (target_source && plan->value->op == XI_UNBOX && plan->value->rep == XR_REP_PTR)
         return rep_adapter_fields_are_exact(&plan->rep, XAOT_VALUE_PTR, XAOT_REP_PTR,
                                             plan->value->type, "void *", 0);
     if (target_source)
-        return rep_adapter_exact_target_scalar_output(target_plan, binding, plan->value->type,
-                                                      &plan->rep);
+        return false;
     if (plan->value->op != XI_UNBOX)
         return false;
     if (plan->value->type->kind == XR_KIND_SLICE)

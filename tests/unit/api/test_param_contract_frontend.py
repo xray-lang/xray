@@ -55,8 +55,13 @@ class ParamContractFrontendTest(unittest.TestCase):
                 output = ANSI_RE.sub("", proc.stdout)
                 self.assertNotEqual(0, proc.returncode, rel)
                 expected_path = ROOT / f"{rel}.expected"
-                expected = expected_path.read_text(encoding="utf-8").strip()
-                self.assertIn(expected, output, rel)
+                expected_lines = expected_path.read_text(encoding="utf-8").strip().splitlines()
+                location = re.fullmatch(r"--> (\d+):(\d+) (E\d+)", expected_lines[0])
+                self.assertIsNotNone(location, rel)
+                line, column, code = location.groups()
+                message = "\n".join(expected_lines[1:])
+                self.assertIn(f"error[{code}]: {message}", output, rel)
+                self.assertRegex(output, rf"-->\s+.*:{line}:{column}(?:\n|$)", rel)
 
     def test_call_contract_positive_matrix(self) -> None:
         for rel in POSITIVE_CASES:

@@ -1197,6 +1197,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNE_IS_WHITESPACE;
         bool string_slice_range =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_SLICE_RANGE;
+        bool string_utf8_static =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRING_UTF8_STATIC;
         bool stringbuilder_to_string =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING;
         bool stringbuilder_append_string =
@@ -1236,12 +1238,13 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              !stringbuilder_constructor && !string_byte_slice_view && !stringbuilder_append_rune &&
              !string_runes && !iterator_rune_has_next && !iterator_rune_next &&
              !iterator_rune_nth && !rune_to_uint32 && !rune_to_string && !rune_is_whitespace &&
-             !string_slice_range && !stringbuilder_to_string && !stringbuilder_append_string &&
-             !json_namespace_value && !array_member_scalar && !native_module_scalar &&
-             !native_namespace_yieldable && !native_target_leaf && !source_class_constructor &&
-             !adt_enum_constructor && !array_intrinsic && !array_fill && !array_hof &&
-             !panic_info_constructor && !scalar_copy && !container_copy && !map_entries_iterator &&
-             !map_entry_iterator_has_next && !map_entry_iterator_next) ||
+             !string_slice_range && !string_utf8_static && !stringbuilder_to_string &&
+             !stringbuilder_append_string && !json_namespace_value && !array_member_scalar &&
+             !native_module_scalar && !native_namespace_yieldable && !native_target_leaf &&
+             !source_class_constructor && !adt_enum_constructor && !array_intrinsic &&
+             !array_fill && !array_hof && !panic_info_constructor && !scalar_copy &&
+             !container_copy && !map_entries_iterator && !map_entry_iterator_has_next &&
+             !map_entry_iterator_next) ||
             plan->calls[i].semantic_operation >= xr_semantic_plan_operation_count(semantic) ||
             ((direct_local || program_direct || source_export || native_namespace_yieldable ||
               source_class_constructor) &&
@@ -1250,10 +1253,11 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
               string_runes || iterator_rune_has_next || iterator_rune_next || iterator_rune_nth ||
               rune_to_uint32 || rune_to_string || rune_is_whitespace || string_slice_range ||
-              json_namespace_value || array_member_scalar || native_module_scalar ||
-              native_target_leaf || adt_enum_constructor || array_intrinsic || array_fill ||
-              array_hof || panic_info_constructor || scalar_copy || container_copy ||
-              map_entries_iterator || map_entry_iterator_has_next || map_entry_iterator_next) &&
+              string_utf8_static || json_namespace_value || array_member_scalar ||
+              native_module_scalar || native_target_leaf || adt_enum_constructor ||
+              array_intrinsic || array_fill || array_hof || panic_info_constructor || scalar_copy ||
+              container_copy || map_entries_iterator || map_entry_iterator_has_next ||
+              map_entry_iterator_next) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||
@@ -1464,16 +1468,21 @@ bool xr_target_plan_partition_for_semantic(const XrTargetPlan *plan,
         *partition = 0u;
         return true;
     }
-    if (!program || !program->module_count ||
-        program->program_module_row >= program->module_count ||
+    const XrSemanticEntityRecord *module_entity =
+        xr_semantic_plan_unique_module_entity(semantic_plan);
+    if ((!program && !module_entity) ||
+        (program &&
+         (!program->module_count || program->program_module_row >= program->module_count)) ||
         plan->module_partitions_count != plan->semantic_module_count ||
-        plan->semantic_module_count != program->module_count)
+        (program && plan->semantic_module_count != program->module_count))
         return false;
     uint32_t match = UINT32_MAX;
     for (uint32_t i = 0u; i < plan->module_partitions_count; i++) {
         const XrTargetModulePartitionRecord *candidate = &plan->module_partitions[i];
-        if (candidate->program_module_row != program->program_module_row ||
-            !xr_stable_id_equal(candidate->module_identity, program->program_module) ||
+        XrStableId expected_identity = program ? program->program_module : module_entity->id;
+        uint32_t expected_row = program ? program->program_module_row : i;
+        if (candidate->program_module_row != expected_row ||
+            !xr_stable_id_equal(candidate->module_identity, expected_identity) ||
             !xr_fingerprint_equal(candidate->semantic_fingerprint, semantic_fingerprint) ||
             xr_target_plan_semantic_module(plan, i) != semantic_plan)
             continue;

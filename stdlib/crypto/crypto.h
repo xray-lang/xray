@@ -133,5 +133,4 @@ XR_FUNC void xr_secure_wipe(void *ptr, size_t len);
 struct XrVMRuntime;
 struct XrModule;
 
-
 #endif  // XR_STDLIB_CRYPTO_H

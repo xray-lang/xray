@@ -181,7 +181,7 @@ XR_FUNC bool xi_cgen_ctx_set_value_emission_plans(
             !xr_target_plan_is_verified(target_plan) ||
             !xr_c_emission_plan_is_verified(emission_plan) ||
             !xr_c_emission_plan_verify(
-                emission_plan, target_plan, module_profile_fingerprint,
+                emission_plan, target_plan, module_semantic, module_profile_fingerprint,
                 verification_error, sizeof(verification_error)) ||
             !xr_fingerprint_equal(
                 xr_target_plan_fingerprint(target_plan),

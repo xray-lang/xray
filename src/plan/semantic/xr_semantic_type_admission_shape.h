@@ -20,22 +20,24 @@
 #include <string.h>
 
 /* The canonical type key opens with a fixed run of decimal fields. Nullability
- * is the fourth, so a caller that wants to compare two keys while ignoring it
- * needs the offset of that field and of the text after it. */
+ * is the fourth and constness the fifth, so a caller that wants to compare two
+ * keys while ignoring one qualifier needs the offset of that field and of the
+ * text after it. */
 #define XR_SEMANTIC_TYPE_KEY_PREFIX "type-v3:"
 #define XR_SEMANTIC_TYPE_KEY_NULLABLE_FIELD 3u
+#define XR_SEMANTIC_TYPE_KEY_CONST_FIELD 4u
 
-/* Split a canonical key around its nullability field: `head_length` covers the
+/* Split a canonical key around one decimal field: `head_length` covers the
  * prefix up to and excluding the field, `value` receives the field itself, and
  * the return value points at the separator that follows it. NULL when the key
  * does not have the expected shape. */
-static inline const char *xr_semantic_type_key_split_nullable(const char *key, size_t *head_length,
-                                                              unsigned *value) {
+static inline const char *xr_semantic_type_key_split_field(const char *key, unsigned target_field,
+                                                           size_t *head_length, unsigned *value) {
     if (!key ||
         strncmp(key, XR_SEMANTIC_TYPE_KEY_PREFIX, sizeof(XR_SEMANTIC_TYPE_KEY_PREFIX) - 1u) != 0)
         return NULL;
     const char *cursor = key + sizeof(XR_SEMANTIC_TYPE_KEY_PREFIX) - 1u;
-    for (unsigned field = 0; field < XR_SEMANTIC_TYPE_KEY_NULLABLE_FIELD; field++) {
+    for (unsigned field = 0; field < target_field; field++) {
         const char *digits = cursor;
         while (*cursor >= '0' && *cursor <= '9')
             cursor++;
@@ -56,6 +58,43 @@ static inline const char *xr_semantic_type_key_split_nullable(const char *key, s
     if (value)
         *value = parsed;
     return cursor;
+}
+
+static inline const char *xr_semantic_type_key_split_nullable(const char *key, size_t *head_length,
+                                                              unsigned *value) {
+    return xr_semantic_type_key_split_field(key, XR_SEMANTIC_TYPE_KEY_NULLABLE_FIELD, head_length,
+                                            value);
+}
+
+/* A read parameter cannot mutate the caller's binding. Consequently the
+ * caller's top-level const spelling and the declaration's unqualified spelling
+ * are one admissible call shape even though they remain separate frozen type
+ * rows. No nested qualifier is ignored: every canonical-key byte outside the
+ * top-level const field and every other frozen flag must agree. Writable and
+ * move parameters must never call this rule. */
+static inline bool
+xr_semantic_type_is_const_read_admission(const XrSemanticTypeRecord *value_type,
+                                         const XrSemanticTypeRecord *parameter_type,
+                                         uint8_t parameter_mode) {
+    if (!value_type || !parameter_type || !value_type->canonical_key ||
+        !parameter_type->canonical_key || parameter_mode != XR_PARAM_READ ||
+        value_type->kind != parameter_type->kind ||
+        (uint8_t) (value_type->flags | XR_SEM_TYPE_CONST) !=
+            (uint8_t) (parameter_type->flags | XR_SEM_TYPE_CONST))
+        return false;
+    size_t value_head = 0;
+    size_t parameter_head = 0;
+    unsigned value_const = 0;
+    unsigned parameter_const = 0;
+    const char *value_tail = xr_semantic_type_key_split_field(
+        value_type->canonical_key, XR_SEMANTIC_TYPE_KEY_CONST_FIELD, &value_head, &value_const);
+    const char *parameter_tail = xr_semantic_type_key_split_field(
+        parameter_type->canonical_key, XR_SEMANTIC_TYPE_KEY_CONST_FIELD, &parameter_head,
+        &parameter_const);
+    return value_tail && parameter_tail && value_const <= 1u && parameter_const <= 1u &&
+           value_head == parameter_head &&
+           strncmp(value_type->canonical_key, parameter_type->canonical_key, value_head) == 0 &&
+           strcmp(value_tail, parameter_tail) == 0;
 }
 
 /* Whether a value of `value_type` may be handed to a parameter of
@@ -115,21 +154,25 @@ xr_semantic_null_inhabits_parameter(const XrSemanticTypeRecord *operand_type,
  * call the semantic layer admits and the target layer refuses is reported as a
  * missing target authority, which points at the wrong thing entirely.  The two
  * admissions below are the language's own rules, not this pass's inventions:
- * null inhabits a nullable reference, a value widens into a nullable
- * reference, and a union parameter admits each of its members. */
+ * a read-only boundary admits the top-level const spelling, null inhabits a
+ * nullable reference, a value widens into a nullable reference, and a union
+ * parameter admits each of its members. */
 static inline bool
 xr_semantic_parameter_type_admits_argument(const XrSemanticPlan *callee,
                                            const XrSemanticTypeRecord *parameter_type,
-                                           const XrSemanticTypeRecord *operand_type) {
-    if (!callee || !parameter_type || !operand_type)
+                                           const XrSemanticTypeRecord *operand_type,
+                                           uint8_t parameter_mode) {
+    if (!parameter_type || !operand_type)
         return false;
     if (xr_stable_id_equal(operand_type->id, parameter_type->id))
+        return true;
+    if (xr_semantic_type_is_const_read_admission(operand_type, parameter_type, parameter_mode))
         return true;
     if (xr_semantic_null_inhabits_parameter(operand_type, parameter_type))
         return true;
     if (xr_semantic_type_is_nullable_widening(operand_type, parameter_type))
         return true;
-    if (parameter_type->kind != (uint32_t) XR_KIND_UNION)
+    if (parameter_type->kind != (uint32_t) XR_KIND_UNION || !callee)
         return false;
     uint32_t child_count = 0;
     const uint32_t *children = xr_semantic_plan_type_children(callee, &child_count);

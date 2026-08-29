@@ -64,7 +64,21 @@ core numeric operations, without reassigning the existing registry.
     exactness are verified in both directions: an exact callsite that carries no
     mark is as much a violation as a mark on an inexact row.
 
-13. The `math` module's 35 core numeric operations have stable identities
+15. A private non-yieldable native leaf is not an ordinary source call merely
+    because its declaration is private. SemanticPlan admits it only when the
+    canonical stdlib module identity, frozen native definition, selector,
+    arity, argument modes, scalar-or-Unit result, and non-yieldable effects all
+    agree. TargetPlan independently rebuilds the same registry span and emits
+    the one stable native target identity. A source wrapper, a same-spelled
+    declaration, or a yieldable native member cannot inherit this authority.
+16. `string.fromUtf8` and `string.fromUtf8Lossy` are sealed static String
+    calls. Their frozen method-symbol identities, selectors, builtin String
+    namespace producer, exact `Array<u8>` or `Slice<u8>` input, and owned String
+    result form one shared judgement. A same-spelled source member, a dynamic
+    namespace, another element type, or an identity/selector disagreement is
+    unclaimed. TargetPlan gives this family its own stable call target instead
+    of routing it through generic method dispatch.
+17. The `math` module's 35 core numeric operations have stable identities
     `7001`-`7035` in family `MATH`. `stdlib/math/math.xr` declares the public
     surface and its bodies are the VM/reference semantics; the identity, not
     the module or member spelling, is what lets AOT emit the operation
@@ -79,7 +93,9 @@ core numeric operations, without reassigning the existing registry.
 
 anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def b82d2d08038fe71e60bda2f3d9f88b1bb7711be72b28f11a8d15eb635c7ccc4b
 anchor-sha256: src/ir/xi_method_sym.def 0ec1ca5390eb9be96b1a1fcfbf932787a39d6af810630f88c360538451359702
+anchor-sha256: src/plan/semantic/xr_semantic_native_leaf_shape.h 344d880c1bac22879ee3290fafa3a736f50db38c10998eb4864063a7b1260393
 anchor-sha256: src/plan/semantic/xr_semantic_native_module_call_shape.h 35d71f47cd448b0baa0980c489b6f807c5affdf0120e746f2d4cf91b81ee5194
+anchor-sha256: src/plan/semantic/xr_semantic_string_utf8_shape.h aa8a342b9578e749c5e812dc9d193220ac63d849e15085130a4279ead5c24056
 anchor-sha256: src/ir/xi_semantic_intrinsic.c 346cd01e3f1f64df7abc2a7018c1aef7dea63ed6d4db2de0cc666e9f6ef4400e
 anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e79c9ae5dd903770f799e0ef69c1805baa
 anchor-sha256: contracts/capability-deletions.tsv 0ce3ca872d9dafa777f75f8540cc92244edb082615b9733534e418afe2d40449

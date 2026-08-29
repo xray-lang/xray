@@ -22,7 +22,20 @@ builder's complete-answer predicate, and later phases cannot reconstruct the
 identity from selector, live type, or argument count. The schema also retains the
 exact `rune.isWhitespace()` intrinsic only for that same uniquely proven Rune;
 its exact bool result and call contract cannot be reconstructed from selector,
-live type, or arity. The schema also retains the
+live type, or arity. The schema separately freezes `string.fromUtf8` and
+`string.fromUtf8Lossy` only as exact static calls on the compiler-owned String
+namespace. The numeric method symbol and selector must agree, the input must
+be exactly `Array<u8>` or `Slice<u8>`, and the result must be one owned String.
+This family does not authorize a same-spelled source member, a dynamic
+receiver, another element type, or generic method dispatch. Target and AOT
+consumers rebuild the shared judgement from frozen rows.
+For ordinary parameter admission, a top-level `const` difference is erased
+only at a `READ` boundary and only when every other canonical type component
+matches. `REF`, `OUT`, and consuming boundaries retain exact constness, and
+nested element constness is never erased. Target call ABI verification admits
+the corresponding read boundary only when caller and callee machine rows have
+the same kind, size, alignment, ownership, and layout detail after removing
+that one top-level const bit. The schema also retains the
 exact three-operand `String.slice(start, end)` identity only when its receiver
 is a unique frozen required String parameter or exact String literal and its
 two ordered bounds are exact native i64 values. Its owned return provenance,
@@ -204,13 +217,17 @@ builder may then publish `NATIVE_NAMESPACE_YIELDABLE` for a non-super
 `XI_CALL_METHOD` only when its receiver independently follows exact identity
 copies through one canonical root-initializer shared-slot store to that
 whole-module import, and the selector and argument count match one complete
-yieldable registry definition. The verifier reconstructs the shared-store,
-root-prefix, import-resolution, registry, arity, and one-to-one coroutine-state
-relation from frozen rows. Source-module shadowing, unresolved imports,
-selective imports, private-wrapper substitution, builtin calls, tail calls,
-ordinary methods, and non-yieldable definitions remain unavailable. This
-family freezes coroutine obligation only; TargetPlan dispatch and execution
-continue to fail closed until a separate target family consumes it.
+yieldable registry definition. A resolver-proven source-module import is also
+admissible when that same namespace owns native registry leaves: source-export
+resolution retains first refusal and owns receiver storage, while the exact
+registry member owns only the native yieldable call target. The verifier
+reconstructs the shared-store, root-prefix, import-resolution, registry, arity,
+and one-to-one coroutine-state relation from frozen rows. Source-member
+shadowing, unresolved imports, selective imports, private-wrapper substitution,
+builtin calls, tail calls, ordinary methods, and non-yieldable definitions
+remain unavailable. This family freezes coroutine obligation only; TargetPlan
+dispatch and execution continue to fail closed until a separate target family
+consumes it.
 Schema 19 additionally requires an exact allocation identity for the zero-
 argument builtin `StringBuilder()` constructor. Publication requires the
 canonical builtin instance type (never a user class with the same spelling),
@@ -540,24 +557,25 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c e33606ab608e06c87d
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 5c4acf7c69c73052e8205b46b815bf150c1fb086432becf142cca0f3a76aa217
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c fcc478aff255817db427c1971e754376a99fa48416656bc2027d368517467fa1
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 82e14aa7ee4ae5ad18dcd9101016aee6869e8abe24110d979ae470fac715df45
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 0fbc294a8b51e1c43a907587e744efabd944e237ebbdf928a4d62746f4dd42d0
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 86c48ef09925169c2a5ef4b1da71175285708cc3d2cb51c7b2163b99b43627d9
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 0f78c911fd05636a4717ec9d4d0b8b5db3d8a669a5a680b367960cc8d7923d66
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 5251d8acc6f982535e09c9f8722a17f0676bf7ee574e96d5eafd2136044b1bb9
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 2845913faf5169046cc8f66cc0c48bb91f001976499adb5c3fa5cceec716ec15
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fbe1eb29e08425a629dda4c281f7a681ab48512c599cae9b63b379f4db338d2e
-anchor-sha256: src/plan/semantic/xr_semantic_type_admission_shape.h b3d62a8e20b7512a08225328479b21ee99eb24c9a415796a93e71f8f20677216
+anchor-sha256: src/plan/semantic/xr_semantic_type_admission_shape.h b69c09a68349ea8bc126bdd5e72d23b06fd1848b43b1dddff77346c6c2cc2801
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af16c555c1a8145aea90fb7f1b50cd599420590f2cfbb96980f2
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h 2b0db2abc1652ec45f6a8090ad973cd60bafe039eb4f64c7d0e38674fd388dce
+anchor-sha256: src/plan/semantic/xr_semantic_string_utf8_shape.h aa8a342b9578e749c5e812dc9d193220ac63d849e15085130a4279ead5c24056
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 520152cb6e93b1cdd6639e094772a652905206e97bf15677ba753eecb4d075f6
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d479ea0483a8a77237bd77dd0f2c0aadc866de482012d6dda7cae
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c ac9c42dcd7d7b2cc6c341618ea5edc006b19b2447c1cd91a21f58a76b8bfee7b
-anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
-anchor-sha256: src/stdlib/xstdlib_metadata.h bcb983e7b99fc3ee47f71a651d99ab15074975a4fbeab049694794782279bee4
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 6ab9f65a8ee2a89075f865156a63bd67dcda4c18d1c5446baf69984b8a29c8bd
+anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 532959558cb72938709198f481ac42d53ec074ca0602b5d4c4512568db908f1a
+anchor-sha256: src/stdlib/xstdlib_metadata.h 6554aa814f46c2a31a40512ed1d8c665e900810d12809f9e195d9d359dc318c3
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 7e21230dbda209079f1d03fa75d4673b398399f782c23769f038fddfc1352fff
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def f2fec1dbe429556d947a2548cdf657698b712b75cd90a2cb2f4a3eb2ac175b79
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb

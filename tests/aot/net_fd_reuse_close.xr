@@ -7,13 +7,15 @@ var statusPort = i64.tryParse(os.getenv("XRAY_STATUS_PORT")!)!
 var trigger = net.listen(triggerPort, 1)!
 var retiredFd = net.fd(trigger)
 var control = net.accept(trigger)!
-var token = net.read(control, 1)!
+var tokenBytes = net.readBytes(control, 1)!
+var token = string.fromUtf8(tokenBytes[:])!
 assert(token == "x")
 net.close(control)
 net.close(trigger)
-var status = net.dial("127.0.0.1", statusPort, 5000)!
+var status = net.dial("127.0.0.1", statusPort, net.DialOptions(5000))
 assert(net.fd(status) == retiredFd)
-var report = net.read(status, 128)!
+var reportBytes = net.readBytes(status, 128)!
+var report = string.fromUtf8(reportBytes[:])!
 net.close(status)
 assert(report == "fd-reuse-ok\n")
 print(report)

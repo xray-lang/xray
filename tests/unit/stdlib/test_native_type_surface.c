@@ -58,9 +58,7 @@ static const XaBuiltinMember *find_type_member(const char *type_name, const char
 TEST(native_type_methods_match_runtime_tables) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
-    ASSERT_EQ_INT(xr_isolate_dostring(iso, "import mem\n",
-                                     &k_native_surface_memory_authority),
-                  0);
+    ASSERT_EQ_INT(xr_isolate_dostring(iso, "import mem\n", &k_native_surface_memory_authority), 0);
 
     int mismatches = xa_native_verify_protocol(iso);
     xray_vm_delete(iso);
@@ -227,7 +225,7 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NOT_NULL(cluster_start_fn);
     ASSERT_NOT_NULL(cluster_info_fn);
     ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 8);
+    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 11);
     ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRING);
     ASSERT_EQ_INT(cluster_start_fn->function.params[1].type->kind, XR_KIND_INT);
     ASSERT_EQ_INT(cluster_start_fn->function.return_type->kind, XR_KIND_BOOL);

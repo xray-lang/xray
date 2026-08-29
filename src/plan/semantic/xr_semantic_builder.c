@@ -264,6 +264,15 @@ static bool text_append(XrTextBuilder *text, const char *value) {
     return true;
 }
 
+static bool text_append_span(XrTextBuilder *text, const char *value, size_t length) {
+    if (!value || !text_reserve(text, length))
+        return false;
+    memcpy(text->data + text->size, value, length);
+    text->size += length;
+    text->data[text->size] = '\0';
+    return true;
+}
+
 static bool text_append_format(XrTextBuilder *text, const char *format, ...) {
     va_list args;
     va_start(args, format);
@@ -3153,10 +3162,51 @@ resolve_native_namespace_import_receiver(const XrSemanticBuildContext *ctx, cons
     if (!source || source->op != XI_IMPORT_REF || !source->aux)
         return NULL;
     const XiImportRef *ref = (const XiImportRef *) source->aux;
-    return (!ref->member_name || ref->member_name[0] == '\0') &&
-                   classify_import_resolution(ref) == XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB
+    /* A module can own source declarations and native registry leaves under
+     * the same namespace.  The source import remains the receiver-storage
+     * authority; an exact yieldable registry member below supplies the call
+     * target authority.  Source export resolution has already had first
+     * refusal, so admitting this resolution kind cannot shadow a source
+     * member. */
+    XrSemanticImportResolution resolution = classify_import_resolution(ref);
+    const char *module = NULL;
+    size_t module_length = 0;
+    bool exact_native_namespace = resolution == XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB;
+    if (exact_native_namespace) {
+        module = ref->module_path;
+        module_length = strlen(module);
+    } else if (resolution == XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE && ref->resolved_module &&
+               ref->resolved_module->identity) {
+        exact_native_namespace = xr_module_identity_stdlib_namespace(ref->resolved_module->identity,
+                                                                     &module, &module_length);
+    }
+    return (!ref->member_name || ref->member_name[0] == '\0') && exact_native_namespace &&
+                   module_length == strlen(ref->module_path) &&
+                   memcmp(module, ref->module_path, module_length) == 0
                ? ref
                : NULL;
+}
+
+static bool native_namespace_import_name(const XiImportRef *ref, const char **module,
+                                         size_t *module_length) {
+    if (module)
+        *module = NULL;
+    if (module_length)
+        *module_length = 0;
+    if (!ref || !module || !module_length)
+        return false;
+    XrSemanticImportResolution resolution = classify_import_resolution(ref);
+    if (resolution == XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB) {
+        *module = ref->module_path;
+        *module_length = strlen(ref->module_path);
+        return true;
+    }
+    return resolution == XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE && ref->resolved_module &&
+           ref->resolved_module->identity &&
+           xr_module_identity_stdlib_namespace(ref->resolved_module->identity, module,
+                                               module_length) &&
+           *module_length == strlen(ref->module_path) &&
+           memcmp(*module, ref->module_path, *module_length) == 0;
 }
 
 static bool append_native_namespace_call_target(XrSemanticBuildContext *ctx, const XiValue *value,
@@ -3168,8 +3218,12 @@ static bool append_native_namespace_call_target(XrSemanticBuildContext *ctx, con
     const XiFunc *caller = ctx->functions[call->function].source;
     const XiImportRef *ref = resolve_native_namespace_import_receiver(ctx, caller, value->args[0]);
     const char *selector = (const char *) value->aux;
+    const char *module = NULL;
+    size_t module_length = 0;
     const XrStdlibDefEntry *binding =
-        ref ? xr_stdlib_metadata_unique_func(ref->module_path, selector) : NULL;
+        ref && native_namespace_import_name(ref, &module, &module_length)
+            ? xr_stdlib_metadata_unique_func_span(module, module_length, selector)
+            : NULL;
     if (!binding || !binding->signature || !binding->vm || !binding->vm_binding ||
         strcmp(binding->vm_binding, "yieldable") != 0 ||
         value->nargs != (uint16_t) (binding->argc + 1u))
@@ -3188,12 +3242,13 @@ static bool append_native_namespace_call_target(XrSemanticBuildContext *ctx, con
     record->callable_type = XR_SEMANTIC_INDEX_NONE;
     record->kind = XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
     XrTextBuilder key = {0};
-    bool valid = text_append_format(
-                     &key, "call-target-v5:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
-                 text_append_stable_id(&key, ctx->plan->operations[operation].id) &&
-                 text_append(&key, ":native-namespace=") && text_append(&key, ref->module_path) &&
-                 text_append(&key, ".") && text_append(&key, selector) &&
-                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    bool valid =
+        text_append_format(&key,
+                           "call-target-v5:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
+        text_append_stable_id(&key, ctx->plan->operations[operation].id) &&
+        text_append(&key, ":native-namespace=") && text_append_span(&key, module, module_length) &&
+        text_append(&key, ".") && text_append(&key, selector) &&
+        text_append_format(&key, ":kind=%u", (unsigned) record->kind);
     if (valid)
         record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
     text_dispose(&key);
@@ -4321,36 +4376,8 @@ static bool semantic_array_member_reference_contract_exact(
     const XrSemanticBuildContext *ctx, const XrArrayMemberShape *shape,
     const XrSemanticOperationRecord *record, uint32_t element_type_index,
     const XrSemanticTypeRecord *element_type) {
-    if (!ctx || !shape || !record || !element_type)
-        return false;
-    if ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
-        return true;
-    if (shape->reference_action == XR_ARRAY_MEMBER_REFERENCE_PRESERVE)
-        return shape->element_operand == 0 &&
-               (shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ ||
-                shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE) &&
-               shape->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_NONE;
-    if (shape->reference_action != XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE ||
-        shape->element_access != XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE ||
-        shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
-        shape->element_operand == 0 || shape->element_operand >= record->operand_count ||
-        xr_semantic_class_instance_type_source_class(ctx->plan, element_type) ==
-            XR_SEMANTIC_INDEX_NONE)
-        return false;
-    bool exact_push = strcmp(shape->selector, "push") == 0 && record->operand_count == 2 &&
-                      record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
-    bool exact_fill = strcmp(shape->selector, "fill") == 0 && record->operand_count == 4 &&
-                      record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
-    if (!exact_push && !exact_fill)
-        return false;
-    uint32_t semantic_operand = record->operand_begin + shape->element_operand;
-    if (semantic_operand >= ctx->plan->operand_count)
-        return false;
-    const XrSemanticOperandRecord *element = &ctx->plan->operands[semantic_operand];
-    return element->type == element_type_index && element->role == XR_SEM_OPERAND_ARGUMENT &&
-           element->parameter == (int16_t) (shape->element_operand - 1u) &&
-           element->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           element->ownership_action == XR_SEM_OPERAND_CONSUME;
+    return ctx && xr_semantic_array_member_reference_contract_is_exact(
+                      ctx->plan, shape, record, element_type_index, element_type);
 }
 
 static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx,
@@ -4534,9 +4561,12 @@ static bool xi_native_module_scalar_call_exact(const XrSemanticBuildContext *ctx
         (value->aux_int & 1) != 0 || (value->flags & XI_FLAG_MAY_SUSPEND) != 0)
         return false;
     const XiImportRef *ref = resolve_native_namespace_import_receiver(ctx, caller, value->args[0]);
-    return ref && ref->module_path &&
-           xr_stdlib_metadata_exact_native_direct_member(
-               ref->module_path, (const char *) value->aux, (uint16_t) (value->nargs - 1u)) != NULL;
+    const char *module = NULL;
+    size_t module_length = 0;
+    return ref && native_namespace_import_name(ref, &module, &module_length) &&
+           xr_stdlib_metadata_exact_native_direct_member_span(
+               module, module_length, (const char *) value->aux, (uint16_t) (value->nargs - 1u)) !=
+               NULL;
 }
 
 static bool semantic_native_module_scalar_call_exact(const XrSemanticBuildContext *ctx,
@@ -5001,6 +5031,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_NATIVE_TARGET_LEAF_SCALAR_CALL;
         if (!xr_semantic_native_target_leaf_call_is_exact(ctx->plan, record, NULL, NULL))
             return fail(ctx, "XR_SEM_0019", "native target leaf authority is not exact");
+    } else if (xr_semantic_native_direct_scalar_call_shape_is_exact(ctx->plan, record, NULL)) {
+        /* Ordinary private native members exist independently of suspension.
+         * They share the closed scalar/Unit boundary with namespace calls;
+         * the specialized target-leaf family above keeps first refusal. */
+        record->intrinsic_kind = XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL;
     }
     bool array_fill_type_exact =
         value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_FILLED_NEW ||

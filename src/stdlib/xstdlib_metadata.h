@@ -60,13 +60,14 @@ static inline void xr_stdlib_metadata_registry_fingerprint(XrFingerprint *out) {
 }
 
 static inline const XrStdlibDefEntry *
-xr_stdlib_metadata_unique_func(const char *module, const char *name) {
-    if (!module || !module[0] || module[0] == '.' || !name || !name[0])
+xr_stdlib_metadata_unique_func_span(const char *module, size_t module_length, const char *name) {
+    if (!module || module_length == 0 || module[0] == '.' || !name || !name[0])
         return NULL;
     const XrStdlibDefEntry *found = NULL;
     for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
         const XrStdlibDefEntry *entry = &xr_stdlib_def_entries[i];
-        if (!entry->module || !entry->name || strcmp(entry->module, module) != 0 ||
+        if (!entry->module || !entry->name || strlen(entry->module) != module_length ||
+            memcmp(entry->module, module, module_length) != 0 ||
             strcmp(entry->name, name) != 0)
             continue;
         if (found)
@@ -74,6 +75,11 @@ xr_stdlib_metadata_unique_func(const char *module, const char *name) {
         found = entry;
     }
     return found;
+}
+
+static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_unique_func(const char *module, const char *name) {
+    return module ? xr_stdlib_metadata_unique_func_span(module, strlen(module), name) : NULL;
 }
 
 /* A callsite identifies an overload by module, selector, and arity. Keep the
@@ -104,6 +110,25 @@ xr_stdlib_metadata_unique_func_arity(const char *module, const char *name,
                                      uint16_t argument_count) {
     return xr_stdlib_metadata_unique_func_arity_in_entries(
         xr_stdlib_def_entries, XR_STDLIB_DEF_ENTRY_COUNT, module, name, argument_count);
+}
+
+static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_unique_func_arity_span(const char *module, size_t module_length,
+                                          const char *name, uint16_t argument_count) {
+    if (!module || module_length == 0 || module[0] == '.' || !name || !name[0])
+        return NULL;
+    const XrStdlibDefEntry *found = NULL;
+    for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibDefEntry *entry = &xr_stdlib_def_entries[i];
+        if (!entry->module || !entry->name || entry->argc != argument_count ||
+            strlen(entry->module) != module_length ||
+            memcmp(entry->module, module, module_length) != 0 || strcmp(entry->name, name) != 0)
+            continue;
+        if (found)
+            return NULL;
+        found = entry;
+    }
+    return found;
 }
 
 static inline bool xr_stdlib_metadata_module_known(const char *module) {
@@ -146,10 +171,11 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
  * the backend actually emits. A `yieldable` binding is refused because it
  * suspends, which is a coroutine-state fact this row does not state. */
 static inline const XrStdlibDefEntry *
-xr_stdlib_metadata_exact_native_direct_member(const char *module, const char *name,
-                                              uint16_t argument_count) {
+xr_stdlib_metadata_exact_native_direct_member_span(const char *module, size_t module_length,
+                                                   const char *name,
+                                                   uint16_t argument_count) {
     const XrStdlibDefEntry *entry =
-        xr_stdlib_metadata_unique_func_arity(module, name, argument_count);
+        xr_stdlib_metadata_unique_func_arity_span(module, module_length, name, argument_count);
     if (!entry || !entry->aot_direct || !entry->aot || !entry->aot_kind || !entry->ret ||
         !entry->vm || !entry->vm_binding || !entry->arg_spec || !entry->aot_enum ||
         !entry->vm_ifdef || !entry->define || !entry->signature)
@@ -166,6 +192,14 @@ xr_stdlib_metadata_exact_native_direct_member(const char *module, const char *na
             return NULL;
     }
     return spec == (uint32_t) argument_count ? entry : NULL;
+}
+
+static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_exact_native_direct_member(const char *module, const char *name,
+                                              uint16_t argument_count) {
+    return module ? xr_stdlib_metadata_exact_native_direct_member_span(
+                        module, strlen(module), name, argument_count)
+                  : NULL;
 }
 
 static inline const XrStdlibDefEntry *

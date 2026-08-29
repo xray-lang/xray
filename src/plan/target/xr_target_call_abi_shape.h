@@ -37,17 +37,47 @@
 #include <string.h>
 
 static inline bool
-xr_target_machine_reps_have_same_call_abi(const XrTargetMachineRepRecord *caller,
-                                          const XrTargetMachineRepRecord *callee) {
+xr_target_machine_reps_have_same_call_abi_ignoring_detail(const XrTargetMachineRepRecord *caller,
+                                                          const XrTargetMachineRepRecord *callee) {
     return caller && callee && caller->kind == callee->kind &&
            caller->register_bits == callee->register_bits &&
            caller->memory_size == callee->memory_size &&
            caller->memory_align == callee->memory_align &&
            caller->signedness == callee->signedness && caller->root_kind == callee->root_kind &&
-           caller->null_encoding == callee->null_encoding && caller->detail == callee->detail &&
+           caller->null_encoding == callee->null_encoding &&
            caller->lane_count == callee->lane_count && caller->reserved == callee->reserved &&
            memcmp(caller->legal_conversion_mask, callee->legal_conversion_mask,
                   sizeof(caller->legal_conversion_mask)) == 0;
+}
+
+static inline bool
+xr_target_machine_reps_have_same_call_abi(const XrTargetMachineRepRecord *caller,
+                                          const XrTargetMachineRepRecord *callee) {
+    return xr_target_machine_reps_have_same_call_abi_ignoring_detail(caller, callee) &&
+           caller->detail == callee->detail;
+}
+
+/* A top-level const spelling remains a distinct frozen semantic type and may
+ * therefore select a distinct detail row, but a read parameter does not grant
+ * the callee mutation authority over the caller's binding. The semantic layer
+ * must first prove that constness is the only type difference; this judgement
+ * then proves that detail is the only ABI difference and that ownership did
+ * not change along with it. */
+static inline bool xr_target_const_read_call_boundary(const XrTargetMachineRepRecord *machine_reps,
+                                                      uint32_t machine_rep_count,
+                                                      const XrTargetValueRepRecord *caller,
+                                                      const XrTargetValueRepRecord *callee,
+                                                      bool semantic_const_read_admission) {
+    return semantic_const_read_admission && caller && callee &&
+           caller->register_rep < machine_rep_count && caller->memory_rep < machine_rep_count &&
+           callee->register_rep < machine_rep_count && callee->memory_rep < machine_rep_count &&
+           xr_target_machine_reps_have_same_call_abi_ignoring_detail(
+               &machine_reps[caller->register_rep], &machine_reps[callee->register_rep]) &&
+           xr_target_machine_reps_have_same_call_abi_ignoring_detail(
+               &machine_reps[caller->memory_rep], &machine_reps[callee->memory_rep]) &&
+           machine_reps[caller->register_rep].ownership ==
+               machine_reps[callee->register_rep].ownership &&
+           machine_reps[caller->memory_rep].ownership == machine_reps[callee->memory_rep].ownership;
 }
 
 /* A reference-capable container handed over by value.

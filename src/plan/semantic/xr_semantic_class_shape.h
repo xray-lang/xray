@@ -874,7 +874,8 @@ xr_semantic_class_construction_source_class(const XrSemanticPlan *plan,
              parameter->ownership != XI_OWN_BORROWED) ||
             parameter->reserved != 0 || (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
             argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) i ||
-            !xr_semantic_parameter_type_admits_argument(plan, parameter_type, argument_type) ||
+            !xr_semantic_parameter_type_admits_argument(plan, parameter_type, argument_type,
+                                                         parameter->mode) ||
             argument->parameter_mode != parameter->mode ||
             argument->transfer_mode != parameter->transfer_mode ||
             argument->access != XR_CALL_ARG_PLAIN || argument->origin != 0 ||
@@ -1060,8 +1061,8 @@ static inline uint32_t xr_semantic_imported_class_construction_authority_source_
             parameter->reserved != 0 ||
             (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
             argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != (int16_t) i ||
-            !xr_semantic_parameter_type_admits_argument(dependency, parameter_type,
-                                                         argument_type) ||
+            !xr_semantic_parameter_type_admits_argument(dependency, parameter_type, argument_type,
+                                                         parameter->mode) ||
             argument->parameter_mode != parameter->mode ||
             argument->transfer_mode != parameter->transfer_mode ||
             argument->access != XR_CALL_ARG_PLAIN || argument->origin != 0 ||

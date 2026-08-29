@@ -330,6 +330,9 @@ typedef enum XrTargetCallConvention {
      * two differ only in whether operand zero is a namespace receiver or the
      * resolved callee, which is why they are separate rows rather than one. */
     XR_TARGET_CALL_CONVENTION_NATIVE_YIELDABLE,
+    /* Runtime-owned `String.fromUtf8*` static dispatch.  The frozen method
+     * symbol, not selector spelling, distinguishes strict and lossy decoding. */
+    XR_TARGET_CALL_CONVENTION_STRING_UTF8_STATIC,
     XR_TARGET_CALL_CONVENTION_COUNT,
 } XrTargetCallConvention;
 
@@ -410,6 +413,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_PROGRAM_DIRECT,
     XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR,
     XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE,
+    XR_TARGET_CALL_TARGET_STRING_UTF8_STATIC,
     XR_TARGET_CALL_TARGET_COUNT,
 } XrTargetCallTargetKind;
 

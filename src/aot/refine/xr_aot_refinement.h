@@ -299,7 +299,8 @@ XR_FUNC XrAotPassProtocol xr_aot_refinement_direct_call_protocol(
 XR_FUNC XrAotPassProtocol xr_aot_refinement_representation_protocol(
     uint32_t pass_id);
 XR_FUNC XrAotRefinementBuilder *xr_aot_refinement_builder_create(
-    const XrTargetPlan *target_plan, XrAotRefinementDiagnostic *diag);
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan,
+    XrAotRefinementDiagnostic *diag);
 XR_FUNC void xr_aot_refinement_builder_free(XrAotRefinementBuilder *builder);
 XR_FUNC bool xr_aot_refinement_try_direct_call(
     XrAotRefinementBuilder *builder, const XrAotPassProtocol *protocol,
@@ -317,7 +318,7 @@ XR_FUNC bool xr_aot_refinement_try_representation_adapter(
  * with a stable diagnostic. PROGRAM_DIRECT is already a static program-graph
  * commitment, so it must produce one APPLIED global binding or fail closed. */
 XR_FUNC bool xr_aot_refinement_direct_call_authority_build(
-    const XrTargetPlan *target_plan, uint32_t pass_id,
+    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic_plan, uint32_t pass_id,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);
 XR_FUNC bool xr_aot_refinement_builder_freeze(
     XrAotRefinementBuilder *builder, const XrTargetPlan *target_plan,
@@ -327,6 +328,7 @@ XR_FUNC XrAotRefinementPlanView xr_aot_refinement_plan_view(
     const XrAotRefinementPlan *plan);
 XR_FUNC bool xr_aot_refinement_verify(const XrAotRefinementPlanView *view,
                                       const XrTargetPlan *target_plan,
+                                      const XrSemanticPlan *semantic_plan,
                                       XrAotRefinementDiagnostic *diag);
 
 #endif  // XR_AOT_REFINEMENT_H

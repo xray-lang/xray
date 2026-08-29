@@ -1073,8 +1073,7 @@ static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_nam
     module->requires_script = descriptor->source != NULL;
 
     if (!xr_stdlib_module_install_native_entries(isolate, module, module_name)) {
-        xr_log_warning("module", "failed to install declared native entries for '%s'",
-                       module_name);
+        xr_log_warning("module", "failed to install declared native entries for '%s'", module_name);
         xr_module_free(module);
         return NULL;
     }

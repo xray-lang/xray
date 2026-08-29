@@ -212,5 +212,4 @@ static XrValue crypto_timing_safe_equal_bytes(XrVMRuntime *isolate, XrValue *arg
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_CRYPTO
 
-
 #endif /* XR_CRYPTO_CORE_ONLY */

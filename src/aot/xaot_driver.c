@@ -1845,22 +1845,24 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
  * plan built by this stage is attributable in diagnostics. */
 #define XAOT_DIRECT_CALL_REFINEMENT_PASS_ID UINT32_C(27902)
 
-static bool xaot_verify_program_direct_call_authority(const XrTargetPlan *target_plan, char *error,
-                                                      size_t error_size) {
+static bool xaot_verify_program_direct_call_authority(const XrTargetPlan *target_plan,
+                                                      const XrSemanticPlan *semantic_plan,
+                                                      char *error, size_t error_size) {
     XrAotRefinementPlan *refinement = NULL;
     XrAotRefinementDiagnostic diagnostic = {0};
     bool verified = false;
 
     if (error && error_size)
         error[0] = '\0';
-    if (!target_plan || xr_target_plan_program_module_count(target_plan) < 2u) {
+    if (!target_plan || !semantic_plan || xr_target_plan_program_module_count(target_plan) < 2u) {
         if (error && error_size)
             snprintf(error, error_size,
                      "XR_TARGET_1000: program direct-call TargetPlan authority is incomplete");
         return false;
     }
-    if (!xr_aot_refinement_direct_call_authority_build(
-            target_plan, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID, &refinement, &diagnostic)) {
+    if (!xr_aot_refinement_direct_call_authority_build(target_plan, semantic_plan,
+                                                       XAOT_DIRECT_CALL_REFINEMENT_PASS_ID,
+                                                       &refinement, &diagnostic)) {
         if (error && error_size)
             snprintf(error, error_size,
                      "XR_TARGET_1000: program direct-call authority build failed: %s "
@@ -1871,7 +1873,7 @@ static bool xaot_verify_program_direct_call_authority(const XrTargetPlan *target
         return false;
     }
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
-    verified = xr_aot_refinement_verify(&view, target_plan, &diagnostic);
+    verified = xr_aot_refinement_verify(&view, target_plan, semantic_plan, &diagnostic);
     if (!verified && error && error_size)
         snprintf(error, error_size,
                  "XR_TARGET_1000: program direct-call authority verification failed: %s "
@@ -1895,8 +1897,13 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
         program_target ? xr_target_plan_program_graphs(program_target, &program_graph_count) : NULL;
     if (program_graph_count != 0u) {
         char error[512] = {0};
+        const XrSemanticPlan *entry_semantic =
+            program_graphs && program_graph_count == 1u
+                ? xr_target_plan_semantic_module(program_target, program_graphs[0].entry_partition)
+                : NULL;
         if (!program_graphs || program_graph_count != 1u ||
-            !xaot_verify_program_direct_call_authority(program_target, error, sizeof(error))) {
+            !xaot_verify_program_direct_call_authority(program_target, entry_semantic, error,
+                                                       sizeof(error))) {
             fprintf(stderr, "Error: program direct-call validation failed: %s\n",
                     error[0] ? error : "XR_TARGET_1001: global call authority is not exact");
             return false;
@@ -1909,11 +1916,13 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
             xaot_bundle_program_semantic_for_module(bundle, module_index)
                 ? xaot_bundle_program_target_plan(bundle)
                 : NULL;
+        const XrSemanticPlan *semantic =
+            xaot_bundle_program_semantic_for_module(bundle, module_index);
         XrAotRefinementPlan *refinement = NULL;
         XrAotRefinementDiagnostic diag = {0};
         if (!module || !target_plan ||
             !xr_aot_refinement_direct_call_authority_build(
-                target_plan, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID, &refinement, &diag)) {
+                target_plan, semantic, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID, &refinement, &diag)) {
             fprintf(stderr,
                     "Error: module direct-call validation failed for '%s': "
                     "%s record=%u target-call=%u\n",
@@ -1926,7 +1935,7 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
         /* Re-verify the frozen plan through the public entry point: the
          * builder's own freeze-time check must not be the only one. */
         XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
-        if (!xr_aot_refinement_verify(&view, target_plan, &diag)) {
+        if (!xr_aot_refinement_verify(&view, target_plan, semantic, &diag)) {
             fprintf(stderr,
                     "Error: module direct-call authority rejected for '%s': "
                     "%s record=%u target-call=%u\n",
@@ -1964,11 +1973,13 @@ static bool xaot_install_module_representation_refinements(XaotBundle *bundle,
             xaot_bundle_program_semantic_for_module(bundle, module_index)
                 ? xaot_bundle_program_target_plan(bundle)
                 : NULL;
+        const XrSemanticPlan *semantic =
+            xaot_bundle_program_semantic_for_module(bundle, module_index);
         XrAotRefinementPlan *refinement = NULL;
         XrAotRefinementDiagnostic diag = {0};
         if (!module || !module->init || !target_plan ||
-            !xr_aot_representation_refinement_build_from_authority(target_plan, policy, &refinement,
-                                                                   &diag)) {
+            !xr_aot_representation_refinement_build_from_authority(target_plan, semantic, policy,
+                                                                   &refinement, &diag)) {
             fprintf(stderr,
                     "Error: module representation authority build failed for '%s': "
                     "%s value=%u operation=%u\n",
@@ -2024,9 +2035,11 @@ static bool xaot_build_module_emission_plans(const XaotBundle *bundle,
             xaot_bundle_program_semantic_for_module(bundle, module_index)
                 ? xaot_bundle_program_target_plan(bundle)
                 : NULL;
+        const XrSemanticPlan *semantic_plan =
+            xaot_bundle_program_semantic_for_module(bundle, module_index);
         char error[512] = {0};
-        if (!target_plan ||
-            !xr_c_emission_plan_build(target_plan, profile_fingerprint,
+        if (!target_plan || !semantic_plan ||
+            !xr_c_emission_plan_build(target_plan, semantic_plan, profile_fingerprint,
                                       &emission_plans[module_index], error, sizeof(error)) ||
             !xr_c_emission_plan_is_verified(emission_plans[module_index])) {
             fprintf(stderr, "Error: module C emission plan build failed for '%s': %s\n",
@@ -2637,9 +2650,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     if (source_program_closure) {
         char graph_target_error[512] = {0};
-        if (!xaot_verify_program_direct_call_authority(xaot_bundle_program_target_plan(&aot_bundle),
-                                                       graph_target_error,
-                                                       sizeof(graph_target_error))) {
+        if (!xaot_verify_program_direct_call_authority(
+                xaot_bundle_program_target_plan(&aot_bundle),
+                xaot_bundle_program_semantic_for_module(&aot_bundle, (uint32_t) entry_index),
+                graph_target_error, sizeof(graph_target_error))) {
             fprintf(stderr, "Error: program AOT direct-call authority failed: %s\n",
                     graph_target_error[0] ? graph_target_error
                                           : "unverified source program AOT binding authority");
@@ -2700,8 +2714,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             !xr_target_profile_require_exact(options->target_profile,
                                              xr_target_plan_profile(program_target_plan),
                                              program_target_error, sizeof(program_target_error)) ||
-            !xaot_verify_program_direct_call_authority(program_target_plan, program_target_error,
-                                                       sizeof(program_target_error))) {
+            !xaot_verify_program_direct_call_authority(
+                program_target_plan,
+                xaot_bundle_program_semantic_for_module(&aot_bundle, (uint32_t) entry_index),
+                program_target_error, sizeof(program_target_error))) {
             aot_bundle.error_msg =
                 "XR_TARGET_1000: installed program TargetPlan authority is not exact";
             fprintf(stderr, "Error: product Program TargetPlan verification failed: %s\n",

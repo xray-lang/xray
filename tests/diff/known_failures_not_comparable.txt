@@ -281,6 +281,10 @@ tests/diff/cases/semantics/modules/cleanup_init_panic.xr  # XR_TARGET_1000 produ
 tests/diff/cases/semantics/modules/cross_module_borrowed_arg_release.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/modules/exported_struct_methods.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/modules/multimod_calls.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
+tests/diff/cases/semantics/modules/native_module_scalar_call_target.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/modules/value_struct_arg_alias_import.xr  # XR_TARGET_1003 source-export call authority is incomplete
+tests/diff/cases/semantics/modules/value_struct_arg_without_type_import.xr  # XR_TARGET_1003 source-export call authority is incomplete
+tests/diff/cases/semantics/modules/value_struct_copy_without_type_import.xr  # XR_TARGET_1003 source-export call authority is incomplete
 tests/diff/cases/semantics/modules/value_struct_return_release.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/modules/xmod_class.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/modules/xmod_coro.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
@@ -438,6 +442,7 @@ tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr  # XR_TARGET_1000 pro
 tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
 tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/stdlib/math_random_int_arg_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
+tests/diff/cases/semantics/stdlib/math_random_system_direct.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/stdlib/mem_cache_maintenance_shared_core.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/stdlib/mem_fence_unit_binding.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE

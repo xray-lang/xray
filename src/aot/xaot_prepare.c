@@ -35,6 +35,7 @@
 #include "../ir/xi_program_semantic_plan.h"
 #include "../plan/target/xr_target_verify.h"
 #include "../shared/xr_array_core.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -4362,6 +4363,19 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             const bool enum_ordinal = xaot_value_plan_is_exact_enum_ordinal_family(bundle, vp);
             const bool rep_adapter = xaot_value_plan_is_exact_rep_adapter(bundle, vp);
             if ((vp->value->backend_origin != XI_BACKEND_VALUE_NONE) != rep_adapter) {
+                if (getenv("XRAY_AOT_REFINE_TRACE")) {
+                    char adapter_error[256] = {0};
+                    xr_aot_rep_adapter_value_is_exact(xaot_bundle_program_target_plan(bundle), func,
+                                                      vp->value, adapter_error,
+                                                      sizeof(adapter_error));
+                    fprintf(stderr,
+                            "[aot-prepare] inexact phi adapter function=%s value=%u op=%u:%s "
+                            "backend-origin=%u rep-adapter=%u rep-kind=%u reason=%s\n",
+                            func->name ? func->name : "<anonymous>", vp->value->id, vp->value->op,
+                            xi_generated_op_name(vp->value->op), vp->value->backend_origin,
+                            rep_adapter ? 1u : 0u, vp->rep.kind,
+                            adapter_error[0] ? adapter_error : "legacy output mismatch");
+                }
                 bundle->error_msg = "AOT prepare refused an inexact representation adapter row";
                 return false;
             }
@@ -4434,6 +4448,19 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             const bool enum_ordinal = xaot_value_plan_is_exact_enum_ordinal_family(bundle, vp);
             const bool rep_adapter = xaot_value_plan_is_exact_rep_adapter(bundle, vp);
             if ((vp->value->backend_origin != XI_BACKEND_VALUE_NONE) != rep_adapter) {
+                if (getenv("XRAY_AOT_REFINE_TRACE")) {
+                    char adapter_error[256] = {0};
+                    xr_aot_rep_adapter_value_is_exact(xaot_bundle_program_target_plan(bundle), func,
+                                                      vp->value, adapter_error,
+                                                      sizeof(adapter_error));
+                    fprintf(stderr,
+                            "[aot-prepare] inexact adapter function=%s value=%u op=%u:%s "
+                            "backend-origin=%u rep-adapter=%u rep-kind=%u reason=%s\n",
+                            func->name ? func->name : "<anonymous>", vp->value->id, vp->value->op,
+                            xi_generated_op_name(vp->value->op), vp->value->backend_origin,
+                            rep_adapter ? 1u : 0u, vp->rep.kind,
+                            adapter_error[0] ? adapter_error : "legacy output mismatch");
+                }
                 bundle->error_msg = "AOT prepare refused an inexact representation adapter row";
                 return false;
             }

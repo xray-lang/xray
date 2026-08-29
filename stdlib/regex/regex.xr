@@ -124,7 +124,7 @@ fn rxNode(t: RxAst, op: i64, a: i64, b: i64, c: i64, d: i64) -> i64 {
     return len(t.op) - 1
 }
 
-// Record the first error only, mirroring parser_error (xregex_parse.c:187-193).
+// Capture the first error only, mirroring parser_error (xregex_parse.c:187-193).
 // Unlike the C side, the message and the byte position survive: the VM binding
 // discarded both (xregex_binding.c:238-242) and reported a generic code.
 fn rxFail(t: RxAst, code: i64, pos: i64, msg: string) -> i64 {

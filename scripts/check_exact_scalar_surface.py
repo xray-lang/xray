@@ -79,14 +79,14 @@ PUBLIC_BINDING_RE = re.compile(
 )
 SOURCE_SIGNATURE_RE = re.compile(
     r"(?:->|:|<|\bas\b|\bis\b)\s*(?:int|byte|float)\b"
-    r"|\b(?:int|byte|float)\s*(?:\?|>)"
+    r"|\b(?:int|byte|float)\s*(?:\?|>(?![>=]))"
 )
 SOURCE_EXACT_BARE_IDENTIFIER_RE = re.compile(
     r"^\s*(?P<name>" + "|".join(EXACT_NAMES) + r")\s*,?\s*$"
 )
 PUBLIC_SIGNATURE_RE = re.compile(
     r"(?:->|:|<)\s*(?:int|byte|float)\b"
-    r"|\b(?:int|byte|float)\s*(?:\?|>)"
+    r"|\b(?:int|byte|float)\s*(?:\?|>(?![>=]))"
 )
 PUBLIC_TEXT_FILES = (
     Path("LANGUAGE_SPEC.md"), Path("LANGUAGE_SPEC_CN.md"),

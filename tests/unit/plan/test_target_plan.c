@@ -3044,7 +3044,8 @@ static void test_builder_materializes_struct_and_named_aggregates(void) {
     REQUIRE(named_binding != NULL);
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(plan, profile_fingerprint, &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan), profile_fingerprint,
+                                     &emission, error, sizeof(error)));
     XrCValueEmissionView aggregate_view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, named_binding->semantic_value, &aggregate_view,
                                           error, sizeof(error)) &&
@@ -3066,10 +3067,12 @@ static void test_builder_materializes_struct_and_named_aggregates(void) {
     xr_target_layout_compute_fingerprint(plan, named_layout_index,
                                          &plan->layouts[named_layout_index].fingerprint);
     expect_verify_failure(plan, "XR_TARGET_1002");
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     named_first->semantic_name = saved_name;
     plan->layouts[named_layout_index].fingerprint = saved_named_fingerprint;
-    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
 
     uint32_t supported_bindings = 0;
     bool dynamic_binding = false;
@@ -4304,17 +4307,20 @@ static void test_imported_source_class_constructor_authority(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic refinement_diag = {0};
     XrAotRefinementPlan *refinement = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(plan, &policy, &refinement,
-                                                                  &refinement_diag));
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        plan, xr_target_plan_semantic_plan(plan), &policy, &refinement, &refinement_diag));
     XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(refinement);
     REQUIRE(refinement_view.frozen && refinement_view.verified &&
-            xr_aot_refinement_verify(&refinement_view, plan, &refinement_diag));
+            xr_aot_refinement_verify(&refinement_view, plan, xr_target_plan_semantic_plan(plan),
+                                     &refinement_diag));
     xr_aot_refinement_plan_free(refinement);
 
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(plan, xr_target_profile_fingerprint(profile), &emission, error,
+    REQUIRE(xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan),
+                                     xr_target_profile_fingerprint(profile), &emission, error,
                                      sizeof(error)) &&
-            xr_c_emission_plan_verify(emission, plan, xr_target_profile_fingerprint(profile), error,
+            xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      xr_target_profile_fingerprint(profile), error,
                                       sizeof(error)));
     XrCValueEmissionView result_view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, operation->result_value, &result_view, error,
@@ -5148,7 +5154,8 @@ static void test_source_export_ref_argument_is_not_array_projection(void) {
 
     XrCEmissionPlan *emission = NULL;
     error[0] = '\0';
-    built = xr_c_emission_plan_build(plan, xr_target_profile_fingerprint(profile), &emission, error,
+    built = xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan),
+                                     xr_target_profile_fingerprint(profile), &emission, error,
                                      sizeof(error));
     if (!built)
         fprintf(stderr, "source-export raw-pointer ref C emission failed: %s\n", error);
@@ -5445,11 +5452,13 @@ static void test_direct_local_scalar_ref_argument_authority(void) {
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
     bool emission_built =
-        xr_c_emission_plan_build(plan, profile_fingerprint, &emission, error, sizeof(error));
+        xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan), profile_fingerprint,
+                                 &emission, error, sizeof(error));
     if (!emission_built)
         fprintf(stderr, "direct-local scalar ref C emission failed: %s\n", error);
     REQUIRE(emission_built && emission && xr_c_emission_plan_call_argument_count(emission) == 1 &&
-            xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+            xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
     XrCCallArgumentEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_call_argument_view(emission, call->result_value, 0, &view, error,
                                                   sizeof(error)) &&
@@ -5466,9 +5475,11 @@ static void test_direct_local_scalar_ref_argument_authority(void) {
             strcmp(view.c_type, "int64_t *") == 0);
     const char *saved_c_type = emission->call_arguments[0].c_type;
     emission->call_arguments[0].c_type = "uint64_t *";
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     emission->call_arguments[0].c_type = saved_c_type;
-    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
 
     XrFingerprint plan_fingerprint = xr_target_plan_fingerprint(plan);
     int64_t vm_argument = 41;
@@ -6134,7 +6145,8 @@ static void test_array_intrinsic_call_authority(void) {
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(plan, xr_target_profile_fingerprint(profile), &emission, error,
+    REQUIRE(xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan),
+                                     xr_target_profile_fingerprint(profile), &emission, error,
                                      sizeof(error)));
     XrCValueEmissionView with_capacity_view = {0};
     XrCValueEmissionView filled_view = {0};
@@ -6302,7 +6314,8 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
 
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(plan, profile_fingerprint, &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan), profile_fingerprint,
+                                     &emission, error, sizeof(error)));
     XrCValueEmissionView hof_view = {0};
     REQUIRE(
         xr_c_emission_plan_value_view(emission, call->result_value, &hof_view, error,
@@ -6320,7 +6333,8 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
         hof_view.recipe_argument_count == expected->operand_count &&
         hof_view.recipe_arguments == emission->recipe_arguments &&
         emission->recipe_argument_count == expected->operand_count &&
-        xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+        xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                  profile_fingerprint, error, sizeof(error)));
     const uint8_t expected_argument_kinds[3] = {
         XR_C_RECIPE_ARGUMENT_ARRAY_HOF_RECEIVER,
         XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK,
@@ -6342,89 +6356,104 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
     REQUIRE(mutable_hof != NULL);
     saved_u32 = mutable_hof->recipe_callee_function;
     mutable_hof->recipe_callee_function ^= 1u;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_callee_function = saved_u32;
     saved_u8 = mutable_hof->recipe_hof_kind;
     mutable_hof->recipe_hof_kind =
         saved_u8 == XR_C_ARRAY_HOF_MAP ? XR_C_ARRAY_HOF_FILTER : XR_C_ARRAY_HOF_MAP;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_hof_kind = saved_u8;
     saved_u8 = mutable_hof->recipe_hof_source_storage;
     mutable_hof->recipe_hof_source_storage = XR_TARGET_ARRAY_STORAGE_U8;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_hof_source_storage = saved_u8;
     saved_u8 = mutable_hof->recipe_hof_result_storage;
     mutable_hof->recipe_hof_result_storage = XR_TARGET_ARRAY_STORAGE_U8;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_hof_result_storage = saved_u8;
     saved_u8 = mutable_hof->recipe_hof_callback_parameter_reps[0];
     mutable_hof->recipe_hof_callback_parameter_reps[0] = XR_C_VALUE_REP_BOOL;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_hof_callback_parameter_reps[0] = saved_u8;
     saved_u8 = mutable_hof->recipe_hof_callback_parameter_reps[1];
     mutable_hof->recipe_hof_callback_parameter_reps[1] =
         saved_u8 == XR_C_VALUE_REP_VOID ? XR_C_VALUE_REP_I64 : XR_C_VALUE_REP_VOID;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_hof_callback_parameter_reps[1] = saved_u8;
     saved_u8 = mutable_hof->recipe_hof_callback_return_rep;
     mutable_hof->recipe_hof_callback_return_rep =
         saved_u8 == XR_C_VALUE_REP_BOOL ? XR_C_VALUE_REP_I64 : XR_C_VALUE_REP_BOOL;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_hof_callback_return_rep = saved_u8;
     mutable_hof->recipe_hof_reserved = 1;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_hof_reserved = 0;
     uint16_t saved_u16 = mutable_hof->recipe_argument_count;
     mutable_hof->recipe_argument_count = 0;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_argument_count = saved_u16;
     const XrCRecipeArgumentView *saved_recipe_arguments = mutable_hof->recipe_arguments;
     mutable_hof->recipe_arguments = NULL;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_arguments = saved_recipe_arguments;
     mutable_hof->recipe_arguments = saved_recipe_arguments + 1;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_hof->recipe_arguments = saved_recipe_arguments;
     saved_u32 = emission->recipe_argument_count;
     emission->recipe_argument_count--;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     emission->recipe_argument_count = saved_u32 + 1;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     emission->recipe_argument_count = saved_u32;
     for (uint16_t i = 0; i < expected->operand_count; i++) {
         saved_u8 = hof_arguments[i].kind;
         hof_arguments[i].kind = XR_C_RECIPE_ARGUMENT_INVALID;
-        REQUIRE(
-            !xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+        REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                           profile_fingerprint, error, sizeof(error)));
         hof_arguments[i].kind = saved_u8;
         saved_u32 = hof_arguments[i].semantic_value;
         hof_arguments[i].semantic_value = UINT32_MAX;
-        REQUIRE(
-            !xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+        REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                           profile_fingerprint, error, sizeof(error)));
         hof_arguments[i].semantic_value = saved_u32;
         saved_u32 = hof_arguments[i].source_semantic_value;
         hof_arguments[i].source_semantic_value = UINT32_MAX;
-        REQUIRE(
-            !xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+        REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                           profile_fingerprint, error, sizeof(error)));
         hof_arguments[i].source_semantic_value = saved_u32;
         for (uint8_t reserved = 0; reserved < 3; reserved++) {
             hof_arguments[i].reserved[reserved] = 1;
-            REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
-                                               sizeof(error)));
+            REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                               profile_fingerprint, error, sizeof(error)));
             hof_arguments[i].reserved[reserved] = 0;
         }
     }
     XrFingerprint saved_fingerprint = emission->fingerprint;
     emission->fingerprint.bytes[0] ^= 1u;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     emission->fingerprint = saved_fingerprint;
-    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
 
     XrCEmissionPlan *same_emission = NULL;
-    REQUIRE(
-        xr_c_emission_plan_build(plan, profile_fingerprint, &same_emission, error, sizeof(error)) &&
-        xr_fingerprint_equal(xr_c_emission_plan_fingerprint(emission),
-                             xr_c_emission_plan_fingerprint(same_emission)));
+    REQUIRE(xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan), profile_fingerprint,
+                                     &same_emission, error, sizeof(error)) &&
+            xr_fingerprint_equal(xr_c_emission_plan_fingerprint(emission),
+                                 xr_c_emission_plan_fingerprint(same_emission)));
     XrCValueEmissionView same_view = {0};
     REQUIRE(xr_c_emission_plan_value_view(same_emission, call->result_value, &same_view, error,
                                           sizeof(error)) &&
@@ -6448,7 +6477,8 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
     call->array_hof_kind =
         saved_u8 == XR_TARGET_ARRAY_HOF_MAP ? XR_TARGET_ARRAY_HOF_FILTER : XR_TARGET_ARRAY_HOF_MAP;
     expect_verify_failure(plan, "XR_TARGET_1003");
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     call->array_hof_kind = saved_u8;
     saved_u8 = call->array_element_storage;
     call->array_element_storage = XR_TARGET_ARRAY_STORAGE_U8;
@@ -6479,7 +6509,8 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
     expect_verify_failure(plan, "XR_TARGET_1001");
     plan->completed_family_mask = saved_mask;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)) &&
-            xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+            xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
 
     uint8_t *encoded = NULL;
     size_t encoded_size = 0;
@@ -6617,7 +6648,8 @@ static void test_tagged_string_array_copy_authority(void) {
 
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
-    REQUIRE(xr_c_emission_plan_build(plan, profile_fingerprint, &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan), profile_fingerprint,
+                                     &emission, error, sizeof(error)));
     XrCValueEmissionView view = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, operation->result_value, &view, error,
                                           sizeof(error)) &&
@@ -6625,7 +6657,8 @@ static void test_tagged_string_array_copy_authority(void) {
             view.target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
             view.target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
             view.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
-            xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+            xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
 
     uint8_t saved_kind = call->target_kind;
     call->target_kind = XR_TARGET_CALL_TARGET_SCALAR_COPY;
@@ -6634,9 +6667,11 @@ static void test_tagged_string_array_copy_authority(void) {
     uint8_t saved_call_storage = call->array_element_storage;
     call->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     expect_verify_failure(plan, "XR_TARGET_1003");
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     call->array_element_storage = saved_call_storage;
-    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
     uint8_t saved_ownership = call->result_ownership;
     call->result_ownership = XR_TARGET_CALL_NONE;
     expect_verify_failure(plan, "XR_TARGET_1003");
@@ -6960,7 +6995,8 @@ static void test_source_class_array_push_authority(void) {
 
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
-    built = xr_c_emission_plan_build(plan, profile_fingerprint, &emission, error, sizeof(error));
+    built = xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan), profile_fingerprint,
+                                     &emission, error, sizeof(error));
     if (!built)
         fprintf(stderr, "source-class Array.push CEmissionPlan failed: %s\n", error);
     REQUIRE(built);
@@ -6971,7 +7007,8 @@ static void test_source_class_array_push_authority(void) {
         fprintf(stderr, "source-class Array.push C emission view failed: %s\n", error);
     REQUIRE(projected);
     bool emission_verified =
-        xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error));
+        xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                  profile_fingerprint, error, sizeof(error));
     if (!emission_verified)
         fprintf(stderr, "source-class Array.push C emission verify failed: %s\n", error);
     if (push_view.recipe_rule_id != XR_C_EMISSION_RULE_C_EMISSION_ARRAY_PUSH_TAGGED_V1 ||
@@ -7011,29 +7048,36 @@ static void test_source_class_array_push_authority(void) {
     REQUIRE(mutable_push != NULL);
     uint16_t saved_rule = mutable_push->recipe_rule_id;
     mutable_push->recipe_rule_id = XR_C_EMISSION_RULE_NONE;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_push->recipe_rule_id = saved_rule;
     uint8_t saved_materialization = mutable_push->materialization;
     mutable_push->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_push->materialization = saved_materialization;
     uint32_t saved_u32 = mutable_push->recipe_operand_value;
     mutable_push->recipe_operand_value = mutable_push->recipe_argument_value;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_push->recipe_operand_value = saved_u32;
     saved_u32 = mutable_push->recipe_argument_value;
     mutable_push->recipe_argument_value = UINT32_MAX;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_push->recipe_argument_value = saved_u32;
     uint32_t saved_discriminant = mutable_push->recipe_discriminant;
     mutable_push->recipe_discriminant = XR_TARGET_ARRAY_STORAGE_NONE;
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_push->recipe_discriminant = saved_discriminant;
     const char *saved_symbol = mutable_push->recipe_symbol;
     mutable_push->recipe_symbol = "xrt_array_set";
-    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
     mutable_push->recipe_symbol = saved_symbol;
-    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
 
     xr_c_emission_plan_free(emission);
 
