@@ -6,6 +6,18 @@
  * Licensed under the MIT License
  *
  * xr_os_core.h - Runtime-neutral OS stdlib core helpers.
+ *
+ * One owner for the parts of the OS surface that neither runtime gets to spell
+ * differently: the platform/arch ladders, the exec result field names, and the
+ * pure arithmetic that normalizes raw syscall output. Both the VM stdlib
+ * (stdlib/os/os.c) and the freestanding AOT runtime (src/aot/xrt_os.h) call in
+ * here, so everything stays header-only static inline and touches no allocator
+ * and no value representation - the caller supplies both.
+ *
+ * Deliberately absent: anything the public Xray module already owns. Path
+ * separator, line ending, homedir and username resolution, and NAME=VALUE
+ * splitting are module policy and live in stdlib/os/os.xr; the C layer only
+ * publishes the raw host facts they build on.
  */
 
 #ifndef XRAY_SHARED_XR_OS_CORE_H
@@ -23,11 +35,6 @@
 #else
 #include <unistd.h>
 #endif
-
-typedef const char *(*XrOsCoreGetenvFn)(void *ctx, const char *name);
-typedef const char *(*XrOsCoreStringFn)(void *ctx);
-typedef bool (*XrOsCoreEnvEntryFn)(void *ctx, const char *key, size_t key_len, const char *value,
-                                   size_t value_len);
 
 enum {
     XR_OS_CORE_EXEC_STDOUT = 0,
@@ -77,67 +84,12 @@ static inline const char *xr_os_core_arch(void) {
 #endif
 }
 
-static inline const char *xr_os_core_sep(void) {
-#ifdef XR_OS_WINDOWS
-    return "\\";
-#else
-    return "/";
-#endif
-}
-
-static inline const char *xr_os_core_eol(void) {
-#ifdef XR_OS_WINDOWS
-    return "\r\n";
-#else
-    return "\n";
-#endif
-}
-
 static inline int64_t xr_os_core_getpid(void) {
 #ifdef XR_OS_WINDOWS
     return (int64_t) _getpid();
 #else
     return (int64_t) getpid();
 #endif
-}
-
-static inline bool xr_os_core_has_env_value(const char *value) {
-    return value && value[0] != '\0';
-}
-
-static inline const char *xr_os_core_homedir(XrOsCoreGetenvFn getenv_fn, void *env_ctx,
-                                             XrOsCoreStringFn system_homedir_fn, void *system_ctx) {
-    if (getenv_fn) {
-        const char *home = getenv_fn(env_ctx, "HOME");
-        if (xr_os_core_has_env_value(home))
-            return home;
-
-#ifdef XR_OS_WINDOWS
-        home = getenv_fn(env_ctx, "USERPROFILE");
-        if (xr_os_core_has_env_value(home))
-            return home;
-#endif
-    }
-
-    if (system_homedir_fn) {
-        const char *home = system_homedir_fn(system_ctx);
-        if (xr_os_core_has_env_value(home))
-            return home;
-    }
-
-    return NULL;
-}
-
-static inline bool xr_os_core_environ_entry(const char *entry, XrOsCoreEnvEntryFn fn, void *ctx) {
-    if (!entry || !fn)
-        return false;
-
-    const char *eq = strchr(entry, '=');
-    if (!eq || eq == entry)
-        return false;
-
-    const char *value = eq + 1;
-    return fn(ctx, entry, (size_t) (eq - entry), value, strlen(value));
 }
 
 static inline int64_t xr_os_core_cpu_count(long raw_count) {
