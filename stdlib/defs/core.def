@@ -2773,11 +2773,11 @@ module cluster {
   }
 
   fn __start {
-    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool"
-    doc: "Start the backend-neutral cluster runtime from normalized scalar configuration"
+    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64): bool"
+    doc: "Start the backend-neutral cluster runtime from normalized scalar configuration and the heartbeat schedule cluster.xr decides"
     vm: "cluster_start_primitive"
-    argc: 8
-    arg_spec: "svsvsssv"
+    argc: 11
+    arg_spec: "svsvsssvvvv"
     aot: "xrt_cluster_start"
     aot_direct: true
     link_object: true
@@ -2786,12 +2786,12 @@ module cluster {
   }
 
   fn __join {
-    signature: "(addr: string): bool"
-    doc: "Join cluster by address without blocking the scheduler worker"
+    signature: "(host: string, port: i64): bool"
+    doc: "Join cluster at a host and port cluster.xr already parsed, without blocking the scheduler worker"
     vm: "cluster_join"
     vm_binding: "yieldable"
-    argc: 1
-    arg_spec: "s"
+    argc: 2
+    arg_spec: "sv"
     aot: "xrt_cluster_join"
     aot_direct: true
     link_object: true
@@ -2872,11 +2872,11 @@ module cluster {
   }
 
   fn __send {
-    signature: "(topic: string, envelope: move Buffer): ClusterDelivery"
-    doc: "Hand one canonical opaque service envelope to local and connected transports"
+    signature: "(topic: string, envelope: move Buffer, hopLimit: i64): ClusterDelivery"
+    doc: "Hand one canonical opaque service envelope, and the hop budget cluster.xr decides, to local and connected transports"
     vm: "cluster_send_primitive"
-    argc: 2
-    arg_spec: "sv"
+    argc: 3
+    arg_spec: "svv"
     aot: "xrt_cluster_send"
     ret: "enum_i64"
     aot_enum: "ClusterDelivery"

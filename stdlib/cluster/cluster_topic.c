@@ -347,10 +347,17 @@ void cluster_topics_destroy(XrCluster *c) {
 
 /* ========== Listen ========== */
 
+/*
+ * What counts as a legal topic pattern, and what capacity a subscription may
+ * ask for, are decided by listen() in stdlib/cluster/cluster.xr, which both
+ * backends compile. They used to be decided three times -- here, in the VM
+ * binding above, and again in xrt_cluster_listen -- and the three copies are
+ * gone. What stays is the shape trie_insert needs to stay in bounds.
+ */
 struct XrChannel *cluster_transport_listen(XrVMRuntime *X, const char *pattern, uint32_t capacity) {
     XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !c->topic_root || !xr_cluster_topic_valid(pattern, true) || capacity == 0 ||
-        capacity > XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX)
+    if (!c || !c->topic_root || !pattern || pattern[0] == '\0' ||
+        strlen(pattern) > XR_TOPIC_PATTERN_MAX || capacity == 0)
         return NULL;
 
     XrTopicSubscription *sub = (XrTopicSubscription *) xr_calloc(1, sizeof(XrTopicSubscription));
@@ -479,7 +486,17 @@ static XrClusterDelivery transport_broadcast_envelope(XrCluster *c, XrClusterNod
 void cluster_transport_handle_frame(XrCluster *c, XrClusterNode *from, const char *topic,
                                     const uint8_t *envelope, uint32_t envelope_len,
                                     uint8_t hop_limit) {
-    if (!c || !topic || !envelope || envelope_len < XR_CLUSTER_ENVELOPE_HEADER_SIZE)
+    /*
+     * A topic that arrived on the wire was never seen by cluster.xr -- the peer
+     * that sent it may be running anything -- so the inbound path is the one
+     * place the C side still asks whether a topic is well formed. The AOT
+     * reader has always asked, through xr_cluster_topic_matches inside
+     * aot_cluster_deliver_local; this path walked straight into the trie, so a
+     * malformed wire topic could reach a subscriber on one backend and not on
+     * the other. Both ask now, and they ask the same function.
+     */
+    if (!c || !topic || !envelope || envelope_len < XR_CLUSTER_ENVELOPE_HEADER_SIZE ||
+        !xr_cluster_topic_valid(topic, false))
         return;
 
     (void) cluster_transport_deliver_local(c, topic, envelope, envelope_len);
@@ -511,30 +528,35 @@ void cluster_transport_handle_frame(XrCluster *c, XrClusterNode *from, const cha
                                         envelope_len);
 }
 
+/*
+ * Topic legality and the envelope floor are decided by send() in
+ * stdlib/cluster/cluster.xr before this leaf is reached, so they are not
+ * decided again here. What stays is the frame's own arithmetic: a topic plus
+ * an envelope plus two length bytes has to fit in one payload, and that is a
+ * fact about the wire, not a policy about the caller.
+ */
 XrClusterDelivery cluster_transport_send(XrVMRuntime *X, const char *topic, const uint8_t *envelope,
-                                         uint32_t envelope_len) {
+                                         uint32_t envelope_len, uint8_t hop_limit) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !atomic_load(&c->running))
         return XR_CLUSTER_DELIVERY_UNAVAILABLE;
-    if (!xr_cluster_topic_valid(topic, false))
-        return XR_CLUSTER_DELIVERY_INVALID_TOPIC;
     size_t topic_len = strlen(topic);
-    if (!envelope || envelope_len < XR_CLUSTER_ENVELOPE_HEADER_SIZE ||
-        envelope_len > XR_FRAME_MAX_PAYLOAD - 2 - topic_len)
+    if (topic_len == 0 || topic_len > XR_TOPIC_PATTERN_MAX)
+        return XR_CLUSTER_DELIVERY_INVALID_TOPIC;
+    if (!envelope || envelope_len > XR_FRAME_MAX_PAYLOAD - 2 - topic_len)
         return XR_CLUSTER_DELIVERY_INVALID_ENVELOPE;
 
     XrClusterDelivery local = cluster_transport_deliver_local(c, topic, envelope, envelope_len);
 
     /*
-     * Build wire frame with the cluster-wide default hop limit. Each
-     * downstream node decrements before forwarding further; see the
-     * detailed comment on XR_TOPIC_DEFAULT_HOP_LIMIT in
-     * cluster_internal.h for the depth-vs-damage trade-off.
+     * Build the wire frame with the hop budget the caller was given. It is
+     * TOPIC_DEFAULT_HOP_LIMIT in cluster.xr unless the caller named another,
+     * and each downstream node decrements before forwarding further.
      */
     // Forward to all connected nodes (no split-horizon — we are the
     // origin, so every peer is a valid destination).
-    XrClusterDelivery remote = transport_broadcast_envelope(c, NULL, XR_TOPIC_DEFAULT_HOP_LIMIT,
-                                                            topic, envelope, envelope_len);
+    XrClusterDelivery remote =
+        transport_broadcast_envelope(c, NULL, hop_limit, topic, envelope, envelope_len);
     if (local == XR_CLUSTER_DELIVERY_ACCEPTED || remote == XR_CLUSTER_DELIVERY_ACCEPTED)
         return XR_CLUSTER_DELIVERY_ACCEPTED;
     if (local == XR_CLUSTER_DELIVERY_OVERLOADED || remote == XR_CLUSTER_DELIVERY_OVERLOADED)

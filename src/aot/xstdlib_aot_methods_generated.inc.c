@@ -172,10 +172,10 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"http2", "__send", 2, "xrt_http_h2_send_unavailable", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"http2", "__recv", 3, "xrt_http_h2_recv_unavailable", "vvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"http2", "__close", 1, "xrt_http_h2_close_unavailable", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"cluster", "__start", 8, "xrt_cluster_start", "svsvsssv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"cluster", "__join", 1, "xrt_cluster_join", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "__start", 11, "xrt_cluster_start", "svsvsssvvvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "__join", 2, "xrt_cluster_join", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__stop", 0, "xrt_cluster_stop", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"cluster", "__send", 2, "xrt_cluster_send", "sv", CG_AOT_RET_ENUM_I64, NULL, UINT32_C(4282747530), "ClusterDelivery", g_aot_stdlib_cluster___send_enum_variants, 6},
+    {"cluster", "__send", 3, "xrt_cluster_send", "svv", CG_AOT_RET_ENUM_I64, NULL, UINT32_C(4282747530), "ClusterDelivery", g_aot_stdlib_cluster___send_enum_variants, 6},
     {"cluster", "__listen", 2, "xrt_cluster_listen", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))

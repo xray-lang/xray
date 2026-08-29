@@ -295,9 +295,24 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
-        .name = "ClusterConfig",
-        .signature = "{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, }",
+        .name = "CORO_NAME_MAX",
+        .signature = ": i64",
         .summary = "",
+    },
+    {
+        .name = "ClusterConfig",
+        .signature = "{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, // The heartbeat schedule, when this node wants one of its own. Omitting a // field leaves it null and takes the constant above, so the defaults still // have exactly one owner and a caller who needs a faster detector no longer // has to be told the numbers are not negotiable. heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }",
+        .summary = "",
+    },
+    {
+        .name = "ClusterConfig.heartbeatTimeoutMs",
+        .signature = "i64?",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "ClusterConfig.maxMissedHeartbeats",
+        .signature = "i64?",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterConfig.name",
@@ -575,12 +590,102 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "Object field",
     },
     {
+        .name = "ENVELOPE_HEADER_SIZE",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_CORO_DEMONITOR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_CORO_EXIT",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_CORO_MONITOR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_HANDSHAKE_ACK",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_HANDSHAKE_DONE",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_HANDSHAKE_ERR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_HANDSHAKE_REQ",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_HEADER_SIZE",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_HEARTBEAT_PING",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_HEARTBEAT_PONG",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_MAX_PAYLOAD",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_TRANSPORT_ENVELOPE",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "HANDSHAKE_TIMEOUT_MS",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
         .name = "HANDSHAKE_VERSION",
         .signature = ": i64",
         .summary = "",
     },
     {
+        .name = "HEARTBEAT_INTERVAL_MS",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "HEARTBEAT_TIMEOUT_MS",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "MAX_MISSED_HEARTBEATS",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
         .name = "NODE_NAME_MAX",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "NONCE_SIZE",
         .signature = ": i64",
         .summary = "",
     },
@@ -605,7 +710,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "PROOF_SIZE",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "SUBSCRIPTION_CAPACITY_MAX",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
         .name = "TOPIC_DEFAULT_HOP_LIMIT",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "TOPIC_MAX_HOP_LIMIT",
         .signature = ": i64",
         .summary = "",
     },
@@ -656,7 +776,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "send",
-        .signature = "(topic: string, envelope: move Buffer): ClusterDelivery",
+        .signature = "(topic: string, envelope: move Buffer, hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT): ClusterDelivery",
         .summary = "",
     },
     {
@@ -8687,7 +8807,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `cluster.ClusterConfig` | `{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, }` |  |\n"
+            "| `cluster.CORO_NAME_MAX` | `: i64` |  |\n"
+            "| `cluster.ClusterConfig` | `{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, // The heartbeat schedule, when this node wants one of its own. Omitting a // field leaves it null and takes the constant above, so the defaults still // have exactly one owner and a caller who needs a faster detector no longer // has to be told the numbers are not negotiable. heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }` |  |\n"
+            "| `cluster.ClusterConfig.heartbeatTimeoutMs` | `i64?` | Type alias field |\n"
+            "| `cluster.ClusterConfig.maxMissedHeartbeats` | `i64?` | Type alias field |\n"
             "| `cluster.ClusterConfig.name` | `string` | Type alias field |\n"
             "| `cluster.ClusterConfig.port` | `i64` | Type alias field |\n"
             "| `cluster.ClusterConfig.secret` | `string?` | Type alias field |\n"
@@ -8743,13 +8866,34 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Object field |\n"
             "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Object field |\n"
             "| `cluster.ClusterTlsStatus.serverReady` | `const bool` | Object field |\n"
+            "| `cluster.ENVELOPE_HEADER_SIZE` | `: i64` |  |\n"
+            "| `cluster.FRAME_CORO_DEMONITOR` | `: i64` |  |\n"
+            "| `cluster.FRAME_CORO_EXIT` | `: i64` |  |\n"
+            "| `cluster.FRAME_CORO_MONITOR` | `: i64` |  |\n"
+            "| `cluster.FRAME_HANDSHAKE_ACK` | `: i64` |  |\n"
+            "| `cluster.FRAME_HANDSHAKE_DONE` | `: i64` |  |\n"
+            "| `cluster.FRAME_HANDSHAKE_ERR` | `: i64` |  |\n"
+            "| `cluster.FRAME_HANDSHAKE_REQ` | `: i64` |  |\n"
+            "| `cluster.FRAME_HEADER_SIZE` | `: i64` |  |\n"
+            "| `cluster.FRAME_HEARTBEAT_PING` | `: i64` |  |\n"
+            "| `cluster.FRAME_HEARTBEAT_PONG` | `: i64` |  |\n"
+            "| `cluster.FRAME_MAX_PAYLOAD` | `: i64` |  |\n"
+            "| `cluster.FRAME_TRANSPORT_ENVELOPE` | `: i64` |  |\n"
+            "| `cluster.HANDSHAKE_TIMEOUT_MS` | `: i64` |  |\n"
             "| `cluster.HANDSHAKE_VERSION` | `: i64` |  |\n"
+            "| `cluster.HEARTBEAT_INTERVAL_MS` | `: i64` |  |\n"
+            "| `cluster.HEARTBEAT_TIMEOUT_MS` | `: i64` |  |\n"
+            "| `cluster.MAX_MISSED_HEARTBEATS` | `: i64` |  |\n"
             "| `cluster.NODE_NAME_MAX` | `: i64` |  |\n"
+            "| `cluster.NONCE_SIZE` | `: i64` |  |\n"
             "| `NodeAddress` | `NodeAddress` |  |\n"
             "| `NodeAddress.constructor` | `(host: string, port: i64): ()` |  |\n"
             "| `NodeAddress.host` | `: string` |  |\n"
             "| `NodeAddress.port` | `: i64` |  |\n"
+            "| `cluster.PROOF_SIZE` | `: i64` |  |\n"
+            "| `cluster.SUBSCRIPTION_CAPACITY_MAX` | `: i64` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: i64` |  |\n"
+            "| `cluster.TOPIC_MAX_HOP_LIMIT` | `: i64` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: i64` |  |\n"
             "| `cluster.discover` | `(): ()` |  |\n"
             "| `cluster.info` | `(): ClusterInfo?` |  |\n"
@@ -8759,7 +8903,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.nodes` | `(): Array<string>?` |  |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
             "| `cluster.self` | `(): string` |  |\n"
-            "| `cluster.send` | `(topic: string, envelope: move Buffer): ClusterDelivery` |  |\n"
+            "| `cluster.send` | `(topic: string, envelope: move Buffer, hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT): ClusterDelivery` |  |\n"
             "| `cluster.start` | `(config: ClusterConfig): bool` |  |\n"
             "| `cluster.stop` | `(): ()` |  |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"

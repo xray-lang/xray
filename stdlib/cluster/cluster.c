@@ -443,20 +443,16 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
 }
 
 int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
-                          const XrClusterTlsOptions *tls) {
+                          const XrClusterTlsOptions *tls, int heartbeat_interval_ms,
+                          int heartbeat_timeout_ms, int max_missed_heartbeats) {
     if (X->cluster)
         return -1;  // already running
-    if (!name || name[0] == '\0')
+    if (!name)
         return -1;  // name required
 
-    // Validate name: printable ASCII, max XR_NODE_NAME_MAX bytes
-    size_t name_len = strlen(name);
-    if (name_len > XR_NODE_NAME_MAX)
-        return -1;
-    for (size_t i = 0; i < name_len; i++) {
-        if ((unsigned char) name[i] < 0x20 || (unsigned char) name[i] > 0x7E)
-            return -1;
-    }
+    /* What counts as a legal node name is decided by validNodeName in
+     * stdlib/cluster/cluster.xr, which both backends compile, so it is not
+     * decided a second time here. The copy below is bounded either way. */
 
     XrCluster *c = (XrCluster *) xr_calloc(1, sizeof(XrCluster));
     if (!c)
@@ -501,9 +497,13 @@ int cluster_runtime_start(XrVMRuntime *X, const char *name, uint16_t port, const
         return -1;
     }
 
-    c->heartbeat_interval_ms = 5000;
-    c->heartbeat_timeout_ms = 15000;
-    c->max_missed_heartbeats = 3;
+    /* The schedule is cluster.xr's, not this file's: HEARTBEAT_INTERVAL_MS,
+     * HEARTBEAT_TIMEOUT_MS and MAX_MISSED_HEARTBEATS are declared there and
+     * passed down, so the numbers have one owner instead of a default here and
+     * a constant there that can drift. */
+    c->heartbeat_interval_ms = heartbeat_interval_ms;
+    c->heartbeat_timeout_ms = heartbeat_timeout_ms;
+    c->max_missed_heartbeats = max_missed_heartbeats;
     // Dynamic tombstone array
     c->tombstone_cap = 16;
     c->tombstones = xr_calloc((size_t) c->tombstone_cap, sizeof(c->tombstones[0]));
@@ -1095,16 +1095,17 @@ bool cluster_runtime_join_spawn(XrCluster *cluster, const char *host, uint16_t p
 // The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
 // both backends consume one representation-independent runtime boundary.
 static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 8 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
+    if (argc < 11 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
         !XR_IS_BOOL(args[3]) || !XR_IS_STRING(args[4]) || !XR_IS_STRING(args[5]) ||
-        !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]))
+        !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]) || !XR_IS_INT(args[8]) ||
+        !XR_IS_INT(args[9]) || !XR_IS_INT(args[10]))
         return xr_bool(false);
 
+    /* The port range is cluster.xr's rule, checked in start() before this leaf
+     * is reached. What is left here is the machine fact that the listener field
+     * is sixteen bits wide. */
     XrString *name = XR_TO_STRING(args[0]);
-    int64_t port_value = XR_TO_INT(args[1]);
-    if (port_value < 0 || port_value > UINT16_MAX)
-        return xr_bool(false);
-    uint16_t port = (uint16_t) port_value;
+    uint16_t port = (uint16_t) XR_TO_INT(args[1]);
     const char *secret = XR_TO_STRING(args[2])->data;
 
     XrClusterTlsOptions tls_opts;
@@ -1122,45 +1123,36 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         tls_ptr = &tls_opts;
     }
 
-    int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr);
+    int rc = cluster_runtime_start(X, name->data, port, secret, tls_ptr, (int) XR_TO_INT(args[8]),
+                                   (int) XR_TO_INT(args[9]), (int) XR_TO_INT(args[10]));
     return xr_bool(rc == 0);
 }
 
-// cluster.join(addr) - netpoll-driven connect and mutual handshake.
+/*
+ * cluster.join(host, port) - netpoll-driven connect and mutual handshake.
+ *
+ * The address grammar is parseAddress in stdlib/cluster/cluster.xr and is not
+ * repeated here. It used to be repeated twice: this function split on the last
+ * colon and never stripped IPv6 brackets, so "[::1]:9000" reached getaddrinfo
+ * as "[::1"; the AOT half stripped brackets but passed the port text straight
+ * through, so "db:http" resolved as a service name and connected to port 80.
+ * One grammar, one answer, and the leaf is handed a host and a port.
+ */
 static XrCFuncResult cluster_join(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || argc < 1 || !XR_IS_STRING(args[0])) {
+    if (!c || argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1])) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
 
-    XrString *addr = XR_TO_STRING(args[0]);
-    char host[256] = {0};
-
-    // Parse one canonical host:port form. Empty hosts, partial numeric ports,
-    // and port zero fail before any socket or continuation is allocated.
-    const char *colon = strrchr(addr->data, ':');
-    if (!colon || colon == addr->data || colon[1] == '\0') {
+    XrString *host = XR_TO_STRING(args[0]);
+    int64_t port_value = XR_TO_INT(args[1]);
+    if (host->length == 0 || host->length >= 256 || port_value <= 0 || port_value > UINT16_MAX) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
 
-    size_t host_len = (size_t) (colon - addr->data);
-    if (host_len >= sizeof(host)) {
-        *result = xr_bool(false);
-        return XR_CFUNC_DONE;
-    }
-    memcpy(host, addr->data, host_len);
-    host[host_len] = '\0';
-    char *end = NULL;
-    errno = 0;
-    long port_value = strtol(colon + 1, &end, 10);
-    if (errno != 0 || !end || *end != '\0' || port_value <= 0 || port_value > UINT16_MAX) {
-        *result = xr_bool(false);
-        return XR_CFUNC_DONE;
-    }
-
-    XrJoinContext *ctx = cluster_join_context_new(c, host, (uint16_t) port_value, false);
+    XrJoinContext *ctx = cluster_join_context_new(c, host->data, (uint16_t) port_value, false);
     if (!ctx) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
@@ -1319,14 +1311,14 @@ static XrValue cluster_delivery_value(XrVMRuntime *X, XrClusterDelivery delivery
     if (!type || delivery < XR_CLUSTER_DELIVERY_ACCEPTED ||
         delivery > XR_CLUSTER_DELIVERY_DISCONNECTED)
         return XR_NULL_VAL;
-    XrEnumAggregateValue *value = xr_enum_zero_payload_value(
-        xr_isolate_get_runtime_core(X), type, (uint32_t) delivery);
+    XrEnumAggregateValue *value =
+        xr_enum_zero_payload_value(xr_isolate_get_runtime_core(X), type, (uint32_t) delivery);
     return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 
 // xray binding: cluster.send(topic, move envelope)
 static XrValue cluster_send_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0]))
+    if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[2]))
         return cluster_delivery_value(X, XR_CLUSTER_DELIVERY_INVALID_TOPIC);
 
     const uint8_t *envelope = NULL;
@@ -1335,8 +1327,8 @@ static XrValue cluster_send_primitive(XrVMRuntime *X, XrValue *args, int argc) {
         return cluster_delivery_value(X, XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
 
     XrString *topic = XR_TO_STRING(args[0]);
-    XrClusterDelivery delivery =
-        cluster_transport_send(X, topic->data, envelope, (uint32_t) envelope_len);
+    XrClusterDelivery delivery = cluster_transport_send(
+        X, topic->data, envelope, (uint32_t) envelope_len, (uint8_t) XR_TO_INT(args[2]));
     return cluster_delivery_value(X, delivery);
 }
 
@@ -1345,11 +1337,10 @@ static XrValue cluster_listen_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]))
         return xr_null();
 
+    /* listen() in cluster.xr rejects a capacity outside the bound before this
+     * leaf is reached, so the bound is not restated here. */
     XrString *pattern_str = XR_TO_STRING(args[0]);
-    int64_t capacity = XR_TO_INT(args[1]);
-    if (capacity <= 0 || capacity > XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX)
-        return xr_null();
-    XrChannel *ch = cluster_transport_listen(X, pattern_str->data, (uint32_t) capacity);
+    XrChannel *ch = cluster_transport_listen(X, pattern_str->data, (uint32_t) XR_TO_INT(args[1]));
     if (!ch)
         return xr_null();
     return xr_value_from_channel(ch);
@@ -1366,8 +1357,8 @@ static XrValue cluster_node_state_value(XrVMRuntime *X, int state) {
     XrEnumType *type = xr_stdlib_enum_type_get(X, "cluster", "ClusterNodeState");
     if (!type || state < XR_NODE_IDLE || state > XR_NODE_CLOSING)
         return XR_NULL_VAL;
-    XrEnumAggregateValue *value = xr_enum_zero_payload_value(
-        xr_isolate_get_runtime_core(X), type, (uint32_t) state);
+    XrEnumAggregateValue *value =
+        xr_enum_zero_payload_value(xr_isolate_get_runtime_core(X), type, (uint32_t) state);
     return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 
