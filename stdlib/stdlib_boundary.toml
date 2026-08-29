@@ -78,9 +78,13 @@ migration_modules = [
 name = "prelude"
 public = false
 layer = "L1"
+# The only module with neither an Xray source nor native entries: everything it
+# stands for is installed into the isolate by xr_prelude_install, and the module
+# exists so that an explicit `import prelude` resolves to a no-op instead of an
+# error. It is loadable for that reason alone, which nothing else can imply.
+sourceless_loadable = true
 policy = "native_primitive"
 semantic_source = "stdlib/prelude/builtin_symbols.def"
-factory_source = "stdlib/prelude/prelude.c"
 public_native = []
 private_native_sources = ["stdlib/prelude/*.c"]
 private_native_reason = "Bootstrap types, operators, and implicit prelude installation"
@@ -92,7 +96,6 @@ public = true
 layer = "L1"
 policy = "xray_semantic"
 semantic_source = "stdlib/time/time.xr"
-factory_source = "stdlib/time/time.c"
 public_native = ["sleep"]
 private_native_sources = ["stdlib/time/*.c"]
 private_native_reason = "Host clock reads and the yieldable timer suspension consumed by time.xr"
@@ -104,7 +107,6 @@ public = true
 layer = "L1"
 policy = "native_primitive"
 semantic_source = "stdlib/defs/core.def"
-factory_source = "stdlib/math/math.c"
 public_native = ["E", "EPSILON", "INF", "LN10", "LN2", "LOG10E", "LOG2E", "MAX_F64", "MAX_I64", "MIN_I64", "NAN", "PI", "SQRT2", "TAU", "abs", "acos", "asin", "atan", "atan2", "cbrt", "ceil", "clamp", "cos", "cosh", "degToRad", "exp", "expm1", "floor", "fmod", "hypot", "isFinite", "isNaN", "lerp", "log", "log10", "log1p", "log2", "max", "min", "pow", "radToDeg", "random", "randomInt", "round", "sign", "sin", "sinh", "sqrt", "tan", "tanh", "trunc"]
 perf_suite = "stdlib/math"
 
@@ -114,7 +116,6 @@ public = true
 layer = "L1"
 policy = "xray_semantic"
 semantic_source = "stdlib/simd/simd.xr"
-factory_source = "stdlib/simd/simd.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -126,7 +127,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/path/path.xr"
-factory_source = "stdlib/path/path.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -155,8 +155,6 @@ public = true
 layer = "L3"
 policy = "xray_semantic"
 semantic_source = "stdlib/regex/regex.xr"
-factory_source = "stdlib/regex/xregex_binding.c"
-factory_symbol = "regex"
 public_native = ["RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text", "find", "findAll", "fullFind"]
 private_native_sources = ["stdlib/regex/*.c"]
 private_native_reason = "Mature regex automata implementation with bounded native data structures"
@@ -168,7 +166,10 @@ public = true
 layer = "L1"
 policy = "xray_semantic"
 semantic_source = "stdlib/mem/mem.xr"
-factory_source = "stdlib/mem/mem.c"
+# Buffer is the one native class registered when its owning module loads rather
+# than up front by the prelude, so the loader has to be told to run its
+# generated registrar.
+load_time_classes = ["Buffer"]
 # Partial migration. The retained rows are the ones whose meaning the compiler
 # owns rather than the source: Buffer plus its methods occupy a runtime core
 # class slot and have no internal spelling in .def metadata, the layout/pointer/
@@ -187,7 +188,6 @@ public = true
 layer = "L1"
 policy = "xray_semantic"
 semantic_source = "stdlib/codegen/codegen.xr"
-factory_source = "stdlib/codegen/codegen.c"
 public_native = []
 def_migration_complete = true
 perf_suite = "stdlib/codegen"
@@ -198,7 +198,6 @@ public = true
 layer = "L0"
 policy = "xray_semantic"
 semantic_source = "stdlib/runtime/runtime.xr"
-factory_source = "stdlib/runtime/runtime.c"
 public_native = []
 private_native_sources = ["stdlib/runtime/*.c"]
 private_native_reason = "Private reclamation-domain and system-heap counter reads consumed by runtime.xr"
@@ -210,9 +209,18 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/sync/sync.xr"
-factory_source = "stdlib/sync/sync.c"
 public_native = ["CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"]
 manual_public_native = ["CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"]
+# The scheduler owns these classes; the module publishes the already-registered
+# VM builtin type under its own name. Declared here so the generic loader binds
+# them from a manifest row instead of a hand-written factory.
+native_type_exports = [
+  { name = "CountdownLatch", builtin_type = "XR_TCOUNTDOWNLATCH" },
+  { name = "EventCount", builtin_type = "XR_TEVENTCOUNT" },
+  { name = "ResultGroup", builtin_type = "XR_TRESULTGROUP" },
+  { name = "Semaphore", builtin_type = "XR_TSEMAPHORE" },
+  { name = "WorkQueue", builtin_type = "XR_TWORKQUEUE" },
+]
 private_native_sources = ["stdlib/sync/sync.c"]
 private_native_reason = "Typed scheduler-backed synchronization primitive classes consumed by Xray composition"
 def_migration_complete = true
@@ -224,7 +232,6 @@ public = true
 layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/parallel/parallel.xr"
-factory_source = "stdlib/parallel/parallel.c"
 public_native = []
 def_migration_complete = true
 perf_suite = "stdlib/parallel"
@@ -235,7 +242,6 @@ public = true
 layer = "L2"
 policy = "xray_semantic"
 semantic_source = "stdlib/sys/sys.xr"
-factory_source = "stdlib/sys/sys.c"
 public_native = ["OsBarrier", "OsBarrier.wait", "OsCondvar", "OsCondvar.broadcast", "OsCondvar.signal", "OsCondvar.wait", "OsCondvar.waitFor", "OsMutex", "OsMutex.lock", "OsMutex.tryLock", "OsMutex.unlock", "OsOnce", "OsOnce.call", "OsRwLock", "OsRwLock.rdlock", "OsRwLock.rdunlock", "OsRwLock.wrlock", "OsRwLock.wrunlock", "cpuCount", "pinToCpu", "sleepMs", "threadYield"]
 private_native_sources = ["stdlib/sys/sys.c"]
 private_native_reason = "OS thread, process, pipe, signal, and dynamic-loader thin boundary"
@@ -247,7 +253,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/url/url.xr"
-factory_source = "stdlib/url/url.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -259,7 +264,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/datetime/datetime.xr"
-factory_source = "stdlib/datetime/datetime.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -271,7 +275,6 @@ public = true
 layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/log/log.xr"
-factory_source = "stdlib/log/log.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -283,7 +286,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/encoding/encoding.xr"
-factory_source = "stdlib/encoding/encoding.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -295,7 +297,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/text/text.xr"
-factory_source = "stdlib/text/text.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -307,8 +308,6 @@ public = false
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/_probe/_probe.xr"
-factory_source = "stdlib/_probe/_probe.c"
-factory_symbol = "probe"
 public_native = []
 def_migration_complete = true
 perf_suite = "stdlib/_probe"
@@ -319,7 +318,6 @@ public = true
 layer = "L2"
 policy = "xray_semantic"
 semantic_source = "stdlib/io/io.xr"
-factory_source = "stdlib/io/io.c"
 public_native = []
 private_native_sources = ["stdlib/io/*.c"]
 private_native_reason = "Private file-descriptor and filesystem syscall primitives consumed by io.xr"
@@ -342,8 +340,25 @@ public = false
 layer = "L0"
 policy = "native_primitive"
 semantic_source = "stdlib/test_yield/test_yield.c"
-factory_source = "stdlib/test_yield/test_yield.c"
 public_native = []
+# This module has no Xray source to derive an export set from: every entry is a
+# scheduler test stub whose point is the native binding kind it is bound with.
+# Declaring the set here is what lets the generic loader carry it too.
+native_fn_exports = [
+  { name = "simple", vm = "test_yield_simple", vm_binding = "yieldable" },
+  { name = "add", vm = "test_yield_add", vm_binding = "yieldable" },
+  { name = "sync", vm = "test_yield_sync", vm_binding = "normal" },
+  { name = "blocking_sleep", vm = "test_yield_blocking_sleep", vm_binding = "slow" },
+  { name = "multi_yield", vm = "test_yield_multi", vm_binding = "yieldable" },
+  { name = "chain", vm = "test_yield_chain", vm_binding = "yieldable" },
+  { name = "error_test", vm = "test_yield_error", vm_binding = "yieldable" },
+  { name = "cancel_test", vm = "test_yield_cancel", vm_binding = "yieldable" },
+  { name = "nested", vm = "test_yield_nested", vm_binding = "yieldable" },
+  { name = "long_task", vm = "test_yield_long_task", vm_binding = "yieldable" },
+  { name = "counter_inc", vm = "test_yield_counter_inc", vm_binding = "yieldable" },
+  { name = "counter_get", vm = "test_yield_counter_get", vm_binding = "normal" },
+  { name = "counter_reset", vm = "test_yield_counter_reset", vm_binding = "normal" },
+]
 private_native_sources = ["stdlib/test_yield/*.c"]
 private_native_reason = "Internal scheduler/yieldable test module"
 perf_suite = "stdlib/test_yield"
@@ -354,7 +369,6 @@ public = true
 layer = "L2"
 policy = "xray_semantic"
 semantic_source = "stdlib/net/net.xr"
-factory_source = "stdlib/net/net.c"
 public_native = ["NetError"]
 private_native_sources = ["stdlib/net/*.c"]
 private_native_reason = "Private socket, TLS, deadline and netpoll primitives consumed by net.xr"
@@ -366,9 +380,7 @@ public = true
 layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/http/http.xr"
-factory_source = "stdlib/http/http.c"
 public_native = []
-private_native_sources = ["stdlib/http/http.c"]
 private_native_reason = "Pure-Xray module factory only; HTTP semantics are source-owned"
 perf_suite = "stdlib/http"
 
@@ -378,7 +390,6 @@ public = true
 layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/ws/ws.xr"
-factory_source = "stdlib/ws/ws.c"
 public_native = []
 perf_suite = "stdlib/ws"
 
@@ -388,8 +399,6 @@ public = true
 layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/http2/http2.xr"
-factory_source = "stdlib/http2/http2_binding.c"
-factory_symbol = "http2"
 public_native = []
 private_native_sources = ["stdlib/http2/*.c"]
 private_native_reason = "HTTP/2 framing, HPACK and the TLS/ALPN connection pool are wire-protocol machinery consumed by http2.xr"
@@ -401,7 +410,6 @@ public = true
 layer = "L3"
 policy = "xray_semantic"
 semantic_source = "stdlib/crypto/crypto.xr"
-factory_source = "stdlib/crypto/crypto.c"
 public_native = []
 private_native_sources = ["stdlib/crypto/*.c"]
 private_native_reason = "Platform CSPRNG and constant-time comparison consumed by crypto.xr"
@@ -413,7 +421,6 @@ public = true
 layer = "L3"
 policy = "xray_semantic"
 semantic_source = "stdlib/compress/compress.xr"
-factory_source = "stdlib/compress/compress.c"
 public_native = []
 private_native_sources = ["stdlib/compress/*.c"]
 private_native_reason = "Deflate coder and its gzip/zlib container payloads, which Xray cannot build as strings, consumed by compress.xr"
@@ -425,7 +432,6 @@ public = true
 layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/cluster/cluster.xr"
-factory_source = "stdlib/cluster/cluster.c"
 public_native = ["ClusterDelivery", "ClusterInfo", "ClusterNodeInfo", "ClusterNodeState", "ClusterTlsStatus"]
 private_native_sources = ["stdlib/cluster/*.c"]
 private_native_reason = "Distributed transport, discovery, channel and node lifecycle data plane consumed by cluster.xr"
@@ -448,7 +454,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/toml/toml.xr"
-factory_source = "stdlib/toml/toml.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -460,7 +465,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/yaml/yaml.xr"
-factory_source = "stdlib/yaml/yaml.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
@@ -472,7 +476,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/xml/xml.xr"
-factory_source = "stdlib/xml/xml.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true

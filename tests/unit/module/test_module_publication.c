@@ -102,28 +102,28 @@ TEST(failed_module_never_publishes_partial_exports) {
     xray_vm_delete(isolate);
 }
 
-TEST(embedded_private_leaf_binding_is_exact_and_one_shot) {
+TEST(declared_native_entry_binding_is_exact_and_one_shot) {
     XrVMConfig config = {0};
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_NOT_NULL(isolate);
 
     XrModule *foreign = xr_module_create_native(isolate, "foreign");
     ASSERT_NOT_NULL(foreign);
-    ASSERT_FALSE(xr_stdlib_embedded_private_leaves_install(isolate, foreign, "os"));
+    ASSERT_FALSE(xr_stdlib_module_install_native_entries(isolate, foreign, "os"));
 
     XrModule *source_only = xr_module_create_native(isolate, "base64");
     ASSERT_NOT_NULL(source_only);
-    ASSERT_TRUE(xr_stdlib_embedded_private_leaves_install(isolate, source_only, "base64"));
+    ASSERT_TRUE(xr_stdlib_module_install_native_entries(isolate, source_only, "base64"));
     ASSERT_TRUE(xr_module_begin_initialization(source_only));
     ASSERT_TRUE(xr_module_publish(source_only));
-    ASSERT_FALSE(xr_stdlib_embedded_private_leaves_install(isolate, source_only, "base64"));
+    ASSERT_FALSE(xr_stdlib_module_install_native_entries(isolate, source_only, "base64"));
 
 #if defined(XR_HAS_FILESYSTEM)
     XrModule *os_module = xr_module_create_native(isolate, "os");
     ASSERT_NOT_NULL(os_module);
-    ASSERT_TRUE(xr_stdlib_embedded_private_leaves_install(isolate, os_module, "os"));
+    ASSERT_TRUE(xr_stdlib_module_install_native_entries(isolate, os_module, "os"));
     ASSERT_TRUE(os_module->export_count > 0);
-    ASSERT_FALSE(xr_stdlib_embedded_private_leaves_install(isolate, os_module, "os"));
+    ASSERT_FALSE(xr_stdlib_module_install_native_entries(isolate, os_module, "os"));
     xr_module_free(os_module);
 #endif
 
@@ -175,6 +175,6 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Module publication");
 RUN_TEST(module_exports_are_invisible_until_atomic_publication);
 RUN_TEST(failed_module_never_publishes_partial_exports);
-RUN_TEST(embedded_private_leaf_binding_is_exact_and_one_shot);
+RUN_TEST(declared_native_entry_binding_is_exact_and_one_shot);
 RUN_TEST(stdlib_resolver_follows_build_authority);
 TEST_MAIN_END()

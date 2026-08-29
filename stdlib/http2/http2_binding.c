@@ -43,6 +43,8 @@ typedef struct XrHttp2Context {
     XrH2Pool *client_pool;
 } XrHttp2Context;
 
+static void http2_context_destroy(void *handle);
+
 static XrHttp2Context *http2_get_context(XrVMRuntime *X) {
     XrModuleRegistry *registry = X ? (XrModuleRegistry *) X->module_registry : NULL;
     XrModule *module = registry && registry->loaded_modules
@@ -50,8 +52,12 @@ static XrHttp2Context *http2_get_context(XrVMRuntime *X) {
                            : NULL;
     if (!module)
         return NULL;
-    if (!module->native_handle)
+    if (!module->native_handle) {
         module->native_handle = xr_calloc(1, sizeof(XrHttp2Context));
+        /* Install the destructor beside the allocation it owns, so the two
+         * cannot drift apart the way a separate load-time step could. */
+        module->native_handle_destroy = http2_context_destroy;
+    }
     return (XrHttp2Context *) module->native_handle;
 }
 
@@ -293,12 +299,3 @@ XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc) {
 #define XR_STDLIB_VM_BIND_MODULE_HTTP2 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_HTTP2
-
-XR_FUNC XrModule *xr_native_module_create_http2(XrVMRuntime *isolate) {
-    XrModule *module = xr_module_create_native(isolate, "http2");
-    if (!module)
-        return NULL;
-    module->native_handle_destroy = http2_context_destroy;
-    xr_stdlib_vm_bind_http2_generated(isolate, module);
-    return module;
-}

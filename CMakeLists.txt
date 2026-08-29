@@ -1264,6 +1264,23 @@ if(NOT XR_STDLIB_FULL)
             "stdlib/ws/[^/]+\\.xr$")
     endif()
 endif()
+# Loadable modules with no .xr source of their own. They belong in the
+# descriptor table for the same reason the sourced ones do, but they cannot be
+# discovered from the source list, and naming a binder that this build did not
+# compile would not link -- so the build states them where it states the rest of
+# its module selection.
+#   prelude - installed into the isolate itself; the module is an import no-op
+#   math    - still a whole-module native policy, so it has native entries only
+#   test_yield - scheduler test stubs, present only in test-module builds
+set(XRAY_STDLIB_SOURCELESS_MODULES prelude math)
+if(XR_BUILD_TEST_MODULES)
+    list(APPEND XRAY_STDLIB_SOURCELESS_MODULES test_yield)
+endif()
+set(XRAY_STDLIB_SOURCELESS_MODULE_ARGS "")
+foreach(XRAY_SOURCELESS_MODULE ${XRAY_STDLIB_SOURCELESS_MODULES})
+    list(APPEND XRAY_STDLIB_SOURCELESS_MODULE_ARGS
+        "--native-only-module" "${XRAY_SOURCELESS_MODULE}")
+endforeach()
 set(XRAY_STDLIB_EMBEDDED_SOURCE_INC
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_sources.inc")
 set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR
@@ -1300,6 +1317,7 @@ add_custom_command(
             --root ${CMAKE_CURRENT_SOURCE_DIR}
             --source-output ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
             --bytecode-output ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC}
+            ${XRAY_STDLIB_SOURCELESS_MODULE_ARGS}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
         ${XRAY_STDLIB_EMBED_GENERATOR}

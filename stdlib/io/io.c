@@ -1162,26 +1162,3 @@ static XrValue io_make_temp_file(XrVMRuntime *X, XrValue *args, int argc) {
 #define XR_STDLIB_VM_BIND_MODULE_IO 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_IO
-
-XR_FUNC XrModule *xr_native_module_create_io(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_io: NULL isolate");
-
-    XrModule *mod = xr_module_create_native(isolate, "io");
-    if (!mod)
-        return NULL;
-
-    // The stat() result class is built lazily per-isolate from
-    // io_get_stat_class() on first call, so no explicit pre-init is
-    // needed at module-load time.
-
-    if (!xr_stdlib_vm_bind_io_generated(isolate, mod)) {
-        xr_module_free(mod);
-        return NULL;
-    }
-
-    // The Path-returning public surface (cwd/tempDir/tempFile/readlink/realpath/
-    // readDir/readDirRecursive) lives in stdlib/io/io.xr, which wraps the raw
-    // string primitives above into native `path.Path` instances.
-    mod->requires_script = true;
-    return mod;
-}

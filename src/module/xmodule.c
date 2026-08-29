@@ -16,7 +16,6 @@
 #include "xray_vm.h"
 #include "../stdlib/xstdlib_vm_fastpath.h"
 #include "xmodule_graph.h"
-#include "xmodule_factories.h"
 #include "xmodule_resolver.h"
 #include "xproject.h"
 #include "../base/xchecks.h"
@@ -63,7 +62,6 @@ void xr_module_set_compiler_hooks(XrVMRuntime *isolate, XrCompilerSession *compi
     registry->fn_compile_src = compile_src_fn;
     registry->fn_ast_free = ast_free_fn;
 }
-
 /* ========== Helper Functions ========== */
 
 /*
@@ -474,7 +472,6 @@ static XrModuleRegistry *create_registry(void) {
         return NULL;
 
     memset(registry, 0, sizeof(*registry));
-    registry->native_factories = xr_hashmap_new();
     registry->loaded_modules = xr_hashmap_new();
     registry->stdlib_path = resolve_stdlib_root();
 
@@ -488,9 +485,6 @@ static void destroy_registry(XrModuleRegistry *registry) {
     if (!registry)
         return;
 
-    if (registry->native_factories) {
-        xr_hashmap_free(registry->native_factories);
-    }
     if (registry->loaded_modules) {
         // Free module-owned payloads before destroying the non-owning hashmap.
         for (uint32_t i = 0; i < registry->loaded_modules->capacity; i++) {
@@ -537,9 +531,6 @@ void xr_module_system_init(XrVMRuntime *isolate) {
         xr_log_warning("module", "failed to create module registry");
         return;
     }
-
-    // Register standard library modules
-    xr_module_register_stdlib(isolate);
 }
 
 /*
@@ -559,8 +550,6 @@ void xr_module_system_init_with_script(XrVMRuntime *isolate, const char *script_
             xr_log_warning("module", "failed to create module registry");
             return;
         }
-        // Register standard library modules (only on first creation)
-        xr_module_register_stdlib(isolate);
     }
 
     // Try to load project config (for package management)
@@ -582,41 +571,17 @@ void xr_module_system_free(XrVMRuntime *isolate) {
     xr_isolate_set_module_registry(isolate, NULL);
 }
 
-/* ========== Module Registration ========== */
-
-/*
-** Register a native module factory
-*/
-void xr_module_register_native_factory(XrVMRuntime *isolate, const char *name,
-                                       XrNativeModuleFactory factory) {
-    if (!isolate || !name || !factory) {
-        xr_log_warning("module", "invalid arguments to register native factory");
-        return;
-    }
-
-    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    if (!registry) {
-        xr_log_warning("module", "module registry not initialized");
-        return;
-    }
-
-    if (!xr_hashmap_set(registry->native_factories, name, (void *) factory)) {
-        xr_log_warning("module", "out of memory registering native factory '%s'", name);
-    }
-}
-
 /* ========== Path Resolution ========== */
 
 /*
- * Ensure the registry has a resolver instance.  Created lazily because
- * native_factories are populated after create_registry() returns.
+ * Ensure the registry has a resolver instance. Created lazily so the stdlib
+ * root is resolved once, on the first import that needs it.
  */
 static XrModuleResolver *ensure_resolver(XrModuleRegistry *registry) {
     if (registry->resolver)
         return registry->resolver;
 
     XrModuleResolverConfig cfg = {
-        .native_factories = registry->native_factories,
         .stdlib_path = registry->stdlib_path,
         .lockfile = NULL,
     };
@@ -1078,33 +1043,38 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
 /*
 ** Load a standard library module
 **
+** There is one load path and it is the same for every module: the generated
+** descriptor table says whether this binary has the module at all, whether it
+** owns an Xray source, and which native entries it declares. Nothing here is
+** written for a particular module.
+**
 ** Flow:
-** 1. Create a module through its legacy native factory or the generic source shell
-** 2. Bind private native leaves to the generic shell when declared
-** 3. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
-** 4. Script extension can access private C leaves and publish source-owned exports
+** 1. Look the module up in the generated descriptor table
+** 2. Create the module shell and install its declared native entries
+** 3. Find and execute the canonical script (stdlib/<name>/<name>.xr)
+** 4. The script can call private C leaves and publish source-owned exports
 */
 static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_name) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry)
         return NULL;
 
-    XrNativeModuleFactory factory =
-        (XrNativeModuleFactory) xr_hashmap_get(registry->native_factories, module_name);
-    bool has_embedded_source = xr_get_embedded_stdlib(module_name) != NULL;
-    if (!factory && !has_embedded_source)
+    const XrStdlibModuleDescriptor *descriptor = xr_stdlib_module_descriptor(module_name);
+    if (!descriptor)
         return NULL;
 
-    XrModule *module = factory ? factory(isolate) : xr_module_create_native(isolate, module_name);
-    if (module && !factory)
-        module->requires_script = true;
-
+    XrModule *module = xr_module_create_native(isolate, module_name);
     if (!module) {
         xr_log_warning("module", "failed to create standard library module '%s'", module_name);
         return NULL;
     }
-    if (!factory && !xr_stdlib_embedded_private_leaves_install(isolate, module, module_name)) {
-        xr_log_warning("module", "failed to bind private native leaves for '%s'", module_name);
+    /* A module that has a source gets its public surface from it, so a missing
+     * script layer has to fail the load rather than publish an empty table. */
+    module->requires_script = descriptor->source != NULL;
+
+    if (!xr_stdlib_module_install_native_entries(isolate, module, module_name)) {
+        xr_log_warning("module", "failed to install declared native entries for '%s'",
+                       module_name);
         xr_module_free(module);
         return NULL;
     }
@@ -1454,6 +1424,24 @@ void xr_module_add_current_export(XrVMRuntime *isolate, const char *name, XrValu
 }
 
 /*
+** Export an already-registered VM builtin type class under a module name.
+**
+** Used by generated binders for modules whose classes the runtime owns: the
+** scheduler registers the class, the module only publishes it. Exporting
+** nothing when the class is absent is deliberate -- the binder's export count
+** check then fails the load rather than publishing a half-populated module.
+*/
+void xr_module_export_native_type_class(XrVMRuntime *isolate, XrModule *module, const char *name,
+                                        uint8_t type_id) {
+    if (!isolate || !module || !name)
+        return;
+    XrClass *cls = xr_isolate_get_native_type_class(isolate, type_id);
+    if (!cls)
+        return;
+    xr_module_add_export(isolate, module, name, xr_value_from_class(cls));
+}
+
+/*
 ** Check if export is a constant (string-based)
 */
 bool xr_module_is_export_const(XrVMRuntime *isolate, XrModule *module, const char *name) {
@@ -1466,138 +1454,3 @@ bool xr_module_is_export_const(XrVMRuntime *isolate, XrModule *module, const cha
         return false;
     return xr_module_is_const_sym(module, sym);
 }
-
-/* ========== Module System Initialization (Standard Library Registration) ========== */
-
-typedef struct {
-    const char *name;
-    XrNativeModuleFactory factory;
-} StdlibEntry;
-
-static const StdlibEntry stdlib_core[] = {
-    /* prelude is auto-loaded during isolate init by xisolate_full.c so users
-     * never need `import prelude`. Listed here so an explicit import is a
-     * harmless no-op that resolves through the same registry. */
-    {"prelude", xr_native_module_create_prelude},
-    {"time", xr_native_module_create_time},
-    {"math", xr_native_module_create_math},
-    {"path", xr_native_module_create_path},
-    {"regex", xr_native_module_create_regex},
-    {"mem", xr_native_module_create_mem},
-    {"runtime", xr_native_module_create_runtime},
-    {"sync", xr_native_module_create_sync},
-    {"parallel", xr_native_module_create_parallel},
-    {"simd", xr_native_module_create_simd},
-    {"codegen", xr_native_module_create_codegen},
-    {"sys", xr_native_module_create_sys},
-    {"url", xr_native_module_create_url},
-    {"datetime", xr_native_module_create_datetime},
-    {"log", xr_native_module_create_log},
-    {"encoding", xr_native_module_create_encoding},
-    {"text", xr_native_module_create_text},
-    /* Pure-Xray stdlib capability probe (task 148 phase 0 item 5): pins the
-     * export shapes migrated modules rely on. Tiny and permanent. */
-    {"_probe", xr_native_module_create_probe},
-};
-
-#if defined(XR_HAS_FILESYSTEM)
-static const StdlibEntry stdlib_filesystem[] = {
-    {"io", xr_native_module_create_io},
-};
-#endif
-
-#if defined(XR_HAS_TEST_MODULES)
-static const StdlibEntry stdlib_test_modules[] = {
-    {"test_yield", xr_native_module_create_test_yield},
-};
-#endif
-
-#if defined(XR_HAS_NETWORK)
-static const StdlibEntry stdlib_network[] = {
-    {"net", xr_native_module_create_net},
-    {"http", xr_native_module_create_http},
-};
-#endif
-
-#if defined(XR_HAS_WS)
-static const StdlibEntry stdlib_ws[] = {
-    {"ws", xr_native_module_create_ws},
-};
-#endif
-
-#if defined(XR_HAS_HTTP2)
-static const StdlibEntry stdlib_http2[] = {
-    {"http2", xr_native_module_create_http2},
-};
-#endif
-
-#if defined(XR_HAS_CRYPTO)
-static const StdlibEntry stdlib_crypto[] = {
-    {"crypto", xr_native_module_create_crypto},
-};
-#endif
-
-#if defined(XR_HAS_COMPRESS)
-static const StdlibEntry stdlib_compress[] = {
-    {"compress", xr_native_module_create_compress},
-};
-#endif
-
-#if defined(XR_HAS_CLUSTER)
-static const StdlibEntry stdlib_cluster[] = {
-    {"cluster", xr_native_module_create_cluster},
-};
-#endif
-
-#if defined(XR_HAS_DATA_FORMATS)
-static const StdlibEntry stdlib_data_formats[] = {
-    {"toml", xr_native_module_create_toml},
-    {"yaml", xr_native_module_create_yaml},
-    {"xml", xr_native_module_create_xml},
-};
-#endif
-
-#define REGISTER_TABLE(table)                                                                      \
-    for (int i = 0; i < (int) (sizeof(table) / sizeof(table[0])); i++)                             \
-    xr_module_register_native_factory(isolate, table[i].name, table[i].factory)
-
-/*
-** Register all standard library modules
-** Called after VM initialization
-*/
-void xr_module_register_stdlib(XrVMRuntime *isolate) {
-    if (!isolate)
-        return;
-
-    REGISTER_TABLE(stdlib_core);
-
-#if defined(XR_HAS_FILESYSTEM)
-    REGISTER_TABLE(stdlib_filesystem);
-#endif
-#if defined(XR_HAS_TEST_MODULES)
-    REGISTER_TABLE(stdlib_test_modules);
-#endif
-#if defined(XR_HAS_NETWORK)
-    REGISTER_TABLE(stdlib_network);
-#endif
-#if defined(XR_HAS_WS)
-    REGISTER_TABLE(stdlib_ws);
-#endif
-#if defined(XR_HAS_HTTP2)
-    REGISTER_TABLE(stdlib_http2);
-#endif
-#if defined(XR_HAS_CRYPTO)
-    REGISTER_TABLE(stdlib_crypto);
-#endif
-#if defined(XR_HAS_COMPRESS)
-    REGISTER_TABLE(stdlib_compress);
-#endif
-#if defined(XR_HAS_CLUSTER)
-    REGISTER_TABLE(stdlib_cluster);
-#endif
-#if defined(XR_HAS_DATA_FORMATS)
-    REGISTER_TABLE(stdlib_data_formats);
-#endif
-}
-
-#undef REGISTER_TABLE

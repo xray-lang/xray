@@ -12,7 +12,7 @@
  *   (Array, Map, Json, BigInt, ...) the parser should recognise without
  *   the user writing `import prelude`. The lexer treats every such name
  *   as a plain identifier; the parser's type-context branch consults the
- *   per-isolate prelude symbol table (populated by xr_native_module_create_prelude
+ *   per-isolate prelude symbol table (populated by xr_prelude_install
  *   during isolate init) to decide whether a name maps to a generic
  *   container, a singleton type, or a simple
  *   named-instance type.
@@ -68,15 +68,15 @@ typedef struct XrPreludeSymbols {
 } XrPreludeSymbols;
 
 /*
- * Module loader. Idempotent: calling it twice on the same isolate is
- * harmless because the registry is process-wide constant and only the
- * isolate->prelude_symbols pointer is rewired (to the same value).
+ * Install the prelude into an isolate. Idempotent: calling it twice on the
+ * same isolate is harmless because the registry is process-wide constant and
+ * only the isolate->prelude_symbols pointer is rewired (to the same value).
  *
- * Registered in src/module/xmodule.c::stdlib_core[] so that an explicit
- * `import prelude` works as a no-op alias; auto-invoked from
- * xisolate_full.c::isolate_init_full() so users do not need it.
+ * Called from xisolate_full.c::isolate_init_full() before the module system
+ * starts, because what it installs is isolate state that every module load
+ * already assumes is in place.
  */
-XR_FUNC struct XrModule *xr_native_module_create_prelude(XrVMRuntime *isolate);
+XR_FUNC void xr_prelude_install(XrVMRuntime *isolate);
 
 /*
  * Accessor used by the frontend (parser type-context branch) to retrieve
@@ -98,7 +98,7 @@ XR_FUNC const XrPreludeTypeEntry *xr_prelude_lookup_type(const XrPreludeSymbols 
 /*
  * Eagerly register every native XrClass that prelude entries refer to:
  * Regex (regex), NetConn / NetListener (net). Called from inside
- * xr_native_module_create_prelude during isolate init, so user code can use remaining
+ * xr_prelude_install during isolate init, so user code can use remaining
  * runtime-owned prelude native types without importing each owner module.
  *
  * The cost of this design is that the four stdlib modules above are

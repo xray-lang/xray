@@ -1541,14 +1541,3 @@ static XrValue cluster_monitor_coro_fn(XrVMRuntime *X, XrValue *args, int argc) 
 #define XR_STDLIB_VM_BIND_MODULE_CLUSTER 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_CLUSTER
-
-/* ========== Module Registration ========== */
-
-XR_FUNC XrModule *xr_native_module_create_cluster(XrVMRuntime *isolate) {
-    XrModule *mod = xr_module_create_native(isolate, "cluster");
-
-    xr_stdlib_vm_bind_cluster_generated(isolate, mod);
-    mod->requires_script = true;
-
-    return mod;
-}

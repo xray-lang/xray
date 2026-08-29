@@ -671,16 +671,3 @@ void xr_regex_register_class(XrVMRuntime *isolate) {
 #define XR_STDLIB_VM_BIND_MODULE_REGEX 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_REGEX
-
-XR_FUNC XrModule *xr_native_module_create_regex(XrVMRuntime *isolate) {
-    // 1. Create native module
-    XrModule *mod = xr_module_create_native(isolate, "regex");
-    if (!mod)
-        return NULL;
-
-    xr_stdlib_vm_bind_regex_generated(isolate, mod);
-
-    // The Regex XrClass itself is registered up front by the prelude
-    // module — no need to do it again here.
-    return mod;
-}

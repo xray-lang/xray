@@ -34,6 +34,7 @@
 #include "../frontend/parser/xast.h"
 #include "../runtime/class/xtype_registry.h"
 #include "../module/xmodule.h"
+#include "../../stdlib/prelude/prelude.h"
 #include "../runtime/xstdlib_bridge.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/mem/xcycle_detector.h"
@@ -171,15 +172,16 @@ static int isolate_init_full(XrVMRuntime *isolate) {
         return -1;
     }
 
+    // Install the prelude before the module system: the symbol table, the
+    // runtime-owned native classes and the canonical builtin enums are isolate
+    // state that every module load already assumes is in place. Built-in type
+    // names (Array, Map, Json, BigInt, ...) resolve from here, so user code
+    // never writes `import prelude` -- and when it does, the module system
+    // resolves it to a no-op module through the same generic path as any other.
+    xr_prelude_install(isolate);
+
     // Module system
     xr_module_system_init(isolate);
-
-    // Auto-load the prelude module so that built-in type names (Array,
-    // Map, Json, BigInt, ...) resolve via the unified prelude symbol
-    // table without requiring the user to write `import prelude`. Going
-    // through xr_module_import here ensures the registry caches the
-    // module exactly once, so a later explicit import hits the cache.
-    (void) xr_module_import(isolate, "prelude");
 
     // Compiler hooks for import
     xr_module_set_compiler_hooks(isolate, isolate->compiler_session, xr_parse_with_source,

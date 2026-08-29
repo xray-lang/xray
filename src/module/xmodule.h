@@ -167,10 +167,6 @@ static inline bool xr_module_set_sym(XrModule *m, SymbolId sym, XrValue val) {
     return false;
 }
 
-/* ========== Native Module Factory Type ========== */
-
-typedef XrModule *(*XrNativeModuleFactory)(struct XrVMRuntime *isolate);
-
 /* ========== Module Registry ========== */
 
 struct XrModuleResolver;
@@ -188,7 +184,6 @@ typedef XrProto *(*XrModuleCompileSourceHook)(XrCompilerSession *session, const 
 typedef void (*XrModuleAstFreeHook)(AstNode *ast);
 
 typedef struct XrModuleRegistry {
-    XrHashMap *native_factories; // Module name -> XrNativeModuleFactory
     XrHashMap *loaded_modules;   // Module path -> XrModule*
 
     char *stdlib_path;  // Stdlib path (default: stdlib/)
@@ -234,19 +229,6 @@ XR_FUNC void xr_module_system_init_with_script(struct XrVMRuntime *isolate,
 XR_FUNC void xr_module_system_free(struct XrVMRuntime *isolate);
 
 /*
-** Register a native module factory
-**
-** @param isolate Isolate instance
-** @param name    Module name (e.g. "time")
-** @param factory Factory function
-**
-** Example:
-**   xr_module_register_native_factory(isolate, "time", xr_native_module_create_time);
-*/
-XR_FUNC void xr_module_register_native_factory(struct XrVMRuntime *isolate, const char *name,
-                                                XrNativeModuleFactory factory);
-
-/*
 ** Import module (called by VM instruction)
 **
 ** @param isolate     Isolate instance
@@ -275,6 +257,13 @@ XR_FUNC XrModule *xr_module_create_script(struct XrVMRuntime *isolate, const cha
                                           const char *path);
 XR_FUNC void xr_module_add_export(struct XrVMRuntime *isolate, XrModule *module, const char *name,
                                   XrValue value);
+
+/*
+** Export an already-registered VM builtin type class under a module name.
+** Generated binders call this for the modules whose classes the runtime owns.
+*/
+XR_FUNC void xr_module_export_native_type_class(struct XrVMRuntime *isolate, XrModule *module,
+                                                const char *name, uint8_t type_id);
 XR_FUNC void xr_module_add_export_sym(struct XrVMRuntime *isolate, XrModule *module, SymbolId sym,
                                       XrValue value, bool is_const);
 XR_FUNC bool xr_module_set_initializing_export(struct XrVMRuntime *isolate, XrModule *module,
@@ -304,14 +293,12 @@ XR_FUNC struct XrModuleResolver *xr_module_registry_get_resolver(XrModuleRegistr
 ** @return            Full path or NULL
 **
 ** Resolution rules:
-** - "time"           → "stdlib/time/time.c" (native)
-** - "datetime"       → "stdlib/datetime/datetime.c" (native)
+** - "time"           → the generated stdlib module descriptor
 ** - "./mylib.xr"     → Relative path
 ** - "/path/to/lib.xr" → Absolute path
 */
 XR_FUNC char *xr_module_resolve_path(struct XrVMRuntime *isolate, const char *module_name);
 XR_FUNC ModuleType xr_module_detect_type(const char *path);
-XR_FUNC void xr_module_register_stdlib(struct XrVMRuntime *isolate);
 
 /* ========== Compiler Hook Registration ========== */
 

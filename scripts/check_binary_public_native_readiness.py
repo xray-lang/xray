@@ -103,11 +103,18 @@ def check_boundary(
             if entry.get("perf_suite") != f"stdlib/{module}":
                 failures.append("perf_suite must use the stdlib namespace")
             semantic_source = root / str(entry.get("semantic_source", ""))
-            factory = root / str(entry.get("factory_source", ""))
             if not semantic_source.is_file():
                 failures.append("semantic_source is missing")
-            if not factory.is_file():
-                failures.append("factory source is missing")
+            # These modules keep a native implementation. There is no factory to
+            # point at any more, so what has to exist is the private C the
+            # module's declared native entries are bound to.
+            private_sources = [
+                path
+                for pattern in entry.get("private_native_sources", ())
+                for path in root.glob(str(pattern))
+            ]
+            if not private_sources:
+                failures.append("private native sources are missing")
         results.append(result("BUILTIN_STDLIB_MODULE", module, failures))
 
     for module, expected in L2_PUBLIC_NATIVE.items():

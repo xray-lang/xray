@@ -62,15 +62,6 @@ XR_FUNC void xr_module_id_cleanup(XrModuleId *id);
 
 typedef struct {
     /*
-     * Hashmap of stdlib module names registered as native factories.
-     * Keys are bare module names ("time", "io", …).  Values are
-     * XrNativeModuleFactory function pointers but the resolver only
-     * checks key existence; it never calls the factories.
-     * Borrowed pointer; caller must keep alive for resolver lifetime.
-     */
-    XrHashMap *native_factories;
-
-    /*
      * Optional stdlib source directory (e.g. "stdlib/").
      * When non-NULL the resolver probes for a development source path.
      * Embedded canonical sources remain valid when this is NULL.

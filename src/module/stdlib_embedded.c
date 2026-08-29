@@ -20,15 +20,6 @@
 #include <stdint.h>
 #include <string.h>
 
-typedef bool (*XrEmbeddedStdlibPrivateLeafBinder)(struct XrVMRuntime *isolate,
-                                                  struct XrModule *module);
-
-typedef struct {
-    const char *name;
-    const char *source;
-    XrEmbeddedStdlibPrivateLeafBinder bind_private_leaves;
-} XrEmbeddedStdlibSource;
-
 typedef struct {
     const char *name;
     const uint8_t *bytecode;
@@ -38,23 +29,23 @@ typedef struct {
 #include <stdlib_embedded_sources.inc>
 #include <stdlib_embedded_bytecodes.inc>
 
-static bool find_embedded_source(const char *module_name,
-                                 const XrEmbeddedStdlibSource **out_entry) {
-    if (out_entry)
-        *out_entry = NULL;
-    if (!module_name || !out_entry)
-        return false;
-    for (size_t i = 0; i < xr_embedded_stdlib_source_count; i++) {
-        const XrEmbeddedStdlibSource *entry = &xr_embedded_stdlib_sources[i];
-        if (!entry->name || !entry->source)
-            return false;
+XR_FUNC const XrStdlibModuleDescriptor *xr_stdlib_module_descriptor(const char *module_name) {
+    if (!module_name)
+        return NULL;
+    const XrStdlibModuleDescriptor *found = NULL;
+    for (size_t i = 0; i < xr_stdlib_module_descriptor_count; i++) {
+        const XrStdlibModuleDescriptor *entry = &xr_stdlib_module_descriptors[i];
+        if (!entry->name)
+            return NULL;
         if (strcmp(entry->name, module_name) != 0)
             continue;
-        if (*out_entry)
-            return false;
-        *out_entry = entry;
+        /* A duplicate name would make "which module is this" ambiguous, so
+         * refuse the lookup rather than pick one of the two. */
+        if (found)
+            return NULL;
+        found = entry;
     }
-    return true;
+    return found;
 }
 
 XR_FUNC const uint8_t *xr_get_embedded_stdlib_bytecode(const char *module_name, size_t *out_size) {
@@ -74,23 +65,21 @@ XR_FUNC const uint8_t *xr_get_embedded_stdlib_bytecode(const char *module_name, 
 }
 
 XR_FUNC const char *xr_get_embedded_stdlib(const char *module_name) {
-    const XrEmbeddedStdlibSource *entry = NULL;
-    if (!find_embedded_source(module_name, &entry) || !entry)
-        return NULL;
-    return entry->source;
+    const XrStdlibModuleDescriptor *entry = xr_stdlib_module_descriptor(module_name);
+    return entry ? entry->source : NULL;
 }
 
-XR_FUNC bool xr_stdlib_embedded_private_leaves_install(XrVMRuntime *isolate, XrModule *module,
-                                                       const char *requested_module_name) {
+XR_FUNC bool xr_stdlib_module_install_native_entries(XrVMRuntime *isolate, XrModule *module,
+                                                     const char *requested_module_name) {
     if (!isolate || !module || !module->name || !requested_module_name ||
         strcmp(module->name, requested_module_name) != 0)
         return false;
-    const XrEmbeddedStdlibSource *entry = NULL;
-    if (!find_embedded_source(requested_module_name, &entry) || !entry)
+    const XrStdlibModuleDescriptor *entry = xr_stdlib_module_descriptor(requested_module_name);
+    if (!entry)
         return false;
     if (xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
         return false;
-    if (!entry->bind_private_leaves)
+    if (!entry->bind_native_entries)
         return true;
-    return entry->bind_private_leaves(isolate, module);
+    return entry->bind_native_entries(isolate, module);
 }

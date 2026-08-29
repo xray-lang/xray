@@ -24,7 +24,6 @@
  *   host-process state.
  */
 
-#include "runtime.h"
 #include "../common.h"
 #include "../stdlib_cache.h"
 #include "../../src/runtime/xisolate_internal.h"
@@ -131,15 +130,3 @@ static XrValue runtime_stats(XrVMRuntime *isolate, XrValue *args, int argc) {
 #define XR_STDLIB_VM_BIND_MODULE_RUNTIME 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_RUNTIME
-
-XR_FUNC XrModule *xr_native_module_create_runtime(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_runtime: NULL isolate");
-
-    XrModule *module = xr_module_create_native(isolate, "runtime");
-    if (!module)
-        return NULL;
-
-    xr_stdlib_vm_bind_runtime_generated(isolate, module);
-
-    return module;
-}

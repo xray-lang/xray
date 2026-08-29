@@ -276,10 +276,9 @@ TEST(durable_identity_parser_rejects_raw_and_ambiguous_text) {
 }
 
 TEST(resolver_publishes_typed_stdlib_identity) {
-    XrHashMap *factories = xr_hashmap_new();
-    ASSERT_NOT_NULL(factories);
-    ASSERT_TRUE(xr_hashmap_set(factories, "time", (void *) 1));
-    XrModuleResolverConfig config = {.native_factories = factories};
+    /* `time` is in the generated descriptor table, which is the resolver's
+     * only source of stdlib module names. */
+    XrModuleResolverConfig config = {0};
     XrModuleResolver *resolver = xr_module_resolver_new(&config);
     ASSERT_NOT_NULL(resolver);
     XrModuleId module_id;
@@ -294,7 +293,6 @@ TEST(resolver_publishes_typed_stdlib_identity) {
     ASSERT_TRUE(xr_module_identity_valid(module_id.canonical, NULL));
     xr_module_id_cleanup(&module_id);
     xr_module_resolver_free(resolver);
-    xr_hashmap_free(factories);
 }
 
 TEST(xi_and_global_evidence_reject_untyped_identity_mutations) {
@@ -437,11 +435,7 @@ TEST(active_graph_named_import_never_falls_back_to_shared_resolver) {
     ASSERT_TRUE(snprintf(base64_path, sizeof(base64_path), "%s/base64/base64.xr",
                          stdlib_root) > 0);
 
-    XrHashMap *native_factories = xr_hashmap_new();
-    ASSERT_NOT_NULL(native_factories);
-    ASSERT_TRUE(xr_hashmap_set(native_factories, "base64", (void *) 1));
     XrModuleResolverConfig resolver_config = {
-        .native_factories = native_factories,
         .stdlib_path = stdlib_root,
     };
     XrModuleResolver *shared_fixture = xr_module_resolver_new(&resolver_config);
@@ -515,7 +509,6 @@ TEST(active_graph_named_import_never_falls_back_to_shared_resolver) {
     xr_compiler_session_set_module_graph(session, NULL);
     xr_module_id_cleanup(&shared_id);
     xr_module_resolver_free(shared_fixture);
-    xr_hashmap_free(native_factories);
     xr_free(entry_canonical);
     xr_free(entry_logical);
     xr_free(base64_canonical);

@@ -1330,13 +1330,3 @@ void xr_sys_once_register_class(XrVMRuntime *isolate) {
 #define XR_STDLIB_VM_BIND_MODULE_SYS 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_SYS
-
-XrModule *xr_native_module_create_sys(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_sys: NULL isolate");
-    XrModule *module = xr_module_create_native(isolate, "sys");
-    if (!module)
-        return NULL;
-
-    xr_stdlib_vm_bind_sys_generated(isolate, module);
-    return module;
-}

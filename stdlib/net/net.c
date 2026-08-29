@@ -22,7 +22,6 @@
 
 #include "../../src/base/xmalloc.h"
 #include "../common.h"
-#include "net.h"
 #include "io.h"
 #include "tls.h"
 #include "../stdlib_cache.h"
@@ -91,7 +90,6 @@ static void net_winsock_init_once(void) {
      * references for its own lifetime. */
     (void) xr_winsock_init();
 }
-
 static void net_platform_init(void) {
     xr_once_call(&g_net_winsock_once, net_winsock_init_once);
 }
@@ -292,6 +290,7 @@ static bool net_is_literal_ip(const char *host) {
 
 static XrValue net_resolved_addrs_value(XrVMRuntime *X, const char *host) {
     XrSockAddr resolved[XR_DNS_MAX_ADDRS];
+    net_platform_init();
     int count = xr_dns_resolve_all(X, host, resolved, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr)
@@ -361,6 +360,7 @@ static XrCFuncResult net_resolve_all_yieldable(XrVMRuntime *X, XrValue *args, in
     // no-pool sync fallback) answered inline and no suspension happened.
     XrSockAddr probe;
     memset(&probe, 0, sizeof(probe));
+    net_platform_init();
     if (!xr_dns_resolve_async(X, coro, worker->p.id, host, &probe, XR_AF_UNSPEC) ||
         probe.family != 0) {
         *result = net_resolved_addrs_value(X, host);
@@ -484,6 +484,7 @@ static XrCFuncResult net_connect_fd_yieldable(XrVMRuntime *X, XrValue *args, int
         return (net_connect_fail(X, NULL, XR_NETERR_INVALID, result), XR_CFUNC_DONE);
 
     XrSockAddr resolved;
+    net_platform_init();
     if (!xr_dns_resolve(X, addr_text, &resolved, XR_AF_UNSPEC) || !net_is_literal_ip(addr_text))
         return (net_connect_fail(X, NULL, XR_NETERR_INVALID, result), XR_CFUNC_DONE);
 
@@ -1771,6 +1772,7 @@ static XrValue net_listen_fd(XrVMRuntime *X, XrValue *args, int nargs) {
     if (port_num < 0 || port_num > 65535 || backlog <= 0)
         return XR_NULL_VAL;
 
+    net_platform_init();
     int fd = xr_io_listen(force_v4 ? "0.0.0.0" : NULL, port_num, backlog);
     if (fd < 0)
         return XR_NULL_VAL;
@@ -2071,6 +2073,7 @@ static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
     if (addr[0] && strchr(addr, ':'))
         family = AF_INET6;
 
+    net_platform_init();
     int fd = socket(family, SOCK_DGRAM, 0);
     if (fd < 0)
         return XR_NULL_VAL;
@@ -2186,6 +2189,7 @@ static XrCFuncResult net_udp_send_to_yieldable(XrVMRuntime *X, XrValue *args, in
     }
 
     XrSockAddr resolved;
+    net_platform_init();
     if (!xr_dns_resolve(X, addr_text, &resolved, XR_AF_UNSPEC)) {
         net_conn_set_error(conn, XR_NETERR_INVALID, 0);
         *result = xr_int(-1);
@@ -2425,21 +2429,4 @@ void xr_netconn_register_class(XrVMRuntime *isolate) {
 
 void xr_netlistener_register_class(XrVMRuntime *isolate) {
     xr_stdlib_vm_register_net_listener_class_generated(isolate);
-}
-
-XrModule *xr_native_module_create_net(XrVMRuntime *isolate) {
-    net_platform_init();
-    XrModule *mod = xr_module_create_native(isolate, "net");
-    if (!mod)
-        return NULL;
-
-    // NetConn / NetListener XrClasses are registered up front by the
-    // prelude module; nothing to do here.
-
-    if (!xr_stdlib_vm_bind_net_generated(isolate, mod)) {
-        xr_module_free(mod);
-        return NULL;
-    }
-
-    return mod;
 }

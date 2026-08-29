@@ -52,31 +52,6 @@
 
 struct XrModule;
 
-/*
- * Load regex module
- *
- * Provided functions:
- *   - compile(pattern)           Compile regex, return Regex object
- *   - compile(pattern, flags)    Compile with flags ("i"=ignorecase, "m"=multiline, "s"=dotall)
- *   - test(re, text)             Test if matches, return bool
- *   - match(re, text)            Find match, return Match object or null
- *   - fullMatch(re, text)        Full match (anchored to start and end)
- *   - replace(re, text, repl)    Replace first match
- *   - replaceAll(re, text, repl) Replace all matches
- *   - split(re, text)            Split by pattern
- *   - escape(text)               Escape special characters
- *
- * RegexMatch object fields (typed instance, not Json):
- *   - start: int                 Match start position
- *   - end: int                   Match end position
- *   - text: string               Matched text
- *   - groups: Array<string>      Capture group array (groups[0] is full match)
- *
- * Zero-allocation narrow APIs:
- *   - findText(re, text)         Return matched text only (string?)
- *   - findGroup(re, text, i)     Return capture group i only (string?)
- */
-XR_FUNC struct XrModule *xr_native_module_create_regex(XrVMRuntime *isolate);
 
 /*
  * Wrap XrRegex as XrValue (XrInstance with native body)

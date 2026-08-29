@@ -251,7 +251,6 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file,
 
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
     XrModuleResolverConfig rcfg = {
-        .native_factories = registry ? registry->native_factories : NULL,
         .stdlib_path = registry ? registry->stdlib_path : NULL,
         .lockfile = NULL,
     };

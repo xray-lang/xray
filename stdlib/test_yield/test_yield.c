@@ -527,31 +527,11 @@ static XrCFuncResult test_yield_long_task(XrVMRuntime *X, XrValue *args, int arg
 // Module registration
 /* ========================================================================== */
 
-XR_FUNC XrModule *xr_native_module_create_test_yield(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_test_yield: NULL isolate");
-
-    XrModule *mod = xr_module_create_native(isolate, "test_yield");
-    if (!mod)
-        return NULL;
-
-    // Basic tests
-    XRS_EXPORT_YIELDABLE(mod, isolate, "simple", test_yield_simple);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "add", test_yield_add);
-    XRS_EXPORT(mod, isolate, "sync", test_yield_sync);
-    XRS_EXPORT_SLOW(mod, isolate, "blocking_sleep", test_yield_blocking_sleep);
-
-    // Complex scenarios
-    XRS_EXPORT_YIELDABLE(mod, isolate, "multi_yield", test_yield_multi);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "chain", test_yield_chain);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "error_test", test_yield_error);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "cancel_test", test_yield_cancel);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "nested", test_yield_nested);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "long_task", test_yield_long_task);
-
-    // Concurrent counter
-    XRS_EXPORT_YIELDABLE(mod, isolate, "counter_inc", test_yield_counter_inc);
-    XRS_EXPORT(mod, isolate, "counter_get", test_yield_counter_get);
-    XRS_EXPORT(mod, isolate, "counter_reset", test_yield_counter_reset);
-
-    return mod;
-}
+/*
+ * The export set lives in stdlib_boundary.toml's native_fn_exports rather than
+ * here: this module has no Xray source to derive one from, and each stub's
+ * point is the binding kind it is bound with.
+ */
+#define XR_STDLIB_VM_BIND_MODULE_TEST_YIELD 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_TEST_YIELD

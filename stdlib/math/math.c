@@ -13,7 +13,6 @@
  *   APIs such as randomInt keep their declared int boundary.
  */
 
-#include "math.h"
 #include "../common.h"
 #include <math.h>
 #include <stdint.h>
@@ -491,17 +490,3 @@ static XrValue math_isFinite(XrVMRuntime *X, XrValue *args, int argc) {
 #define XR_STDLIB_VM_BIND_MODULE_MATH 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_MATH
-
-/* ========== Module Loading ========== */
-
-XR_FUNC XrModule *xr_native_module_create_math(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_native_module_create_math: NULL isolate");
-
-    XrModule *mod = xr_module_create_native(isolate, "math");
-    if (!mod)
-        return NULL;
-
-    xr_stdlib_vm_bind_math_generated(isolate, mod);
-
-    return mod;
-}
