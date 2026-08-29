@@ -7420,27 +7420,24 @@ static void xicgen_emit_math_f64_minmax(XiCgenCtx *ctx, FILE *out, const XiValue
         xicgen_emit_math_arg(ctx, out, v->args[index]);
         return;
     }
-    fprintf(out, "(");
+    /* Only the head needs a NaN test: when the tail is NaN the comparison is
+     * false and the tail is returned, so NaN still propagates. Testing it here
+     * as well would emit the tail four times per level instead of twice. */
+    fprintf(out, "((");
     xicgen_emit_math_arg(ctx, out, v->args[index]);
-    fprintf(out, " != ");
-    xicgen_emit_math_arg(ctx, out, v->args[index]);
-    fprintf(out, " ? ");
-    xicgen_emit_math_arg(ctx, out, v->args[index]);
-    fprintf(out, " : ((");
-    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
     fprintf(out, ") != (");
-    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
+    xicgen_emit_math_arg(ctx, out, v->args[index]);
     fprintf(out, ") ? (");
-    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
-    fprintf(out, ") : ((");
-    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
-    fprintf(out, ") %s ", is_min ? "<" : ">");
     xicgen_emit_math_arg(ctx, out, v->args[index]);
-    fprintf(out, " ? (");
-    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
-    fprintf(out, ") : ");
+    fprintf(out, ") : (((");
     xicgen_emit_math_arg(ctx, out, v->args[index]);
-    fprintf(out, ")))");
+    fprintf(out, ") %s (", is_min ? "<" : ">");
+    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ")) ? (");
+    xicgen_emit_math_arg(ctx, out, v->args[index]);
+    fprintf(out, ") : (");
+    xicgen_emit_math_f64_minmax(ctx, out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, "))))");
 }
 
 static void xicgen_emit_math_i64_clamp(XiCgenCtx *ctx, FILE *out, const XiValue *x,

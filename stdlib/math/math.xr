@@ -163,6 +163,9 @@ export fn isFinite(x: f64) -> bool {
 // IEEE-754 NaN propagation: any NaN argument produces NaN.  This is not fmin
 // semantics, which returns the non-NaN operand instead.
 export fn min(...args: f64) -> f64 {
+    if (len(args) == 0) {
+        return NAN
+    }
     var result = args[0]
     if (result != result) {
         return result
@@ -180,6 +183,9 @@ export fn min(...args: f64) -> f64 {
 }
 
 export fn max(...args: f64) -> f64 {
+    if (len(args) == 0) {
+        return NAN
+    }
     var result = args[0]
     if (result != result) {
         return result
