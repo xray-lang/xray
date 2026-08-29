@@ -223,9 +223,12 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 // http2 module functions
 static const XaBuiltinMember g_gen_http2_functions[] = {
     {"__supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?", "Execute one typed HTTP/2 request", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__connect", "(host: string, port: i64, timeoutMs: i64): i64", "Open one TLS connection that negotiated ALPN h2 and answer its handle, or -1", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__send", "(handle: i64, data: Array<u8>): bool", "Write one buffer to an open HTTP/2 connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes from an open HTTP/2 connection; null on error or EOF", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__close", "(handle: i64): bool", "Close an HTTP/2 connection and release its handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_HTTP2_FUNCTION_COUNT 2
+#define GEN_HTTP2_FUNCTION_COUNT 5
 
 // io.__FileStat handle fields
 static const XaBuiltinHandleField g_gen_io___filestat_fields[] = {

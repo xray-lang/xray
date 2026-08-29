@@ -2686,17 +2686,59 @@ module http2 {
     layer: "runtime"
   }
 
-  fn __request {
-    signature: "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?"
-    doc: "Execute one typed HTTP/2 request"
-    vm: "h2_request_typed"
-    argc: 6
-    arg_spec: "vvvvvv"
-    aot: "xrt_http_h2_request_unavailable"
+  fn __connect {
+    signature: "(host: string, port: i64, timeoutMs: i64): i64"
+    doc: "Open one TLS connection that negotiated ALPN h2 and answer its handle, or -1"
+    vm: "h2_connect"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: "vvv"
+    aot: "xrt_http_h2_connect_unavailable"
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
+  }
+
+  fn __send {
+    signature: "(handle: i64, data: Array<u8>): bool"
+    doc: "Write one buffer to an open HTTP/2 connection"
+    vm: "h2_send"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: "vv"
+    aot: "xrt_http_h2_send_unavailable"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    caps: "coro,netpoll"
+  }
+
+  fn __recv {
+    signature: "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?"
+    doc: "Read up to maxBytes from an open HTTP/2 connection; null on error or EOF"
+    vm: "h2_recv"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: "vvv"
+    aot: "xrt_http_h2_recv_unavailable"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    caps: "coro,netpoll"
     return_ownership: "fresh"
+  }
+
+  fn __close {
+    signature: "(handle: i64): bool"
+    doc: "Close an HTTP/2 connection and release its handle"
+    vm: "h2_close"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_http_h2_close_unavailable"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
   }
 
 }

@@ -410,7 +410,7 @@ policy = "xray_semantic"
 semantic_source = "stdlib/http2/http2.xr"
 public_native = []
 private_native_sources = ["stdlib/http2/*.c"]
-private_native_reason = "HTTP/2 framing, HPACK and the TLS/ALPN connection pool are wire-protocol machinery consumed by http2.xr"
+private_native_reason = "One TLS/ALPN socket boundary consumed by http2.xr; the framing, HPACK and flow control above it are Xray"
 perf_suite = "stdlib/http2"
 
 [[module]]

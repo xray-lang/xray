@@ -2204,13 +2204,298 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
     {
+        .name = "CANCEL",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "COMPRESSION_ERROR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "CONNECT_ERROR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "ENHANCE_YOUR_CALM",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FLOW_CONTROL_ERROR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FRAME_SIZE_ERROR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FrameHeader",
+        .signature = "FrameHeader",
+        .summary = "",
+    },
+    {
+        .name = "FrameHeader.constructor",
+        .signature = "(length: i64, kind: i64, flags: i64, streamId: i64): ()",
+        .summary = "",
+    },
+    {
+        .name = "FrameHeader.flags",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FrameHeader.hasFlag",
+        .signature = "(flag: i64): bool",
+        .summary = "",
+    },
+    {
+        .name = "FrameHeader.kind",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FrameHeader.length",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FrameHeader.streamId",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "HTTP_1_1_REQUIRED",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "HeaderList",
+        .signature = "HeaderList",
+        .summary = "",
+    },
+    {
+        .name = "HeaderList.add",
+        .signature = "(name: string, value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "HeaderList.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "HeaderList.count",
+        .signature = "(): i64",
+        .summary = "",
+    },
+    {
+        .name = "HeaderList.names",
+        .signature = ": Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "HeaderList.values",
+        .signature = ": Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "HpackDecoder",
+        .signature = "HpackDecoder",
+        .summary = "",
+    },
+    {
+        .name = "HpackDecoder.constructor",
+        .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()",
+        .summary = "",
+    },
+    {
+        .name = "HpackDecoder.decode",
+        .signature = "(block: Array<u8>): HeaderList?",
+        .summary = "",
+    },
+    {
+        .name = "HpackDecoder.decodeRange",
+        .signature = "(block: Array<u8>, start: i64, limit: i64): HeaderList?",
+        .summary = "",
+    },
+    {
+        .name = "HpackDecoder.lookupName",
+        .signature = "(index: i64): string?",
+        .summary = "",
+    },
+    {
+        .name = "HpackDecoder.lookupValue",
+        .signature = "(index: i64): string?",
+        .summary = "",
+    },
+    {
+        .name = "HpackDecoder.readNameValue",
+        .signature = "(block: Array<u8>, pos: i64, limit: i64, nameIndex: i64): _NameValue?",
+        .summary = "",
+    },
+    {
+        .name = "HpackDecoder.table",
+        .signature = ": HpackTable",
+        .summary = "",
+    },
+    {
+        .name = "HpackEncoder",
+        .signature = "HpackEncoder",
+        .summary = "",
+    },
+    {
+        .name = "HpackEncoder.constructor",
+        .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()",
+        .summary = "",
+    },
+    {
+        .name = "HpackEncoder.encode",
+        .signature = "(names: Array<string>, values: Array<string>): Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "HpackEncoder.encodeHeader",
+        .signature = "(out: ref Array<u8>, name: string, value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "HpackEncoder.staticFull",
+        .signature = "(name: string, value: string): i64",
+        .summary = "",
+    },
+    {
+        .name = "HpackEncoder.staticName",
+        .signature = "(name: string): i64",
+        .summary = "",
+    },
+    {
+        .name = "HpackEncoder.table",
+        .signature = ": HpackTable",
+        .summary = "",
+    },
+    {
+        .name = "INADEQUATE_SECURITY",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "INTERNAL_ERROR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "NO_ERROR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "PROTOCOL_ERROR",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "REFUSED_STREAM",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "SETTINGS_TIMEOUT",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "STREAM_CLOSED",
+        .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "Settings",
+        .signature = "Settings",
+        .summary = "",
+    },
+    {
+        .name = "Settings.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Settings.get",
+        .signature = "(id: i64): i64",
+        .summary = "",
+    },
+    {
+        .name = "Settings.set",
+        .signature = "(id: i64, value: i64): ()",
+        .summary = "",
+    },
+    {
+        .name = "Settings.values",
+        .signature = ": Array<i64>",
+        .summary = "",
+    },
+    {
+        .name = "applySettingsPayload",
+        .signature = "(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64",
+        .summary = "",
+    },
+    {
+        .name = "encodeClientSettings",
+        .signature = "(settings: Settings): Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "encodeGoaway",
+        .signature = "(lastStreamId: i64, errorCode: i64): Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "encodePingAck",
+        .signature = "(payload: Array<u8>, start: i64): Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "encodeRstStream",
+        .signature = "(streamId: i64, errorCode: i64): Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "encodeSettingsAck",
+        .signature = "(): Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "encodeWindowUpdate",
+        .signature = "(streamId: i64, increment: i64): Array<u8>",
+        .summary = "",
+    },
+    {
+        .name = "readFrameHeader",
+        .signature = "(src: Array<u8>, pos: i64): FrameHeader?",
+        .summary = "",
+    },
+    {
         .name = "request",
-        .signature = "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?",
+        .signature = "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)",
         .summary = "",
     },
     {
         .name = "supported",
         .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "validateFrameHeader",
+        .signature = "(header: FrameHeader): i64",
+        .summary = "",
+    },
+    {
+        .name = "writeFrameHeader",
+        .signature = "(out: ref Array<u8>, length: i64, kind: i64, flags: i64, streamId: i64): ()",
         .summary = "",
     },
 };
@@ -8928,8 +9213,65 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?` |  |\n"
+            "| `http2.CANCEL` | `: i64` |  |\n"
+            "| `http2.COMPRESSION_ERROR` | `: i64` |  |\n"
+            "| `http2.CONNECT_ERROR` | `: i64` |  |\n"
+            "| `http2.ENHANCE_YOUR_CALM` | `: i64` |  |\n"
+            "| `http2.FLOW_CONTROL_ERROR` | `: i64` |  |\n"
+            "| `http2.FRAME_SIZE_ERROR` | `: i64` |  |\n"
+            "| `FrameHeader` | `FrameHeader` |  |\n"
+            "| `FrameHeader.constructor` | `(length: i64, kind: i64, flags: i64, streamId: i64): ()` |  |\n"
+            "| `FrameHeader.flags` | `: i64` |  |\n"
+            "| `FrameHeader.hasFlag` | `(flag: i64): bool` |  |\n"
+            "| `FrameHeader.kind` | `: i64` |  |\n"
+            "| `FrameHeader.length` | `: i64` |  |\n"
+            "| `FrameHeader.streamId` | `: i64` |  |\n"
+            "| `http2.HTTP_1_1_REQUIRED` | `: i64` |  |\n"
+            "| `HeaderList` | `HeaderList` |  |\n"
+            "| `HeaderList.add` | `(name: string, value: string): ()` |  |\n"
+            "| `HeaderList.constructor` | `(): ()` |  |\n"
+            "| `HeaderList.count` | `(): i64` |  |\n"
+            "| `HeaderList.names` | `: Array<string>` |  |\n"
+            "| `HeaderList.values` | `: Array<string>` |  |\n"
+            "| `HpackDecoder` | `HpackDecoder` |  |\n"
+            "| `HpackDecoder.constructor` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
+            "| `HpackDecoder.decode` | `(block: Array<u8>): HeaderList?` |  |\n"
+            "| `HpackDecoder.decodeRange` | `(block: Array<u8>, start: i64, limit: i64): HeaderList?` |  |\n"
+            "| `HpackDecoder.lookupName` | `(index: i64): string?` |  |\n"
+            "| `HpackDecoder.lookupValue` | `(index: i64): string?` |  |\n"
+            "| `HpackDecoder.readNameValue` | `(block: Array<u8>, pos: i64, limit: i64, nameIndex: i64): _NameValue?` |  |\n"
+            "| `HpackDecoder.table` | `: HpackTable` |  |\n"
+            "| `HpackEncoder` | `HpackEncoder` |  |\n"
+            "| `HpackEncoder.constructor` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
+            "| `HpackEncoder.encode` | `(names: Array<string>, values: Array<string>): Array<u8>` |  |\n"
+            "| `HpackEncoder.encodeHeader` | `(out: ref Array<u8>, name: string, value: string): ()` |  |\n"
+            "| `HpackEncoder.staticFull` | `(name: string, value: string): i64` |  |\n"
+            "| `HpackEncoder.staticName` | `(name: string): i64` |  |\n"
+            "| `HpackEncoder.table` | `: HpackTable` |  |\n"
+            "| `http2.INADEQUATE_SECURITY` | `: i64` |  |\n"
+            "| `http2.INTERNAL_ERROR` | `: i64` |  |\n"
+            "| `http2.NO_ERROR` | `: i64` |  |\n"
+            "| `http2.PROTOCOL_ERROR` | `: i64` |  |\n"
+            "| `http2.REFUSED_STREAM` | `: i64` |  |\n"
+            "| `http2.SETTINGS_TIMEOUT` | `: i64` |  |\n"
+            "| `http2.STREAM_CLOSED` | `: i64` |  |\n"
+            "| `Settings` | `Settings` |  |\n"
+            "| `Settings.constructor` | `(): ()` |  |\n"
+            "| `Settings.get` | `(id: i64): i64` |  |\n"
+            "| `Settings.set` | `(id: i64, value: i64): ()` |  |\n"
+            "| `Settings.values` | `: Array<i64>` |  |\n"
+            "| `http2.applySettingsPayload` | `(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64` |  |\n"
+            "| `http2.encodeClientSettings` | `(settings: Settings): Array<u8>` |  |\n"
+            "| `http2.encodeGoaway` | `(lastStreamId: i64, errorCode: i64): Array<u8>` |  |\n"
+            "| `http2.encodePingAck` | `(payload: Array<u8>, start: i64): Array<u8>` |  |\n"
+            "| `http2.encodeRstStream` | `(streamId: i64, errorCode: i64): Array<u8>` |  |\n"
+            "| `http2.encodeSettingsAck` | `(): Array<u8>` |  |\n"
+            "| `http2.encodeWindowUpdate` | `(streamId: i64, increment: i64): Array<u8>` |  |\n"
+            "| `http2.readFrameHeader` | `(src: Array<u8>, pos: i64): FrameHeader?` |  |\n"
+            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)` |  |\n"
             "| `http2.supported` | `(): bool` |  |\n"
+            "| `http2.validateFrameHeader` | `(header: FrameHeader): i64` |  |\n"
+            "| `http2.writeFrameHeader` | `(out: ref Array<u8>, length: i64, kind: i64, flags: i64, streamId: i64): ()` |  |\n"
             "",
         .symbols = _symbols_http2,
         .symbol_count = (int)(sizeof(_symbols_http2) / sizeof(_symbols_http2[0])),

@@ -5,45 +5,79 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * http2_binding.c - HTTP/2 xray binding
+ * http2_binding.c - HTTP/2 transport leaves
  *
  * KEY CONCEPT:
- *   Exposes a private typed tuple/byte-array boundary to http.xr. Public
- *   request/response semantics stay in the Xray control plane.
+ *   Four leaves that move opaque bytes over one TLS connection negotiated
+ *   with ALPN "h2", plus a build-capability probe. None of them knows what a
+ *   frame is: HPACK, framing, the stream state machine and flow control all
+ *   live in stdlib/http2/http2.xr. What is left here is the part Xray cannot
+ *   state -- a socket, a TLS session, and the protocol the peer agreed to
+ *   speak over it.
+ *
+ *   Connections are addressed by an integer handle rather than a pointer, so
+ *   no address ever crosses into Xray. A handle carries a generation counter,
+ *   which is what makes a stale handle fail cleanly instead of aliasing onto
+ *   whatever connection later reused its slot.
  */
 
-#include "http2_internal.h"
 #include "../../stdlib/common.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
+#include "../../src/runtime/xisolate_internal.h"
+#include "../../src/runtime/mem/xheap.h"
+#include "../../src/os/os_thread.h"
 #include "../../src/vm/xvm.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xstring.h"
-#include "../../src/runtime/object/xpanic_info.h"
-#include "../../src/runtime/object/xtuple.h"
+#include "../../stdlib/net/io.h"
 #include "../../stdlib/net/tls.h"
 #include <string.h>
 
-// clang-format off
-static const char TLS_UNAVAIL_MSG[] =
-    "HTTPS requires TLS support. Xray was built without OpenSSL"
-    " -- rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>";
+/* The protocol list offered on the wire: "h2" first, then "http/1.1" so a
+ * server that speaks only HTTP/1.1 answers rather than failing the
+ * handshake. Only "h2" is accepted below -- this module has no HTTP/1.1
+ * fallback, and http.xr routes those requests elsewhere. */
+static const unsigned char ALPN_PROTOS[] = "\x02h2\x08http/1.1";
+#define ALPN_PROTOS_LEN 12
 
-static void throw_tls_unavailable(XrVMRuntime *X) {
-    XrValue exc = xr_panic_info_new(X, XR_ERR_TLS_UNAVAILABLE, TLS_UNAVAIL_MSG);
-    xr_vm_unwind_with_trace(X, exc);
-}
-// clang-format on
+/* One read is capped here rather than at the caller: `maxBytes` arrives from
+ * Xray and a peer must not be able to name an allocation size. */
+#define XR_H2_MAX_READ 65536
 
-// External declarations
-extern XrValue xr_string_value(XrString *str);
-extern XrString *xr_string_intern(XrVMRuntime *X, const char *str, size_t len, uint32_t hash);
+/* A connection never outlives its slot, and slots are never freed, so the
+ * table only grows. This bounds it. */
+#define XR_H2_MAX_SLOTS 4096
+
+typedef struct XrH2Slot {
+    XrIOConn *io;
+    XrTlsContext *tls_ctx;
+    uint32_t generation;
+    bool in_use;
+    int32_t next_free;
+} XrH2Slot;
 
 typedef struct XrHttp2Context {
-    XrH2Pool *client_pool;
+    XrH2Slot *slots;
+    int32_t count;
+    int32_t capacity;
+    int32_t free_head;
+    uint32_t next_generation;
+    xr_mutex_t lock;
 } XrHttp2Context;
 
+static xr_mutex_t http2_context_init_lock = XR_MUTEX_INITIALIZER;
 static void http2_context_destroy(void *handle);
+
+/* Release a connection's resources. `io` must be closed before `tls_ctx`:
+ * stdlib/net/io.h:73 requires the context to outlive every connection made
+ * from it. */
+static void h2_conn_close(XrIOConn *io, XrTlsContext *tls_ctx) {
+    if (io)
+        xr_io_close(io);
+    if (tls_ctx)
+        xr_tls_context_free(tls_ctx);
+}
 
 static XrHttp2Context *http2_get_context(XrVMRuntime *X) {
     XrModuleRegistry *registry = X ? (XrModuleRegistry *) X->module_registry : NULL;
@@ -52,177 +86,131 @@ static XrHttp2Context *http2_get_context(XrVMRuntime *X) {
                            : NULL;
     if (!module)
         return NULL;
-    if (!module->native_handle) {
-        module->native_handle = xr_calloc(1, sizeof(XrHttp2Context));
-        /* Install the destructor beside the allocation it owns, so the two
-         * cannot drift apart the way a separate load-time step could. */
-        module->native_handle_destroy = http2_context_destroy;
+
+    xr_mutex_lock(&http2_context_init_lock);
+    XrHttp2Context *ctx = (XrHttp2Context *) module->native_handle;
+    if (!ctx) {
+        ctx = (XrHttp2Context *) xr_calloc(1, sizeof(XrHttp2Context));
+        if (ctx) {
+            ctx->free_head = -1;
+            xr_mutex_init(&ctx->lock);
+            module->native_handle = ctx;
+            module->native_handle_destroy = http2_context_destroy;
+        }
     }
-    return (XrHttp2Context *) module->native_handle;
+    xr_mutex_unlock(&http2_context_init_lock);
+    return ctx;
 }
 
 static void http2_context_destroy(void *handle) {
     XrHttp2Context *ctx = (XrHttp2Context *) handle;
     if (!ctx)
         return;
-    if (ctx->client_pool)
-        http2_client_pool_destroy(ctx->client_pool);
+    for (int32_t i = 0; i < ctx->count; i++) {
+        if (ctx->slots[i].in_use)
+            h2_conn_close(ctx->slots[i].io, ctx->slots[i].tls_ctx);
+    }
+    xr_free(ctx->slots);
+    xr_mutex_destroy(&ctx->lock);
     xr_free(ctx);
 }
 
-// Helper function: create string value
-static bool ascii_ieq(const char *a, size_t a_len, const char *b) {
-    size_t b_len = strlen(b);
-    if (a_len != b_len)
-        return false;
-    for (size_t i = 0; i < a_len; i++) {
-        unsigned char ca = (unsigned char) a[i];
-        unsigned char cb = (unsigned char) b[i];
-        if (ca >= 'A' && ca <= 'Z')
-            ca = (unsigned char) (ca + ('a' - 'A'));
-        if (cb >= 'A' && cb <= 'Z')
-            cb = (unsigned char) (cb + ('a' - 'A'));
-        if (ca != cb)
-            return false;
-    }
-    return true;
+/* Handles are (generation << 32) | (slot + 1). The generation is never zero,
+ * so a handle is always >= 2^32: positive, and never the -1 that means
+ * failure. */
+static int64_t h2_handle_make(int32_t slot, uint32_t generation) {
+    return ((int64_t) generation << 32) | (int64_t) (slot + 1);
 }
 
-static bool h2_token_char(unsigned char c) {
-    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '!' ||
-           c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
-           c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
+/* Resolve a handle to its slot index, or -1 when it names nothing live. */
+static int32_t h2_slot_index(const XrHttp2Context *ctx, int64_t handle) {
+    if (handle <= 0)
+        return -1;
+    int32_t slot = (int32_t) ((handle & 0xffffffff) - 1);
+    uint32_t generation = (uint32_t) ((uint64_t) handle >> 32);
+    if (slot < 0 || slot >= ctx->count)
+        return -1;
+    if (!ctx->slots[slot].in_use || ctx->slots[slot].generation != generation)
+        return -1;
+    return slot;
 }
 
-static bool h2_method_valid(const char *method, size_t len) {
-    if (!method)
-        return true;
-    if (len == 0)
-        return false;
-    for (size_t i = 0; i < len; i++) {
-        if (!h2_token_char((unsigned char) method[i]))
-            return false;
-    }
-    return true;
-}
-
-static bool h2_header_name_valid(const char *name, size_t len) {
-    if (!name || len == 0 || name[0] == ':')
-        return false;
-    for (size_t i = 0; i < len; i++) {
-        if (!h2_token_char((unsigned char) name[i]))
-            return false;
-    }
-    return true;
-}
-
-static bool h2_header_value_valid(const char *value, size_t len) {
-    if (!value && len > 0)
-        return false;
-    for (size_t i = 0; i < len; i++) {
-        unsigned char c = (unsigned char) value[i];
-        if (c == '\t')
-            continue;
-        if (c < 0x20 || c == 0x7F)
-            return false;
-    }
-    return true;
-}
-
-static bool h2_custom_header_allowed(const XrHttpHeader *h) {
-    if (!h2_header_name_valid(h->name, h->name_len) ||
-        !h2_header_value_valid(h->value, h->value_len))
-        return false;
-
-    if (ascii_ieq(h->name, h->name_len, "connection") ||
-        ascii_ieq(h->name, h->name_len, "keep-alive") ||
-        ascii_ieq(h->name, h->name_len, "proxy-connection") ||
-        ascii_ieq(h->name, h->name_len, "transfer-encoding") ||
-        ascii_ieq(h->name, h->name_len, "upgrade") || ascii_ieq(h->name, h->name_len, "host"))
-        return false;
-
-    if (ascii_ieq(h->name, h->name_len, "te") && !ascii_ieq(h->value, h->value_len, "trailers"))
-        return false;
-
-    return true;
-}
-
-static bool h2_request_options_valid(const XrH2Request *req) {
-    if (!req)
-        return true;
-    if (!h2_method_valid(req->method, req->method_len))
-        return false;
-    for (int i = 0; i < req->header_count; i++) {
-        if (!h2_custom_header_allowed(&req->headers[i]))
-            return false;
-    }
-    return true;
-}
-
-/* ========== Typed Header/Response Conversion ========== */
-
-static bool h2_typed_headers(XrArray *names, XrArray *values, XrHttpHeader **out_headers,
-                             int *out_count) {
-    *out_headers = NULL;
-    *out_count = 0;
-    if (!names || !values || names->length < 0 || names->length != values->length ||
-        names->length > 28)
-        return false;
-    if (names->length == 0)
-        return true;
-
-    XrHttpHeader *headers =
-        (XrHttpHeader *) xr_calloc((size_t) names->length, sizeof(XrHttpHeader));
-    if (!headers)
-        return false;
-    for (int64_t i = 0; i < names->length; i++) {
-        XrValue name_value = xr_array_get(names, (int) i);
-        XrValue value_value = xr_array_get(values, (int) i);
-        if (!XR_IS_STRING(name_value) || !XR_IS_STRING(value_value)) {
-            xr_free(headers);
-            return false;
+/* Take a slot for a new connection. Answers the handle, or -1. */
+static int64_t h2_slot_register(XrHttp2Context *ctx, XrIOConn *io, XrTlsContext *tls_ctx) {
+    xr_mutex_lock(&ctx->lock);
+    int32_t slot = ctx->free_head;
+    if (slot >= 0) {
+        ctx->free_head = ctx->slots[slot].next_free;
+    } else {
+        if (ctx->count == ctx->capacity) {
+            int32_t grown = ctx->capacity == 0 ? 8 : ctx->capacity * 2;
+            if (grown > XR_H2_MAX_SLOTS)
+                grown = XR_H2_MAX_SLOTS;
+            if (grown == ctx->capacity) {
+                xr_mutex_unlock(&ctx->lock);
+                return -1;
+            }
+            XrH2Slot *grown_slots =
+                (XrH2Slot *) xr_realloc(ctx->slots, (size_t) grown * sizeof(XrH2Slot));
+            if (!grown_slots) {
+                xr_mutex_unlock(&ctx->lock);
+                return -1;
+            }
+            memset(grown_slots + ctx->capacity, 0,
+                   (size_t) (grown - ctx->capacity) * sizeof(XrH2Slot));
+            ctx->slots = grown_slots;
+            ctx->capacity = grown;
         }
-        XrString *name = XR_TO_STRING(name_value);
-        XrString *value = XR_TO_STRING(value_value);
-        headers[i].name = name->data;
-        headers[i].name_len = name->length;
-        headers[i].value = value->data;
-        headers[i].value_len = value->length;
+        slot = ctx->count++;
     }
-    *out_headers = headers;
-    *out_count = (int) names->length;
+    uint32_t generation = ++ctx->next_generation;
+    if (generation == 0)
+        generation = ++ctx->next_generation;
+    ctx->slots[slot].io = io;
+    ctx->slots[slot].tls_ctx = tls_ctx;
+    ctx->slots[slot].generation = generation;
+    ctx->slots[slot].in_use = true;
+    ctx->slots[slot].next_free = -1;
+    xr_mutex_unlock(&ctx->lock);
+    return h2_handle_make(slot, generation);
+}
+
+/* Detach a live handle's connection so the caller can close it outside the
+ * lock. Answers false when the handle names nothing live. */
+static bool h2_slot_take(XrHttp2Context *ctx, int64_t handle, XrIOConn **out_io,
+                         XrTlsContext **out_ctx) {
+    xr_mutex_lock(&ctx->lock);
+    int32_t slot = h2_slot_index(ctx, handle);
+    if (slot < 0) {
+        xr_mutex_unlock(&ctx->lock);
+        return false;
+    }
+    *out_io = ctx->slots[slot].io;
+    *out_ctx = ctx->slots[slot].tls_ctx;
+    ctx->slots[slot].io = NULL;
+    ctx->slots[slot].tls_ctx = NULL;
+    ctx->slots[slot].in_use = false;
+    ctx->slots[slot].next_free = ctx->free_head;
+    ctx->free_head = slot;
+    xr_mutex_unlock(&ctx->lock);
     return true;
 }
 
-static XrValue h2_typed_response(XrVMRuntime *X, const XrH2Response *response) {
-    if (!response || response->body_len > INT32_MAX || response->header_count < 0)
-        return xr_null();
-    XrCoroutine *coro = xr_current_coro(X);
-    XrArray *header_names = xr_array_new(coro);
-    XrArray *header_values = xr_array_new(coro);
-    XrArray *body = xr_byte_array_new(coro, (int32_t) response->body_len);
-    if (!header_names || !header_values || !body)
-        return xr_null();
-    for (int i = 0; i < response->header_count; i++) {
-        const XrHttpHeader *header = &response->headers[i];
-        XrString *name = xr_string_intern(X, header->name, header->name_len, 0);
-        XrString *value = xr_string_intern(X, header->value, header->value_len, 0);
-        if (!name || !value)
-            return xr_null();
-        xr_array_push(header_names, xr_string_value(name));
-        xr_array_push(header_values, xr_string_value(value));
-    }
-    if (response->body_len > 0)
-        memcpy(body->data, response->body, response->body_len);
-    body->length = (int32_t) response->body_len;
-
-    XrValue fields[4] = {xr_int(response->status), xr_value_from_array(header_names),
-                         xr_value_from_array(header_values), xr_value_from_array(body)};
-    XrTuple *tuple = xr_tuple_from_values(coro, fields, 4);
-    return tuple ? xr_value_from_tuple(tuple) : xr_null();
+/* Answer a live handle's connection. The connection stays owned by its slot;
+ * only h2_close detaches it, and Xray closes each connection exactly once at
+ * the end of the request that opened it. */
+static XrIOConn *h2_conn_for_handle(XrVMRuntime *X, int64_t handle) {
+    XrHttp2Context *ctx = http2_get_context(X);
+    if (!ctx)
+        return NULL;
+    xr_mutex_lock(&ctx->lock);
+    int32_t slot = h2_slot_index(ctx, handle);
+    XrIOConn *io = slot < 0 ? NULL : ctx->slots[slot].io;
+    xr_mutex_unlock(&ctx->lock);
+    return io;
 }
 
-/* ========== HTTP/2 Client Binding ========== */
+/* ========== Leaves ========== */
 
 XrValue h2_supported(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
@@ -231,69 +219,123 @@ XrValue h2_supported(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(xr_tls_is_available());
 }
 
-/*
- * http.__h2Request(url, method, headerNames, headerValues, body, timeoutMs)
- *     -> (int, Array<u8>)?
- */
-XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 6 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_ARRAY(args[2]) ||
-        !XR_IS_ARRAY(args[3]) || !XR_IS_ARRAY(args[4]) || !XR_IS_INT(args[5])) {
-        return xr_null();
-    }
+/* http2.__connect(host, port, timeoutMs) -> i64; -1 when no h2 connection
+ * could be made, for any reason. */
+XrCFuncResult h2_connect(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
+    *result = xr_int(-1);
+    if (nargs < 3 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
+        return XR_CFUNC_DONE;
 
     XrHttp2Context *ctx = http2_get_context(X);
     if (!ctx)
-        return xr_null();
-    if (!ctx->client_pool) {
-        ctx->client_pool = http2_client_pool_create();
-        if (!ctx->client_pool)
-            return xr_null();
+        return XR_CFUNC_DONE;
+
+    int64_t port = XR_TO_INT(args[1]);
+    int64_t timeout_value = XR_TO_INT(args[2]);
+    if (port < 1 || port > 65535 || timeout_value <= 0 || timeout_value > INT32_MAX)
+        return XR_CFUNC_DONE;
+    const char *host = XR_STRING_CHARS(XR_TO_STRING(args[0]));
+    if (!host)
+        return XR_CFUNC_DONE;
+
+    XrTlsContext *tls_ctx = xr_tls_context_new_client();
+    if (!tls_ctx)
+        return XR_CFUNC_DONE;
+    xr_tls_context_set_alpn(tls_ctx, ALPN_PROTOS, ALPN_PROTOS_LEN);
+
+    XrIOConn *io = xr_io_connect_tls_with_ctx(X, tls_ctx, host, (int) port, (int) timeout_value);
+    if (!io) {
+        h2_conn_close(NULL, tls_ctx);
+        return XR_CFUNC_DONE;
     }
 
-    XrString *url = XR_TO_STRING(args[0]);
-    XrString *method = XR_TO_STRING(args[1]);
-    XrArray *header_names = XR_TO_ARRAY(args[2]);
-    XrArray *header_values = XR_TO_ARRAY(args[3]);
-    XrArray *body = XR_TO_ARRAY(args[4]);
-    int64_t timeout_value = XR_TO_INT(args[5]);
-    if (body->elem_type != XR_ELEM_U8 || body->length < 0 || timeout_value <= 0 ||
-        timeout_value > INT32_MAX)
-        return xr_null();
-    int timeout_ms = (int) timeout_value;
-
-    XrH2Request req = {0};
-    req.method = method->data;
-    req.method_len = method->length;
-    req.body = (const char *) body->data;
-    req.body_len = (size_t) body->length;
-
-    int hcount = 0;
-    XrHttpHeader *headers = NULL;
-    if (!h2_typed_headers(header_names, header_values, &headers, &hcount))
-        return xr_null();
-    if (hcount > 0) {
-        req.headers = headers;
-        req.header_count = hcount;
+    /* A peer that did not choose h2 cannot be spoken to here, and answering a
+     * handle would let the caller write frames at an HTTP/1.1 server. */
+    const char *alpn = io->tls ? xr_tls_conn_get_alpn(io->tls) : NULL;
+    if (!alpn || strcmp(alpn, "h2") != 0) {
+        h2_conn_close(io, tls_ctx);
+        return XR_CFUNC_DONE;
     }
 
-    if (!h2_request_options_valid(&req)) {
-        xr_free(headers);
-        return xr_null();
+    xr_io_set_timeout(io, (int) timeout_value);
+    int64_t handle = h2_slot_register(ctx, io, tls_ctx);
+    if (handle < 0) {
+        h2_conn_close(io, tls_ctx);
+        return XR_CFUNC_DONE;
     }
+    *result = xr_int(handle);
+    return XR_CFUNC_DONE;
+}
 
-    XrH2Response *resp = http2_client_request(X, ctx->client_pool, url->data, &req, timeout_ms);
-
-    xr_free(headers);
-
-    if (!resp) {
-        if (!xr_tls_is_available())
-            throw_tls_unavailable(X);
-        return xr_null();
+/* http2.__send(handle, data) -> bool; writes the whole buffer or fails. */
+XrCFuncResult h2_send(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
+    *result = xr_bool(false);
+    if (nargs < 2 || !XR_IS_INT(args[0]) || !XR_IS_ARRAY(args[1]))
+        return XR_CFUNC_DONE;
+    XrArray *data = XR_TO_ARRAY(args[1]);
+    if (data->elem_type != XR_ELEM_U8 || data->length < 0)
+        return XR_CFUNC_DONE;
+    if (data->length == 0) {
+        *result = xr_bool(true);
+        return XR_CFUNC_DONE;
     }
+    XrIOConn *io = h2_conn_for_handle(X, XR_TO_INT(args[0]));
+    if (!io)
+        return XR_CFUNC_DONE;
+    int written = xr_io_write_all(io, data->data, (size_t) data->length);
+    *result = xr_bool(written == data->length);
+    return XR_CFUNC_DONE;
+}
 
-    XrValue result = h2_typed_response(X, resp);
-    http2_client_response_free(resp);
-    return result;
+/* http2.__recv(handle, maxBytes, timeoutMs) -> Array<u8>?
+ *
+ * One read. A short read is normal and is answered as-is; reassembling frames
+ * from short reads is http2.xr's job. Null means the peer closed or the read
+ * failed -- the caller cannot act differently on those two, and conflating
+ * them keeps errno out of Xray. */
+XrCFuncResult h2_recv(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
+    *result = xr_null();
+    if (nargs < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
+        return XR_CFUNC_DONE;
+    int64_t requested = XR_TO_INT(args[1]);
+    if (requested <= 0)
+        return XR_CFUNC_DONE;
+    if (requested > XR_H2_MAX_READ)
+        requested = XR_H2_MAX_READ;
+
+    XrIOConn *io = h2_conn_for_handle(X, XR_TO_INT(args[0]));
+    if (!io)
+        return XR_CFUNC_DONE;
+    int64_t timeout_value = XR_TO_INT(args[2]);
+    if (timeout_value > 0 && timeout_value <= INT32_MAX)
+        xr_io_set_timeout(io, (int) timeout_value);
+
+    XrCoroutine *coro = xr_current_coro(X);
+    XrArray *buffer = xr_byte_array_new(coro, (int32_t) requested);
+    if (!buffer)
+        return XR_CFUNC_DONE;
+
+    int n = xr_io_read(io, buffer->data, (size_t) requested);
+    if (n <= 0)
+        return XR_CFUNC_DONE;
+    buffer->length = (int32_t) n;
+    *result = xr_value_from_array(buffer);
+    return XR_CFUNC_DONE;
+}
+
+/* http2.__close(handle) -> bool; false when the handle named nothing live. */
+XrValue h2_close(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    XrHttp2Context *ctx = http2_get_context(X);
+    if (!ctx)
+        return xr_bool(false);
+    XrIOConn *io = NULL;
+    XrTlsContext *tls_ctx = NULL;
+    if (!h2_slot_take(ctx, XR_TO_INT(args[0]), &io, &tls_ctx))
+        return xr_bool(false);
+    h2_conn_close(io, tls_ctx);
+    return xr_bool(true);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_HTTP2 1
