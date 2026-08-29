@@ -1190,6 +1190,8 @@ add_xray_unit_test(test_regex regex/test_regex.c)
 # ============================================================================
 
 add_xray_unit_test(test_api_defense api/test_api_defense.c)
+add_xray_unit_test(test_dostring_module_defaults api/test_dostring_module_defaults.c)
+set_tests_properties(test_dostring_module_defaults PROPERTIES LABELS "api;modules;defaults")
 add_test(
     NAME test_api_inventory_param_modes
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_param_modes.py
