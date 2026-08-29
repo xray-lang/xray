@@ -42,8 +42,8 @@ def valid_plan() -> completion.PlanIdentity:
         {
             "psc_schema": 9,
             "semantic_schema": 45,
-            "target_schema": 55,
-            "xtp_schema": 55,
+            "target_schema": 56,
+            "xtp_schema": 56,
             "module_count": 3,
             "dependency_count": 2,
             "program_fingerprint": "1" * 64,
@@ -65,7 +65,7 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
         schemas, errors = probe.source_schema_authority(ROOT)
         self.assertEqual([], errors)
         self.assertEqual(
-            (9, 45, 55, 55),
+            (9, 45, 56, 56),
             (
                 schemas.psc_schema,
                 schemas.semantic_schema,
@@ -85,14 +85,14 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
                     f"psc={'1' * 64} gci={'3' * 32}"
                 ),
                 *(
-                    f"target-plan module={index} schema=55 fingerprint={target} "
+                    f"target-plan module={index} schema=56 fingerprint={target} "
                     f"semantic={semantic} profile={'7' * 64}"
                     for index in range(3)
                 ),
             ]
         )
         observation = probe.parse_aot_plan_observation(
-            stdout, probe.SchemaAuthority(9, 45, 55, 55)
+            stdout, probe.SchemaAuthority(9, 45, 56, 56)
         )
         self.assertEqual(3, observation.module_count)
         self.assertEqual(2, observation.dependency_count)

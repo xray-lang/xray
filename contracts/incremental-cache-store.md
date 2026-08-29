@@ -122,7 +122,7 @@ invalidation, compiler-session ownership, or any compatibility reader.
     every live module, function, import/export, resolver, call, attachment, and
     dependency join. Producer and entry XSM bytes are deterministic; entry
     decode requires the exact ordered producer plan. The driver then constructs
-    one independently verified schema-55 program TargetPlan from the full
+    one independently verified schema-56 program TargetPlan from the full
     canonical SemanticPlan module set. Its single graph row, two pointer-free
     module partitions, aggregate semantic fingerprint, global Target rows, and
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge must all verify before

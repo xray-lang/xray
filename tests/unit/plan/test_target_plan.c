@@ -2330,10 +2330,10 @@ static void test_plan_snapshot_and_determinism(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "d644dbdcd23a5e4aa03cc987079cc8c0811e0aef62494d4d23cbbcac8e136178") != 0)
+    if (strcmp(target_hex, "2334a7539cd0ee6ad82b6ca5673ce20e2c81dc867fb4b9b7de8742d034bf1168") != 0)
         fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "d644dbdcd23a5e4aa03cc987079cc8c0811e0aef62494d4d23cbbcac8e136178") == 0);
+                   "2334a7539cd0ee6ad82b6ca5673ce20e2c81dc867fb4b9b7de8742d034bf1168") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -6042,9 +6042,13 @@ static void test_stringbuilder_constructor_call_authority(void) {
     uint8_t saved_convention = call->calling_convention;
     call->calling_convention = XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE;
     expect_verify_failure(plan, "XR_TARGET_1003");
+    call->calling_convention = XR_TARGET_CALL_CONVENTION_COUNT;
+    expect_verify_failure(plan, "XR_TARGET_1003");
     call->calling_convention = saved_convention;
     uint8_t saved_kind = call->target_kind;
     call->target_kind = XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->target_kind = XR_TARGET_CALL_TARGET_COUNT;
     expect_verify_failure(plan, "XR_TARGET_1003");
     call->target_kind = saved_kind;
     uint8_t saved_ownership = call->result_ownership;

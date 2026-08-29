@@ -1642,7 +1642,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0,  448, 58, 12, 24, 108, 28, 40, 24, 12,  48,  58,  112,
-        32, 178, 58, 20, 4,  20,  44, 12, 48, 144, 132, 208, 340,
+        32, 178, 58, 20, 4,  20,  44, 12, 48, 144, 132, 216, 340,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
@@ -2101,10 +2101,10 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-55-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-56-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
         test_previous_schema_is_rejected();
-        puts("XTP schema 55 cutover tests passed");
+        puts("XTP schema 56 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

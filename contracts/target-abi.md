@@ -428,7 +428,7 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-TargetPlan schema 55 freezes the closed `i64.addOverflows`,
+TargetPlan schema 56 freezes the closed `i64.addOverflows`,
 `i64.subOverflows`, and `i64.mulOverflows` family as two exact signed-`i64`
 inputs and one `I1` result slot. The ABI answer is the function-qualified
 predicate row plus its typed instruction; a method name, Xi body shape, or
@@ -443,7 +443,7 @@ text, dispatch through the runtime method table, box the predicate, or fall
 back to a legacy value plan. Missing, duplicate, stale, swapped, or
 wrong-helper rows fail closed before C emission.
 
-TargetPlan schema 55 freezes one exact borrowed direct-local
+TargetPlan schema 56 freezes one exact borrowed direct-local
 `ref i64` boundary. The caller source and callee parameter retain scalar `I64`
 storage; `REFERENCE`, `BORROW`, and `ADDRESSABLE` are call-boundary facts, not a
 request to rewrite the parameter as a general raw-pointer value. The caller's
@@ -453,7 +453,7 @@ and transfer. C emission may project that verified boundary as `int64_t *`.
 This authority does not by itself grant representation-refinement, VM, CGen, or
 native execution coverage, and no generic ref or pointer inference is allowed.
 The AOT scalar-ref-v1 slice separately rejoins that exact SemanticPlan and
-schema-55 TargetPlan boundary. Refinement schema 6 records no adapter: it
+schema-56 TargetPlan boundary. Refinement schema 6 records no adapter: it
 materializes caller storage, callee storage, call machine rows, and load/store
 pointees as `I64`, while the caller `LOCAL_ADDR` and callee function ABI are
 `RAW_PTR` with an `I64` pointee. C-emission schema 39 is the sole C spelling
@@ -471,7 +471,7 @@ projection to the portable scalar helper; the `os.__getpid` source spelling,
 native-module factory, tagged `XrValue` wrapper, and legacy function table are
 not ABI owners and cannot repair missing or mutated rows.
 
-The schema-55 source program graph is a distinct program-wide AOT cutover; it
+The schema-56 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
 TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and

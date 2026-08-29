@@ -30,7 +30,7 @@ typedef struct XrTypedLeafAggregateI64x2 {
 } XrTypedLeafAggregateI64x2;
 
 /* Exact pointer-free tuple6 carrier.  Padding is part of the x64 ABI layout
- * proved by schema-55 TargetPlan rows; callers never expose plan slots. */
+ * proved by schema-56 TargetPlan rows; callers never expose plan slots. */
 typedef struct XrTypedLeafValueProductTuple6 {
     int64_t field0;
     int64_t field1;

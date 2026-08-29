@@ -1,6 +1,7 @@
 /* Independent proof of the frozen i64 overflow TargetPlan authority. */
 
 #include "xr_i64_overflow_target_instruction.h"
+#include "xr_target_plan_internal.h"
 #include "../semantic/xr_i64_overflow_predicate_semantics.h"
 #include "../semantic/xr_semantic_ids.h"
 #include "../semantic/xr_semantic_plan_internal.h"
@@ -24,30 +25,27 @@ static bool zero_id(XrStableId id) {
 static bool exact_i64(const XrSemanticTypeRecord *type) {
     XrStableId zero = {{0}};
     return type && type->kind == XR_KIND_INT && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 0 && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && type->scalar_rep == XR_NATIVE_I64 &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_NATIVE_I64 && type->source_class == XR_SEMANTIC_INDEX_NONE &&
            xr_stable_id_equal(type->source_class_identity, zero) &&
            xr_stable_id_equal(type->source_enum_identity, zero) && !type->source_enum_key &&
-           type->enum_layout_id == 0 && type->enum_member_count == 0 &&
-           type->enum_flags == 0 && type->reserved_enum == 0 && type->flags == 0;
+           type->enum_layout_id == 0 && type->enum_member_count == 0 && type->enum_flags == 0 &&
+           type->reserved_enum == 0 && type->flags == 0;
 }
 
 static bool exact_bool(const XrSemanticTypeRecord *type) {
     XrStableId zero = {{0}};
     return type && type->kind == XR_KIND_BOOL && type->builtin_type == XR_TID_NULL &&
-           type->child_count == 0 && type->aggregate_extent == 0 &&
-           type->aggregate_align == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->source_class == XR_SEMANTIC_INDEX_NONE &&
            xr_stable_id_equal(type->source_class_identity, zero) &&
            xr_stable_id_equal(type->source_enum_identity, zero) && !type->source_enum_key &&
-           type->enum_layout_id == 0 && type->enum_member_count == 0 &&
-           type->enum_flags == 0 && type->reserved_enum == 0 && type->flags == 0;
+           type->enum_layout_id == 0 && type->enum_member_count == 0 && type->enum_flags == 0 &&
+           type->reserved_enum == 0 && type->flags == 0;
 }
 
 /* Deliberately independent from the builder-side identity routine. */
-static bool reconstruct_identity(const XrTargetI64OverflowPredicateRecord *row,
-                                 XrStableId *out) {
+static bool reconstruct_identity(const XrTargetI64OverflowPredicateRecord *row, XrStableId *out) {
     char call[XR_STABLE_ID_BYTES * 2 + 1];
     char callsite[XR_STABLE_ID_BYTES * 2 + 1];
     char caller[XR_STABLE_ID_BYTES * 2 + 1];
@@ -64,25 +62,22 @@ static bool reconstruct_identity(const XrTargetI64OverflowPredicateRecord *row,
         key, sizeof(key),
         "xray-target-i64-overflow-predicate-v1:call=%s:callsite=%s:caller=%s:builtin=%s:"
         "function=%u:operation=%u:program-row=%u:result=%u:receiver=%u:argument=%u:kind=%u",
-        call, callsite, caller, builtin, row->function, row->semantic_operation,
-        row->program_row, row->result_slot, row->receiver_slot, row->argument_slot,
-        (unsigned) row->kind);
+        call, callsite, caller, builtin, row->function, row->semantic_operation, row->program_row,
+        row->result_slot, row->receiver_slot, row->argument_slot, (unsigned) row->kind);
     return written > 0 && (size_t) written < sizeof(key) &&
            xr_stable_id_from_key(key, out, &digest);
 }
 
-static bool verifier_kind(XrStableId builtin, XrI64OverflowPredicateKind *kind,
-                          uint32_t *symbol) {
-    for (uint32_t raw = XR_I64_OVERFLOW_PREDICATE_ADD;
-         raw < XR_I64_OVERFLOW_PREDICATE_COUNT; raw++) {
+static bool verifier_kind(XrStableId builtin, XrI64OverflowPredicateKind *kind, uint32_t *symbol) {
+    for (uint32_t raw = XR_I64_OVERFLOW_PREDICATE_ADD; raw < XR_I64_OVERFLOW_PREDICATE_COUNT;
+         raw++) {
         XrStableId expected = {{0}};
-        uint32_t expected_symbol = raw == XR_I64_OVERFLOW_PREDICATE_ADD
-                                       ? XR_I64_OVERFLOW_METHOD_SYMBOL_ADD
-                                   : raw == XR_I64_OVERFLOW_PREDICATE_SUB
-                                       ? XR_I64_OVERFLOW_METHOD_SYMBOL_SUB
-                                       : XR_I64_OVERFLOW_METHOD_SYMBOL_MUL;
-        if (xr_i64_overflow_predicate_builtin_identity(
-                (XrI64OverflowPredicateKind) raw, &expected) &&
+        uint32_t expected_symbol =
+            raw == XR_I64_OVERFLOW_PREDICATE_ADD   ? XR_I64_OVERFLOW_METHOD_SYMBOL_ADD
+            : raw == XR_I64_OVERFLOW_PREDICATE_SUB ? XR_I64_OVERFLOW_METHOD_SYMBOL_SUB
+                                                   : XR_I64_OVERFLOW_METHOD_SYMBOL_MUL;
+        if (xr_i64_overflow_predicate_builtin_identity((XrI64OverflowPredicateKind) raw,
+                                                       &expected) &&
             xr_stable_id_equal(expected, builtin)) {
             if (kind)
                 *kind = (XrI64OverflowPredicateKind) raw;
@@ -94,23 +89,20 @@ static bool verifier_kind(XrStableId builtin, XrI64OverflowPredicateKind *kind,
     return false;
 }
 
-static bool slot_matches(const XrTargetSlotRecord *slot, uint32_t id,
-                         uint32_t function, uint32_t semantic_value,
-                         uint32_t semantic_operation, bool result) {
+static bool slot_matches(const XrTargetSlotRecord *slot, uint32_t id, uint32_t function,
+                         uint32_t semantic_value, uint32_t semantic_operation, bool result) {
     return slot && slot->id == id && slot->function == function &&
            slot->semantic_value == semantic_value &&
            (!result || slot->semantic_operation == semantic_operation) &&
-           slot->root_kind == XR_TARGET_ROOT_NONE &&
-           slot->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+           slot->root_kind == XR_TARGET_ROOT_NONE && slot->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
 }
 
-static bool row_matches_binding(const XrTargetPlan *plan,
+static bool row_matches_binding(const XrTargetPlan *plan, const XrSemanticPlan *semantic,
                                 const XrTargetI64OverflowPredicateRecord *row,
                                 const XrSemanticProgramCallBinding *binding,
                                 const XrSemanticProgramFunctionBinding *function_binding,
-                                uint32_t target_function,
+                                uint32_t global_row, uint32_t target_function,
                                 const XrTargetInstructionRecord *instruction) {
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
     const XrSemanticOperationRecord *operation =
         semantic ? xr_semantic_plan_operation(semantic, binding->operation) : NULL;
     uint32_t operand_count = 0, slot_count = 0;
@@ -124,7 +116,7 @@ static bool row_matches_binding(const XrTargetPlan *plan,
         !verifier_kind(binding->callee_program_function, &kind, &symbol) ||
         !reconstruct_identity(row, &expected_identity))
         return false;
-    if (row->id != binding->program_row || row->function != target_function ||
+    if (row->id != global_row || row->function != target_function ||
         row->semantic_operation != binding->operation || row->program_row != binding->program_row ||
         row->kind != (uint8_t) kind || row->reserved[0] || row->reserved[1] || row->reserved[2] ||
         !xr_stable_id_equal(row->identity, expected_identity) ||
@@ -132,11 +124,11 @@ static bool row_matches_binding(const XrTargetPlan *plan,
         !xr_stable_id_equal(row->callsite, binding->callsite) ||
         !xr_stable_id_equal(row->caller_identity, function_binding->program_function) ||
         !xr_stable_id_equal(row->builtin_identity, binding->callee_program_function) ||
-        !xr_stable_id_equal(binding->caller_program_function,
-                            function_binding->program_function) ||
+        !xr_stable_id_equal(binding->caller_program_function, function_binding->program_function) ||
         binding->target_function != XR_SEMANTIC_INDEX_NONE ||
         binding->program_dependency != XR_SEMANTIC_INDEX_NONE ||
-        !zero_id(binding->resolver_binding) || operation->function != function_binding->semantic_function ||
+        !zero_id(binding->resolver_binding) ||
+        operation->function != function_binding->semantic_function ||
         operation->opcode != XI_CALL_METHOD || operation->operand_count != 2 ||
         operation->operand_begin > operand_count ||
         operation->operand_count > operand_count - operation->operand_begin ||
@@ -147,9 +139,10 @@ static bool row_matches_binding(const XrTargetPlan *plan,
         operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
         operation->transfer_mode != XR_TRANSFER_SHARE ||
-        operation->parameter_mode != XR_PARAM_READ || operation->parameter_ownership != XI_OWN_NONE ||
-        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
-        operation->return_provenance != XR_SEM_RETURN_NONE || operation->return_complete != 0 ||
+        operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->return_provenance != XR_SEM_RETURN_NONE ||
+        operation->return_complete != 0 ||
         !exact_bool(xr_semantic_plan_type(semantic, operation->result_type)) ||
         !exact_i64(xr_semantic_plan_type(semantic, operands[operation->operand_begin].type)) ||
         !exact_i64(xr_semantic_plan_type(semantic, operands[operation->operand_begin + 1u].type)) ||
@@ -162,8 +155,7 @@ static bool row_matches_binding(const XrTargetPlan *plan,
         !slot_matches(&slots[row->argument_slot], row->argument_slot, target_function,
                       operands[operation->operand_begin + 1u].value, 0, false) ||
         instruction->opcode != XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE ||
-        instruction->immediate_bits != row->id ||
-        instruction->function != row->function ||
+        instruction->immediate_bits != row->id || instruction->function != row->function ||
         instruction->result_slot != row->result_slot || instruction->operand_count != 2 ||
         instruction->reserved != 0 || instruction->operand_slots[0] != row->receiver_slot ||
         instruction->operand_slots[1] != row->argument_slot)
@@ -171,22 +163,32 @@ static bool row_matches_binding(const XrTargetPlan *plan,
     return true;
 }
 
-XR_FUNC bool xr_i64_overflow_target_program_verify(const XrTargetPlan *plan,
-                                                   char *error, size_t error_size) {
-    const XrSemanticPlan *semantic = plan ? xr_target_plan_semantic_plan(plan) : NULL;
+static bool verify_partition(const XrTargetPlan *plan, const XrSemanticPlan *semantic,
+                             const XrTargetModulePartitionRecord *partition, char *error,
+                             size_t error_size) {
     const XrSemanticProgramProvenance *program =
         semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
-    uint32_t row_count = 0, instruction_count = 0;
+    uint32_t total_row_count = 0, total_instruction_count = 0, function_count = 0;
     const XrTargetI64OverflowPredicateRecord *rows =
-        xr_target_plan_i64_overflow_predicates(plan, &row_count);
+        xr_target_plan_i64_overflow_predicates(plan, &total_row_count);
     const XrTargetInstructionRecord *instructions =
-        xr_target_plan_instructions(plan, &instruction_count);
-    bool required = program &&
-                    program->program_family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+        xr_target_plan_instructions(plan, &total_instruction_count);
+    const XrTargetFunctionRecord *functions = xr_target_plan_functions(plan, &function_count);
+    uint32_t row_begin = partition->i64_overflow_predicates_begin;
+    uint32_t row_count = partition->i64_overflow_predicates_count;
+    uint32_t instruction_begin = partition->instructions_begin;
+    uint32_t instruction_count = partition->instructions_count;
+    bool required =
+        program && program->program_family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     if (!required)
-        return row_count == 0 || reject(error, error_size,
-                                        "overflow rows lack exact program authority");
-    if (!plan || !xr_target_plan_is_frozen(plan) || !rows || !instructions ||
+        return row_count == 0 ||
+               reject(error, error_size, "overflow rows lack exact program authority");
+    if (!plan || !xr_target_plan_is_frozen(plan) || !rows || !instructions || !functions ||
+        row_begin > total_row_count || row_count > total_row_count - row_begin ||
+        instruction_begin > total_instruction_count ||
+        instruction_count > total_instruction_count - instruction_begin ||
+        partition->functions_begin > function_count ||
+        partition->functions_count > function_count - partition->functions_begin ||
         program->module_count != 1 || program->function_count != 1 || program->call_count == 0 ||
         row_count != program->call_count ||
         xr_semantic_plan_program_function_binding_count(semantic) != 1 ||
@@ -194,13 +196,11 @@ XR_FUNC bool xr_i64_overflow_target_program_verify(const XrTargetPlan *plan,
         return reject(error, error_size, "overflow TargetPlan provenance is incomplete");
     const XrSemanticProgramFunctionBinding *function_binding =
         xr_semantic_plan_program_function_binding(semantic, 0);
-    if (!function_binding ||
-        function_binding->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY)
+    if (!function_binding || function_binding->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY)
         return reject(error, error_size, "overflow entry function binding is invalid");
-    uint32_t function_count = 0;
-    const XrTargetFunctionRecord *functions = xr_target_plan_functions(plan, &function_count);
     uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t i = 0; functions && i < function_count; i++) {
+    uint32_t function_end = partition->functions_begin + partition->functions_count;
+    for (uint32_t i = partition->functions_begin; i < function_end; i++) {
         if (functions[i].semantic_function != function_binding->semantic_function)
             continue;
         if (target_function != XR_SEMANTIC_INDEX_NONE)
@@ -212,19 +212,21 @@ XR_FUNC bool xr_i64_overflow_target_program_verify(const XrTargetPlan *plan,
         return reject(error, error_size, "overflow target function join is not unique");
     uint32_t overflow_count = 0;
     uint32_t previous_operation = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t i = 0; i < instruction_count; i++) {
+    uint32_t instruction_end = instruction_begin + instruction_count;
+    uint32_t row_end = row_begin + row_count;
+    for (uint32_t i = instruction_begin; i < instruction_end; i++) {
         if (instructions[i].opcode != XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE)
             continue;
-        if (instructions[i].immediate_bits >= row_count)
+        if (instructions[i].immediate_bits < row_begin || instructions[i].immediate_bits >= row_end)
             return reject(error, error_size,
                           "overflow instruction predicate index is out of range");
         uint32_t row_index = (uint32_t) instructions[i].immediate_bits;
         const XrTargetI64OverflowPredicateRecord *row = &rows[row_index];
         const XrSemanticProgramCallBinding *binding =
             xr_semantic_plan_program_call_for_operation(semantic, row->semantic_operation);
-        if (!binding || binding->program_row != row_index || row->id != row_index ||
+        if (!binding || binding->program_row != row_index - row_begin || row->id != row_index ||
             (overflow_count != 0 && row->semantic_operation <= previous_operation) ||
-            !row_matches_binding(plan, row, binding, function_binding,
+            !row_matches_binding(plan, semantic, row, binding, function_binding, row_index,
                                  target_function, &instructions[i]))
             return reject(error, error_size, "overflow predicate row is not exact");
         previous_operation = row->semantic_operation;
@@ -232,4 +234,35 @@ XR_FUNC bool xr_i64_overflow_target_program_verify(const XrTargetPlan *plan,
     }
     return overflow_count == row_count ||
            reject(error, error_size, "overflow instruction coverage is not exact");
+}
+
+XR_FUNC bool xr_i64_overflow_target_program_verify(const XrTargetPlan *plan, char *error,
+                                                   size_t error_size) {
+    if (!plan || !xr_target_plan_is_frozen(plan))
+        return reject(error, error_size, "overflow verifier requires a frozen TargetPlan");
+    if (!plan->module_partitions_count) {
+        XrTargetModulePartitionRecord whole = {
+            .functions_begin = 0u,
+            .functions_count = plan->functions_count,
+            .slots_begin = 0u,
+            .slots_count = plan->slots_count,
+            .i64_overflow_predicates_begin = 0u,
+            .i64_overflow_predicates_count = plan->i64_overflow_predicates_count,
+            .instructions_begin = 0u,
+            .instructions_count = plan->instructions_count,
+        };
+        return verify_partition(plan, plan->semantic_plan, &whole, error, error_size);
+    }
+    if (!plan->module_partitions || !plan->semantic_modules ||
+        plan->module_partitions_count != plan->semantic_module_count)
+        return reject(error, error_size, "overflow module partitions are incomplete");
+    for (uint32_t i = 0; i < plan->module_partitions_count; i++) {
+        const XrTargetModulePartitionRecord *partition = &plan->module_partitions[i];
+        const XrSemanticPlan *semantic = partition->semantic_module < plan->semantic_module_count
+                                             ? plan->semantic_modules[partition->semantic_module]
+                                             : NULL;
+        if (!semantic || !verify_partition(plan, semantic, partition, error, error_size))
+            return false;
+    }
+    return true;
 }
