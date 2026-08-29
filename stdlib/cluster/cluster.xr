@@ -103,6 +103,13 @@ export type ClusterConfig = {
     port: i64,
     secret: string?,
     tls: ClusterTlsOptions?,
+    // The heartbeat schedule, when this node wants one of its own. Omitting a
+    // field leaves it null and takes the constant above, so the defaults still
+    // have exactly one owner and a caller who needs a faster detector no longer
+    // has to be told the numbers are not negotiable.
+    heartbeatIntervalMs: i64?,
+    heartbeatTimeoutMs: i64?,
+    maxMissedHeartbeats: i64?,
 }
 
 export enum AddressError {
@@ -264,14 +271,22 @@ export fn monitor(name: string, coroName: string? = null) -> Channel<string> {
 // checked this before: the name went straight into a fixed 64-byte field and a
 // longer one was silently truncated, so two nodes with names differing past
 // byte 63 became the same node to the cluster. The heartbeat schedule is passed
-// down rather than defaulted below, so the numbers have one owner.
+// down rather than defaulted below the leaf, so the numbers have one owner and
+// a caller may override them.
 export fn start(config: ClusterConfig) -> bool {
     if (!validNodeName(config.name)) { return false }
     if (config.port < 0 || config.port > 65535) { return false }
+    var interval = config.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS
+    var timeout = config.heartbeatTimeoutMs ?? HEARTBEAT_TIMEOUT_MS
+    var missed = config.maxMissedHeartbeats ?? MAX_MISSED_HEARTBEATS
+    // A schedule that cannot detect anything is a configuration mistake, not a
+    // tuning choice: a detector needs at least one interval to elapse before it
+    // may call a peer late, and at least one missed beat before it kills it.
+    if (interval <= 0 || timeout < interval || missed <= 0) { return false }
     var secret = config.secret ?? ""
     if (config.tls == null) {
-        return __start(config.name, config.port, secret, false, "", "", "", false,
-                       HEARTBEAT_INTERVAL_MS, HEARTBEAT_TIMEOUT_MS, MAX_MISSED_HEARTBEATS)
+        return __start(config.name, config.port, secret, false, "", "", "", false, interval,
+                       timeout, missed)
     }
     var tls = config.tls!
     return __start(
@@ -283,9 +298,9 @@ export fn start(config: ClusterConfig) -> bool {
         tls.certFile ?? "",
         tls.keyFile ?? "",
         tls.insecure,
-        HEARTBEAT_INTERVAL_MS,
-        HEARTBEAT_TIMEOUT_MS,
-        MAX_MISSED_HEARTBEATS
+        interval,
+        timeout,
+        missed
     )
 }
 
