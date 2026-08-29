@@ -2647,13 +2647,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "",
     },
     {
+        .name = "BufWriter.bytes",
+        .signature = "(): Array<u8>",
+        .summary = "",
+    },
+    {
         .name = "BufWriter.constructor",
         .signature = "(path: Path, capacity: i64 = 131072): ()",
         .summary = "",
     },
     {
-        .name = "BufWriter.flush",
-        .signature = "(): bool",
+        .name = "BufWriter.path",
+        .signature = "(): Path",
         .summary = "",
     },
     {
@@ -2692,8 +2697,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "",
     },
     {
+        .name = "File.flush",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
         .name = "File.open",
         .signature = "(path: Path): File?",
+        .summary = "",
+    },
+    {
+        .name = "File.openWrite",
+        .signature = "(path: Path, append: bool): File?",
         .summary = "",
     },
     {
@@ -2702,8 +2717,28 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "",
     },
     {
+        .name = "File.stderr",
+        .signature = "(): File",
+        .summary = "",
+    },
+    {
         .name = "File.stdin",
         .signature = "(): File",
+        .summary = "",
+    },
+    {
+        .name = "File.stdout",
+        .signature = "(): File",
+        .summary = "",
+    },
+    {
+        .name = "File.write",
+        .signature = "(data: Array<u8>, offset: i64): i64",
+        .summary = "",
+    },
+    {
+        .name = "File.writeString",
+        .signature = "(data: string, offset: i64): i64",
         .summary = "",
     },
     {
@@ -2819,6 +2854,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "fileSize",
         .signature = "(path: Path): i64",
+        .summary = "",
+    },
+    {
+        .name = "flushWriter",
+        .signature = "(writer: BufWriter): bool",
         .summary = "",
     },
     {
@@ -9439,8 +9479,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `BufReader.open` | `(path: Path, chunkSize: i64 = 131072): BufReader?` |  |\n"
             "| `BufReader.readLine` | `(): string?` |  |\n"
             "| `BufWriter` | `BufWriter` |  |\n"
+            "| `BufWriter.bytes` | `(): Array<u8>` |  |\n"
             "| `BufWriter.constructor` | `(path: Path, capacity: i64 = 131072): ()` |  |\n"
-            "| `BufWriter.flush` | `(): bool` |  |\n"
+            "| `BufWriter.path` | `(): Path` |  |\n"
             "| `BufWriter.reset` | `(): ()` |  |\n"
             "| `BufWriter.size` | `(): i64` |  |\n"
             "| `BufWriter.write` | `(data: Slice<u8>): i64` |  |\n"
@@ -9448,9 +9489,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `BufWriter.writeString` | `(data: string): i64` |  |\n"
             "| `File` | `File` |  |\n"
             "| `File.close` | `(): bool` |  |\n"
+            "| `File.flush` | `(): bool` |  |\n"
             "| `File.open` | `(path: Path): File?` |  |\n"
+            "| `File.openWrite` | `(path: Path, append: bool): File?` |  |\n"
             "| `File.read` | `(maxBytes: i64 = 131072): Array<u8>?` |  |\n"
+            "| `File.stderr` | `(): File` |  |\n"
             "| `File.stdin` | `(): File` |  |\n"
+            "| `File.stdout` | `(): File` |  |\n"
+            "| `File.write` | `(data: Array<u8>, offset: i64): i64` |  |\n"
+            "| `File.writeString` | `(data: string, offset: i64): i64` |  |\n"
             "| `FileStat` | `FileStat` |  |\n"
             "| `FileStat.atime` | `: i64` |  |\n"
             "| `FileStat.constructor` | `(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()` |  |\n"
@@ -9474,6 +9521,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.cwd` | `(): Path` |  |\n"
             "| `io.exists` | `(path: Path): bool` |  |\n"
             "| `io.fileSize` | `(path: Path): i64` |  |\n"
+            "| `io.flushWriter` | `(writer: BufWriter): bool` |  |\n"
             "| `io.isDir` | `(path: Path): bool` |  |\n"
             "| `io.isFile` | `(path: Path): bool` |  |\n"
             "| `io.isSymlink` | `(path: Path): bool` |  |\n"

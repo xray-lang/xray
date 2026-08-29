@@ -251,15 +251,17 @@ static const XaBuiltinHandle g_gen_io_handles[] = {
 
 // io module functions
 static const XaBuiltinMember g_gen_io_functions[] = {
-    {"__appendFile", "(path: Path, data: string): bool", "Append string to file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__chmod", "(path: Path, mode: i64): bool", "Change file permissions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__chdir", "(path: Path): bool", "Change working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__copyFile", "(src: Path, dst: Path): bool", "Copy a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cwd", "(): string", "Get current working directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__exists", "(path: Path): bool", "Check if path exists", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileClose", "(handle: i64): bool", "Close an owned binary file handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileOpen", "(path: Path): i64", "Open a file for binary reading and return an opaque handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read at most maxBytes from an opaque binary stream; empty means EOF", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__fileClose", "(handle: i64): bool", "Close an owned file descriptor; 0, 1 and 2 are refused", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileFlush", "(handle: i64): bool", "Flush any C-runtime buffering behind a standard stream handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileOpen", "(path: Path): i64", "Open a file for binary reading and return a file descriptor", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileOpenWrite", "(path: Path, append: bool): i64", "Open a file for binary writing and return a file descriptor", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read at most maxBytes from a descriptor; an empty result means EOF", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__fileWrite", "(handle: i64, data: Array<u8>, offset: i64): i64", "Write bytes from offset once; returns how many the stream accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileWriteStr", "(handle: i64, data: string, offset: i64): i64", "Write string bytes from offset once; returns how many were accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__fileSize", "(path: Path): i64", "Get file size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__isDir", "(path: Path): bool", "Check if path is a directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__isFile", "(path: Path): bool", "Check if path is a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -280,12 +282,8 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__makeTempDir", "(root: string): string?", "Create a uniquely named directory inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__makeTempFile", "(root: string): string?", "Create a uniquely named file inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__writeFile", "(path: Path, data: string): bool", "Write string to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__writeFileBytes", "(path: Path, data: Array<u8>): bool", "Write byte array to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_IO_FUNCTION_COUNT 33
+#define GEN_IO_FUNCTION_COUNT 31
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {

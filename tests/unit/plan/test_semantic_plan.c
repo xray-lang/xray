@@ -2742,7 +2742,7 @@ static void test_immutable_owned_snapshot(void) {
      * above remain independent.
      * Old: 56e7d17e6f52451d5a90eb3e6bcad5fa101abf1cf280bffe786a2da9b84fd12e. */
     REQUIRE(strcmp(semantic_hex,
-                   "499241c8164406343ad9a441cea2e8831aa599f6e0a59d184a63124c2963f81c") == 0);
+                   "5236ba3815056cb087b079eade3073881dd3b0241bc4d0e233c0ad090244a1c0") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3800,16 +3800,16 @@ static void test_source_export_call_target_authority(void) {
      * (xr_semantic_verify.c), so it embeds the imported module's SemanticPlan
      * fingerprint - and that fingerprint covers the whole stdlib metadata
      * registry (xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
-     * derived from every .def entry).  Publishing http2, compress, mem and regex
+     * derived from every .def entry).  Publishing http2, compress, mem, regex and io
      * from .xr bodies therefore moves dependency_id, and the source-export call
      * target key "call-target-v4:...:dependency=<dependency-id>:export=..." moves
      * target_id with it.  export_id is keyed off the export's own shape with no
      * fingerprint in the key, so it stays put.
      * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
      * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "99694eb337d29073546b9ef4f4a03bd6") == 0);
+    REQUIRE(strcmp(dependency_id, "436c7e1e737c0e6fb39de20d5528e625") == 0);
     REQUIRE(strcmp(export_id, "fda3c47f9afbb56bc6f54afe0f1f2516") == 0);
-    REQUIRE(strcmp(target_id, "75dbc0913037120b6f96db543ec92ad7") == 0);
+    REQUIRE(strcmp(target_id, "b571b2c9937f244b98bfab2b8f9418d7") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));

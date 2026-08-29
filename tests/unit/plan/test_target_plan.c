@@ -2327,13 +2327,13 @@ static void test_plan_snapshot_and_determinism(void) {
      * plan->semantic_fingerprint, and xr_semantic_plan.c in turn hashes
      * plan->stdlib_registry_fingerprint, which
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
+     * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "8b256065e56fa48dfac952aab9239393abfd166ced29bf2f3371b98f94e659d3") != 0)
+    if (strcmp(target_hex, "d644dbdcd23a5e4aa03cc987079cc8c0811e0aef62494d4d23cbbcac8e136178") != 0)
         fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "8b256065e56fa48dfac952aab9239393abfd166ced29bf2f3371b98f94e659d3") == 0);
+                   "d644dbdcd23a5e4aa03cc987079cc8c0811e0aef62494d4d23cbbcac8e136178") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4492,10 +4492,10 @@ static void test_channel_close_call_authority(void) {
      * plan->semantic_fingerprint first, and xr_semantic_plan.c in turn hashes
      * plan->stdlib_registry_fingerprint, which
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
+     * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f. */
-    REQUIRE(strcmp(call_hex, "1524578cb8ca5460ac9711c49670f54fce0e0250537d82d98887f3d3bc1fcd33") ==
+    REQUIRE(strcmp(call_hex, "1d6e74c8f7636ab19a4a579cfd33e67e47bfdd43b3d61e3fdcf1f9b6539d4c9b") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -5251,10 +5251,10 @@ static void test_direct_local_call_adapter_family(void) {
      * plan->semantic_fingerprint first, and xr_semantic_plan.c in turn hashes
      * plan->stdlib_registry_fingerprint, which
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
+     * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc. */
-    REQUIRE(strcmp(call_hex, "7e4f3e78a4e809fc12c6d1426547cf9d00399a7aa94e09ef02efd183a4693711") ==
+    REQUIRE(strcmp(call_hex, "65d64c0c5e8335c3684d469219abf160b58d90123a9174192f8716e150c0548f") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -5774,10 +5774,10 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * plan->semantic_fingerprint first, and xr_semantic_plan.c in turn hashes
      * plan->stdlib_registry_fingerprint, which
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
-     * Publishing http2, compress, mem and regex from .xr bodies renames their
+     * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e. */
-    REQUIRE(strcmp(tail_hex, "9fc062542594b4520e42d7d145b609b3e894767c427b469a2964edf07d97d76b") ==
+    REQUIRE(strcmp(tail_hex, "eadb4fd9c95e87d4b1073654e7454731d341325fb7b3a6db13f78dc3019e9038") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

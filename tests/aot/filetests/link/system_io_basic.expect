@@ -1,3 +1,29 @@
+# STALE: this expectation cannot be verified on this baseline. `import io` plus
+# `import path` is a multi-module graph, and AOT is fail-closed on migrated stdlib
+# modules here -- the dump command fails with XR_TARGET_1000 before a single
+# c_contains line is evaluated (tests/aot/run_aot_filetests.py takes the "dump
+# command failed" branch). Whoever first gets this case to build again must
+# re-derive every line below from real `--dump-xaot-plan --dump-link-manifest`
+# output rather than editing it by hand.
+#
+# Lines the io write-side migration invalidated (lane 6-9, branch
+# work/6-9-io-write-leaf-34be0379c): xrt_io_write_file, xrt_io_append_file,
+# xrt_io_write_file_bytes and xrt_io_copy_file no longer exist -- the six write
+# leaves were replaced by the descriptor-based __fileOpenWrite/__fileWrite/
+# __fileWriteStr/__fileFlush set, so writeFile/appendFile/writeFileBytes/copyFile
+# are now Xray bodies in stdlib/io/io.xr over xrt_io_file_open_write and
+# xrt_io_write_handle_chunk/_str. Those four c_contains lines are removed below
+# and the four new entry points added in their place.
+#
+# Lines that were already stale before that migration, left as they are because
+# this lane did not cause them and cannot verify a replacement: xrt_io_temp_dir,
+# xrt_io_mkdirp, xrt_io_touch, xrt_io_read_dir_recursive and xrt_io_remove_all
+# name C entry points that no longer exist either -- tempDir, mkdirp, touch,
+# readDirRecursive and removeAll became Xray bodies in an earlier round.
+#
+# DELETE THIS COMMENT when the case builds again and every line has been
+# re-derived from real output.
+
 contains=xaot-plan v0
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_caps": ["coro", "objects"]
@@ -11,17 +37,17 @@ not_contains="stdlib_objects": ["io"]
 c_contains=xrt_io_temp_dir(
 c_contains=xrt_io_mkdirp(
 c_contains=xrt_io_is_dir(
-c_contains=xrt_io_write_file(
 c_contains=xrt_io_exists(
 c_contains=xrt_io_is_file(
 c_contains=xrt_io_file_size(
 c_contains=xrt_io_read_file(
-c_contains=xrt_io_append_file(
 c_contains=xrt_io_file_open(
+c_contains=xrt_io_file_open_write(
+c_contains=xrt_io_write_handle_chunk(
+c_contains=xrt_io_write_handle_str(
+c_contains=xrt_io_file_close(
 c_contains=xrt_io_read_handle_chunk(
-c_contains=xrt_io_write_file_bytes(
 c_contains=xrt_io_read_file_bytes(
-c_contains=xrt_io_copy_file(
 c_contains=xrt_io_rename(
 c_contains=xrt_io_stat(
 c_contains=xrt_io_touch(

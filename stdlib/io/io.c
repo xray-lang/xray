@@ -60,11 +60,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <utime.h>
-#ifdef XR_OS_MACOS
-#include <copyfile.h>
-#elif defined(XR_OS_LINUX)
-#include <sys/sendfile.h>
-#endif
 #endif
 
 /* ========== External Declarations ========== */
@@ -72,6 +67,66 @@
 struct XrCoroutine;
 extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 static void io_release_array(XrArray *arr);
+
+/* ========== File descriptor handles ==========
+ *
+ * A handle is a file descriptor, not a FILE* cast to an integer. The kernel
+ * validates it, so a bogus integer arriving from Xray source answers EBADF
+ * instead of dereferencing an arbitrary address, and a descriptor is what
+ * io_uring accepts -- a FILE* has no submittable form.
+ *
+ * 0, 1 and 2 are reserved for the standard streams. Reads on 0 and writes on
+ * 1 and 2 go through the C runtime's own stdin/stdout/stderr rather than the
+ * raw descriptor, so they stay ordered against print(), which writes the same
+ * FILE*. An open never hands back a descriptor in that range.
+ */
+#define XR_IO_STD_IN 0
+#define XR_IO_STD_OUT 1
+#define XR_IO_STD_ERR 2
+
+#ifdef XR_OS_WINDOWS
+typedef int io_fd_ssize_t;
+#define io_fd_open _open
+#define io_fd_read _read
+#define io_fd_write _write
+#define io_fd_close _close
+#define IO_FD_OPEN_FLAGS (_O_BINARY | _O_NOINHERIT)
+#define IO_FD_CREATE_MODE (_S_IREAD | _S_IWRITE)
+#else
+typedef ssize_t io_fd_ssize_t;
+#define io_fd_open open
+#define io_fd_read read
+#define io_fd_write write
+#define io_fd_close close
+#define IO_FD_OPEN_FLAGS O_CLOEXEC
+#define IO_FD_CREATE_MODE 0644
+#endif
+
+// One open for both directions; `flags` carries the whole difference. An open
+// must never hand back 0, 1 or 2, because a file landing on one of those would
+// make a later write to "stdout" reach that file instead -- only reachable when
+// the process starts with a standard stream already closed, which is why a
+// failed lift refuses the open rather than returning the low descriptor. The
+// mode argument is ignored by open(2) unless O_CREAT is among the flags.
+static int XR_IO_CORE_ACQUIRE_HANDLE("xray_file_descriptor")
+    io_fd_open_checked(const char *path, int flags) {
+    if (!path || path[0] == '\0')
+        return -1;
+    int fd = io_fd_open(path, flags, IO_FD_CREATE_MODE);
+    if (fd < 0 || fd > XR_IO_STD_ERR)
+        return fd;
+#ifdef XR_OS_WINDOWS
+    int lifted = _dup(fd);
+    if (lifted >= 0 && lifted <= XR_IO_STD_ERR) {
+        _close(lifted);
+        lifted = -1;
+    }
+#else
+    int lifted = fcntl(fd, F_DUPFD_CLOEXEC, XR_IO_STD_ERR + 1);
+#endif
+    io_fd_close(fd);
+    return lifted;
+}
 
 static bool io_prepare_binary_stdin(void) {
 #ifdef XR_OS_WINDOWS
@@ -122,10 +177,6 @@ static size_t io_file_read(void *ctx, void *buf, size_t cap) {
     return fread(buf, 1, cap, (FILE *) ctx);
 }
 
-static size_t io_file_write(void *ctx, const void *buf, size_t len) {
-    return fwrite(buf, 1, len, (FILE *) ctx);
-}
-
 static bool io_file_error(void *ctx) {
     return ferror((FILE *) ctx) != 0;
 }
@@ -139,28 +190,6 @@ XR_FUNC char *xr_io_read_stdin_all(size_t *out_len) {
                                             io_core_realloc, io_core_free, NULL, 4096,
                                             IO_MAX_READ_BYTES, out_len);
 }
-
-#if !defined(XR_OS_WINDOWS) && !defined(XR_OS_MACOS) && !defined(XR_OS_LINUX)
-typedef struct IoCopyFileCtx {
-    FILE *src;
-    FILE *dst;
-} IoCopyFileCtx;
-
-static size_t io_copy_file_read(void *ctx, void *buf, size_t cap) {
-    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
-    return fread(buf, 1, cap, copy_ctx->src);
-}
-
-static size_t io_copy_file_write(void *ctx, const void *buf, size_t len) {
-    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
-    return fwrite(buf, 1, len, copy_ctx->dst);
-}
-
-static bool io_copy_file_error(void *ctx) {
-    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
-    return ferror(copy_ctx->src) != 0;
-}
-#endif
 
 static XrValue io_readStdin(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
@@ -214,14 +243,8 @@ static XrValue io_readStdinBytes(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_value_from_array(arr);
 }
 
-static intptr_t XR_IO_CORE_ACQUIRE_HANDLE("xray_file_stream")
-    io_file_open_handle(const char *path) {
-    FILE *file = path && path[0] != '\0' ? fopen(path, "rb") : NULL;
-    return file ? (intptr_t) file : -1;
-}
-
-static bool io_file_close_handle(intptr_t handle XR_IO_CORE_RELEASE_HANDLE("xray_file_stream")) {
-    return handle >= 0 && fclose((FILE *) handle) == 0;
+static bool io_file_close_handle(int handle XR_IO_CORE_RELEASE_HANDLE("xray_file_descriptor")) {
+    return io_fd_close(handle) == 0;
 }
 
 static XrValue io_fileOpen(XrVMRuntime *X, XrValue *args, int argc) {
@@ -229,17 +252,45 @@ static XrValue io_fileOpen(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_int(-1);
     const char *path = xrs_path_arg(args[0], NULL);
-    return xr_int((int64_t) io_file_open_handle(path));
+    return xr_int((int64_t) io_fd_open_checked(path, O_RDONLY | IO_FD_OPEN_FLAGS));
+}
+
+static XrValue io_fileOpenWrite(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    if (argc < 2)
+        return xr_int(-1);
+    const char *path = xrs_path_arg(args[0], NULL);
+    int flags = O_WRONLY | O_CREAT | IO_FD_OPEN_FLAGS | (XR_IS_TRUE(args[1]) ? O_APPEND : O_TRUNC);
+    return xr_int((int64_t) io_fd_open_checked(path, flags));
 }
 
 static XrValue io_fileRead(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
         return xr_null();
     int64_t handle = XR_TO_INT(args[0]);
-    FILE *stream = handle == 0 ? stdin : (FILE *) (uintptr_t) handle;
-    if (handle == 0 && !io_prepare_binary_stdin())
+    int64_t max_bytes = XR_TO_INT(args[1]);
+    if (handle < 0 || max_bytes < 0 || max_bytes > INT32_MAX)
         return xr_null();
-    return io_stream_read_bytes(X, stream, XR_TO_INT(args[1]));
+    if (handle == XR_IO_STD_IN) {
+        if (!io_prepare_binary_stdin())
+            return xr_null();
+        return io_stream_read_bytes(X, stdin, max_bytes);
+    }
+    XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) max_bytes);
+    if (!arr)
+        return xr_null();
+    if (max_bytes == 0)
+        return xr_value_from_array(arr);
+    io_fd_ssize_t count;
+    do {
+        count = io_fd_read((int) handle, arr->data, (size_t) max_bytes);
+    } while (count < 0 && errno == EINTR);
+    if (count < 0) {
+        io_release_array(arr);
+        return xr_null();
+    }
+    arr->length = (int32_t) count;
+    return xr_value_from_array(arr);
 }
 
 static XrValue io_fileClose(XrVMRuntime *X, XrValue *args, int argc) {
@@ -247,30 +298,25 @@ static XrValue io_fileClose(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_INT(args[0]))
         return xr_bool(false);
     int64_t handle = XR_TO_INT(args[0]);
-    if (handle <= 0)
-        return xr_bool(false);
-    return xr_bool(io_file_close_handle((intptr_t) handle));
+    if (handle <= XR_IO_STD_ERR)
+        return xr_bool(false);  // the standard streams are not the caller's to close
+    return xr_bool(io_file_close_handle((int) handle));
 }
 
-static XrValue io_write_stream(XrValue *args, int argc, FILE *stream) {
-    if (argc < 1 || !stream)
-        return xr_bool(false);
-    size_t len = 0;
-    const char *data = xrs_string_arg(args[0], &len);
-    if (!data)
-        return xr_bool(false);
-    bool ok = xr_io_core_write_all(stream, io_file_write, io_file_error, data, len);
-    return xr_bool(ok && fflush(stream) == 0);
-}
-
-static XrValue io_writeStdout(XrVMRuntime *X, XrValue *args, int argc) {
+// Only the standard streams carry C-runtime buffering; a plain descriptor has
+// none, so flushing one is a no-op that still reports success.
+static XrValue io_fileFlush(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
-    return io_write_stream(args, argc, stdout);
-}
-
-static XrValue io_writeStderr(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    return io_write_stream(args, argc, stderr);
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_bool(false);
+    int64_t handle = XR_TO_INT(args[0]);
+    if (handle < 0)
+        return xr_bool(false);
+    if (handle == XR_IO_STD_OUT)
+        return xr_bool(fflush(stdout) == 0);
+    if (handle == XR_IO_STD_ERR)
+        return xr_bool(fflush(stderr) == 0);
+    return xr_bool(true);
 }
 
 /* ========== io_uring async file I/O (Linux) ==========
@@ -286,15 +332,13 @@ static XrValue io_writeStderr(XrVMRuntime *X, XrValue *args, int argc) {
 
 typedef enum {
     FILE_IO_READ_BYTES,
-    FILE_IO_READ_STRING,
-    FILE_IO_WRITE
+    FILE_IO_READ_STRING
 } FileIoKind;
 
 typedef struct {
     int fd;
     XrPollDesc *pd;
-    char *rbuf;        // read: owned raw buffer (freed on completion)
-    const char *wbuf;  // write: borrowed source (rooted .xr arg)
+    char *rbuf;  // owned raw buffer (freed on completion)
     size_t len;
     size_t off;
     FileIoKind kind;
@@ -305,9 +349,7 @@ static XrCFuncResult file_io_step(XrVMRuntime *X, FileIoState *st, XrValue *resu
 static XrCFuncResult file_io_finish(XrVMRuntime *X, FileIoState *st, bool ok, XrValue *result) {
     XrValue r;
     if (!ok) {
-        r = (st->kind == FILE_IO_WRITE) ? xr_bool(false) : xr_null();
-    } else if (st->kind == FILE_IO_WRITE) {
-        r = xr_bool(st->off == st->len);
+        r = xr_null();
     } else if (st->kind == FILE_IO_READ_STRING) {
         r = xrs_string_value_n(X, st->rbuf, st->off);
     } else {  // FILE_IO_READ_BYTES
@@ -332,21 +374,19 @@ static XrCFuncResult file_io_finish(XrVMRuntime *X, FileIoState *st, bool ok, Xr
 }
 
 // Fallback used when an SQE cannot be queued (submission queue momentarily full):
-// finish the remaining transfer synchronously with pread/pwrite at the offset.
+// finish the remaining read synchronously with pread at the offset.
 static XrCFuncResult file_io_sync_rest(XrVMRuntime *X, FileIoState *st, XrValue *result) {
-    bool is_write = (st->kind == FILE_IO_WRITE);
     while (st->off < st->len) {
-        ssize_t n = is_write ? pwrite(st->fd, st->wbuf + st->off, st->len - st->off, st->off)
-                             : pread(st->fd, st->rbuf + st->off, st->len - st->off, st->off);
+        ssize_t n = pread(st->fd, st->rbuf + st->off, st->len - st->off, st->off);
         if (n > 0) {
             st->off += (size_t) n;
             continue;
         }
         if (n == 0)
-            break;  // read EOF
+            break;  // EOF
         if (errno == EINTR)
             continue;
-        return file_io_finish(X, st, !is_write, result);  // read keeps partial; write fails
+        return file_io_finish(X, st, true, result);  // keep what was already read
     }
     return file_io_finish(X, st, true, result);
 }
@@ -356,11 +396,10 @@ static XrCFuncResult file_io_complete(XrVMRuntime *X, int status, XrValue resume
     (void) status;
     (void) resume_value;
     FileIoState *st = (FileIoState *) ctx;
-    bool is_write = (st->kind == FILE_IO_WRITE);
     XrUringXferKind kind;
-    long n = xr_netpoll_uring_xfer_result(st->pd, is_write ? XR_POLL_WRITE : XR_POLL_READ, &kind);
+    long n = xr_netpoll_uring_xfer_result(st->pd, XR_POLL_READ, &kind);
     if (kind != XR_URING_XFER_DATA)
-        return file_io_finish(X, st, !is_write && st->off > 0, result);
+        return file_io_finish(X, st, st->off > 0, result);
     if (n > 0)
         st->off += (size_t) n;
     if (n > 0 && st->off < st->len)
@@ -369,25 +408,23 @@ static XrCFuncResult file_io_complete(XrVMRuntime *X, int status, XrValue resume
 }
 
 static XrCFuncResult file_io_step(XrVMRuntime *X, FileIoState *st, XrValue *result) {
-    bool is_write = (st->kind == FILE_IO_WRITE);
     XrUringReq req = {
-        .kind = is_write ? XR_URING_OP_FILE_WRITE : XR_URING_OP_FILE_READ,
-        .buf = is_write ? (void *) (st->wbuf + st->off) : (void *) (st->rbuf + st->off),
+        .kind = XR_URING_OP_FILE_READ,
+        .buf = (void *) (st->rbuf + st->off),
         .len = (unsigned) (st->len - st->off),
         .offset = st->off,
     };
     XrCFuncResult cr;
-    if (xr_yield_for_uring_io(X, st->pd, is_write ? XR_POLL_WRITE : XR_POLL_READ, &req,
-                              file_io_complete, st, result, &cr))
+    if (xr_yield_for_uring_io(X, st->pd, XR_POLL_READ, &req, file_io_complete, st, result, &cr))
         return cr;
     return file_io_sync_rest(X, st, result);  // SQ exhausted — finish synchronously
 }
 
 // Try the io_uring completion path. Returns true (and sets *out) if taken;
 // false if the caller should run the synchronous fopen/fread path. `rbuf` is an
-// owned buffer for reads (adopted by the state); `wbuf` is a borrowed source.
-static bool file_io_try_uring(XrVMRuntime *X, int fd, FileIoKind kind, char *rbuf, const char *wbuf,
-                              size_t len, XrValue *result, XrCFuncResult *out) {
+// owned buffer adopted by the state.
+static bool file_io_try_uring(XrVMRuntime *X, int fd, FileIoKind kind, char *rbuf, size_t len,
+                              XrValue *result, XrCFuncResult *out) {
     XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
     if (!rt || !xr_current_coro(X) || !xr_netpoll_uring_active(&rt->netpoll))
         return false;
@@ -403,12 +440,135 @@ static bool file_io_try_uring(XrVMRuntime *X, int fd, FileIoKind kind, char *rbu
     st->pd = pd;
     st->kind = kind;
     st->rbuf = rbuf;
-    st->wbuf = wbuf;
     st->len = len;
     *out = (len == 0) ? file_io_finish(X, st, true, result) : file_io_step(X, st, result);
     return true;
 }
+
+/* One write submitted through io_uring. Unlike the read state machine above,
+ * this owns neither the descriptor nor the buffer: __fileWrite reports what a
+ * single write accepted and the retry loop that turns a short write into a
+ * complete one lives in io.xr. */
+typedef struct {
+    XrPollDesc *pd;
+} IoWriteOnceState;
+
+static XrCFuncResult io_write_once_complete(XrVMRuntime *X, int status, XrValue resume_value,
+                                            void *ctx, XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    IoWriteOnceState *st = (IoWriteOnceState *) ctx;
+    XrUringXferKind kind;
+    long n = xr_netpoll_uring_xfer_result(st->pd, XR_POLL_WRITE, &kind);
+    bool ok = (kind == XR_URING_XFER_DATA && n >= 0);
+    if (st->pd)
+        xr_netpoll_close(&((XrRuntime *) X->vm.scheduler)->netpoll, st->pd);
+    xr_free(st);
+    *result = xr_int(ok ? (int64_t) n : -1);
+    return XR_CFUNC_DONE;
+}
+
+// Returns true (and sets *out) when the submission was taken; false when the
+// caller should fall back to the synchronous write(2) path.
+static bool io_write_once_try_uring(XrVMRuntime *X, int fd, const char *data, size_t len,
+                                    XrValue *result, XrCFuncResult *out) {
+    XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
+    if (!rt || !xr_current_coro(X) || !xr_netpoll_uring_active(&rt->netpoll))
+        return false;
+    XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
+    if (!pd)
+        return false;
+    IoWriteOnceState *st = (IoWriteOnceState *) xr_calloc(1, sizeof(IoWriteOnceState));
+    if (!st) {
+        xr_netpoll_close(&rt->netpoll, pd);
+        return false;
+    }
+    st->pd = pd;
+    // Offset -1 means "use the descriptor's own file position". An explicit
+    // offset would ignore O_APPEND and rewrite from the same place on every
+    // call, which is exactly what a sequential drain must not do.
+    XrUringReq req = {
+        .kind = XR_URING_OP_FILE_WRITE,
+        .buf = (void *) data,
+        .len = (unsigned) (len > UINT_MAX ? UINT_MAX : len),
+        .offset = (uint64_t) -1,
+    };
+    XrCFuncResult cr;
+    if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, io_write_once_complete, st, result,
+                              &cr)) {
+        *out = cr;
+        return true;
+    }
+    xr_netpoll_close(&rt->netpoll, pd);  // SQ exhausted — let the caller write directly
+    xr_free(st);
+    return false;
+}
 #endif  // XR_OS_LINUX && XR_HAS_IO_URING
+
+/* One write, reported as the number of bytes the stream accepted. `offset` is
+ * an index into the caller's buffer, never a file offset: the file position is
+ * the descriptor's own, so an appending handle keeps appending. */
+static XrCFuncResult io_write_once(XrVMRuntime *X, int64_t handle, const char *data, size_t len,
+                                   int64_t offset, XrValue *result) {
+    (void) X;
+    *result = xr_int(-1);
+    if (handle < 0 || offset < 0 || (!data && len != 0))
+        return XR_CFUNC_DONE;
+    if ((uint64_t) offset >= (uint64_t) len) {
+        *result = xr_int(0);
+        return XR_CFUNC_DONE;
+    }
+    const char *from = data + offset;
+    size_t remaining = len - (size_t) offset;
+
+    if (handle == XR_IO_STD_OUT || handle == XR_IO_STD_ERR) {
+        FILE *stream = (handle == XR_IO_STD_OUT) ? stdout : stderr;
+        size_t n = fwrite(from, 1, remaining, stream);
+        *result = (n == 0 && ferror(stream)) ? xr_int(-1) : xr_int((int64_t) n);
+        return XR_CFUNC_DONE;
+    }
+    if (handle == XR_IO_STD_IN)
+        return XR_CFUNC_DONE;  // stdin is not writable
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    do {
+        XrCFuncResult out;
+        if (io_write_once_try_uring(X, (int) handle, from, remaining, result, &out))
+            return out;
+    } while (0);
+#endif
+
+    io_fd_ssize_t n;
+    do {
+        n = io_fd_write((int) handle, from, remaining);
+    } while (n < 0 && errno == EINTR);
+    *result = xr_int(n < 0 ? -1 : (int64_t) n);
+    return XR_CFUNC_DONE;
+}
+
+static XrCFuncResult io_fileWrite(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
+    *result = xr_int(-1);
+    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[2]))
+        return XR_CFUNC_DONE;
+    if (!xr_value_is_array(args[1]))
+        return XR_CFUNC_DONE;
+    XrArray *arr = xr_value_to_array(args[1]);
+    if (!arr || arr->elem_type != XR_ELEM_U8)
+        return XR_CFUNC_DONE;
+    return io_write_once(X, XR_TO_INT(args[0]), (const char *) arr->data, (size_t) arr->length,
+                         XR_TO_INT(args[2]), result);
+}
+
+static XrCFuncResult io_fileWriteStr(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
+    *result = xr_int(-1);
+    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[2]))
+        return XR_CFUNC_DONE;
+    size_t len = 0;
+    const char *data = xrs_string_arg(args[1], &len);
+    if (!data)
+        return XR_CFUNC_DONE;
+    return io_write_once(X, XR_TO_INT(args[0]), data, len, XR_TO_INT(args[2]), result);
+}
 
 // readFile(path) - Read file content (yieldable; io_uring async when available)
 static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
@@ -420,7 +580,7 @@ static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValu
         return XR_CFUNC_DONE;
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    {
+    do {
         int fd = open(path, O_RDONLY | O_CLOEXEC);
         if (fd >= 0) {
             struct stat sb;
@@ -429,15 +589,15 @@ static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValu
                 char *buf = (char *) xr_malloc((size_t) sb.st_size + 1);
                 if (buf) {
                     XrCFuncResult out;
-                    if (file_io_try_uring(X, fd, FILE_IO_READ_STRING, buf, NULL,
-                                          (size_t) sb.st_size, result, &out))
+                    if (file_io_try_uring(X, fd, FILE_IO_READ_STRING, buf, (size_t) sb.st_size,
+                                          result, &out))
                         return out;
                     xr_free(buf);  // not taken — fall through to the sync path
                 }
             }
             close(fd);
         }
-    }
+    } while (0);
 #endif
 
     size_t read_size = 0;
@@ -459,7 +619,7 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
         return XR_CFUNC_DONE;
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    {
+    do {
         int fd = open(path, O_RDONLY | O_CLOEXEC);
         if (fd >= 0) {
             struct stat sb;
@@ -468,7 +628,7 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
                 char *buf = (char *) xr_malloc((size_t) sb.st_size + 1);
                 if (buf) {
                     XrCFuncResult out;
-                    if (file_io_try_uring(X, fd, FILE_IO_READ_BYTES, buf, NULL, (size_t) sb.st_size,
+                    if (file_io_try_uring(X, fd, FILE_IO_READ_BYTES, buf, (size_t) sb.st_size,
                                           result, &out))
                         return out;
                     xr_free(buf);
@@ -476,7 +636,7 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
             }
             close(fd);
         }
-    }
+    } while (0);
 #endif
 
     size_t read_size = 0;
@@ -494,96 +654,6 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
     xr_free(buf);
     *result = xr_value_from_array(arr);
     return XR_CFUNC_DONE;
-}
-
-// writeFileBytes(path, bytes) - Write byte array (yieldable; io_uring async when available)
-static XrCFuncResult io_writeFileBytes(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    (void) X;
-    *result = xr_bool(false);
-    if (argc < 2)
-        return XR_CFUNC_DONE;
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return XR_CFUNC_DONE;
-    if (!xr_value_is_array(args[1]))
-        return XR_CFUNC_DONE;
-    XrArray *arr = xr_value_to_array(args[1]);
-    if (!arr || arr->elem_type != XR_ELEM_U8)
-        return XR_CFUNC_DONE;
-
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    {
-        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-        if (fd >= 0) {
-            XrCFuncResult out;
-            if (file_io_try_uring(X, fd, FILE_IO_WRITE, NULL, (const char *) arr->data,
-                                  (size_t) arr->length, result, &out))
-                return out;
-            close(fd);
-        }
-    }
-#endif
-
-    FILE *f = fopen(path, "wb");
-    if (!f)
-        return XR_CFUNC_DONE;
-    bool ok =
-        xr_io_core_write_all(f, io_file_write, io_file_error, arr->data, (size_t) arr->length);
-    bool close_ok = fclose(f) == 0;
-    *result = xr_bool(ok && close_ok);
-    return XR_CFUNC_DONE;
-}
-
-// writeFile(path, content) - Write string (yieldable; io_uring async when available)
-static XrCFuncResult io_writeFile(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    (void) X;
-    *result = xr_bool(false);
-    if (argc < 2)
-        return XR_CFUNC_DONE;
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path || !XR_IS_STRING(args[1]))
-        return XR_CFUNC_DONE;
-    XrString *str = XR_TO_STRING(args[1]);
-
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    {
-        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-        if (fd >= 0) {
-            XrCFuncResult out;
-            if (file_io_try_uring(X, fd, FILE_IO_WRITE, NULL, str->data, str->length, result, &out))
-                return out;
-            close(fd);
-        }
-    }
-#endif
-
-    FILE *f = fopen(path, "wb");
-    if (!f)
-        return XR_CFUNC_DONE;
-    bool ok = xr_io_core_write_all(f, io_file_write, io_file_error, str->data, str->length);
-    bool close_ok = fclose(f) == 0;
-    *result = xr_bool(ok && close_ok);
-    return XR_CFUNC_DONE;
-}
-
-// appendFile(path, content) - Append to file
-static XrValue io_appendFile(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 2)
-        return xr_bool(false);
-
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path || !XR_IS_STRING(args[1]))
-        return xr_bool(false);
-
-    XrString *str = XR_TO_STRING(args[1]);
-    FILE *f = fopen(path, "ab");
-    if (!f)
-        return xr_bool(false);
-
-    bool ok = xr_io_core_write_all(f, io_file_write, io_file_error, str->data, str->length);
-    bool close_ok = fclose(f) == 0;
-    return xr_bool(ok && close_ok);
 }
 
 /* ========== File Checks ========== */
@@ -787,93 +857,6 @@ static XrValue io_chdir(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // copyFile(src, dst) - Copy file
-static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 2)
-        return xr_bool(false);
-
-    const char *src = xrs_path_arg(args[0], NULL);
-    const char *dst = xrs_path_arg(args[1], NULL);
-    if (!src || !dst)
-        return xr_bool(false);
-
-#ifdef XR_OS_WINDOWS
-    return xr_bool(CopyFileA(src, dst, FALSE) != 0);
-#elif defined(XR_OS_MACOS)
-    // macOS: use fcopyfile for kernel-level copy (zero-copy when possible)
-    int src_fd = open(src, O_RDONLY);
-    if (src_fd < 0)
-        return xr_bool(false);
-    int dst_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (dst_fd < 0) {
-        close(src_fd);
-        return xr_bool(false);
-    }
-    int ret = fcopyfile(src_fd, dst_fd, NULL, COPYFILE_DATA);
-    close(src_fd);
-    /* A deferred write can fail at close, so the copy is complete only when
-     * the destination also closes cleanly. The buffered fallback below has
-     * always checked this; the fast paths did not. */
-    int closed = close(dst_fd);
-    return xr_bool(ret == 0 && closed == 0);
-#elif defined(XR_OS_LINUX)
-    // Linux: use sendfile for zero-copy
-    int src_fd = open(src, O_RDONLY);
-    if (src_fd < 0)
-        return xr_bool(false);
-    struct stat st;
-    if (fstat(src_fd, &st) < 0) {
-        close(src_fd);
-        return xr_bool(false);
-    }
-    int dst_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (dst_fd < 0) {
-        close(src_fd);
-        return xr_bool(false);
-    }
-    // sendfile(2) on Linux may transfer fewer bytes than requested, either
-    // because it is interrupted by a signal or because the underlying file
-    // system throttled the write. Loop until we have copied the entire
-    // source length or hit an unrecoverable error.
-    off_t offset = 0;
-    off_t remaining = st.st_size;
-    int sendfile_ok = 1;
-    while (remaining > 0) {
-        ssize_t sent = sendfile(dst_fd, src_fd, &offset, remaining);
-        if (sent <= 0) {
-            if (sent < 0 && errno == EINTR)
-                continue;
-            sendfile_ok = 0;
-            break;
-        }
-        remaining -= sent;
-    }
-    close(src_fd);
-    /* A deferred write can fail at close; see the note on the macOS path. */
-    int closed = close(dst_fd);
-    return xr_bool(sendfile_ok && remaining == 0 && closed == 0);
-#else
-    FILE *fsrc = fopen(src, "rb");
-    if (!fsrc)
-        return xr_bool(false);
-
-    FILE *fdst = fopen(dst, "wb");
-    if (!fdst) {
-        fclose(fsrc);
-        return xr_bool(false);
-    }
-
-    char buf[XR_IO_CORE_COPY_BUFFER_SIZE];
-    IoCopyFileCtx copy_ctx = {.src = fsrc, .dst = fdst};
-    bool ok = xr_io_core_copy_stream(&copy_ctx, io_copy_file_read, io_copy_file_write,
-                                     io_copy_file_error, buf, sizeof(buf));
-    fclose(fsrc);
-    if (fclose(fdst) != 0)
-        ok = false;
-    return xr_bool(ok);
-#endif
-}
-
 static char *io_read_file_buffer_sync(const char *path, size_t *out_len) {
     if (out_len)
         *out_len = 0;
@@ -1089,11 +1072,6 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     if (!xr_io_core_path_result_cstr_view(resolved, &view))
         return xr_null();
     return xrs_string_value_n(X, view.data, view.len);
-}
-
-static const char *io_core_getenv(void *ctx, const char *name) {
-    (void) ctx;
-    return getenv(name);
 }
 
 // tempFile() - Create temporary file, return path
