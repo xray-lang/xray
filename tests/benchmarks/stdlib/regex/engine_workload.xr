@@ -1,0 +1,93 @@
+// regex engine workload: compile, test, count, findAll, replaceAll, split and
+// escape over a ~14 KB haystack. Written for the C-to-Xray migration so the two
+// implementations could be compared on identical work; kept because it is the
+// only regex benchmark that exercises the automata rather than just escape().
+//
+// Run it directly and take a median over several runs; wall times here move a
+// lot under parallel build load.
+import regex
+import time
+
+fn buildHaystack(reps: i64) -> string {
+    var sb = ""
+    var i = 0
+    while (i < reps) {
+        sb = sb + "user${i}@example.com id=${i} tag-${i}, "
+        i = i + 1
+    }
+    return sb
+}
+
+var hay = buildHaystack(400)
+print("haystack bytes=${len(hay.bytes())}")
+
+var t0 = time.nanos()
+var i = 0
+while (i < 200) {
+    var r = regex.compile("([a-z]+)([0-9]+)@([a-z.]+)")
+    i = i + 1
+}
+var t1 = time.nanos()
+print("compile_200_ns=${t1 - t0}")
+
+var re = regex.compile("([a-z]+)([0-9]+)@([a-z.]+)")
+var t2 = time.nanos()
+var j = 0
+var acc = 0
+while (j < 50) {
+    if (regex.test(re, hay)) { acc = acc + 1 }
+    j = j + 1
+}
+var t3 = time.nanos()
+print("test_50_ns=${t3 - t2} acc=${acc}")
+
+var t4 = time.nanos()
+var k = 0
+var total = 0
+while (k < 20) {
+    total = total + regex.count(re, hay)
+    k = k + 1
+}
+var t5 = time.nanos()
+print("count_20_ns=${t5 - t4} total=${total}")
+
+var t6 = time.nanos()
+var m = 0
+var nfound = 0
+while (m < 20) {
+    nfound = len(regex.findAll(re, hay))
+    m = m + 1
+}
+var t7 = time.nanos()
+print("findAll_20_ns=${t7 - t6} nfound=${nfound}")
+
+var t8 = time.nanos()
+var n = 0
+var rlen = 0
+while (n < 20) {
+    rlen = len(regex.replaceAll(re, hay, "<$1|$2>"))
+    n = n + 1
+}
+var t9 = time.nanos()
+print("replaceAll_20_ns=${t9 - t8} rlen=${rlen}")
+
+var comma = regex.compile(",\\s*")
+var ta = time.nanos()
+var p = 0
+var nparts = 0
+while (p < 20) {
+    nparts = len(regex.split(comma, hay, -1))
+    p = p + 1
+}
+var tb = time.nanos()
+print("split_20_ns=${tb - ta} nparts=${nparts}")
+
+var tc = time.nanos()
+var q = 0
+var elen = 0
+while (q < 200) {
+    elen = len(regex.escape("a.b*c+d?e[f]g(h)i{j}k|l^m$n"))
+    q = q + 1
+}
+var td = time.nanos()
+print("escape_200_ns=${td - tc} elen=${elen}")

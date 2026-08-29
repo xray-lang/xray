@@ -157,9 +157,13 @@ public = true
 layer = "L3"
 policy = "xray_semantic"
 semantic_source = "stdlib/regex/regex.xr"
-public_native = ["RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text", "find", "findAll", "fullFind"]
+# Regex remains a runtime class because literal syntax lowers to
+# XI_REGEX_COMPILE, but its class row and fields are internal binding metadata.
+# RegexMatch and its fields are the only native declarations on the public API;
+# every method and module function is now implemented in Xray.
+public_native = ["RegexMatch", "RegexMatch.end", "RegexMatch.groups", "RegexMatch.start", "RegexMatch.text"]
 private_native_sources = ["stdlib/regex/*.c"]
-private_native_reason = "Mature regex automata implementation with bounded native data structures"
+private_native_reason = "Handle allocation plus three lookups owned elsewhere: the shared flag-string mask and the unicode property tables"
 perf_suite = "stdlib/regex"
 
 [[module]]

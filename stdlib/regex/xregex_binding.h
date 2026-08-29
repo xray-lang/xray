@@ -5,81 +5,41 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xregex_binding.h - Xray regex module binding
+ * xregex_binding.h - VM binding for the regex module
  *
  * KEY CONCEPT:
- *   Provides regex functionality for Xray scripts.
+ *   The engine is stdlib/regex/regex.xr. This header declares only what the
+ *   runtime still needs from C: module registration, class registration, and
+ *   the bytecode helper that builds a Regex for a /pat/flags literal.
  *
- * PERFORMANCE (based on RE2 design):
- *   - Linear time matching guarantee, no backtracking trap
- *   - Thompson NFA algorithm
- *   - Controlled memory usage
- *
- * USAGE EXAMPLE:
- *   import regex
- *
- *   // Compile regex
- *   var re = regex.compile("\\d+")
- *
- *   // Test match
- *   if (regex.test(re, "abc123")) {
- *       print("found!")
- *   }
- *
- *   // Get match result
- *   var m = regex.match(re, "abc123def")
- *   print(m.start, m.end)  // 3 6
- *
- *   // Capture groups
- *   var re2 = regex.compile("(\\w+)@(\\w+)")
- *   var m2 = regex.match(re2, "user@host")
- *   print(m2.groups[1])  // "user"
- *   print(m2.groups[2])  // "host"
- *
- *   // Replace
- *   var result = regex.replace(re, "a1b2c3", "X")  // "aXbXcX"
- *
- *   // Split
- *   var parts = regex.split(regex.compile(",\\s*"), "a, b, c")  // ["a", "b", "c"]
+ *   The public surface (compile, test, count, find, fullFind, findAll,
+ *   findText, findGroup, replace, replaceAll, split, escape, isValid) is
+ *   exported from regex.xr and documented there.
  */
 
 #ifndef XREGEX_BINDING_H
 #define XREGEX_BINDING_H
 
-#include "xregex.h"
 #include "../../src/base/xdefs.h"
 #include "../../src/runtime/value/xvalue.h"
 
 struct XrModule;
 
-
 /*
- * Wrap XrRegex as XrValue (XrInstance with native body)
- * @param X  Isolate context
- * @param re Regex object pointer
- * @return Wrapped XrValue
- */
-XR_FUNC XrValue xr_regex_wrap(XrVMRuntime *X, XrRegex *re);
-
-/*
- * Register the Regex XrClass with native body descriptor so regex
- * literals and regex.compile(...) results dispatch instance methods.
- * Called unconditionally from xr_prelude_register_all_native_types
- * during isolate init.
+ * Register the Regex and RegexMatch classes. Regex stays a native class
+ * because the literal syntax /pat/flags lowers to XI_REGEX_COMPILE with its
+ * result type pinned to type_regex (src/ir/xi_lower_expr.c:11349); it carries
+ * three ordinary GC-visible fields (pattern, flags, prog) and no native body.
+ * Called from xr_prelude_register_all_native_types during isolate init.
  */
 XR_FUNC void xr_regex_register_class(XrVMRuntime *isolate);
 
-// Check if value is a Regex object
-XR_FUNC bool xr_value_is_regex(XrValue v);
-
-// Get Regex pointer
-XR_FUNC XrRegex *xr_value_to_regex(XrValue v);
-
 /*
- * Build a RegexMatch instance (typed XrInstance with 4 field slots).
- * Replaces the former Json { start, end, text, groups } approach —
- * field access is now a direct slot load, not a hash lookup.
+ * Build a Regex for a regex literal (OP_REGEX_COMPILE bytecode helper).
+ * It records the pattern and the parsed flag mask; compilation happens in
+ * regex.xr on first use.
  */
-XR_FUNC XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMatch *match);
+XR_FUNC XrValue xr_regex_compile_literal(XrVMRuntime *isolate, XrValue pattern_val,
+                                         XrValue flags_val);
 
 #endif  // XREGEX_BINDING_H

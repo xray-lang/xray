@@ -1069,12 +1069,11 @@ module sys {
 }
 
 module regex {
-  native_class Regex {
+  class Regex {
     visibility: "internal"
     super_slot: objectClass
     core_slot: regexClass
-    native_body: g_regex_body_desc
-    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    flags: "XR_CLASS_BUILTIN"
     builtin_kind: XR_BK_REGEX
   }
 
@@ -1085,39 +1084,16 @@ module regex {
     builtin_kind: XR_BK_REGEX_MATCH
   }
 
-  class_method Regex.test {
-    vm: "re_m_test"
-    argc: 1
+  class_field Regex.pattern {
+    visibility: "internal"
   }
 
-  class_method Regex.find {
-    vm: "re_m_find"
-    argc: 2
+  class_field Regex.flags {
+    visibility: "internal"
   }
 
-  class_method Regex.findText {
-    vm: "re_m_find_text"
-    argc: 1
-  }
-
-  class_method Regex.findGroup {
-    vm: "re_m_find_group"
-    argc: 2
-  }
-
-  class_method Regex.findAll {
-    vm: "re_m_find_all"
-    argc: 2
-  }
-
-  class_method Regex.replace {
-    vm: "re_m_replace"
-    argc: 2
-  }
-
-  class_method Regex.split {
-    vm: "re_m_split"
-    argc: 2
+  class_field Regex.prog {
+    visibility: "internal"
   }
 
   class_field RegexMatch.start {
@@ -1132,252 +1108,56 @@ module regex {
   class_field RegexMatch.groups {
   }
 
-  fn __compile {
-    signature: "(pattern: string, flags?: string): Regex"
-    doc: "Compile regex pattern"
+  fn __regexNew {
+    signature: "(pattern: string, flags: i64): Regex"
+    doc: "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation"
     vm: "regex_compile"
-    aot: "xrt_regex_compile_default"
+    argc: 2
+    arg_spec: "sv"
+    layer: "alloc"
+    allocation: "may_heap"
+    return_ownership: "fresh"
+  }
+
+  fn __regexMatchNew {
+    signature: "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch"
+    doc: "Allocate a RegexMatch with its four fields set"
+    vm: "regex_match_new"
+    argc: 4
+    arg_spec: "vvsv"
+    layer: "alloc"
+    allocation: "may_heap"
+    return_ownership: "fresh"
+  }
+
+  fn __regexParseFlags {
+    signature: "(flags: string): i64"
+    doc: "Flag string to mask, the shared VM/AOT authority"
+    vm: "regex_parse_flags"
     argc: 1
     arg_spec: "s"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __compile {
-    signature: "(pattern: string, flags?: string): Regex"
-    doc: "Compile regex pattern"
-    vm: "regex_compile"
-    aot: "xrt_regex_compile_with_flags"
-    argc: 2
-    arg_spec: "ss"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __test {
-    signature: "(pattern: Regex, s: string): bool"
-    doc: "Test if regex matches"
-    vm: "regex_test"
-    aot: "xrt_regex_test"
-    argc: 2
-    arg_spec: "vs"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
+    layer: "pure"
     allocation: "no_heap"
   }
 
-  fn __count {
-    signature: "(pattern: Regex, s: string): i64"
-    doc: "Count matches"
-    vm: "regex_count"
-    aot: "xrt_regex_count"
-    argc: 2
-    arg_spec: "vs"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
+  fn __unicodePropId {
+    signature: "(name: string): i64"
+    doc: "Unicode property name to id, -1 when unknown"
+    vm: "regex_unicode_prop_id"
+    argc: 1
+    arg_spec: "s"
+    layer: "pure"
     allocation: "no_heap"
   }
 
-  fn __findText {
-    signature: "(pattern: Regex, s: string): string?"
-    doc: "Find first matching text"
-    vm: "regex_find_text"
-    aot: "xrt_regex_find_text"
+  fn __unicodeHasProp {
+    signature: "(cp: i64, propId: i64): bool"
+    doc: "Whether a code point carries a unicode property"
+    vm: "regex_unicode_has_prop"
     argc: 2
-    arg_spec: "vs"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __findGroup {
-    signature: "(pattern: Regex, s: string, index: i64): string?"
-    doc: "Find capture group"
-    vm: "regex_find_group"
-    aot: "xrt_regex_find_group"
-    argc: 3
-    arg_spec: "vsv"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn find {
-    signature: "(pattern: Regex, s: string, offset?: i64): RegexMatch?"
-    doc: "Find first match"
-    vm: "regex_find"
-    aot: "xrt_regex_find"
-    argc: 2
-    arg_spec: "vs"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn find {
-    signature: "(pattern: Regex, s: string, offset?: i64): RegexMatch?"
-    doc: "Find first match"
-    vm: "regex_find"
-    aot: "xrt_regex_find_offset"
-    argc: 3
-    arg_spec: "vsv"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn fullFind {
-    signature: "(pattern: Regex, s: string): RegexMatch?"
-    doc: "Find full match"
-    vm: "regex_full_match"
-    aot: "xrt_regex_full_find"
-    argc: 2
-    arg_spec: "vs"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn findAll {
-    signature: "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>"
-    doc: "Find all matches"
-    vm: "regex_find_all"
-    aot: "xrt_regex_find_all"
-    argc: 2
-    arg_spec: "vs"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn findAll {
-    signature: "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>"
-    doc: "Find all matches"
-    vm: "regex_find_all"
-    aot: "xrt_regex_find_all_limit"
-    argc: 3
-    arg_spec: "vsv"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __replace {
-    signature: "(pattern: Regex, s: string, repl: string): string"
-    doc: "Replace first match"
-    vm: "regex_replace"
-    aot: "xrt_regex_replace"
-    argc: 3
-    arg_spec: "vss"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __replaceAll {
-    signature: "(pattern: Regex, s: string, repl: string): string"
-    doc: "Replace all matches"
-    vm: "regex_replace_all"
-    aot: "xrt_regex_replace_all"
-    argc: 3
-    arg_spec: "vss"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __split {
-    signature: "(pattern: Regex, s: string, limit?: i64): Array<string>"
-    doc: "Split string by regex"
-    vm: "regex_split"
-    aot: "xrt_regex_split"
-    argc: 2
-    arg_spec: "vs"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __split {
-    signature: "(pattern: Regex, s: string, limit?: i64): Array<string>"
-    doc: "Split string by regex"
-    vm: "regex_split"
-    aot: "xrt_regex_split_limit"
-    argc: 3
-    arg_spec: "vsv"
-    aot_direct: true
-    link_object: true
-    define: "XRT_ENABLE_REGEX"
-    layer: "alloc"
-    allocation: "may_heap"
-    return_ownership: "fresh"
-  }
-
-  fn __escape {
-    signature: "(s: string): string"
-    doc: "Escape regex special chars"
-    vm: "regex_escape"
-    aot: "xrt_regex_escape"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: false
-    layer: "core"
-    return_ownership: "fresh"
-  }
-
-  fn __isValid {
-    signature: "(pattern: string): bool"
-    doc: "Check if pattern is valid"
-    vm: "regex_is_valid"
-    aot: "xrt_regex_is_valid"
-    argc: 1
-    arg_spec: "s"
-    aot_direct: true
-    link_object: true
-    layer: "core"
+    arg_spec: "vv"
+    layer: "pure"
+    allocation: "no_heap"
   }
 }
 

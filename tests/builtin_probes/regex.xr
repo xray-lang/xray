@@ -1,2 +1,6 @@
+// Regex is still a native class, but everything it can do is an Xray module
+// function now: the class_method rows were removed with the C engine.
+import regex
+
 var re: Regex = /a+/
-print(re.test("aaa"))
+print(regex.test(re, "aaa"))

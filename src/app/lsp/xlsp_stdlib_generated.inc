@@ -453,21 +453,22 @@ static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
 
 // regex module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
-    {"find", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, offset?: i64): RegexMatch?", "Find first match", NULL, 0},
-    {"fullFind", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): RegexMatch?", "Find full match", NULL, 0},
-    {"findAll", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>", "Find all matches", NULL, 0},
     {"compile", XLSP_SYM_FUNCTION, "fn(pattern: string, flags?: string): Regex", "", NULL, 0},
     {"isValid", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
     {"test", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): bool", "", NULL, 0},
     {"count", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): i64", "", NULL, 0},
+    {"find", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, offset?: i64): RegexMatch?", "", NULL, 0},
+    {"fullFind", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): RegexMatch?", "", NULL, 0},
+    {"findAll", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>", "", NULL, 0},
     {"findText", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): string?", "", NULL, 0},
     {"findGroup", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, index: i64): string?", "", NULL, 0},
     {"replace", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, repl: string): string", "", NULL, 0},
     {"replaceAll", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, repl: string): string", "", NULL, 0},
     {"split", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, limit?: i64): Array<string>", "", NULL, 0},
     {"escape", XLSP_SYM_FUNCTION, "fn(s: string): string", "", NULL, 0},
+    {"RegexError", XLSP_SYM_CLASS, "type RegexError", "Enum type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 13
+#define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 14
 
 // runtime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {

@@ -51,7 +51,29 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         manifest = load_manifest(ROOT)
         os_module = manifest.by_name["os"]
         binders = native_entry_binder_modules(ROOT)
-        self.assertIn("os", binders)
+        # Every module with generated native entries belongs here. Keep the
+        # complete set explicit so a newly generated binder cannot silently
+        # bypass the generic loader's boundary inventory.
+        self.assertEqual(
+            {
+                "cluster",
+                "compress",
+                "crypto",
+                "http2",
+                "io",
+                "math",
+                "mem",
+                "net",
+                "os",
+                "regex",
+                "runtime",
+                "sync",
+                "sys",
+                "test_yield",
+                "time",
+            },
+            set(binders),
+        )
         self.assertIn("os", source_modules(ROOT))
         self.assertEqual(
             "xr_stdlib_vm_bind_os_generated",

@@ -1,84 +1,1912 @@
-// regex — typed public module surface over the private native regex leaves.
+// regex - pattern matching, written in Xray.
 //
-// Ownership split. Every module-level function of `regex` is owned here: this
-// file is the single place that names them, fixes their parameter names and
-// their optional-argument defaults, and it forwards each one straight to a
-// private `__` leaf. No matching, scanning, or replacement logic lives here.
+// This file owns the whole engine: the parser, the compiler, the NFA
+// simulation and the top-level API. It replaces 5265 lines of C across six
+// translation units (xregex_parse.c, xregex_compile.c, xregex_nfa.c,
+// xregex_dfa.c, xregex.c and most of xregex_binding.c).
 //
-// The automata stay in C on purpose. Pattern parsing, NFA/DFA construction,
-// the bounded XrSplitPart / XrMatch scratch buffers, and the escape character
-// class are one shared owner (stdlib/regex/*.c plus src/shared/xr_regex_core.h,
-// consumed by both the VM binding and the AOT runtime). Reimplementing any of
-// them here would mint a second authority for the same question, which is the
-// failure mode task-256 was written to avoid — so every function below is a
-// pass-through with no added validation and no added policy.
+// What stays native, and why it is not a second owner of anything here:
+//   __regexNew         allocates the Regex handle. `Regex` has to remain a
+//                      native class because the literal syntax /pat/flags
+//                      lowers to XI_REGEX_COMPILE with its result type pinned
+//                      to type_regex (src/ir/xi_lower_expr.c:11349).
+//   __regexParseFlags  the flag-string mask, shared verbatim by the VM and AOT
+//                      leaves (xr_regex_core_parse_flags).
+//   __unicodePropId    the unicode property tables belong to unicode, not to
+//   __unicodeHasProp   regex; their owner is src/base/xunicode.c and copying
+//                      several hundred code-point ranges in here would mint a
+//                      second answer to the same question.
 //
-// `Regex` and `RegexMatch` also stay native classes. stdlibgen gives
-// native_class / class / class_method / class_field entries no `is_internal`
-// attribute (tools/stdlibgen/stdlibgen.py:329-382), so they cannot be made
-// private by renaming the way `fn` entries can; they remain listed in
-// public_native, exactly as sys keeps OsMutex and net keeps NetConn. The
-// instance-method surface (`re.test(s)`, `re.find(s)`, ...) therefore keeps
-// dispatching through the class_method table and is untouched by this file.
+// Layout of the compiled program image, the AST and every constant below is
+// fixed by analysis/r3-6-5-regex-xray-design.md.
 //
-// Optional-argument defaults below are not chosen here; they restate what the
-// argc-short C entry points already do, so the one-argument and two-argument
-// spellings cannot drift apart:
-//   compile flags ""  — VM: xregex_binding.c:229 (XR_RE_NONE when argc < 2)
-//                       AOT: xrt_regex_core.c:98-100 (compile_default passes
-//                            NULL/0 to compile_with_flags; "" parses to NONE)
-//   find    offset 0   — VM: xregex_binding.c:376
-//                       AOT: xrt_regex_core.c:239-241
-//   findAll limit -1   — VM: xregex_binding.c:404-405 via
-//                            xr_regex_core_limit_arg(false, ...) -> -1
-//                       AOT: xrt_regex_core.c:284-286
-//   split   limit -1   — VM: xregex_binding.c:494-495 (same helper)
-//                       AOT: xrt_regex_core.c:347-349
+// Two Xray facts shape the code, both measured on this build rather than
+// assumed:
+//   * A class-typed parameter is a read capability, so assigning a scalar
+//     field of a parameter is E0353; marking it `ref` then makes recursion
+//     impossible because a borrowed ref cannot be passed to another ref
+//     parameter (E0352). Array *elements* of a read parameter are writable, so
+//     all mutable state lives in Array<i64> fields.
+//   * Array<i64>(n) does not zero-fill: 255 of 256 elements came back non-zero
+//     from reused memory. Every sized allocation states its fill value.
 
-// ========== Compilation ==========
+const RX_F_NONE: i64 = 0
+const RX_F_IGNORECASE: i64 = 1
+const RX_F_MULTILINE: i64 = 2
+const RX_F_DOTALL: i64 = 4
+const RX_F_UNGREEDY: i64 = 8
 
-// An empty flag string parses to "no flags", which is what the argc-1 leaf
-// applies, so the single spelling below covers both native entry points.
-export fn compile(pattern: string, flags: string = "") -> Regex {
-    return __compile(pattern, flags)
+const EW_BEGIN_LINE: i64 = 1
+const EW_END_LINE: i64 = 2
+const EW_BEGIN_TEXT: i64 = 4
+const EW_END_TEXT: i64 = 8
+const EW_WORD_BOUNDARY: i64 = 16
+const EW_NOT_WORD_BOUND: i64 = 32
+
+const AN_EMPTY: i64 = 0
+const AN_LITERAL: i64 = 1
+const AN_ANY: i64 = 2
+const AN_CLASS: i64 = 3
+const AN_CONCAT: i64 = 4
+const AN_ALT: i64 = 5
+const AN_REPEAT: i64 = 6
+const AN_GROUP: i64 = 7
+const AN_EMPTY_WIDTH: i64 = 8
+const AN_UNICODE: i64 = 9
+
+const RX_MAX_DEPTH: i64 = 100
+const RX_MAX_GROUPS: i64 = 31
+
+const RXE_OK: i64 = 0
+const RXE_SYNTAX: i64 = 1
+const RXE_UNMATCHED_PAREN: i64 = 2
+const RXE_UNMATCHED_BRACKET: i64 = 3
+const RXE_BAD_REPEAT: i64 = 4
+const RXE_TRAILING_BACKSLASH: i64 = 5
+const RXE_BAD_ESCAPE: i64 = 6
+const RXE_TOO_MANY_GROUPS: i64 = 7
+const RXE_TOO_DEEP: i64 = 8
+const RXE_BAD_CLASS: i64 = 9
+const RXE_UNSUPPORTED: i64 = 10
+
+// meta[] slots
+const RXM_ROOT: i64 = 0
+const RXM_NGROUPS: i64 = 1
+const RXM_FLAGS: i64 = 2
+const RXM_ERR: i64 = 3
+const RXM_ERRPOS: i64 = 4
+const RXM_POS: i64 = 5
+const RXM_LAZY: i64 = 6
+const RXM_LEN: i64 = 7
+
+class RxAst {
+    op: Array<i64> = Array<i64>()
+    a: Array<i64> = Array<i64>()
+    b: Array<i64> = Array<i64>()
+    c: Array<i64> = Array<i64>()
+    d: Array<i64> = Array<i64>()
+
+    clsRanges: Array<i64> = Array<i64>()
+    clsStart: Array<i64> = Array<i64>()
+    clsLen: Array<i64> = Array<i64>()
+    clsNeg: Array<i64> = Array<i64>()
+
+    uniRanges: Array<i64> = Array<i64>()
+
+    meta: Array<i64> = Array<i64>()
+    errMsg: Array<string> = Array<string>()
+    src: Array<u8> = Array<u8>()
 }
 
-export fn isValid(pattern: string) -> bool { return __isValid(pattern) }
+fn rxNewAst() -> RxAst {
+    var t = RxAst()
+    var i = 0
+    while (i < RXM_LEN) {
+        t.meta.push(0)
+        i = i + 1
+    }
+    t.meta[RXM_ROOT] = -1
+    t.errMsg.push("")
+    return t
+}
 
-// ========== Matching ==========
+fn rxErr(t: RxAst) -> i64 { return t.meta[RXM_ERR] }
+fn rxRoot(t: RxAst) -> i64 { return t.meta[RXM_ROOT] }
+fn rxNgroups(t: RxAst) -> i64 { return t.meta[RXM_NGROUPS] }
+fn rxFlags(t: RxAst) -> i64 { return t.meta[RXM_FLAGS] }
 
-export fn test(pattern: Regex, s: string) -> bool { return __test(pattern, s) }
-export fn count(pattern: Regex, s: string) -> i64 { return __count(pattern, s) }
+fn rxNode(t: RxAst, op: i64, a: i64, b: i64, c: i64, d: i64) -> i64 {
+    t.op.push(op)
+    t.a.push(a)
+    t.b.push(b)
+    t.c.push(c)
+    t.d.push(d)
+    return len(t.op) - 1
+}
 
-export fn findText(pattern: Regex, s: string) -> string? { return __findText(pattern, s) }
+// Record the first error only, mirroring parser_error (xregex_parse.c:187-193).
+// Unlike the C side, the message and the byte position survive: the VM binding
+// discarded both (xregex_binding.c:238-242) and reported a generic code.
+fn rxFail(t: RxAst, code: i64, pos: i64, msg: string) -> i64 {
+    if (t.meta[RXM_ERR] == 0) {
+        t.meta[RXM_ERR] = code
+        t.meta[RXM_ERRPOS] = pos
+        t.errMsg[0] = msg
+    }
+    return -1
+}
+
+fn rxAddClass(t: RxAst, ranges: Array<i64>, neg: i64) -> i64 {
+    var start = len(t.clsRanges) / 2
+    var i = 0
+    while (i < len(ranges)) {
+        t.clsRanges.push(ranges[i])
+        i = i + 1
+    }
+    t.clsStart.push(start)
+    t.clsLen.push(len(ranges) / 2)
+    t.clsNeg.push(neg)
+    return len(t.clsStart) - 1
+}
+
+fn rxPeek(t: RxAst) -> i64 {
+    var p = t.meta[RXM_POS]
+    if (p >= len(t.src)) { return -1 }
+    return t.src[p] as i64
+}
+
+fn rxPeekAt(t: RxAst, off: i64) -> i64 {
+    var i = t.meta[RXM_POS] + off
+    if (i < 0 || i >= len(t.src)) { return -1 }
+    return t.src[i] as i64
+}
+
+fn rxAdvance(t: RxAst) -> i64 {
+    var c = rxPeek(t)
+    if (c >= 0) { t.meta[RXM_POS] = t.meta[RXM_POS] + 1 }
+    return c
+}
+
+fn rxEat(t: RxAst, b: i64) -> bool {
+    if (rxPeek(t) == b) {
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        return true
+    }
+    return false
+}
+
+fn rxIsDigitByte(b: i64) -> bool { return b >= 48 && b <= 57 }
+
+fn rxHexVal(b: i64) -> i64 {
+    if (b >= 48 && b <= 57) { return b - 48 }
+    if (b >= 97 && b <= 102) { return b - 97 + 10 }
+    if (b >= 65 && b <= 70) { return b - 65 + 10 }
+    return -1
+}
+
+fn rxSlice(t: RxAst, lo: i64, to: i64) -> string {
+    var b: Array<u8> = Array<u8>()
+    var i = lo
+    while (i < to) {
+        b.push(t.src[i])
+        i = i + 1
+    }
+    return string.fromUtf8(b[:])!
+}
+
+// ---------- predefined classes (REF-regex-semantics.md §3, byte-exact) ----------
+// The asymmetry is deliberate and copied: \D is expressed by expansion while
+// \W and \S use the negated bit. Byte semantics agree but the AST shapes
+// differ, so the two take different optimisation paths.
+fn rxPushRange(r: ref Array<i64>, lo: i64, hi: i64) {
+    r.push(lo)
+    r.push(hi)
+}
+
+fn rxPredefClass(t: RxAst, kind: i64) -> i64 {
+    var r: Array<i64> = []
+    if (kind == 100) {                       // \d
+        rxPushRange(ref r, 48, 57)
+        return rxAddClass(t, r, 0)
+    }
+    if (kind == 68) {                        // \D  (expanded, not negated)
+        rxPushRange(ref r, 0, 47)
+        rxPushRange(ref r, 58, 255)
+        return rxAddClass(t, r, 0)
+    }
+    if (kind == 119 || kind == 87) {         // \w \W
+        rxPushRange(ref r, 97, 122)
+        rxPushRange(ref r, 65, 90)
+        rxPushRange(ref r, 48, 57)
+        rxPushRange(ref r, 95, 95)
+        var negW = 0
+        if (kind == 87) { negW = 1 }
+        return rxAddClass(t, r, negW)
+    }
+    if (kind == 115 || kind == 83) {         // \s \S
+        rxPushRange(ref r, 32, 32)
+        rxPushRange(ref r, 9, 9)
+        rxPushRange(ref r, 10, 10)
+        rxPushRange(ref r, 13, 13)
+        rxPushRange(ref r, 12, 12)
+        rxPushRange(ref r, 11, 11)
+        var negS = 0
+        if (kind == 83) { negS = 1 }
+        return rxAddClass(t, r, negS)
+    }
+    return -1
+}
+
+// ---------- character class body: [...] ----------
+// Mine 11 (KEPT): inside a class, \d \w \s \p{} degrade to the literal
+// character, so [\d] is the set {'d'}. This is the largest deviation from
+// PCRE and it is preserved deliberately.
+// Mine 12 (KEPT): POSIX [:alpha:] is not recognised; it parses as an ordinary
+// set plus a literal ']'.
+fn rxClassEscape(t: RxAst) -> i64 {
+    var c = rxAdvance(t)
+    if (c < 0) {
+        return rxFail(t, RXE_TRAILING_BACKSLASH, t.meta[RXM_POS],
+                      "trailing backslash in character class")
+    }
+    if (c == 110) { return 10 }
+    if (c == 114) { return 13 }
+    if (c == 116) { return 9 }
+    if (c == 102) { return 12 }
+    if (c == 118) { return 11 }
+    if (c == 48) { return 0 }
+    if (c == 120) {
+        var h1 = rxHexVal(rxPeek(t))
+        var h2 = rxHexVal(rxPeekAt(t, 1))
+        // The C side returned -1 here without setting an error, so the failure
+        // surfaced later as "unexpected character" at a misleading position.
+        if (h1 < 0 || h2 < 0) {
+            return rxFail(t, RXE_BAD_ESCAPE, t.meta[RXM_POS],
+                          "invalid \\xNN escape: two hex digits required")
+        }
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 2
+        return h1 * 16 + h2
+    }
+    return c
+}
+
+fn rxParseClass(t: RxAst) -> i64 {
+    var startPos = t.meta[RXM_POS]
+    var neg = 0
+    if (rxEat(t, 94)) { neg = 1 }            // '^'
+    var ranges: Array<i64> = []
+    var first = true
+    while (true) {
+        var c = rxPeek(t)
+        if (c < 0) {
+            return rxFail(t, RXE_UNMATCHED_BRACKET, startPos, "unterminated character class")
+        }
+        if (c == 93 && !first) {             // ']' closes unless it is first
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            break
+        }
+        first = false
+        var lo = 0
+        if (c == 92) {                       // '\'
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            lo = rxClassEscape(t)
+            if (rxErr(t) != 0) { return -1 }
+        } else {
+            lo = rxAdvance(t)
+        }
+        var hi = lo
+        // a-z range, but a '-' just before ']' is a literal
+        if (rxPeek(t) == 45 && rxPeekAt(t, 1) != 93 && rxPeekAt(t, 1) >= 0) {
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            var c2 = rxPeek(t)
+            if (c2 == 92) {
+                t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+                hi = rxClassEscape(t)
+                if (rxErr(t) != 0) { return -1 }
+            } else {
+                hi = rxAdvance(t)
+            }
+            if (hi < lo) {
+                return rxFail(t, RXE_BAD_CLASS, t.meta[RXM_POS],
+                              "character class range is out of order")
+            }
+        }
+        ranges.push(lo)
+        ranges.push(hi)
+    }
+    if (len(ranges) == 0) {
+        return rxFail(t, RXE_BAD_CLASS, startPos, "empty character class")
+    }
+    var idx = rxAddClass(t, ranges, neg)
+    return rxNode(t, AN_CLASS, 0, 0, idx, 0)
+}
+
+// ---------- escapes outside a class ----------
+fn rxParseEscape(t: RxAst) -> i64 {
+    var c = rxAdvance(t)
+    if (c < 0) {
+        return rxFail(t, RXE_TRAILING_BACKSLASH, t.meta[RXM_POS], "trailing backslash")
+    }
+
+    if (c == 100 || c == 68 || c == 119 || c == 87 || c == 115 || c == 83) {
+        var ci = rxPredefClass(t, c)
+        return rxNode(t, AN_CLASS, 0, 0, ci, 0)
+    }
+    if (c == 98) { return rxNode(t, AN_EMPTY_WIDTH, EW_WORD_BOUNDARY, 0, 0, 0) }
+    if (c == 66) { return rxNode(t, AN_EMPTY_WIDTH, EW_NOT_WORD_BOUND, 0, 0, 0) }
+    if (c == 65) { return rxNode(t, AN_EMPTY_WIDTH, EW_BEGIN_TEXT, 0, 0, 0) }
+    if (c == 122) { return rxNode(t, AN_EMPTY_WIDTH, EW_END_TEXT, 0, 0, 0) }
+
+    // \p{Name} / \P{Name} — only outside a character class (mine 11)
+    if (c == 112 || c == 80) {
+        var negated = 0
+        if (c == 80) { negated = 1 }
+        if (!rxEat(t, 123)) {                // '{'
+            return rxFail(t, RXE_BAD_ESCAPE, t.meta[RXM_POS], "\\p must be followed by {Name}")
+        }
+        var nameStart = t.meta[RXM_POS]
+        while (rxPeek(t) >= 0 && rxPeek(t) != 125) {
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        }
+        if (rxPeek(t) != 125) {
+            return rxFail(t, RXE_BAD_ESCAPE, nameStart, "unterminated \\p{...}")
+        }
+        var name = rxSlice(t, nameStart, t.meta[RXM_POS])
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        var propId = __unicodePropId(name)
+        if (propId < 0) {
+            return rxFail(t, RXE_BAD_ESCAPE, nameStart, "unknown unicode property '" + name + "'")
+        }
+        var uidx = len(t.uniRanges) / 3
+        t.uniRanges.push(propId)
+        t.uniRanges.push(negated)
+        t.uniRanges.push(0)
+        return rxNode(t, AN_UNICODE, uidx, 0, 0, 0)
+    }
+
+    if (c == 110) { return rxNode(t, AN_LITERAL, 10, 0, 0, 0) }
+    if (c == 114) { return rxNode(t, AN_LITERAL, 13, 0, 0, 0) }
+    if (c == 116) { return rxNode(t, AN_LITERAL, 9, 0, 0, 0) }
+    if (c == 102) { return rxNode(t, AN_LITERAL, 12, 0, 0, 0) }
+    if (c == 118) { return rxNode(t, AN_LITERAL, 11, 0, 0, 0) }
+    if (c == 48) { return rxNode(t, AN_LITERAL, 0, 0, 0, 0) }
+    if (c == 120) {
+        var h1 = rxHexVal(rxPeek(t))
+        var h2 = rxHexVal(rxPeekAt(t, 1))
+        if (h1 < 0 || h2 < 0) {
+            return rxFail(t, RXE_BAD_ESCAPE, t.meta[RXM_POS],
+                          "invalid \\xNN escape: two hex digits required")
+        }
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 2
+        return rxNode(t, AN_LITERAL, h1 * 16 + h2, 0, 0, 0)
+    }
+    // Mine 14: \u stays unsupported. The C file header claimed support; the
+    // claim was false and it went away with the file.
+    if (c == 117) {
+        return rxFail(t, RXE_UNSUPPORTED, t.meta[RXM_POS] - 1, "\\u escapes are not supported")
+    }
+    // Backreferences cannot exist in a Thompson NFA. Say so rather than
+    // silently treating \1 as the literal '1'.
+    if (c >= 49 && c <= 57) {
+        return rxFail(t, RXE_UNSUPPORTED, t.meta[RXM_POS] - 1, "backreferences are not supported")
+    }
+    return rxNode(t, AN_LITERAL, c, 0, 0, 0)
+}
+
+// ---------- group: ( ... ) ----------
+fn rxParseGroup(t: RxAst, depth: i64) -> i64 {
+    var openPos = t.meta[RXM_POS] - 1
+    var capIndex = -1
+    if (rxEat(t, 63)) {                       // '?'
+        var k = rxPeek(t)
+        if (k == 58) {                        // (?:
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        } else if (k == 61 || k == 33) {      // (?=  (?!
+            return rxFail(t, RXE_UNSUPPORTED, t.meta[RXM_POS], "lookahead is not supported")
+        } else if (k == 60) {                 // (?<
+            // Mine 13 (FIXED): the C parser sent (?<= and (?<! down the named
+            // group branch, read the name as "=..." and reported a misleading
+            // named-group error. Name what is actually unsupported.
+            var k2 = rxPeekAt(t, 1)
+            if (k2 == 61 || k2 == 33) {
+                return rxFail(t, RXE_UNSUPPORTED, t.meta[RXM_POS], "lookbehind is not supported")
+            }
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            while (rxPeek(t) >= 0 && rxPeek(t) != 62) {
+                t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            }
+            if (!rxEat(t, 62)) {
+                return rxFail(t, RXE_SYNTAX, t.meta[RXM_POS], "unterminated group name")
+            }
+            t.meta[RXM_NGROUPS] = t.meta[RXM_NGROUPS] + 1
+            capIndex = t.meta[RXM_NGROUPS]
+        } else if (k == 80) {                 // (?P<name>
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            if (!rxEat(t, 60)) {
+                return rxFail(t, RXE_SYNTAX, t.meta[RXM_POS], "expected '<' after (?P")
+            }
+            while (rxPeek(t) >= 0 && rxPeek(t) != 62) {
+                t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            }
+            if (!rxEat(t, 62)) {
+                return rxFail(t, RXE_SYNTAX, t.meta[RXM_POS], "unterminated group name")
+            }
+            t.meta[RXM_NGROUPS] = t.meta[RXM_NGROUPS] + 1
+            capIndex = t.meta[RXM_NGROUPS]
+        } else {
+            // Inline flags (?imsU) — mine 17 (KEPT): never restored, so they
+            // affect everything that follows, exactly as in C.
+            var sawFlag = false
+            while (true) {
+                var f = rxPeek(t)
+                if (f == 105) { t.meta[RXM_FLAGS] = t.meta[RXM_FLAGS] | RX_F_IGNORECASE }
+                else if (f == 109) { t.meta[RXM_FLAGS] = t.meta[RXM_FLAGS] | RX_F_MULTILINE }
+                else if (f == 115) { t.meta[RXM_FLAGS] = t.meta[RXM_FLAGS] | RX_F_DOTALL }
+                else if (f == 85) { t.meta[RXM_FLAGS] = t.meta[RXM_FLAGS] | RX_F_UNGREEDY }
+                else { break }
+                sawFlag = true
+                t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            }
+            if (!sawFlag) {
+                return rxFail(t, RXE_SYNTAX, t.meta[RXM_POS], "invalid group syntax after '(?'")
+            }
+            if (!rxEat(t, 41)) {              // ')'
+                return rxFail(t, RXE_SYNTAX, t.meta[RXM_POS], "unterminated inline flags")
+            }
+            return rxNode(t, AN_EMPTY, 0, 0, 0, 0)
+        }
+    } else {
+        t.meta[RXM_NGROUPS] = t.meta[RXM_NGROUPS] + 1
+        capIndex = t.meta[RXM_NGROUPS]
+    }
+    // Mine 9: diagnosable rather than silent.
+    if (t.meta[RXM_NGROUPS] > RX_MAX_GROUPS) {
+        return rxFail(t, RXE_TOO_MANY_GROUPS, openPos,
+                      "too many capture groups (limit ${RX_MAX_GROUPS})")
+    }
+    var inner = rxParseAlt(t, depth + 1)
+    if (rxErr(t) != 0) { return -1 }
+    if (!rxEat(t, 41)) {
+        return rxFail(t, RXE_UNMATCHED_PAREN, openPos, "unmatched '('")
+    }
+    return rxNode(t, AN_GROUP, inner, 0, capIndex, 0)
+}
+
+// ---------- atom ----------
+fn rxParseAtom(t: RxAst, depth: i64) -> i64 {
+    var c = rxPeek(t)
+    if (c < 0) { return rxNode(t, AN_EMPTY, 0, 0, 0, 0) }
+    if (c == 40) {                            // '('
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        return rxParseGroup(t, depth)
+    }
+    if (c == 91) {                            // '['
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        return rxParseClass(t)
+    }
+    if (c == 46) {                            // '.'
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        return rxNode(t, AN_ANY, 0, 0, 0, 0)
+    }
+    if (c == 94) {                            // '^'
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        var m = EW_BEGIN_TEXT
+        if ((t.meta[RXM_FLAGS] & RX_F_MULTILINE) != 0) { m = EW_BEGIN_LINE }
+        return rxNode(t, AN_EMPTY_WIDTH, m, 0, 0, 0)
+    }
+    if (c == 36) {                            // '$'
+        // Mine 4 (KEPT): non-multiline '$' is \z; it does not allow a trailing
+        // newline the way Perl's \Z does.
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        var m2 = EW_END_TEXT
+        if ((t.meta[RXM_FLAGS] & RX_F_MULTILINE) != 0) { m2 = EW_END_LINE }
+        return rxNode(t, AN_EMPTY_WIDTH, m2, 0, 0, 0)
+    }
+    if (c == 92) {                            // '\'
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        return rxParseEscape(t)
+    }
+    if (c == 41) {                            // ')' — the caller handles it
+        return rxNode(t, AN_EMPTY, 0, 0, 0, 0)
+    }
+    if (c == 42 || c == 43 || c == 63) {
+        return rxFail(t, RXE_BAD_REPEAT, t.meta[RXM_POS], "quantifier has nothing to repeat")
+    }
+    t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+    return rxNode(t, AN_LITERAL, c, 0, 0, 0)
+}
+
+// ---------- quantifier ----------
+fn rxParseRepeat(t: RxAst, depth: i64) -> i64 {
+    var atom = rxParseAtom(t, depth)
+    if (rxErr(t) != 0) { return -1 }
+    while (true) {
+        var c = rxPeek(t)
+        var minR = -1
+        var maxR = -1
+        if (c == 42) {                                                 // *
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            minR = 0
+            maxR = -1
+        } else if (c == 43) {                                          // +
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            minR = 1
+            maxR = -1
+        } else if (c == 63) {                                          // ?
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            minR = 0
+            maxR = 1
+        } else if (c == 123) {                                         // {
+            var save = t.meta[RXM_POS]
+            t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+            if (!rxIsDigitByte(rxPeek(t))) {
+                // not a quantifier: '{' is a literal, as in the C parser
+                t.meta[RXM_POS] = save
+                break
+            }
+            var lo = 0
+            while (rxIsDigitByte(rxPeek(t))) { lo = lo * 10 + (rxAdvance(t) - 48) }
+            var hi = lo
+            if (rxEat(t, 44)) {                                        // ','
+                if (rxIsDigitByte(rxPeek(t))) {
+                    hi = 0
+                    while (rxIsDigitByte(rxPeek(t))) { hi = hi * 10 + (rxAdvance(t) - 48) }
+                } else {
+                    hi = -1
+                }
+            }
+            if (!rxEat(t, 125)) {                                      // '}'
+                t.meta[RXM_POS] = save
+                break
+            }
+            if (hi >= 0 && hi < lo) {
+                return rxFail(t, RXE_BAD_REPEAT, save, "repeat range is out of order")
+            }
+            minR = lo
+            maxR = hi
+        } else {
+            break
+        }
+        var lazy = 0
+        if (rxEat(t, 63)) {
+            lazy = 1
+            t.meta[RXM_LAZY] = 1
+        }
+        atom = rxNode(t, AN_REPEAT, atom, lazy, minR, maxR)
+    }
+    return atom
+}
+
+fn rxParseConcat(t: RxAst, depth: i64) -> i64 {
+    var node = -1
+    while (true) {
+        var c = rxPeek(t)
+        if (c < 0 || c == 124 || c == 41) { break }                    // end, '|', ')'
+        var piece = rxParseRepeat(t, depth)
+        if (rxErr(t) != 0) { return -1 }
+        if (node < 0) { node = piece }
+        else { node = rxNode(t, AN_CONCAT, node, piece, 0, 0) }
+    }
+    if (node < 0) { node = rxNode(t, AN_EMPTY, 0, 0, 0, 0) }
+    return node
+}
+
+fn rxParseAlt(t: RxAst, depth: i64) -> i64 {
+    // Mine 18 (FIXED): XR_RE_MAX_NESTED_DEPTH was a dead constant with zero
+    // references anywhere in the C tree. Here it is enforced, which Xray also
+    // requires because its recursion depth is bounded.
+    if (depth > RX_MAX_DEPTH) {
+        return rxFail(t, RXE_TOO_DEEP, t.meta[RXM_POS],
+                      "pattern nests deeper than ${RX_MAX_DEPTH}")
+    }
+    var node = rxParseConcat(t, depth)
+    if (rxErr(t) != 0) { return -1 }
+    while (rxPeek(t) == 124) {                                         // '|'
+        t.meta[RXM_POS] = t.meta[RXM_POS] + 1
+        var rhs = rxParseConcat(t, depth)
+        if (rxErr(t) != 0) { return -1 }
+        node = rxNode(t, AN_ALT, node, rhs, 0, 0)
+    }
+    return node
+}
+
+fn rxParse(pattern: string, flags: i64) -> RxAst {
+    var t = rxNewAst()
+    t.src = pattern.copyBytes()
+    t.meta[RXM_FLAGS] = flags
+    var root = rxParseAlt(t, 0)
+    if (rxErr(t) == 0 && t.meta[RXM_POS] < len(t.src)) {
+        // only reachable on a stray ')'
+        rxFail(t, RXE_UNMATCHED_PAREN, t.meta[RXM_POS], "unmatched ')'")
+    }
+    t.meta[RXM_ROOT] = root
+    // Mine 2 (KEPT): one lazy quantifier flips the whole program to UNGREEDY.
+    // It is a global switch, not a per-quantifier one (compile.c:660-662).
+    if (t.meta[RXM_LAZY] == 1) {
+        t.meta[RXM_FLAGS] = t.meta[RXM_FLAGS] | RX_F_UNGREEDY
+    }
+    return t
+}
+
+// ---------- AST dump, for cross-checking ----------
+fn rxAstDump(t: RxAst, n: i64) -> string {
+    if (n < 0) { return "<nil>" }
+    var op = t.op[n]
+    if (op == AN_LITERAL) {
+        var ch = t.a[n]
+        if (ch >= 32 && ch < 127) { return "'" + chr(ch)! + "'" }
+        return "LIT(${ch})"
+    }
+    if (op == AN_EMPTY) { return "EMPTY" }
+    if (op == AN_ANY) { return "ANY" }
+    if (op == AN_CLASS) {
+        var ci = t.c[n]
+        var s = "CLASS["
+        if (t.clsNeg[ci] == 1) { s = s + "^" }
+        var k = 0
+        while (k < t.clsLen[ci]) {
+            var lo = t.clsRanges[(t.clsStart[ci] + k) * 2]
+            var hi = t.clsRanges[(t.clsStart[ci] + k) * 2 + 1]
+            if (k > 0) { s = s + "," }
+            if (lo == hi) { s = s + "${lo}" } else { s = s + "${lo}-${hi}" }
+            k = k + 1
+        }
+        return s + "]"
+    }
+    if (op == AN_CONCAT) { return "(" + rxAstDump(t, t.a[n]) + " " + rxAstDump(t, t.b[n]) + ")" }
+    if (op == AN_ALT) { return "(" + rxAstDump(t, t.a[n]) + "|" + rxAstDump(t, t.b[n]) + ")" }
+    if (op == AN_REPEAT) {
+        var q = "{${t.c[n]},${t.d[n]}}"
+        var lz = ""
+        if (t.b[n] == 1) { lz = "?" }
+        return rxAstDump(t, t.a[n]) + q + lz
+    }
+    if (op == AN_GROUP) { return "G${t.c[n]}(" + rxAstDump(t, t.a[n]) + ")" }
+    if (op == AN_EMPTY_WIDTH) { return "EW(${t.a[n]})" }
+    if (op == AN_UNICODE) {
+        return "UNI(${t.uniRanges[t.a[n] * 3]},${t.uniRanges[t.a[n] * 3 + 1]})"
+    }
+    return "?"
+}
+
+
+// ============================================================================
+// Segment 2: compiler, RxAst -> program image. Replaces xregex_compile.c.
+// ============================================================================
+
+const PH_MAGIC: i64 = 0
+const PH_FLAGS: i64 = 1
+const PH_START: i64 = 2
+const PH_NINST: i64 = 3
+const PH_NCAPS: i64 = 4
+const PH_NGROUPS: i64 = 5
+const PH_INST_BASE: i64 = 6
+const PH_UNI_BASE: i64 = 7
+const PH_UNI_COUNT: i64 = 8
+const PH_TRAITS: i64 = 9
+const PH_ANCHORED: i64 = 10
+const PH_HEADER_LEN: i64 = 16
+const PH_MAGIC_VALUE: i64 = 1481920049
+
+const IN_OP: i64 = 0
+const IN_OUT: i64 = 1
+const IN_OUT1: i64 = 2
+const IN_ARG: i64 = 3
+const INST_STRIDE: i64 = 4
+
+const OP_NOP: i64 = 0
+const OP_MATCH: i64 = 1
+const OP_FAIL: i64 = 2
+const OP_BYTE: i64 = 3
+const OP_BYTE_RANGE: i64 = 4
+const OP_ANY_BYTE: i64 = 5
+const OP_ANY_BYTE_NL: i64 = 6
+const OP_ALT: i64 = 7
+const OP_CAPTURE: i64 = 8
+const OP_EMPTY_WIDTH: i64 = 9
+const OP_UNICODE_RANGE: i64 = 10
+// One UTF-8 continuation byte (0x80-0xBF). It exists so that every executed
+// instruction consumes exactly one byte: a thread that advanced by a whole
+// scalar in one step would desynchronise from the byte-stepped thread list.
+// The C engine had the same question and answered it twice (its NFA consumed a
+// whole scalar for ANY while the DFA and fast paths consumed one byte); here
+// the whole-scalar answer is the only one, expressed in the program itself.
+const OP_CONT: i64 = 11
+
+const TR_HAS_EMPTY_WIDTH: i64 = 1
+const TR_HAS_ANY_SCALAR: i64 = 2
+const TR_HAS_UNICODE: i64 = 4
+const TR_HAS_CAPTURE: i64 = 8
+
+const UNI_STRIDE: i64 = 3
+
+// Mine 19 (FIXED): the C side advertised 10000 but alloc_inst's doubling check
+// topped out at 8192 (compile.c:37-39). One number, one answer.
+const RX_MAX_INSTS: i64 = 10000
+
+// Compiler scratch. Same trick as the parser: mutable state in arrays.
+class RxC {
+    inst: Array<i64> = Array<i64>()
+    st: Array<i64> = Array<i64>()      // [0] = overflow flag
+}
+
+fn rxNewC() -> RxC {
+    var c = RxC()
+    c.st.push(0)
+    return c
+}
+
+fn rxEmit(c: RxC, op: i64, out: i64, out1: i64, arg: i64) -> i64 {
+    if (len(c.inst) / INST_STRIDE >= RX_MAX_INSTS) {
+        c.st[0] = 1
+        return 0
+    }
+    c.inst.push(op)
+    c.inst.push(out)
+    c.inst.push(out1)
+    c.inst.push(arg)
+    return len(c.inst) / INST_STRIDE - 1
+}
+
+fn rxSetOut(c: RxC, idx: i64, out: i64, out1: i64) {
+    c.inst[idx * INST_STRIDE + IN_OUT] = out
+    c.inst[idx * INST_STRIDE + IN_OUT1] = out1
+}
+
+// Emit one byte-range test that jumps to `next` on success.
+fn rxEmitRange(c: RxC, lo: i64, hi: i64, next: i64) -> i64 {
+    if (lo == hi) { return rxEmit(c, OP_BYTE, next, -1, lo) }
+    return rxEmit(c, OP_BYTE_RANGE, next, -1, lo | (hi << 16))
+}
+
+// IGNORECASE expansion, ASCII a-zA-Z only, exactly as compile.c:409-410.
+// The C side wrote into a fixed expanded_ranges[128] and silently truncated
+// past 128 ranges; an Array<i64> has no such ceiling, so that truncation is
+// gone. IGNORECASE never applies to \p{} (compile.c:410).
+fn rxExpandCase(ranges: ref Array<i64>, lo: i64, hi: i64) {
+    ranges.push(lo)
+    ranges.push(hi)
+    // lowercase span -> add the uppercase counterpart
+    var l1 = lo
+    var h1 = hi
+    if (l1 < 97) { l1 = 97 }
+    if (h1 > 122) { h1 = 122 }
+    if (l1 <= h1) {
+        ranges.push(l1 - 32)
+        ranges.push(h1 - 32)
+    }
+    var l2 = lo
+    var h2 = hi
+    if (l2 < 65) { l2 = 65 }
+    if (h2 > 90) { h2 = 90 }
+    if (l2 <= h2) {
+        ranges.push(l2 + 32)
+        ranges.push(h2 + 32)
+    }
+}
+
+// Mine 15 (KEPT): [^...] complements over bytes 0..255, so [^a] also matches
+// UTF-8 continuation bytes. Wrong for multi-byte characters, preserved because
+// changing it needs unicode set arithmetic and is its own piece of work.
+fn rxComplement(src: Array<i64>) -> Array<i64> {
+    // Array<i64>(n) does NOT zero-fill on this build (measured: 255 of 256
+    // elements came back non-zero from reused memory), so the fill value is
+    // given explicitly. Without it this function is non-deterministic.
+    var mark: Array<i64> = Array<i64>(256, 0)
+    var i = 0
+    while (i < len(src)) {
+        var lo = src[i]
+        var hi = src[i + 1]
+        if (lo < 0) { lo = 0 }
+        if (hi > 255) { hi = 255 }
+        var b = lo
+        while (b <= hi) {
+            mark[b] = 1
+            b = b + 1
+        }
+        i = i + 2
+    }
+    var out: Array<i64> = Array<i64>()
+    var runStart = -1
+    var k = 0
+    while (k < 256) {
+        if (mark[k] == 0) {
+            if (runStart < 0) { runStart = k }
+        } else {
+            if (runStart >= 0) {
+                out.push(runStart)
+                out.push(k - 1)
+                runStart = -1
+            }
+        }
+        k = k + 1
+    }
+    if (runStart >= 0) {
+        out.push(runStart)
+        out.push(255)
+    }
+    return out
+}
+
+// `.` expanded into the UTF-8 byte structure, so one instruction consumes one
+// byte while `.` still matches one whole scalar.
+//   1 byte  [00-7F]                    (minus '\n' unless DOTALL)
+//   2 bytes [C2-DF][80-BF]
+//   3 bytes [E0-EF][80-BF]{2}
+//   4 bytes [F0-F4][80-BF]{3}
+fn rxCompAny(c: RxC, dotall: bool, next: i64) -> i64 {
+    var c2 = rxEmit(c, OP_CONT, next, -1, 0)
+    var lead2 = rxEmitRange(c, 194, 223, c2)
+
+    var c3b = rxEmit(c, OP_CONT, next, -1, 0)
+    var c3a = rxEmit(c, OP_CONT, c3b, -1, 0)
+    var lead3 = rxEmitRange(c, 224, 239, c3a)
+
+    var c4c = rxEmit(c, OP_CONT, next, -1, 0)
+    var c4b = rxEmit(c, OP_CONT, c4c, -1, 0)
+    var c4a = rxEmit(c, OP_CONT, c4b, -1, 0)
+    var lead4 = rxEmitRange(c, 240, 244, c4a)
+
+    var multi = rxEmit(c, OP_ALT, lead3, lead4, 0)
+    multi = rxEmit(c, OP_ALT, lead2, multi, 0)
+
+    if (dotall) {
+        var a1 = rxEmitRange(c, 0, 127, next)
+        return rxEmit(c, OP_ALT, a1, multi, 0)
+    }
+    var lo = rxEmitRange(c, 0, 9, next)
+    var hi = rxEmitRange(c, 11, 127, next)
+    var ascii = rxEmit(c, OP_ALT, lo, hi, 0)
+    return rxEmit(c, OP_ALT, ascii, multi, 0)
+}
+
+// \p{...}: the lead byte is checked together with the whole decoded scalar, then
+// the remaining continuation bytes are consumed one per step. IN_OUT1 carries
+// the base of a three-instruction CONT chain; a scalar of width w enters it at
+// contBase + (w - 2), and width 1 goes straight to IN_OUT.
+fn rxCompUni(c: RxC, uniIdx: i64, next: i64) -> i64 {
+    var k1 = rxEmit(c, OP_CONT, next, -1, 0)   // contBase + 0 : width 2
+    var k2 = rxEmit(c, OP_CONT, k1, -1, 0)     // contBase + 1 : width 3
+    var k3 = rxEmit(c, OP_CONT, k2, -1, 0)     // contBase + 2 : width 4
+    return rxEmit(c, OP_UNICODE_RANGE, next, k1, uniIdx)
+}
+
+// Compile a character class into an ALT chain of byte tests.
+fn rxCompClass(t: RxAst, c: RxC, ci: i64, flags: i64, next: i64) -> i64 {
+    var raw: Array<i64> = Array<i64>()
+    var k = 0
+    while (k < t.clsLen[ci]) {
+        var lo = t.clsRanges[(t.clsStart[ci] + k) * 2]
+        var hi = t.clsRanges[(t.clsStart[ci] + k) * 2 + 1]
+        if ((flags & RX_F_IGNORECASE) != 0) {
+            rxExpandCase(ref raw, lo, hi)
+        } else {
+            raw.push(lo)
+            raw.push(hi)
+        }
+        k = k + 1
+    }
+    var eff = raw
+    if (t.clsNeg[ci] == 1) { eff = rxComplement(raw) }
+    if (len(eff) == 0) { return rxEmit(c, OP_FAIL, -1, -1, 0) }
+    // build the chain back to front so each ALT can point at a known target
+    var n = len(eff) / 2
+    var chain = rxEmitRange(c, eff[(n - 1) * 2], eff[(n - 1) * 2 + 1], next)
+    var j = n - 2
+    while (j >= 0) {
+        var r = rxEmitRange(c, eff[j * 2], eff[j * 2 + 1], next)
+        chain = rxEmit(c, OP_ALT, r, chain, 0)
+        j = j - 1
+    }
+    return chain
+}
+
+// Compile `node` so that success continues at instruction `next`.
+// Returns the entry instruction index.
+fn rxComp(t: RxAst, c: RxC, node: i64, flags: i64, next: i64) -> i64 {
+    if (c.st[0] != 0) { return next }
+    if (node < 0) { return next }
+    var op = t.op[node]
+
+    if (op == AN_EMPTY) { return next }
+
+    if (op == AN_LITERAL) {
+        var ch = t.a[node]
+        if ((flags & RX_F_IGNORECASE) != 0) {
+            var other = -1
+            if (ch >= 97 && ch <= 122) { other = ch - 32 }
+            if (ch >= 65 && ch <= 90) { other = ch + 32 }
+            if (other >= 0) {
+                var i2 = rxEmit(c, OP_BYTE, next, -1, other)
+                var i1 = rxEmit(c, OP_BYTE, next, -1, ch)
+                return rxEmit(c, OP_ALT, i1, i2, 0)
+            }
+        }
+        return rxEmit(c, OP_BYTE, next, -1, ch)
+    }
+
+    if (op == AN_ANY) {
+        // Design §2.3: `.` matches one whole UTF-8 scalar. The C side answered
+        // this differently in the NFA and in the DFA/fast paths; here the
+        // whole-scalar answer is the only one, and it is expressed in the
+        // program so each executed instruction still consumes one byte.
+        return rxCompAny(c, (flags & RX_F_DOTALL) != 0, next)
+    }
+
+    if (op == AN_CLASS) { return rxCompClass(t, c, t.c[node], flags, next) }
+
+    if (op == AN_UNICODE) { return rxCompUni(c, t.a[node], next) }
+
+    if (op == AN_EMPTY_WIDTH) { return rxEmit(c, OP_EMPTY_WIDTH, next, -1, t.a[node]) }
+
+    if (op == AN_CONCAT) {
+        var s2 = rxComp(t, c, t.b[node], flags, next)
+        return rxComp(t, c, t.a[node], flags, s2)
+    }
+
+    if (op == AN_ALT) {
+        var l = rxComp(t, c, t.a[node], flags, next)
+        var r = rxComp(t, c, t.b[node], flags, next)
+        return rxEmit(c, OP_ALT, l, r, 0)
+    }
+
+    if (op == AN_GROUP) {
+        var cap = t.c[node]
+        if (cap < 0) { return rxComp(t, c, t.a[node], flags, next) }
+        var close = rxEmit(c, OP_CAPTURE, next, -1, cap * 2 + 1)
+        var inner = rxComp(t, c, t.a[node], flags, close)
+        return rxEmit(c, OP_CAPTURE, inner, -1, cap * 2)
+    }
+
+    if (op == AN_REPEAT) {
+        var child = t.a[node]
+        var lazy = t.b[node]
+        var minR = t.c[node]
+        var maxR = t.d[node]
+        var cur = next
+        if (maxR < 0) {
+            // unbounded tail: a self loop.
+            // Greedy vs lazy is only the order of the ALT's two branches
+            // (compile.c:709/745).
+            var loop = rxEmit(c, OP_ALT, -1, -1, 0)
+            var body = rxComp(t, c, child, flags, loop)
+            if (c.st[0] != 0) { return next }
+            if (lazy == 1) { rxSetOut(c, loop, next, body) }
+            else { rxSetOut(c, loop, body, next) }
+            cur = loop
+        } else {
+            var opt = maxR - minR
+            var o = 0
+            while (o < opt) {
+                var altIdx = rxEmit(c, OP_ALT, -1, -1, 0)
+                var b2 = rxComp(t, c, child, flags, cur)
+                if (c.st[0] != 0) { return next }
+                if (lazy == 1) { rxSetOut(c, altIdx, next, b2) }
+                else { rxSetOut(c, altIdx, b2, next) }
+                cur = altIdx
+                o = o + 1
+            }
+        }
+        // the mandatory `min` copies, expanded at compile time (compile.c:653-796)
+        var m = 0
+        while (m < minR) {
+            cur = rxComp(t, c, child, flags, cur)
+            if (c.st[0] != 0) { return next }
+            m = m + 1
+        }
+        return cur
+    }
+
+    return next
+}
+
+// Is the pattern anchored at the start (leftmost leaf is ^ or \A)?
+fn rxLeftAnchored(t: RxAst, node: i64) -> bool {
+    if (node < 0) { return false }
+    var op = t.op[node]
+    if (op == AN_EMPTY_WIDTH) {
+        return (t.a[node] & EW_BEGIN_TEXT) != 0 || (t.a[node] & EW_BEGIN_LINE) != 0
+    }
+    if (op == AN_CONCAT) { return rxLeftAnchored(t, t.a[node]) }
+    if (op == AN_GROUP) { return rxLeftAnchored(t, t.a[node]) }
+    if (op == AN_ALT) { return rxLeftAnchored(t, t.a[node]) && rxLeftAnchored(t, t.b[node]) }
+    return false
+}
+
+fn rxCompile(t: RxAst) -> Array<i64> {
+    var empty: Array<i64> = Array<i64>()
+    if (rxErr(t) != 0) { return empty }
+
+    var c = rxNewC()
+    var flags = rxFlags(t)
+    var matchIdx = rxEmit(c, OP_MATCH, -1, -1, 0)
+    var cap1 = rxEmit(c, OP_CAPTURE, matchIdx, -1, 1)
+    var body = rxComp(t, c, rxRoot(t), flags, cap1)
+    var start = rxEmit(c, OP_CAPTURE, body, -1, 0)
+    if (c.st[0] != 0) { return empty }
+
+    var ninst = len(c.inst) / INST_STRIDE
+    var ngroups = rxNgroups(t)
+    var uniCount = len(t.uniRanges) / UNI_STRIDE
+
+    var traits = 0
+    var i = 0
+    while (i < ninst) {
+        var op = c.inst[i * INST_STRIDE + IN_OP]
+        if (op == OP_EMPTY_WIDTH) { traits = traits | TR_HAS_EMPTY_WIDTH }
+        if (op == OP_CONT) { traits = traits | TR_HAS_ANY_SCALAR }
+        if (op == OP_UNICODE_RANGE) { traits = traits | TR_HAS_UNICODE }
+        if (op == OP_CAPTURE && c.inst[i * INST_STRIDE + IN_ARG] > 1) {
+            traits = traits | TR_HAS_CAPTURE
+        }
+        i = i + 1
+    }
+
+    var prog: Array<i64> = Array<i64>()
+    var h = 0
+    while (h < PH_HEADER_LEN) {
+        prog.push(0)
+        h = h + 1
+    }
+    prog[PH_MAGIC] = PH_MAGIC_VALUE
+    prog[PH_FLAGS] = flags
+    prog[PH_START] = start
+    prog[PH_NINST] = ninst
+    prog[PH_NCAPS] = 2 * (ngroups + 1)
+    prog[PH_NGROUPS] = ngroups
+    prog[PH_INST_BASE] = PH_HEADER_LEN
+    prog[PH_UNI_BASE] = PH_HEADER_LEN + ninst * INST_STRIDE
+    prog[PH_UNI_COUNT] = uniCount
+    prog[PH_TRAITS] = traits
+    if (rxLeftAnchored(t, rxRoot(t))) { prog[PH_ANCHORED] = 1 }
+
+    var k = 0
+    while (k < len(c.inst)) {
+        prog.push(c.inst[k])
+        k = k + 1
+    }
+    var u = 0
+    while (u < len(t.uniRanges)) {
+        prog.push(t.uniRanges[u])
+        u = u + 1
+    }
+    return prog
+}
+
+// ---------- disassembler ----------
+fn rxOpName(op: i64) -> string {
+    if (op == OP_NOP) { return "NOP" }
+    if (op == OP_MATCH) { return "MATCH" }
+    if (op == OP_FAIL) { return "FAIL" }
+    if (op == OP_BYTE) { return "BYTE" }
+    if (op == OP_BYTE_RANGE) { return "RANGE" }
+    if (op == OP_ANY_BYTE) { return "ANY" }
+    if (op == OP_ANY_BYTE_NL) { return "ANY_NL" }
+    if (op == OP_ALT) { return "ALT" }
+    if (op == OP_CAPTURE) { return "CAP" }
+    if (op == OP_EMPTY_WIDTH) { return "EW" }
+    if (op == OP_UNICODE_RANGE) { return "UNI" }
+    if (op == OP_CONT) { return "CONT" }
+    return "?"
+}
+
+fn rxDisasm(prog: Array<i64>) -> string {
+    if (len(prog) == 0) { return "<empty program>" }
+    var s = "start=${prog[PH_START]} ninst=${prog[PH_NINST]} ncaps=${prog[PH_NCAPS]}"
+    s = s + " flags=${prog[PH_FLAGS]} traits=${prog[PH_TRAITS]} anchored=${prog[PH_ANCHORED]}\n"
+    var base = prog[PH_INST_BASE]
+    var i = 0
+    while (i < prog[PH_NINST]) {
+        var op = prog[base + i * INST_STRIDE + IN_OP]
+        var out = prog[base + i * INST_STRIDE + IN_OUT]
+        var out1 = prog[base + i * INST_STRIDE + IN_OUT1]
+        var arg = prog[base + i * INST_STRIDE + IN_ARG]
+        s = s + "  ${i}: " + rxOpName(op)
+        if (op == OP_BYTE) { s = s + " '${arg}'" }
+        if (op == OP_BYTE_RANGE) { s = s + " ${arg & 65535}-${arg >> 16}" }
+        if (op == OP_CAPTURE) { s = s + " slot=${arg}" }
+        if (op == OP_EMPTY_WIDTH) { s = s + " mask=${arg}" }
+        if (op == OP_UNICODE_RANGE) { s = s + " uni=${arg}" }
+        if (op == OP_ALT) { s = s + " -> ${out}, ${out1}" }
+        else if (op != OP_MATCH && op != OP_FAIL) { s = s + " -> ${out}" }
+        s = s + "\n"
+        i = i + 1
+    }
+    return s
+}
+
+// ============================================================================
+// Segment 3: execution engine. Replaces xregex_nfa.c AND xregex_dfa.c.
+//
+// Thompson NFA simulation, leftmost-longest (POSIX), no backtracking.
+//
+// The DFA is not ported. In C it was an unsynchronised shared mutable cache
+// hanging off a shared XrRegex (dfa_next_state writes state->next[] and
+// dfa->state_cache[]), so two coroutines using one Regex raced. The general
+// NFA loop was already linear and the DFA only bought a constant factor, so
+// deleting it answers the race structurally. rxSearch holds no state across
+// calls: same inputs, same output, and it never writes `prog`.
+//
+// Epsilon closure uses an explicit stack, never recursion: the C add_thread
+// recursed with a 512-byte frame per level, and Xray's recursion depth is
+// bounded anyway.
+// ============================================================================
+
+const EW_ALL_MASK: i64 = 63
+
+fn rxIsWordByte(b: i64) -> bool {
+    if (b >= 97 && b <= 122) { return true }
+    if (b >= 65 && b <= 90) { return true }
+    if (b >= 48 && b <= 57) { return true }
+    return b == 95
+}
+
+// The single authority for zero-width assertions, shared by every path here,
+// mirroring xr_re_check_empty_width (xregex_nfa.c:185-216).
+// `base` is where the text is considered to start. Mine 3 (KEPT): match_at,
+// count and the iterators shift the text base to the slice start, so ^ \A and
+// \b can become true again at every offset -- find(/^a/, "bba", 2) matches.
+// C did this by moving a pointer; doing it by copying the tail would make every
+// findAll O(n^2), so the base is passed instead.
+fn rxCheckEmptyWidth(text: Array<u8>, base: i64, pos: i64, mask: i64) -> bool {
+    var n = len(text)
+    if ((mask & EW_BEGIN_TEXT) != 0 && pos != base) { return false }
+    if ((mask & EW_END_TEXT) != 0 && pos != n) { return false }
+    if ((mask & EW_BEGIN_LINE) != 0) {
+        if (pos != base && (text[pos - 1] as i64) != 10) { return false }
+    }
+    if ((mask & EW_END_LINE) != 0) {
+        if (pos != n && (text[pos] as i64) != 10) { return false }
+    }
+    if ((mask & EW_WORD_BOUNDARY) != 0 || (mask & EW_NOT_WORD_BOUND) != 0) {
+        var before = false
+        if (pos > base) { before = rxIsWordByte(text[pos - 1] as i64) }
+        var after = false
+        if (pos < n) { after = rxIsWordByte(text[pos] as i64) }
+        var atB = before != after
+        if ((mask & EW_WORD_BOUNDARY) != 0 && !atB) { return false }
+        if ((mask & EW_NOT_WORD_BOUND) != 0 && atB) { return false }
+    }
+    return true
+}
+
+// Decode one UTF-8 scalar at byte index i.
+// Returns (codepoint << 8) | width, or -1 when the bytes are not valid UTF-8.
+fn rxDecodeUtf8(text: Array<u8>, i: i64) -> i64 {
+    var n = len(text)
+    if (i < 0 || i >= n) { return -1 }
+    var b0 = text[i] as i64
+    if (b0 < 128) { return (b0 << 8) | 1 }
+    if (b0 < 194) { return -1 }
+    if (b0 < 224) {
+        if (i + 1 >= n) { return -1 }
+        var b1 = text[i + 1] as i64
+        if ((b1 & 192) != 128) { return -1 }
+        return ((((b0 & 31) << 6) | (b1 & 63)) << 8) | 2
+    }
+    if (b0 < 240) {
+        if (i + 2 >= n) { return -1 }
+        var c1 = text[i + 1] as i64
+        var c2 = text[i + 2] as i64
+        if ((c1 & 192) != 128 || (c2 & 192) != 128) { return -1 }
+        var cp2 = ((b0 & 15) << 12) | ((c1 & 63) << 6) | (c2 & 63)
+        if (cp2 < 2048) { return -1 }
+        return (cp2 << 8) | 3
+    }
+    if (b0 < 245) {
+        if (i + 3 >= n) { return -1 }
+        var d1 = text[i + 1] as i64
+        var d2 = text[i + 2] as i64
+        var d3 = text[i + 3] as i64
+        if ((d1 & 192) != 128 || (d2 & 192) != 128 || (d3 & 192) != 128) { return -1 }
+        var cp3 = ((b0 & 7) << 18) | ((d1 & 63) << 12) | ((d2 & 63) << 6) | (d3 & 63)
+        if (cp3 < 65536 || cp3 > 1114111) { return -1 }
+        return (cp3 << 8) | 4
+    }
+    return -1
+}
+
+// Execution scratch: thread lists, capture snapshots and the dedup marks.
+// Two preallocated lists are swapped rather than reallocated per byte.
+class RxX {
+    clist: Array<i64> = Array<i64>()      // pc per current thread
+    ccap: Array<i64> = Array<i64>()       // snapshot offset per current thread
+    nlist: Array<i64> = Array<i64>()
+    ncap: Array<i64> = Array<i64>()
+    cpool: Array<i64> = Array<i64>()      // capture snapshots for clist
+    npool: Array<i64> = Array<i64>()      // ... for nlist
+    seen: Array<i64> = Array<i64>()       // pc -> generation, dedup
+    stack: Array<i64> = Array<i64>()      // explicit epsilon-closure stack
+    best: Array<i64> = Array<i64>()
+    st: Array<i64> = Array<i64>()         // [0]=gen [1]=matched
+}
+
+const RXX_GEN: i64 = 0
+const RXX_MATCHED: i64 = 1
+
+// Append a capture snapshot onto one of the two pools and return its offset.
+// srcOff < 0 means "all -1". Arrays cannot be passed as mutable parameters
+// (a plain Array parameter is a read capability, and a `ref` one cannot be
+// passed on), so the pools are reached through the owning object instead.
+fn rxSnapCopy(x: RxX, toNext: bool, fromNext: bool, ncaps: i64, srcOff: i64) -> i64 {
+    var off = len(x.cpool)
+    if (toNext) { off = len(x.npool) }
+    var i = 0
+    while (i < ncaps) {
+        var v = -1
+        if (srcOff >= 0) {
+            if (fromNext) { v = x.npool[srcOff + i] } else { v = x.cpool[srcOff + i] }
+        }
+        if (toNext) { x.npool.push(v) } else { x.cpool.push(v) }
+        i = i + 1
+    }
+    return off
+}
+
+// Add pc, and everything reachable from it through epsilon transitions, to the
+// current or next thread list. Explicit stack, never recursion: the C
+// add_thread recursed with a 512-byte frame per level (xregex_nfa.c:233-284),
+// and Xray bounds recursion depth anyway.
+fn rxAddThread(x: RxX, prog: Array<i64>, text: Array<u8>, tbase: i64, toNext: bool,
+               pc0: i64, snap0: i64, pos: i64, ncaps: i64, gen: i64) {
+    var base = prog[PH_INST_BASE]
+    x.stack.push(pc0)
+    x.stack.push(snap0)
+    while (len(x.stack) > 0) {
+        var snap = x.stack.pop()!
+        var pc = x.stack.pop()!
+        if (pc < 0) { continue }
+        if (x.seen[pc] == gen) { continue }
+        x.seen[pc] = gen
+        var op = prog[base + pc * INST_STRIDE + IN_OP]
+        var out = prog[base + pc * INST_STRIDE + IN_OUT]
+        var out1 = prog[base + pc * INST_STRIDE + IN_OUT1]
+        var arg = prog[base + pc * INST_STRIDE + IN_ARG]
+        if (op == OP_NOP) {
+            x.stack.push(out)
+            x.stack.push(snap)
+        } else if (op == OP_ALT) {
+            // push the low-priority branch first so the high-priority one is
+            // popped, and marked seen, first
+            x.stack.push(out1)
+            x.stack.push(snap)
+            x.stack.push(out)
+            x.stack.push(snap)
+        } else if (op == OP_CAPTURE) {
+            var ns = rxSnapCopy(x, toNext, toNext, ncaps, snap)
+            if (toNext) { x.npool[ns + arg] = pos } else { x.cpool[ns + arg] = pos }
+            x.stack.push(out)
+            x.stack.push(ns)
+        } else if (op == OP_EMPTY_WIDTH) {
+            if (rxCheckEmptyWidth(text, tbase, pos, arg)) {
+                x.stack.push(out)
+                x.stack.push(snap)
+            }
+        } else if (op == OP_FAIL) {
+            // the thread dies here
+        } else {
+            if (toNext) {
+                x.nlist.push(pc)
+                x.ncap.push(snap)
+            } else {
+                x.clist.push(pc)
+                x.ccap.push(snap)
+            }
+        }
+    }
+}
+
+// Search text[at..len). On success writes prog[PH_NCAPS] byte offsets into
+// `caps` (-1 for groups that did not participate) and returns true.
+// `anchored` restricts the search to start exactly at `at`.
+// The execution scratch is rebuilt per search. Reusing it across the repeated
+// searches that count/findAll/replace/split perform would save one object, ten
+// arrays and one push per instruction each time -- measurably the dominant cost
+// -- but it cannot be written that way here: the double buffer is swapped by
+// assigning clist/nlist, and a class-typed parameter is a read capability, so
+// the swap only compiles while `x` is a local. Doing it would mean carrying a
+// phase bit in x.st and selecting the physical array at every access. Recorded
+// as the next optimisation rather than attempted here.
+fn rxSearch(prog: Array<i64>, text: Array<u8>, at: i64, anchored: bool,
+            caps: ref Array<i64>) -> bool {
+    if (len(prog) == 0) { return false }
+    var base = prog[PH_INST_BASE]
+    var ninst = prog[PH_NINST]
+    var ncaps = prog[PH_NCAPS]
+    var start = prog[PH_START]
+    var ungreedy = (prog[PH_FLAGS] & RX_F_UNGREEDY) != 0
+    var n = len(text)
+    var startAt = at
+    if (startAt < 0) { startAt = 0 }
+    if (startAt > n) { return false }
+
+    var x = RxX()
+    var i = 0
+    while (i < ninst) {
+        x.seen.push(-1)
+        i = i + 1
+    }
+    x.st.push(0)
+    x.st.push(0)
+    i = 0
+    while (i < ncaps) {
+        x.best.push(-1)
+        i = i + 1
+    }
+
+    var gen = 0
+    var matched = false
+    var pos = startAt
+    while (true) {
+        // leftmost: stop injecting new start points once something matched
+        if (!matched) {
+            if (!anchored || pos == startAt) {
+                var s0 = rxSnapCopy(x, false, false, ncaps, -1)
+                rxAddThread(x, prog, text, startAt, false, start, s0, pos, ncaps, gen)
+            }
+        }
+        if (len(x.clist) == 0) {
+            if (matched) { break }
+            if (anchored && pos > startAt) { break }
+            if (pos > n) { break }
+        }
+        if (pos > n) { break }
+
+        gen = gen + 1
+        x.nlist.clear()
+        x.ncap.clear()
+        x.npool.clear()
+
+        var k = 0
+        var stop = false
+        while (k < len(x.clist)) {
+            var pc = x.clist[k]
+            var snap = x.ccap[k]
+            var op = prog[base + pc * INST_STRIDE + IN_OP]
+            if (op == OP_MATCH) {
+                // Mine 1 (KEPT): leftmost-longest (POSIX), not leftmost-first.
+                // The C loop just overwrote best_caps on every MATCH
+                // (xregex_nfa.c:527-539/915-927), which only yields the longest
+                // match because of the order its thread list happened to be in.
+                // The rule is stated directly here instead: an earlier start
+                // always wins, and at an equal start the longer end wins.
+                var cs = x.cpool[snap]
+                var ce = x.cpool[snap + 1]
+                var better = !matched
+                if (matched) {
+                    if (cs < x.best[0]) { better = true }
+                    else if (cs == x.best[0] && ce > x.best[1]) { better = true }
+                }
+                if (better) {
+                    var m = 0
+                    while (m < ncaps) {
+                        x.best[m] = x.cpool[snap + m]
+                        m = m + 1
+                    }
+                }
+                matched = true
+                // Mine 2 (KEPT): under UNGREEDY the run stops at the first
+                // match (nfa.c:532/920).
+                if (ungreedy) {
+                    stop = true
+                    k = len(x.clist)
+                }
+            } else if (pos < n) {
+                var out = prog[base + pc * INST_STRIDE + IN_OUT]
+                var out1 = prog[base + pc * INST_STRIDE + IN_OUT1]
+                var arg = prog[base + pc * INST_STRIDE + IN_ARG]
+                var b = text[pos] as i64
+                var adv = -1
+                if (op == OP_BYTE) {
+                    if (b == arg) { adv = 1 }
+                } else if (op == OP_BYTE_RANGE) {
+                    var lo = arg & 65535
+                    var hi = arg >> 16
+                    if (b >= lo && b <= hi) { adv = 1 }
+                } else if (op == OP_CONT) {
+                    if (b >= 128 && b <= 191) { adv = 1 }
+                } else if (op == OP_UNICODE_RANGE) {
+                    // Check the whole scalar here, but consume only the lead
+                    // byte; the remaining bytes are eaten by the CONT chain
+                    // whose base is in IN_OUT1, entered at (width - 2).
+                    var dec2 = rxDecodeUtf8(text, pos)
+                    if (dec2 >= 0) {
+                        var cp2 = dec2 >> 8
+                        var w = dec2 & 255
+                        var ub = prog[PH_UNI_BASE]
+                        var propId = prog[ub + arg * UNI_STRIDE]
+                        var negd = prog[ub + arg * UNI_STRIDE + 1]
+                        var has = __unicodeHasProp(cp2, propId)
+                        if (negd == 1) { has = !has }
+                        if (has) {
+                            adv = 1
+                            if (w > 1) { out = out1 + (w - 2) }
+                        }
+                    }
+                }
+                if (adv > 0) {
+                    var ns = rxSnapCopy(x, true, false, ncaps, snap)
+                    rxAddThread(x, prog, text, startAt, true, out, ns, pos + 1, ncaps, gen)
+                }
+            }
+            k = k + 1
+        }
+        if (stop) { break }
+
+        // swap the double buffers
+        var tl = x.clist
+        x.clist = x.nlist
+        x.nlist = tl
+        var tc = x.ccap
+        x.ccap = x.ncap
+        x.ncap = tc
+        var tp = x.cpool
+        x.cpool = x.npool
+        x.npool = tp
+
+        if (pos >= n) { break }
+        pos = pos + 1
+    }
+
+    if (!matched) { return false }
+    var q = 0
+    while (q < ncaps) {
+        caps[q] = x.best[q]
+        q = q + 1
+    }
+    return true
+}
+
+// ============================================================================
+// Segment 4: top-level API. Replaces xregex.c.
+//
+// One path per operation. The C side kept a "fast path" for capture-free
+// replacement next to the general one, and the two disagreed on empty matches
+// (mine 6): the fast path appended the byte at p a second time, duplicating a
+// character and skipping text. Deleting the fast path removes the possibility
+// of disagreement rather than fixing one of the two copies.
+// ============================================================================
+
+fn rxNewCaps(prog: Array<i64>) -> Array<i64> {
+    return Array<i64>(prog[PH_NCAPS], -1)
+}
+
+fn rxBytesToStr(text: Array<u8>, lo: i64, hi: i64) -> string {
+    var b: Array<u8> = Array<u8>()
+    var i = lo
+    while (i < hi) {
+        b.push(text[i])
+        i = i + 1
+    }
+    return string.fromUtf8(b[:])!
+}
+
+fn rxTest(prog: Array<i64>, s: string) -> bool {
+    if (len(prog) == 0) { return false }
+    var text = s.copyBytes()
+    var caps = rxNewCaps(prog)
+    return rxSearch(prog, text, 0, false, ref caps)
+}
+
+// Each round treats the position after the previous match as a fresh text base,
+// so assertion context resets, exactly as the C count loop did.
+fn rxCount(prog: Array<i64>, s: string) -> i64 {
+    if (len(prog) == 0) { return 0 }
+    var text = s.copyBytes()
+    var caps = rxNewCaps(prog)
+    var n = len(text)
+    var pos = 0
+    var total = 0
+    while (pos <= n) {
+        if (!rxSearch(prog, text, pos, false, ref caps)) { break }
+        total = total + 1
+        if (caps[1] == caps[0]) { pos = caps[0] + 1 } else { pos = caps[1] }
+    }
+    return total
+}
+
+fn rxFindAt(prog: Array<i64>, s: string, offset: i64, caps: ref Array<i64>) -> bool {
+    if (len(prog) == 0) { return false }
+    var text = s.copyBytes()
+    if (offset < 0 || offset > len(text)) { return false }
+    return rxSearch(prog, text, offset, false, ref caps)
+}
+
+// Anchored, and the match must cover the whole text. Because the engine is
+// leftmost-LONGEST, a|ab full-matches "ab".
+fn rxFullMatch(prog: Array<i64>, s: string, caps: ref Array<i64>) -> bool {
+    if (len(prog) == 0) { return false }
+    var text = s.copyBytes()
+    if (!rxSearch(prog, text, 0, true, ref caps)) { return false }
+    return caps[0] == 0 && caps[1] == len(text)
+}
+
+// Mine 5 (FIXED): the C slow path produced an empty match twice, so
+// findAll(/$/, "abc") returned two entries at offset 3 while count(/$/, "abc")
+// returned one -- one question with two answers. Each position now yields at
+// most one match, and count uses the same stepping rule.
+// Mine 8 (KEPT): limit == 0 means "no results" for findAll, while for split it
+// means "unlimited". The two are opposites and both are preserved.
+fn rxFindAllRanges(prog: Array<i64>, s: string, limit: i64) -> Array<i64> {
+    var out: Array<i64> = Array<i64>()
+    if (!rxProgValid(prog)) { return out }
+    if (limit == 0) { return out }
+    var text = s.copyBytes()
+    var n = len(text)
+    var ncaps = prog[PH_NCAPS]
+    var caps = rxNewCaps(prog)
+    var pos = 0
+    var found = 0
+    while (pos <= n) {
+        if (limit > 0 && found >= limit) { break }
+        if (!rxSearch(prog, text, pos, false, ref caps)) { break }
+        var k = 0
+        while (k < ncaps) {
+            out.push(caps[k])
+            k = k + 1
+        }
+        found = found + 1
+        if (caps[1] == caps[0]) { pos = caps[0] + 1 } else { pos = caps[1] }
+    }
+    return out
+}
+
+// Mine 10 (KEPT): $N reads digits greedily ($12 is group 12); a group that is
+// absent or did not participate inserts nothing; an unclosed ${ silently
+// discards the rest of the replacement; and \1 is not a reference.
+// Output buffer. A plain Array parameter is a read capability, so the buffer
+// travels as a field of an object instead.
+class RxBuf {
+    b: Array<u8> = Array<u8>()
+}
+
+fn rxAppendRepl(buf: RxBuf, repl: Array<u8>, text: Array<u8>,
+                caps: Array<i64>, ncaps: i64) {
+    var i = 0
+    var m = len(repl)
+    while (i < m) {
+        var ch = repl[i] as i64
+        if (ch != 36) {                                  // not '$'
+            buf.b.push(repl[i])
+            i = i + 1
+            continue
+        }
+        if (i + 1 >= m) {
+            buf.b.push(repl[i])
+            i = i + 1
+            continue
+        }
+        var nx = repl[i + 1] as i64
+        if (nx == 123) {                                 // ${
+            var j = i + 2
+            var num = 0
+            var sawDigit = false
+            while (j < m && (repl[j] as i64) >= 48 && (repl[j] as i64) <= 57) {
+                num = num * 10 + ((repl[j] as i64) - 48)
+                sawDigit = true
+                j = j + 1
+            }
+            if (j < m && (repl[j] as i64) == 125 && sawDigit) {
+                if (num * 2 + 1 < ncaps && caps[num * 2] >= 0) {
+                    var q = caps[num * 2]
+                    while (q < caps[num * 2 + 1]) {
+                        buf.b.push(text[q])
+                        q = q + 1
+                    }
+                }
+                i = j + 1
+            } else {
+                // unclosed ${ : drop the rest of the replacement
+                i = m
+            }
+            continue
+        }
+        if (nx >= 48 && nx <= 57) {
+            var j2 = i + 1
+            var num2 = 0
+            while (j2 < m && (repl[j2] as i64) >= 48 && (repl[j2] as i64) <= 57) {
+                num2 = num2 * 10 + ((repl[j2] as i64) - 48)
+                j2 = j2 + 1
+            }
+            if (num2 * 2 + 1 < ncaps && caps[num2 * 2] >= 0) {
+                var q2 = caps[num2 * 2]
+                while (q2 < caps[num2 * 2 + 1]) {
+                    buf.b.push(text[q2])
+                    q2 = q2 + 1
+                }
+            }
+            i = j2
+            continue
+        }
+        buf.b.push(repl[i])
+        i = i + 1
+    }
+}
+
+fn rxReplace(prog: Array<i64>, s: string, repl: string, all: bool) -> string {
+    if (len(prog) == 0) { return s }
+    var text = s.copyBytes()
+    var rb = repl.copyBytes()
+    var n = len(text)
+    var ncaps = prog[PH_NCAPS]
+    var caps = rxNewCaps(prog)
+    var buf = RxBuf()
+    var pos = 0
+    var last = 0
+    var done = false
+    while (!done && pos <= n) {
+        if (!rxSearch(prog, text, pos, false, ref caps)) { break }
+        var i = last
+        while (i < caps[0]) {
+            buf.b.push(text[i])
+            i = i + 1
+        }
+        rxAppendRepl(buf, rb, text, caps, ncaps)
+        last = caps[1]
+        if (caps[1] == caps[0]) {
+            // one empty match per position, then step over one byte; the C fast
+            // path re-emitted the byte at p here, which is mine 6
+            if (caps[0] < n) {
+                buf.b.push(text[caps[0]])
+                last = caps[0] + 1
+            }
+            pos = caps[0] + 1
+        } else {
+            pos = caps[1]
+        }
+        if (!all) { done = true }
+    }
+    var k = last
+    while (k < n) {
+        buf.b.push(text[k])
+        k = k + 1
+    }
+    return string.fromUtf8(buf.b[:])!
+}
+
+// Mine 7 (FIXED): the C split silently truncated at 256 parts and dropped the
+// tail (XR_REGEX_CORE_SPLIT_MAX_PARTS plus the `count < max_parts` guard in
+// xregex.c:717 both failing at once). Measured on the C engine: 300 separators
+// produced 256 parts and the last one was wrong. Array<string> has no ceiling
+// and the tail is always emitted.
+// Mine 8 (KEPT): for split, limit == 0 means unlimited.
+fn rxSplit(prog: Array<i64>, s: string, limit: i64) -> Array<string> {
+    var parts: Array<string> = Array<string>()
+    var text = s.copyBytes()
+    var n = len(text)
+    if (len(prog) == 0) {
+        parts.push(s)
+        return parts
+    }
+    var caps = rxNewCaps(prog)
+    var pos = 0
+    var last = 0
+    while (pos <= n) {
+        if (limit > 0 && len(parts) >= limit - 1) { break }
+        if (!rxSearch(prog, text, pos, false, ref caps)) { break }
+        if (caps[0] == caps[1]) {
+            // an empty separator never splits; step one byte
+            if (caps[0] >= n) { break }
+            pos = caps[0] + 1
+            continue
+        }
+        parts.push(rxBytesToStr(text, last, caps[0]))
+        last = caps[1]
+        pos = caps[1]
+    }
+    parts.push(rxBytesToStr(text, last, n))
+    return parts
+}
+
+// The escaped set is the one shared by the VM and AOT leaves
+// (xr_regex_core_is_special, src/shared/xr_regex_core.h:117-137):
+//   \ . + * ? [ ] ( ) { } | ^ $
+// and notably NOT - / # whitespace < >.
+fn rxIsSpecial(b: i64) -> bool {
+    if (b == 92 || b == 46 || b == 43 || b == 42 || b == 63) { return true }
+    if (b == 91 || b == 93 || b == 40 || b == 41) { return true }
+    if (b == 123 || b == 125 || b == 124 || b == 94 || b == 36) { return true }
+    return false
+}
+
+fn rxEscape(s: string) -> string {
+    var text = s.copyBytes()
+    var outb: Array<u8> = Array<u8>()
+    var i = 0
+    while (i < len(text)) {
+        var b = text[i] as i64
+        if (rxIsSpecial(b)) { outb.push(92 as u8) }
+        outb.push(text[i])
+        i = i + 1
+    }
+    return string.fromUtf8(outb[:])!
+}
+
+// Normalise a limit argument the way xr_regex_core_limit_arg does
+// (src/shared/xr_regex_core.h:102-110): anything that is not an int is -1.
+fn rxLimitArg(present: bool, v: i64) -> i64 {
+    if (!present) { return -1 }
+    return v
+}
+
+
+// ============================================================================
+// Public surface
+// ============================================================================
+
+// compile() used to report a bad pattern with xr_runtime_error and answer null
+// (xregex_binding.c:238-242). Now that the parser is Xray the failure is a
+// throw: `-> Regex` cannot answer null, and handing back a silently
+// never-matching Regex would hide the error. Declared here rather than in the
+// prelude because a prelude enum also needs a C-side global slot to publish
+// its values, while an .xr enum is usable directly -- csv.xr and encoding.xr
+// do the same.
+export enum RegexError {
+    InvalidPattern(message: string, position: i64)
+}
+
+// The program image is compiled on first use and memoised in the handle.
+// Laziness is forced by the literal path: /pat/flags reaches __regexNew
+// through the VM's OP_REGEX_COMPILE, and C can no longer compile a pattern.
+// The write is idempotent -- the same pattern and flags compile to an equal
+// image -- so two coroutines racing here can at worst compile twice. That is
+// the whole of the mutable state in this engine, and it is why the DFA is
+// gone: its cache was written mid-match and could tear.
+fn rxProgOf(pattern: Regex) -> Array<i64> {
+    if (len(pattern.prog) == 0) {
+        var t = rxParse(pattern.pattern, pattern.flags)
+        var np = rxCompile(t)
+        if (len(np) == 0) {
+            // A pattern that does not compile still has to memoise something,
+            // or every call would parse it again. A zero header is an invalid
+            // image: PH_MAGIC does not match, so rxProgValid rejects it.
+            var z = 0
+            while (z < PH_HEADER_LEN) {
+                pattern.prog.push(0)
+                z = z + 1
+            }
+        } else {
+            var i = 0
+            while (i < len(np)) {
+                pattern.prog.push(np[i])
+                i = i + 1
+            }
+        }
+    }
+    return pattern.prog
+}
+
+fn rxProgValid(prog: Array<i64>) -> bool {
+    if (len(prog) < PH_HEADER_LEN) { return false }
+    return prog[PH_MAGIC] == PH_MAGIC_VALUE
+}
+
+export fn compile(pattern: string, flags: string = "") -> Regex {
+    var re = __regexNew(pattern, __regexParseFlags(flags))
+    // Compile eagerly so a bad pattern is reported by compile(), where C
+    // reported it. C answered null after xr_runtime_error
+    // (xregex_binding.c:238-242); `-> Regex` cannot answer null, and handing
+    // back a silently never-matching Regex would hide the error, so it throws.
+    var t = rxParse(pattern, re.flags)
+    // The C binding threw away error_msg and error_pos and reported a generic
+    // code (xregex_binding.c:238-242); both travel out of here.
+    if (rxErr(t) != 0) { throw RegexError.InvalidPattern(t.errMsg[0], t.meta[RXM_ERRPOS]) }
+    var prog = rxCompile(t)
+    if (len(prog) == 0) {
+        throw RegexError.InvalidPattern("pattern exceeds ${RX_MAX_INSTS} instructions", 0)
+    }
+    var i = 0
+    while (i < len(prog)) {
+        re.prog.push(prog[i])
+        i = i + 1
+    }
+    return re
+}
+
+// Parses only; it never compiles. A pattern whose instruction count exceeds
+// the cap is therefore still "valid" here and fails in compile(), which is the
+// C behaviour and is preserved.
+export fn isValid(pattern: string) -> bool {
+    return rxErr(rxParse(pattern, RX_F_NONE)) == 0
+}
+
+export fn test(pattern: Regex, s: string) -> bool {
+    return rxTest(rxProgOf(pattern), s)
+}
+
+export fn count(pattern: Regex, s: string) -> i64 {
+    return rxCount(rxProgOf(pattern), s)
+}
+
+// Groups that did not participate become "" rather than null: the C match
+// object pushed xr_null() into groups, which Array<string> cannot hold.
+fn rxMakeMatch(text: Array<u8>, caps: Array<i64>, ncaps: i64) -> RegexMatch {
+    var g: Array<string> = Array<string>()
+    var i = 0
+    while (i * 2 + 1 < ncaps) {
+        if (caps[i * 2] >= 0 && caps[i * 2 + 1] >= 0) {
+            g.push(rxBytesToStr(text, caps[i * 2], caps[i * 2 + 1]))
+        } else {
+            g.push("")
+        }
+        i = i + 1
+    }
+    return __regexMatchNew(caps[0], caps[1], rxBytesToStr(text, caps[0], caps[1]), g)
+}
+
+// Mine 3 (KEPT): offset shifts the text base, so ^ \A and \b can hold again at
+// the offset. Returned offsets stay relative to the original text.
+export fn find(pattern: Regex, s: string, offset: i64 = 0) -> RegexMatch? {
+    var prog = rxProgOf(pattern)
+    if (!rxProgValid(prog)) { return null }
+    var text = s.copyBytes()
+    if (offset < 0 || offset > len(text)) { return null }
+    var caps = rxNewCaps(prog)
+    if (!rxSearch(prog, text, offset, false, ref caps)) { return null }
+    return rxMakeMatch(text, caps, prog[PH_NCAPS])
+}
+
+export fn fullFind(pattern: Regex, s: string) -> RegexMatch? {
+    var prog = rxProgOf(pattern)
+    if (!rxProgValid(prog)) { return null }
+    var text = s.copyBytes()
+    var caps = rxNewCaps(prog)
+    if (!rxSearch(prog, text, 0, true, ref caps)) { return null }
+    if (caps[0] != 0 || caps[1] != len(text)) { return null }
+    return rxMakeMatch(text, caps, prog[PH_NCAPS])
+}
+
+export fn findAll(pattern: Regex, s: string, limit: i64 = -1) -> Array<RegexMatch> {
+    var out: Array<RegexMatch> = Array<RegexMatch>()
+    var prog = rxProgOf(pattern)
+    if (!rxProgValid(prog)) { return out }
+    var text = s.copyBytes()
+    var ncaps = prog[PH_NCAPS]
+    var flat = rxFindAllRanges(prog, s, limit)
+    var caps: Array<i64> = Array<i64>(ncaps, -1)
+    var k = 0
+    while ((k + 1) * ncaps <= len(flat)) {
+        var j = 0
+        while (j < ncaps) {
+            caps[j] = flat[k * ncaps + j]
+            j = j + 1
+        }
+        out.push(rxMakeMatch(text, caps, ncaps))
+        k = k + 1
+    }
+    return out
+}
+
+export fn findText(pattern: Regex, s: string) -> string? {
+    var prog = rxProgOf(pattern)
+    if (!rxProgValid(prog)) { return null }
+    var text = s.copyBytes()
+    var caps = rxNewCaps(prog)
+    if (!rxSearch(prog, text, 0, false, ref caps)) { return null }
+    return rxBytesToStr(text, caps[0], caps[1])
+}
 
 export fn findGroup(pattern: Regex, s: string, index: i64) -> string? {
-    return __findGroup(pattern, s, index)
+    var prog = rxProgOf(pattern)
+    if (!rxProgValid(prog)) { return null }
+    var text = s.copyBytes()
+    var caps = rxNewCaps(prog)
+    if (!rxSearch(prog, text, 0, false, ref caps)) { return null }
+    if (index < 0 || index * 2 + 1 >= prog[PH_NCAPS]) { return null }
+    if (caps[index * 2] < 0 || caps[index * 2 + 1] < 0) { return null }
+    return rxBytesToStr(text, caps[index * 2], caps[index * 2 + 1])
 }
 
-// find, fullFind and findAll stay native, and the reason is naming rather than
-// logic: they answer RegexMatch, and RegexMatch is not a name this file can
-// write. Regex is a prelude built-in type (stdlib/prelude/builtin_symbols.def:115)
-// and so resolves anywhere, but RegexMatch is declared only by the compiler
-// input stdlib/types/regex.xr and registered from core.def, which puts it out
-// of scope in a standard-library module body. Measured: a body naming it fails
-// with `E0365: undefined type 'RegexMatch'`.
-
-// ========== Rewriting ==========
-
 export fn replace(pattern: Regex, s: string, repl: string) -> string {
-    return __replace(pattern, s, repl)
+    return rxReplace(rxProgOf(pattern), s, repl, false)
 }
 
 export fn replaceAll(pattern: Regex, s: string, repl: string) -> string {
-    return __replaceAll(pattern, s, repl)
+    return rxReplace(rxProgOf(pattern), s, repl, true)
 }
 
 export fn split(pattern: Regex, s: string, limit: i64 = -1) -> Array<string> {
-    return __split(pattern, s, limit)
+    return rxSplit(rxProgOf(pattern), s, limit)
 }
 
-// The escaped character class is shared by the VM and AOT leaves
-// (xr_regex_core_is_special in src/shared/xr_regex_core.h); restating it here
-// would give the same question two answers, so this stays a pass-through.
-export fn escape(s: string) -> string { return __escape(s) }
+export fn escape(s: string) -> string { return rxEscape(s) }

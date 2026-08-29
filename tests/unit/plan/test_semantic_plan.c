@@ -2740,9 +2740,9 @@ static void test_immutable_owned_snapshot(void) {
      * rows with registry intrinsic identities changes that registry even though
      * the probe plan below imports nothing. The operation-owner registry digests
      * above remain independent.
-     * Old: 01b1c8a2720377127f4d78132431cf934be5b5aceefb9dd56eba5f9b85db473b. */
+     * Old: 56e7d17e6f52451d5a90eb3e6bcad5fa101abf1cf280bffe786a2da9b84fd12e. */
     REQUIRE(strcmp(semantic_hex,
-                   "56e7d17e6f52451d5a90eb3e6bcad5fa101abf1cf280bffe786a2da9b84fd12e") == 0);
+                   "c7d68af9076745c8d4b395c05ef1bcfaac93760eacd146f3d8c050d7c8fe8225") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3807,9 +3807,9 @@ static void test_source_export_call_target_authority(void) {
      * fingerprint in the key, so it stays put.
      * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
      * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "9c562421701d8bee125a9d8119f1f83a") == 0);
+    REQUIRE(strcmp(dependency_id, "6c61647ae8933b3e5ae6bdad30cdf487") == 0);
     REQUIRE(strcmp(export_id, "fda3c47f9afbb56bc6f54afe0f1f2516") == 0);
-    REQUIRE(strcmp(target_id, "f7049a426e7a61c66b5fa05a89172e31") == 0);
+    REQUIRE(strcmp(target_id, "77e1144644c6879e3ddf876eb1bde85c") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));

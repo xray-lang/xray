@@ -10,27 +10,30 @@ fn test_compile_and_test() {
     assertEqual(regex.test(re, "no digits"), false)
 }
 
-// @test instance methods
+// The Regex.test / .find / .findAll / ... instance methods are gone. They were
+// class_method rows dispatching into C, and the engine is Xray now; a C method
+// that forwarded into Xray would be exactly the compatibility shim this
+// migration exists to avoid. Every operation is a module function.
 @test
-fn test_instance_methods() {
+fn test_module_functions() {
     var re = regex.compile("([a-z]+)(\\d+)")
-    assertEqual(re.test("abc123"), true)
+    assertEqual(regex.test(re, "abc123"), true)
 
-    var found = re.find("abc123 xyz456")
+    var found = regex.find(re, "abc123 xyz456")
     assert(found != null)
     assertEqual(found!.text, "abc123")
 
-    assertEqual(re.findText("abc123 xyz456"), "abc123")
-    assertEqual(re.findGroup("abc123 xyz456", 1), "abc")
-    assertEqual(re.findGroup("abc123 xyz456", 2), "123")
+    assertEqual(regex.findText(re, "abc123 xyz456"), "abc123")
+    assertEqual(regex.findGroup(re, "abc123 xyz456", 1), "abc")
+    assertEqual(regex.findGroup(re, "abc123 xyz456", 2), "123")
 
-    var all = re.findAll("abc123 xyz456")
+    var all = regex.findAll(re, "abc123 xyz456")
     assertEqual(len(all), 2)
 
-    assertEqual(re.replace("abc123 xyz456", "N"), "N xyz456")
+    assertEqual(regex.replace(re, "abc123 xyz456", "N"), "N xyz456")
 
     var comma = regex.compile(",\\s*")
-    var parts = comma.split("a, b, c")
+    var parts = regex.split(comma, "a, b, c")
     assertEqual(len(parts), 3)
     assertEqual(parts[2], "c")
 }

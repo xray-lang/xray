@@ -1,0 +1,762 @@
+// Engine-level regex coverage, carried over from tests/unit/regex/test_regex.c.
+//
+// That file tested the C automata through their internal headers. The automata
+// are Xray now (stdlib/regex/regex.xr), so the same behaviour is asserted
+// through the public surface instead. Case names below mirror the C test names
+// so the two can be compared.
+//
+// Three C cases have no equivalent and are not lost:
+//   core_parse_flags_matches_regex_engine_flags   the flag mask now has one
+//       owner, the __regexParseFlags leaf, so there are no two values to drift
+//   core_match_field_schema_matches_regex_match_class   RegexMatch is built by
+//       __regexMatchNew against the same slot order the class declares
+//   core_int_argument_rules_match_adapters   the adapters are gone
+// replace_alloc and iterator_* covered C-internal entry points that no longer
+// exist; their observable behaviour is covered by replace_* and find_all_basic.
+
+import regex
+import { RegexError } from regex
+
+// ========== compile ==========
+
+@test
+fn test_compile_basic() {
+    var re = regex.compile("abc")
+    assertEqual(regex.test(re, "xxabcyy"), true)
+}
+
+@test
+fn test_compile_empty() {
+    var re = regex.compile("")
+    assertEqual(regex.test(re, "anything"), true)
+    assertEqual(regex.test(re, ""), true)
+}
+
+@test
+fn test_compile_flags() {
+    var re = regex.compile("abc", "i")
+    assertEqual(regex.test(re, "xABCy"), true)
+    var plain = regex.compile("abc")
+    assertEqual(regex.test(plain, "xABCy"), false)
+}
+
+@test
+fn test_compile_is_valid() {
+    assertEqual(regex.isValid("\\d+"), true)
+    assertEqual(regex.isValid("["), false)
+    assertEqual(regex.isValid("a("), false)
+    assertEqual(regex.isValid("a{3,1}"), false)
+    assertEqual(regex.isValid("(a)(b)(c)"), true)
+}
+
+@test
+fn test_compile_invalid_unmatched_paren() {
+    var threw = false
+    try {
+        var re = regex.compile("a(")
+        assertEqual(regex.test(re, "a"), false)
+    } catch (e: RegexError) {
+        threw = true
+    }
+    assertEqual(threw, true)
+}
+
+@test
+fn test_compile_invalid_unmatched_bracket() {
+    var threw = false
+    try {
+        var re = regex.compile("[abc")
+        assertEqual(regex.test(re, "a"), false)
+    } catch (e: RegexError) {
+        threw = true
+    }
+    assertEqual(threw, true)
+}
+
+@test
+fn test_compile_invalid_bad_repeat() {
+    var threw = false
+    try {
+        var re = regex.compile("a{3,1}")
+        assertEqual(regex.test(re, "a"), false)
+    } catch (e: RegexError) {
+        threw = true
+    }
+    assertEqual(threw, true)
+}
+
+@test
+fn test_compile_rejects_too_many_capture_groups() {
+    var pat = ""
+    var i = 0
+    while (i < 35) {
+        pat = pat + "(a)"
+        i = i + 1
+    }
+    var threw = false
+    try {
+        var re = regex.compile(pat)
+        assertEqual(regex.test(re, "a"), false)
+    } catch (e: RegexError) {
+        threw = true
+    }
+    assertEqual(threw, true)
+}
+
+// ========== matching ==========
+
+@test
+fn test_match_simple() {
+    assertEqual(regex.test(regex.compile("hello"), "hello world"), true)
+    assertEqual(regex.test(regex.compile("hello"), "goodbye"), false)
+}
+
+@test
+fn test_literal_no_match_empty_text() {
+    assertEqual(regex.test(regex.compile("abc"), ""), false)
+}
+
+@test
+fn test_match_digits() {
+    assertEqual(regex.test(regex.compile("\\d+"), "abc123"), true)
+    assertEqual(regex.test(regex.compile("\\d+"), "no digits"), false)
+}
+
+@test
+fn test_find_position() {
+    var m = regex.find(regex.compile("world"), "hello world")
+    assert(m != null)
+    assertEqual(m!.start, 6)
+    assertEqual(m!.end, 11)
+    assertEqual(m!.text, "world")
+}
+
+@test
+fn test_find_at_offset() {
+    var re = regex.compile("a")
+    var m = regex.find(re, "aXa", 1)
+    assert(m != null)
+    assertEqual(m!.start, 2)
+}
+
+@test
+fn test_full_match_success() {
+    assert(regex.fullFind(regex.compile("\\d+"), "12345") != null)
+}
+
+@test
+fn test_full_match_failure() {
+    assert(regex.fullFind(regex.compile("\\d+"), "123abc") == null)
+}
+
+// leftmost-LONGEST, so the shorter alternative does not win the full match
+@test
+fn test_full_match_takes_longest_alternative() {
+    assert(regex.fullFind(regex.compile("a|ab"), "ab") != null)
+}
+
+// ========== captures ==========
+
+@test
+fn test_capture_simple() {
+    var m = regex.find(regex.compile("(\\d+)"), "abc123")
+    assert(m != null)
+    assertEqual(m!.groups[1], "123")
+}
+
+@test
+fn test_capture_count() {
+    var m = regex.find(regex.compile("([a-z]+)(\\d+)"), "abc123")
+    assert(m != null)
+    assertEqual(len(m!.groups), 3)
+    assertEqual(m!.groups[0], "abc123")
+    assertEqual(m!.groups[1], "abc")
+    assertEqual(m!.groups[2], "123")
+}
+
+@test
+fn test_capture_nested() {
+    var m = regex.find(regex.compile("((a)(b))"), "ab")
+    assert(m != null)
+    assertEqual(m!.groups[1], "ab")
+    assertEqual(m!.groups[2], "a")
+    assertEqual(m!.groups[3], "b")
+}
+
+@test
+fn test_noncapture_group() {
+    var m = regex.find(regex.compile("(?:ab)(c)"), "abc")
+    assert(m != null)
+    assertEqual(len(m!.groups), 2)
+    assertEqual(m!.groups[1], "c")
+}
+
+// ========== character classes ==========
+
+@test
+fn test_charclass_simple() {
+    assertEqual(regex.test(regex.compile("[abc]"), "xbz"), true)
+    assertEqual(regex.test(regex.compile("[abc]"), "xyz"), false)
+}
+
+@test
+fn test_charclass_range() {
+    assertEqual(regex.test(regex.compile("[a-f]+"), "deadbeef"), true)
+    assertEqual(regex.test(regex.compile("[a-f]"), "xyz"), false)
+}
+
+@test
+fn test_charclass_negated() {
+    assertEqual(regex.findText(regex.compile("[^a]"), "ab"), "b")
+    assertEqual(regex.test(regex.compile("[^abc]"), "abc"), false)
+}
+
+@test
+fn test_charclass_combined() {
+    assertEqual(regex.test(regex.compile("[a-z0-9_]+"), "x_9"), true)
+}
+
+@test
+fn test_predefined_digit() {
+    assertEqual(regex.findText(regex.compile("\\d+"), "ab123cd"), "123")
+}
+
+@test
+fn test_predefined_word() {
+    assertEqual(regex.findText(regex.compile("\\w+"), " a_1 "), "a_1")
+}
+
+@test
+fn test_predefined_space() {
+    assertEqual(regex.test(regex.compile("\\s"), "a b"), true)
+    assertEqual(regex.test(regex.compile("\\s"), "ab"), false)
+}
+
+@test
+fn test_predefined_negated() {
+    assertEqual(regex.findText(regex.compile("\\D+"), "12ab34"), "ab")
+    assertEqual(regex.findText(regex.compile("\\W+"), "ab..cd"), "..")
+    assertEqual(regex.findText(regex.compile("\\S+"), "  xy  "), "xy")
+}
+
+// A class body does not expand \d: [\d] is the literal 'd'. This is the
+// engine's largest deviation from PCRE and it is deliberate.
+@test
+fn test_charclass_escape_is_literal() {
+    assertEqual(regex.test(regex.compile("[\\d]"), "d"), true)
+    assertEqual(regex.test(regex.compile("[\\d]"), "5"), false)
+}
+
+// ========== anchors ==========
+
+@test
+fn test_anchor_begin() {
+    assertEqual(regex.test(regex.compile("^abc"), "abcdef"), true)
+    assertEqual(regex.test(regex.compile("^abc"), "xabcdef"), false)
+}
+
+@test
+fn test_anchor_end() {
+    assertEqual(regex.test(regex.compile("abc$"), "xxabc"), true)
+    assertEqual(regex.test(regex.compile("abc$"), "abcxx"), false)
+}
+
+// non-multiline '$' is \z: it does not allow a trailing newline
+@test
+fn test_anchor_end_rejects_trailing_newline() {
+    assertEqual(regex.test(regex.compile("abc$"), "abc\n"), false)
+}
+
+@test
+fn test_anchor_both() {
+    assertEqual(regex.test(regex.compile("^abc$"), "abc"), true)
+    assertEqual(regex.test(regex.compile("^abc$"), "abcd"), false)
+}
+
+@test
+fn test_word_boundary() {
+    assertEqual(regex.test(regex.compile("\\bcat\\b"), "the cat sat"), true)
+    assertEqual(regex.test(regex.compile("\\bcat\\b"), "concatenate"), false)
+}
+
+@test
+fn test_not_word_boundary() {
+    assertEqual(regex.test(regex.compile("\\Bcat"), "concat"), true)
+    assertEqual(regex.test(regex.compile("\\Bcat"), "a cat"), false)
+}
+
+@test
+fn test_anchor_a_and_z() {
+    assertEqual(regex.test(regex.compile("\\Aabc\\z"), "abc"), true)
+    assertEqual(regex.test(regex.compile("\\Aabc\\z"), "abcd"), false)
+}
+
+// ========== quantifiers ==========
+
+@test
+fn test_quantifier_star() {
+    assertEqual(regex.findText(regex.compile("ab*"), "abbbc"), "abbb")
+    assertEqual(regex.test(regex.compile("ab*"), "ac"), true)
+}
+
+@test
+fn test_quantifier_plus() {
+    assertEqual(regex.findText(regex.compile("ab+"), "abbbc"), "abbb")
+    assertEqual(regex.test(regex.compile("ab+"), "ac"), false)
+}
+
+@test
+fn test_quantifier_question() {
+    assertEqual(regex.test(regex.compile("ab?c"), "ac"), true)
+    assertEqual(regex.test(regex.compile("ab?c"), "abc"), true)
+    assertEqual(regex.test(regex.compile("ab?c"), "abbc"), false)
+}
+
+@test
+fn test_quantifier_exact() {
+    assertEqual(regex.findText(regex.compile("a{3}"), "aaaaa"), "aaa")
+    assertEqual(regex.test(regex.compile("^a{3}$"), "aa"), false)
+}
+
+@test
+fn test_quantifier_range() {
+    assertEqual(regex.findText(regex.compile("a{2,3}"), "aaaa"), "aaa")
+    assertEqual(regex.test(regex.compile("^a{2,3}$"), "a"), false)
+}
+
+@test
+fn test_quantifier_min() {
+    assertEqual(regex.findText(regex.compile("a{2,}"), "aaaa"), "aaaa")
+    assertEqual(regex.test(regex.compile("a{2,}"), "a"), false)
+}
+
+@test
+fn test_greedy_plus() {
+    assertEqual(regex.findText(regex.compile("<.+>"), "<a><b>"), "<a><b>")
+}
+
+// One lazy quantifier switches the whole program to ungreedy: it is a global
+// switch, not a per-quantifier one.
+@test
+fn test_lazy_plus() {
+    assertEqual(regex.findText(regex.compile("<.+?>"), "<a><b>"), "<a>")
+}
+
+@test
+fn test_lazy_star() {
+    assertEqual(regex.findText(regex.compile("<.*?>"), "<a><b>"), "<a>")
+}
+
+@test
+fn test_lazy_repeat() {
+    assertEqual(regex.findText(regex.compile("a{2,4}?"), "aaaa"), "aa")
+}
+
+// ========== alternation ==========
+
+@test
+fn test_alternation_simple() {
+    assertEqual(regex.test(regex.compile("cat|dog"), "hotdog"), true)
+    assertEqual(regex.test(regex.compile("cat|dog"), "bird"), false)
+}
+
+@test
+fn test_alternation_words() {
+    assertEqual(regex.findText(regex.compile("red|green|blue"), "a green b"), "green")
+}
+
+@test
+fn test_alternation_in_group() {
+    var m = regex.find(regex.compile("(cat|dog)s"), "dogs")
+    assert(m != null)
+    assertEqual(m!.groups[1], "dog")
+}
+
+// leftmost-longest (POSIX), not leftmost-first (Perl)
+@test
+fn test_alternation_is_leftmost_longest() {
+    assertEqual(regex.findText(regex.compile("a|ab"), "ab"), "ab")
+    assertEqual(regex.findText(regex.compile("ab|a"), "ab"), "ab")
+}
+
+// ========== dot ==========
+
+@test
+fn test_dot_basic() {
+    assertEqual(regex.test(regex.compile("a.c"), "abc"), true)
+    assertEqual(regex.test(regex.compile("a.c"), "a\nc"), false)
+}
+
+@test
+fn test_dot_dotall() {
+    assertEqual(regex.test(regex.compile("a.c", "s"), "a\nc"), true)
+}
+
+// '.' consumes one whole UTF-8 scalar, not one byte
+@test
+fn test_dot_matches_one_scalar() {
+    assertEqual(regex.test(regex.compile("^.$"), "中"), true)
+    assertEqual(regex.test(regex.compile("^.$"), "ab"), false)
+    assertEqual(regex.findText(regex.compile("a.c"), "a中c"), "a中c")
+}
+
+// ========== case folding ==========
+
+@test
+fn test_ignorecase_basic() {
+    assertEqual(regex.test(regex.compile("hello", "i"), "HELLO"), true)
+    assertEqual(regex.test(regex.compile("[a-z]+", "i"), "ABC"), true)
+}
+
+@test
+fn test_ignorecase_match_text() {
+    assertEqual(regex.findText(regex.compile("abc", "i"), "xABCy"), "ABC")
+}
+
+@test
+fn test_case_sensitive() {
+    assertEqual(regex.test(regex.compile("hello"), "HELLO"), false)
+}
+
+// ========== multiline ==========
+
+@test
+fn test_multiline_caret() {
+    assertEqual(regex.test(regex.compile("^b", "m"), "a\nb"), true)
+    assertEqual(regex.test(regex.compile("^b"), "a\nb"), false)
+}
+
+@test
+fn test_multiline_dollar() {
+    assertEqual(regex.test(regex.compile("a$", "m"), "a\nb"), true)
+}
+
+// ========== inline flags (never restored) ==========
+
+@test
+fn test_inline_ignorecase() {
+    assertEqual(regex.test(regex.compile("(?i)abc"), "ABC"), true)
+}
+
+@test
+fn test_inline_multiline() {
+    assertEqual(regex.test(regex.compile("(?m)^b"), "a\nb"), true)
+}
+
+@test
+fn test_inline_dotall() {
+    assertEqual(regex.test(regex.compile("(?s)a.c"), "a\nc"), true)
+}
+
+@test
+fn test_inline_combined() {
+    assertEqual(regex.test(regex.compile("(?is)a.C"), "A\nc"), true)
+}
+
+// ========== escapes ==========
+
+@test
+fn test_escape_metachar() {
+    assertEqual(regex.test(regex.compile("a\\.c"), "a.c"), true)
+    assertEqual(regex.test(regex.compile("a\\.c"), "abc"), false)
+}
+
+@test
+fn test_escape_backslash() {
+    assertEqual(regex.test(regex.compile("a\\\\b"), "a\\b"), true)
+}
+
+@test
+fn test_escape_tab_newline() {
+    assertEqual(regex.test(regex.compile("a\\tb"), "a\tb"), true)
+    assertEqual(regex.test(regex.compile("a\\nb"), "a\nb"), true)
+}
+
+@test
+fn test_escape_hex() {
+    assertEqual(regex.test(regex.compile("\\x41"), "A"), true)
+}
+
+@test
+fn test_escape_special_chars() {
+    assertEqual(regex.escape("a.b*c"), "a\\.b\\*c")
+    assertEqual(regex.escape("a+b?c"), "a\\+b\\?c")
+    assertEqual(regex.escape("[](){}"), "\\[\\]\\(\\)\\{\\}")
+    assertEqual(regex.escape("a|b^c$d"), "a\\|b\\^c\\$d")
+    // deliberately NOT escaped
+    assertEqual(regex.escape("a-b/c#d<e>f g"), "a-b/c#d<e>f g")
+    // an escaped pattern matches its own source text
+    assertEqual(regex.test(regex.compile(regex.escape("a.b")), "a.b"), true)
+    assertEqual(regex.test(regex.compile(regex.escape("a.b")), "axb"), false)
+}
+
+// ========== replace ==========
+
+@test
+fn test_replace_first() {
+    assertEqual(regex.replace(regex.compile("a"), "aaa", "X"), "Xaa")
+}
+
+@test
+fn test_replace_all() {
+    assertEqual(regex.replaceAll(regex.compile("a"), "aaa", "X"), "XXX")
+    assertEqual(regex.replaceAll(regex.compile("\\d"), "a1b2c3", "X"), "aXbXcX")
+}
+
+@test
+fn test_replace_with_capture_ref() {
+    var re = regex.compile("([a-z]+)(\\d+)")
+    assertEqual(regex.replaceAll(re, "abc123", "$2-$1"), "123-abc")
+}
+
+@test
+fn test_replace_no_match() {
+    assertEqual(regex.replaceAll(regex.compile("z"), "abc", "X"), "abc")
+}
+
+// A missing group inserts nothing rather than failing.
+@test
+fn test_replace_missing_group_is_empty() {
+    var re = regex.compile("([a-z]+)")
+    assertEqual(regex.replaceAll(re, "abc", "[$3]"), "[]")
+}
+
+// The two replace paths used to disagree on empty matches: the capture-free
+// fast path re-emitted a character, so replaceAll(/x*$/, "abc", "-") produced
+// "abc-a". There is one path now.
+@test
+fn test_replace_empty_match_does_not_duplicate() {
+    assertEqual(regex.replaceAll(regex.compile("x*$"), "abc", "-"), "abc-")
+    assertEqual(regex.replaceAll(regex.compile("x*"), "abc", "-"), "-a-b-c-")
+}
+
+// ========== split ==========
+
+@test
+fn test_split_basic() {
+    var parts = regex.split(regex.compile(","), "a,b,c")
+    assertEqual(len(parts), 3)
+    assertEqual(parts[0], "a")
+    assertEqual(parts[2], "c")
+}
+
+@test
+fn test_split_no_match() {
+    var parts = regex.split(regex.compile(";"), "abc")
+    assertEqual(len(parts), 1)
+    assertEqual(parts[0], "abc")
+}
+
+@test
+fn test_split_with_limit() {
+    var parts = regex.split(regex.compile(","), "a,b,c", 2)
+    assertEqual(len(parts), 2)
+    assertEqual(parts[0], "a")
+    assertEqual(parts[1], "b,c")
+}
+
+// limit == 0 means unlimited for split, and no results for findAll. The two
+// are opposites, and both are deliberate.
+@test
+fn test_split_limit_zero_is_unlimited() {
+    assertEqual(len(regex.split(regex.compile(","), "a,b,c", 0)), 3)
+    assertEqual(len(regex.findAll(regex.compile("\\d"), "1234", 0)), 0)
+}
+
+@test
+fn test_split_keeps_trailing_empty_part() {
+    var parts = regex.split(regex.compile(","), "a,")
+    assertEqual(len(parts), 2)
+    assertEqual(parts[1], "")
+}
+
+// The C split truncated at 256 parts and dropped the tail. Both are fixed.
+@test
+fn test_split_beyond_256_parts_keeps_tail() {
+    var s = ""
+    var i = 0
+    while (i < 300) {
+        s = s + "x,"
+        i = i + 1
+    }
+    s = s + "TAIL"
+    var parts = regex.split(regex.compile(","), s)
+    assertEqual(len(parts), 301)
+    assertEqual(parts[300], "TAIL")
+}
+
+// ========== count / findAll ==========
+
+@test
+fn test_count_basic() {
+    assertEqual(regex.count(regex.compile("a"), "banana"), 3)
+    assertEqual(regex.count(regex.compile("\\d+"), "a1b22c333"), 3)
+}
+
+@test
+fn test_count_no_match() {
+    assertEqual(regex.count(regex.compile("z"), "abc"), 0)
+}
+
+@test
+fn test_find_all_basic() {
+    var all = regex.findAll(regex.compile("\\d+"), "a1b22c333")
+    assertEqual(len(all), 3)
+    assertEqual(all[0].text, "1")
+    assertEqual(all[1].text, "22")
+    assertEqual(all[2].text, "333")
+}
+
+@test
+fn test_find_all_with_limit() {
+    assertEqual(len(regex.findAll(regex.compile("\\d"), "1234", 2)), 2)
+}
+
+// findAll produced an empty match twice while count produced it once. They
+// agree now.
+@test
+fn test_find_all_and_count_agree_on_empty_matches() {
+    var re = regex.compile("$")
+    assertEqual(len(regex.findAll(re, "abc")), 1)
+    assertEqual(regex.count(re, "abc"), 1)
+    var wb = regex.compile("\\b")
+    assertEqual(len(regex.findAll(wb, "ab")), regex.count(wb, "ab"))
+    var star = regex.compile("x*")
+    assertEqual(len(regex.findAll(star, "ab")), regex.count(star, "ab"))
+}
+
+// ========== findText / findGroup ==========
+
+@test
+fn test_find_text_and_group() {
+    var re = regex.compile("([a-z]+)(\\d+)")
+    assertEqual(regex.findText(re, "abc123 xyz"), "abc123")
+    assertEqual(regex.findGroup(re, "abc123", 1), "abc")
+    assertEqual(regex.findGroup(re, "abc123", 2), "123")
+    assert(regex.findGroup(re, "abc123", 9) == null)
+    assert(regex.findText(re, "no match here") == null)
+}
+
+// ========== unicode ==========
+
+@test
+fn test_unicode_han() {
+    assertEqual(regex.test(regex.compile("\\p{Han}"), "中"), true)
+    assertEqual(regex.test(regex.compile("\\p{Han}"), "abc"), false)
+    assertEqual(regex.findText(regex.compile("\\p{Han}+"), "ab中文cd"), "中文")
+}
+
+@test
+fn test_unicode_latin() {
+    assertEqual(regex.test(regex.compile("\\p{Latin}"), "a"), true)
+    assertEqual(regex.test(regex.compile("\\p{Latin}"), "中"), false)
+}
+
+@test
+fn test_unicode_number() {
+    assertEqual(regex.test(regex.compile("\\p{Nd}"), "5"), true)
+    assertEqual(regex.test(regex.compile("\\p{Nd}"), "x"), false)
+}
+
+@test
+fn test_unicode_negated() {
+    assertEqual(regex.test(regex.compile("\\P{Han}"), "a"), true)
+    assertEqual(regex.test(regex.compile("^\\P{Han}$"), "中"), false)
+}
+
+// ========== edge cases ==========
+
+@test
+fn test_empty_pattern_empty_text() {
+    assertEqual(regex.test(regex.compile(""), ""), true)
+}
+
+@test
+fn test_empty_pattern_nonempty_text() {
+    assertEqual(regex.test(regex.compile(""), "abc"), true)
+}
+
+@test
+fn test_deeply_nested_groups() {
+    assertEqual(regex.test(regex.compile("((((((((((a))))))))))"), "a"), true)
+}
+
+// The nesting limit is enforced now; it used to be a dead constant.
+@test
+fn test_nesting_limit_is_enforced() {
+    var pat = ""
+    var i = 0
+    while (i < 120) {
+        pat = pat + "(?:"
+        i = i + 1
+    }
+    pat = pat + "a"
+    i = 0
+    while (i < 120) {
+        pat = pat + ")"
+        i = i + 1
+    }
+    assertEqual(regex.isValid(pat), false)
+}
+
+@test
+fn test_complex_pattern() {
+    var re = regex.compile("^([a-zA-Z0-9_.]+)@([a-zA-Z0-9-]+)\\.([a-z]{2,})$")
+    var m = regex.find(re, "user.name@example.com")
+    assert(m != null)
+    assertEqual(m!.groups[1], "user.name")
+    assertEqual(m!.groups[2], "example")
+    assertEqual(m!.groups[3], "com")
+    assert(regex.find(re, "not an email") == null)
+}
+
+@test
+fn test_literal_empty_after_many_matches() {
+    assertEqual(regex.count(regex.compile("ab"), "ababab"), 3)
+    assertEqual(regex.replaceAll(regex.compile("ab"), "ababab", ""), "")
+}
+
+// Errors carry a message and a byte position; the C binding discarded both.
+@test
+fn test_error_carries_message_and_position() {
+    var got = ""
+    var pos = -1
+    try {
+        var re = regex.compile("a(")
+        assertEqual(regex.test(re, "a"), false)
+    } catch (e: RegexError) {
+        match (e) {
+            RegexError.InvalidPattern(msg, p) -> {
+                got = msg
+                pos = p
+            }
+        }
+    }
+    assert(len(got) > 0)
+    assertEqual(pos, 1)
+}
+
+// Lookaround is rejected by name rather than through the named-group branch.
+@test
+fn test_lookaround_is_rejected() {
+    assertEqual(regex.isValid("(?=a)b"), false)
+    assertEqual(regex.isValid("(?<=a)b"), false)
+    assertEqual(regex.isValid("(?<!a)b"), false)
+}
+
+// Named groups still capture positionally.
+@test
+fn test_named_group_captures() {
+    var m = regex.find(regex.compile("(?P<word>[a-z]+)"), "abc")
+    assert(m != null)
+    assertEqual(m!.groups[1], "abc")
+}
+
+// find() shifts the text base, so ^ can hold again at the offset.
+@test
+fn test_find_offset_shifts_text_base() {
+    var m = regex.find(regex.compile("^a"), "bba", 2)
+    assert(m != null)
+    assertEqual(m!.start, 2)
+    assert(regex.find(regex.compile("^a"), "bba", 0) == null)
+}

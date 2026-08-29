@@ -498,21 +498,13 @@ static const XaBuiltinClass g_gen_regex_classes[] = {
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
-    {"__compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__test", "(pattern: Regex, s: string): bool", "Test if regex matches", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__count", "(pattern: Regex, s: string): i64", "Count matches", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__findText", "(pattern: Regex, s: string): string?", "Find first matching text", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__findGroup", "(pattern: Regex, s: string, index: i64): string?", "Find capture group", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"find", "(pattern: Regex, s: string, offset?: i64): RegexMatch?", "Find first match", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"fullFind", "(pattern: Regex, s: string): RegexMatch?", "Find full match", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"findAll", "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>", "Find all matches", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__replace", "(pattern: Regex, s: string, repl: string): string", "Replace first match", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__replaceAll", "(pattern: Regex, s: string, repl: string): string", "Replace all matches", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__split", "(pattern: Regex, s: string, limit?: i64): Array<string>", "Split string by regex", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__escape", "(s: string): string", "Escape regex special chars", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__isValid", "(pattern: string): bool", "Check if pattern is valid", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__regexMatchNew", "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch", "Allocate a RegexMatch with its four fields set", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
+    {"__regexParseFlags", "(flags: string): i64", "Flag string to mask, the shared VM/AOT authority", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_REGEX_FUNCTION_COUNT 13
+#define GEN_REGEX_FUNCTION_COUNT 5
 
 // runtime.__RuntimeStats object fields
 static const XaBuiltinObjectField g_gen_runtime___runtimestats_object_fields[] = {

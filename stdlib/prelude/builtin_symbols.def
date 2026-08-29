@@ -113,6 +113,11 @@ XR_BUILTIN_PRELUDE_TYPE("PanicInfo",     0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Path",          0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Range",         0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Regex",         0, XR_TINSTANCE, SIMPLE)
+/* RegexMatch joins Regex here because stdlib/regex/regex.xr now builds match
+ * objects itself. Without an entry the name does not resolve in an .xr body
+ * (measured: error[E0365]: undefined type 'RegexMatch'), which is what forced
+ * find/fullFind/findAll to stay native. */
+XR_BUILTIN_PRELUDE_TYPE("RegexMatch",    0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Set",           1, XR_TSET,      GENERIC_1)
 /* Slice<T> is a borrowed view, not a heap object: a slice value is a tagged
  * XR_IS_SLICE_REF fat reference, so it has no GC type id. Its element storage

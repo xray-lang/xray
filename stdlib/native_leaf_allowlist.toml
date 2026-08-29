@@ -1396,125 +1396,67 @@ provider = "the kernel. VM stdlib/os/os.c os_uptime; AOT src/aot/xrt_os.h xrt_os
 deletion_trigger = "when Xray source can issue the boot-time query itself; the boot-time-to-uptime subtraction could move to os.xr first, but only once the leaf reports the boot instant rather than the difference"
 
 # ============================================================================
-# regex -- the built-in pattern engine
+# regex -- handle allocation plus three lookups owned elsewhere
 # ============================================================================
 #
-# Every one of these is `native_engine_leaf` for the same reason compress is:
-# `stdlib/regex/` is Xray's own Thompson-simulation engine -- parser, compiler,
-# NFA and a lazily-built DFA cache -- with no PCRE, RE2, Oniguruma or POSIX
-# regcomp(3) behind it, and no system call other than heap allocation. Both
-# backends run the same engine; only the value wrappers differ.
+# The engine is no longer here. Parsing, compilation, NFA simulation and the
+# whole top-level API moved to stdlib/regex/regex.xr; the C files that held
+# them (xregex.c, xregex_parse.c, xregex_compile.c, xregex_nfa.c, xregex_dfa.c)
+# are deleted, and so is the DFA, whose unsynchronised shared cache was a data
+# race on any Regex shared between coroutines.
 #
-# The `Regex` value is a native class (builtin kind XR_BK_REGEX): an XrInstance
-# with a native body on the VM, an ARC object with a builtin destructor on AOT.
-# That runtime-owned handle is what keeps most of these leaves in C. Two of
-# them -- __escape and __isValid -- produce no handle, and their deletion
-# triggers name the other reason instead.
-#
-# `XRT_ENABLE_REGEX`, which the `.def` names on ten of these entries, gates
-# only the ARC destructor case in the AOT collections header, not the leaves.
-# The AOT driver adds it automatically when a program references any regex
-# symbol, so it is dead-code elimination rather than a feature switch.
+# What is left is two handle constructors and three forwards to definitions
+# other files own. None of them decides anything about matching.
 
 [[leaf]]
 module = "regex"
-symbol = "__compile"
-class = "native_engine_leaf"
-abi = "none; parses and compiles a pattern in process, reaching only malloc(3) and free(3)"
+symbol = "__regexNew"
+class = "runtime_leaf"
+abi = "none; allocates one XrInstance and stores three fields"
 ownership = "fresh"
 effect = "nothrow"
-provider = "stdlib/regex/xregex.c xr_regex_compile_ex, shared by both backends. It parses into an arena, compiles to a program capped at 10000 instructions, and builds a DFA eagerly when the pattern has no empty-width assertion or Unicode range. The wrappers differ: the VM returns an XrInstance of the Regex native class, AOT an ARC object tagged XR_TAG_REGEX. Two .def entries, one for each arity, share this leaf; the flags string is parsed by src/shared/xr_regex_core.h on both sides"
-deletion_trigger = "the engine holds runtime-owned state: a compiled Regex is a native class the runtime knows how to destroy, and its DFA cache is written during matching. The leaf can go when Xray can own that handle -- declare the compiled program as an Xray type with a destructor -- at which point the whole module's leaves move together"
+provider = "stdlib/regex/xregex_binding.c make_regex. Regex is a native class (builtin kind XR_BK_REGEX) and Xray has no surface for constructing one. The leaf only sets pattern, flags and an empty program array; regex.xr compiles the pattern on first use and fills the array by pushing"
+deletion_trigger = "Regex has to stay a native class for as long as the regex literal syntax exists: /pat/flags lowers to XI_REGEX_COMPILE with its result type pinned to type_regex in src/ir/xi_lower_expr.c:11349. The leaf goes when a literal can lower to a call of an Xray constructor instead, at which point Regex can be an ordinary Xray class"
 
 [[leaf]]
 module = "regex"
-symbol = "__count"
+symbol = "__regexMatchNew"
+class = "runtime_leaf"
+abi = "none; allocates one XrInstance and stores four fields"
+ownership = "fresh"
+effect = "nothrow"
+provider = "stdlib/regex/xregex_binding.c regex_match_new. Every value it stores is computed by regex.xr; the leaf exists because RegexMatch is a native class and an .xr body cannot construct one, even though it can read and write the fields"
+deletion_trigger = "goes when an .xr body can construct a native class, or when RegexMatch becomes an ordinary Xray class. The latter is blocked only by RegexMatch being reachable from find/findAll return types that the AOT side still describes as a native record"
+
+[[leaf]]
+module = "regex"
+symbol = "__regexParseFlags"
 class = "native_engine_leaf"
-abi = "none; matches in process with no allocation at all"
+abi = "none; a three-character scan over the flag string"
 ownership = "none"
 effect = "nothrow"
-provider = "stdlib/regex/xregex.c xr_regex_count, shared by both backends: it tries the DFA first and falls back to the NFA simulation when the DFA exceeds its 8 MB or 10000-state budget"
-deletion_trigger = "the engine holds runtime-owned state: this leaf reads a compiled Regex handle the runtime owns. It goes when regex.__compile goes"
+provider = "src/shared/xr_regex_core.h xr_regex_core_parse_flags. Unknown flag characters are ignored, which is long-standing behaviour"
+deletion_trigger = "rewriting it would fork a shared definition: the regex literal path parses its flags in C (xr_regex_compile_literal, reached from the OP_REGEX_COMPILE bytecode) while regex.compile() parses them through this leaf, and an Xray copy would be free to drift from the C one. It goes when the literal path can reach Xray, which is the same condition that frees __regexNew"
 
 [[leaf]]
 module = "regex"
-symbol = "__escape"
+symbol = "__unicodePropId"
 class = "native_engine_leaf"
-abi = "none at all; it does not even enter the engine. A character-class test and one buffer copy"
-ownership = "fresh"
-effect = "nothrow"
-provider = "src/shared/xr_regex_core.h xr_regex_core_escape, which both backends call -- AOT inlines it from the header without a call at all. It is the only regex leaf that touches neither the parser nor a Regex handle"
-deletion_trigger = "rewriting it would fork a shared definition: the set of characters it escapes has to stay identical to the set the parser treats as special, and an Xray copy in regex.xr would be free to drift from it. The leaf goes when the metacharacter set is stated once somewhere both the parser and Xray source can read -- this is the nearest-term deletion in the module, since nothing about the handle or the data representation is in its way"
-
-[[leaf]]
-module = "regex"
-symbol = "__findGroup"
-class = "native_engine_leaf"
-abi = "none; matches in process, reaching only malloc(3) for the result string"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex.c xr_regex_match, shared by both backends. Capture groups force the NFA path, since the DFA does not track submatches. The VM interns the result string; AOT allocates and copies it"
-deletion_trigger = "the engine holds runtime-owned state: this leaf reads a compiled Regex handle the runtime owns. It goes when regex.__compile goes"
-
-[[leaf]]
-module = "regex"
-symbol = "__findText"
-class = "native_engine_leaf"
-abi = "none; matches in process, reaching only malloc(3) for the result string"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex.c xr_regex_match through xr_regex_match_at, shared by both backends and running on the NFA simulation"
-deletion_trigger = "the engine holds runtime-owned state: this leaf reads a compiled Regex handle the runtime owns. It goes when regex.__compile goes"
-
-[[leaf]]
-module = "regex"
-symbol = "__isValid"
-class = "native_engine_leaf"
-abi = "none; runs the pattern parser and discards the result, reaching only malloc(3) for the parse arena"
+abi = "none; a table lookup by name"
 ownership = "none"
 effect = "nothrow"
-provider = "stdlib/regex/xregex_parse.c xr_regex_parse. The shell around it is written twice -- stdlib/regex/xregex.c xr_regex_is_valid on the VM and src/aot/xrt_regex_core.c xrt_regex_is_valid_core on AOT, which needs a NUL-terminated copy of its slice first -- so the parser is shared but the validity judgement has two authors"
-deletion_trigger = "rewriting it would fork a shared definition: validity means \"this parser accepts it\", so an Xray reimplementation would be a second grammar. The leaf goes when the parser itself is expressible in Xray, or when a compile that reports its failure makes a separate validity question unnecessary"
+provider = "src/base/xunicode.c xr_unicode_property_lookup, over the property name table at :232-266"
+deletion_trigger = "rewriting it would fork a shared definition: the set of names \\p{...} accepts is unicode's, not regex's, and copying the table into regex.xr would give one question two answers. It goes when the unicode tables themselves are Xray"
 
 [[leaf]]
 module = "regex"
-symbol = "__replace"
+symbol = "__unicodeHasProp"
 class = "native_engine_leaf"
-abi = "none; matches and rebuilds a string in process, reaching only malloc(3)"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex.c xr_regex_replace_alloc, shared by both backends. On the rare allocation-failure path the VM answers the original string and AOT answers null -- a difference confined to that path, since \"no match\" returns a copy of the input on both"
-deletion_trigger = "the engine holds runtime-owned state: this leaf reads a compiled Regex handle the runtime owns. It goes when regex.__compile goes"
-
-[[leaf]]
-module = "regex"
-symbol = "__replaceAll"
-class = "native_engine_leaf"
-abi = "none; matches and rebuilds a string in process, reaching only malloc(3)"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex.c xr_regex_replace_alloc with the all flag set, shared by both backends"
-deletion_trigger = "the engine holds runtime-owned state: this leaf reads a compiled Regex handle the runtime owns. It goes when regex.__compile goes"
-
-[[leaf]]
-module = "regex"
-symbol = "__split"
-class = "native_engine_leaf"
-abi = "none; matches in process, reaching only malloc(3) for the result array"
-ownership = "fresh"
-effect = "nothrow"
-provider = "stdlib/regex/xregex.c xr_regex_split, shared by both backends. Two .def entries, one for each arity, share this leaf; both cap the result at the 256 parts src/shared/xr_regex_core.h states, so the VM's heap buffer and the AOT's fixed stack array cannot diverge"
-deletion_trigger = "the engine holds runtime-owned state: this leaf reads a compiled Regex handle the runtime owns. It goes when regex.__compile goes"
-
-[[leaf]]
-module = "regex"
-symbol = "__test"
-class = "native_engine_leaf"
-abi = "none; matches in process with no allocation at all"
+abi = "none; a binary search over a static range table"
 ownership = "none"
 effect = "nothrow"
-provider = "stdlib/regex/xregex.c xr_regex_test, shared by both backends: the DFA first, falling back to the NFA simulation when the DFA exceeds its budget"
-deletion_trigger = "the engine holds runtime-owned state: this leaf reads a compiled Regex handle the runtime owns. It goes when regex.__compile goes"
+provider = "src/base/xunicode.c xr_unicode_is_property"
+deletion_trigger = "rewriting it would fork a shared definition: several hundred code-point ranges whose owner is the unicode tables. It goes with __unicodePropId, when those tables are Xray"
 
 # ============================================================================
 # runtime -- reclamation-domain introspection
