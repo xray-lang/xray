@@ -707,52 +707,52 @@ static const XmcpGeneratedStdlibSymbol _symbols_codegen[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     {
         .name = "adler32",
-        .signature = "(data: string): i64",
+        .signature = "(data: Slice<u8>): i64",
         .summary = "",
     },
     {
         .name = "crc32",
-        .signature = "(data: string): i64",
+        .signature = "(data: Slice<u8>): i64",
         .summary = "",
     },
     {
         .name = "deflate",
-        .signature = "(data: string, level: i64 = DEFAULT_COMPRESSION): string?",
+        .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>",
         .summary = "",
     },
     {
         .name = "gunzip",
-        .signature = "(data: string): string",
+        .signature = "(data: Slice<u8>): Array<u8>",
         .summary = "",
     },
     {
         .name = "gzip",
-        .signature = "(data: string, level: i64 = DEFAULT_COMPRESSION): string?",
+        .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>",
         .summary = "",
     },
     {
         .name = "inflate",
-        .signature = "(data: string): string",
+        .signature = "(data: Slice<u8>): Array<u8>",
         .summary = "",
     },
     {
         .name = "isGzip",
-        .signature = "(data: string): bool",
+        .signature = "(data: Slice<u8>): bool",
         .summary = "",
     },
     {
         .name = "isZlib",
-        .signature = "(data: string): bool",
+        .signature = "(data: Slice<u8>): bool",
         .summary = "",
     },
     {
         .name = "zlibCompress",
-        .signature = "(data: string, level: i64 = DEFAULT_COMPRESSION): string?",
+        .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>",
         .summary = "",
     },
     {
         .name = "zlibDecompress",
-        .signature = "(data: string): string",
+        .signature = "(data: Slice<u8>): Array<u8>",
         .summary = "",
     },
 };
@@ -2833,257 +2833,257 @@ static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
     {
         .name = "E",
         .signature = ": f64",
-        .summary = "Euler's number",
+        .summary = "",
     },
     {
         .name = "EPSILON",
         .signature = ": f64",
-        .summary = "Smallest representable difference above 1.0",
+        .summary = "",
     },
     {
         .name = "INF",
         .signature = ": f64",
-        .summary = "Positive infinity",
+        .summary = "",
     },
     {
         .name = "LN10",
         .signature = ": f64",
-        .summary = "Natural logarithm of 10",
+        .summary = "",
     },
     {
         .name = "LN2",
         .signature = ": f64",
-        .summary = "Natural logarithm of 2",
+        .summary = "",
     },
     {
         .name = "LOG10E",
         .signature = ": f64",
-        .summary = "Base-10 logarithm of e",
+        .summary = "",
     },
     {
         .name = "LOG2E",
         .signature = ": f64",
-        .summary = "Base-2 logarithm of e",
+        .summary = "",
     },
     {
         .name = "MAX_F64",
         .signature = ": f64",
-        .summary = "Largest finite IEEE-754 double",
+        .summary = "",
     },
     {
         .name = "MAX_I64",
         .signature = ": i64",
-        .summary = "Largest signed 64-bit integer",
+        .summary = "",
     },
     {
         .name = "MIN_I64",
         .signature = ": i64",
-        .summary = "Smallest signed 64-bit integer",
+        .summary = "",
     },
     {
         .name = "NAN",
         .signature = ": f64",
-        .summary = "Quiet NaN value",
+        .summary = "",
     },
     {
         .name = "PI",
         .signature = ": f64",
-        .summary = "Ratio of a circle's circumference to its diameter",
+        .summary = "",
     },
     {
         .name = "SQRT2",
         .signature = ": f64",
-        .summary = "Square root of 2",
+        .summary = "",
     },
     {
         .name = "TAU",
         .signature = ": f64",
-        .summary = "Full-circle radians, 2 * PI",
+        .summary = "",
     },
     {
         .name = "abs",
         .signature = "(x: f64): f64",
-        .summary = "Absolute value",
+        .summary = "",
     },
     {
         .name = "acos",
         .signature = "(x: f64): f64",
-        .summary = "Arc cosine",
+        .summary = "",
     },
     {
         .name = "asin",
         .signature = "(x: f64): f64",
-        .summary = "Arc sine",
+        .summary = "",
     },
     {
         .name = "atan",
         .signature = "(x: f64): f64",
-        .summary = "Arc tangent",
+        .summary = "",
     },
     {
         .name = "atan2",
         .signature = "(y: f64, x: f64): f64",
-        .summary = "Arc tangent of y/x",
+        .summary = "",
     },
     {
         .name = "cbrt",
         .signature = "(x: f64): f64",
-        .summary = "Cube root",
+        .summary = "",
     },
     {
         .name = "ceil",
         .signature = "(x: f64): i64",
-        .summary = "Ceiling to integer",
+        .summary = "",
     },
     {
         .name = "clamp",
         .signature = "(x: f64, min: f64, max: f64): f64",
-        .summary = "Clamp to a closed interval",
+        .summary = "",
     },
     {
         .name = "cos",
         .signature = "(x: f64): f64",
-        .summary = "Cosine",
+        .summary = "",
     },
     {
         .name = "cosh",
         .signature = "(x: f64): f64",
-        .summary = "Hyperbolic cosine",
+        .summary = "",
     },
     {
         .name = "degToRad",
         .signature = "(deg: f64): f64",
-        .summary = "Degrees to radians",
+        .summary = "",
     },
     {
         .name = "exp",
         .signature = "(x: f64): f64",
-        .summary = "Exponential e^x",
+        .summary = "",
     },
     {
         .name = "expm1",
         .signature = "(x: f64): f64",
-        .summary = "exp(x)-1 accurate for small x",
+        .summary = "",
     },
     {
         .name = "floor",
         .signature = "(x: f64): i64",
-        .summary = "Floor to integer",
+        .summary = "",
     },
     {
         .name = "fmod",
         .signature = "(x: f64, y: f64): f64",
-        .summary = "Floating-point remainder",
+        .summary = "",
     },
     {
         .name = "hypot",
         .signature = "(x: f64, y: f64): f64",
-        .summary = "Hypotenuse sqrt(x*x+y*y)",
+        .summary = "",
     },
     {
         .name = "isFinite",
         .signature = "(x: f64): bool",
-        .summary = "Check if finite",
+        .summary = "",
     },
     {
         .name = "isNaN",
         .signature = "(x: f64): bool",
-        .summary = "Check if NaN",
+        .summary = "",
     },
     {
         .name = "lerp",
         .signature = "(a: f64, b: f64, t: f64): f64",
-        .summary = "Linear interpolation",
+        .summary = "",
     },
     {
         .name = "log",
         .signature = "(x: f64): f64",
-        .summary = "Natural logarithm",
+        .summary = "",
     },
     {
         .name = "log10",
         .signature = "(x: f64): f64",
-        .summary = "Base-10 logarithm",
+        .summary = "",
     },
     {
         .name = "log1p",
         .signature = "(x: f64): f64",
-        .summary = "log(1+x) accurate for small x",
+        .summary = "",
     },
     {
         .name = "log2",
         .signature = "(x: f64): f64",
-        .summary = "Base-2 logarithm",
+        .summary = "",
     },
     {
         .name = "max",
         .signature = "(...args: f64): f64",
-        .summary = "Maximum value",
+        .summary = "",
     },
     {
         .name = "min",
         .signature = "(...args: f64): f64",
-        .summary = "Minimum value",
+        .summary = "",
     },
     {
         .name = "pow",
         .signature = "(base: f64, exp: f64): f64",
-        .summary = "Power",
+        .summary = "",
     },
     {
         .name = "radToDeg",
         .signature = "(rad: f64): f64",
-        .summary = "Radians to degrees",
+        .summary = "",
     },
     {
         .name = "random",
         .signature = "(): f64",
-        .summary = "Random f64 in [0, 1)",
+        .summary = "",
     },
     {
         .name = "randomInt",
         .signature = "(min: i64, max: i64): i64",
-        .summary = "Random integer in [min, max]",
+        .summary = "",
     },
     {
         .name = "round",
         .signature = "(x: f64): i64",
-        .summary = "Round to nearest integer",
+        .summary = "",
     },
     {
         .name = "sign",
         .signature = "(x: f64): i64",
-        .summary = "Sign of value (-1, 0, 1)",
+        .summary = "",
     },
     {
         .name = "sin",
         .signature = "(x: f64): f64",
-        .summary = "Sine",
+        .summary = "",
     },
     {
         .name = "sinh",
         .signature = "(x: f64): f64",
-        .summary = "Hyperbolic sine",
+        .summary = "",
     },
     {
         .name = "sqrt",
         .signature = "(x: f64): f64",
-        .summary = "Square root",
+        .summary = "",
     },
     {
         .name = "tan",
         .signature = "(x: f64): f64",
-        .summary = "Tangent",
+        .summary = "",
     },
     {
         .name = "tanh",
         .signature = "(x: f64): f64",
-        .summary = "Hyperbolic tangent",
+        .summary = "",
     },
     {
         .name = "trunc",
         .signature = "(x: f64): i64",
-        .summary = "Truncate toward zero",
+        .summary = "",
     },
 };
 
@@ -3109,16 +3109,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "",
     },
     {
-        .name = "addr",
-        .signature = "(ptr: Ptr<u8>): i64",
-        .summary = "Numeric address of any Ptr<T> or MutPtr<T>",
-    },
-    {
-        .name = "alignOf",
-        .signature = "(): i64",
-        .summary = "Compile-time alignment in bytes of a statically laid out type T",
-    },
-    {
         .name = "alloc",
         .signature = "(n: i64): Buffer",
         .summary = "",
@@ -3132,11 +3122,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "allocZeroed",
         .signature = "(n: i64): Buffer",
         .summary = "",
-    },
-    {
-        .name = "assumeInitialized",
-        .signature = "(buffer: Buffer): any",
-        .summary = "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T",
     },
     {
         .name = "cacheFlush",
@@ -3169,29 +3154,14 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "",
     },
     {
-        .name = "load",
-        .signature = "(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64",
-        .summary = "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset",
-    },
-    {
         .name = "move",
         .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()",
         .summary = "",
     },
     {
-        .name = "mutPtr",
-        .signature = "(addr: i64): MutPtr<u8>",
-        .summary = "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe",
-    },
-    {
         .name = "nontemporalStore",
         .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
         .summary = "",
-    },
-    {
-        .name = "offsetOf",
-        .signature = "(field: string): i64",
-        .summary = "Compile-time byte offset of a field in a fixed-layout struct T",
     },
     {
         .name = "pageAlloc",
@@ -3214,29 +3184,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "",
     },
     {
-        .name = "ptr",
-        .signature = "(addr: i64): Ptr<u8>",
-        .summary = "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe",
-    },
-    {
         .name = "set",
         .signature = "(dst: MutPtr<u8>, byte: i64, n: i64): ()",
         .summary = "",
-    },
-    {
-        .name = "sizeOf",
-        .signature = "(): i64",
-        .summary = "Compile-time size in bytes of a statically laid out type T",
-    },
-    {
-        .name = "slice",
-        .signature = "(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>",
-        .summary = "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked",
-    },
-    {
-        .name = "store",
-        .signature = "(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()",
-        .summary = "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset",
     },
     {
         .name = "volatileLoad",
@@ -3247,11 +3197,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "volatileStore",
         .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
         .summary = "",
-    },
-    {
-        .name = "withSliceMut",
-        .signature = "(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any",
-        .summary = "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked",
     },
 };
 
@@ -3934,38 +3879,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
         .summary = "",
     },
     {
-        .name = "Regex.find",
-        .signature = "(text: string): RegexMatch?",
+        .name = "Regex.flags",
+        .signature = ": i64",
         .summary = "",
     },
     {
-        .name = "Regex.findAll",
-        .signature = "(text: string, limit?: i64): Array<RegexMatch>",
+        .name = "Regex.pattern",
+        .signature = ": string",
         .summary = "",
     },
     {
-        .name = "Regex.findGroup",
-        .signature = "(text: string, index: i64): string?",
-        .summary = "",
-    },
-    {
-        .name = "Regex.findText",
-        .signature = "(text: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "Regex.replace",
-        .signature = "(text: string, replacement: string): string",
-        .summary = "",
-    },
-    {
-        .name = "Regex.split",
-        .signature = "(text: string, limit?: i64): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "Regex.test",
-        .signature = "(text: string): bool",
+        .name = "Regex.prog",
+        .signature = ": Array<i64>",
         .summary = "",
     },
     {
@@ -3985,13 +3910,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "find",
-        .signature = "(pattern: Regex, s: string, offset?: i64): RegexMatch?",
-        .summary = "Find first match",
+        .signature = "(pattern: Regex, s: string, offset: i64 = 0): RegexMatch?",
+        .summary = "",
     },
     {
         .name = "findAll",
-        .signature = "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>",
-        .summary = "Find all matches",
+        .signature = "(pattern: Regex, s: string, limit: i64 = -1): Array<RegexMatch>",
+        .summary = "",
     },
     {
         .name = "findGroup",
@@ -4006,7 +3931,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     {
         .name = "fullFind",
         .signature = "(pattern: Regex, s: string): RegexMatch?",
-        .summary = "Find full match",
+        .summary = "",
     },
     {
         .name = "isValid",
@@ -8599,16 +8524,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `compress.adler32` | `(data: string): i64` |  |\n"
-            "| `compress.crc32` | `(data: string): i64` |  |\n"
-            "| `compress.deflate` | `(data: string, level: i64 = DEFAULT_COMPRESSION): string?` |  |\n"
-            "| `compress.gunzip` | `(data: string): string` |  |\n"
-            "| `compress.gzip` | `(data: string, level: i64 = DEFAULT_COMPRESSION): string?` |  |\n"
-            "| `compress.inflate` | `(data: string): string` |  |\n"
-            "| `compress.isGzip` | `(data: string): bool` |  |\n"
-            "| `compress.isZlib` | `(data: string): bool` |  |\n"
-            "| `compress.zlibCompress` | `(data: string, level: i64 = DEFAULT_COMPRESSION): string?` |  |\n"
-            "| `compress.zlibDecompress` | `(data: string): string` |  |\n"
+            "| `compress.adler32` | `(data: Slice<u8>): i64` |  |\n"
+            "| `compress.crc32` | `(data: Slice<u8>): i64` |  |\n"
+            "| `compress.deflate` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n"
+            "| `compress.gunzip` | `(data: Slice<u8>): Array<u8>` |  |\n"
+            "| `compress.gzip` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n"
+            "| `compress.inflate` | `(data: Slice<u8>): Array<u8>` |  |\n"
+            "| `compress.isGzip` | `(data: Slice<u8>): bool` |  |\n"
+            "| `compress.isZlib` | `(data: Slice<u8>): bool` |  |\n"
+            "| `compress.zlibCompress` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n"
+            "| `compress.zlibDecompress` | `(data: Slice<u8>): Array<u8>` |  |\n"
             "",
         .symbols = _symbols_compress,
         .symbol_count = (int)(sizeof(_symbols_compress) / sizeof(_symbols_compress[0])),
@@ -9211,57 +9136,57 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `math.E` | `: f64` | Euler's number |\n"
-            "| `math.EPSILON` | `: f64` | Smallest representable difference above 1.0 |\n"
-            "| `math.INF` | `: f64` | Positive infinity |\n"
-            "| `math.LN10` | `: f64` | Natural logarithm of 10 |\n"
-            "| `math.LN2` | `: f64` | Natural logarithm of 2 |\n"
-            "| `math.LOG10E` | `: f64` | Base-10 logarithm of e |\n"
-            "| `math.LOG2E` | `: f64` | Base-2 logarithm of e |\n"
-            "| `math.MAX_F64` | `: f64` | Largest finite IEEE-754 double |\n"
-            "| `math.MAX_I64` | `: i64` | Largest signed 64-bit integer |\n"
-            "| `math.MIN_I64` | `: i64` | Smallest signed 64-bit integer |\n"
-            "| `math.NAN` | `: f64` | Quiet NaN value |\n"
-            "| `math.PI` | `: f64` | Ratio of a circle's circumference to its diameter |\n"
-            "| `math.SQRT2` | `: f64` | Square root of 2 |\n"
-            "| `math.TAU` | `: f64` | Full-circle radians, 2 * PI |\n"
-            "| `math.abs` | `(x: f64): f64` | Absolute value |\n"
-            "| `math.acos` | `(x: f64): f64` | Arc cosine |\n"
-            "| `math.asin` | `(x: f64): f64` | Arc sine |\n"
-            "| `math.atan` | `(x: f64): f64` | Arc tangent |\n"
-            "| `math.atan2` | `(y: f64, x: f64): f64` | Arc tangent of y/x |\n"
-            "| `math.cbrt` | `(x: f64): f64` | Cube root |\n"
-            "| `math.ceil` | `(x: f64): i64` | Ceiling to integer |\n"
-            "| `math.clamp` | `(x: f64, min: f64, max: f64): f64` | Clamp to a closed interval |\n"
-            "| `math.cos` | `(x: f64): f64` | Cosine |\n"
-            "| `math.cosh` | `(x: f64): f64` | Hyperbolic cosine |\n"
-            "| `math.degToRad` | `(deg: f64): f64` | Degrees to radians |\n"
-            "| `math.exp` | `(x: f64): f64` | Exponential e^x |\n"
-            "| `math.expm1` | `(x: f64): f64` | exp(x)-1 accurate for small x |\n"
-            "| `math.floor` | `(x: f64): i64` | Floor to integer |\n"
-            "| `math.fmod` | `(x: f64, y: f64): f64` | Floating-point remainder |\n"
-            "| `math.hypot` | `(x: f64, y: f64): f64` | Hypotenuse sqrt(x*x+y*y) |\n"
-            "| `math.isFinite` | `(x: f64): bool` | Check if finite |\n"
-            "| `math.isNaN` | `(x: f64): bool` | Check if NaN |\n"
-            "| `math.lerp` | `(a: f64, b: f64, t: f64): f64` | Linear interpolation |\n"
-            "| `math.log` | `(x: f64): f64` | Natural logarithm |\n"
-            "| `math.log10` | `(x: f64): f64` | Base-10 logarithm |\n"
-            "| `math.log1p` | `(x: f64): f64` | log(1+x) accurate for small x |\n"
-            "| `math.log2` | `(x: f64): f64` | Base-2 logarithm |\n"
-            "| `math.max` | `(...args: f64): f64` | Maximum value |\n"
-            "| `math.min` | `(...args: f64): f64` | Minimum value |\n"
-            "| `math.pow` | `(base: f64, exp: f64): f64` | Power |\n"
-            "| `math.radToDeg` | `(rad: f64): f64` | Radians to degrees |\n"
-            "| `math.random` | `(): f64` | Random f64 in [0, 1) |\n"
-            "| `math.randomInt` | `(min: i64, max: i64): i64` | Random integer in [min, max] |\n"
-            "| `math.round` | `(x: f64): i64` | Round to nearest integer |\n"
-            "| `math.sign` | `(x: f64): i64` | Sign of value (-1, 0, 1) |\n"
-            "| `math.sin` | `(x: f64): f64` | Sine |\n"
-            "| `math.sinh` | `(x: f64): f64` | Hyperbolic sine |\n"
-            "| `math.sqrt` | `(x: f64): f64` | Square root |\n"
-            "| `math.tan` | `(x: f64): f64` | Tangent |\n"
-            "| `math.tanh` | `(x: f64): f64` | Hyperbolic tangent |\n"
-            "| `math.trunc` | `(x: f64): i64` | Truncate toward zero |\n"
+            "| `math.E` | `: f64` |  |\n"
+            "| `math.EPSILON` | `: f64` |  |\n"
+            "| `math.INF` | `: f64` |  |\n"
+            "| `math.LN10` | `: f64` |  |\n"
+            "| `math.LN2` | `: f64` |  |\n"
+            "| `math.LOG10E` | `: f64` |  |\n"
+            "| `math.LOG2E` | `: f64` |  |\n"
+            "| `math.MAX_F64` | `: f64` |  |\n"
+            "| `math.MAX_I64` | `: i64` |  |\n"
+            "| `math.MIN_I64` | `: i64` |  |\n"
+            "| `math.NAN` | `: f64` |  |\n"
+            "| `math.PI` | `: f64` |  |\n"
+            "| `math.SQRT2` | `: f64` |  |\n"
+            "| `math.TAU` | `: f64` |  |\n"
+            "| `math.abs` | `(x: f64): f64` |  |\n"
+            "| `math.acos` | `(x: f64): f64` |  |\n"
+            "| `math.asin` | `(x: f64): f64` |  |\n"
+            "| `math.atan` | `(x: f64): f64` |  |\n"
+            "| `math.atan2` | `(y: f64, x: f64): f64` |  |\n"
+            "| `math.cbrt` | `(x: f64): f64` |  |\n"
+            "| `math.ceil` | `(x: f64): i64` |  |\n"
+            "| `math.clamp` | `(x: f64, min: f64, max: f64): f64` |  |\n"
+            "| `math.cos` | `(x: f64): f64` |  |\n"
+            "| `math.cosh` | `(x: f64): f64` |  |\n"
+            "| `math.degToRad` | `(deg: f64): f64` |  |\n"
+            "| `math.exp` | `(x: f64): f64` |  |\n"
+            "| `math.expm1` | `(x: f64): f64` |  |\n"
+            "| `math.floor` | `(x: f64): i64` |  |\n"
+            "| `math.fmod` | `(x: f64, y: f64): f64` |  |\n"
+            "| `math.hypot` | `(x: f64, y: f64): f64` |  |\n"
+            "| `math.isFinite` | `(x: f64): bool` |  |\n"
+            "| `math.isNaN` | `(x: f64): bool` |  |\n"
+            "| `math.lerp` | `(a: f64, b: f64, t: f64): f64` |  |\n"
+            "| `math.log` | `(x: f64): f64` |  |\n"
+            "| `math.log10` | `(x: f64): f64` |  |\n"
+            "| `math.log1p` | `(x: f64): f64` |  |\n"
+            "| `math.log2` | `(x: f64): f64` |  |\n"
+            "| `math.max` | `(...args: f64): f64` |  |\n"
+            "| `math.min` | `(...args: f64): f64` |  |\n"
+            "| `math.pow` | `(base: f64, exp: f64): f64` |  |\n"
+            "| `math.radToDeg` | `(rad: f64): f64` |  |\n"
+            "| `math.random` | `(): f64` |  |\n"
+            "| `math.randomInt` | `(min: i64, max: i64): i64` |  |\n"
+            "| `math.round` | `(x: f64): i64` |  |\n"
+            "| `math.sign` | `(x: f64): i64` |  |\n"
+            "| `math.sin` | `(x: f64): f64` |  |\n"
+            "| `math.sinh` | `(x: f64): f64` |  |\n"
+            "| `math.sqrt` | `(x: f64): f64` |  |\n"
+            "| `math.tan` | `(x: f64): f64` |  |\n"
+            "| `math.tanh` | `(x: f64): f64` |  |\n"
+            "| `math.trunc` | `(x: f64): i64` |  |\n"
             "",
         .symbols = _symbols_math,
         .symbol_count = (int)(sizeof(_symbols_math) / sizeof(_symbols_math[0])),
@@ -9284,35 +9209,24 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.PROT_NONE` | `: i64` |  |\n"
             "| `mem.PROT_READ` | `: i64` |  |\n"
             "| `mem.PROT_WRITE` | `: i64` |  |\n"
-            "| `mem.addr` | `(ptr: Ptr<u8>): i64` | Numeric address of any Ptr<T> or MutPtr<T> |\n"
-            "| `mem.alignOf` | `(): i64` | Compile-time alignment in bytes of a statically laid out type T |\n"
             "| `mem.alloc` | `(n: i64): Buffer` |  |\n"
             "| `mem.allocAligned` | `(n: i64, align: i64): Buffer` |  |\n"
             "| `mem.allocZeroed` | `(n: i64): Buffer` |  |\n"
-            "| `mem.assumeInitialized` | `(buffer: Buffer): any` | Unsafe compiler-verified materialization of a completely initialized native output Buffer as T |\n"
             "| `mem.cacheFlush` | `(ptr: Ptr<u8>, n: i64): ()` |  |\n"
             "| `mem.cacheInvalidate` | `(ptr: Ptr<u8>, n: i64): ()` |  |\n"
             "| `mem.cacheLineSize` | `(): i64` |  |\n"
             "| `mem.compare` | `(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64` |  |\n"
             "| `mem.copy` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n"
             "| `mem.fence` | `(ordering: i64): ()` |  |\n"
-            "| `mem.load` | `(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"
             "| `mem.move` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n"
-            "| `mem.mutPtr` | `(addr: i64): MutPtr<u8>` | Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.nontemporalStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n"
-            "| `mem.offsetOf` | `(field: string): i64` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
             "| `mem.pageAlloc` | `(bytes: i64, prot?: i64): MutPtr<u8>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
             "| `mem.pageFree` | `(ptr: MutPtr<u8>, bytes: i64): bool` |  |\n"
             "| `mem.pageProtect` | `(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool` |  |\n"
             "| `mem.prefetch` | `(ptr: Ptr<u8>, rw: i64): ()` |  |\n"
-            "| `mem.ptr` | `(addr: i64): Ptr<u8>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.set` | `(dst: MutPtr<u8>, byte: i64, n: i64): ()` |  |\n"
-            "| `mem.sizeOf` | `(): i64` | Compile-time size in bytes of a statically laid out type T |\n"
-            "| `mem.slice` | `(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>` | Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked |\n"
-            "| `mem.store` | `(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
             "| `mem.volatileLoad` | `(ptr: Ptr<u8>, size: i64): i64` |  |\n"
             "| `mem.volatileStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n"
-            "| `mem.withSliceMut` | `(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any` | Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked |\n"
             "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),
@@ -9591,21 +9505,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Regex` | `Regex` |  |\n"
-            "| `Regex.find` | `(text: string): RegexMatch?` |  |\n"
-            "| `Regex.findAll` | `(text: string, limit?: i64): Array<RegexMatch>` |  |\n"
-            "| `Regex.findGroup` | `(text: string, index: i64): string?` |  |\n"
-            "| `Regex.findText` | `(text: string): string?` |  |\n"
-            "| `Regex.replace` | `(text: string, replacement: string): string` |  |\n"
-            "| `Regex.split` | `(text: string, limit?: i64): Array<string>` |  |\n"
-            "| `Regex.test` | `(text: string): bool` |  |\n"
+            "| `Regex.flags` | `: i64` |  |\n"
+            "| `Regex.pattern` | `: string` |  |\n"
+            "| `Regex.prog` | `: Array<i64>` |  |\n"
             "| `regex.compile` | `(pattern: string, flags: string = \"\"): Regex` |  |\n"
             "| `regex.count` | `(pattern: Regex, s: string): i64` |  |\n"
             "| `regex.escape` | `(s: string): string` |  |\n"
-            "| `regex.find` | `(pattern: Regex, s: string, offset?: i64): RegexMatch?` | Find first match |\n"
-            "| `regex.findAll` | `(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>` | Find all matches |\n"
+            "| `regex.find` | `(pattern: Regex, s: string, offset: i64 = 0): RegexMatch?` |  |\n"
+            "| `regex.findAll` | `(pattern: Regex, s: string, limit: i64 = -1): Array<RegexMatch>` |  |\n"
             "| `regex.findGroup` | `(pattern: Regex, s: string, index: i64): string?` |  |\n"
             "| `regex.findText` | `(pattern: Regex, s: string): string?` |  |\n"
-            "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` | Find full match |\n"
+            "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` |  |\n"
             "| `regex.isValid` | `(pattern: string): bool` |  |\n"
             "| `regex.replace` | `(pattern: Regex, s: string, repl: string): string` |  |\n"
             "| `regex.replaceAll` | `(pattern: Regex, s: string, repl: string): string` |  |\n"

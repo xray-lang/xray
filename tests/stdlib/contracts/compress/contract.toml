@@ -1,6 +1,6 @@
 schema = 1
 module = "compress"
-contract_revision = 3
+contract_revision = 4
 legacy_commit = "d5cfcb587219468fde5bf8cda6cb76df875cf25b"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/compress/legacy_expected.jsonl"
@@ -17,10 +17,12 @@ legacy_public_surface = [
   "isZlib"
 ]
 intentional_semantic_changes = [
-  "public convergence target uses Slice<u8> inputs and Array<u8> outputs after the native error ABI is stable",
-  "decompression failures must become typed CompressionError values instead of null sentinels in the native switch",
-  "checksum values remain stable across old string storage and future byte slices",
-  "compression and decompression helpers must not construct string storage for arbitrary bytes once the ABI switches"
+  "public surface takes Slice<u8> inputs and answers Array<u8> outputs",
+  "decompression failures are typed CompressionError values, not null sentinels",
+  "checksum values are unchanged from the old string storage to the byte slices that replaced it",
+  "compression and decompression construct no string storage for arbitrary bytes",
+  "compression no longer answers an optional: it has no failure mode short of exhausting memory",
+  "the whole coder is stated in compress.xr; the module has no native runtime"
 ]
 known_legacy_bugs = [
   "legacy compressed payloads are carried as string values even when the bytes are not text",
@@ -43,14 +45,14 @@ new_behavior = "gzip, deflate, and zlib round-trip data and reject malformed pay
 [[legacy_behavior]]
 id = "truncated-input-classification"
 classification = "required"
-new_behavior = "truncated gzip, deflate, and zlib payloads keep the same failure classification before becoming CompressionError.TruncatedInput"
+new_behavior = "truncated gzip, deflate, and zlib payloads keep the same failure classification, reported as CompressionError.InvalidData"
 
 [[legacy_behavior]]
 id = "nullable-decompression-failure"
 classification = "removed"
-new_behavior = "future converged decompression APIs throw CompressionError and never use null as a failure sentinel"
+new_behavior = "decompression throws CompressionError and never uses null as a failure sentinel"
 
 [[legacy_behavior]]
 id = "string-binary-payloads"
 classification = "removed"
-new_behavior = "future converged compression APIs carry arbitrary bytes through Slice<u8> and Array<u8>, not string storage"
+new_behavior = "compression carries arbitrary bytes through Slice<u8> and Array<u8>, not string storage"

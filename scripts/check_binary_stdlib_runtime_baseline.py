@@ -82,7 +82,7 @@ LINK_EXPECTS: dict[str, tuple[str, ...]] = {
     "tests/aot/filetests/link/core_compress.expect": (
         '"stdlib_symbols": ["compress.crc32"',
         'not_contains="runtime_objects": ["xray_core"]',
-        "c_contains=xrt_compress_gzip(",
+        "c_not_contains=xrt_compress_",
         "c_not_contains=xrt_method_",
     ),
     "tests/aot/filetests/link/core_crypto.expect": (

@@ -183,13 +183,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install zlib
-        shell: pwsh
-        run: |
-          vcpkg install zlib:x64-windows-release
-          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
-          echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
-
       # Ninja on every platform; on Windows that needs cl.exe on PATH.
       - name: Set up MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -197,10 +190,7 @@ jobs:
           arch: x64
 
       - name: Configure (Release)
-        run: >-
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE"
-          -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
       # Ninja is single-config: no --config, and the binary lands in build/.
       - name: Build

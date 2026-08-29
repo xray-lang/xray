@@ -1,12 +1,21 @@
 // AOT direct-call checksum helpers must match VM tagged stdlib dispatch.
+//
+// The checksums borrow their input as Slice<u8>, and a slice cannot be
+// borrowed from a temporary, so each literal is bound before .bytes().
 import compress
 
-print(compress.crc32("123456789"))
-print(compress.crc32(""))
-print(compress.crc32("Hello"))
-print(compress.crc32("hello world"))
+var digits = "123456789"
+var empty = ""
+var hello = "Hello"
+var helloWorld = "hello world"
+var wikipedia = "Wikipedia"
 
-print(compress.adler32("Wikipedia"))
-print(compress.adler32(""))
-print(compress.adler32("Hello"))
-print(compress.adler32("hello world"))
+print(compress.crc32(digits.bytes()))
+print(compress.crc32(empty.bytes()))
+print(compress.crc32(hello.bytes()))
+print(compress.crc32(helloWorld.bytes()))
+
+print(compress.adler32(wikipedia.bytes()))
+print(compress.adler32(empty.bytes()))
+print(compress.adler32(hello.bytes()))
+print(compress.adler32(helloWorld.bytes()))

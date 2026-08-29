@@ -31,7 +31,7 @@ L2_PUBLIC_NATIVE = {
 CONTRACT_FILES = ("contract.toml", "cases.jsonl", "diff_cases.txt")
 ABI_EVIDENCE = {
     "tests/unit/api/test_compress_native_error_abi.py": (
-        "stdlib/compress/compress.c",
+        "stdlib/compress/compress.xr",
         "CompressionError.InvalidData",
         "test_vm_native_aot_typed_catch_parity",
     ),
@@ -105,15 +105,17 @@ def check_boundary(
             semantic_source = root / str(entry.get("semantic_source", ""))
             if not semantic_source.is_file():
                 failures.append("semantic_source is missing")
-            # These modules keep a native implementation. There is no factory to
-            # point at any more, so what has to exist is the private C the
-            # module's declared native entries are bound to.
+            # A completed migration has no native payload. Every other retained
+            # module must keep its declared private implementation reachable.
             private_sources = [
                 path
                 for pattern in entry.get("private_native_sources", ())
                 for path in root.glob(str(pattern))
             ]
-            if not private_sources:
+            if entry.get("def_migration_complete"):
+                if entry.get("private_native_sources"):
+                    failures.append("completed migration must not declare private native sources")
+            elif not private_sources:
                 failures.append("private native sources are missing")
         results.append(result("BUILTIN_STDLIB_MODULE", module, failures))
 
@@ -149,7 +151,7 @@ def check_module_payloads(root: Path) -> list[CheckResult]:
         module_dir = root / "stdlib" / module
         if not module_dir.is_dir():
             failures.append(f"missing stdlib/{module}")
-        if not entry.get("private_native_sources"):
+        if not entry.get("private_native_sources") and not entry.get("def_migration_complete"):
             failures.append("private_native_sources must be declared")
         declared = set(entry.get("public_native", ()))
         # A module that still publishes native symbols has to declare them in

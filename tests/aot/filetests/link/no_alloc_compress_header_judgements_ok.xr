@@ -1,0 +1,15 @@
+// What the byte-carrier migration bought: asking whether a buffer opens as gzip
+// or zlib, and checksumming it, are now provably allocation-free. They read a
+// borrowed Slice<u8> and answer a scalar, so there is nothing to allocate. On
+// the string carrier the same questions had to take a copy of the bytes first.
+import compress
+
+fn xray_no_alloc_compress_header_judgements_ok(view: Slice<u8>) -> i64 {
+    var score = 0
+    if (compress.isGzip(view)) { score = score + 10 }
+    if (compress.isZlib(view)) { score = score + 100 }
+    return score + compress.crc32(view) + compress.adler32(view)
+}
+
+var xray_no_alloc_compress_raw: [u8; 4] = [31, 139, 8, 0]
+print(xray_no_alloc_compress_header_judgements_ok(xray_no_alloc_compress_raw[:]))

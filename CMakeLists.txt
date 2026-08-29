@@ -1032,6 +1032,9 @@ list(APPEND BASE_SRC
     "src/shared/xr_unicode_grapheme_data.c"
     "src/shared/xr_unicode_grapheme.c"
     "src/shared/xr_http_url.c"
+    # Not a stdlib module: compress.xr states the language's compressor, while
+    # this coder serves the package client and the AOT runtime.
+    "src/shared/xr_compress_engine.c"
 )
 # Cross-platform abstraction layer. Each impl file is exclusive to
 # its platform — no body guards, only the right subtree is built.
@@ -1140,16 +1143,12 @@ file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
 )
 set(STDLIB_SRC ${STDLIB_CORE_SRC})
 
-find_package(ZLIB QUIET)
 if(XR_STDLIB_FULL)
     # Full stdlib includes every built-in module. Group switches apply only to
     # modular builds, so "full" has one exact, fail-closed meaning.
     file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
     list(APPEND STDLIB_ALL_SRC "stdlib/stdlib_cache.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
-    if(NOT ZLIB_FOUND)
-        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX "compress_zlib\\.c$")
-    endif()
     if(NOT XR_BUILD_TEST_MODULES)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")
     endif()
@@ -1160,7 +1159,6 @@ if(XR_STDLIB_FULL)
     add_compile_definitions(XR_HAS_NETWORK=1)
     add_compile_definitions(XR_HAS_DATA_FORMATS=1)
     add_compile_definitions(XR_HAS_CRYPTO=1)
-    add_compile_definitions(XR_HAS_COMPRESS=1)
     add_compile_definitions(XR_HAS_CLUSTER=1)
     add_compile_definitions(XR_HAS_WS=1)
     add_compile_definitions(XR_HAS_HTTP2=1)
@@ -1195,16 +1193,6 @@ else()
         list(APPEND STDLIB_SRC ${STDLIB_CRYPTO_SRC})
         add_compile_definitions(XR_HAS_CRYPTO=1)
         message(STATUS "Stdlib: +crypto")
-    endif()
-
-    if(XR_STDLIB_COMPRESS)
-        file(GLOB STDLIB_COMPRESS_SRC CONFIGURE_DEPENDS "stdlib/compress/*.c")
-        if(NOT ZLIB_FOUND)
-            list(FILTER STDLIB_COMPRESS_SRC EXCLUDE REGEX "compress_zlib\\.c$")
-        endif()
-        list(APPEND STDLIB_SRC ${STDLIB_COMPRESS_SRC})
-        add_compile_definitions(XR_HAS_COMPRESS=1)
-        message(STATUS "Stdlib: +compress")
     endif()
 
     if(XR_STDLIB_CLUSTER)
@@ -1489,7 +1477,7 @@ add_library(xray_aot_core STATIC
     src/base/xlog.c
     src/base/xsha256.c
     src/base/xunicode.c
-    stdlib/compress/compress.c
+    src/shared/xr_compress_engine.c
     stdlib/crypto/crypto.c
 )
 target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1 XR_CRYPTO_CORE_ONLY=1)
@@ -1680,14 +1668,6 @@ else()
     target_link_libraries(xray_core PUBLIC m pthread)
     target_link_libraries(xray_rt_coro PUBLIC m pthread)
     target_link_libraries(xray_vm PUBLIC pthread)
-endif()
-if(ZLIB_FOUND)
-    target_link_libraries(xray_core_objs PUBLIC ZLIB::ZLIB)
-    target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ZLIB::ZLIB)
-    target_link_libraries(xray_core PUBLIC ZLIB::ZLIB)
-    target_compile_definitions(xray_core_objs PRIVATE XR_HAS_ZLIB=1)
-    target_compile_definitions(xray_stdlib_bootstrap_core PRIVATE XR_HAS_ZLIB=1)
-    target_compile_definitions(xray_core PRIVATE XR_HAS_ZLIB=1)
 endif()
 
 # libffi: FFI / C interop. The bytecode VM marshals extern calls through

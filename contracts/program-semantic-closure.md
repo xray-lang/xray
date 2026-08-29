@@ -339,7 +339,7 @@ require the independently verified program authority frozen above.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 3e46b60e295c5f6d2fb9ca028e696ff57b07b980b06b6c6e54f7c31d1af8e567
+anchor-sha256: CMakeLists.txt e68592e1d5a789c8f107ef5dbe18d602c8004a97a49481a0d7c3687280af64d4
 anchor-sha256: src/module/xmodule_graph.h 9eeade35f1bf2115b5c6c1b0d76453e9848f11a9916489085701f1c8319e42e1
 anchor-sha256: src/module/xmodule_graph.c fc7601efe0e40a2b5641d33cfb5f3bc6fec99d1a983c042949accd458b3a94f2
 anchor-sha256: src/frontend/parser/xparse.c 906aa94e4ae012a8534e62d771674aab960948ad45b8b78e3a19d6da63bff518
@@ -394,7 +394,7 @@ anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 14b7af26f15a2c9add8ec4fa7d
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c d816c4bbbb9baa3399944516d34865a86bfd2ce3561c2e7328c4d9262c53cebc
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 3d6e80cab9f9feef2b5667297212ffe1df19d87643c5045b1a6cfed11bc8683c
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 49a7b2d141baba1c7d97d52178b0f624ce1dcdd8b0846acae7ecddb4b719bca3
+anchor-sha256: tests/unit/plan/test_semantic_plan.c fc8d9ffcd2e435156b6ec533b07cedfb676bc2c2d085c9121873f4dbca79838c
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 75e7f75e1d3e043a800ed24ef3d297a88e9ca7800e225ef64da7f9150466ceb8
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c a4cb293fbbd070bfef681b148919a100e608fe2a66530acfb984cf842db8a007

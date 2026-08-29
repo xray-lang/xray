@@ -49,28 +49,6 @@ XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule 
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CLUSTER */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_COMPRESS
-XR_FUNC bool xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule *module) {
-    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
-        return false;
-    size_t expected_count = 0;
-    (void) expected_count;
-    XRS_EXPORT(module, isolate, "__gzip", compress_gzip);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__gunzip", compress_gunzip);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__deflate", compress_deflate);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__inflate", compress_inflate);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__zlibCompress", compress_zlib_compress);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__zlibDecompress", compress_zlib_decompress);
-    expected_count++;
-    return module->export_count == expected_count;
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_COMPRESS */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_CRYPTO
 XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *module) {
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)

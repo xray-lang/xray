@@ -167,6 +167,13 @@ XR_FUNC XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, 
                                            size_t out_cap, size_t *out_len);
 XR_FUNC bool xr_is_zlib(const uint8_t *data, size_t len);
 
+/* Heap-allocating wrappers over the coder above; the caller frees the result,
+   which is NULL when the input could not be coded. */
+XR_FUNC uint8_t *xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level);
+XR_FUNC uint8_t *xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len);
+
+XR_FUNC const char *xr_compress_error_str(XrCompressError err);
+
 typedef void *(*XrCompressCoreAllocFn)(void *ctx, size_t size);
 typedef void (*XrCompressCoreFreeFn)(void *ctx, void *ptr);
 typedef XrCompressError (*XrCompressCoreCompressFn)(const uint8_t *input, size_t in_len,

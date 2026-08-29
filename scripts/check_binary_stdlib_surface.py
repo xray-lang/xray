@@ -134,7 +134,7 @@ OLD_API_CALL_RE = re.compile(
 )
 NATIVE_STRING_CREATOR_RE = re.compile(
     r"\b(?:make_string_n|xr_value_make_string|xr_value_make_string_n|"
-    r"xr_string_new|xr_string_from|xrt_compress_finish_string|"
+    r"xr_string_new|xr_string_from|"
     r"xr_cfunc_ok_string)\b"
 )
 GENERATED_STALE_RE = re.compile(

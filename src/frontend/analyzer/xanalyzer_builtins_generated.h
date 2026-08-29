@@ -213,29 +213,6 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
 };
 #define GEN_CLUSTER_FUNCTION_COUNT 10
 
-static const char *g_gen_compress___gunzip_1_errors[] = {
-    "CompressionError.InvalidData",
-};
-
-static const char *g_gen_compress___inflate_3_errors[] = {
-    "CompressionError.InvalidData",
-};
-
-static const char *g_gen_compress___zlibdecompress_5_errors[] = {
-    "CompressionError.InvalidData",
-};
-
-// compress module functions
-static const XaBuiltinMember g_gen_compress_functions[] = {
-    {"__gzip", "(data: string, level: i64): string?", "Gzip-wrap and deflate at the given level", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__gunzip", "(data: string): string", "Inflate a gzip member, refusing a header that is not gzip", true, false, true, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress___gunzip_1_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__deflate", "(data: string, level: i64): string?", "Raw deflate at the given level", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__inflate", "(data: string): string", "Raw inflate", true, false, true, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress___inflate_3_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__zlibCompress", "(data: string, level: i64): string?", "Zlib-wrap and deflate at the given level", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__zlibDecompress", "(data: string): string", "Inflate a zlib stream, refusing a header that is not zlib", true, false, true, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress___zlibdecompress_5_errors, 1}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-};
-#define GEN_COMPRESS_FUNCTION_COUNT 6
-
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
     {"__randomBytes", "(n: i64): Array<u8>", "Read n bytes from the platform CSPRNG", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
@@ -584,7 +561,6 @@ static const XaBuiltinMember g_gen_time_functions[] = {
 static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT, NULL, 0},
     {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_object_shapes, GEN_CLUSTER_OBJECT_SHAPE_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT, NULL, 0},
-    {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
@@ -597,7 +573,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_sys_classes, GEN_SYS_CLASS_COUNT},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 14
+#define GEN_BUILTIN_MODULE_COUNT 13
 
 /* clang-format on */
 

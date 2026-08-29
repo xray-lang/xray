@@ -1,17 +1,14 @@
+// Compressing allocates: the coder builds a buffer it hands back, so a
+// no_semantic_alloc contract over it must be refused.
+//
+// The header judgements used to be refused here too. They no longer allocate --
+// see no_alloc_compress_header_judgements_ok -- because the module reads its
+// input through a borrowed Slice<u8> instead of copying it out of a string.
 import compress
 
-fn xray_no_alloc_compress_gzip_reject(data: string) -> string? {
+fn xray_no_alloc_compress_gzip_reject(data: Slice<u8>) -> Array<u8> {
     return compress.gzip(data)
 }
 
-fn xray_no_alloc_compress_is_gzip_reject(data: string) -> bool {
-    return compress.isGzip(data)
-}
-
-fn xray_no_alloc_compress_is_zlib_reject(data: string) -> bool {
-    return compress.isZlib(data)
-}
-
-print(xray_no_alloc_compress_gzip_reject("edge") ?? "")
-print(xray_no_alloc_compress_is_gzip_reject("edge"))
-print(xray_no_alloc_compress_is_zlib_reject("edge"))
+var xray_no_alloc_compress_sample: [u8; 4] = [101, 100, 103, 101]
+print(len(xray_no_alloc_compress_gzip_reject(xray_no_alloc_compress_sample[:])))

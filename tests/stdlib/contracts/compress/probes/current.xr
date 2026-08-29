@@ -1,7 +1,14 @@
+// Current-API side of the legacy oracle. The cases and the emitted JSONL must
+// stay identical to probes/legacy.xr; only the carrier changed, from nullable
+// strings to Slice<u8> in and Array<u8> out.
 import compress
 
 fn emit(name: string, ok: bool) {
     print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+fn textOf(data: Array<u8>) -> string {
+    return string.fromUtf8(data[:])!
 }
 
 fn rejects(body: fn()) -> bool {
@@ -13,13 +20,15 @@ fn rejects(body: fn()) -> bool {
     }
 }
 
-emit("checksum-known-values", compress.crc32("123456789") == 3421780262 && compress.adler32("Wikipedia") == 300286872)
+var digits = "123456789"
+var wikipedia = "Wikipedia"
+emit("checksum-known-values", compress.crc32(digits.bytes()) == 3421780262 && compress.adler32(wikipedia.bytes()) == 300286872)
 var data = "stdlib legacy oracle compression payload"
-var gz = compress.gzip(data)!
-var df = compress.deflate(data)!
-var zl = compress.zlibCompress(data)!
-emit("roundtrip-formats", compress.gunzip(gz) == data && compress.inflate(df) == data && compress.zlibDecompress(zl) == data)
+var gz = compress.gzip(data.bytes())
+var df = compress.deflate(data.bytes())
+var zl = compress.zlibCompress(data.bytes())
+emit("roundtrip-formats", textOf(compress.gunzip(gz[:])) == data && textOf(compress.inflate(df[:])) == data && textOf(compress.zlibDecompress(zl[:])) == data)
 emit("truncated-input-classification",
-    rejects(fn() { compress.gunzip(gz.slice(0, 1)) }) &&
-    rejects(fn() { compress.inflate(df.slice(0, 1)) }) &&
-    rejects(fn() { compress.zlibDecompress(zl.slice(0, 1)) }))
+    rejects(fn() { compress.gunzip(gz[0:1]) }) &&
+    rejects(fn() { compress.inflate(df[0:1]) }) &&
+    rejects(fn() { compress.zlibDecompress(zl[0:1]) }))

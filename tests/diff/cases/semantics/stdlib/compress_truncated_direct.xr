@@ -1,5 +1,8 @@
 // Legacy task-200 oracle: truncated compressed payloads must report
 // decompression failure through the converged typed native error channel.
+//
+// The coder speaks bytes end to end, so truncation is a byte-level cut on the
+// Array<u8> payload rather than a rune-level cut on a string.
 import compress
 
 fn compressionInvalidData(body: fn()) -> bool {
@@ -13,21 +16,16 @@ fn compressionInvalidData(body: fn()) -> bool {
     }
 }
 
-fn truncatePayload(value: string) -> string {
-    if (len(value) <= 1) { return "" }
-    return value.slice(0, 1)
-}
-
 var text = "Task 200 compress truncated input contract. Task 200 compress truncated input contract."
 
-var gz = compress.gzip(text) ?? ""
+var gz = compress.gzip(text.bytes())
 print(len(gz) > 1)
-print(compressionInvalidData(fn() { compress.gunzip(truncatePayload(gz)) }))
+print(compressionInvalidData(fn() { compress.gunzip(gz[0:1]) }))
 
-var deflated = compress.deflate(text) ?? ""
+var deflated = compress.deflate(text.bytes())
 print(len(deflated) > 1)
-print(compressionInvalidData(fn() { compress.inflate(truncatePayload(deflated)) }))
+print(compressionInvalidData(fn() { compress.inflate(deflated[0:1]) }))
 
-var zlibbed = compress.zlibCompress(text) ?? ""
+var zlibbed = compress.zlibCompress(text.bytes())
 print(len(zlibbed) > 1)
-print(compressionInvalidData(fn() { compress.zlibDecompress(truncatePayload(zlibbed)) }))
+print(compressionInvalidData(fn() { compress.zlibDecompress(zlibbed[0:1]) }))

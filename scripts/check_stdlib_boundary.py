@@ -199,9 +199,10 @@ def check_builtin_distribution(root: Path) -> list[str]:
 
     ws left this set once its connection layer became pure Xray: it now has no
     core.def binding block and, like http, is loaded from its source alone.
+    compress follows the same source-only path after moving its coder into Xray.
     """
     errors: list[str] = []
-    expected = {"cluster", "http2", "compress", "crypto"}
+    expected = {"cluster", "http2", "crypto"}
     manifest = load_manifest(root)
     names = set(manifest.by_name)
     core_def = (root / "stdlib/defs/core.def").read_text(encoding="utf-8")
@@ -224,6 +225,16 @@ def check_builtin_distribution(root: Path) -> list[str]:
         entry = manifest.by_name.get(name, {})
         if entry.get("perf_suite") != f"stdlib/{name}":
             errors.append(f"built-in standard module {name}: perf_suite must be stdlib/{name}")
+
+    compress = manifest.by_name.get("compress", {})
+    if not compress:
+        errors.append("built-in standard module compress: missing boundary entry")
+    elif not compress.get("def_migration_complete"):
+        errors.append("built-in standard module compress: source-only migration is not complete")
+    if re.search(r"^module\s+compress\s*\{", core_def, re.M):
+        errors.append("built-in standard module compress: obsolete binding block remains")
+    if "compress" in binders:
+        errors.append("built-in standard module compress: obsolete native-entry binder remains")
 
     forbidden = (
         "packages/official",
