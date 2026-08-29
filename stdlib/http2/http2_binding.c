@@ -79,6 +79,36 @@ static void h2_conn_close(XrIOConn *io, XrTlsContext *tls_ctx) {
         xr_tls_context_free(tls_ctx);
 }
 
+/* HTTP/2 connections are always TLS connections negotiated by h2_connect.
+ * Keep their byte transport here instead of reviving the retired generic
+ * xr_io_read/xr_io_write_all facade: no other owner needs that surface. */
+static int h2_conn_read(XrIOConn *io, void *buffer, size_t length) {
+    if (!io || !io->is_tls || !io->tls || !buffer || length == 0)
+        return -1;
+    int read_count = xr_tls_conn_read(io->X, io->tls, buffer, length);
+    if (read_count < 0)
+        io->last_error = XR_NERR_READ;
+    else if (read_count == 0)
+        io->last_error = XR_NERR_CLOSED;
+    return read_count;
+}
+
+static int h2_conn_write_all(XrIOConn *io, const void *buffer, size_t length) {
+    if (!io || !io->is_tls || !io->tls || !buffer || length == 0)
+        return -1;
+    size_t written = 0;
+    const char *bytes = (const char *) buffer;
+    while (written < length) {
+        int count = xr_tls_conn_write(io->X, io->tls, bytes + written, length - written);
+        if (count <= 0) {
+            io->last_error = XR_NERR_WRITE;
+            return written > 0 ? (int) written : count;
+        }
+        written += (size_t) count;
+    }
+    return (int) written;
+}
+
 static XrHttp2Context *http2_get_context(XrVMRuntime *X) {
     XrModuleRegistry *registry = X ? (XrModuleRegistry *) X->module_registry : NULL;
     XrModule *module = registry && registry->loaded_modules
@@ -282,7 +312,7 @@ XrCFuncResult h2_send(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result)
     XrIOConn *io = h2_conn_for_handle(X, XR_TO_INT(args[0]));
     if (!io)
         return XR_CFUNC_DONE;
-    int written = xr_io_write_all(io, data->data, (size_t) data->length);
+    int written = h2_conn_write_all(io, data->data, (size_t) data->length);
     *result = xr_bool(written == data->length);
     return XR_CFUNC_DONE;
 }
@@ -315,7 +345,7 @@ XrCFuncResult h2_recv(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result)
     if (!buffer)
         return XR_CFUNC_DONE;
 
-    int n = xr_io_read(io, buffer->data, (size_t) requested);
+    int n = h2_conn_read(io, buffer->data, (size_t) requested);
     if (n <= 0)
         return XR_CFUNC_DONE;
     buffer->length = (int32_t) n;

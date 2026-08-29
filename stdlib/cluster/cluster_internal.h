@@ -408,8 +408,9 @@ typedef struct XrCluster {
      *                     Built at start_ex time with caller-supplied CA
      *                     bundle, optional client cert/key (for mTLS), and
      *                     optional verify_peer toggle.
-     *   tls_server_ctx  — used by cluster_accept_loop to wrap inbound fds
-     *                     via xr_io_accept_tls_with_ctx. NULL if the
+     *   tls_server_ctx  — used by cluster_spawn_inbound to wrap inbound fds
+     *                     with xr_tls_conn_new before the incremental server
+     *                     handshake. NULL if the
      *                     operator did not supply a cert+key pair; in
      *                     that case tls_enabled + NULL tls_server_ctx
      *                     causes the accept loop to refuse all inbound

@@ -83,34 +83,6 @@ XR_FUNC XrIOConn *xr_io_connect_tls_with_ctx(struct XrVMRuntime *X, XrTlsContext
 // on a NULL conn. Frees the conn struct itself.
 XR_FUNC void xr_io_close(XrIOConn *conn);
 
-/* ========== Read/Write API ==========
- *
- * Both read and write yield the calling coroutine via conn->X when
- * the underlying fd would block. Returning -1 means a hard failure
- * (conn->last_error carries the reason); 0 means peer closed.
- */
-
-XR_FUNC int xr_io_read(XrIOConn *conn, void *buf, size_t len);
-
-// Read until `len` bytes are filled, the peer closes, or an error.
-// Partial reads are returned (positive count); 0/<=0 only when no
-// progress was made.
-XR_FUNC int xr_io_read_full(XrIOConn *conn, void *buf, size_t len);
-
-XR_FUNC int xr_io_write(XrIOConn *conn, const void *buf, size_t len);
-
-// Write the entire buffer or fail; partial progress is returned only
-// when a later send fails after some bytes already left this side.
-XR_FUNC int xr_io_write_all(XrIOConn *conn, const void *buf, size_t len);
-
-/*
- * Scatter-gather write (plain TCP only — TLS flattens internally).
- * One writev syscall reduces the per-message copy/syscall overhead
- * the http and ws layers care about. EAGAIN on a partial drain falls
- * back to per-buffer xr_io_write_all to keep yield semantics.
- */
-XR_FUNC int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt);
-
 /* ========== Server API ========== */
 
 /*
@@ -124,22 +96,6 @@ XR_FUNC int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt);
 XR_FUNC int xr_io_listen(const char *addr, int port, int backlog);
 
 /*
- * Accept one connection (yieldable). Returns a fully initialised
- * XrIOConn whose ownership transfers to the caller. NULL on a hard
- * accept failure.
- */
-XR_FUNC XrIOConn *xr_io_accept(struct XrVMRuntime *X, int listen_fd);
-
-/*
- * Accept + server-side TLS handshake. `ctx` (server context built
- * with xr_tls_context_new_server, optionally with a CA bundle for
- * mTLS) stays under caller ownership and must outlive every accepted
- * connection. NULL on any failure leaves no half-wrapped fd behind.
- */
-XR_FUNC XrIOConn *xr_io_accept_tls_with_ctx(struct XrVMRuntime *X, int listen_fd,
-                                            XrTlsContext *ctx);
-
-/*
  * Wrap an existing fd into an XrIOConn. The caller is responsible
  * for the fd before this call. Sets non-blocking mode and TCP_NODELAY
  * automatically.
@@ -149,7 +105,6 @@ XR_FUNC XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_
 /* ========== Utility Functions ========== */
 
 XR_FUNC void xr_io_set_timeout(XrIOConn *conn, int timeout_ms);
-XR_FUNC XrNetError xr_io_get_error(XrIOConn *conn);
 XR_FUNC int xr_io_set_nonblocking(int fd);
 
 #endif  // XR_STDLIB_NET_IO_H
