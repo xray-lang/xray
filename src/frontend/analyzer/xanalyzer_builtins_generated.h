@@ -353,23 +353,12 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"__cacheInvalidate", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cacheLineSize", "(): i64", "CPU cache line size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"sizeOf", "(): i64", "Compile-time size in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"alignOf", "(): i64", "Compile-time alignment in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"offsetOf", "(field: string): i64", "Compile-time byte offset of a field in a fixed-layout struct T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"slice", "(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>", "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"assumeInitialized", "(buffer: Buffer): any", "Unsafe compiler-verified materialization of a completely initialized native output Buffer as T", true, false, false, true, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
     {"__allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
     {"__allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
     {"pageAlloc", "(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"ptr", "(addr: i64): Ptr<u8>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"withSliceMut", "(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any", "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked", true, false, false, true, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"mutPtr", "(addr: i64): MutPtr<u8>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"addr", "(ptr: Ptr<u8>): i64", "Numeric address of any Ptr<T> or MutPtr<T>", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"load", "(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"store", "(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()", "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__move", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__set", "(dst: MutPtr<u8>, u8: i64, n: i64): ()", "Fill n bytes at dst with byte (memset)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -377,7 +366,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"__volatileLoad", "(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__volatileStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_MEM_FUNCTION_COUNT 29
+#define GEN_MEM_FUNCTION_COUNT 18
 
 // net.__CopyBidirectionalResult object fields
 static const XaBuiltinObjectField g_gen_net___copybidirectionalresult_object_fields[] = {

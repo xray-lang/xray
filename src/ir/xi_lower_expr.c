@@ -5788,6 +5788,40 @@ static XiValue *lower_mem_access_call(XiLower *l, AstNode *node, CallExprNode *c
     return v;
 }
 
+/*
+ * mem's module intrinsics reach lowering as canonical registry identities that
+ * the analyzer already resolved.  Dispatch on the lowering identity, and take
+ * the member spelling back out of the registry key rather than off the call.
+ */
+static XiValue *lower_mem_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                                const XaIntrinsicDesc *desc) {
+    if (!desc)
+        return NULL;
+    const char *member = xa_intrinsic_source_member(desc);
+    switch (desc->lowering) {
+        case XA_INTRINSIC_LOWERING_MEM_SIZE_OF:
+        case XA_INTRINSIC_LOWERING_MEM_ALIGN_OF:
+        case XA_INTRINSIC_LOWERING_MEM_OFFSET_OF:
+            return lower_mem_layout_call(l, node, call, member);
+        case XA_INTRINSIC_LOWERING_MEM_PTR:
+        case XA_INTRINSIC_LOWERING_MEM_MUT_PTR:
+            return lower_mem_pointer_constructor_call(l, node, call, member);
+        case XA_INTRINSIC_LOWERING_MEM_ADDR:
+            return lower_mem_addr_pointer_call(l, node, call, member);
+        case XA_INTRINSIC_LOWERING_MEM_LOAD:
+        case XA_INTRINSIC_LOWERING_MEM_STORE:
+            return lower_mem_access_call(l, node, call, member);
+        case XA_INTRINSIC_LOWERING_MEM_SLICE:
+            return lower_mem_slice_call(l, node, call, member);
+        case XA_INTRINSIC_LOWERING_MEM_WITH_SLICE_MUT:
+            return lower_mem_with_slice_mut_call(l, node, call, member);
+        case XA_INTRINSIC_LOWERING_MEM_ASSUME_INITIALIZED:
+            return lower_mem_assume_initialized_call(l, node, call, member);
+        default:
+            return NULL;
+    }
+}
+
 static uint16_t lower_byte_slice_typed_op_for_target(XrType *target, bool is_load) {
     if (!target)
         return 0;
@@ -6423,6 +6457,11 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     }
     if (desc->family == XA_INTRINSIC_FAMILY_CODEGEN)
         return lower_codegen_intrinsic_call(l, node, call, desc);
+    if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
+        XiValue *mem_intrinsic = lower_mem_module_intrinsic_call(l, node, call, desc);
+        if (mem_intrinsic)
+            return mem_intrinsic;
+    }
     if (desc->lowering == XA_INTRINSIC_LOWERING_SCALAR_PARSE) {
         if (call->arg_count != 1 || !call->arguments[0]) {
             l->had_error = true;

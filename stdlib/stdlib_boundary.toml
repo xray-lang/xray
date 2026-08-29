@@ -174,12 +174,15 @@ semantic_source = "stdlib/mem/mem.xr"
 load_time_classes = ["Buffer"]
 # Partial migration. The retained rows are the ones whose meaning the compiler
 # owns rather than the source: Buffer plus its methods occupy a runtime core
-# class slot and have no internal spelling in .def metadata, the layout/pointer/
-# borrow intrinsics take their result type from an explicit type argument and
-# lower to backend ops rather than calls, and pageAlloc declares two arities
-# that select two AOT entry points, which Xray cannot express without function
-# overloading.
-public_native = ["addr", "alignOf", "assumeInitialized", "load", "mutPtr", "offsetOf", "pageAlloc", "ptr", "sizeOf", "slice", "store", "withSliceMut"]
+# class slot and have no public spelling in .def metadata, and pageAlloc
+# declares two arities that select two AOT entry points, which Xray cannot
+# express without function overloading. The layout, pointer and borrow
+# intrinsics no longer appear here: they are declared by
+# src/frontend/analyzer/xa_intrinsic_registry.def instead, because their result
+# type comes from an explicit type argument and they lower to backend ops
+# rather than to calls, so a .def row could only restate a signature nothing
+# reads.
+public_native = ["pageAlloc"]
 private_native_sources = ["stdlib/mem/mem.c"]
 private_native_reason = "Private fence, cache, allocation, page, address and bulk-byte leaves consumed by mem.xr"
 perf_suite = "stdlib/mem"

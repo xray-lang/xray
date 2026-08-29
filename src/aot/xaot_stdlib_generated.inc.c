@@ -233,27 +233,11 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.__cacheLineSize") == 0)
         return true;
-    if (strcmp(symbol, "mem.sizeOf") == 0)
-        return true;
-    if (strcmp(symbol, "mem.alignOf") == 0)
-        return true;
-    if (strcmp(symbol, "mem.offsetOf") == 0)
-        return true;
     if (strcmp(symbol, "mem.__alloc") == 0)
         return true;
     if (strcmp(symbol, "mem.__allocZeroed") == 0)
         return true;
     if (strcmp(symbol, "mem.__allocAligned") == 0)
-        return true;
-    if (strcmp(symbol, "mem.ptr") == 0)
-        return true;
-    if (strcmp(symbol, "mem.mutPtr") == 0)
-        return true;
-    if (strcmp(symbol, "mem.addr") == 0)
-        return true;
-    if (strcmp(symbol, "mem.load") == 0)
-        return true;
-    if (strcmp(symbol, "mem.store") == 0)
         return true;
     if (strcmp(symbol, "mem.__copy") == 0)
         return true;

@@ -58,6 +58,7 @@ core numeric operations, without reassigning the existing registry.
     to fix. Membership is a registry fact, never a spelling: the frozen
     definition row for the module path, selector, and arity is the authority.
 14. Every layer that admits the family states the call shape through the one
+    shared judgement in `xr_semantic_native_module_call_shape.h`. A layer may
     require an additional term only when that term is one its own artifact
     alone can state, and the reason belongs next to the term. Classification and
     exactness are verified in both directions: an exact callsite that carries no
@@ -76,11 +77,10 @@ core numeric operations, without reassigning the existing registry.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def b6c6cb203d39b640ecf255ac06cf50dcd77e6c6ea91d88ca28e3961b64fbba43
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def b82d2d08038fe71e60bda2f3d9f88b1bb7711be72b28f11a8d15eb635c7ccc4b
 anchor-sha256: src/ir/xi_method_sym.def 0ec1ca5390eb9be96b1a1fcfbf932787a39d6af810630f88c360538451359702
 anchor-sha256: src/plan/semantic/xr_semantic_native_module_call_shape.h 35d71f47cd448b0baa0980c489b6f807c5affdf0120e746f2d4cf91b81ee5194
-anchor-sha256: src/ir/xi_semantic_intrinsic.c 20a45ccefbdbda7fe02cae622bc6f64187e080ec761b288a77764473a8e86068
-    shared judgement in `xr_semantic_native_module_call_shape.h`. A layer may
+anchor-sha256: src/ir/xi_semantic_intrinsic.c 346cd01e3f1f64df7abc2a7018c1aef7dea63ed6d4db2de0cc666e9f6ef4400e
 anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e79c9ae5dd903770f799e0ef69c1805baa
 anchor-sha256: contracts/capability-deletions.tsv 0ce3ca872d9dafa777f75f8540cc92244edb082615b9733534e418afe2d40449
 anchor-sha256: scripts/check_branch_hint_surface_residue.py de29c337d4f946fda333015f97e5d78143889959e0e5956d5c2790216121283e

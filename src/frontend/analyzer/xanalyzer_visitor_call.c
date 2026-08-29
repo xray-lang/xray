@@ -667,20 +667,6 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
 }
 
-static bool xa_call_is_mem_addr(CallExprNode *call, XaSymbolLinks *fn_links) {
-    if (fn_links && fn_links->module_name && strcmp(fn_links->module_name, "mem") == 0) {
-        if (fn_links->import_member_name && strcmp(fn_links->import_member_name, "addr") == 0)
-            return true;
-    }
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "addr") != 0 || !ma->object ||
-        ma->object->type != AST_VARIABLE)
-        return false;
-    return ma->object->as.variable.name && strcmp(ma->object->as.variable.name, "mem") == 0;
-}
-
 static void xa_check_mem_addr_arg(XaInferContext *ctx, AstNode *arg_node, XrType *arg_type) {
     if (!ctx || !ctx->analyzer || !arg_node)
         return;
@@ -2721,16 +2707,6 @@ static bool xa_type_is_supported_mem_access(XrType *type) {
     }
 }
 
-static const char *xa_mem_access_member(XaInferContext *ctx, CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return NULL;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || (strcmp(ma->name, "load") != 0 && strcmp(ma->name, "store") != 0) ||
-        !xa_call_object_is_module(ctx, ma->object, "mem"))
-        return NULL;
-    return ma->name;
-}
-
 static bool xa_mem_access_endian_literal(AstNode *arg, int64_t *out_endian) {
     if (!arg)
         return false;
@@ -3388,45 +3364,6 @@ static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstN
     return type;
 }
 
-static bool xa_mem_layout_member_name(const char *name) {
-    return name && (strcmp(name, "sizeOf") == 0 || strcmp(name, "alignOf") == 0 ||
-                    strcmp(name, "offsetOf") == 0);
-}
-
-static const char *xa_mem_pointer_constructor_member(XaInferContext *ctx, CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return NULL;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || (strcmp(ma->name, "ptr") != 0 && strcmp(ma->name, "mutPtr") != 0) ||
-        !xa_call_object_is_module(ctx, ma->object, "mem"))
-        return NULL;
-    return ma->name;
-}
-
-static bool xa_mem_slice_call(XaInferContext *ctx, CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    return ma->name && strcmp(ma->name, "slice") == 0 &&
-           xa_call_object_is_module(ctx, ma->object, "mem");
-}
-
-static bool xa_mem_with_slice_mut_call(XaInferContext *ctx, CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    return ma->name && strcmp(ma->name, "withSliceMut") == 0 &&
-           xa_call_object_is_module(ctx, ma->object, "mem");
-}
-
-static bool xa_mem_assume_initialized_call(XaInferContext *ctx, CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    return ma->name && strcmp(ma->name, "assumeInitialized") == 0 &&
-           xa_call_object_is_module(ctx, ma->object, "mem");
-}
-
 static AstNode *xa_ffi_output_unwrap_expr(AstNode *node) {
     node = xa_call_unwrap_grouping(node);
     if (node && node->type == AST_UNSAFE_EXPR) {
@@ -3997,15 +3934,6 @@ static XrType *xa_mem_pointer_constructor_return_type(XaInferContext *ctx, AstNo
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, strcmp(member, "mutPtr") == 0);
 }
 
-static const char *xa_mem_layout_call_member(XaInferContext *ctx, CallExprNode *call) {
-    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
-        return NULL;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!xa_mem_layout_member_name(ma->name) || !xa_call_object_is_module(ctx, ma->object, "mem"))
-        return NULL;
-    return ma->name;
-}
-
 static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
                                          const char *member) {
     XrLocation loc = {
@@ -4075,6 +4003,91 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
     (void) size;
     (void) align;
     return xr_type_new_int(ctx->analyzer->isolate);
+}
+
+/*
+ * mem.addr accepts any Ptr<T>/MutPtr<T>.  No .def signature can spell that, so
+ * the argument contract is checked here instead of through the generic
+ * parameter path that a declared native signature would drive.
+ */
+static XrType *xa_mem_addr_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call) {
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (call->type_arg_count != 0) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   "mem.addr() does not accept explicit type arguments", &loc);
+        return xr_type_new_int(ctx->analyzer->isolate);
+    }
+    if (call->arg_count != 1 || !call->arguments || !call->arguments[0]) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   "mem.addr() expects exactly one pointer argument", &loc);
+        return xr_type_new_int(ctx->analyzer->isolate);
+    }
+    AstNode *arg_node = call->arguments[0];
+    XrType *arg_type = xa_visit_infer_expr(ctx, arg_node);
+    xa_check_mem_addr_arg(ctx, arg_node, arg_type);
+    xa_check_pointer_borrow_escape(ctx, arg_node, arg_node, arg_type,
+                                   "erase raw pointer borrow provenance with mem.addr");
+    return xr_type_new_int(ctx->analyzer->isolate);
+}
+
+/*
+ * Resolve a module-qualified call to its canonical registry identity.  The key
+ * is built from the callee's own module and member, so no module or member
+ * spelling is hardcoded here; a module function that owns no registry row
+ * simply does not resolve.
+ */
+static const XaIntrinsicDesc *xa_module_function_intrinsic(XaInferContext *ctx,
+                                                           CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name)
+        return NULL;
+    const char *module_name = xa_call_object_module_name(ctx, ma->object);
+    if (!module_name || module_name[0] == '.' || module_name[0] == '/')
+        return NULL;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "%s.%s", module_name, ma->name);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return NULL;
+    return xa_intrinsic_by_key(key);
+}
+
+/*
+ * The layout, pointer and borrow intrinsics take their result type from the
+ * explicit type argument, so the analyzer owns the result rather than reading a
+ * declared return type.  Dispatch is on the canonical lowering identity, and
+ * the member spelling comes back out of the registry key.
+ */
+static XrType *xa_mem_module_intrinsic_return_type(XaInferContext *ctx, AstNode *node,
+                                                   CallExprNode *call,
+                                                   const XaIntrinsicDesc *desc) {
+    if (!desc)
+        return NULL;
+    switch (desc->lowering) {
+        case XA_INTRINSIC_LOWERING_MEM_SIZE_OF:
+        case XA_INTRINSIC_LOWERING_MEM_ALIGN_OF:
+        case XA_INTRINSIC_LOWERING_MEM_OFFSET_OF:
+            return xa_mem_layout_return_type(ctx, node, call, xa_intrinsic_source_member(desc));
+        case XA_INTRINSIC_LOWERING_MEM_PTR:
+        case XA_INTRINSIC_LOWERING_MEM_MUT_PTR:
+            return xa_mem_pointer_constructor_return_type(ctx, node, call,
+                                                          xa_intrinsic_source_member(desc));
+        case XA_INTRINSIC_LOWERING_MEM_ADDR:
+            return xa_mem_addr_return_type(ctx, node, call);
+        case XA_INTRINSIC_LOWERING_MEM_LOAD:
+        case XA_INTRINSIC_LOWERING_MEM_STORE:
+            return xa_mem_access_return_type(ctx, node, call, xa_intrinsic_source_member(desc));
+        case XA_INTRINSIC_LOWERING_MEM_SLICE:
+            return xa_mem_slice_return_type(ctx, node, call);
+        case XA_INTRINSIC_LOWERING_MEM_WITH_SLICE_MUT:
+            return xa_mem_with_slice_mut_return_type(ctx, node, call);
+        case XA_INTRINSIC_LOWERING_MEM_ASSUME_INITIALIZED:
+            return xa_mem_assume_initialized_return_type(ctx, node, call);
+        default:
+            return NULL;
+    }
 }
 
 static const char *xa_math_module_call_member(XaInferContext *ctx, CallExprNode *call) {
@@ -6681,21 +6694,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (fn_links)
         xa_ensure_function_return_ownership_prepass(ctx, fn_links);
 
-    const char *mem_layout_member = xa_mem_layout_call_member(ctx, call);
-    if (mem_layout_member)
-        return xa_mem_layout_return_type(ctx, node, call, mem_layout_member);
-    const char *mem_pointer_member = xa_mem_pointer_constructor_member(ctx, call);
-    if (mem_pointer_member)
-        return xa_mem_pointer_constructor_return_type(ctx, node, call, mem_pointer_member);
-    if (xa_mem_slice_call(ctx, call))
-        return xa_mem_slice_return_type(ctx, node, call);
-    if (xa_mem_assume_initialized_call(ctx, call))
-        return xa_mem_assume_initialized_return_type(ctx, node, call);
-    if (xa_mem_with_slice_mut_call(ctx, call))
-        return xa_mem_with_slice_mut_return_type(ctx, node, call);
-    const char *mem_access = xa_mem_access_member(ctx, call);
-    if (mem_access)
-        return xa_mem_access_return_type(ctx, node, call, mem_access);
+    XrType *module_intrinsic_result = xa_mem_module_intrinsic_return_type(
+        ctx, node, call, xa_module_function_intrinsic(ctx, call));
+    if (module_intrinsic_result) {
+        /* Publish the canonical identity before returning: lowering must read
+         * the resolved intrinsic rather than rediscover it from the callee
+         * spelling. */
+        (void) xa_record_resolved_intrinsic_call(ctx, node, call->callee, NULL, NULL, NULL);
+        return module_intrinsic_result;
+    }
 
     if (xa_call_is_json_static_method(call, "parse") && call->type_arg_count > 0)
         return xa_visit_json_typed_parse(ctx, node, call);
@@ -7446,8 +7453,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     int fixed_param_count = rest_param_index >= 0 ? rest_param_index : param_count;
     if (!fn_links && call->callee && call->callee->type == AST_MEMBER_ACCESS)
         fn_links = xa_static_method_fn_links(ctx, call->callee);
-    bool is_mem_addr = xa_call_is_mem_addr(call, fn_links);
-
     // Caller-side default argument filling (C1): for a direct call to a named
     // function with default parameters, complete omitted trailing arguments by
     // appending session-cloned copies of the declared default expressions. This
@@ -7884,14 +7889,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     effective_arg_path_precise[slot] = path_precise && local_path[0] != '\0';
                 }
             }
-        }
-
-        if (is_mem_addr && slot == 0) {
-            xa_check_mem_addr_arg(ctx, arg_node, arg_type);
-            xa_check_pointer_borrow_escape(ctx, arg_node, arg_node, arg_type,
-                                           "erase raw pointer borrow provenance with mem.addr");
-            slot++;
-            continue;
         }
 
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
