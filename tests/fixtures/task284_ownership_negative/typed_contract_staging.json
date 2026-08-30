@@ -1,0 +1,432 @@
+{
+  "schema": "ownership-typed-contract-staging/1",
+  "activation": "staging-only-before-i1-r4",
+  "authority": "non-authoritative executable-oracle input; the integration train owns public activation after granting every required lock",
+  "train_base": {
+    "commit": "5f5df6c5778bcf9d54b3b0e9cf29cabd5e27822a",
+    "tree": "366fc89b4ebe12b5cf700021f441679e3e2b19b2"
+  },
+  "public_activation_forbidden_without": [
+    "I1/R4 clean checkpoint",
+    "LOCK-FRONTEND",
+    "LOCK-SCHEMA",
+    "LOCK-RUNTIME",
+    "LOCK-BUILD-GEN",
+    "LOCK-RESIDUE"
+  ],
+  "forbidden_compatibility": [
+    "alias",
+    "shim",
+    "legacy schema reader",
+    "dual write",
+    "dual read",
+    "fallback selector",
+    "migration flag",
+    "second planner",
+    "second executor",
+    "second cache",
+    "transition facade"
+  ],
+  "axes": {
+    "binding_use": [
+      "UNINITIALIZED",
+      "LIVE",
+      "MOVED",
+      "MAYBE_MOVED",
+      "UNKNOWN"
+    ],
+    "domain_transfer": [
+      "CANDIDATE",
+      "EXTERNAL_ALIASED",
+      "ESCAPED",
+      "UNKNOWN"
+    ],
+    "capability": [
+      "MUTABLE",
+      "CONST",
+      "SYNC",
+      "BORROW_READ",
+      "BORROW_WRITE",
+      "UNKNOWN"
+    ],
+    "loan": [
+      "READ",
+      "WRITE",
+      "RAW",
+      "VIEW",
+      "CAPTURE",
+      "CLEANUP"
+    ],
+    "view_validity": [
+      "LIVE",
+      "INVALIDATED",
+      "MAYBE_INVALIDATED",
+      "UNKNOWN"
+    ]
+  },
+  "parameter_modes": [
+    {
+      "symbol": "READ",
+      "value": 0,
+      "maximum_capability": "call-bound readonly use"
+    },
+    {
+      "symbol": "REF",
+      "value": 1,
+      "maximum_capability": "call-bound exclusive read/write place loan"
+    },
+    {
+      "symbol": "MOVE",
+      "value": 2,
+      "maximum_capability": "unique owner transfer"
+    }
+  ],
+  "receiver_contract": {
+    "ast_field": "AstMethodDecl.receiver_mode",
+    "type_field": "XrFunctionType.receiver_mode",
+    "modes": [
+      "READ",
+      "REF",
+      "MOVE"
+    ],
+    "identity_owner": "method or interface declaration and function type",
+    "body_role": "validate implementation effects do not exceed the declaration",
+    "fixed_forms": [
+      "static and receiver mode are mutually exclusive",
+      "constructor owns construction-only mutable this and declares no receiver mode",
+      "computed-property getter is READ",
+      "syntactic setter is REF",
+      "sync-interior mutation is a sealed typed-registry capability and adds no public mode"
+    ],
+    "identity_consumers": [
+      "interface",
+      "override",
+      "method item/value",
+      "API fingerprint"
+    ],
+    "override_rule": "receiver mode must exactly match the base or interface declaration",
+    "forbidden_authorities": [
+      "recursive body scan",
+      "method name",
+      "mutates_receiver boolean",
+      "backend inference"
+    ]
+  },
+  "borrow_origin_contract": {
+    "syntax_field": "AstFunctionDecl.borrow_origin_syntax",
+    "ast_origin_array": "AstBorrowOriginRef[]",
+    "function_type_named_params": "AstFunctionType.named_params are optional non-semantic names",
+    "normalized_type_field": "XrFunctionType.view_origin_set[] stores canonical (kind, parameter ordinal) rows",
+    "elision_type_field": "XrFunctionType.view_origin_was_elided is diagnostic/source-map data and not type identity",
+    "syntax_states": [
+      "OMITTED",
+      "EXPLICIT_SET"
+    ],
+    "ast_origin_kinds": [
+      "PARAM_NAME",
+      "RECEIVER",
+      "STATIC"
+    ],
+    "canonical_origin_kinds": [
+      "PARAM",
+      "RECEIVER",
+      "STATIC"
+    ],
+    "canonical_identity": "sorted and deduplicated (kind, parameter ordinal) set",
+    "kind_order": [
+      "PARAM",
+      "RECEIVER",
+      "STATIC"
+    ],
+    "eligibility": [
+      "READ parameter whose input type is a total type-system match for the returned const Slice backing storage",
+      "READ receiver whose input type is a total type-system match for the returned const Slice backing storage",
+      "verified static immutable storage"
+    ],
+    "ineligible": [
+      "REF",
+      "MOVE",
+      "local",
+      "temporary",
+      "foreign unknown"
+    ],
+    "elision": {
+      "explicit_set": "bind and validate the declared set without running elision",
+      "one_signature_candidate": "normalize to the sole candidate",
+      "multiple_signature_candidates": "reject with OWN-E-VIEW-ORIGIN-AMBIGUOUS",
+      "zero_signature_candidates": "reject with OWN-E-VIEW-ORIGIN-INVALID unless static is explicit"
+    },
+    "identity_exclusions": [
+      "parameter name",
+      "source spelling order",
+      "view_origin_was_elided",
+      "function body",
+      "call-site value flow"
+    ],
+    "required_invariants": [
+      "borrowed return origin set is nonempty",
+      "parameter ordinals are in range",
+      "parameter and receiver origins retain READ mode",
+      "each return-path provenance is a member of the normalized set",
+      "static provenance creates no invalidatable caller root"
+    ],
+    "return_surface_constraints": [
+      "the first public cut permits only direct const Slice<T> borrowed returns",
+      "tuple union enum and struct may not conceal a borrowed return",
+      "local temporary and unknown provenance cannot impersonate static or input provenance",
+      "static origin storage is readonly and lives for the program or module use period",
+      "interface extern bodyless declaration function value import sidecar and dynamic target normalize from the signature",
+      "every dynamic target has an exactly equal normalized origin set",
+      "missing sidecar or inconsistent target set fails closed"
+    ]
+  },
+  "domain_transfer_contract": {
+    "type": "XaDomainTransferState",
+    "states": [
+      {
+        "symbol": "CANDIDATE",
+        "value": 0
+      },
+      {
+        "symbol": "EXTERNAL_ALIASED",
+        "value": 1
+      },
+      {
+        "symbol": "ESCAPED",
+        "value": 2
+      },
+      {
+        "symbol": "UNKNOWN",
+        "value": 3
+      }
+    ],
+    "allowed_transitions": [
+      "CANDIDATE->EXTERNAL_ALIASED",
+      "EXTERNAL_ALIASED->ESCAPED",
+      "CANDIDATE->UNKNOWN",
+      "EXTERNAL_ALIASED->UNKNOWN",
+      "ESCAPED->UNKNOWN"
+    ],
+    "forbidden_recovery_triggers": [
+      "scope exit",
+      "last use",
+      "retain count drops to one",
+      "container overwrite"
+    ],
+    "copy_semantics": "copy creates a new candidate domain",
+    "move_semantics": "move transfers the root token of the same candidate domain"
+  },
+  "ownership_edge_contract": {
+    "type": "XaOwnershipEdgeKind",
+    "kinds": [
+      "INTERNAL_OWNED",
+      "EXTERNAL_STRONG",
+      "BORROW_READ",
+      "BORROW_WRITE",
+      "CONST_SHARED",
+      "SYNC_SHARED",
+      "WEAK",
+      "FOREIGN_OWNED",
+      "FOREIGN_BORROWED",
+      "UNKNOWN"
+    ],
+    "required_fields": [
+      "source value/place",
+      "target value/place",
+      "source domain id",
+      "target domain id",
+      "kind",
+      "provenance",
+      "creation site",
+      "complete",
+      "unknown reason"
+    ],
+    "borrow_fields": [
+      "loan boundary",
+      "view fact id"
+    ],
+    "owned_foreign_fields": [
+      "drop/finalizer policy"
+    ],
+    "internal_owned_criteria": [
+      "source and target already share one ownership domain or source enters by legal move adoption",
+      "the domain ledger owns the edge lifetime",
+      "the edge publishes no ordinary strong handle outside the domain",
+      "drop/finalizer order is complete or domain teardown handles the internal strong cycle",
+      "the edge carries no execution-affine unknown-foreign or non-transferable weak-table state"
+    ],
+    "adoption_rules": [
+      "child source domain is CANDIDATE with no loan and a complete plan",
+      "child binding becomes MOVED",
+      "child allocation/drop ledger merges or attaches to the parent ownership domain",
+      "the field edge is INTERNAL_OWNED",
+      "the parent domain transfer state does not worsen",
+      "adoption cannot cross const sync or foreign boundaries or change execution-affine finalizer constraints"
+    ],
+    "external_alias_triggers": [
+      "ordinary root handle binding or assignment",
+      "store into another ownership domain field container or closure",
+      "return an ordinary managed alias",
+      "dynamic or foreign call that may retain",
+      "publish to module mutable global or unknown storage",
+      "stored closure captures a mutable root by reference",
+      "incomplete edge provenance"
+    ],
+    "unknown_policy": "UNKNOWN edge or provenance fails closed",
+    "forbidden_classifiers": [
+      "field name",
+      "method name",
+      "function name",
+      "runtime retain count"
+    ]
+  },
+  "view_validity_contract": {
+    "type": "XaViewValidityState",
+    "states": [
+      {
+        "symbol": "LIVE",
+        "value": 0
+      },
+      {
+        "symbol": "INVALIDATED",
+        "value": 1
+      },
+      {
+        "symbol": "MAYBE_INVALIDATED",
+        "value": 2
+      },
+      {
+        "symbol": "UNKNOWN",
+        "value": 3
+      }
+    ],
+    "required_fields": [
+      "view value/binding id",
+      "canonical origin RootId set",
+      "validity state",
+      "creation/rebind site",
+      "first invalidation site",
+      "invalidation reason",
+      "escape bit",
+      "capture bit",
+      "call-active bit",
+      "complete",
+      "unknown reason"
+    ],
+    "transfer_rules": [
+      "create or rebind from an owner or proven view creates a LIVE version with a canonical origin set",
+      "read or project a LIVE view preserves its state and origin set",
+      "use of INVALIDATED, MAYBE_INVALIDATED, or UNKNOWN rejects",
+      "owner-preserving action leaves view state unchanged",
+      "owner-invalidating action atomically invalidates every tracked local view with an intersecting origin set",
+      "overwriting or leaving scope makes only that view version unreachable",
+      "an active, escaped, captured, or foreign-unknown view blocks owner invalidation"
+    ],
+    "join_table": [
+      {"left": "LIVE", "right": "LIVE", "result": "LIVE"},
+      {"left": "LIVE", "right": "INVALIDATED", "result": "MAYBE_INVALIDATED"},
+      {"left": "LIVE", "right": "MAYBE_INVALIDATED", "result": "MAYBE_INVALIDATED"},
+      {"left": "LIVE", "right": "UNKNOWN", "result": "UNKNOWN"},
+      {"left": "INVALIDATED", "right": "LIVE", "result": "MAYBE_INVALIDATED"},
+      {"left": "INVALIDATED", "right": "INVALIDATED", "result": "INVALIDATED"},
+      {"left": "INVALIDATED", "right": "MAYBE_INVALIDATED", "result": "MAYBE_INVALIDATED"},
+      {"left": "INVALIDATED", "right": "UNKNOWN", "result": "UNKNOWN"},
+      {"left": "MAYBE_INVALIDATED", "right": "LIVE", "result": "MAYBE_INVALIDATED"},
+      {"left": "MAYBE_INVALIDATED", "right": "INVALIDATED", "result": "MAYBE_INVALIDATED"},
+      {"left": "MAYBE_INVALIDATED", "right": "MAYBE_INVALIDATED", "result": "MAYBE_INVALIDATED"},
+      {"left": "MAYBE_INVALIDATED", "right": "UNKNOWN", "result": "UNKNOWN"},
+      {"left": "UNKNOWN", "right": "LIVE", "result": "UNKNOWN"},
+      {"left": "UNKNOWN", "right": "INVALIDATED", "result": "UNKNOWN"},
+      {"left": "UNKNOWN", "right": "MAYBE_INVALIDATED", "result": "UNKNOWN"},
+      {"left": "UNKNOWN", "right": "UNKNOWN", "result": "UNKNOWN"}
+    ],
+    "join_commutative": true,
+    "unknown_precedence": "UNKNOWN is the top state and absorbs every other join input",
+    "evaluation_order_rules": [
+      "data.push(len(view)) completes the READ call before receiver invalidation and is allowed",
+      "mutate(ref data, view) holds overlapping REF and view facts in one call and is rejected",
+      "owner move rebind or destroy invalidates tracked views before owner state commits",
+      "any failed check commits neither owner state nor view state",
+      "READ REF and immediate non-retaining closure loans end at the enclosing call return"
+    ],
+    "owner_effects": [
+      "PRESERVES_VIEW",
+      "INVALIDATES_VIEW",
+      "UNKNOWN_VIEW_EFFECT"
+    ],
+    "source_legality_owner": "forward validity state machine and typed invalidation effect",
+    "forbidden_legality_owners": [
+      "AST last-use",
+      "CFG future-use scan",
+      "fixed lexical block lifetime",
+      "runtime capacity"
+    ]
+  },
+  "semantic_plan_contract": {
+    "required_facts": [
+      "declared parameter/receiver contract",
+      "normalized borrowed-return origin set",
+      "binding movedness proof",
+      "domain transfer proof",
+      "view origin/validity/invalidation plan",
+      "call-bound loan scopes",
+      "ownership edge/domain closure",
+      "allocation/storage/drop plan",
+      "boundary transfer action",
+      "proof/certificate ids"
+    ],
+    "domain_plan_required_facts": [
+      "domain id",
+      "root value id",
+      "transfer state and first witness",
+      "allocation sites",
+      "internal edge closure",
+      "outbound const/sync/weak/foreign edges",
+      "drop/finalizer ledger",
+      "storage domain",
+      "transfer capability",
+      "complete and unknown reasons"
+    ],
+    "required_types": [
+      "XaDomainTransferState",
+      "XaOwnershipEdgeKind",
+      "XaOwnershipEdge[]",
+      "XaOwnershipDomainPlan",
+      "XaDomainAdoptionPlan",
+      "XaViewFact",
+      "XaOwnerViewIndex",
+      "XaCallBoundLoan"
+    ],
+    "independent_checker_obligations": [
+      "borrowed return origin set is nonempty sorted deduplicated and ordinal-bounded",
+      "parameter and receiver origins are READ and type eligible",
+      "every return provenance is a member of the normalized origin set",
+      "each invalidation and its owner mutation or move share one plan node",
+      "every intersecting local view has a validity transition",
+      "active escaped and unknown views are never silently marked dead",
+      "every view join is a row in the frozen validity join table"
+    ],
+    "atomicity_invariant": "owner invalidation and every intersecting local-view transition are one semantic action",
+    "fingerprint_role": "byte integrity only; structural and semantic verification remains mandatory"
+  },
+  "target_plan_contract": {
+    "allowed_choices": [
+      "target-specific representation",
+      "layout",
+      "slot/call convention",
+      "materialization"
+    ],
+    "forbidden_inference": [
+      "alias versus owned edge",
+      "receiver mode",
+      "borrowed origin",
+      "domain transfer eligibility",
+      "storage domain",
+      "view validity or invalidation",
+      "call-bound loan scope",
+      "allocation drop or boundary-transfer action",
+      "source legality from backend liveness",
+      "ownership from VM, C, or helper names"
+    ]
+  }
+}
