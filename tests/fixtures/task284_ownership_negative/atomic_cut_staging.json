@@ -310,6 +310,7 @@
       "positive_gates": [
         "all inventory residue reaches its declared zero replacement or bound",
         "contract freeze and hostile artifact checks",
+        "schema-3 live refusal census has exact row-local diagnostic bindings and no evidence debt or ratchet drift",
         "full sanitizer differential and provider gates"
       ],
       "negative_reasons": [
@@ -351,6 +352,7 @@
         "meta-ownership-inventory",
         "generated-c-w1-w4",
         "contract-freeze-and-hostile-artifact",
+        "live-refusal-schema3-row-binding",
         "asan-focused",
         "aot-ubsan-generated-output",
         "lsan-strict",
@@ -426,6 +428,13 @@
       "status": "UNRUN",
       "evidence": [],
       "blocking_reason": "schema cache artifact and contract identities are not activated"
+    },
+    {
+      "id": "live-refusal-schema3-row-binding",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires clean current source and an exact Ninja Release VM-fastpaths-off matching binary and provider, schema 3 exclusively, exactly one registered diagnostic on every source-emitted raw-log row, zero evidence debt, and zero refusal-ratchet drift"
     },
     {
       "id": "asan-focused",

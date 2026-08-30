@@ -177,7 +177,7 @@ ALLOWED_LOCKS = {
 }
 EXPECTED_STAGING_SHA256 = {
     "typed_contract_staging.json": "71d03bbbb4d7ebc19dce5411ad5e4616b902b11e2a02979ac52e49a19d830cf3",
-    "atomic_cut_staging.json": "0f36c98c79f0964f70b57657814962a203f14d3c4f929d0c5d0502bcfd24f75b",
+    "atomic_cut_staging.json": "64572246356679d8791addc3ec34a2a17e7800a7a252463eddad580eff54b19c",
 }
 EXPECTED_STAGING_FILES = {TYPED_CONTRACT_PATH.name, ATOMIC_CUT_PATH.name}
 EXPECTED_TYPED_AUTHORITY = (
@@ -384,7 +384,9 @@ EXPECTED_CUT_NODE_DETAILS = {
         ],
         [
             "all inventory residue reaches its declared zero replacement or bound",
-            "contract freeze and hostile artifact checks", "full sanitizer differential and provider gates",
+            "contract freeze and hostile artifact checks",
+            "schema-3 live refusal census has exact row-local diagnostic bindings and no evidence debt or ratchet drift",
+            "full sanitizer differential and provider gates",
         ],
     ),
 }
@@ -424,6 +426,12 @@ EXPECTED_ACTIVATION_GATES = [
     (
         "contract-freeze-and-hostile-artifact", "retirement-contract",
         "schema cache artifact and contract identities are not activated",
+    ),
+    (
+        "live-refusal-schema3-row-binding", "retirement-contract",
+        "requires clean current source and an exact Ninja Release VM-fastpaths-off matching "
+        "binary and provider, schema 3 exclusively, exactly one registered diagnostic on every "
+        "source-emitted raw-log row, zero evidence debt, and zero refusal-ratchet drift",
     ),
     (
         "asan-focused", "retirement-contract",
@@ -1492,6 +1500,14 @@ def self_test(
     mutations.append((
         "retirement without generated-output UBSan", copy.deepcopy(inventory),
         copy.deepcopy(oracles), copy.deepcopy(typed_contract), missing_retirement_gate,
+    ))
+    missing_live_refusal_gate = copy.deepcopy(atomic_cut)
+    missing_live_refusal_gate["nodes"][-1]["required_activation_gate_ids"].remove(
+        "live-refusal-schema3-row-binding"
+    )
+    mutations.append((
+        "retirement without schema-3 live-refusal qualification", copy.deepcopy(inventory),
+        copy.deepcopy(oracles), copy.deepcopy(typed_contract), missing_live_refusal_gate,
     ))
     dual_runtime = copy.deepcopy(atomic_cut)
     dual_runtime["activation_batch"]["forbidden_shortcuts"].remove("runtime fallback")
