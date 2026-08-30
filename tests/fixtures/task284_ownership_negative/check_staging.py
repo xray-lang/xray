@@ -17,6 +17,7 @@ INVENTORY_PATH = HERE / "boundary_inventory.json"
 ORACLES_PATH = HERE / "negative_oracles.json"
 TYPED_CONTRACT_PATH = HERE / "typed_contract_staging.json"
 ATOMIC_CUT_PATH = HERE / "atomic_cut_staging.json"
+ACTIVATION_GATE_PATH = HERE / "activation_gate_staging.json"
 POSITIVE_FIXTURE_DIR = HERE.parent / "task284_ownership_positive"
 
 FROZEN_COMMIT = "49f71d1ea0f8e12aa2af8e64fb5d8d1c6f3ee79c"
@@ -1192,8 +1193,11 @@ ALLOWED_LOCKS = {
 EXPECTED_STAGING_SHA256 = {
     "typed_contract_staging.json": "3f496e67fae72bcb68fc40952ab8ca5927e58a55cf7b08e3f34a7163364111a1",
     "atomic_cut_staging.json": "1622d25d463bb3988a6a54f2c550adf9948d2a9f895f34567c7f670aa47eed9f",
+    "activation_gate_staging.json": "7c2cc74b5afcc2af0ee2d735dd6902ef1d767ced2097310d1a25e6d18bacfbef",
 }
-EXPECTED_STAGING_FILES = {TYPED_CONTRACT_PATH.name, ATOMIC_CUT_PATH.name}
+EXPECTED_STAGING_FILES = {
+    TYPED_CONTRACT_PATH.name, ATOMIC_CUT_PATH.name, ACTIVATION_GATE_PATH.name,
+}
 EXPECTED_TYPED_AUTHORITY = (
     "non-authoritative executable-oracle input; the integration train owns public activation "
     "after granting every required lock"
@@ -1201,6 +1205,23 @@ EXPECTED_TYPED_AUTHORITY = (
 EXPECTED_CUT_AUTHORITY = (
     "non-authoritative dependency and deletion ledger for one integration-train activation batch"
 )
+EXPECTED_GATE_AUTHORITY = (
+    "non-authoritative executable gate ledger; CURRENT identifies an existing entrypoint and "
+    "never a Task 284 PASS"
+)
+EXPECTED_CURRENT_ENTRYPOINT_SEMANTICS = (
+    "CURRENT means the repository has a complete command entrypoint; every gate remains UNRUN "
+    "until the atomic public cut and its exact activated assets are present"
+)
+EXPECTED_GATE_METADATA_CANONICAL_SHA256 = (
+    "2f3336d73107b1354d046a0a01fc0a2221fbe477cdf322558a6541c5a3afdc21"
+)
+EXPECTED_CURRENT_GATE_IDS = {
+    "matching-default-release-binary",
+    "meta-ownership-inventory",
+    "contract-freeze-and-hostile-artifact",
+    "live-refusal-schema3-row-binding",
+}
 EXPECTED_BORROW_ELISION = {
     "explicit_set": "bind and validate the declared set without running elision",
     "one_signature_candidate": "normalize to the sole candidate",
@@ -2568,21 +2589,94 @@ def validate_atomic_cut(data: dict[str, object], inventory: dict[str, object]) -
         raise ValidationError("atomic cut external boundary changed")
 
 
+def validate_activation_gate_metadata(
+    data: dict[str, object], atomic_cut: dict[str, object],
+) -> None:
+    require_exact_keys(data, {
+        "schema", "activation", "authority", "train_base",
+        "current_entrypoint_semantics", "gates", "delivery_state",
+    }, "activation gate metadata")
+    canonical = json.dumps(
+        data, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8")
+    if hashlib.sha256(canonical).hexdigest() != EXPECTED_GATE_METADATA_CANONICAL_SHA256:
+        raise ValidationError("activation gate metadata content changed")
+    if data.get("schema") != "ownership-activation-gate-staging/1":
+        raise ValidationError("activation gate metadata schema changed")
+    if data.get("activation") != "staging-only-before-i1-r4":
+        raise ValidationError("activation gate metadata boundary changed")
+    if data.get("authority") != EXPECTED_GATE_AUTHORITY:
+        raise ValidationError("activation gate metadata claims qualification authority")
+    if data.get("train_base") != {"commit": TRAIN_COMMIT, "tree": TRAIN_TREE}:
+        raise ValidationError("activation gate metadata train base changed")
+    if data.get("current_entrypoint_semantics") != EXPECTED_CURRENT_ENTRYPOINT_SEMANTICS:
+        raise ValidationError("CURRENT activation entrypoint semantics changed")
+    if data.get("delivery_state") != "NOT_READY":
+        raise ValidationError("activation gate metadata must remain NOT_READY")
+
+    expected_ids = [gate[0] for gate in EXPECTED_ACTIVATION_GATES]
+    gates = require_exact_ids(data.get("gates"), set(expected_ids), "activation gate metadata")
+    if [gate.get("id") for gate in gates] != expected_ids:
+        raise ValidationError("activation gate metadata order changed")
+    required_keys = {
+        "id", "owner", "entrypoint_state", "commands", "cwd", "environment",
+        "required_host_provider", "skip_policy", "pass_criteria", "evidence_artifacts",
+        "future_assets",
+    }
+    for gate in gates:
+        gate_id = str(gate["id"])
+        require_exact_keys(gate, required_keys, f"activation gate metadata {gate_id}")
+        expected_state = "CURRENT" if gate_id in EXPECTED_CURRENT_GATE_IDS else "NEEDS_ACTIVATED_CASE"
+        if gate.get("entrypoint_state") != expected_state:
+            raise ValidationError(f"activation gate metadata {gate_id} entrypoint state changed")
+        for field in (
+            "owner", "cwd", "environment", "required_host_provider", "skip_policy",
+            "pass_criteria",
+        ):
+            require_text(gate, field, f"activation gate metadata {gate_id}")
+        if gate.get("cwd") != "repository-root":
+            raise ValidationError(f"activation gate metadata {gate_id} cwd changed")
+        commands = require_text_list(gate, "commands", f"activation gate metadata {gate_id}")
+        if any(
+            "--config" in command or command.lstrip().lower().startswith("make ")
+            for command in commands
+        ):
+            raise ValidationError(f"activation gate metadata {gate_id} violates Ninja rules")
+        require_text_list(
+            gate, "evidence_artifacts", f"activation gate metadata {gate_id}"
+        )
+        require_text_list(gate, "future_assets", f"activation gate metadata {gate_id}")
+
+    atomic_records = atomic_cut.get("activation_gates")
+    if not isinstance(atomic_records, list):
+        raise ValidationError("atomic activation gate records are unavailable")
+    if [record.get("id") for record in atomic_records if isinstance(record, dict)] != expected_ids:
+        raise ValidationError("activation metadata and atomic gate ids disagree")
+    if any(
+        not isinstance(record, dict) or record.get("status") != "UNRUN"
+        or record.get("evidence") != [] for record in atomic_records
+    ):
+        raise ValidationError("activation metadata cannot qualify an atomic gate")
+
+
 def validate(
     inventory: dict[str, object], oracles: dict[str, object], typed_contract: dict[str, object],
-    atomic_cut: dict[str, object],
+    atomic_cut: dict[str, object], activation_gates: dict[str, object] | None = None,
 ) -> None:
+    if activation_gates is None:
+        activation_gates = load_json(ACTIVATION_GATE_PATH)
     validate_staging_file_hashes()
     validate_positive_fixtures()
     validate_inventory(inventory)
     validate_oracles(oracles)
     validate_typed_contract(typed_contract)
     validate_atomic_cut(atomic_cut, inventory)
+    validate_activation_gate_metadata(activation_gates, atomic_cut)
 
 
 def self_test(
     inventory: dict[str, object], oracles: dict[str, object], typed_contract: dict[str, object],
-    atomic_cut: dict[str, object],
+    atomic_cut: dict[str, object], activation_gates: dict[str, object],
 ) -> None:
     for name, expected in EXPECTED_STAGING_SHA256.items():
         try:
@@ -2973,6 +3067,52 @@ def self_test(
             continue
         raise ValidationError(f"self-test mutation was accepted: {label}")
 
+    gate_mutations: list[tuple[str, dict[str, object]]] = []
+    missing_gate_metadata = copy.deepcopy(activation_gates)
+    missing_gate_metadata["gates"] = missing_gate_metadata["gates"][:-1]
+    gate_mutations.append(("missing activation gate metadata", missing_gate_metadata))
+    reordered_gate_metadata = copy.deepcopy(activation_gates)
+    reordered_gate_metadata["gates"][0], reordered_gate_metadata["gates"][1] = (
+        reordered_gate_metadata["gates"][1], reordered_gate_metadata["gates"][0]
+    )
+    gate_mutations.append(("reordered activation gate metadata", reordered_gate_metadata))
+    false_current_gate = copy.deepcopy(activation_gates)
+    false_current_gate["gates"][1]["entrypoint_state"] = "CURRENT"
+    gate_mutations.append(("false current activation entrypoint", false_current_gate))
+    downgraded_current_gate = copy.deepcopy(activation_gates)
+    downgraded_current_gate["gates"][0]["entrypoint_state"] = "NEEDS_ACTIVATED_CASE"
+    gate_mutations.append(("downgraded current activation entrypoint", downgraded_current_gate))
+    empty_gate_command = copy.deepcopy(activation_gates)
+    empty_gate_command["gates"][0]["commands"] = []
+    gate_mutations.append(("empty activation gate command", empty_gate_command))
+    false_gate_command = copy.deepcopy(activation_gates)
+    false_gate_command["gates"][0]["commands"] = ["true"]
+    gate_mutations.append(("false activation gate command", false_gate_command))
+    weakened_skip_policy = copy.deepcopy(activation_gates)
+    weakened_skip_policy["gates"][11]["skip_policy"] = "all skips pass"
+    gate_mutations.append(("weakened sanitizer skip policy", weakened_skip_policy))
+    substituted_provider = copy.deepcopy(activation_gates)
+    substituted_provider["gates"][17]["required_host_provider"] = "anything"
+    gate_mutations.append(("substituted provider requirement", substituted_provider))
+    substituted_future_asset = copy.deepcopy(activation_gates)
+    substituted_future_asset["gates"][11]["future_assets"] = ["placeholder"]
+    gate_mutations.append(("substituted future activation asset", substituted_future_asset))
+    deleted_future_asset = copy.deepcopy(activation_gates)
+    deleted_future_asset["gates"][11]["future_assets"] = []
+    gate_mutations.append(("deleted future activation asset", deleted_future_asset))
+    qualified_gate_metadata = copy.deepcopy(activation_gates)
+    qualified_gate_metadata["gates"][0]["status"] = "PASS"
+    gate_mutations.append(("qualified activation gate metadata", qualified_gate_metadata))
+    non_ninja_command = copy.deepcopy(activation_gates)
+    non_ninja_command["gates"][0]["commands"][1] = "cmake --build build --config Release"
+    gate_mutations.append(("multi-config activation command", non_ninja_command))
+    for label, mutated_gates in gate_mutations:
+        try:
+            validate_activation_gate_metadata(mutated_gates, atomic_cut)
+        except ValidationError:
+            continue
+        raise ValidationError(f"self-test mutation was accepted: {label}")
+
 
 def main(argv: list[str]) -> int:
     try:
@@ -2981,9 +3121,10 @@ def main(argv: list[str]) -> int:
         oracles = load_json(ORACLES_PATH)
         typed_contract = load_json(TYPED_CONTRACT_PATH)
         atomic_cut = load_json(ATOMIC_CUT_PATH)
-        validate(inventory, oracles, typed_contract, atomic_cut)
+        activation_gates = load_json(ACTIVATION_GATE_PATH)
+        validate(inventory, oracles, typed_contract, atomic_cut, activation_gates)
         if "--self-test" in argv:
-            self_test(inventory, oracles, typed_contract, atomic_cut)
+            self_test(inventory, oracles, typed_contract, atomic_cut, activation_gates)
     except ValidationError as exc:
         print(f"ownership source-contract staging: FAIL: {exc}", file=sys.stderr)
         return 1
@@ -2991,7 +3132,7 @@ def main(argv: list[str]) -> int:
     print(
         f"ownership source-contract staging: PASS: {len(EXPECTED_ROWS)} owner rows, "
         f"{len(EXPECTED_CASES)} negative oracles, {len(EXPECTED_CUT_ORDER)} atomic-cut nodes, "
-        f"{len(EXPECTED_ACTIVATION_GATES)} activation gates{suffix}"
+        f"{len(EXPECTED_ACTIVATION_GATES)} executable activation gates{suffix}"
     )
     return 0
 
