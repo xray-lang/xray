@@ -1,0 +1,136 @@
+path	line	enum	variant	proposed_fields	review	evidence
+demos/07-advanced/testing.xr	8	TestErr	Expected	message	confirmed	domain error payload
+stdlib/cluster/cluster.xr	116	AddressError	MissingPort	address	confirmed	address parser input
+stdlib/cluster/cluster.xr	117	AddressError	InvalidHost	host	confirmed	variant domain
+stdlib/cluster/cluster.xr	118	AddressError	InvalidPort	port	confirmed	variant domain
+stdlib/csv/csv.xr	9	CsvDelimiter	Exact	delimiter	confirmed	parse option terminology
+stdlib/csv/csv.xr	16	CsvHeader	Explicit	names	confirmed	header-name payload
+stdlib/csv/csv.xr	45	CsvError	InvalidOption	message	confirmed	diagnostic text
+stdlib/csv/csv.xr	46	CsvError	InputLimitExceeded	limit	confirmed	variant domain
+stdlib/csv/csv.xr	47	CsvError	FieldLimitExceeded	limit	confirmed	variant domain
+stdlib/csv/csv.xr	48	CsvError	ColumnLimitExceeded	limit	confirmed	variant domain
+stdlib/csv/csv.xr	49	CsvError	UnterminatedQuote	byteOffset,line,record,column,message	confirmed	CsvDiagnostic fields
+stdlib/csv/csv.xr	50	CsvError	InvalidEscape	byteOffset,line,record,column,message	confirmed	CsvDiagnostic fields
+stdlib/csv/csv.xr	51	CsvError	FieldCountMismatch	byteOffset,line,record,column,message	confirmed	CsvDiagnostic fields
+stdlib/http/http.xr	1242	HttpError	InvalidHeaderName	name	confirmed	variant domain
+stdlib/http/http.xr	1243	HttpError	InvalidHeaderValue	value	confirmed	variant domain
+stdlib/http/http.xr	1244	HttpError	InvalidMethod	method	confirmed	variant domain
+stdlib/http/http.xr	1245	HttpError	InvalidUrl	url	confirmed	variant domain
+stdlib/http/http.xr	1246	HttpError	ConnectionFailed	target	confirmed	connection target text
+stdlib/http/http.xr	1247	HttpError	ProtocolError	reason	confirmed	protocol failure reason
+stdlib/http/http.xr	1249	HttpError	UnsupportedVersion	version	confirmed	HttpVersion payload
+stdlib/types/channel.xr	4	Recv	Value	value	confirmed	public API vocabulary
+stdlib/types/coroutine.xr	4	TaskResult	Success	value	confirmed	public API vocabulary
+stdlib/types/coroutine.xr	5	TaskResult	Failed	error	confirmed	Error payload
+stdlib/url/url.xr	10	UrlError	InvalidPercentEncoding	byteOffset	confirmed	parser location
+stdlib/xml/xml.xr	42	XmlNode	Document	children	confirmed	node model
+stdlib/xml/xml.xr	43	XmlNode	Element	name,attributes,children	confirmed	Xml element model
+stdlib/xml/xml.xr	44	XmlNode	Text	content	confirmed	constructor terminology
+stdlib/xml/xml.xr	45	XmlNode	Comment	content	confirmed	constructor terminology
+stdlib/xml/xml.xr	46	XmlNode	CData	content	confirmed	constructor terminology
+stdlib/xml/xml.xr	47	XmlNode	ProcessingInstruction	target,data	confirmed	XML processing instruction model
+stdlib/xml/xml.xr	173	XmlError	Parse	diagnostic	confirmed	XmlDiagnostic payload
+stdlib/xml/xml.xr	174	XmlError	Io	message	confirmed	I/O error text
+stdlib/yaml/yaml.xr	98	YamlValue	Boolean	value	confirmed	scalar payload
+stdlib/yaml/yaml.xr	99	YamlValue	Integer	value	confirmed	scalar payload
+stdlib/yaml/yaml.xr	100	YamlValue	Float	value	confirmed	scalar payload
+stdlib/yaml/yaml.xr	101	YamlValue	String	value	confirmed	scalar payload
+stdlib/yaml/yaml.xr	102	YamlValue	Binary	bytes	confirmed	Array<u8> payload
+stdlib/yaml/yaml.xr	103	YamlValue	Sequence	items	confirmed	consumer binding terminology
+stdlib/yaml/yaml.xr	104	YamlValue	Mapping	mapping	confirmed	YamlMapping payload
+stdlib/yaml/yaml.xr	105	YamlValue	Tagged	tagged	confirmed	YamlTagged payload
+stdlib/yaml/yaml.xr	106	YamlValue	Alias	anchor	confirmed	YamlAnchor payload
+stdlib/yaml/yaml.xr	133	YamlError	Parse	diagnostic	confirmed	YamlDiagnostic payload
+stdlib/yaml/yaml.xr	134	YamlError	Io	message	confirmed	I/O error text
+tests/aot/basic/adt_match_static_tag_payload.xr	2	FastResult	Ok	value	confirmed	result convention
+tests/aot/basic/adt_match_static_tag_payload.xr	3	FastResult	Err	code	confirmed	test bindings
+tests/aot/basic/enum_descriptor_erased_boundaries.xr	8	BoundaryState	Busy	value	confirmed	stable value name for the single opaque descriptor payload
+tests/aot/basic/enum_descriptor_union_escape.xr	8	State	Busy	value	confirmed	stable value name for the single opaque descriptor payload
+tests/aot/basic/generic_enum_tuple_payload.xr	4	DecodeResult	Ok	value	confirmed	result convention
+tests/aot/basic/generic_enum_tuple_payload.xr	5	DecodeResult	Err	error	confirmed	result convention
+tests/aot/coro/scope.xr	11	ScopeAotErr	Msg	message	confirmed	error message
+tests/aot/filetests/cgen/adt_match_multi_payload_aggregate.xr	2	PairResult	Pair	left,right	confirmed	pair convention
+tests/aot/filetests/cgen/adt_match_static_tag_payload.xr	2	FastResult	Ok	value	confirmed	result convention
+tests/aot/filetests/cgen/adt_match_static_tag_payload.xr	3	FastResult	Err	code	confirmed	test bindings
+tests/aot/filetests/cgen/adt_payload_class_exact_type_check.xr	10	Payload	Item	value	confirmed	payload convention
+tests/aot/filetests/cgen/adt_print_multi_payload_boxed.xr	2	PairResult	Pair	left,right	confirmed	pair convention
+tests/aot/filetests/cgen/coro_transitive_enum_owned_result.xr	9	Outcome	Unit	id,generation	confirmed	fully named mirror in test_xi_cgen.c
+tests/aot/filetests/cgen/coro_transitive_enum_owned_result.xr	10	Outcome	Echo	id,generation,payload	confirmed	fully named mirror in test_xi_cgen.c
+tests/aot/filetests/cgen/coro_transitive_enum_owned_result.xr	11	Outcome	State	id,generation,n	confirmed	fully named mirror in test_xi_cgen.c
+tests/aot/filetests/cgen/coro_transitive_enum_owned_result.xr	12	Outcome	Failed	reason	confirmed	fully named mirror in test_xi_cgen.c
+tests/aot/filetests/cgen/map_get_payload_enum_direct_return.xr	3	Item	Number	value	confirmed	numeric payload
+tests/aot/filetests/link/freestanding_enum_payload_error_channel.xr	2	FsErr	Bad	code	confirmed	test bindings
+tests/aot/filetests/link/freestanding_enum_payload_untyped_catch_reject.xr	2	FsErr	Bad	code	confirmed	test bindings
+tests/aot/filetests/link/freestanding_enum_payload_value.xr	2	FastResult	Ok	value	confirmed	result convention
+tests/aot/filetests/link/freestanding_enum_payload_value.xr	3	FastResult	Err	code	confirmed	test bindings
+tests/aot/filetests/link/no_alloc_enum_descriptor_erasure_reject.xr	8	NoAllocState	Busy	value	confirmed	stable value name for the single opaque descriptor payload
+tests/aot/modules/enum_payload_import_dep.xr	3	SharedError	Invalid	message	confirmed	error message
+tests/aot/modules/enum_payload_import_dep.xr	9	SharedResult	Ok	value	confirmed	result convention
+tests/aot/modules/enum_payload_import_dep.xr	10	SharedResult	Err	error	confirmed	result convention
+tests/aot/modules/enum_payload_import_dep.xr	14	MirroredResult	Ok	value	confirmed	result convention
+tests/aot/modules/enum_payload_import_dep.xr	15	MirroredResult	Err	error	confirmed	result convention
+tests/aot/modules/enum_result_lib.xr	4	FastResult	Ok	value	confirmed	result convention
+tests/aot/modules/enum_result_lib.xr	5	FastResult	Err	code	confirmed	test bindings
+tests/aot/modules/reexport_enum_error_lib.xr	2	ReexportError	Invalid	actual,expected	confirmed	pattern bindings prove order
+tests/builtin_probes/error.xr	1	ProbeErr	Failed	message	confirmed	error message
+tests/compile_errors/ownership/187_match_rejects_unknown_generic_variant.xr	3	Box	Full	value	confirmed	container convention
+tests/compile_errors/type/094_enum_recursive_payload_rejected.xr	2	Expr	Number	value	confirmed	numeric node payload
+tests/compile_errors/type/095_enum_generic_recursive_payload_rejected.xr	3	List	Cons	head,tail	confirmed	list convention
+tests/compile_errors/type/096_enum_payload_constructor_not_value.xr	2	Result	Ok	value	confirmed	result convention
+tests/compile_errors/type/096_enum_payload_constructor_not_value.xr	3	Result	Err	error	confirmed	result convention
+tests/compile_errors/type/097_enum_payload_constructor_arg_type.xr	2	Result	Ok	value	confirmed	result convention
+tests/compile_errors/type/097_enum_payload_constructor_arg_type.xr	3	Result	Err	error	confirmed	result convention
+tests/compile_errors/type/span_enum_payload_escape.xr	2	Hold	Slice	view	confirmed	Slice payload
+tests/coroutine_safety/11_monitoring_debug.xr	11	MonDebugErr	Msg	message	confirmed	error message
+tests/diff/cases/match/adt_enum_nonpayload_variant.xr	12	Shape	Circle	radius	confirmed	shape domain
+tests/diff/cases/match/adt_enum_nonpayload_variant.xr	13	Shape	Square	side	confirmed	shape domain
+tests/diff/cases/match/adt_enum_payload_tostring.xr	11	E	A	value	confirmed	generic single payload
+tests/diff/cases/match/adt_enum_payload_tostring.xr	12	P	Pair	first,second	confirmed	pair convention
+tests/diff/cases/match/adt_enum_payload_tostring.xr	13	W	Wrap	value	confirmed	wrapper convention
+tests/diff/cases/semantics/collections/enum_payload_equality.xr	4	E	A	value	confirmed	consumer semantics
+tests/diff/cases/semantics/collections/enum_payload_equality.xr	4	E	B	value	confirmed	consumer semantics
+tests/diff/cases/semantics/collections/enum_payload_equality.xr	5	K	Id	id	confirmed	variant domain
+tests/diff/cases/semantics/collections/enum_payload_equality.xr	5	K	Name	name	confirmed	variant domain
+tests/diff/cases/semantics/coro/coroutine_throws_unit_variant.xr	14	E2	Code	code	confirmed	variant domain
+tests/diff/cases/semantics/coro/scope_child_failure_isolation.xr	1	DiffScopeErr	Msg	message	confirmed	error message
+tests/diff/cases/semantics/coro/task_result_failed_error_value.xr	1	TaskResultErr	Msg	message	confirmed	error message
+tests/diff/cases/semantics/exception/array_class_throw_cleanup_lifetime.xr	3	ParseError	Invalid	code	confirmed	test bindings
+tests/diff/cases/semantics/oop/enum_class_payload_aggregate.xr	29	Node	Document	children	confirmed	node model
+tests/diff/cases/semantics/oop/enum_class_payload_aggregate.xr	30	Node	Element	name,attributes,children	confirmed	node model
+tests/diff/cases/semantics/oop/enum_class_payload_aggregate.xr	31	Node	Text	content	confirmed	text node payload
+tests/diff/cases/semantics/oop/enum_dynamic_read_aggregate.xr	14	Node	Leaf	value	confirmed	tree convention
+tests/diff/cases/semantics/oop/enum_dynamic_read_aggregate.xr	15	Node	Branch	children	confirmed	tree convention
+tests/diff/cases/semantics/oop/enum_namespace_ctor_with_nullable.xr	12	E	Num	value	confirmed	numeric payload
+tests/diff/cases/semantics/oop/enum_namespace_ctor_with_nullable.xr	13	E	Pair	left,right	confirmed	pair convention
+tests/diff/cases/semantics/oop/enum_nullable_materialize.xr	16	E	A	value	confirmed	generic single payload
+tests/diff/cases/semantics/types/enum_type_name.xr	14	Shape	Circle	radius	confirmed	shape domain
+tests/regression/08_error_handling/0830_throw_catch_value_return.xr	4	AppErr	NotFound	key	confirmed	lookup failure key
+tests/regression/08_error_handling/modules/error_source.xr	4	ValidationErr	TooLong	length	confirmed	variant domain
+tests/regression/09_advanced/0901_adt_enum.xr	12	Shape	Circle	radius	confirmed	shape domain
+tests/regression/09_advanced/0901_adt_enum.xr	13	Shape	Square	side	confirmed	shape domain
+tests/regression/09_advanced/0901_adt_enum.xr	19	Tree	Leaf	value	confirmed	tree convention
+tests/regression/09_advanced/0901_adt_enum.xr	20	Tree	Branch	value	confirmed	branch stores one node value and the fixture binds it as v
+tests/regression/09_advanced/0953_typed_multi_catch.xr	6	CatchErr	Msg	message	confirmed	error message
+tests/regression/09_advanced/0953_typed_multi_catch.xr	7	OtherErr	Msg	message	confirmed	error message
+tests/regression/09_advanced/0958_try_optional.xr	6	OptErr	Msg	message	confirmed	error message
+tests/regression/09_advanced/0959_try_force.xr	7	ForceErr	Msg	message	confirmed	error message
+tests/regression/09_advanced/0960_enum_static_iteration_metadata.xr	24	PositionalPayload	Pair	left,right	confirmed	pair order is explicitly observed as left then right
+tests/regression/10_stdlib/modules/generic_result_lib.xr	6	Result	Ok	value	confirmed	result convention
+tests/regression/10_stdlib/modules/generic_result_lib.xr	7	Result	Err	error	confirmed	result convention
+tests/regression/11_coroutine/1132_task_monitor.xr	3	MonitorErr	Msg	message	confirmed	error message
+tests/regression/11_coroutine/1134_linked_go_propagation.xr	3	LinkErr	Msg	message	confirmed	error message
+tests/regression/11_coroutine/1135_scope_child_errors.xr	6	SvErr	Msg	message	confirmed	error message
+tests/regression/11_coroutine/1136_task_link.xr	5	LinkErr	Msg	message	confirmed	error message
+tests/regression/11_coroutine/1137_await_any_success.xr	6	CoroErr	Msg	message	confirmed	error message
+tests/regression/11_coroutine/1143_syscall_handoff.xr	11	HandoffErr	Failed	message	confirmed	error message
+tests/regression/11_coroutine/1145_coro_error_patterns.xr	29	CoroErr	Msg	message	confirmed	error message
+tests/regression/11_coroutine/1148_scope_race_stress.xr	7	RaceErr	Msg	message	confirmed	error message
+tests/regression/11_coroutine/1172_enum_descriptor_erased_transfer.xr	8	TransferState	Busy	value	confirmed	stable value name for the single opaque descriptor payload
+tests/regression/13_types/0400_generic_where_clause.xr	34	Wrap	One	value	confirmed	wrapper convention
+tests/regression/dap/fixtures/exception.xr	3	DapErr	Test	message	confirmed	error message
+tests/unit/fixtures/assertion/deep_equality_vm.xr	2	Choice	Value	value	confirmed	variant convention
+tests/work_stealing/01_basic_stealing.xr	10	WsErr	Failed	message	confirmed	error message
+tests/work_stealing/02_fairness_test.xr	10	WsErr	Failed	message	confirmed	error message
+tests/work_stealing/03_burst_workload.xr	10	WsErr	Failed	message	confirmed	error message
+tests/work_stealing/04_mixed_workload.xr	10	WsErr	Failed	message	confirmed	error message
+tests/work_stealing/06_chain_spawn.xr	10	WsErr	Failed	message	confirmed	error message

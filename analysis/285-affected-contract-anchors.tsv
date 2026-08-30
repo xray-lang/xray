@@ -1,0 +1,15 @@
+contract	surfaces	impact_to_verify	planned_evidence	lock	status
+contracts/program-semantic-closure.md	284,enum	new receiver and EnumVariantSchema authority must be complete before Xi	PSC structural and mutation checks	LOCK-SCHEMA	impact-only
+contracts/effect-semantics.md	284,enum,property	receiver modes, initializer cleanup and explicit-method effects must remain declared facts	positive and hostile semantic-plan cases	LOCK-SCHEMA	impact-only
+contracts/target-abi.md	enum,property	canonical enum operands must preserve ADT constructor ABI and accessor rows must disappear	VM/AOT shape and provider evidence	LOCK-SCHEMA	impact-only
+contracts/typed-target-plan-execution.md	enum,property	one verified slot/call contract must feed typed VM and AOT	target mutation and differential gates	LOCK-SCHEMA	impact-only
+contracts/rc-contract.md	284,enum	initializer failure, selected pattern fields and ownership transfer must remain exactly once	ARC/source-move verifier and sanitizer cases	LOCK-SCHEMA	impact-only
+contracts/runtime-target-plan-load.md	enum,property	loaders must reject empty or duplicate field names and stale accessor kinds	hostile artifact mutation cases	LOCK-SCHEMA	impact-only
+contracts/structural-object-json-map-boundary.md	enum,property	named enum records must not become structural objects and stored fields must remain distinct from methods	boundary regression and plan checks	LOCK-SCHEMA	impact-only
+contracts/memory-model.md	284,enum	field-name metadata and source-to-slot plans must own cross-stage strings	meta ownership inventory and ASan	LOCK-SCHEMA	impact-only
+contracts/assertion-semantics.md	match-comma	only shared parser or CMake anchors may drift	contract freeze plus unchanged assertion behavior	LOCK-SCHEMA	conditional-shared-anchor
+contracts/print-semantics.md	enum	enum toString layout/name behavior must remain slot-stable	VM/AOT print differential	LOCK-SCHEMA	conditional-shared-anchor
+contracts/differential-protocol.md	enum,match-comma,property	corpus migrations must preserve intended VM/AOT observables	matching-binary differential matrix	LOCK-SCHEMA	conditional-shared-anchor
+contracts/typed-target-plan-opaque-boundary.md	enum,property	new source facts must not create backend inference or compatibility adapters	hostile opaque-plan checks	LOCK-SCHEMA	conditional-shared-anchor
+contracts/ownership-audit-foundation.md	284,enum	new plans and strings must satisfy compiler metadata ownership	meta_ownership_inventory	LOCK-SCHEMA	conditional-shared-anchor
+contracts/typed-target-plan-debug.md	enum,property	dumps must expose canonical new facts and no legacy accessor selector	plan dump residue checks	LOCK-SCHEMA	conditional-shared-anchor

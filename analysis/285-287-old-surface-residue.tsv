@@ -1,0 +1,41 @@
+surface	scope	count	unit	files	classification	lock_or_boundary	detail
+enum	all tracked Xray source	247	enum declarations	-	baseline fact	preparation-only	bench,demos,stdlib,tests at frozen revision
+enum	all tracked Xray source	196	payload variants	107	baseline fact	preparation-only	239 payload fields
+enum	all tracked Xray source	135	positional-or-mixed payload variants	72	must migrate	LOCK-FRONTEND	164 unnamed fields; naming manifest has one row per variant
+enum	all tracked Xray source	61	fully named parenthesized payload variants	-	must migrate delimiters	LOCK-FRONTEND	preserve existing field names
+enum	all tracked Xray source	327	call-shaped constructors	85	must migrate	LOCK-FRONTEND	declared Enum.Variant pairs only
+enum	all tracked Xray source	412	positional match or catch patterns	182	must migrate	LOCK-FRONTEND	404 direct arms,2 guarded arms,6 catches
+enum	test source	11	old enum methods using fn	4	must migrate	LOCK-FRONTEND	freestanding_enum_method_static,enum_static_methods,enum_value_aot_identity,0900_enum
+enum	stdlib/regex and its focused regression	3	old call-shaped uses	2	excluded ownership	regex lane	2 constructors and 1 pattern; do not modify in this lane
+enum	compiler symbols	6	allow_payload_enum_ctor_value hits	3	old owner	LOCK-FRONTEND	xanalyzer_infer.h,xanalyzer_visitor_call.c,xanalyzer_visitor_expr.c
+enum	compiler symbols	2	parse_enum_variant_payload hits	1	old owner	LOCK-FRONTEND	xparse_oop.c
+enum	compiler symbols	72	payload_names hits	19	mixed owner and consumers	LOCK-FRONTEND/LOCK-SCHEMA	must converge on nonempty canonical names
+enum	compiler symbols	10	PatternAdtNode hits	5	old positional owner and consumers	LOCK-FRONTEND	must gain named selective fields
+enum	compiler symbols	0	AST_ENUM_CONSTRUCT hits	0	missing new owner	LOCK-FRONTEND	dedicated construct AST absent
+enum	target contract	4	XR_TARGET_CALL_CONVENTION_ADT_ENUM_CONSTRUCTOR hits	4	retained consumer	LOCK-SCHEMA	do not classify as residue
+enum	target contract	5	XR_TARGET_CALL_TARGET_ADT_ENUM_CONSTRUCTOR hits	5	retained consumer	LOCK-SCHEMA	do not classify as residue
+where	stdlib and demos	0	trailing where clauses	0	clean source segment	LOCK-FRONTEND	where becomes ordinary identifier after cut
+where	tests	9	trailing where clauses	4	must migrate or become negative oracle	LOCK-FRONTEND	6 positive cases and 3 compile-error cases
+where	compiler symbols	1	TK_WHERE token owner	3	old owner	LOCK-FRONTEND	xkeywords.def,xlex.h,xlex.c
+where	compiler symbols	1	xr_parse_where_clause definition	4	old owner and attachments	LOCK-FRONTEND	xparse_type.c,xparse_internal.h,xparse_decl.c,xparse_oop.c
+match-comma	stdlib excluding regex	31	match expressions	-	baseline fact	LOCK-FRONTEND	31 multi-arm
+match-comma	stdlib excluding regex	10	comma-less multi-arm matches	-	must migrate	LOCK-FRONTEND	16 missing separators
+match-comma	demos	14	match expressions	-	baseline fact	LOCK-FRONTEND	14 multi-arm
+match-comma	demos	12	comma-less multi-arm matches	-	must migrate	LOCK-FRONTEND	24 missing separators
+match-comma	tests	449	match expressions	-	baseline fact	LOCK-FRONTEND	407 multi-arm; includes five nested multi-arm matches omitted by the first shallow census
+match-comma	tests	360	comma-less multi-arm matches	-	must migrate	LOCK-FRONTEND	481 missing separators
+match-comma	regex boundary	1	match expression	1	excluded ownership	regex lane	single-arm; no missing separator
+match-comma	all scoped Xray source	495	match expressions	-	baseline fact	LOCK-FRONTEND	452 multi-arm
+match-comma	all scoped Xray source	382	comma-less multi-arm matches	198	must migrate	LOCK-FRONTEND	521 missing separators
+match-comma	compiler symbols	1	Parser.match_arm_body_depth field	3	old owner	LOCK-FRONTEND	xparse.h,xparse.c,xparse_match.c
+match-comma	compiler symbols	1	match-specific TK_IS newline heuristic	1	old owner	LOCK-FRONTEND	line_break_ends_expr in xparse.c
+property	all scoped Xray source	35	computed accessor blocks	8	must migrate	LOCK-FRONTEND	35 getters and 6 setters; source-aware declaration-body scan excludes closure-valued stored fields
+property	stdlib	14	computed accessor blocks	3	production migration	LOCK-FRONTEND	datetime=12,http=1,sys=1
+property	tests	21	computed accessor blocks	5	test migration	LOCK-FRONTEND	getter,setter,inheritance and struct fixtures
+property	tests	4	interface properties	1	must migrate	LOCK-FRONTEND	0851_interface_generic_property.xr
+property	native registration	16	native getter entries	7	must migrate or delete	LOCK-RUNTIME	14 coro getters plus Range get:start/get:end
+property	compiler symbols	1	AST_INTERFACE_PROPERTY kind	frontend	old owner	LOCK-FRONTEND	delete after interface migration
+property	compiler symbols	2	is_getter/is_setter flags	frontend and formatter	old owner	LOCK-FRONTEND	delete accessor-only flags
+property	compiler symbols	1	XA_SEL_PROPERTY kind	analyzer and Xi	old owner	LOCK-FRONTEND	delete field-or-call selection
+property	runtime symbols	1	xr_accessor_name.h identity owner	runtime and AOT	old owner	LOCK-RUNTIME	delete get:/set: synthetic identities
+property	runtime symbols	1	XrAccessorEntry family	runtime and VM	old owner	LOCK-RUNTIME	delete getter/setter tables and lookup fallback
