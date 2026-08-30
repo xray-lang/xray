@@ -24,6 +24,13 @@ The support matrix distinguishes supported, CI-only, unqualified, and
 unsupported configurations.  A failed row cannot be relabelled as a skipped
 configuration.
 
+Semantic-owner discovery is target-aware. Each Xi row derives VM and AOT
+applicability only from its declared targets; each shared-kernel row derives it
+only from its profiles. An applicable source-backed leg records exactly
+`representation adapter`, while an inapplicable leg is JSON `null`. Generic
+per-operation executor ownership remains visible as migration residue and must
+not be mislabeled as a canonical source-backed adapter.
+
 The baseline policy is the governed source of truth for correctness lanes,
 fresh configure/build preflight, clean initial and final source identity,
 compiler binary and native toolchain identity, and source-run performance
@@ -52,19 +59,19 @@ LF bytes on every host.  Their policy and contract digests therefore identify
 the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 059e9f7dfcd8459e3cda1f8186a722f2d3daab287bd072082a9dd6de79195d6a
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 1893bb922a9115a6a270e53cb844174a04398c2374b0c433191dfecd24b0597e
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json c4a10116a2e13c576e1d6f4c1fb4f2cfe298961d4f8eac2a7985864796fec28a
-anchor-sha256: contracts/target-machine/legacy-vm-inventory.json 8090ad192ca673b6502529e1971da15692c9bff7caf2a0b2483f3f152e2cc768
+anchor-sha256: contracts/target-machine/legacy-vm-inventory.json 61a80fd7e2f0bf6f941c5abb649a9469a88be7393cc1fa9fec1a757df63758b0
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: contracts/target-machine/migration-source-classification.json e0adb045a60f4b5d4c5a5f243b6a43cb217236190a4d2163eab2368f8663cacc
-anchor-sha256: scripts/check_target_machine_migration_classification.py 525f9dd89119a999f21a19c7fca7627c0c5bec34440783dc3871be7027cd2363
+anchor-sha256: scripts/check_target_machine_migration_classification.py f42bc5a7687bbdf7b2b1b2124943e2bc04c6c25a8727ae975622926169931cfc
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
-anchor-sha256: contracts/target-machine/object-extent-inventory.json e78c26ebddb7b409ee639501428897f5adfdf3bbbab80a51b1008a389f81fc1d
+anchor-sha256: contracts/target-machine/object-extent-inventory.json 75001ee542b90c747a3c55533838e59f39e890a3b93e0cb5ee22e5a00614511c
 anchor-sha256: contracts/target-machine/validation-matrix.json e6a1610c21edc6bfb4d7f92a535f3680e0952c57e4e835d51778edc3bbe7ef74
 anchor-sha256: contracts/target-machine/baseline-manifest.json f6af567e8dc686ae76733bc0b2b7cbc6d2a078d1730af6434dd35aed338dfb05
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml c939590da4fe46af9f42774997c322b6c968e2c1b5621541f540ee40ec4f28b7
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
-anchor-sha256: scripts/target_machine_phase0.py 3fe8d990604604b1de7b421c3712e3299c3c42b735b10e251f99f51d0bdc6a87
+anchor-sha256: scripts/target_machine_phase0.py 35e237075014497bebce259e6b169bef568499263f0cd77781139e5f2fa126d5
 anchor-sha256: scripts/run_target_machine_matrix_row.py 2a480a236d2bc486a9eea12429b52d10b38a71c637e86712e8660ccb1a5f08b3
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
 anchor-sha256: scripts/check_runtime_header_dependencies.py aaa81090a84a890c9e265de999b3eed00e303dbb8019f04385bb91556fe4f399

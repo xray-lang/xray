@@ -1,0 +1,84 @@
+import regex
+
+fn makeDynamicPattern(seed: i64) -> string {
+    return "([a-z]+)(" + string(seed) + "+)"
+}
+
+fn makeRegexAcrossFrame(seed: i64) -> Regex {
+    var pattern = makeDynamicPattern(seed)
+    return regex.compile(pattern)
+}
+
+fn makeMatchAcrossFrame(pattern: Regex, seed: i64) -> RegexMatch {
+    var text = "prefix target" + string(seed) + string(seed) + " suffix"
+    var found = regex.find(pattern, text)
+    assert(found != null)
+    return found!
+}
+
+fn makeMatchesAcrossFrame(pattern: Regex, seed: i64) -> Array<RegexMatch> {
+    var text = "alpha" + string(seed) + " beta" + string(seed) + string(seed) +
+               " gamma" + string(seed) + string(seed) + string(seed)
+    return regex.findAll(pattern, text)
+}
+
+fn churnReleasedStorage(seed: i64) {
+    for (var round = 0; round < 80; round++) {
+        var strings: Array<string> = []
+        var arrays: Array<Array<string>> = []
+        for (var i = 0; i < 40; i++) {
+            var value = "replacement_" + string(seed) + "_" + string(round) + "_" + string(i)
+            strings.push(value)
+            arrays.push([value, value + "_tail"])
+        }
+        assertEqual(len(strings), 40)
+        assertEqual(len(arrays), 40)
+    }
+}
+
+fn constructReadAndDropResults(round: i64) {
+    var pattern = makeRegexAcrossFrame(7)
+    var matches = makeMatchesAcrossFrame(pattern, 7)
+    assertEqual(len(matches), 3)
+    assertEqual(matches[0].text, "alpha7")
+    assertEqual(matches[1].groups[2], "77")
+    assertEqual(matches[2].text, "gamma777")
+
+    var missing = "missing_" + string(round)
+    assertEqual(regex.find(pattern, missing), null)
+}
+
+@test
+fn test_regex_native_fields_own_borrowed_values() {
+    var pattern = makeRegexAcrossFrame(7)
+    churnReleasedStorage(11)
+    assertEqual(pattern.pattern, "([a-z]+)(7+)")
+    assertEqual(regex.test(pattern, "target777"), true)
+
+    var found = makeMatchAcrossFrame(pattern, 7)
+    churnReleasedStorage(23)
+    assertEqual(found.text, "target77")
+    assertEqual(len(found.groups), 3)
+    assertEqual(found.groups[0], "target77")
+    assertEqual(found.groups[1], "target")
+    assertEqual(found.groups[2], "77")
+
+    var matches = makeMatchesAcrossFrame(pattern, 7)
+    churnReleasedStorage(29)
+    assertEqual(len(matches), 3)
+    assertEqual(matches[0].text, "alpha7")
+    assertEqual(matches[0].groups[1], "alpha")
+    assertEqual(matches[1].text, "beta77")
+    assertEqual(matches[1].groups[2], "77")
+    assertEqual(matches[2].text, "gamma777")
+    assertEqual(matches[2].groups[1], "gamma")
+
+    var noMatchText = "no_digits_" + string(41)
+    assertEqual(regex.find(pattern, noMatchText), null)
+
+    for (var round = 0; round < 200; round++) {
+        constructReadAndDropResults(round)
+    }
+}
+
+print("Regex native field ownership tests passed")

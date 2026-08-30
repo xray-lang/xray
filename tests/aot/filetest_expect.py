@@ -9,6 +9,9 @@ Directives (KEY=VALUE, `#` comments, blank lines ignored):
 
   args=...            build arguments (consumed by the runner, not a check)
   status=pass|fail    whether the dump/build is expected to succeed (default pass)
+  product_status=fail require the product command to fail after any contract passes
+  product_contains=S require literal S in product-command output
+  artifact=absent    require the requested output path to remain absent
   skip=reason         report the case as skipped
   contains=S          the dump must contain literal S
   not_contains=S      the dump must not contain literal S
@@ -29,7 +32,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Directives that are inputs to the runner, not assertions checked here.
-_RUNNER_KEYS = {"args", "status", "c_syntax"}
+_RUNNER_KEYS = {
+    "args",
+    "status",
+    "c_syntax",
+    "product_status",
+    "product_contains",
+    "artifact",
+}
 
 # Regex directives match line-wise, the way `grep -E` did: expect files anchor
 # with ^...$ meaning "some line looks like this", so ^ and $ must bind to line
@@ -44,6 +54,8 @@ def _search(pattern: str, text: str) -> re.Match | None:
 # Assertion directives and whether each targets the dump or the generated C.
 _DUMP_KEYS = {"contains", "not_contains", "regex", "not_regex"}
 _C_KEYS = {"c_contains", "c_not_contains", "c_count", "c_regex", "c_not_regex"}
+_KNOWN_KEYS = _RUNNER_KEYS | _DUMP_KEYS | _C_KEYS | {"skip"}
+_SINGLETON_KEYS = {"args", "status", "c_syntax", "skip", "product_status", "artifact"}
 
 
 @dataclass
@@ -65,6 +77,63 @@ class Expect:
     def wants_c_syntax(self) -> bool:
         return any(d.key == "c_syntax" and d.value == "pass" for d in self.directives)
 
+    @property
+    def wants_product_failure(self) -> bool:
+        return any(d.key == "product_status" and d.value == "fail" for d in self.directives)
+
+    @property
+    def product_contains(self) -> list[str]:
+        return [d.value for d in self.directives if d.key == "product_contains"]
+
+    @property
+    def wants_absent_artifact(self) -> bool:
+        return any(d.key == "artifact" and d.value == "absent" for d in self.directives)
+
+
+def _parse_failure(path: Path, lineno: int, detail: str) -> str:
+    return f"bad expect directive: {path}:{lineno}: {detail}"
+
+
+def _validate_combinations(exp: Expect) -> str | None:
+    product_status = [d for d in exp.directives if d.key == "product_status"]
+    product_contains = [d for d in exp.directives if d.key == "product_contains"]
+    artifact = [d for d in exp.directives if d.key == "artifact"]
+    if not product_status and (product_contains or artifact):
+        offender = (product_contains or artifact)[0]
+        return _parse_failure(
+            exp.path, offender.lineno, f"{offender.key} requires product_status=fail"
+        )
+    if product_status:
+        status_directive = product_status[0]
+        if exp.status == "fail":
+            return _parse_failure(
+                exp.path,
+                status_directive.lineno,
+                "product directives cannot be combined with status=fail",
+            )
+        if not product_contains:
+            return _parse_failure(
+                exp.path,
+                status_directive.lineno,
+                "product_status=fail requires at least one product_contains directive",
+            )
+        if not artifact:
+            return _parse_failure(
+                exp.path,
+                status_directive.lineno,
+                "product_status=fail requires artifact=absent",
+            )
+        c_directive = next(
+            (d for d in exp.directives if d.key in _C_KEYS or d.key == "c_syntax"), None
+        )
+        if c_directive is not None:
+            return _parse_failure(
+                exp.path,
+                c_directive.lineno,
+                "artifact=absent cannot be combined with generated-C directives",
+            )
+    return None
+
 
 def parse(path: Path) -> Expect:
     """Parse a .expect file. A malformed directive is recorded, not raised, so
@@ -72,24 +141,63 @@ def parse(path: Path) -> Expect:
     exp = Expect(path=path)
     if not path.is_file():
         return exp
+    seen_singletons: set[str] = set()
+    seen_product_contains: set[str] = set()
     for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         line = raw.rstrip("\r")
         if not line or line.lstrip().startswith("#"):
             continue
         if "=" not in line:
-            exp.parse_error = (
-                f"bad expect directive: {path}:{lineno}: "
-                "expected args=, status=, contains=, not_contains=, regex=, "
-                "not_regex=, c_contains=, c_count=, c_regex=, c_syntax=, or skip="
-            )
+            exp.parse_error = _parse_failure(path, lineno, "expected KEY=VALUE")
             return exp
         key, value = line.split("=", 1)
+        if key not in _KNOWN_KEYS:
+            exp.parse_error = _parse_failure(path, lineno, f"unknown key {key!r}")
+            return exp
+        if not value:
+            exp.parse_error = _parse_failure(path, lineno, f"{key} requires a non-empty value")
+            return exp
+        if key in _SINGLETON_KEYS:
+            if key in seen_singletons:
+                exp.parse_error = _parse_failure(path, lineno, f"duplicate {key} directive")
+                return exp
+            seen_singletons.add(key)
+        if key == "product_contains":
+            if value in seen_product_contains:
+                exp.parse_error = _parse_failure(
+                    path, lineno, f"duplicate product_contains value {value!r}"
+                )
+                return exp
+            seen_product_contains.add(value)
+        if key == "status" and value not in {"pass", "fail"}:
+            exp.parse_error = _parse_failure(path, lineno, "status must be pass or fail")
+            return exp
+        if key == "product_status" and value != "fail":
+            exp.parse_error = _parse_failure(path, lineno, "product_status must be fail")
+            return exp
+        if key == "artifact" and value != "absent":
+            exp.parse_error = _parse_failure(path, lineno, "artifact must be absent")
+            return exp
+        if key == "c_syntax" and value != "pass":
+            exp.parse_error = _parse_failure(path, lineno, "c_syntax must be pass")
+            return exp
         exp.directives.append(Directive(lineno, key, value))
         if key == "status":
             exp.status = value
         elif key == "args":
             exp.args = value
+    exp.parse_error = _validate_combinations(exp)
     return exp
+
+
+def check_product(exp: Expect, product_text: str) -> CheckOutcome:
+    """Evaluate only product-output assertions after an expected product failure."""
+    if exp.parse_error:
+        return CheckOutcome(exp.parse_error)
+    for needle in exp.product_contains:
+        if needle not in product_text:
+            return CheckOutcome(f"missing product output: {needle}")
+    return CheckOutcome()
 
 
 # A check result: None means pass; a string is the failure/skip reason. The

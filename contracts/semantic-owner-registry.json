@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "0c776fa995496d59811d3daaef5f79a47ff4fbfe7e27020a510686100fb8d1fc",
+  "canonical_fingerprint": "9dd017c70e18363ba192960bbfb63c886e66ca3dc141a3c5fb2e37027af4894f",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -1705,52 +1705,6 @@
       ]
     },
     {
-      "owner": "shared.regex",
-      "owner_id": "c4f504256c97c0ec2c6130a94974719c",
-      "owner_id_hi": "0xc4f504256c97c0ec",
-      "owner_id_lo": "0x2c6130a94974719c",
-      "category": "shared-semantic-kernel",
-      "operations": [
-        "xi.regex.compile"
-      ],
-      "consumers": [
-        "semantic-plan",
-        "vm",
-        "aot-hosted",
-        "cgen",
-        "runtime"
-      ],
-      "consumer_bits": "0x00000037",
-      "cgen_adapter": "xrt_regex_compile_with_flags",
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        },
-        {
-          "consumer": "vm",
-          "path": "src/vm/xvm_dispatch_assert.inc.c",
-          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
-        },
-        {
-          "consumer": "aot-hosted",
-          "path": "src/aot/xrt_regex_core.c",
-          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
-        },
-        {
-          "consumer": "cgen",
-          "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_regex_compile_adapter_name"
-        },
-        {
-          "consumer": "runtime",
-          "path": "stdlib/regex/xregex_binding.c",
-          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
-        }
-      ]
-    },
-    {
       "owner": "shared.shift",
       "owner_id": "578daf22f61f90c22bd2082e5a24c656",
       "owner_id_hi": "0x578daf22f61f90c2",
@@ -2044,6 +1998,40 @@
           "consumer": "runtime",
           "path": "src/runtime/value/xvalue_truthy.c",
           "symbol": "xr_value_is_truthy"
+        }
+      ]
+    },
+    {
+      "owner": "stdlib.regex.compile-match",
+      "owner_id": "e4f44f1eb598dbb19530369822d76e8a",
+      "owner_id_hi": "0xe4f44f1eb598dbb1",
+      "owner_id_lo": "0x9530369822d76e8a",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.regex.compile"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "runtime"
+      ],
+      "consumer_bits": "0x00000023",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_assert.inc.c",
+          "symbol": "xr_regex_compile_literal"
+        },
+        {
+          "consumer": "runtime",
+          "path": "stdlib/regex/xregex_binding.c",
+          "symbol": "xr_regex_compile_literal"
         }
       ]
     },
@@ -4896,6 +4884,7 @@
       "owner_id": "4fd70b1ac06b74641cfed6b009cf1036",
       "owner_id_hi": "0x4fd70b1ac06b7464",
       "owner_id_lo": "0x1cfed6b009cf1036",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -4919,6 +4908,7 @@
       "owner_id": "b7da9fe23933d4893acab485ecefc3c7",
       "owner_id_hi": "0xb7da9fe23933d489",
       "owner_id_lo": "0x3acab485ecefc3c7",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -4942,6 +4932,7 @@
       "owner_id": "e55c44efae2e1171f33b2a95db9de3aa",
       "owner_id_hi": "0xe55c44efae2e1171",
       "owner_id_lo": "0xf33b2a95db9de3aa",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -4977,6 +4968,7 @@
       "owner_id": "e55c44efae2e1171f33b2a95db9de3aa",
       "owner_id_hi": "0xe55c44efae2e1171",
       "owner_id_lo": "0xf33b2a95db9de3aa",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5012,6 +5004,7 @@
       "owner_id": "ddf005348f92b9f7b260660df8cbcf19",
       "owner_id_hi": "0xddf005348f92b9f7",
       "owner_id_lo": "0xb260660df8cbcf19",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5047,6 +5040,7 @@
       "owner_id": "ddf005348f92b9f7b260660df8cbcf19",
       "owner_id_hi": "0xddf005348f92b9f7",
       "owner_id_lo": "0xb260660df8cbcf19",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5082,6 +5076,7 @@
       "owner_id": "ddf005348f92b9f7b260660df8cbcf19",
       "owner_id_hi": "0xddf005348f92b9f7",
       "owner_id_lo": "0xb260660df8cbcf19",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5117,6 +5112,7 @@
       "owner_id": "a6029eb7111c38e0e04c995a0849a639",
       "owner_id_hi": "0xa6029eb7111c38e0",
       "owner_id_lo": "0xe04c995a0849a639",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan",
@@ -5164,6 +5160,7 @@
       "owner_id": "a6029eb7111c38e0e04c995a0849a639",
       "owner_id_hi": "0xa6029eb7111c38e0",
       "owner_id_lo": "0xe04c995a0849a639",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan",
@@ -5211,6 +5208,7 @@
       "owner_id": "a6029eb7111c38e0e04c995a0849a639",
       "owner_id_hi": "0xa6029eb7111c38e0",
       "owner_id_lo": "0xe04c995a0849a639",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan",
@@ -5258,6 +5256,7 @@
       "owner_id": "6fbb4b2fe8ab8b612dda997b7e6e8934",
       "owner_id_hi": "0x6fbb4b2fe8ab8b61",
       "owner_id_lo": "0x2dda997b7e6e8934",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5305,6 +5304,7 @@
       "owner_id": "6fbb4b2fe8ab8b612dda997b7e6e8934",
       "owner_id_hi": "0x6fbb4b2fe8ab8b61",
       "owner_id_lo": "0x2dda997b7e6e8934",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5352,6 +5352,7 @@
       "owner_id": "6b56ca99f6f6f6ab5def55389e5c70b3",
       "owner_id_hi": "0x6b56ca99f6f6f6ab",
       "owner_id_lo": "0x5def55389e5c70b3",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5405,6 +5406,7 @@
       "owner_id": "ed163bd74ec14c905a52f8ade83f970d",
       "owner_id_hi": "0xed163bd74ec14c90",
       "owner_id_lo": "0x5a52f8ade83f970d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5458,6 +5460,7 @@
       "owner_id": "ed163bd74ec14c905a52f8ade83f970d",
       "owner_id_hi": "0xed163bd74ec14c90",
       "owner_id_lo": "0x5a52f8ade83f970d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5511,6 +5514,7 @@
       "owner_id": "ed163bd74ec14c905a52f8ade83f970d",
       "owner_id_hi": "0xed163bd74ec14c90",
       "owner_id_lo": "0x5a52f8ade83f970d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5564,6 +5568,7 @@
       "owner_id": "33bfc5c10128a1f8cb3ec3b2385000f2",
       "owner_id_hi": "0x33bfc5c10128a1f8",
       "owner_id_lo": "0xcb3ec3b2385000f2",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5611,6 +5616,7 @@
       "owner_id": "578daf22f61f90c22bd2082e5a24c656",
       "owner_id_hi": "0x578daf22f61f90c2",
       "owner_id_lo": "0x2bd2082e5a24c656",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5664,6 +5670,7 @@
       "owner_id": "578daf22f61f90c22bd2082e5a24c656",
       "owner_id_hi": "0x578daf22f61f90c2",
       "owner_id_lo": "0x2bd2082e5a24c656",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5717,6 +5724,7 @@
       "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
       "owner_id_hi": "0x658354f83ccf3838",
       "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5764,6 +5772,7 @@
       "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
       "owner_id_hi": "0x658354f83ccf3838",
       "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5811,6 +5820,7 @@
       "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
       "owner_id_hi": "0x658354f83ccf3838",
       "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5858,6 +5868,7 @@
       "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
       "owner_id_hi": "0x658354f83ccf3838",
       "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5905,6 +5916,7 @@
       "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
       "owner_id_hi": "0x658354f83ccf3838",
       "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5952,6 +5964,7 @@
       "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
       "owner_id_hi": "0x658354f83ccf3838",
       "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -5999,6 +6012,7 @@
       "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
       "owner_id_hi": "0x658354f83ccf3838",
       "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6046,6 +6060,7 @@
       "owner_id": "400a801f70c9e0d4ac54e9f89ae8f307",
       "owner_id_hi": "0x400a801f70c9e0d4",
       "owner_id_lo": "0xac54e9f89ae8f307",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6081,6 +6096,7 @@
       "owner_id": "63474a5ab71119f2285f3a0a0abb2c78",
       "owner_id_hi": "0x63474a5ab71119f2",
       "owner_id_lo": "0x285f3a0a0abb2c78",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6116,6 +6132,7 @@
       "owner_id": "2b67e75abd8a612a0bbedf300bf9fe29",
       "owner_id_hi": "0x2b67e75abd8a612a",
       "owner_id_lo": "0x0bbedf300bf9fe29",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6163,6 +6180,7 @@
       "owner_id": "2b67e75abd8a612a0bbedf300bf9fe29",
       "owner_id_hi": "0x2b67e75abd8a612a",
       "owner_id_lo": "0x0bbedf300bf9fe29",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6210,6 +6228,7 @@
       "owner_id": "2b67e75abd8a612a0bbedf300bf9fe29",
       "owner_id_hi": "0x2b67e75abd8a612a",
       "owner_id_lo": "0x0bbedf300bf9fe29",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6257,6 +6276,7 @@
       "owner_id": "2b67e75abd8a612a0bbedf300bf9fe29",
       "owner_id_hi": "0x2b67e75abd8a612a",
       "owner_id_lo": "0x0bbedf300bf9fe29",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6304,6 +6324,7 @@
       "owner_id": "2b67e75abd8a612a0bbedf300bf9fe29",
       "owner_id_hi": "0x2b67e75abd8a612a",
       "owner_id_lo": "0x0bbedf300bf9fe29",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6351,6 +6372,7 @@
       "owner_id": "2b67e75abd8a612a0bbedf300bf9fe29",
       "owner_id_hi": "0x2b67e75abd8a612a",
       "owner_id_lo": "0x0bbedf300bf9fe29",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6398,6 +6420,7 @@
       "owner_id": "7ec352d0136c63f99f71c69f3e6c2b2d",
       "owner_id_hi": "0x7ec352d0136c63f9",
       "owner_id_lo": "0x9f71c69f3e6c2b2d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6451,6 +6474,7 @@
       "owner_id": "2285f5c9de466c0c1fc7e4cff3f6cc02",
       "owner_id_hi": "0x2285f5c9de466c0c",
       "owner_id_lo": "0x1fc7e4cff3f6cc02",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -6474,6 +6498,7 @@
       "owner_id": "0f08a939d420816c3b3dab41e6230519",
       "owner_id_hi": "0x0f08a939d420816c",
       "owner_id_lo": "0x3b3dab41e6230519",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -6497,6 +6522,7 @@
       "owner_id": "055918b802f9902fe59eb377a7c7c7ad",
       "owner_id_hi": "0x055918b802f9902f",
       "owner_id_lo": "0xe59eb377a7c7c7ad",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -6520,6 +6546,7 @@
       "owner_id": "cb628e674c913b0a34a7b29f8b4d5af6",
       "owner_id_hi": "0xcb628e674c913b0a",
       "owner_id_lo": "0x34a7b29f8b4d5af6",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -6543,6 +6570,7 @@
       "owner_id": "f4aed4412b621d4408faafea85fb54ac",
       "owner_id_hi": "0xf4aed4412b621d44",
       "owner_id_lo": "0x08faafea85fb54ac",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -6566,6 +6594,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6613,6 +6642,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6660,6 +6690,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6707,6 +6738,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6754,6 +6786,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6801,6 +6834,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6848,6 +6882,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6895,6 +6930,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6942,6 +6978,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -6989,6 +7026,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7036,6 +7074,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7083,6 +7122,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7130,6 +7170,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7177,6 +7218,7 @@
       "owner_id": "03934e35643b1197e36762addff0755a",
       "owner_id_hi": "0x03934e35643b1197",
       "owner_id_lo": "0xe36762addff0755a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7224,6 +7266,7 @@
       "owner_id": "7e9ee0da1e3d19e31a3467a8c3af66a7",
       "owner_id_hi": "0x7e9ee0da1e3d19e3",
       "owner_id_lo": "0x1a3467a8c3af66a7",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -7247,6 +7290,7 @@
       "owner_id": "18cbd4295b55ed79c87f795ae44fc88f",
       "owner_id_hi": "0x18cbd4295b55ed79",
       "owner_id_lo": "0xc87f795ae44fc88f",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -7270,6 +7314,7 @@
       "owner_id": "b5320055070bc9c0e8867c548428d640",
       "owner_id_hi": "0xb5320055070bc9c0",
       "owner_id_lo": "0xe8867c548428d640",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -7293,6 +7338,7 @@
       "owner_id": "faab0b49d73f9eb3387163d15a21fb96",
       "owner_id_hi": "0xfaab0b49d73f9eb3",
       "owner_id_lo": "0x387163d15a21fb96",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -7316,6 +7362,7 @@
       "owner_id": "a3130fa8e2496fa803fd95f746e1b797",
       "owner_id_hi": "0xa3130fa8e2496fa8",
       "owner_id_lo": "0x03fd95f746e1b797",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -7339,6 +7386,7 @@
       "owner_id": "9aa2c9e0dead43035ef32153ad6a345e",
       "owner_id_hi": "0x9aa2c9e0dead4303",
       "owner_id_lo": "0x5ef32153ad6a345e",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -7362,6 +7410,7 @@
       "owner_id": "91816487d9c027457588962d27c68c29",
       "owner_id_hi": "0x91816487d9c02745",
       "owner_id_lo": "0x7588962d27c68c29",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7409,6 +7458,7 @@
       "owner_id": "91816487d9c027457588962d27c68c29",
       "owner_id_hi": "0x91816487d9c02745",
       "owner_id_lo": "0x7588962d27c68c29",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7456,6 +7506,7 @@
       "owner_id": "437f7a4a7f59ec00887f454f3390c325",
       "owner_id_hi": "0x437f7a4a7f59ec00",
       "owner_id_lo": "0x887f454f3390c325",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -7479,6 +7530,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7526,6 +7578,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7573,6 +7626,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7620,6 +7674,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7667,6 +7722,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7714,6 +7770,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7761,6 +7818,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7808,6 +7866,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7855,6 +7914,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7902,6 +7962,7 @@
       "owner_id": "48d553d4f426165efea7ec7b66809ca5",
       "owner_id_hi": "0x48d553d4f426165e",
       "owner_id_lo": "0xfea7ec7b66809ca5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7949,6 +8010,7 @@
       "owner_id": "f6beeef98afc0ce044d26a9384b86e65",
       "owner_id_hi": "0xf6beeef98afc0ce0",
       "owner_id_lo": "0x44d26a9384b86e65",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -7996,6 +8058,7 @@
       "owner_id": "dada661895c70a61993a5a3a7d865a76",
       "owner_id_hi": "0xdada661895c70a61",
       "owner_id_lo": "0x993a5a3a7d865a76",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8043,6 +8106,7 @@
       "owner_id": "73865844a3ce50daac6d98753c69f6b9",
       "owner_id_hi": "0x73865844a3ce50da",
       "owner_id_lo": "0xac6d98753c69f6b9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8090,6 +8154,7 @@
       "owner_id": "0671ffa480867a96be552bfef404fbbf",
       "owner_id_hi": "0x0671ffa480867a96",
       "owner_id_lo": "0xbe552bfef404fbbf",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8137,6 +8202,7 @@
       "owner_id": "cb8999118db6fe238e9eb3754ea5b1fd",
       "owner_id_hi": "0xcb8999118db6fe23",
       "owner_id_lo": "0x8e9eb3754ea5b1fd",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8184,6 +8250,7 @@
       "owner_id": "f39b531cca8bef2445b6d9f0034c9fe2",
       "owner_id_hi": "0xf39b531cca8bef24",
       "owner_id_lo": "0x45b6d9f0034c9fe2",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8231,6 +8298,7 @@
       "owner_id": "168a7d3b72efbe41bb266ec45c547907",
       "owner_id_hi": "0x168a7d3b72efbe41",
       "owner_id_lo": "0xbb266ec45c547907",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -8254,6 +8322,7 @@
       "owner_id": "45ed884d22c321689437409286f03052",
       "owner_id_hi": "0x45ed884d22c32168",
       "owner_id_lo": "0x9437409286f03052",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -8277,6 +8346,7 @@
       "owner_id": "a916f36a96f51a6420f5d58366252fc5",
       "owner_id_hi": "0xa916f36a96f51a64",
       "owner_id_lo": "0x20f5d58366252fc5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8324,6 +8394,7 @@
       "owner_id": "14097a6afcee4cb3794908bf6b69b707",
       "owner_id_hi": "0x14097a6afcee4cb3",
       "owner_id_lo": "0x794908bf6b69b707",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8371,6 +8442,7 @@
       "owner_id": "f5a12a0374776878dc819e405093b343",
       "owner_id_hi": "0xf5a12a0374776878",
       "owner_id_lo": "0xdc819e405093b343",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8418,6 +8490,7 @@
       "owner_id": "99d77642494450de43912756d86012f5",
       "owner_id_hi": "0x99d77642494450de",
       "owner_id_lo": "0x43912756d86012f5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8465,6 +8538,7 @@
       "owner_id": "a916f36a96f51a6420f5d58366252fc5",
       "owner_id_hi": "0xa916f36a96f51a64",
       "owner_id_lo": "0x20f5d58366252fc5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8512,6 +8586,7 @@
       "owner_id": "bb25374a4853f10d6f88453fb142876f",
       "owner_id_hi": "0xbb25374a4853f10d",
       "owner_id_lo": "0x6f88453fb142876f",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8559,6 +8634,7 @@
       "owner_id": "bb25374a4853f10d6f88453fb142876f",
       "owner_id_hi": "0xbb25374a4853f10d",
       "owner_id_lo": "0x6f88453fb142876f",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8606,6 +8682,7 @@
       "owner_id": "6a0586278621de39864e17375221abc8",
       "owner_id_hi": "0x6a0586278621de39",
       "owner_id_lo": "0x864e17375221abc8",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8653,6 +8730,7 @@
       "owner_id": "02f68b34df6800b7b36e858c3676a17c",
       "owner_id_hi": "0x02f68b34df6800b7",
       "owner_id_lo": "0xb36e858c3676a17c",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8700,6 +8778,7 @@
       "owner_id": "ba07a1754147a6e15ccbfb90632e35f8",
       "owner_id_hi": "0xba07a1754147a6e1",
       "owner_id_lo": "0x5ccbfb90632e35f8",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8747,6 +8826,7 @@
       "owner_id": "ba07a1754147a6e15ccbfb90632e35f8",
       "owner_id_hi": "0xba07a1754147a6e1",
       "owner_id_lo": "0x5ccbfb90632e35f8",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8794,6 +8874,7 @@
       "owner_id": "7550405f9f595552201a1fcda85a4d9b",
       "owner_id_hi": "0x7550405f9f595552",
       "owner_id_lo": "0x201a1fcda85a4d9b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8823,6 +8904,7 @@
       "owner_id": "3ca4a89253b432c5918197df748e1ab1",
       "owner_id_hi": "0x3ca4a89253b432c5",
       "owner_id_lo": "0x918197df748e1ab1",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -8846,6 +8928,7 @@
       "owner_id": "ab9e7e4d3f9de11e8b749de776eb7886",
       "owner_id_hi": "0xab9e7e4d3f9de11e",
       "owner_id_lo": "0x8b749de776eb7886",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -8869,6 +8952,7 @@
       "owner_id": "df7eb61d60ac6d552d05e11ef5ae2abb",
       "owner_id_hi": "0xdf7eb61d60ac6d55",
       "owner_id_lo": "0x2d05e11ef5ae2abb",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -8892,6 +8976,7 @@
       "owner_id": "1b97d353698b2ce82196ff569479351d",
       "owner_id_hi": "0x1b97d353698b2ce8",
       "owner_id_lo": "0x2196ff569479351d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8939,6 +9024,7 @@
       "owner_id": "1b97d353698b2ce82196ff569479351d",
       "owner_id_hi": "0x1b97d353698b2ce8",
       "owner_id_lo": "0x2196ff569479351d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -8986,6 +9072,7 @@
       "owner_id": "19ac7b512c35efb924e1b564db623b45",
       "owner_id_hi": "0x19ac7b512c35efb9",
       "owner_id_lo": "0x24e1b564db623b45",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -9033,6 +9120,7 @@
       "owner_id": "e2eddf9aaac4b01e0da664cf32a76eeb",
       "owner_id_hi": "0xe2eddf9aaac4b01e",
       "owner_id_lo": "0x0da664cf32a76eeb",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9056,6 +9144,7 @@
       "owner_id": "a45d5b148a71da7fe06a016d5f331795",
       "owner_id_hi": "0xa45d5b148a71da7f",
       "owner_id_lo": "0xe06a016d5f331795",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9079,6 +9168,7 @@
       "owner_id": "b9b2295934d3f2b4d0cd374330f55b3b",
       "owner_id_hi": "0xb9b2295934d3f2b4",
       "owner_id_lo": "0xd0cd374330f55b3b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9102,6 +9192,7 @@
       "owner_id": "f8d9ebf43d810251aaaf69476577ab0f",
       "owner_id_hi": "0xf8d9ebf43d810251",
       "owner_id_lo": "0xaaaf69476577ab0f",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9125,6 +9216,7 @@
       "owner_id": "4be871196cc23bdf1c60b831a220b6d9",
       "owner_id_hi": "0x4be871196cc23bdf",
       "owner_id_lo": "0x1c60b831a220b6d9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9148,6 +9240,7 @@
       "owner_id": "d03ea984bbe1de59f0adc43a75804777",
       "owner_id_hi": "0xd03ea984bbe1de59",
       "owner_id_lo": "0xf0adc43a75804777",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9171,6 +9264,7 @@
       "owner_id": "3a123876e4ea996e61ef6faedd65706c",
       "owner_id_hi": "0x3a123876e4ea996e",
       "owner_id_lo": "0x61ef6faedd65706c",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9194,6 +9288,7 @@
       "owner_id": "2fc870f04255d036e6f5622cee0599c2",
       "owner_id_hi": "0x2fc870f04255d036",
       "owner_id_lo": "0xe6f5622cee0599c2",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9217,6 +9312,7 @@
       "owner_id": "de4fba8b84cc8c0244df2b08f7c04e8f",
       "owner_id_hi": "0xde4fba8b84cc8c02",
       "owner_id_lo": "0x44df2b08f7c04e8f",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9240,6 +9336,7 @@
       "owner_id": "cc5ea54df45d70e0fefa2ff76ce57da4",
       "owner_id_hi": "0xcc5ea54df45d70e0",
       "owner_id_lo": "0xfefa2ff76ce57da4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9263,6 +9360,7 @@
       "owner_id": "03622734e68d7b59d17b9ee9150c74e7",
       "owner_id_hi": "0x03622734e68d7b59",
       "owner_id_lo": "0xd17b9ee9150c74e7",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -9286,6 +9384,7 @@
       "owner_id": "9a27f481bdd58f379d686b855f625fc3",
       "owner_id_hi": "0x9a27f481bdd58f37",
       "owner_id_lo": "0x9d686b855f625fc3",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9309,6 +9408,7 @@
       "owner_id": "c27557ff4a1c192ad5a00bca960e3649",
       "owner_id_hi": "0xc27557ff4a1c192a",
       "owner_id_lo": "0xd5a00bca960e3649",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9332,6 +9432,7 @@
       "owner_id": "cadced48aee391b847574843b0a3852b",
       "owner_id_hi": "0xcadced48aee391b8",
       "owner_id_lo": "0x47574843b0a3852b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9355,6 +9456,7 @@
       "owner_id": "cdb68b940cb9acf9a15d27c327c24026",
       "owner_id_hi": "0xcdb68b940cb9acf9",
       "owner_id_lo": "0xa15d27c327c24026",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9378,6 +9480,7 @@
       "owner_id": "cae627617585ec0294648588ad5928e9",
       "owner_id_hi": "0xcae627617585ec02",
       "owner_id_lo": "0x94648588ad5928e9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9401,6 +9504,7 @@
       "owner_id": "9ed8851fbbbb9d91ce2f9ed1013a54d9",
       "owner_id_hi": "0x9ed8851fbbbb9d91",
       "owner_id_lo": "0xce2f9ed1013a54d9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9424,6 +9528,7 @@
       "owner_id": "cac006b7c69df40a2f55b163778852a8",
       "owner_id_hi": "0xcac006b7c69df40a",
       "owner_id_lo": "0x2f55b163778852a8",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9447,6 +9552,7 @@
       "owner_id": "98db3af39e8d2ca2bf8348efda2f5030",
       "owner_id_hi": "0x98db3af39e8d2ca2",
       "owner_id_lo": "0xbf8348efda2f5030",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9470,6 +9576,7 @@
       "owner_id": "03c43d1ef118c57a4b5baba373d7dfa6",
       "owner_id_hi": "0x03c43d1ef118c57a",
       "owner_id_lo": "0x4b5baba373d7dfa6",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9493,6 +9600,7 @@
       "owner_id": "deee8b230463a30316b3a1f777ded876",
       "owner_id_hi": "0xdeee8b230463a303",
       "owner_id_lo": "0x16b3a1f777ded876",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9516,6 +9624,7 @@
       "owner_id": "16e3e85bcbcdb5ab2c7e06f1b97be6ff",
       "owner_id_hi": "0x16e3e85bcbcdb5ab",
       "owner_id_lo": "0x2c7e06f1b97be6ff",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9539,6 +9648,7 @@
       "owner_id": "4aad36e211d169a0b81757e1816d20c3",
       "owner_id_hi": "0x4aad36e211d169a0",
       "owner_id_lo": "0xb81757e1816d20c3",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -9580,6 +9690,7 @@
       "owner_id": "b47b6eb7e2595b1286a05b82df994259",
       "owner_id_hi": "0xb47b6eb7e2595b12",
       "owner_id_lo": "0x86a05b82df994259",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -9621,6 +9732,7 @@
       "owner_id": "94c49dac09213eb7bb5680d07c66d916",
       "owner_id_hi": "0x94c49dac09213eb7",
       "owner_id_lo": "0xbb5680d07c66d916",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9644,6 +9756,7 @@
       "owner_id": "10c00834a3515dc445ecb2fd8fcec5b9",
       "owner_id_hi": "0x10c00834a3515dc4",
       "owner_id_lo": "0x45ecb2fd8fcec5b9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9667,6 +9780,7 @@
       "owner_id": "9c7b2d77c33fb4480a883448a214ef17",
       "owner_id_hi": "0x9c7b2d77c33fb448",
       "owner_id_lo": "0x0a883448a214ef17",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9690,6 +9804,7 @@
       "owner_id": "c70e98a2edee8065074f2336296c1a56",
       "owner_id_hi": "0xc70e98a2edee8065",
       "owner_id_lo": "0x074f2336296c1a56",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9713,6 +9828,7 @@
       "owner_id": "a367904d890a1adb367edf6a1db1850a",
       "owner_id_hi": "0xa367904d890a1adb",
       "owner_id_lo": "0x367edf6a1db1850a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9736,6 +9852,7 @@
       "owner_id": "c9be7d13af289f99ed6318ec62490bcb",
       "owner_id_hi": "0xc9be7d13af289f99",
       "owner_id_lo": "0xed6318ec62490bcb",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -9783,6 +9900,7 @@
       "owner_id": "c9be7d13af289f99ed6318ec62490bcb",
       "owner_id_hi": "0xc9be7d13af289f99",
       "owner_id_lo": "0xed6318ec62490bcb",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -9830,6 +9948,7 @@
       "owner_id": "277da935cf662880912aa6e558e2808b",
       "owner_id_hi": "0x277da935cf662880",
       "owner_id_lo": "0x912aa6e558e2808b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9853,6 +9972,7 @@
       "owner_id": "3cabfbbaa109b481a9e258356d53307a",
       "owner_id_hi": "0x3cabfbbaa109b481",
       "owner_id_lo": "0xa9e258356d53307a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9876,6 +9996,7 @@
       "owner_id": "a8ed710c706cf6480db958ae969b4c3c",
       "owner_id_hi": "0xa8ed710c706cf648",
       "owner_id_lo": "0x0db958ae969b4c3c",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9899,6 +10020,7 @@
       "owner_id": "dfbadfb314d8effff3a1f900e8ef88a6",
       "owner_id_hi": "0xdfbadfb314d8efff",
       "owner_id_lo": "0xf3a1f900e8ef88a6",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9922,6 +10044,7 @@
       "owner_id": "bb3e0e07dd2b4514d8312cce916ec27e",
       "owner_id_hi": "0xbb3e0e07dd2b4514",
       "owner_id_lo": "0xd8312cce916ec27e",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9945,6 +10068,7 @@
       "owner_id": "ef64c6e01151bd66b1dc171f06d40a4b",
       "owner_id_hi": "0xef64c6e01151bd66",
       "owner_id_lo": "0xb1dc171f06d40a4b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -9968,6 +10092,7 @@
       "owner_id": "7f22268cffd45498f9b2a21441d3420a",
       "owner_id_hi": "0x7f22268cffd45498",
       "owner_id_lo": "0xf9b2a21441d3420a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "capability-provider",
       "consumers": [
         "semantic-plan"
@@ -9991,6 +10116,7 @@
       "owner_id": "34413d2650a443d64148a0f1b5b0a04d",
       "owner_id_hi": "0x34413d2650a443d6",
       "owner_id_lo": "0x4148a0f1b5b0a04d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10014,6 +10140,7 @@
       "owner_id": "477833942d3c270a4a45b1a07aab652b",
       "owner_id_hi": "0x477833942d3c270a",
       "owner_id_lo": "0x4a45b1a07aab652b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "capability-provider",
       "consumers": [
         "semantic-plan"
@@ -10037,6 +10164,7 @@
       "owner_id": "6f3bb307945eb0681371311d2dbb6e89",
       "owner_id_hi": "0x6f3bb307945eb068",
       "owner_id_lo": "0x1371311d2dbb6e89",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "generated-specialization",
       "consumers": [
         "semantic-plan"
@@ -10060,6 +10188,7 @@
       "owner_id": "6066d53b69e44571090dde067002f415",
       "owner_id_hi": "0x6066d53b69e44571",
       "owner_id_lo": "0x090dde067002f415",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10083,6 +10212,7 @@
       "owner_id": "bec93ce788105e41547dcc1dee129b1e",
       "owner_id_hi": "0xbec93ce788105e41",
       "owner_id_lo": "0x547dcc1dee129b1e",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10106,6 +10236,7 @@
       "owner_id": "933a17444ab6c23b9db5d2ca402916bb",
       "owner_id_hi": "0x933a17444ab6c23b",
       "owner_id_lo": "0x9db5d2ca402916bb",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10129,6 +10260,7 @@
       "owner_id": "6d2631ba76c7fa79ba2f5a0f03a5a1d0",
       "owner_id_hi": "0x6d2631ba76c7fa79",
       "owner_id_lo": "0xba2f5a0f03a5a1d0",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10152,6 +10284,7 @@
       "owner_id": "21b1fa20e84641ac1984ea2e7c3c9a4e",
       "owner_id_hi": "0x21b1fa20e84641ac",
       "owner_id_lo": "0x1984ea2e7c3c9a4e",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10175,6 +10308,7 @@
       "owner_id": "491d5dad72c0397296753c6d8dd6ccb0",
       "owner_id_hi": "0x491d5dad72c03972",
       "owner_id_lo": "0x96753c6d8dd6ccb0",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10198,6 +10332,7 @@
       "owner_id": "4db38006ab9600b67884e2d777ff5346",
       "owner_id_hi": "0x4db38006ab9600b6",
       "owner_id_lo": "0x7884e2d777ff5346",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10221,6 +10356,7 @@
       "owner_id": "26f268fc0326cf9afc6c04a83dcd51bd",
       "owner_id_hi": "0x26f268fc0326cf9a",
       "owner_id_lo": "0xfc6c04a83dcd51bd",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10244,6 +10380,7 @@
       "owner_id": "c02995a2a03f9f890536950f883fe605",
       "owner_id_hi": "0xc02995a2a03f9f89",
       "owner_id_lo": "0x0536950f883fe605",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10267,6 +10404,7 @@
       "owner_id": "cb03a9726cb7f9b5a181f185efe64f70",
       "owner_id_hi": "0xcb03a9726cb7f9b5",
       "owner_id_lo": "0xa181f185efe64f70",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10290,6 +10428,7 @@
       "owner_id": "1cfd95ad8c90b0589d480d6d7803fa9e",
       "owner_id_hi": "0x1cfd95ad8c90b058",
       "owner_id_lo": "0x9d480d6d7803fa9e",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10313,6 +10452,7 @@
       "owner_id": "9739a664a545ab10c8c43cbfbcfb46bc",
       "owner_id_hi": "0x9739a664a545ab10",
       "owner_id_lo": "0xc8c43cbfbcfb46bc",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10336,6 +10476,7 @@
       "owner_id": "cc7580f18f2375ac339e8e41bd171333",
       "owner_id_hi": "0xcc7580f18f2375ac",
       "owner_id_lo": "0x339e8e41bd171333",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10359,6 +10500,7 @@
       "owner_id": "6f84063f9c30fa3987d184a35e081cf7",
       "owner_id_hi": "0x6f84063f9c30fa39",
       "owner_id_lo": "0x87d184a35e081cf7",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10382,6 +10524,7 @@
       "owner_id": "747830ae803514db56a1f04039809cfc",
       "owner_id_hi": "0x747830ae803514db",
       "owner_id_lo": "0x56a1f04039809cfc",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "capability-provider",
       "consumers": [
         "semantic-plan"
@@ -10405,6 +10548,7 @@
       "owner_id": "4e932b3a8e1c8383f112639f7d6957d5",
       "owner_id_hi": "0x4e932b3a8e1c8383",
       "owner_id_lo": "0xf112639f7d6957d5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10428,6 +10572,7 @@
       "owner_id": "3a81d2f9e439d5c99ac5ee3384a5a1e3",
       "owner_id_hi": "0x3a81d2f9e439d5c9",
       "owner_id_lo": "0x9ac5ee3384a5a1e3",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10451,6 +10596,7 @@
       "owner_id": "a9543cd1080d6ec47d71848ea8c67fbd",
       "owner_id_hi": "0xa9543cd1080d6ec4",
       "owner_id_lo": "0x7d71848ea8c67fbd",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10474,6 +10620,7 @@
       "owner_id": "780d6ddbb6b41822e8d154609b833247",
       "owner_id_hi": "0x780d6ddbb6b41822",
       "owner_id_lo": "0xe8d154609b833247",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10497,6 +10644,7 @@
       "owner_id": "83cc7b1931f52f8fb38611789481b8ae",
       "owner_id_hi": "0x83cc7b1931f52f8f",
       "owner_id_lo": "0xb38611789481b8ae",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10520,6 +10668,7 @@
       "owner_id": "ccf42d9a9e4734f27afd12f04e9a85e4",
       "owner_id_hi": "0xccf42d9a9e4734f2",
       "owner_id_lo": "0x7afd12f04e9a85e4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10543,6 +10692,7 @@
       "owner_id": "2efa47cf9902a43416ba2864f159def3",
       "owner_id_hi": "0x2efa47cf9902a434",
       "owner_id_lo": "0x16ba2864f159def3",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10566,6 +10716,7 @@
       "owner_id": "d9f23bb9fa5ab6347b2aff7f9766be88",
       "owner_id_hi": "0xd9f23bb9fa5ab634",
       "owner_id_lo": "0x7b2aff7f9766be88",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10589,6 +10740,7 @@
       "owner_id": "32735bfd45d5ca5b19fb543ecb387b03",
       "owner_id_hi": "0x32735bfd45d5ca5b",
       "owner_id_lo": "0x19fb543ecb387b03",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10612,6 +10764,7 @@
       "owner_id": "287f433b3081e6c0217d3f9869cc5646",
       "owner_id_hi": "0x287f433b3081e6c0",
       "owner_id_lo": "0x217d3f9869cc5646",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10635,6 +10788,7 @@
       "owner_id": "60b244ffd35b14aa7ad90cb9a2efa718",
       "owner_id_hi": "0x60b244ffd35b14aa",
       "owner_id_lo": "0x7ad90cb9a2efa718",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10658,6 +10812,7 @@
       "owner_id": "738223c8f0d3307b9428abe4b487e682",
       "owner_id_hi": "0x738223c8f0d3307b",
       "owner_id_lo": "0x9428abe4b487e682",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10681,6 +10836,7 @@
       "owner_id": "1579bff8e282d360acaf444e09c2f8b2",
       "owner_id_hi": "0x1579bff8e282d360",
       "owner_id_lo": "0xacaf444e09c2f8b2",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10704,6 +10860,7 @@
       "owner_id": "86e6566cd3e38479780b48b808c8e9c9",
       "owner_id_hi": "0x86e6566cd3e38479",
       "owner_id_lo": "0x780b48b808c8e9c9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10727,6 +10884,7 @@
       "owner_id": "f42eb126ce578e724f6096b8231c9d25",
       "owner_id_hi": "0xf42eb126ce578e72",
       "owner_id_lo": "0x4f6096b8231c9d25",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10750,6 +10908,7 @@
       "owner_id": "13045f35e623c425278b5d1bd48f0b24",
       "owner_id_hi": "0x13045f35e623c425",
       "owner_id_lo": "0x278b5d1bd48f0b24",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10773,6 +10932,7 @@
       "owner_id": "6fbd2b11accb0cac266916ace244a81e",
       "owner_id_hi": "0x6fbd2b11accb0cac",
       "owner_id_lo": "0x266916ace244a81e",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10796,6 +10956,7 @@
       "owner_id": "f7c99946590da93c6c96569cfc17128a",
       "owner_id_hi": "0xf7c99946590da93c",
       "owner_id_lo": "0x6c96569cfc17128a",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -10843,6 +11004,7 @@
       "owner_id": "c4cdff4adb32c244cffbe883ee26e7b9",
       "owner_id_hi": "0xc4cdff4adb32c244",
       "owner_id_lo": "0xcffbe883ee26e7b9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10866,6 +11028,7 @@
       "owner_id": "96b11b47c7ee4528028efa46901989c2",
       "owner_id_hi": "0x96b11b47c7ee4528",
       "owner_id_lo": "0x028efa46901989c2",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10889,6 +11052,7 @@
       "owner_id": "53061b8c2ac6960320d91feaf1829842",
       "owner_id_hi": "0x53061b8c2ac69603",
       "owner_id_lo": "0x20d91feaf1829842",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -10912,6 +11076,7 @@
       "owner_id": "5bf4de29d61bd2df1a24395b1351ec03",
       "owner_id_hi": "0x5bf4de29d61bd2df",
       "owner_id_lo": "0x1a24395b1351ec03",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -10935,6 +11100,7 @@
       "owner_id": "72235a3a274831e86027f98fa7d4ec32",
       "owner_id_hi": "0x72235a3a274831e8",
       "owner_id_lo": "0x6027f98fa7d4ec32",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -10982,6 +11148,7 @@
       "owner_id": "c20a4c6b08ddf7007a877e69f85d58c0",
       "owner_id_hi": "0xc20a4c6b08ddf700",
       "owner_id_lo": "0x7a877e69f85d58c0",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11005,6 +11172,7 @@
       "owner_id": "0eef4bb7af611d065dafdae1ffb66d19",
       "owner_id_hi": "0x0eef4bb7af611d06",
       "owner_id_lo": "0x5dafdae1ffb66d19",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -11052,6 +11220,7 @@
       "owner_id": "0f73bafa732af9720806802775d26a2b",
       "owner_id_hi": "0x0f73bafa732af972",
       "owner_id_lo": "0x0806802775d26a2b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11075,6 +11244,7 @@
       "owner_id": "7ec352d0136c63f99f71c69f3e6c2b2d",
       "owner_id_hi": "0x7ec352d0136c63f9",
       "owner_id_lo": "0x9f71c69f3e6c2b2d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -11128,6 +11298,7 @@
       "owner_id": "4d64cd90730584e4d2e51c63c4d160e9",
       "owner_id_hi": "0x4d64cd90730584e4",
       "owner_id_lo": "0xd2e51c63c4d160e9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -11163,6 +11334,7 @@
       "owner_id": "6a65f01c07e7e34b75a5b1ef00a6fef5",
       "owner_id_hi": "0x6a65f01c07e7e34b",
       "owner_id_lo": "0x75a5b1ef00a6fef5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11186,6 +11358,7 @@
       "owner_id": "4fabbfacf85bab3a7d642a2ff99a9421",
       "owner_id_hi": "0x4fabbfacf85bab3a",
       "owner_id_lo": "0x7d642a2ff99a9421",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -11209,6 +11382,7 @@
       "owner_id": "4225117598355c1a039099138577f2fa",
       "owner_id_hi": "0x4225117598355c1a",
       "owner_id_lo": "0x039099138577f2fa",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -11232,6 +11406,7 @@
       "owner_id": "650383fea2a960c98d709ffd676ac157",
       "owner_id_hi": "0x650383fea2a960c9",
       "owner_id_lo": "0x8d709ffd676ac157",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11255,6 +11430,7 @@
       "owner_id": "071470cc2cb322056afced209e2b7e60",
       "owner_id_hi": "0x071470cc2cb32205",
       "owner_id_lo": "0x6afced209e2b7e60",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11278,6 +11454,7 @@
       "owner_id": "d4232d7615939a81e7b3c646e1205ddf",
       "owner_id_hi": "0xd4232d7615939a81",
       "owner_id_lo": "0xe7b3c646e1205ddf",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11301,6 +11478,7 @@
       "owner_id": "ec9c80b9ce4638216475b4adf79e4de5",
       "owner_id_hi": "0xec9c80b9ce463821",
       "owner_id_lo": "0x6475b4adf79e4de5",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -11348,6 +11526,7 @@
       "owner_id": "e99ec68201c8d458c8cd54a90f6bdba8",
       "owner_id_hi": "0xe99ec68201c8d458",
       "owner_id_lo": "0xc8cd54a90f6bdba8",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan",
@@ -11401,6 +11580,7 @@
       "owner_id": "b10468dba442fec05350faf0a21f6f0d",
       "owner_id_hi": "0xb10468dba442fec0",
       "owner_id_lo": "0x5350faf0a21f6f0d",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11424,6 +11604,7 @@
       "owner_id": "409519ef027cce604615e44bacc996bc",
       "owner_id_hi": "0x409519ef027cce60",
       "owner_id_lo": "0x4615e44bacc996bc",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11447,6 +11628,7 @@
       "owner_id": "2f233c8fda38720104ca98a417e773d0",
       "owner_id_hi": "0x2f233c8fda387201",
       "owner_id_lo": "0x04ca98a417e773d0",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11470,6 +11652,7 @@
       "owner_id": "bbb4cc686e0424a93dfd44524b6dfbc3",
       "owner_id_hi": "0xbbb4cc686e0424a9",
       "owner_id_lo": "0x3dfd44524b6dfbc3",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11489,20 +11672,19 @@
       "operation_id": "11a866995d9a96f8e462e3c1569e3fb0",
       "operation_id_hi": "0x11a866995d9a96f8",
       "operation_id_lo": "0xe462e3c1569e3fb0",
-      "owner": "shared.regex",
-      "owner_id": "c4f504256c97c0ec2c6130a94974719c",
-      "owner_id_hi": "0xc4f504256c97c0ec",
-      "owner_id_lo": "0x2c6130a94974719c",
+      "owner": "stdlib.regex.compile-match",
+      "owner_id": "e4f44f1eb598dbb19530369822d76e8a",
+      "owner_id_hi": "0xe4f44f1eb598dbb1",
+      "owner_id_lo": "0x9530369822d76e8a",
+      "observable_contract": "stdlib/regex/regex.xr",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
         "vm",
-        "aot-hosted",
-        "cgen",
         "runtime"
       ],
-      "consumer_bits": "0x00000037",
-      "cgen_adapter": "xrt_regex_compile_with_flags",
+      "consumer_bits": "0x00000023",
+      "cgen_adapter": null,
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -11512,22 +11694,12 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_dispatch_assert.inc.c",
-          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
-        },
-        {
-          "consumer": "aot-hosted",
-          "path": "src/aot/xrt_regex_core.c",
-          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
-        },
-        {
-          "consumer": "cgen",
-          "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_regex_compile_adapter_name"
+          "symbol": "xr_regex_compile_literal"
         },
         {
           "consumer": "runtime",
           "path": "stdlib/regex/xregex_binding.c",
-          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
+          "symbol": "xr_regex_compile_literal"
         }
       ]
     },
@@ -11540,6 +11712,7 @@
       "owner_id": "ce620df212ca698c822c746748f73646",
       "owner_id_hi": "0xce620df212ca698c",
       "owner_id_lo": "0x822c746748f73646",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -11575,6 +11748,7 @@
       "owner_id": "ce620df212ca698c822c746748f73646",
       "owner_id_hi": "0xce620df212ca698c",
       "owner_id_lo": "0x822c746748f73646",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -11610,6 +11784,7 @@
       "owner_id": "715b506496f2c2e1a1fe50236bed5aea",
       "owner_id_hi": "0x715b506496f2c2e1",
       "owner_id_lo": "0xa1fe50236bed5aea",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11633,6 +11808,7 @@
       "owner_id": "ac617302a6f0c5e7ec024eedf7938361",
       "owner_id_hi": "0xac617302a6f0c5e7",
       "owner_id_lo": "0xec024eedf7938361",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -11668,6 +11844,7 @@
       "owner_id": "92cc2cb3dc9a3131b2466a7421ec4e58",
       "owner_id_hi": "0x92cc2cb3dc9a3131",
       "owner_id_lo": "0xb2466a7421ec4e58",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11691,6 +11868,7 @@
       "owner_id": "4690ba0ee6917fd06d6ebd4c5d15cb7b",
       "owner_id_hi": "0x4690ba0ee6917fd0",
       "owner_id_lo": "0x6d6ebd4c5d15cb7b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan"
@@ -11714,6 +11892,7 @@
       "owner_id": "fa0026056ad1e40213511fc08aa6c5d6",
       "owner_id_hi": "0xfa0026056ad1e402",
       "owner_id_lo": "0x13511fc08aa6c5d6",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11737,6 +11916,7 @@
       "owner_id": "f3567e58b2659212eff9b7f659b73e79",
       "owner_id_hi": "0xf3567e58b2659212",
       "owner_id_lo": "0xeff9b7f659b73e79",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11760,6 +11940,7 @@
       "owner_id": "67395fe74e1def42e2ce2bb0d61e397b",
       "owner_id_hi": "0x67395fe74e1def42",
       "owner_id_lo": "0xe2ce2bb0d61e397b",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11783,6 +11964,7 @@
       "owner_id": "1ae4e971d1104338a45fc8f2bff42418",
       "owner_id_hi": "0x1ae4e971d1104338",
       "owner_id_lo": "0xa45fc8f2bff42418",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11806,6 +11988,7 @@
       "owner_id": "bf41ab5455b8b856d45562de0003ace6",
       "owner_id_hi": "0xbf41ab5455b8b856",
       "owner_id_lo": "0xd45562de0003ace6",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11829,6 +12012,7 @@
       "owner_id": "0da508b008d6bcc82071d3027e8b1092",
       "owner_id_hi": "0x0da508b008d6bcc8",
       "owner_id_lo": "0x2071d3027e8b1092",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11852,6 +12036,7 @@
       "owner_id": "4626f35b4850411ffd8a43a6f38a03b4",
       "owner_id_hi": "0x4626f35b4850411f",
       "owner_id_lo": "0xfd8a43a6f38a03b4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11875,6 +12060,7 @@
       "owner_id": "2015ef33491a2af14146017c256c843c",
       "owner_id_hi": "0x2015ef33491a2af1",
       "owner_id_lo": "0x4146017c256c843c",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11898,6 +12084,7 @@
       "owner_id": "81c8049cfd17d66bf8ee126679922a38",
       "owner_id_hi": "0x81c8049cfd17d66b",
       "owner_id_lo": "0xf8ee126679922a38",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11921,6 +12108,7 @@
       "owner_id": "8088aa9c9d26e689b5dedd54a1375b89",
       "owner_id_hi": "0x8088aa9c9d26e689",
       "owner_id_lo": "0xb5dedd54a1375b89",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11944,6 +12132,7 @@
       "owner_id": "1aa9fb9ca98a8711939d59e4a9e29ded",
       "owner_id_hi": "0x1aa9fb9ca98a8711",
       "owner_id_lo": "0x939d59e4a9e29ded",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11967,6 +12156,7 @@
       "owner_id": "58d019a2c3c75876c92e564e5d970157",
       "owner_id_hi": "0x58d019a2c3c75876",
       "owner_id_lo": "0xc92e564e5d970157",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -11990,6 +12180,7 @@
       "owner_id": "bcec4198ad75a52dc761f764488ccbe2",
       "owner_id_hi": "0xbcec4198ad75a52d",
       "owner_id_lo": "0xc761f764488ccbe2",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12013,6 +12204,7 @@
       "owner_id": "1d48d5e576d4e4f50fb083815cff76a0",
       "owner_id_hi": "0x1d48d5e576d4e4f5",
       "owner_id_lo": "0x0fb083815cff76a0",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12036,6 +12228,7 @@
       "owner_id": "79311f5055b4473d2160ed965f6bf769",
       "owner_id_hi": "0x79311f5055b4473d",
       "owner_id_lo": "0x2160ed965f6bf769",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12059,6 +12252,7 @@
       "owner_id": "1d167dd3a5653d5022cf5ca72cacc4df",
       "owner_id_hi": "0x1d167dd3a5653d50",
       "owner_id_lo": "0x22cf5ca72cacc4df",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12082,6 +12276,7 @@
       "owner_id": "70ab8bc3d14316a2edcb3ac71a436472",
       "owner_id_hi": "0x70ab8bc3d14316a2",
       "owner_id_lo": "0xedcb3ac71a436472",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12105,6 +12300,7 @@
       "owner_id": "c73f5b901d84b9e686533045fb62baa1",
       "owner_id_hi": "0xc73f5b901d84b9e6",
       "owner_id_lo": "0x86533045fb62baa1",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12128,6 +12324,7 @@
       "owner_id": "e6b4aae29528ffc8204d26ac82fd61a4",
       "owner_id_hi": "0xe6b4aae29528ffc8",
       "owner_id_lo": "0x204d26ac82fd61a4",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12151,6 +12348,7 @@
       "owner_id": "25799be3271ad210e157d5fc90944785",
       "owner_id_hi": "0x25799be3271ad210",
       "owner_id_lo": "0xe157d5fc90944785",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12174,6 +12372,7 @@
       "owner_id": "32c046b01db10de1d3d59b407b12bdb3",
       "owner_id_hi": "0x32c046b01db10de1",
       "owner_id_lo": "0xd3d59b407b12bdb3",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"
@@ -12197,6 +12396,7 @@
       "owner_id": "acfd067e46bbc707d1837bee2890d982",
       "owner_id_hi": "0xacfd067e46bbc707",
       "owner_id_lo": "0xd1837bee2890d982",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [
         "semantic-plan"

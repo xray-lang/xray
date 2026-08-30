@@ -51,6 +51,45 @@ def is_exact_relative_path(value: Any) -> bool:
     )
 
 
+def semantic_owner_counts(root: Path, semantic: dict[str, Any], errors: list[str]) -> tuple[int, int]:
+    """Validate target applicability without conflating adapters with owners."""
+    operations = semantic.get("operations")
+    if not isinstance(operations, list) or semantic.get("operation_count") != len(operations):
+        errors.append("semantic owner inventory is malformed")
+        return 0, 0
+    adapter = "representation adapter"
+    dual = 0
+    shared = 0
+    for row in operations:
+        operation_id = row.get("operation_id", "<missing>")
+        if not operation_id or not row.get("migration_task"):
+            errors.append(f"{operation_id}: semantic owner row lacks identity or migration task")
+        targets = set(row.get("targets", []))
+        is_shared = row.get("family") == "shared-kernel"
+        if is_shared:
+            shared += 1
+        source_backed = is_shared or row.get("future_semantic_owner") != "SemanticPlan.operation_registry"
+        vm_applicable = ("vm" if is_shared else "vm-bytecode") in targets
+        aot_applicable = ("aot" if is_shared else "aot-c") in targets
+        for label, applicable in (("current_vm_owner", vm_applicable),
+                                  ("current_aot_owner", aot_applicable)):
+            value = row.get(label)
+            if not applicable:
+                if value is not None:
+                    errors.append(f"{operation_id}: inapplicable {label} must be null")
+            elif source_backed:
+                if value != adapter:
+                    errors.append(f"{operation_id}: applicable {label} is not the governed adapter")
+            elif not isinstance(value, str) or not value or value == adapter:
+                errors.append(f"{operation_id}: generic {label} lacks its live executor owner")
+        if not source_backed and (vm_applicable or aot_applicable):
+            dual += 1
+        owner = row.get("current_shared_owner")
+        if not is_exact_relative_path(owner) or not (root / owner).is_file():
+            errors.append(f"{operation_id}: canonical source owner is not a current file")
+    return dual, shared
+
+
 def validate_inventory_rows(root: Path, data: dict[str, Any], errors: list[str]) -> dict[str, int]:
     discovery = data.get("discovery", {})
     counts: dict[str, int] = {}
@@ -78,23 +117,9 @@ def validate_inventory_rows(root: Path, data: dict[str, Any], errors: list[str])
         counts["aot_private_plan"] = len(rows) + len(mixed)
 
     semantic = read_json(root / discovery.get("semantic_owner_inventory", "<missing>"))
-    operations = semantic.get("operations")
-    if not isinstance(operations, list) or semantic.get("operation_count") != len(operations):
-        errors.append("semantic owner inventory is malformed")
-    else:
-        adapter = "representation adapter"
-        dual = [row for row in operations
-                if row.get("current_vm_owner") != adapter or row.get("current_aot_owner") != adapter]
-        for row in dual:
-            if not row.get("operation_id") or not row.get("migration_task"):
-                errors.append("semantic dual-owner row lacks identity or migration task")
-        shared = [row for row in operations if row.get("family") == "shared-kernel"]
-        for row in shared:
-            owner = row.get("current_shared_owner")
-            if not is_exact_relative_path(owner) or not (root / owner).is_file():
-                errors.append(f"shared kernel {row.get('operation_id')} lacks a source owner")
-        counts["semantic_dual_owner"] = len(dual)
-        counts["shared_kernel"] = len(shared)
+    dual, shared = semantic_owner_counts(root, semantic, errors)
+    counts["semantic_dual_owner"] = dual
+    counts["shared_kernel"] = shared
     return counts
 
 
@@ -288,6 +313,43 @@ def self_test(root: Path, data: dict[str, Any]) -> int:
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         return 1
+
+    semantic = read_json(root / data["discovery"]["semantic_owner_inventory"])
+    semantic_errors: list[str] = []
+    semantic_owner_counts(root, semantic, semantic_errors)
+    if semantic_errors:
+        print("migration classification self-test: semantic inventory is invalid", file=sys.stderr)
+        return 1
+
+    def require_semantic_error(name: str, mutate) -> None:
+        candidate = copy.deepcopy(semantic)
+        mutate(candidate["operations"])
+        found: list[str] = []
+        semantic_owner_counts(root, candidate, found)
+        if not found:
+            raise AssertionError(f"semantic owner mutation escaped: {name}")
+
+    def bind_inapplicable(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi.") and
+                   "vm-bytecode" not in item.get("targets", []))
+        row["current_vm_owner"] = "representation adapter"
+
+    def erase_explicit_adapter(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("future_semantic_owner") != "SemanticPlan.operation_registry" and
+                   "vm-bytecode" in item.get("targets", []))
+        row["current_vm_owner"] = None
+
+    def conflate_generic_adapter(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("future_semantic_owner") == "SemanticPlan.operation_registry" and
+                   "aot-c" in item.get("targets", []))
+        row["current_aot_owner"] = "representation adapter"
+
+    require_semantic_error("inapplicable-binding", bind_inapplicable)
+    require_semantic_error("missing-explicit-adapter", erase_explicit_adapter)
+    require_semantic_error("generic-adapter-conflation", conflate_generic_adapter)
 
     mutations: list[tuple[str, Any]] = []
     wrong_category = copy.deepcopy(data)

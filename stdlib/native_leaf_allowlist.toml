@@ -1337,21 +1337,21 @@ deletion_trigger = "when Xray source can issue the boot-time query itself; the b
 module = "regex"
 symbol = "__regexNew"
 class = "runtime_leaf"
-abi = "none; allocates one XrInstance and stores three fields"
+abi = "none; allocates one XrInstance, retains the borrowed pattern into field 0, stores scalar flags in field 1, and transfers the fresh empty program array into field 2"
 ownership = "fresh"
 effect = "nothrow"
-provider = "stdlib/regex/xregex_binding.c make_regex. Regex is a native class (builtin kind XR_BK_REGEX) and Xray has no surface for constructing one. The leaf only sets pattern, flags and an empty program array; regex.xr compiles the pattern on first use and fills the array by pushing"
+provider = "stdlib/regex/xregex_binding.c make_regex. Regex is the VM native handle required by XI_REGEX_COMPILE. The returned instance owns one retained pattern reference and the creator reference of the empty program array; ordinary instance destruction releases both fields. regex.xr alone compiles and fills the program array"
 deletion_trigger = "Regex has to stay a native class for as long as the regex literal syntax exists: /pat/flags lowers to XI_REGEX_COMPILE with its result type pinned to type_regex in src/ir/xi_lower_expr.c:11349. The leaf goes when a literal can lower to a call of an Xray constructor instead, at which point Regex can be an ordinary Xray class"
 
 [[leaf]]
 module = "regex"
 symbol = "__regexMatchNew"
 class = "runtime_leaf"
-abi = "none; allocates one XrInstance and stores four fields"
+abi = "none; allocates one XrInstance, stores scalar start and end fields, and retains the borrowed text and groups into fields 2 and 3"
 ownership = "fresh"
 effect = "nothrow"
-provider = "stdlib/regex/xregex_binding.c regex_match_new. Every value it stores is computed by regex.xr; the leaf exists because RegexMatch is a native class and an .xr body cannot construct one, even though it can read and write the fields"
-deletion_trigger = "goes when an .xr body can construct a native class, or when RegexMatch becomes an ordinary Xray class. The latter is blocked only by RegexMatch being reachable from find/findAll return types that the AOT side still describes as a native record"
+provider = "stdlib/regex/xregex_binding.c regex_match_new. Every value is computed by regex.xr. The returned instance owns the retained text and groups references, and ordinary instance destruction releases both fields"
+deletion_trigger = "goes when an .xr body can construct the native RegexMatch class, or when RegexMatch becomes an ordinary Xray class; no backend implementation owns this construction outside the VM binding"
 
 [[leaf]]
 module = "regex"

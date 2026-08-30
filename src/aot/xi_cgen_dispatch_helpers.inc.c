@@ -7765,22 +7765,6 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_typename(ctx, out, f, v, prefix);
     } else if (xicgen_emit_math_builtin_expr(ctx, out, f, v, bn)) {
         /* Expression emitted by the math helper. */
-    } else if (strcmp(bn, "regex_compile") == 0) {
-        XR_DCHECK(v->nargs >= 2, "builtin regex_compile: need 2 args");
-        const char *adapter = cg_regex_compile_adapter_name(ctx);
-        if (!adapter) {
-            emit_codegen_abort_expr(out);
-            return;
-        }
-        fprintf(out, "%s(xr_str_data(", adapter);
-        emit_vref(out, v->args[0]);
-        fprintf(out, "), xr_str_len(");
-        emit_vref(out, v->args[0]);
-        fprintf(out, "), xr_str_data(");
-        emit_vref(out, v->args[1]);
-        fprintf(out, "), xr_str_len(");
-        emit_vref(out, v->args[1]);
-        fprintf(out, "))");
     } else {
         fprintf(stderr, "[xi_cgen] ERROR: unknown builtin '%s'\n", bn);
         emit_codegen_abort_expr(out);
@@ -11023,20 +11007,6 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         fprintf(out, "xrt_buffer_borrow_ptr(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
-    if (method && strcmp(method, "test") == 0 && nargs == 1 && v->nargs >= 2 &&
-        xr_type_is_builtin_named_class(v->args[0]->type, "Regex")) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xrt_regex_test(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", xr_str_data(");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, "), xr_str_len(");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, "))");
         emit_conversion_suffix(out, conv_suffix);
         return;
     }

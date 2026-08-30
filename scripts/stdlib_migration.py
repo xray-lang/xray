@@ -21,6 +21,7 @@ LEGACY_CLASSIFICATIONS = {"required", "bug", "accidental", "removed"}
 LEGACY_ORACLE_MODES = {"classification_only", "executable"}
 DIFF_BACKENDS = {"vm", "aot"}
 CONTRACT_ROOT = Path("tests/stdlib/contracts")
+VM_CASE_TIMEOUT_SECONDS = 120
 
 
 def read_jsonl(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
@@ -238,14 +239,29 @@ def run_vm_cases(root: Path, contract: dict[str, Any], xray: Path) -> int:
             lines = args_path.read_text(encoding="utf-8").splitlines()
             extra_args = shlex.split(lines[0]) if lines else []
         stdin_path = Path(f"{case_path}.stdin")
-        stdin = stdin_path.read_bytes() if stdin_path.is_file() else None
-        result = subprocess.run(
-            [str(xray), "run", str(case_path), *extra_args],
-            cwd=root,
-            input=stdin,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        stdin = stdin_path.read_bytes() if stdin_path.is_file() else b""
+        command = [str(xray), "run", str(case_path)]
+        if extra_args:
+            command.extend(["--", *extra_args])
+        try:
+            result = subprocess.run(
+                command,
+                cwd=root,
+                input=stdin,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=VM_CASE_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            print(f"FAIL vm {case}", file=sys.stderr)
+            print(
+                f"  timed out after {VM_CASE_TIMEOUT_SECONDS}s",
+                file=sys.stderr,
+            )
+            if exc.stderr:
+                stderr = exc.stderr if isinstance(exc.stderr, bytes) else exc.stderr.encode()
+                print(stderr.decode("utf-8", errors="replace"), file=sys.stderr)
+            return 1
         expected = expected_path.read_bytes()
         if result.returncode != 0 or result.stdout != expected:
             print(f"FAIL vm {case}", file=sys.stderr)

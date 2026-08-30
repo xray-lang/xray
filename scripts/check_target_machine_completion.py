@@ -764,8 +764,22 @@ def dual_owner_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
         owner = row.get("current_shared_owner")
         if not isinstance(owner, str) or not owner or not (root / owner).is_file():
             errors.append(f"{operation_id}: missing canonical source owner")
-        if row.get("current_vm_owner") != adapter or row.get("current_aot_owner") != adapter:
-            errors.append(f"{operation_id}: executor owns observable semantics")
+        targets = set(row.get("targets", []))
+        is_shared = row.get("family") == "shared-kernel"
+        source_backed = is_shared or row.get("future_semantic_owner") != "SemanticPlan.operation_registry"
+        vm_applicable = ("vm" if is_shared else "vm-bytecode") in targets
+        aot_applicable = ("aot" if is_shared else "aot-c") in targets
+        for label, applicable in (("current_vm_owner", vm_applicable),
+                                  ("current_aot_owner", aot_applicable)):
+            value = row.get(label)
+            if not applicable:
+                if value is not None:
+                    errors.append(f"{operation_id}: inapplicable {label} must be null")
+            elif source_backed:
+                if value != adapter:
+                    errors.append(f"{operation_id}: applicable {label} is not the governed adapter")
+            else:
+                errors.append(f"{operation_id}: executor owns observable semantics")
         if not row.get("independent_oracle"):
             errors.append(f"{operation_id}: missing independent oracle")
     if not errors:
@@ -1944,6 +1958,8 @@ def self_test(manifest_path: Path) -> int:
                 "operation_id": "shared.fixture", "current_shared_owner": "src/shared/owner.h",
                 "current_vm_owner": "representation adapter",
                 "current_aot_owner": "representation adapter", "independent_oracle": "fixture",
+                "family": "shared-kernel", "future_semantic_owner": "SemanticOwnerRegistry/fixture",
+                "targets": ["vm", "aot"],
             }]}
             write_json(owner_root / owner_manifest["dual_owner"]["inventory"], owner_data)
             if dual_owner_findings(owner_root, owner_manifest):
@@ -1951,6 +1967,15 @@ def self_test(manifest_path: Path) -> int:
             owner_data["operations"][0]["current_vm_owner"] = "vm semantic owner"
             write_json(owner_root / owner_manifest["dual_owner"]["inventory"], owner_data)
             expect_mutation(results, "dual-owner", dual_owner_findings(
+                owner_root, owner_manifest), "TM-COMP-DUAL-OWNER")
+            owner_data["operations"][0]["current_vm_owner"] = None
+            owner_data["operations"][0]["targets"] = ["aot"]
+            write_json(owner_root / owner_manifest["dual_owner"]["inventory"], owner_data)
+            if dual_owner_findings(owner_root, owner_manifest):
+                raise AssertionError("inapplicable-null owner fixture rejected")
+            owner_data["operations"][0]["current_vm_owner"] = "representation adapter"
+            write_json(owner_root / owner_manifest["dual_owner"]["inventory"], owner_data)
+            expect_mutation(results, "dual-owner-inapplicable-binding", dual_owner_findings(
                 owner_root, owner_manifest), "TM-COMP-DUAL-OWNER")
 
             inventory_root = root / "inventory"
@@ -1991,6 +2016,7 @@ def self_test(manifest_path: Path) -> int:
             "matrix", "activation-generation", "full-validation",
             "full-validation-selection", "full-validation-execution",
             "full-validation-producer", "full-validation-build", "dual-owner",
+            "dual-owner-inapplicable-binding",
             "terminal-inventory",
         }
         observed = {item.split("->", 1)[0] for item in results}

@@ -72,7 +72,7 @@
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_null_test_core.h"
 #include "../shared/xr_pod_slice_core.h"
-#include "../shared/xr_regex_core.h"
+#include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xr_slice_window_core.h"
 #include "../shared/xr_assertion_core.h"
 

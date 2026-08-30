@@ -136,53 +136,52 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
     text = read(root / inputs[0])
     manifest = tomllib.loads(read(root / inputs[1]))
     registry = json.loads(read(root / inputs[4]))
-    kernels_by_owner = {
+    canonical_by_owner = {
         f"shared.{item['id']}": item["header"] for item in manifest.get("core", [])
     }
-    kernels_by_owner.update({
+    canonical_by_owner.update({
         item["typed_plan"]: item["semantic_kernel"]
         for item in manifest.get("operation", [])
         if item.get("typed_plan") and item.get("semantic_kernel")
     })
     blocks = re.findall(r"\(define-xi-op\s+([^\s()]+)(.*?)(?=\n\(define-xi-op|\Z)", text, re.S)
-    targets_by_operation = {
-        name: set(sexpr_list(body, "targets")) for name, body in blocks
+    registry_by_operation = {
+        row["operation"]: row for row in registry.get("operations", [])
     }
-    explicit_by_operation: dict[str, dict[str, Any]] = {}
-    for owner in registry.get("owners", []):
-        canonical_source = kernels_by_owner.get(owner.get("owner"))
-        consumers = set(owner.get("consumers", []))
-        # CGen is the production AOT consumer for compile-time-only semantics.
-        # Runtime owners additionally name their hosted/freestanding adapters,
-        # but requiring those profiles would hide source-backed target queries
-        # that are fully reduced before generated C crosses that boundary.
-        if not canonical_source or "cgen" not in consumers:
-            continue
-        for operation in owner.get("operations", []):
-            targets = targets_by_operation.get(operation, set())
-            if "vm-bytecode" in targets and "vm" not in consumers:
-                continue
-            explicit_by_operation[operation] = {
-                "owner": owner["owner"],
-                "source": canonical_source,
-            }
     rows: list[dict[str, Any]] = []
     for name, body in blocks:
         op_class = sexpr_atom(body, "class", "unclassified")
         family = op_family(op_class)
-        explicit = explicit_by_operation.get(name)
+        registry_row = registry_by_operation.get(name)
+        if registry_row is None:
+            raise RuntimeError(f"semantic owner registry has no operation {name}")
+        owner = registry_row.get("owner")
+        canonical_source = canonical_by_owner.get(owner)
+        explicit = canonical_source is not None
+        observable_contract = registry_row.get("observable_contract")
+        if (not isinstance(observable_contract, str) or
+                not (root / observable_contract).is_file()):
+            raise RuntimeError(f"{name}: observable contract is not a current source file")
+        targets = set(sexpr_list(body, "targets"))
+        consumers = set(registry_row.get("consumers", []))
+        vm_applicable = "vm-bytecode" in targets
+        aot_applicable = "aot-c" in targets
+        if explicit and vm_applicable and "vm" not in consumers:
+            raise RuntimeError(f"{name}: VM target lacks its declared owner consumer")
+        if explicit and aot_applicable and "cgen" not in consumers:
+            raise RuntimeError(f"{name}: AOT target lacks its declared owner consumer")
         rows.append({
             "operation_id": name,
             "family": family,
-            "observable_contract": (explicit["source"] if explicit
-                                    else "contracts/xi-canonical-ops.md"),
-            "current_vm_owner": ("representation adapter" if explicit else
-                                 "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm"),
-            "current_aot_owner": ("representation adapter" if explicit else
-                                  "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c"),
-            "current_shared_owner": (explicit["source"] if explicit else "xisa/xi/ops.def"),
-            "future_semantic_owner": (explicit["owner"] if explicit
-                                      else "SemanticPlan.operation_registry"),
+            "observable_contract": observable_contract,
+            "current_vm_owner": (("representation adapter" if explicit else
+                                  "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm")
+                                 if vm_applicable else None),
+            "current_aot_owner": (("representation adapter" if explicit else
+                                   "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c")
+                                  if aot_applicable else None),
+            "current_shared_owner": (canonical_source if explicit else "xisa/xi/ops.def"),
+            "future_semantic_owner": (owner if explicit else "SemanticPlan.operation_registry"),
             "effects": sexpr_list(body, "effects"),
             "capabilities": sexpr_list(body, "requires"),
             "observable_edges": sexpr_list(body, "observable"),
@@ -203,8 +202,8 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
             "operation_id": f"shared.{item['id']}",
             "family": "shared-kernel",
             "observable_contract": item["header"],
-            "current_vm_owner": "representation adapter",
-            "current_aot_owner": "representation adapter",
+            "current_vm_owner": ("representation adapter" if "vm" in item["profiles"] else None),
+            "current_aot_owner": ("representation adapter" if "aot" in item["profiles"] else None),
             "current_shared_owner": item["header"],
             "future_semantic_owner": f"SemanticOwnerRegistry/{item['id']}",
             "effects": [],
@@ -827,6 +826,70 @@ def self_test() -> int:
         assert [path.relative_to(root).as_posix() for path in source_files(root, ".")] == [
             "a", "a/first.c", "governed.txt", "z", "z/later.c"
         ]
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for relative in ("xisa/xi/ops.def", "contracts/semantic-owners.toml",
+                         "src/ir/xi_emit_vm_gen.h", "src/aot/xi_to_c_dispatch_gen.h",
+                         "contracts/semantic-owner-registry.json",
+                         "stdlib/fixture.xr", "src/shared/xr_fixture_core.h"):
+            (root / relative).parent.mkdir(parents=True, exist_ok=True)
+            (root / relative).write_text("", encoding="utf-8")
+        (root / "xisa/xi/ops.def").write_text(
+            "(define-xi-op xi.fixture\n"
+            "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
+            "  :observable () :targets (vm-bytecode)\n"
+            "  :observable-contract \"stdlib/fixture.xr\")\n"
+            "(define-xi-op xi.verifier\n"
+            "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
+            "  :observable () :targets (aot-verify))\n"
+            "(define-xi-op xi.shared\n"
+            "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
+            "  :observable () :targets (vm-bytecode aot-c))\n",
+            encoding="utf-8")
+        (root / "contracts/semantic-owners.toml").write_text(
+            "[[core]]\nid = \"fixture\"\nheader = \"src/shared/xr_fixture_core.h\"\n"
+            "representation = \"native\"\nowner = \"shared-kernel\"\nprofiles = [\"vm\"]\n\n"
+            "[[operation]]\nid = \"fixture\"\nobservable_contract = \"stdlib/fixture.xr\"\n"
+            "semantic_kernel = \"stdlib/fixture.xr\"\nvm_adapter = \"adapter\"\n"
+            "aot_adapter = \"none\"\ntyped_plan = \"stdlib.fixture\"\n"
+            "runtime_fallback = \"none\"\nfixtures = []\n",
+            encoding="utf-8")
+        (root / "stdlib/fixture.xr").write_text("// fixture\n", encoding="utf-8")
+        (root / "src/shared/xr_fixture_core.h").write_text("/* fixture */\n", encoding="utf-8")
+        registry = {"owners": [], "operations": [
+            {"operation": "xi.fixture", "owner": "stdlib.fixture",
+             "observable_contract": "stdlib/fixture.xr", "consumers": ["vm"]},
+            {"operation": "xi.verifier", "owner": "xi.verifier",
+             "observable_contract": "contracts/xi-canonical-ops.md",
+             "consumers": ["semantic-plan"]},
+            {"operation": "xi.shared", "owner": "shared.fixture",
+             "observable_contract": "src/shared/xr_fixture_core.h",
+             "consumers": ["vm", "cgen"]},
+        ]}
+        (root / "contracts/xi-canonical-ops.md").write_text("fixture\n", encoding="utf-8")
+        (root / "contracts/semantic-owner-registry.json").write_text(
+            json.dumps(registry), encoding="utf-8")
+        inventory = semantic_owner_inventory(root)
+        by_id = {row["operation_id"]: row for row in inventory["operations"]}
+        assert by_id["xi.fixture"]["current_vm_owner"] == "representation adapter"
+        assert by_id["xi.fixture"]["current_aot_owner"] is None
+        assert by_id["xi.verifier"]["current_vm_owner"] is None
+        assert by_id["xi.verifier"]["current_aot_owner"] is None
+        assert by_id["xi.shared"]["current_vm_owner"] == "representation adapter"
+        assert by_id["xi.shared"]["current_aot_owner"] == "representation adapter"
+        assert by_id["xi.shared"]["current_shared_owner"] == "src/shared/xr_fixture_core.h"
+        assert by_id["xi.shared"]["future_semantic_owner"] == "shared.fixture"
+        assert by_id["shared.fixture"]["current_vm_owner"] == "representation adapter"
+        assert by_id["shared.fixture"]["current_aot_owner"] is None
+        registry["operations"][0]["consumers"] = []
+        (root / "contracts/semantic-owner-registry.json").write_text(
+            json.dumps(registry), encoding="utf-8")
+        try:
+            semantic_owner_inventory(root)
+        except RuntimeError as error:
+            assert "VM target lacks" in str(error)
+        else:
+            raise AssertionError("missing VM owner binding was accepted")
     if lf_fingerprint != crlf_fingerprint:
         print("target-machine Phase 0 inventory self-test: FAIL", file=sys.stderr)
         return 1

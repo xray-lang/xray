@@ -533,7 +533,8 @@ static void test_backend_policy_generated_metadata(void) {
     assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_NEW), "iter_new") == 0);
     assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_NEXT), "iter_next") == 0);
     assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_VALID), "iter_valid") == 0);
-    assert(strcmp(xi_op_backend_rewrite_name(XI_REGEX_COMPILE), "regex_compile") == 0);
+    assert(xi_op_backend_rewrite(XI_REGEX_COMPILE) == XI_GEN_BACKEND_REWRITE_NONE);
+    assert(xi_op_backend_rewrite_name(XI_REGEX_COMPILE) == NULL);
 
     printf("  PASS\n");
 }
@@ -565,16 +566,6 @@ static void test_backend_lower_rewrites_generated_builtin_ops(void) {
     iter_valid->args[0] = iter_new;
     iter_valid->flags = xi_op_default_effects(XI_ITER_VALID);
 
-    XiValue *pattern = xi_const_str(f, entry, "x+", &stub_string);
-    assert(pattern != NULL);
-    XiValue *flags = xi_const_int(f, entry, 0, &stub_int);
-    assert(flags != NULL);
-    XiValue *regex = xi_value_new(f, entry, XI_REGEX_COMPILE, &stub_int, 2);
-    assert(regex != NULL);
-    regex->args[0] = pattern;
-    regex->args[1] = flags;
-    regex->flags = xi_op_default_effects(XI_REGEX_COMPILE);
-
     xi_block_set_return(entry, NULL);
     XiReppedProgram *repped = advance_to_repped(f);
     XiBackendProgram *backend = finish_backend(repped, f);
@@ -583,7 +574,6 @@ static void test_backend_lower_rewrites_generated_builtin_ops(void) {
     assert_rewritten_builtin(iter_new, "iter_new");
     assert_rewritten_builtin(iter_next, "iter_next");
     assert_rewritten_builtin(iter_valid, "iter_valid");
-    assert_rewritten_builtin(regex, "regex_compile");
 
     xi_func_free(xi_backend_program_release(backend));
     printf("  PASS\n");

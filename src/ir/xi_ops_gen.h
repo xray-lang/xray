@@ -416,7 +416,7 @@ typedef struct {
     X(LEN, "xi.len", XI_GEN_CLASS_MEMORY_READ, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_TOP, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(GET_BUILTIN, "xi.get.builtin", XI_GEN_CLASS_MEMORY_READ, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_CONST, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(IMPORT_REF, "xi.import.ref", XI_GEN_CLASS_MEMORY_READ, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_TOP, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
-    X(REGEX_COMPILE, "xi.regex.compile", XI_GEN_CLASS_ALLOCATION, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_FRESH, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_BUILTIN, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_HEAP, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, "regex_compile", NULL) \
+    X(REGEX_COMPILE, "xi.regex.compile", XI_GEN_CLASS_ALLOCATION, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_FRESH, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_HEAP, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(RETAIN, "xi.retain", XI_GEN_CLASS_OWNERSHIP, 1, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_RETAINS, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(RELEASE, "xi.release", XI_GEN_CLASS_OWNERSHIP, 1, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_RELEASES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(SOURCE_MOVE, "xi.source.move", XI_GEN_CLASS_OWNERSHIP, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_SYNC_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT, 0, XI_EFFECT_SIDE_EFFECT, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -3185,7 +3185,7 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_LEN: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_GET_BUILTIN: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_IMPORT_REF: return XI_GEN_BACKEND_REWRITE_NONE;
-        case XI_REGEX_COMPILE: return XI_GEN_BACKEND_REWRITE_BUILTIN;
+        case XI_REGEX_COMPILE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_RETAIN: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_RELEASE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_SOURCE_MOVE: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -3416,7 +3416,7 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_LEN: return NULL;
         case XI_GET_BUILTIN: return NULL;
         case XI_IMPORT_REF: return NULL;
-        case XI_REGEX_COMPILE: return "regex_compile";
+        case XI_REGEX_COMPILE: return NULL;
         case XI_RETAIN: return NULL;
         case XI_RELEASE: return NULL;
         case XI_SOURCE_MOVE: return NULL;
@@ -3451,8 +3451,1006 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
 }
 
 static inline bool xi_generated_op_backend_legal(uint16_t op) {
-    return xi_generated_op_backend_rewrite(op) == XI_GEN_BACKEND_REWRITE_NONE &&
-           xi_generated_op_lowering_policy(op) != XI_GEN_LOWERING_VERIFIER_ONLY;
+    switch ((XiOp) op) {
+        case XI_CONST:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PARAM:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TARGET_SIZEOF:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TARGET_ALIGNOF:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TARGET_SIMD_BYTES:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TARGET_SIMD_ACCELERATED:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TARGET_SIMD_RUNTIME_SELECTED:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ADD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SUB:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_MUL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_DIV:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_MOD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NEG:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BAND:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BOR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BXOR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BNOT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SHL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SHR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BIT_ROTL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BIT_ROTR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BIT_BSWAP:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BIT_POPCOUNT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BIT_CLZ:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BIT_CTZ:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BIT_MUL_HIGH:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CODEGEN_OPAQUE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CODEGEN_COMPILER_FENCE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_EQ:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_LT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_LE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_GT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_GE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NOT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CONVERT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BOX:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_UNBOX:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ENUM_DESCRIPTOR_BOX:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ENUM_DESCRIPTOR_UNBOX:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NARROW_I8:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NARROW_U8:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NARROW_I16:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NARROW_U16:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NARROW_I32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NARROW_U32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_NARROW_F32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WIDEN_I8:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WIDEN_U8:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WIDEN_I16:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WIDEN_U16:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WIDEN_I32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WIDEN_U32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WIDEN_F32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_LOAD_FIELD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_STORE_FIELD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WEAK_LOAD_FIELD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_WEAK_STORE_FIELD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_INDEX_GET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_INDEX_SET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ENUM_VARIANT_AT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ENUM_PAYLOAD_AT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ENUM_META_GET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_LOAD_U16:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_LOAD_U32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_LOAD_U64:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_LOAD_F32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_LOAD_F64:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_STORE_U16:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_STORE_U32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_STORE_U64:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_STORE_F32:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_STORE_F64:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_FILL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_COPY:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_COMPARE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_COMMON_PREFIX:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_SLICE_REPEAT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SLICE_WINDOW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SLICE_FROM_PTR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BUFFER_MATERIALIZE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SLICE_AS_BYTES:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SLICE_FILL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SLICE_COPY:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SLICE_COMPARE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SLICE_REINTERPRET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_ARRAY_COPY_WITHIN:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_ARRAY_COPY_FROM:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_ARRAY_APPEND_FROM:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_BYTE_ARRAY_REPEAT_FROM:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ARRAY_DATA_PTR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_STATIC_BYTES_PTR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_STATIC_ADDR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_LOCAL_ADDR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PLACE_LOAD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PLACE_STORE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PTR_LOAD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PTR_STORE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PTR_COPY_NONOVERLAP:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_AGG_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_AGG_GET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_AGG_SET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_FIXED_ARRAY_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_FIXED_BYTES_CONST:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_OBJECT_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_OBJECT_INIT_F:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_OBJECT_GET_F:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_OBJECT_SET_F:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_OBJECT_MERGE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_JSON_DECODE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ARRAY_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ARRAY_PUSH:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ARRAY_EXTEND:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_MAP_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TUPLE_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TUPLE_GET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CALL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CALL_METHOD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CALL_METHOD_DIRECT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TAIL_CALL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CALL_BUILTIN:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ATOMIC_LOAD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ATOMIC_STORE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ATOMIC_RMW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ATOMIC_TO_STRING:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_EXTRACT: return false;
+        case XI_CLOSURE_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CELL_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CELL_GET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CELL_SET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_LOAD_UPVAL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_STORE_UPVAL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_GET_SHARED:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SET_SHARED:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_GET_GLOBAL: return false;
+        case XI_SET_GLOBAL: return false;
+        case XI_PRINT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_GO: return false;
+        case XI_THREAD_SPAWN: return false;
+        case XI_GEN_CALL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_AWAIT: return false;
+        case XI_PAR_FOR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PAR_MAP:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PAR_REDUCE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TASK_GROUP_NEW: return false;
+        case XI_TASK_GROUP_SPAWN_RANGE: return false;
+        case XI_TASK_GROUP_AWAIT_REDUCE: return false;
+        case XI_TASK_GROUP_JOIN: return false;
+        case XI_CHAN_SEND: return false;
+        case XI_CHAN_RECV: return false;
+        case XI_CHAN_RECV_STATUS:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CHAN_TRY_SEND: return false;
+        case XI_CHAN_TRY_RECV: return false;
+        case XI_CHAN_IS_CLOSED: return false;
+        case XI_TIME_AFTER: return false;
+        case XI_CHAN_TIMER_DISPOSE: return false;
+        case XI_SELECT_BLOCK: return false;
+        case XI_YIELD: return false;
+        case XI_GEN_YIELD: return false;
+        case XI_THROW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ERR_SET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ERR_RETURN:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ERR_CHECK:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ERR_CATCH:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CLEANUP_ENTER:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CLEANUP_LEAVE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CLEANUP_ERR_CHECK:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ITER_NEW: return false;
+        case XI_ITER_NEXT: return false;
+        case XI_ITER_VALID: return false;
+        case XI_CHAN_NEW: return false;
+        case XI_SET_NEW:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_STR_CONCAT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_IS:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_AS:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CHECKTYPE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SLICE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_RANGE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_MULTI_RET: return false;
+        case XI_ISNULL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_PHI:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SELECT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_COPY:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CLASS_CREATE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SCOPE_ENTER: return false;
+        case XI_SCOPE_EXIT: return false;
+        case XI_TRY:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CATCH:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_END_TRY:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_ASSERTION:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TYPEID:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_TYPENAME:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_LEN:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_GET_BUILTIN:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_IMPORT_REF:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_REGEX_COMPILE: return false;
+        case XI_RETAIN:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_RELEASE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_SOURCE_MOVE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_OWNER_FORWARD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_STACK_ALLOC:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_CORO_OP: return false;
+        case XI_VEC_LOAD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_STORE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_SPLAT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_EXTRACT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_REPLACE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_ADD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_SUB:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_MUL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_BIT_AND:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_BIT_OR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_BIT_XOR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_BIT_NOT:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_SHL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_SHR:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_REINTERPRET:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_SHUFFLE:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_WIDEN_MUL:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_UNZIP:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_WIDEN_MUL_HALF:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VEC_REDUCE_ADD:
+            return xi_generated_op_backend_rewrite(op) ==
+                       XI_GEN_BACKEND_REWRITE_NONE &&
+                   xi_generated_op_lowering_policy(op) !=
+                       XI_GEN_LOWERING_VERIFIER_ONLY;
+        case XI_VALUE_PRODUCT_CONSTRUCT: return false;
+        case XI_VALUE_PRODUCT_PROJECT: return false;
+        case XI_OP_COUNT: break;
+    }
+    return false;
 }
 
 static inline uint8_t xi_generated_op_escape_use(uint16_t op) {

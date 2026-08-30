@@ -1000,7 +1000,7 @@
       ]
     },
     {
-      "benchmark_anchor": "shared-core/regex",
+      "benchmark_anchor": "shared-core/regex-flag-contract",
       "capabilities": [
         "vm",
         "aot",
@@ -1012,12 +1012,12 @@
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "shared-kernel",
-      "future_semantic_owner": "SemanticOwnerRegistry/regex",
+      "future_semantic_owner": "SemanticOwnerRegistry/regex-flag-contract",
       "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
       "migration_task": 278,
       "observable_contract": "src/shared/xr_regex_core.h",
       "observable_edges": [],
-      "operation_id": "shared.regex",
+      "operation_id": "shared.regex-flag-contract",
       "ownership": "native",
       "targets": [
         "vm",
@@ -1062,7 +1062,7 @@
       ],
       "current_aot_owner": "representation adapter",
       "current_shared_owner": "src/shared/xr_static_address_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": null,
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "shared-kernel",
@@ -1391,7 +1391,7 @@
       "future_semantic_owner": "primitive.integer-wrapping",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_int_arith_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.add",
       "ownership": "borrow",
@@ -1492,7 +1492,7 @@
       "future_semantic_owner": "shared.data-pointer",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_data_pointer_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.array.data.ptr",
       "ownership": "borrow",
@@ -1618,7 +1618,7 @@
       "future_semantic_owner": "shared.assertion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_assertion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.assertion",
       "ownership": "borrow",
@@ -1644,7 +1644,7 @@
       "future_semantic_owner": "shared.atomic-load",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_sync_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "atomic-load"
       ],
@@ -1703,7 +1703,7 @@
       "future_semantic_owner": "shared.atomic-store",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_sync_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "atomic-store"
       ],
@@ -1750,7 +1750,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1786,7 +1786,7 @@
       "future_semantic_owner": "shared.bitwise-binary",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.band",
       "ownership": "borrow",
@@ -1808,7 +1808,7 @@
       "future_semantic_owner": "shared.bits",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bit.bswap",
       "ownership": "borrow",
@@ -1830,7 +1830,7 @@
       "future_semantic_owner": "shared.bits",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bit.clz",
       "ownership": "borrow",
@@ -1852,7 +1852,7 @@
       "future_semantic_owner": "shared.bits",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bit.ctz",
       "ownership": "borrow",
@@ -1874,7 +1874,7 @@
       "future_semantic_owner": "shared.bits",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bit.mul-high",
       "ownership": "borrow",
@@ -1896,7 +1896,7 @@
       "future_semantic_owner": "shared.bits",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bit.popcount",
       "ownership": "borrow",
@@ -1918,7 +1918,7 @@
       "future_semantic_owner": "shared.bits",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bit.rotl",
       "ownership": "borrow",
@@ -1940,7 +1940,7 @@
       "future_semantic_owner": "shared.bits",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bit.rotr",
       "ownership": "borrow",
@@ -1962,7 +1962,7 @@
       "future_semantic_owner": "shared.bits-not",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bnot",
       "ownership": "borrow",
@@ -1984,7 +1984,7 @@
       "future_semantic_owner": "shared.bitwise-binary",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bor",
       "ownership": "borrow",
@@ -2063,7 +2063,7 @@
       "future_semantic_owner": "shared.bitwise-binary",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.bxor",
       "ownership": "borrow",
@@ -2097,7 +2097,7 @@
       "future_semantic_owner": "shared.byte-array-append",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_array_append_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "sequence-append"
       ],
@@ -2131,7 +2131,7 @@
       "future_semantic_owner": "shared.byte-array-copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_array_copy_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "in-place-copy"
       ],
@@ -2166,7 +2166,7 @@
       "future_semantic_owner": "shared.byte-array-copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_array_copy_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "in-place-copy"
       ],
@@ -2202,7 +2202,7 @@
       "future_semantic_owner": "shared.byte-array-repeat",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_array_repeat_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "sequence-repeat"
       ],
@@ -2234,7 +2234,7 @@
       "future_semantic_owner": "shared.byte-slice-common-prefix",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-common-prefix"
       ],
@@ -2266,7 +2266,7 @@
       "future_semantic_owner": "shared.byte-slice-compare",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-compare"
       ],
@@ -2301,7 +2301,7 @@
       "future_semantic_owner": "shared.byte-slice-copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-copy"
       ],
@@ -2334,7 +2334,7 @@
       "future_semantic_owner": "shared.byte-slice-fill",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-fill"
       ],
@@ -2367,7 +2367,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "f32-bitcast"
       ],
@@ -2400,7 +2400,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "f64-bitcast"
       ],
@@ -2433,7 +2433,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "u16-wrap"
       ],
@@ -2466,7 +2466,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "u32-wrap"
       ],
@@ -2499,7 +2499,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "u64-wrap"
       ],
@@ -2534,7 +2534,7 @@
       "future_semantic_owner": "shared.byte-slice-repeat",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-repeat"
       ],
@@ -2568,7 +2568,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "f32-bitcast"
       ],
@@ -2602,7 +2602,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "f64-bitcast"
       ],
@@ -2636,7 +2636,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "u16-wrap"
       ],
@@ -2670,7 +2670,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "u32-wrap"
       ],
@@ -2704,7 +2704,7 @@
       "future_semantic_owner": "shared.byte-slice-scalar",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "u64-wrap"
       ],
@@ -2870,7 +2870,7 @@
       "future_semantic_owner": "shared.cell-access",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_cell_access_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "cell-read"
       ],
@@ -2925,7 +2925,7 @@
       "future_semantic_owner": "shared.cell-access",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_cell_access_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "cell-write"
       ],
@@ -2940,7 +2940,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2964,7 +2964,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2989,7 +2989,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3036,7 +3036,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3061,7 +3061,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3085,7 +3085,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3109,7 +3109,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3303,7 +3303,7 @@
       "future_semantic_owner": "shared.codegen-compiler-fence",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_codegen_opaque_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "compiler-order"
       ],
@@ -3327,7 +3327,7 @@
       "future_semantic_owner": "shared.codegen-opaque",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_codegen_opaque_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "codegen-control"
       ],
@@ -3395,7 +3395,7 @@
       "future_semantic_owner": "shared.copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_copy_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.copy",
       "ownership": "borrow",
@@ -3408,7 +3408,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3442,7 +3442,7 @@
       "future_semantic_owner": "shared.int-div-mod",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_int_arith_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.div",
       "ownership": "borrow",
@@ -3571,7 +3571,7 @@
       "future_semantic_owner": "shared.enum-metadata-access",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_enum_metadata_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.enum.payload.at",
       "ownership": "borrow",
@@ -3599,7 +3599,7 @@
       "future_semantic_owner": "shared.enum-metadata-access",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_enum_metadata_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.enum.variant.at",
       "ownership": "borrow",
@@ -3621,7 +3621,7 @@
       "future_semantic_owner": "shared.compare",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_compare_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.eq",
       "ownership": "borrow",
@@ -3730,9 +3730,9 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "call-and-dispatch",
@@ -3811,7 +3811,7 @@
       "future_semantic_owner": "shared.compare",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_compare_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.ge",
       "ownership": "borrow",
@@ -3849,7 +3849,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3897,7 +3897,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3944,7 +3944,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3977,7 +3977,7 @@
       "future_semantic_owner": "shared.compare",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_compare_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.gt",
       "ownership": "borrow",
@@ -4094,7 +4094,7 @@
       "future_semantic_owner": "shared.null-test",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_null_test_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.isnull",
       "ownership": "borrow",
@@ -4107,7 +4107,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-iterator",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4132,7 +4132,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-iterator",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4157,7 +4157,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-iterator",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4215,7 +4215,7 @@
       "future_semantic_owner": "shared.compare",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_compare_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.le",
       "ownership": "borrow",
@@ -4334,7 +4334,7 @@
       "future_semantic_owner": "shared.compare",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_compare_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.lt",
       "ownership": "borrow",
@@ -4382,7 +4382,7 @@
       "future_semantic_owner": "shared.int-div-mod",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_int_arith_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.mod",
       "ownership": "borrow",
@@ -4404,7 +4404,7 @@
       "future_semantic_owner": "primitive.integer-wrapping",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_int_arith_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.mul",
       "ownership": "borrow",
@@ -4417,9 +4417,9 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "call-and-dispatch",
@@ -4446,7 +4446,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.narrow.f32",
       "ownership": "borrow",
@@ -4468,7 +4468,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.narrow.i16",
       "ownership": "borrow",
@@ -4490,7 +4490,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.narrow.i32",
       "ownership": "borrow",
@@ -4512,7 +4512,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.narrow.i8",
       "ownership": "borrow",
@@ -4534,7 +4534,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.narrow.u16",
       "ownership": "borrow",
@@ -4556,7 +4556,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.narrow.u32",
       "ownership": "borrow",
@@ -4578,7 +4578,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.narrow.u8",
       "ownership": "borrow",
@@ -4600,7 +4600,7 @@
       "future_semantic_owner": "shared.compare",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_compare_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.ne",
       "ownership": "borrow",
@@ -4622,7 +4622,7 @@
       "future_semantic_owner": "shared.numeric-neg",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.neg",
       "ownership": "borrow",
@@ -4644,7 +4644,7 @@
       "future_semantic_owner": "shared.truthiness",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_truthy_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.not",
       "ownership": "borrow",
@@ -4792,7 +4792,7 @@
       "future_semantic_owner": "shared.owner-forward",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_owner_forward_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.owner.forward",
       "ownership": "consume",
@@ -5041,7 +5041,7 @@
       "future_semantic_owner": "shared.raw-memory-copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_raw_memory_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "raw-memory-copy"
       ],
@@ -5067,7 +5067,7 @@
       "future_semantic_owner": "shared.raw-scalar-access",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_raw_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.ptr.load",
       "ownership": "borrow",
@@ -5092,7 +5092,7 @@
       "future_semantic_owner": "shared.raw-scalar-access",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_raw_scalar_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.ptr.store",
       "ownership": "borrow",
@@ -5114,7 +5114,7 @@
       "future_semantic_owner": "shared.range",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_range_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.range",
       "ownership": "borrow",
@@ -5127,8 +5127,8 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
-      "current_shared_owner": "src/shared/xr_regex_core.h",
+      "current_aot_owner": null,
+      "current_shared_owner": "stdlib/regex/regex.xr",
       "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
@@ -5137,10 +5137,10 @@
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "allocation-and-ownership",
-      "future_semantic_owner": "shared.regex",
+      "future_semantic_owner": "stdlib.regex.compile-match",
       "independent_oracle": "ownership-certificate-plus-runtime-event-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_regex_core.h",
+      "observable_contract": "stdlib/regex/regex.xr",
       "observable_edges": [],
       "operation_id": "xi.regex.compile",
       "ownership": "consume",
@@ -5164,7 +5164,7 @@
       "future_semantic_owner": "shared.reference-count",
       "independent_oracle": "ownership-certificate-plus-runtime-event-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_reference_count_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.release",
       "ownership": "consume",
@@ -5189,7 +5189,7 @@
       "future_semantic_owner": "shared.reference-count",
       "independent_oracle": "ownership-certificate-plus-runtime-event-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_reference_count_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.retain",
       "ownership": "borrow",
@@ -5202,7 +5202,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5225,7 +5225,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5258,7 +5258,7 @@
       "future_semantic_owner": "shared.truthiness",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_truthy_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.select",
       "ownership": "consume",
@@ -5271,7 +5271,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5296,7 +5296,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5380,7 +5380,7 @@
       "future_semantic_owner": "shared.shift",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.shl",
       "ownership": "borrow",
@@ -5402,7 +5402,7 @@
       "future_semantic_owner": "shared.shift",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_bits_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.shr",
       "ownership": "borrow",
@@ -5456,7 +5456,7 @@
       "future_semantic_owner": "shared.pod-slice-view",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_pod_slice_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-as-bytes"
       ],
@@ -5490,7 +5490,7 @@
       "future_semantic_owner": "shared.pod-slice-compare",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_pod_slice_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-compare"
       ],
@@ -5527,7 +5527,7 @@
       "future_semantic_owner": "shared.pod-slice-copy",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_pod_slice_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-copy"
       ],
@@ -5561,7 +5561,7 @@
       "future_semantic_owner": "shared.pod-slice-fill",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_pod_slice_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-fill"
       ],
@@ -5623,7 +5623,7 @@
       "future_semantic_owner": "shared.pod-slice-view",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_pod_slice_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-reinterpret"
       ],
@@ -5655,7 +5655,7 @@
       "future_semantic_owner": "shared.slice-window",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_slice_window_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [
         "slice-window"
       ],
@@ -5696,7 +5696,7 @@
       "capabilities": [],
       "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [
         "side-effect",
         "memory-write",
@@ -5724,14 +5724,14 @@
       ],
       "current_aot_owner": "representation adapter",
       "current_shared_owner": "src/shared/xr_static_address_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": null,
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-pure",
       "future_semantic_owner": "shared.static-address",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_static_address_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.static.addr",
       "ownership": "borrow",
@@ -5755,7 +5755,7 @@
       "future_semantic_owner": "shared.data-pointer",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_data_pointer_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.static.bytes.ptr",
       "ownership": "borrow",
@@ -5830,7 +5830,7 @@
       "future_semantic_owner": "shared.string-concat",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_string_concat_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.str.concat",
       "ownership": "consume",
@@ -5852,7 +5852,7 @@
       "future_semantic_owner": "primitive.integer-wrapping",
       "independent_oracle": "independent-kat-property-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_int_arith_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.sub",
       "ownership": "borrow",
@@ -5903,7 +5903,7 @@
       "future_semantic_owner": "shared.target-layout-query",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_native_type_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.target.alignof",
       "ownership": "borrow",
@@ -5925,7 +5925,7 @@
       "future_semantic_owner": "shared.target-simd-query",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_target_simd_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.target.simd.accelerated",
       "ownership": "borrow",
@@ -5947,7 +5947,7 @@
       "future_semantic_owner": "shared.target-simd-query",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_target_simd_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.target.simd.bytes",
       "ownership": "borrow",
@@ -5969,7 +5969,7 @@
       "future_semantic_owner": "shared.target-simd-query",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_target_simd_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.target.simd.runtime-selected",
       "ownership": "borrow",
@@ -5991,7 +5991,7 @@
       "future_semantic_owner": "shared.target-layout-query",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_native_type_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.target.sizeof",
       "ownership": "borrow",
@@ -6004,9 +6004,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-parallel",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [
         "side-effect",
         "may-suspend",
@@ -6036,9 +6036,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-parallel",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [
         "side-effect",
         "may-suspend",
@@ -6067,9 +6067,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-parallel",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [
         "side-effect",
         "memory-write",
@@ -6093,9 +6093,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-parallel",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [
         "side-effect",
         "may-throw",
@@ -6122,7 +6122,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6173,7 +6173,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6280,7 +6280,7 @@
       "future_semantic_owner": "primitive.type-identity",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_type_identity_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.typeid",
       "ownership": "borrow",
@@ -6337,9 +6337,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -6357,9 +6357,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -6772,7 +6772,7 @@
       "capabilities": [],
       "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "vector-and-simd",
@@ -6815,7 +6815,7 @@
       "capabilities": [],
       "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
       "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_vm_owner": null,
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "vector-and-simd",
@@ -6896,7 +6896,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.widen.f32",
       "ownership": "borrow",
@@ -6918,7 +6918,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.widen.i16",
       "ownership": "borrow",
@@ -6940,7 +6940,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.widen.i32",
       "ownership": "borrow",
@@ -6962,7 +6962,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.widen.i8",
       "ownership": "borrow",
@@ -6984,7 +6984,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.widen.u16",
       "ownership": "borrow",
@@ -7006,7 +7006,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.widen.u32",
       "ownership": "borrow",
@@ -7028,7 +7028,7 @@
       "future_semantic_owner": "shared.numeric-conversion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_numeric_conversion_core.h",
+      "observable_contract": "contracts/xi-canonical-ops.md",
       "observable_edges": [],
       "operation_id": "xi.widen.u8",
       "ownership": "borrow",
@@ -7041,7 +7041,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": null,
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -7070,5 +7070,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "d309ea42675884115ed79ccdb241c9182af4c4ef6cf43d83b84888e0ba7169f5"
+  "source_tree_fingerprint": "bc812095ea3e3bf2b997f31016684fb529d614c8cc8f8bf9b681cd99a22d6c93"
 }

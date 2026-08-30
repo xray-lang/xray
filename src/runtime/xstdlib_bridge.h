@@ -33,10 +33,9 @@ struct XrChannel;
 
 /*
  * Build a Regex for a regex literal (the OP_REGEX_COMPILE bytecode helper).
- * Both arguments must be strings; flag chars 'i' / 'm' / 's' are recognised
- * and anything else is silently ignored, which is the long-standing behaviour
- * of xr_regex_core_parse_flags. It records the pattern and the flag mask;
- * compilation belongs to stdlib/regex/regex.xr and happens on first use.
+ * Both arguments must be strings. stdlib/regex/regex.xr owns compile and match
+ * semantics; this bridge only constructs the VM representation. Flag spelling
+ * is governed separately by the shared regex flag contract.
  *
  * Lives in stdlib/regex but is forward-declared here so the VM dispatch loop
  * can reach it without pulling stdlib headers into src/vm.

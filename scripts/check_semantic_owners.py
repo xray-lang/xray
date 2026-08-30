@@ -407,6 +407,15 @@ def validate_owner_registry(registry: dict, operation_categories: dict[str, str]
         elif row.get("category") != expected_category:
             errors.append(f"{operation}: generated owner category differs from xisa/xi/ops.def")
 
+        observable_contract = row.get("observable_contract")
+        contract_path = Path(observable_contract) if isinstance(observable_contract, str) else None
+        if (not isinstance(observable_contract, str) or not observable_contract or
+                "\\" in observable_contract or contract_path is None or
+                contract_path.is_absolute() or ".." in contract_path.parts):
+            errors.append(f"{operation}: observable contract is not an exact relative path")
+        elif root is not None and not (root / contract_path).is_file():
+            errors.append(f"{operation}: observable contract source is missing: {observable_contract}")
+
         consumers = row.get("consumers")
         if not isinstance(consumers, list) or not consumers:
             errors.append(f"{operation}: semantic owner has no production consumer")
@@ -2810,8 +2819,8 @@ def verify_static_address_ratchet(root: Path, registry: dict) -> list[str]:
 
     phase0_text = (root / "scripts/target_machine_phase0.py").read_text(
         encoding="utf-8", errors="strict")
-    for token in ("targets_by_operation", '"vm-bytecode" in targets',
-                  '"cgen" not in consumers'):
+    for token in ("registry_by_operation", '"vm-bytecode" in targets',
+                  '"aot-c" in targets', '"cgen" not in consumers'):
         if token not in phase0_text:
             errors.append("scripts/target_machine_phase0.py: AOT-only owner is not target-aware")
             break
@@ -3011,22 +3020,31 @@ def verify_atomic_store_ratchet(root: Path, registry: dict) -> list[str]:
 
 def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
-    owner_name = "shared.regex"
+    owner_name = "stdlib.regex.compile-match"
     marker = owner_macro_prefix(owner_name)
     owner = next((row for row in registry.get("owners", [])
                   if row.get("owner") == owner_name), None)
     if owner is None or set(owner.get("operations", [])) != REGEX_COMPILE_OPERATIONS:
-        errors.append("semantic owner registry has no exact shared.regex family")
-    elif owner.get("cgen_adapter") != "xrt_regex_compile_with_flags":
-        errors.append("semantic owner registry has no exact hosted AOT regex adapter")
+        errors.append("semantic owner registry has no exact stdlib regex compile-match family")
+    elif (owner.get("consumers") != ["semantic-plan", "vm", "runtime"] or
+          owner.get("cgen_adapter") is not None):
+        errors.append("stdlib regex owner consumers are not the exact source-backed set")
+    operation = next((row for row in registry.get("operations", [])
+                      if row.get("operation") == "xi.regex.compile"), None)
+    if operation is None or operation.get("observable_contract") != "stdlib/regex/regex.xr":
+        errors.append("xi.regex.compile lacks its operation-level observable contract")
 
     core_text = (root / "src/shared/xr_regex_core.h").read_text(
         encoding="utf-8", errors="strict")
-    for token in (f"{marker}_HI", f"{marker}_LO", "XR_REGEX_COMPILE_OWNER_APPLY",
-                  "xr_regex_core_parse_flags"):
-        if token not in core_text:
-            errors.append("src/shared/xr_regex_core.h: regex compile lacks stable owner")
-            break
+    if "xr_regex_core_parse_flags" not in core_text:
+        errors.append("src/shared/xr_regex_core.h: regex flag contract is missing")
+    if any(token in core_text for token in
+           (f"{marker}_HI", f"{marker}_LO", "XR_REGEX_COMPILE_OWNER_APPLY")):
+        errors.append("src/shared/xr_regex_core.h: flag utility is conflated with compile-match owner")
+
+    stdlib_text = (root / "stdlib/regex/regex.xr").read_text(encoding="utf-8", errors="strict")
+    if "export fn compile(" not in stdlib_text or "export fn test(" not in stdlib_text:
+        errors.append("stdlib/regex/regex.xr: canonical compile-match source is incomplete")
 
     vm_text = (root / "src/vm/xvm_dispatch_assert.inc.c").read_text(
         encoding="utf-8", errors="strict")
@@ -3034,7 +3052,7 @@ def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
     end = vm_text.find("vmbreak;", start)
     vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
     for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
-                  "XR_REGEX_COMPILE_OWNER_APPLY", "xr_regex_compile_literal"):
+                  "xr_semantic_owner_has_consumer", "xr_regex_compile_literal"):
         if token not in vm_body:
             errors.append("src/vm/xvm_dispatch_assert.inc.c: regex compile bypasses owner")
             break
@@ -3043,44 +3061,29 @@ def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
         encoding="utf-8", errors="strict")
     body = extract_c_function(runtime_text, "xr_regex_compile_literal") or ""
     for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_RUNTIME",
-                  "XR_REGEX_COMPILE_OWNER_APPLY", "xr_regex_core_parse_flags"):
+                  "xr_semantic_owner_has_consumer", "xr_regex_core_parse_flags"):
         if token not in body:
             errors.append("stdlib/regex/xregex_binding.c: regex literal bypasses owner")
             break
-    if re.search(r"\bparse_flags\s*\(", body):
-        errors.append("stdlib/regex/xregex_binding.c: retired literal flag parser revived")
+    if "XR_REGEX_COMPILE_OWNER_APPLY" in body:
+        errors.append("stdlib/regex/xregex_binding.c: retired compile-owner wrapper revived")
 
     cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
-    resolver = extract_c_function(cgen_text, "cg_regex_compile_adapter_name") or ""
-    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
-            "xr_semantic_owner_cgen_adapter" not in resolver):
-        errors.append("src/aot/xi_cgen.c: regex compile does not resolve stable adapter")
+    if "cg_regex_compile_adapter_name" in cgen_text:
+        errors.append("src/aot/xi_cgen.c: retired regex AOT adapter resolver revived")
     dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
         encoding="utf-8", errors="strict")
-    branch_start = dispatch.find('strcmp(bn, "regex_compile") == 0')
-    branch_end = dispatch.find("} else {", branch_start)
-    branch = dispatch[branch_start:branch_end] if branch_start >= 0 and branch_end >= 0 else ""
-    if ("cg_regex_compile_adapter_name" not in branch or
-            "xr_str_data(" not in branch or "xr_str_len(" not in branch or
-            'fprintf(out, "xr_regex_compile_literal' in branch):
-        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: regex compile bypasses owner")
-
-    aot_text = (root / "src/aot/xrt_regex_core.c").read_text(
-        encoding="utf-8", errors="strict")
-    flags_body = extract_c_function(aot_text, "xrt_regex_parse_flags") or ""
-    if "xr_regex_core_parse_flags" not in flags_body:
-        errors.append("src/aot/xrt_regex_core.c: regex compile bypasses shared flag semantics")
-    aot_body = extract_c_function(aot_text, "xrt_regex_compile_with_flags") or ""
-    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_AOT_HOSTED",
-                  "XR_REGEX_COMPILE_OWNER_APPLY", "xrt_regex_parse_flags"):
-        if token not in aot_body:
-            errors.append("src/aot/xrt_regex_core.c: hosted AOT regex compile bypasses owner")
+    for retired in ('strcmp(bn, "regex_compile") == 0',
+                    'strcmp(method, "test") == 0',
+                    "xrt_regex_test"):
+        if retired in dispatch:
+            errors.append(
+                "src/aot/xi_cgen_dispatch_helpers.inc.c: retired regex CGen branch revived"
+            )
             break
-    freestanding_expect = (root / "tests/aot/filetests/link/"
-                                  "freestanding_heap_constructs_reject.expect").read_text(
-                                      encoding="utf-8", errors="strict")
-    if "contains=freestanding profile rejects regex literal" not in freestanding_expect:
-        errors.append("freestanding regex literal rejection boundary is not pinned")
+    for retired in ("src/aot/xrt_regex.h", "src/aot/xrt_regex_core.c"):
+        if (root / retired).exists():
+            errors.append(f"{retired}: retired AOT regex owner still exists")
     return errors
 
 
@@ -3911,11 +3914,20 @@ def verify_operation_registry(root: Path) -> tuple[list[str], int]:
         if set(row.get("consumers", [])) != {"semantic-plan"}
         for operation in row.get("operations", [])
     }
+    registry_operations = {
+        row.get("operation"): row for row in registry.get("operations", [])
+        if isinstance(row, dict)
+    }
+    parsed_operations = {operation.name: operation for operation in operations}
     for name, category in owners.items():
         row = inventory_rows.get(name)
         expected_owner = explicit_owner_by_operation.get(name, "SemanticPlan.operation_registry")
         if row and row.get("future_semantic_owner") != expected_owner:
             errors.append(f"{name}: target-machine inventory does not point at {expected_owner}")
+        registry_row = registry_operations.get(name)
+        if registry_row and registry_row.get("observable_contract") != \
+                parsed_operations[name].observable_contract:
+            errors.append(f"{name}: generated observable contract differs from xisa/xi/ops.def")
         if category not in {
             "declarative-primitive",
             "shared-semantic-kernel",
@@ -4066,6 +4078,7 @@ def self_test() -> int:
     }
     add_row = {
         "operation": "xi.add",
+        "observable_contract": "contracts/xi-canonical-ops.md",
         **stable_fields("xi.add", "operation_id"),
         "owner": "xi.add",
         **stable_fields("xi.add", "owner_id"),
@@ -4077,6 +4090,7 @@ def self_test() -> int:
     }
     truthy_row = {
         "operation": "xi.not",
+        "observable_contract": "src/shared/xr_truthy_core.h",
         **stable_fields("xi.not", "operation_id"),
         "owner": "shared.truthiness",
         **stable_fields("shared.truthiness", "owner_id"),
@@ -4142,6 +4156,12 @@ def self_test() -> int:
             "xr_value_is_truthy\n",
             encoding="utf-8",
         )
+        contract_source = root / "contracts/xi-canonical-ops.md"
+        contract_source.parent.mkdir(parents=True, exist_ok=True)
+        contract_source.write_text("canonical operations\n", encoding="utf-8")
+        truthy_contract = root / "src/shared/xr_truthy_core.h"
+        truthy_contract.parent.mkdir(parents=True, exist_ok=True)
+        truthy_contract.write_text("truthiness contract\n", encoding="utf-8")
         assert validate_owner_registry(registry, categories, root) == []
 
         require_error(mutated(lambda value: value["operations"].pop()),
@@ -4185,6 +4205,12 @@ def self_test() -> int:
         require_error(mutated(lambda value: value["operations"][1]["production_bindings"][0]
                               .update(path="src/runtime/value/dead.c")),
                       "production consumer source is missing", root)
+        require_error(mutated(lambda value: value["operations"][1]
+                              .update(observable_contract="../retired.h")),
+                      "observable contract is not an exact relative path", root)
+        require_error(mutated(lambda value: value["operations"][1]
+                              .update(observable_contract="src/shared/missing.h")),
+                      "observable contract source is missing", root)
         bad_fingerprint = mutated(lambda value: value.update(canonical_fingerprint="0" * 64),
                                   refresh=False)
         require_error(bad_fingerprint, "canonical fingerprint mismatch", root)

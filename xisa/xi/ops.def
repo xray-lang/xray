@@ -2295,14 +2295,14 @@
 (define-xi-op xi.regex.compile
   :class allocation
   :arity 2
+  :observable-contract "stdlib/regex/regex.xr"
   :escape-alloc heap
   :own-use consume
   :tbaa-group fresh
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify)
-  :backend-rewrite (builtin "regex_compile"))
+  :targets (vm-bytecode aot-verify))
 
 (define-xi-op xi.retain
   :class ownership
@@ -3727,23 +3727,18 @@
     (cgen "src/aot/xi_cgen.c" "cg_null_test_adapter_name")
   ))
 
-(define-xi-observable-owner shared.regex
+(define-xi-observable-owner stdlib.regex.compile-match
   :category shared-semantic-kernel
   :operations (xi.regex.compile)
   :consumers (
     semantic-plan
     vm
-    aot-hosted
-    cgen
     runtime
   )
-  :cgen-adapter xrt_regex_compile_with_flags
   :production-bindings (
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
-    (vm "src/vm/xvm_dispatch_assert.inc.c" "XR_REGEX_COMPILE_OWNER_APPLY")
-    (aot-hosted "src/aot/xrt_regex_core.c" "XR_REGEX_COMPILE_OWNER_APPLY")
-    (cgen "src/aot/xi_cgen.c" "cg_regex_compile_adapter_name")
-    (runtime "stdlib/regex/xregex_binding.c" "XR_REGEX_COMPILE_OWNER_APPLY")
+    (vm "src/vm/xvm_dispatch_assert.inc.c" "xr_regex_compile_literal")
+    (runtime "stdlib/regex/xregex_binding.c" "xr_regex_compile_literal")
   ))
 
 (define-xi-observable-owner primitive.type-identity

@@ -461,10 +461,8 @@
       "id": "compression",
       "owner": "shared-kernel",
       "production_callers": [
-        "src/aot/xrt_compress.h",
         "src/module/xpkg_client.c",
-        "stdlib/compress/compress.c",
-        "stdlib/compress/compress.h"
+        "src/shared/xr_compress_engine.c"
       ],
       "profiles": [
         "vm",
@@ -1093,21 +1091,16 @@
       "signatures": [
         "xr_os_core_arch",
         "xr_os_core_cpu_count",
-        "xr_os_core_environ_entry",
-        "xr_os_core_eol",
         "xr_os_core_exec_buffer_append_raw",
         "xr_os_core_exec_buffer_next_cap",
         "xr_os_core_exec_windows_exit_code",
         "xr_os_core_getpid",
-        "xr_os_core_has_env_value",
-        "xr_os_core_homedir",
         "xr_os_core_loadavg_from_fixed",
         "xr_os_core_loadavg_set",
         "xr_os_core_loadavg_zero",
         "xr_os_core_memory_bytes",
         "xr_os_core_platform",
         "xr_os_core_seconds_from_nsec",
-        "xr_os_core_sep",
         "xr_os_core_uptime_from_boot_seconds"
       ],
       "status": "production",
@@ -1336,13 +1329,9 @@
     {
       "contains_tagged_value": false,
       "header": "src/shared/xr_regex_core.h",
-      "id": "regex",
+      "id": "regex-flag-contract",
       "owner": "shared-kernel",
       "production_callers": [
-        "src/aot/xrt_regex.h",
-        "src/aot/xrt_regex_core.c",
-        "src/vm/xvm.c",
-        "stdlib/regex/xregex.c",
         "stdlib/regex/xregex_binding.c"
       ],
       "profiles": [
@@ -1361,9 +1350,7 @@
         "xr_regex_core_split_max_parts"
       ],
       "status": "production",
-      "test_callers": [
-        "tests/unit/regex/test_regex.c"
-      ]
+      "test_callers": []
     },
     {
       "contains_tagged_value": false,

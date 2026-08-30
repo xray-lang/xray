@@ -15,6 +15,15 @@ for a migrated shared owner consume its generated stable owner ID. CGen adapter
 spelling is obtained by stable-ID lookup rather than reconstructed from an Xi
 or source-language name.
 
+`xi.regex.compile` binds its observable contract directly to
+`stdlib/regex/regex.xr`, whose `stdlib.regex.compile-match` identity is the sole
+compile/match owner. The VM and runtime prove exact membership in that owner;
+the AOT target is inapplicable and has no adapter. `xr_regex_core.h` is a
+separate `regex-flag-contract` utility for flag spelling and scalar boundaries,
+not a regex engine or an alternate compile/match owner. A missing VM/runtime
+binding, an AOT compile/match adapter, or owner logic in the flag utility fails
+closed.
+
 Bounds semantics have one real operation family: canonical `xi.index.get` and
 `xi.index.set`, whose generated VM and AOT consumers perform the access. The
 retired `xi.bounds.check` row had no source-lowering producer and no executor
@@ -106,9 +115,9 @@ Generated C may not ask the host compiler to rediscover target layout through
 
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml a32587b98c26b76a01d1483716eb278f653ee35997e604c099e61eba8f49b677
-anchor-sha256: contracts/semantic-owner-registry.json a727eba7a2f5bda417b86926786cddcd4095c3507f7bc6207f49693fef194c83
+anchor-sha256: contracts/semantic-owners.toml 05ddaa0d1870aac072fa918a9f444b521c55a305eff4509fd1c9172769980447
+anchor-sha256: contracts/semantic-owner-registry.json 67930d92d51b636e044bee023dd7ea13c3dd60ced6c2221cc1f3bb44a437739d
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json 3b43c1ac935fc9527486e61d18f8fed584b277bcdc2fb818c0d50f154663a42c
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h d832f9293af8bab82dfd6a4db2f6f8c33a2ab8dd1b48202bb4c8613ea2f4d0a4
-anchor-sha256: scripts/check_semantic_owners.py 031caa25352b325a182ea7d52b49b293277ff6e8f1df707cc982c1d61da9513e
+anchor-sha256: contracts/shared-core-inventory.json 76b550c56235449de623e213d9afc7efb83d35145962a99a923a3661df7bedf8
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h aa0cca97cfab375867d60f94597feb9c5b75c58b3c3b8761ccd597e81ba4b5e6
+anchor-sha256: scripts/check_semantic_owners.py b68ad3ae27d9010c07b7809e2319beb6aa057c88cb2273177dce68e80cc8116b

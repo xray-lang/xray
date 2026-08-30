@@ -1,4 +1,4 @@
-schema = 1
+schema = 2
 raw_samples_required = true
 minimum_release_repetitions = 5
 governed_suites = [
@@ -350,12 +350,12 @@ module = "regex"
 suite = "stdlib/regex"
 kind = "cpu_kernel"
 source = "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr"
+output_oracle = "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr.expected"
 warmup = 1
 iterations = 5
 quick_iterations = 2
 metrics = ["wall_ns"]
-compare = ["vm", "aot"]
-vm_budget_ratio = 80.0
+compare = ["vm"]
 
 [[benchmark]]
 id = "runtime.cycle.contract"

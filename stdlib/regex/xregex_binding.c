@@ -10,9 +10,9 @@
  * KEY CONCEPT:
  *   The regex engine itself lives in stdlib/regex/regex.xr. Nothing here
  *   parses, compiles or matches. This file only allocates the Regex handle
- *   and forwards three questions that belong to other owners: the flag-string
- *   mask (shared with the AOT leaf) and two unicode property lookups (owned by
- *   src/base/xunicode.c).
+ *   and forwards three questions that belong to other owners: the one
+ *   flag-string mask used by regex.compile and the VM literal path, plus two
+ *   unicode property lookups owned by src/base/xunicode.c.
  *
  *   Regex stays a native class solely because the literal syntax /pat/flags
  *   lowers to XI_REGEX_COMPILE with its result type pinned to type_regex
@@ -36,9 +36,11 @@
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/class/xclass_builder.h"
 #include "../../src/runtime/class/xclass_system.h"
+#include "../../src/runtime/mem/xcoro_heap.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/coro/xcoroutine.h"
+#include "../../src/shared/xr_semantic_owner_ids_gen.h"
 #include "../../src/shared/xr_regex_core.h"
 #include "../../src/base/xunicode.h"
 
@@ -69,8 +71,8 @@ static const char *value_to_cstring(XrValue v, int *len) {
     return s->data;
 }
 
-/* Allocate a Regex handle carrying its pattern and flags. The program image
- * stays null; regex.xr compiles it on first use and stores it back. */
+/* Allocate a Regex handle carrying its pattern and flags. The empty program
+ * image is filled by regex.xr on first use. */
 static XrValue make_regex(XrVMRuntime *isolate, XrValue pattern, int64_t flags) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core && core->regexClass, "make_regex: regexClass not registered");
@@ -81,6 +83,7 @@ static XrValue make_regex(XrVMRuntime *isolate, XrValue pattern, int64_t flags) 
     XrInstance *inst = xr_instance_new(isolate, core->regexClass);
     if (!inst)
         return xr_null();
+    xr_rc_retain_value(pattern);
     xr_instance_set_field_fast(inst, XR_REGEX_FIELD_PATTERN, pattern);
     xr_instance_set_field_fast(inst, XR_REGEX_FIELD_FLAGS, xr_int((int) flags));
     /* The program image starts as an empty array rather than null: regex.xr
@@ -101,6 +104,8 @@ static XrValue regex_match_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     XrInstance *inst = xr_instance_new(isolate, core->regexMatchClass);
     if (!inst)
         return xr_null();
+    xr_rc_retain_value(args[2]);
+    xr_rc_retain_value(args[3]);
     xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_START, args[0]);
     xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_END, args[1]);
     xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_TEXT, args[2]);
@@ -118,8 +123,9 @@ static XrValue regex_compile(XrVMRuntime *isolate, XrValue *args, int argc) {
     return make_regex(isolate, args[0], flags);
 }
 
-/* __regexParseFlags(flags) - the shared VM/AOT authority for the flag string.
- * Unknown flag characters are ignored, which is deliberate and long-standing. */
+/* __regexParseFlags(flags) - forwards regex.compile to the flag-mask authority
+ * that the VM literal path also uses. Unknown flag characters are ignored,
+ * which is deliberate and long-standing. */
 static XrValue regex_parse_flags(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     if (argc < 1)
@@ -168,9 +174,12 @@ XrValue xr_regex_compile_literal(XrVMRuntime *isolate, XrValue pattern_val, XrVa
     if (!pattern_str || !flags_str)
         return xr_null();
 
-    int64_t flags = (int64_t) XR_REGEX_COMPILE_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_REGEX_HI, XR_SEM_OWNER_ID_SHARED_REGEX_LO, XR_SEM_CONSUMER_RUNTIME,
-        xr_regex_core_parse_flags(flags_str->data, (size_t) flags_str->length));
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_STDLIB_REGEX_COMPILE_MATCH_HI,
+                                        XR_SEM_OWNER_ID_STDLIB_REGEX_COMPILE_MATCH_LO,
+                                        XR_SEM_CONSUMER_RUNTIME))
+        return xr_null();
+    int64_t flags =
+        (int64_t) xr_regex_core_parse_flags(flags_str->data, (size_t) flags_str->length);
 
     return make_regex(isolate, xr_string_value(pattern_str), flags);
 }

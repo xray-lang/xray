@@ -2330,10 +2330,10 @@ static void test_plan_snapshot_and_determinism(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "2334a7539cd0ee6ad82b6ca5673ce20e2c81dc867fb4b9b7de8742d034bf1168") != 0)
+    if (strcmp(target_hex, "ac47272bca2ded2b8f4847806f9ef1283feb48e986def9451a415a7d03bec552") != 0)
         fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "2334a7539cd0ee6ad82b6ca5673ce20e2c81dc867fb4b9b7de8742d034bf1168") == 0);
+                   "ac47272bca2ded2b8f4847806f9ef1283feb48e986def9451a415a7d03bec552") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4501,7 +4501,7 @@ static void test_channel_close_call_authority(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f. */
-    REQUIRE(strcmp(call_hex, "1d6e74c8f7636ab19a4a579cfd33e67e47bfdd43b3d61e3fdcf1f9b6539d4c9b") ==
+    REQUIRE(strcmp(call_hex, "346e59956a6184a7b4f33e413665323091bedcee1af8b95c98456e7471344e04") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -5261,7 +5261,7 @@ static void test_direct_local_call_adapter_family(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc. */
-    REQUIRE(strcmp(call_hex, "65d64c0c5e8335c3684d469219abf160b58d90123a9174192f8716e150c0548f") ==
+    REQUIRE(strcmp(call_hex, "3164aac10bd060915a9bee5306a9a0f4ee6d3f869e6c39bb7ac538b7fc501351") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -5788,7 +5788,7 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e. */
-    REQUIRE(strcmp(tail_hex, "eadb4fd9c95e87d4b1073654e7454731d341325fb7b3a6db13f78dc3019e9038") ==
+    REQUIRE(strcmp(tail_hex, "abf48c00cf8ebb404d444bf19d0cce87538ddcb1200b763d0fbf0f2ec8cb6fb1") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

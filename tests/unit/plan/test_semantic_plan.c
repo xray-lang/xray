@@ -2730,9 +2730,9 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "0c776fa995496d59811d3daaef5f79a47ff4fbfe7e27020a510686100fb8d1fc") == 0);
+                   "9dd017c70e18363ba192960bbfb63c886e66ca3dc141a3c5fb2e37027af4894f") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "89144a97b515dd8f7890c96a3cbbae1f8c3777b573c89b0f5e3d2e04cb57e0bd") == 0);
+                   "c4d6e09264c9477d1fd5ce36f94ee642b415f16b90b87bce3747e35771f713ee") == 0);
     /* Re-anchored because the SemanticPlan fingerprint covers the whole stdlib
      * metadata registry: xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def
@@ -2742,7 +2742,7 @@ static void test_immutable_owned_snapshot(void) {
      * above remain independent.
      * Old: 56e7d17e6f52451d5a90eb3e6bcad5fa101abf1cf280bffe786a2da9b84fd12e. */
     REQUIRE(strcmp(semantic_hex,
-                   "5236ba3815056cb087b079eade3073881dd3b0241bc4d0e233c0ad090244a1c0") == 0);
+                   "6ddb104bc3028ecef0630720090fed7ed3402b3874f97e763069b475812b7561") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3807,9 +3807,9 @@ static void test_source_export_call_target_authority(void) {
      * fingerprint in the key, so it stays put.
      * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
      * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "436c7e1e737c0e6fb39de20d5528e625") == 0);
+    REQUIRE(strcmp(dependency_id, "04aa8824317a3b84f233567794c5e1ea") == 0);
     REQUIRE(strcmp(export_id, "fda3c47f9afbb56bc6f54afe0f1f2516") == 0);
-    REQUIRE(strcmp(target_id, "b571b2c9937f244b98bfab2b8f9418d7") == 0);
+    REQUIRE(strcmp(target_id, "e5ecba91f11d65b94b8e55aeaec331e8") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));

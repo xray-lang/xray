@@ -478,7 +478,7 @@ static const XaBuiltinClass g_gen_regex_classes[] = {
 static const XaBuiltinMember g_gen_regex_functions[] = {
     {"__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
     {"__regexMatchNew", "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch", "Allocate a RegexMatch with its four fields set", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__regexParseFlags", "(flags: string): i64", "Flag string to mask, the shared VM/AOT authority", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__regexParseFlags", "(flags: string): i64", "Parse flag spelling for the VM representation adapter", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
 };

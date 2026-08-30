@@ -96,8 +96,14 @@ compatibility opcode, reserved hole, or second bounds owner.
     managed tuple nodes; arity, spelling, encoded identity, or an unbound tuple
     cannot select this family. These operations provide no TargetPlan, VM, AOT,
     or ordinary-product execution route by themselves.
+22. Every Xi operation projects one exact `observable_contract` source into the
+    semantic-owner registry. Generic operations default to this contract; an
+    explicit source-backed operation names its current canonical source.
+    `xi.regex.compile` names `stdlib/regex/regex.xr`, is executable by VM only,
+    and may be rewritten for deterministic AOT refusal but may not be accepted
+    as AOT-backend legal or acquire a fallback compile/match owner.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def cd873e45558cba139d9675bcf9dce00223a514d3b4d811b494c55da65779de7d
+anchor-sha256: xisa/xi/ops.def f3ac159a211d1f5ce8bc7d8202f31eaf413f91bfed0752ff28dda3ad84f1e5ea
 anchor-sha256: xisa/xi/lowering.def b928743b1e7b3d0cc50bcf2d9779f4c755f189bcb0f6e710e7fa232bce7aa517

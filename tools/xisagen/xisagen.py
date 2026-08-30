@@ -34,6 +34,7 @@ import os
 import hashlib
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import c_emission_rules
 
@@ -471,6 +472,7 @@ class XiOpDef:
     requires: list
     observable: list
     targets: list
+    observable_contract: str
     result_kind: str
     result_ownership: str
     result_native_type: str
@@ -515,6 +517,7 @@ class XiObservableOperation:
     operation_id_lo: int
     owner_id_hi: int
     owner_id_lo: int
+    observable_contract: str
     consumers: tuple[str, ...]
     consumer_bits: int
     cgen_adapter: str
@@ -677,6 +680,13 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         for target in targets:
             if target not in VALID_XI_TARGETS:
                 die(f"{path}: Xi op '{name}' uses unknown target '{target}'")
+        observable_contract = _xi_get_kw_str(
+            form, ':observable-contract', 'contracts/xi-canonical-ops.md')
+        contract_path = Path(observable_contract)
+        if (not observable_contract or '\\' in observable_contract or contract_path.is_absolute()
+                or '..' in contract_path.parts):
+            die(f"{path}: Xi op '{name}' has invalid observable contract "
+                f"'{observable_contract}'")
         result_native_type = _xi_get_kw_str(form, ':result-native-type', 'none')
         if result_native_type != 'none' and result_native_type not in VALID_XI_RESULT_NATIVE_TYPES:
             die(f"{path}: Xi op '{name}' uses unknown result native type "
@@ -794,6 +804,7 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         ops.append(XiOpDef(name=name, ident=ident, cls=cls, arity=arity, operands=operands,
                            results=results, effects=effects, requires=requires,
                            observable=observable, targets=targets,
+                           observable_contract=observable_contract,
                            result_kind=result_kind,
                            result_ownership=result_ownership,
                            result_native_type=result_native_type,
@@ -1015,6 +1026,7 @@ def parse_xi_observable_owners(text: str, ops: list[XiOpDef],
             operation_id_lo=operation_ids[op.name][1],
             owner_id_hi=owner_id[0],
             owner_id_lo=owner_id[1],
+            observable_contract=op.observable_contract,
             consumers=consumers,
             consumer_bits=consumer_bits,
             cgen_adapter=cgen_adapter,
@@ -1167,6 +1179,7 @@ def build_semantic_owner_registry(rows: list[XiObservableOperation]) -> dict:
             'owner_id': _semantic_id_hex(row.owner_id_hi, row.owner_id_lo),
             'owner_id_hi': f'0x{row.owner_id_hi:016x}',
             'owner_id_lo': f'0x{row.owner_id_lo:016x}',
+            'observable_contract': row.observable_contract,
             'category': row.category,
             'consumers': list(row.consumers),
             'consumer_bits': f'0x{row.consumer_bits:08x}',
@@ -1665,8 +1678,19 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('}')
     lines.append('')
     lines.append('static inline bool xi_generated_op_backend_legal(uint16_t op) {')
-    lines.append('    return xi_generated_op_backend_rewrite(op) == XI_GEN_BACKEND_REWRITE_NONE &&')
-    lines.append('           xi_generated_op_lowering_policy(op) != XI_GEN_LOWERING_VERIFIER_ONLY;')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        if 'aot-c' in op.targets:
+            lines.append(f'        case XI_{op.ident}:')
+            lines.append('            return xi_generated_op_backend_rewrite(op) ==')
+            lines.append('                       XI_GEN_BACKEND_REWRITE_NONE &&')
+            lines.append('                   xi_generated_op_lowering_policy(op) !=')
+            lines.append('                       XI_GEN_LOWERING_VERIFIER_ONLY;')
+        else:
+            lines.append(f'        case XI_{op.ident}: return false;')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return false;')
     lines.append('}')
     lines.append('')
     lines.append('static inline uint8_t xi_generated_op_escape_use(uint16_t op) {')
@@ -4442,6 +4466,7 @@ def _test_xi_ops_parser():
     assert ops[7].sync_order == 'none'
     assert ops[8].tbaa_group == 'top'
     assert ops[8].sync_order == 'acquire'
+    assert ops[8].observable_contract == 'contracts/xi-canonical-ops.md'
     header = generate_xi_ops_header(ops)
     assert 'case XI_ADD: return "ADD";' in header
     assert 'case XI_MEM_LOAD: return 1;' in header
@@ -4637,6 +4662,7 @@ def _test_xi_semantic_ops_parser():
     (define-xi-op xi.primitive :class pure :arity 0 :own-use borrow
       :effects () :requires () :observable () :targets (aot-c))
     (define-xi-op xi.kernel :class pure :arity 0 :own-use borrow
+      :observable-contract "src/shared/xr_test_kernel.h"
       :effects () :requires () :observable (kernel-result) :targets (aot-c))
     (define-xi-op xi.provider :class side-effect :arity 0 :own-use borrow
       :effects (side-effect) :requires () :observable (host-result) :targets (aot-c))
@@ -4667,9 +4693,11 @@ def _test_xi_semantic_ops_parser():
     assert explicit[0].name == 'shared.test-kernel'
     assert observable[1].consumer_bits == (
         XI_SEMANTIC_CONSUMERS['semantic-plan'] | XI_SEMANTIC_CONSUMERS['cgen'])
+    assert observable[1].observable_contract == 'src/shared/xr_test_kernel.h'
     registry = build_semantic_owner_registry(observable)
     assert len(registry['canonical_fingerprint']) == 64
     assert registry['operations'][1]['owner'] == 'shared.test-kernel'
+    assert registry['operations'][1]['observable_contract'] == 'src/shared/xr_test_kernel.h'
     ids_header = generate_semantic_owner_ids_header(explicit, observable)
     assert 'XR_SEM_OWNER_ID_SHARED_TEST_KERNEL_HI' in ids_header
     assert 'xr_semantic_owner_cgen_adapter' in ids_header
@@ -4724,6 +4752,11 @@ def _test_xi_semantic_ops_parser():
         '        (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")',
         '        (unknown-consumer "src/aot/xi_cgen.c" "unknown")'))
     reject_observable(text, hasher=lambda _: bytes(16))
+    try:
+        parse_xi_ops_def(text.replace('src/shared/xr_test_kernel.h', '../outside.h'))
+        assert False, "non-canonical observable contract path should be rejected"
+    except SystemExit:
+        pass
     print(" PASS", file=sys.stderr)
 
 

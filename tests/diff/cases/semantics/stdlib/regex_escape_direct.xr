@@ -1,4 +1,4 @@
-// AOT direct-call regex.escape must match VM tagged dispatch.
+// The regex public surface must match this case's byte-exact VM oracle.
 import regex
 
 print(regex.escape("a.b*c?"))

@@ -32,6 +32,81 @@ from stdlib_manifest import api_inventory, load_manifest, load_toml
 from stdlib_migration import contract_modules, validate_contract
 
 
+def benchmark_backend_agreement(
+    contracts: list[dict[str, Any]], benchmarks: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Return exact benchmark rows whose backend set disagrees with its contract."""
+    contract_backends = {
+        str(contract["module"]): list(contract.get("backends", ["vm", "aot"]))
+        for contract in contracts
+    }
+    mismatches: list[dict[str, Any]] = []
+    for benchmark in benchmarks:
+        module = str(benchmark.get("module", ""))
+        declared = benchmark.get("compare")
+        expected = contract_backends.get(module)
+        if expected is None or declared != expected:
+            mismatches.append(
+                {
+                    "benchmark": str(benchmark.get("id", "")),
+                    "module": module,
+                    "contract_backends": expected,
+                    "benchmark_backends": declared,
+                }
+            )
+    return mismatches
+
+
+def benchmark_oracle_agreement(
+    root: Path, contracts: list[dict[str, Any]], benchmarks: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Prove each VM-only benchmark uses its contract case's byte-exact oracle."""
+    contracts_by_module = {str(contract["module"]): contract for contract in contracts}
+    mismatches: list[dict[str, Any]] = []
+    for benchmark in benchmarks:
+        if benchmark.get("compare") != ["vm"]:
+            continue
+        module = str(benchmark.get("module", ""))
+        source = str(benchmark.get("source", ""))
+        oracle = benchmark.get("output_oracle")
+        contract = contracts_by_module.get(module, {})
+        manifest_value = contract.get("diff_cases_manifest")
+        reasons: list[str] = []
+        cases: set[str] = set()
+        if not isinstance(manifest_value, str) or not manifest_value:
+            reasons.append("contract has no diff_cases_manifest")
+        else:
+            manifest_path = root / manifest_value
+            try:
+                cases = {
+                    line.strip()
+                    for line in manifest_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip() and not line.lstrip().startswith("#")
+                }
+            except OSError as exc:
+                reasons.append(f"cannot read contract diff manifest: {exc}")
+        if source not in cases:
+            reasons.append("benchmark source is absent from contract diff manifest")
+        expected_oracle = f"{source}.expected"
+        if oracle != expected_oracle:
+            reasons.append("benchmark output_oracle is not the source's .expected oracle")
+        elif not (root / expected_oracle).is_file():
+            reasons.append("benchmark output_oracle does not exist")
+        if reasons:
+            mismatches.append(
+                {
+                    "benchmark": str(benchmark.get("id", "")),
+                    "module": module,
+                    "contract_diff_cases_manifest": manifest_value,
+                    "source": source,
+                    "output_oracle": oracle,
+                    "expected_oracle": expected_oracle,
+                    "reasons": reasons,
+                }
+            )
+    return mismatches
+
+
 def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
     manifest = load_manifest(root)
     errors = (
@@ -72,12 +147,16 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
                 "contract_revision": contract.get("contract_revision"),
                 "legacy_commit": contract.get("legacy_commit"),
                 "legacy_oracle": contract.get("legacy_oracle"),
+                "backends": contract.get("backends", ["vm", "aot"]),
+                "diff_cases_manifest": contract.get("diff_cases_manifest"),
                 "case_count": case_count,
                 "equivalence": contract.get("equivalence", []),
             }
         )
 
     perf = load_toml(root / "tests/benchmarks/stdlib/manifest.toml")
+    if perf.get("schema") != 2:
+        errors.append("tests/benchmarks/stdlib/manifest.toml: schema must be 2")
     layer_counts = Counter(str(module["layer"]) for module in manifest.modules)
     policy_counts = Counter(str(module["policy"]) for module in manifest.modules)
     native_boundaries = [
@@ -127,6 +206,26 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
         agreement_blockers.append(
             {"kind": "non_executable_legacy_oracles", "modules": non_executable_legacy}
         )
+    backend_mismatches = benchmark_backend_agreement(
+        contracts, list(perf.get("benchmark", []))
+    )
+    if backend_mismatches:
+        agreement_blockers.append(
+            {
+                "kind": "contract_benchmark_backend_mismatch",
+                "benchmarks": backend_mismatches,
+            }
+        )
+    oracle_mismatches = benchmark_oracle_agreement(
+        root, contracts, list(perf.get("benchmark", []))
+    )
+    if oracle_mismatches:
+        agreement_blockers.append(
+            {
+                "kind": "contract_benchmark_oracle_mismatch",
+                "benchmarks": oracle_mismatches,
+            }
+        )
 
     report = {
         "schema": 1,
@@ -151,6 +250,7 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
         "vm_fastpaths": list(manifest.vm_fastpaths),
         "correctness_contracts": contracts,
         "performance_governance": {
+            "schema": perf.get("schema"),
             "governed_suite_count": len(perf.get("governed_suites", [])),
             "active_benchmarks": perf.get("benchmark", []),
             "raw_samples_required": perf.get("raw_samples_required", False),

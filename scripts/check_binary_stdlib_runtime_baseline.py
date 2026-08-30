@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import tomllib
 from dataclasses import asdict, dataclass
@@ -43,11 +44,55 @@ REQUIRED_BENCHMARKS: dict[str, dict[str, str]] = {
     },
 }
 
-RUNNER_ANCHORS = (
-    '"aot_binary_size_bytes": binary.stat().st_size',
-    'if outputs["vm"] != outputs["aot"]',
-    '"output_sha256": hashlib.sha256(outputs["vm"]).hexdigest()',
-    'ratio = medians["vm"] / max(medians["aot"], 1)',
+RUNNER_INVARIANTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "validated_resolved_backends",
+        (
+            r'if compare not in \(\["vm"\], \["vm", "aot"\]\):',
+            r'elif compare != contract_backends\.get\(module\):',
+            r'backends = list\(entry\["compare"\]\)',
+        ),
+    ),
+    (
+        "aot_build_requires_selected_aot_backend",
+        (r'if "aot" in backends:\n\s+build = subprocess\.run\(',),
+    ),
+    (
+        "observable_equality_only_for_multiple_outputs",
+        (r'if len\(outputs\) > 1 and len\(set\(outputs\.values\(\)\)\) != 1:',),
+    ),
+    (
+        "selected_vm_output_hash",
+        (r'"output_sha256": hashlib\.sha256\(outputs\["vm"\]\)\.hexdigest\(\)',),
+    ),
+    (
+        "vm_only_byte_exact_output_oracle",
+        (
+            r'if compare == \["vm"\]:[\s\S]+?VM-only benchmark requires output_oracle',
+            r'expected_oracle = f"\{source_value\}\.expected"',
+            r'elif output_oracle != expected_oracle:',
+            r'if backends == \["vm"\]:[\s\S]+?expected_output = oracle_path\.read_bytes\(\)',
+            r'if outputs\["vm"\] != expected_output:',
+            r'if backends == \["vm"\]:[\s\S]+?outputs\["vm"\] != expected_output:'
+            r'[\s\S]+?"output_sha256": hashlib\.sha256\(outputs\["vm"\]\)\.hexdigest\(\)',
+            r'if output_oracle is not None:\n\s+result\["output_oracle"\] = output_oracle',
+        ),
+    ),
+    (
+        "aot_size_requires_selected_aot_backend",
+        (
+            r'if "aot" in backends:\n\s+result\["aot_binary_size_bytes"\] = '
+            r'binary\.stat\(\)\.st_size',
+        ),
+    ),
+    (
+        "vm_aot_ratio_requires_dual_mode",
+        (
+            r'if backends == \["vm", "aot"\]:\n\s+ratio = '
+            r'medians\["vm"\] / max\(medians\["aot"\], 1\)',
+            r'if backends == \["vm", "aot"\]:[\s\S]+?result\["vm_aot_ratio"\] = ratio',
+        ),
+    ),
 )
 
 BACKEND_DIFF_ANCHORS = (
@@ -116,6 +161,36 @@ def check_text_file(root: Path, category: str, path_text: str, anchors: tuple[st
     return CheckResult(category, path_text, True, "anchors ok")
 
 
+def check_runner_source(text: str) -> list[str]:
+    """Return missing source-current execution invariants for the benchmark runner."""
+    return [
+        name
+        for name, patterns in RUNNER_INVARIANTS
+        if any(re.search(pattern, text) is None for pattern in patterns)
+    ]
+
+
+def check_runner(root: Path) -> CheckResult:
+    path_text = "tests/benchmarks/stdlib/run.py"
+    path = root / path_text
+    if not path.is_file():
+        return CheckResult("STDLIB_BENCH_OUTPUT_SIZE", path_text, False, "missing file")
+    missing = check_runner_source(path.read_text(encoding="utf-8"))
+    if missing:
+        return CheckResult(
+            "STDLIB_BENCH_OUTPUT_SIZE",
+            path_text,
+            False,
+            "missing invariants: " + ", ".join(missing),
+        )
+    return CheckResult(
+        "STDLIB_BENCH_OUTPUT_SIZE",
+        path_text,
+        True,
+        "VM-only and dual-backend execution invariants are source-current",
+    )
+
+
 def check_benchmarks(root: Path) -> list[CheckResult]:
     manifest_path = root / "tests/benchmarks/stdlib/manifest.toml"
     if not manifest_path.is_file():
@@ -159,9 +234,7 @@ def check_benchmarks(root: Path) -> list[CheckResult]:
 def build_results(root: Path) -> list[CheckResult]:
     results: list[CheckResult] = []
     results.extend(check_benchmarks(root))
-    results.append(
-        check_text_file(root, "STDLIB_BENCH_OUTPUT_SIZE", "tests/benchmarks/stdlib/run.py", RUNNER_ANCHORS)
-    )
+    results.append(check_runner(root))
     results.append(check_text_file(root, "VM_AOT_OUTPUT_DIFF", "tests/diff/run_backend_diff.py", BACKEND_DIFF_ANCHORS))
     results.append(check_text_file(root, "AOT_LINK_SIZE_BASELINE", "tests/aot/run_aot_filetests.py", AOT_FILETEST_ANCHORS))
     results.append(check_text_file(root, "AOT_LINK_SIZE_BASELINE", "tests/aot/filetest_expect.py", AOT_FILETEST_DSL_ANCHORS))

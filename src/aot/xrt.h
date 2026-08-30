@@ -17,7 +17,6 @@
  *     L1  xrt_range.h   - lazy Range value
  *     L2  xrt_coll.h    - Array, Map, Json, StringBuilder, Closure, index ops
  *     L2  xrt_crypto.h  - freestanding crypto utilities
- *     L2  xrt_regex.h   - freestanding regex utilities
  *     L2  xrt_math.h    - freestanding math system helpers
  *     L2  xrt_time.h    - freestanding time query helpers
  *     L2  xrt_os.h      - freestanding OS query helpers
@@ -175,7 +174,6 @@
 #include "xrt_coll.h"       // L2: Array, Map, Json, StringBuilder, Closure, index ops
 #include "xrt_arith.h"      // L2: add/sub/mul/div/mod/neg, eq/lt/le, print
 #include "xrt_crypto.h"     // L2: freestanding crypto helpers
-#include "xrt_regex.h"      // L2: freestanding regex helpers
 #include "xrt_math.h"       // L2: freestanding math helpers
 #include "xrt_codegen.h"    // L2: semantic-neutral native code-shape controls
 #include "xrt_mem.h"        // L2: freestanding mem bit intrinsics

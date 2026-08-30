@@ -7161,10 +7161,6 @@ typedef struct xrt_cell {
     XR_CELL_ABI_FIELDS;
 } xrt_cell_t;
 
-#ifdef XRT_ENABLE_REGEX
-static inline void xrt_regex_destroy_builtin(void *obj);
-#endif
-
 static inline XrValue xrt_cell_new(XrValue value) {
     xrt_cell_t *cell = (xrt_cell_t *) xrt_arc_alloc(sizeof(xrt_cell_t));
     if (XR_UNLIKELY(!cell)) {
@@ -7251,11 +7247,6 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         case XRT_ARC_KIND_ENUM_BOX:
             xrt_enum_box_destroy_builtin(obj);
             break;
-#ifdef XRT_ENABLE_REGEX
-        case XRT_ARC_KIND_REGEX:
-            xrt_regex_destroy_builtin(obj);
-            break;
-#endif
         case XRT_ARC_KIND_SYS_MUTEX:
             xrt_sys_mutex_destroy_builtin(obj);
             break;
@@ -7279,7 +7270,7 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
             xrt_net_destroy_builtin(obj);
             break;
 #ifdef XRT_ENABLE_SYS_THREAD
-        /* Guarded like regex: xrt_thread_destroy_builtin calls the extern
+        /* xrt_thread_destroy_builtin calls the extern
          * xr_thread_detach, which only links when the coro runtime archive is
          * present. Thread handles can only exist when the program spawns
          * threads, which also sets this define (xaot_driver.c). */

@@ -3614,7 +3614,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "81d2d62de5a4af7055a8aba67488a97b846ad432fa6b24169dc9390a4e9384b2",
+  "source_tree_fingerprint": "a8672d40e66227365b643556eed510b8f01e4bba18f53a8e57aad72c8a43fd16",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xr_typed_dispatch.c",

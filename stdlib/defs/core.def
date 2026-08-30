@@ -1043,7 +1043,7 @@ module regex {
 
   fn __regexParseFlags {
     signature: "(flags: string): i64"
-    doc: "Flag string to mask, the shared VM/AOT authority"
+    doc: "Parse flag spelling for the VM representation adapter"
     vm: "regex_parse_flags"
     argc: 1
     arg_spec: "s"

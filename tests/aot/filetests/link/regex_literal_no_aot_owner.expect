@@ -1,0 +1,4 @@
+product_status=fail
+product_contains=non-backend op REGEX_COMPILE
+product_contains=must be lowered before STAGE_BACKEND
+artifact=absent

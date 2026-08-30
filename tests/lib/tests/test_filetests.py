@@ -8,6 +8,7 @@ hash. Both are testable here without a compiler.
 
 import contextlib
 import io
+import stat
 import sys
 import tempfile
 import unittest
@@ -52,6 +53,73 @@ class ParseTest(unittest.TestCase):
     def test_wants_c_syntax(self):
         self.assertTrue(self._parse("c_syntax=pass\n").wants_c_syntax)
         self.assertFalse(self._parse("contains=x\n").wants_c_syntax)
+
+    def test_closed_grammar_rejects_unknown_empty_and_invalid_values(self):
+        invalid = (
+            "unknown=value\n",
+            "contains=\n",
+            "status=maybe\n",
+            "c_syntax=fail\n",
+            "product_status=pass\n",
+            "artifact=present\n",
+        )
+        for text in invalid:
+            with self.subTest(text=text):
+                self.assertIsNotNone(self._parse(text).parse_error)
+
+    def test_duplicate_controls_and_product_literals_fail_closed(self):
+        invalid = (
+            "status=pass\nstatus=pass\n",
+            "args=--one\nargs=--two\n",
+            "product_status=fail\nproduct_status=fail\n",
+            "product_status=fail\nproduct_contains=code\nproduct_contains=code\nartifact=absent\n",
+            "product_status=fail\nproduct_contains=code\nartifact=absent\nartifact=absent\n",
+        )
+        for text in invalid:
+            with self.subTest(text=text):
+                self.assertIsNotNone(self._parse(text).parse_error)
+
+    def test_repeatable_assertions_preserve_distinct_and_legacy_duplicate_rows(self):
+        exp = self._parse("contains=one\ncontains=two\ncontains=one\n")
+        self.assertIsNone(exp.parse_error)
+
+    def test_product_failure_requires_diagnostic_and_absent_artifact(self):
+        invalid = (
+            "product_contains=code\n",
+            "artifact=absent\n",
+            "product_status=fail\nartifact=absent\n",
+            "product_status=fail\nproduct_contains=code\n",
+            "status=fail\nproduct_status=fail\nproduct_contains=code\nartifact=absent\n",
+        )
+        for text in invalid:
+            with self.subTest(text=text):
+                self.assertIsNotNone(self._parse(text).parse_error)
+
+    def test_absent_product_artifact_rejects_every_generated_c_directive(self):
+        for key in sorted(expectlib._C_KEYS | {"c_syntax"}):
+            value = "pass" if key == "c_syntax" else "needle"
+            text = (
+                "product_status=fail\n"
+                "product_contains=code\n"
+                "artifact=absent\n"
+                f"{key}={value}\n"
+            )
+            with self.subTest(key=key):
+                self.assertIsNotNone(self._parse(text).parse_error)
+
+    def test_product_failure_properties_and_all_diagnostics(self):
+        exp = self._parse(
+            "product_status=fail\n"
+            "product_contains=XR_TARGET_1003\n"
+            "product_contains=no authority\n"
+            "artifact=absent\n"
+        )
+        self.assertIsNone(exp.parse_error)
+        self.assertTrue(exp.wants_product_failure)
+        self.assertTrue(exp.wants_absent_artifact)
+        self.assertEqual(["XR_TARGET_1003", "no authority"], exp.product_contains)
+        self.assertTrue(expectlib.check_product(exp, "XR_TARGET_1003: no authority").ok)
+        self.assertFalse(expectlib.check_product(exp, "XR_TARGET_1003 only").ok)
 
 
 class CheckTest(unittest.TestCase):
@@ -147,6 +215,87 @@ class NormalizeLinkTest(unittest.TestCase):
 
 
 class RunnerHelpersTest(unittest.TestCase):
+    @staticmethod
+    def _config(root: Path, timeout: float | None = 7) -> object:
+        return runner.Config(
+            xray=root / "xray",
+            mode="link",
+            selected_modes=["link"],
+            verbose=False,
+            keep_tmp=False,
+            jobs=1,
+            cache_dir=root / "cache",
+            sanitizer=False,
+            disable_run_cache=False,
+            baseline=root / "baseline.txt",
+            case_timeout=timeout,
+        )
+
+    @staticmethod
+    def _proc_result(
+        returncode: int = 1,
+        stdout: bytes = b"",
+        stderr: bytes = b"XR_TARGET_1003: no authority\n",
+        timed_out: bool = False,
+    ) -> object:
+        return runner.proc.ProcResult(
+            argv=("xray",),
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
+            timed_out=timed_out,
+        )
+
+    def _run_product_case(
+        self,
+        *,
+        result: object | None = None,
+        timeout: float | None = 7,
+        contract_result: object | None = None,
+        prepare_artifact=None,
+        dump_side_effect=None,
+    ):
+        temp = tempfile.TemporaryDirectory(prefix="xt_filetest_product.")
+        root = Path(temp.name)
+        xr_file = root / "case.xr"
+        xr_file.write_text("print(1)\n", encoding="utf-8")
+        xr_file.with_suffix(".expect").write_text(
+            "product_status=fail\n"
+            "product_contains=XR_TARGET_1003\n"
+            "product_contains=no authority\n"
+            "artifact=absent\n",
+            encoding="utf-8",
+        )
+        if contract_result is not None:
+            xr_file.with_name("case.contract.toml").write_text("version = 1\n", encoding="utf-8")
+        out_c = root / "case.c"
+        if prepare_artifact is not None:
+            prepare_artifact(out_c, root)
+        ws = mock.Mock()
+        ws.path.return_value = out_c
+        run_result = result or self._proc_result()
+        run_verify_patch = mock.patch.object(
+            runner,
+            "run_verify",
+            return_value=contract_result or self._proc_result(returncode=0, stderr=b""),
+        )
+        if dump_side_effect is None:
+            run_dump_patch = mock.patch.object(runner, "run_dump", return_value=run_result)
+        else:
+            run_dump_patch = mock.patch.object(runner, "run_dump", side_effect=dump_side_effect)
+        cache_patch = mock.patch.object(runner, "_dump_and_c_paths")
+        verify = run_verify_patch.start()
+        dump = run_dump_patch.start()
+        cached = cache_patch.start()
+        try:
+            verdict = runner.run_one_case(self._config(root, timeout), "link", xr_file, ws)
+        finally:
+            run_verify_patch.stop()
+            run_dump_patch.stop()
+            cache_patch.stop()
+            temp.cleanup()
+        return verdict, verify, dump, cached
+
     def test_syntax_include_reaches_include_dir(self):
         # The regression that motivated task 258: the C syntax check must carry
         # -Iinclude, where xray_value_abi.h lives.
@@ -285,6 +434,7 @@ class RunnerHelpersTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="xt_filetest_probe.") as tmp:
             fake_xray = Path(tmp) / "xray"
             fake_xray.write_text("not invoked\n", encoding="utf-8")
+            fake_xray.chmod(fake_xray.stat().st_mode | stat.S_IXUSR)
             output = io.StringIO()
             with mock.patch.object(
                 runner, "probe_dump_support", return_value=(False, "unsupported option\n")
@@ -293,6 +443,117 @@ class RunnerHelpersTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("ERROR: xray build --native --dump-xaot-plan probe failed", output.getvalue())
         self.assertIn("Reason: unsupported option", output.getvalue())
+
+    def test_expected_product_failure_bypasses_success_cache(self):
+        verdict, _verify, dump, cached = self._run_product_case()
+        self.assertEqual(runner.Status.PASS.value, verdict.status)
+        dump.assert_called_once()
+        cached.assert_not_called()
+
+    def test_product_diagnostic_comes_only_from_product_command(self):
+        verify_result = self._proc_result(
+            returncode=0,
+            stderr=b"XR_TARGET_1003: no authority\n",
+        )
+        product_result = self._proc_result(stderr=b"different failure\n")
+        verdict, verify, _dump, _cached = self._run_product_case(
+            result=product_result,
+            contract_result=verify_result,
+        )
+        self.assertEqual(runner.Status.FAIL.value, verdict.status)
+        self.assertIn("missing product output", verdict.detail)
+        verify.assert_called_once()
+
+    def test_product_timeout_unexpected_success_and_missing_diagnostic_are_red(self):
+        results = (
+            self._proc_result(returncode=-9, timed_out=True),
+            self._proc_result(returncode=0, stderr=b""),
+            self._proc_result(stderr=b"wrong failure\n"),
+        )
+        expected = ("timed out", "unexpectedly succeeded", "missing product output")
+        for result, detail in zip(results, expected):
+            with self.subTest(detail=detail):
+                verdict, _verify, _dump, cached = self._run_product_case(result=result)
+                self.assertEqual(runner.Status.FAIL.value, verdict.status)
+                self.assertIn(detail, verdict.detail)
+                cached.assert_not_called()
+
+    def test_product_failure_requires_finite_timeout_before_execution(self):
+        verdict, _verify, dump, cached = self._run_product_case(timeout=None)
+        self.assertEqual(runner.Status.FAIL.value, verdict.status)
+        self.assertIn("finite case timeout", verdict.detail)
+        dump.assert_not_called()
+        cached.assert_not_called()
+
+    def test_parse_failure_starts_no_compiler_process(self):
+        with tempfile.TemporaryDirectory(prefix="xt_filetest_parse_red.") as tmp:
+            root = Path(tmp)
+            xr_file = root / "case.xr"
+            xr_file.write_text("print(1)\n", encoding="utf-8")
+            xr_file.with_suffix(".expect").write_text(
+                "product_status=fail\nartifact=absent\n", encoding="utf-8"
+            )
+            ws = mock.Mock()
+            with mock.patch.object(runner, "run_verify") as verify, mock.patch.object(
+                runner, "run_dump"
+            ) as dump, mock.patch.object(runner, "_dump_and_c_paths") as cached:
+                verdict = runner.run_one_case(
+                    self._config(root), "link", xr_file, ws
+                )
+        self.assertEqual(runner.Status.FAIL.value, verdict.status)
+        self.assertIn("requires at least one product_contains", verdict.detail)
+        verify.assert_not_called()
+        dump.assert_not_called()
+        cached.assert_not_called()
+
+    def test_absent_artifact_rejects_files_directories_and_symlinks(self):
+        def regular(path, _root):
+            path.write_text("partial", encoding="utf-8")
+
+        def directory(path, _root):
+            path.mkdir()
+
+        def live_symlink(path, root):
+            target = root / "target"
+            target.write_text("target", encoding="utf-8")
+            path.symlink_to(target)
+
+        def dangling_symlink(path, root):
+            path.symlink_to(root / "missing-target")
+
+        for kind, setup in (
+            ("regular file", regular),
+            ("directory", directory),
+            ("symbolic link", live_symlink),
+            ("symbolic link", dangling_symlink),
+        ):
+            with self.subTest(kind=kind, setup=setup.__name__):
+                verdict, _verify, dump, _cached = self._run_product_case(
+                    prepare_artifact=setup
+                )
+                self.assertEqual(runner.Status.FAIL.value, verdict.status)
+                self.assertIn(kind, verdict.detail)
+                dump.assert_not_called()
+
+    def test_product_artifact_created_by_failed_command_is_red(self):
+        def create_artifact(*_args, **_kwargs):
+            out_c = _args[1]
+            out_c.write_text("partial", encoding="utf-8")
+            return self._proc_result()
+
+        verdict, _verify, _dump, _cached = self._run_product_case(
+            dump_side_effect=create_artifact
+        )
+        self.assertEqual(runner.Status.FAIL.value, verdict.status)
+        self.assertIn("regular file", verdict.detail)
+
+    def test_artifact_lstat_race_fails_closed(self):
+        path = Path("raced-product.c")
+        with mock.patch.object(runner.os.path, "lexists", return_value=True), mock.patch.object(
+            runner.os, "lstat", side_effect=FileNotFoundError("raced")
+        ):
+            reason = runner._artifact_absence_error(path)
+        self.assertIn("changed while checking absence", reason)
 
     def test_report_rejects_all_skipped_measurement(self):
         with tempfile.TemporaryDirectory(prefix="xt_filetest_zero.") as tmp:

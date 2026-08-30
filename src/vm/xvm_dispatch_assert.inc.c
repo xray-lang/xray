@@ -212,9 +212,12 @@ vmcase(OP_REGEX_COMPILE) {
      * The actual flag parse + xr_regex_compile() lives
      * behind xr_regex_compile_literal() in stdlib/regex
      * to keep src/vm free of stdlib reverse includes. */
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_STDLIB_REGEX_COMPILE_MATCH_HI,
+                                        XR_SEM_OWNER_ID_STDLIB_REGEX_COMPILE_MATCH_LO,
+                                        XR_SEM_CONSUMER_VM)) {
+        VM_RUNTIME_ERROR(0, "regex literal owner has no VM consumer");
+    }
     int a = GETARG_A(i);
-    R(a) = XR_REGEX_COMPILE_OWNER_APPLY(
-        XR_SEM_OWNER_ID_SHARED_REGEX_HI, XR_SEM_OWNER_ID_SHARED_REGEX_LO, XR_SEM_CONSUMER_VM,
-        xr_regex_compile_literal(isolate, K(GETARG_B(i)), K(GETARG_C(i))));
+    R(a) = xr_regex_compile_literal(isolate, K(GETARG_B(i)), K(GETARG_C(i)));
     vmbreak;
 }

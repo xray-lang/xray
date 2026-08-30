@@ -109,7 +109,6 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_NONE 0u
 #define XRT_ARC_KIND_CLOSURE 1u
 #define XRT_ARC_KIND_CELL 2u
-#define XRT_ARC_KIND_REGEX 3u
 #define XRT_ARC_KIND_SYS_MUTEX 4u
 #define XRT_ARC_KIND_SYS_RWLOCK 5u
 #define XRT_ARC_KIND_SYS_CONDVAR 6u

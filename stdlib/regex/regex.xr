@@ -1,17 +1,16 @@
 // regex - pattern matching, written in Xray.
 //
-// This file owns the whole engine: the parser, the compiler, the NFA
-// simulation and the top-level API. It replaces 5265 lines of C across six
-// translation units (xregex_parse.c, xregex_compile.c, xregex_nfa.c,
-// xregex_dfa.c, xregex.c and most of xregex_binding.c).
+// This file is the sole compile and match owner: it owns the parser, compiler,
+// NFA simulation and top-level API. The native binding retains only VM handle
+// construction and three non-matching leaves that Xray cannot express.
 //
 // What stays native, and why it is not a second owner of anything here:
 //   __regexNew         allocates the Regex handle. `Regex` has to remain a
 //                      native class because the literal syntax /pat/flags
 //                      lowers to XI_REGEX_COMPILE with its result type pinned
 //                      to type_regex (src/ir/xi_lower_expr.c:11349).
-//   __regexParseFlags  the flag-string mask, shared verbatim by the VM and AOT
-//                      leaves (xr_regex_core_parse_flags).
+//   __regexParseFlags  the one flag-string mask used by both regex.compile()
+//                      and the VM regex-literal path.
 //   __unicodePropId    the unicode property tables belong to unicode, not to
 //   __unicodeHasProp   regex; their owner is src/base/xunicode.c and copying
 //                      several hundred code-point ranges in here would mint a
@@ -1698,8 +1697,7 @@ fn rxSplit(prog: Array<i64>, s: string, limit: i64) -> Array<string> {
     return parts
 }
 
-// The escaped set is the one shared by the VM and AOT leaves
-// (xr_regex_core_is_special, src/shared/xr_regex_core.h:117-137):
+// The public escape set is:
 //   \ . + * ? [ ] ( ) { } | ^ $
 // and notably NOT - / # whitespace < >.
 fn rxIsSpecial(b: i64) -> bool {

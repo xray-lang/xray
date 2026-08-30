@@ -252,7 +252,7 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
-id = "regex"
+id = "regex-flag-contract"
 header = "src/shared/xr_regex_core.h"
 representation = "native"
 owner = "shared-kernel"
@@ -355,6 +355,21 @@ header = "src/shared/xr_value_format_core.h"
 representation = "native"
 owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted"]
+
+[[operation]]
+id = "regex-compile-match"
+observable_contract = "stdlib/regex/regex.xr"
+semantic_kernel = "stdlib/regex/regex.xr"
+vm_adapter = "src/vm/xvm_dispatch_assert.inc.c"
+aot_adapter = "none"
+typed_plan = "stdlib.regex.compile-match"
+runtime_fallback = "none"
+fixtures = [
+  "tests/stdlib/contracts/regex/cases.jsonl",
+  "tests/diff/cases/semantics/stdlib/regex_escape_direct.xr",
+  "tests/aot/filetests/link/core_regex.xr",
+  "tests/aot/filetests/link/regex_literal_no_aot_owner.xr",
+]
 
 [[operation]]
 id = "Array.sort"
@@ -1032,6 +1047,6 @@ disposition = "single-owner"
 
 [[operation_family]]
 id = "encoding-formatting"
-canonical_cores = ["compression", "crypto", "regex", "value-format"]
+canonical_cores = ["compression", "crypto", "regex-flag-contract", "value-format"]
 duplicate_sources = []
 disposition = "single-owner"

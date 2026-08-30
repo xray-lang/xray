@@ -1,0 +1,56 @@
+a\.b\*c\?
+\[x\]\(y\)\{z\}\|\^\$\\
+plain
+
+x\+y
+hello/world
+true
+false
+true
+true
+false
+3
+1
+true
+2
+abc123
+abc
+123
+true
+true
+abc123
+0
+6
+3
+abc123
+abc
+123
+true
+true
+abc123
+0
+6
+abc
+true
+2
+abc123
+0
+123
+xyz456
+7
+1
+abc123
+2
+0
+0
+aN b22 c333
+aN bN cN
+123-abc xyz
+abc
+3
+a
+b
+c
+2
+a
+b, c

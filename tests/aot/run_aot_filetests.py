@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import stat
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -261,6 +262,82 @@ def _dump_and_c_paths(config: Config, mode: str, xr_file: Path, extra_args: list
         lock.release()
 
 
+def _artifact_absence_error(path: Path) -> str | None:
+    """Return a fail-closed reason when an expected-absent path has an entry.
+
+    lexists and lstat are deliberate: exists/is_file would accept dangling
+    symlinks, while an output artifact assertion must reject every filesystem
+    object and any race that prevents the object from being classified.
+    """
+    try:
+        present = os.path.lexists(path)
+    except OSError as exc:
+        return f"cannot determine product artifact absence: {path}: {exc}"
+    if not present:
+        return None
+    try:
+        mode = os.lstat(path).st_mode
+    except OSError as exc:
+        return f"product artifact changed while checking absence: {path}: {exc}"
+    if stat.S_ISREG(mode):
+        kind = "regular file"
+    elif stat.S_ISDIR(mode):
+        kind = "directory"
+    elif stat.S_ISLNK(mode):
+        kind = "symbolic link"
+    else:
+        kind = "filesystem object"
+    return f"product artifact must be absent, found {kind}: {path}"
+
+
+def _run_expected_product_failure(
+    config: Config,
+    mode: str,
+    xr_file: Path,
+    extra_args: list[str],
+    exp: expectlib.Expect,
+    ws: workspace.Workspace,
+) -> CaseVerdict:
+    name = rel_path(xr_file)
+    if config.case_timeout is None:
+        return CaseVerdict(
+            name,
+            mode,
+            Status.FAIL.value,
+            "expected product failure requires a finite case timeout",
+        )
+    out_c = ws.path(f"{mode}_{xr_file.stem}.c")
+    artifact_error = _artifact_absence_error(out_c)
+    if artifact_error:
+        return CaseVerdict(name, mode, Status.FAIL.value, artifact_error)
+
+    result = run_dump(config, out_c, _build_source(mode, xr_file, ws), extra_args)
+    product_text = result.combined_text()
+    if result.timed_out:
+        return CaseVerdict(
+            name,
+            mode,
+            Status.FAIL.value,
+            f"product command timed out after {config.case_timeout}s",
+            product_text,
+        )
+    if result.ok:
+        return CaseVerdict(
+            name,
+            mode,
+            Status.FAIL.value,
+            "product command unexpectedly succeeded",
+            product_text,
+        )
+    artifact_error = _artifact_absence_error(out_c)
+    if artifact_error:
+        return CaseVerdict(name, mode, Status.FAIL.value, artifact_error, product_text)
+    outcome = expectlib.check_product(exp, product_text)
+    if outcome.ok:
+        outcome = expectlib.check(exp, product_text, "")
+    return _verdict_from_outcome(name, mode, outcome, product_text)
+
+
 def run_one_case(config: Config, mode: str, xr_file: Path, ws: workspace.Workspace) -> CaseVerdict:
     name = rel_path(xr_file)
     base = xr_file.stem
@@ -271,6 +348,9 @@ def run_one_case(config: Config, mode: str, xr_file: Path, ws: workspace.Workspa
 
     if not expect_path.is_file():
         return CaseVerdict(name, mode, Status.SKIP.value, "missing expect")
+
+    if exp.parse_error:
+        return CaseVerdict(name, mode, Status.FAIL.value, exp.parse_error)
 
     if skip_for_sanitizer(config, exp):
         return CaseVerdict(name, mode, Status.SKIP.value,
@@ -334,6 +414,12 @@ def run_one_case(config: Config, mode: str, xr_file: Path, ws: workspace.Workspa
         if not vres.ok:
             return CaseVerdict(name, mode, Status.FAIL.value, "contract verification failed",
                                vres.combined_text())
+
+    # Expected product failures never consult or populate the success cache.
+    # They execute the product command once under a finite timeout and require
+    # the output artifact to be absent before and after the command.
+    if exp.wants_product_failure:
+        return _run_expected_product_failure(config, mode, xr_file, extra_args, exp, ws)
 
     dump_bytes, c_bytes, err = _dump_and_c_paths(config, mode, xr_file, extra_args, ws)
     if err:
