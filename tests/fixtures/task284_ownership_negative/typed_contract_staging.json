@@ -89,6 +89,7 @@
       "REF",
       "MOVE"
     ],
+    "default_mode": "omitted receiver mode normalizes to READ",
     "identity_owner": "method or interface declaration and function type",
     "body_role": "validate implementation effects do not exceed the declaration",
     "fixed_forms": [
@@ -105,6 +106,13 @@
       "API fingerprint"
     ],
     "override_rule": "receiver mode must exactly match the base or interface declaration",
+    "move_invocation_rules": [
+      "fresh and explicit copy results may call a MOVE receiver directly",
+      "an existing continuing lvalue must use (move value).method()",
+      "a plain continuing lvalue call rejects with OWN-E-RECEIVER-MOVE",
+      "a successful MOVE receiver call consumes the whole receiver binding exactly once"
+    ],
+    "value_type_move_rule": "Copy and value-struct receivers may not declare or invoke MOVE receiver mode",
     "forbidden_authorities": [
       "recursive body scan",
       "method name",
@@ -178,6 +186,60 @@
       "interface extern bodyless declaration function value import sidecar and dynamic target normalize from the signature",
       "every dynamic target has an exactly equal normalized origin set",
       "missing sidecar or inconsistent target set fails closed"
+    ],
+    "caller_root_mapping": [
+      "map each PARAM origin ordinal to the corresponding caller actual RootId",
+      "map RECEIVER to the caller receiver RootId",
+      "expand a view actual to its canonical origin RootId set",
+      "STATIC contributes no invalidatable caller RootId",
+      "union then sort and deduplicate every mapped RootId",
+      "unknown missing or moved actual provenance fails closed"
+    ],
+    "multi_origin_invalidation": "an invalidating action on any mapped RootId invalidates the returned view; no flag branch runtime tag or observed path may narrow the normalized origin set",
+    "result_lifetime_rules": [
+      "an unbound full-expression result becomes unreachable at full-expression end without source last-use inference",
+      "binding a result creates a new view version managed by forward validity",
+      "every later assignment or rebind creates another version and never lexically unions historical origins"
+    ],
+    "const_binding_orthogonality": [
+      "const Slice return capability is independent of caller binding mutability",
+      "var may rebind a const Slice but may not mutate through it or drop const",
+      "const may neither rebind nor mutate through the const Slice",
+      "assigning a const Slice result to mutable Slice or otherwise dropping const rejects",
+      "const Slice may be passed to READ but rejects REF MOVE and ordinary REF or MOVE receiver calls",
+      "never-rebound var produces only a non-semantic preference hint"
+    ]
+  },
+  "closure_contract": {
+    "type": "XaClosureCaptureFact",
+    "required_fields": [
+      "closure value id",
+      "captured source RootId",
+      "capture capability",
+      "storage domain",
+      "escape destination set",
+      "call-bound bit",
+      "cross-execution bit",
+      "creation and first escape sites",
+      "complete and unknown reason"
+    ],
+    "classification_rules": [
+      "an immediate closure literal passed to a strict READ non-retaining formal creates a call-bound READ borrow that ends when the enclosing call returns",
+      "assignment to a binding return container store retain formal and unknown formal each classify an ordinary mutable-root capture as an external strong alias and escape",
+      "a consuming closure factory may adopt a MOVE formal into the closure domain and consumes the caller source exactly once",
+      "an ordinary go closure rejects capture of an outer mutable var even when the body only reads it",
+      "const and sync closure capture follows typed capability while explicit go task and channel argument transfer uses a MOVE boundary plan",
+      "unknown retention target capability or storage fails closed"
+    ],
+    "syntax_rule": "closure capture lists and capture-mode annotations are not public syntax",
+    "plan_owner": "ProgramSemanticClosure and SemanticPlan publish the complete capture fact before Xi",
+    "consumer_rule": "Xi VM AOT and runtime consume the verified capture fact without reclassifying ownership",
+    "forbidden_authorities": [
+      "closure name",
+      "callee body availability",
+      "runtime retain count",
+      "backend liveness",
+      "scheduler topology"
     ]
   },
   "domain_transfer_contract": {
@@ -354,6 +416,18 @@
       "INVALIDATES_VIEW",
       "UNKNOWN_VIEW_EFFECT"
     ],
+    "owner_effect_rules": {
+      "PRESERVES_VIEW": "proves backing address extent and lifetime remain valid for every origin root",
+      "INVALIDATES_VIEW": "includes owner move rebind destroy maybe-reallocation and backing-extent shortening",
+      "UNKNOWN_VIEW_EFFECT": "invalidates a tracked local view and blocks the owner action when the view is active escaped captured or foreign-unknown",
+      "raw_foreign_policy": "incomplete raw or foreign effects fail closed and cannot be inferred from helper names"
+    },
+    "cleanup_reachability_rules": [
+      "a defer cleanup publishes typed RootId and lifetime-scope reachability before source legality checks",
+      "move return rebind or destroy rejects while a reachable cleanup can observe the root",
+      "scope exit may expire the cleanup fact but never grants legality from future-use or textual last-use",
+      "the cleanup fact feeds allocation storage drop planning and exactly-once teardown"
+    ],
     "source_legality_owner": "forward validity state machine and typed invalidation effect",
     "forbidden_legality_owners": [
       "AST last-use",
@@ -370,6 +444,8 @@
       "domain transfer proof",
       "view origin/validity/invalidation plan",
       "call-bound loan scopes",
+      "typed closure capture publication and escape action",
+      "typed cleanup reachability and drop boundary",
       "ownership edge/domain closure",
       "allocation/storage/drop plan",
       "boundary transfer action",
@@ -395,7 +471,9 @@
       "XaDomainAdoptionPlan",
       "XaViewFact",
       "XaOwnerViewIndex",
-      "XaCallBoundLoan"
+      "XaCallBoundLoan",
+      "XaClosureCaptureFact",
+      "XaCleanupReachabilityFact"
     ],
     "independent_checker_obligations": [
       "borrowed return origin set is nonempty sorted deduplicated and ordinal-bounded",
@@ -404,7 +482,9 @@
       "each invalidation and its owner mutation or move share one plan node",
       "every intersecting local view has a validity transition",
       "active escaped and unknown views are never silently marked dead",
-      "every view join is a row in the frozen validity join table"
+      "every view join is a row in the frozen validity join table",
+      "every closure capture has one complete call-bound escape or adoption classification",
+      "every reachable cleanup RootId has one lifetime scope and drop boundary"
     ],
     "atomicity_invariant": "owner invalidation and every intersecting local-view transition are one semantic action",
     "fingerprint_role": "byte integrity only; structural and semantic verification remains mandatory"
@@ -422,9 +502,10 @@
       "borrowed origin",
       "domain transfer eligibility",
       "storage domain",
-      "view validity or invalidation",
-      "call-bound loan scope",
-      "allocation drop or boundary-transfer action",
+        "view validity or invalidation",
+        "call-bound loan scope",
+        "closure retention escape adoption or cross-execution classification",
+        "allocation drop or boundary-transfer action",
       "source legality from backend liveness",
       "ownership from VM, C, or helper names"
     ]

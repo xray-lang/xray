@@ -1,0 +1,15 @@
+{
+  "schema": "ownership-semantic-plan-mutation/1",
+  "expected_reason": "OWN-E-UNKNOWN-EDGE",
+  "source_precondition": "A READ mutable-root argument has one complete FOREIGN_BORROWED edge before the mutation",
+  "mutations": [
+    "Change the foreign edge kind to UNKNOWN",
+    "Clear the completeness bit and set unknown reason to MISSING_FOREIGN_RETENTION_CONTRACT",
+    "Recompute the enclosing artifact checksum"
+  ],
+  "required_verifier_checks": [
+    "Reject the UNKNOWN foreign edge with incomplete provenance before execution",
+    "Report the foreign call and first UNKNOWN edge witness",
+    "Do not execute either VM or AOT"
+  ]
+}

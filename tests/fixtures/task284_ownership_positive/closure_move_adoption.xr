@@ -1,0 +1,13 @@
+fn make_reader(data: move Array<i64>) -> fn() -> i64 {
+    return fn() -> i64 {
+        return len(data)
+    }
+}
+
+fn main() {
+    var values = [1, 2, 3]
+    var reader = make_reader(move values)
+    print(reader())
+}
+
+main()

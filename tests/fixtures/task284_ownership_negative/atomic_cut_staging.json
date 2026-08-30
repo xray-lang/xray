@@ -157,25 +157,34 @@
         "domain-contract"
       ],
       "required_locks": [
-        "LOCK-SCHEMA"
+        "LOCK-SCHEMA",
+        "LOCK-RUNTIME",
+        "LOCK-BUILD-GEN"
       ],
       "protected_surfaces": [
         "view facts and owner reverse index",
         "CFG forward joins",
-        "call-bound loan scopes"
+        "call-bound loan scopes",
+        "closure capture facts and escape destinations",
+        "cleanup reachability facts and drop boundaries"
       ],
       "positive_gates": [
         "owner action invalidates intersecting local views",
         "branch and loop forward join",
-        "view rebind creates a new version"
+        "view rebind creates a new version",
+        "immediate retained adopted and cross-execution captures have one typed classification",
+        "cleanup reachability blocks owner actions until its typed lifetime scope expires"
       ],
       "negative_reasons": [
+        "OWN-E-READ-ESCAPE",
+        "OWN-E-UNKNOWN-EDGE",
         "OWN-E-VIEW-INVALIDATED",
         "OWN-E-VIEW-ACTIVE-CONFLICT",
         "OWN-E-VIEW-ESCAPED"
       ],
       "prepares_replacement_for_rows": [
-        "source-view-last-use"
+        "source-view-last-use",
+        "closure-capture-authority"
       ],
       "deletes_inventory_rows": [],
       "required_activation_gate_ids": []
@@ -334,6 +343,7 @@
       "deletes_inventory_rows": [
         "recoverable-root-alias",
         "source-view-last-use",
+        "closure-capture-authority",
         "body-inferred-receiver",
         "body-inferred-borrow-origin",
         "read-retain-return-alias",
@@ -361,7 +371,12 @@
         "provider-clang",
         "provider-gcc",
         "provider-msvc",
-        "provider-zig"
+        "provider-zig",
+        "source-corpus-positive-negative",
+        "parser-formatter-type-tooling-identity",
+        "legacy-oracle-differential",
+        "ownership-performance-manifest",
+        "ownership-residue-zero"
       ]
     }
   ],
@@ -498,6 +513,41 @@
       "status": "UNRUN",
       "evidence": [],
       "blocking_reason": "requires real generated C on a Zig provider host"
+    },
+    {
+      "id": "source-corpus-positive-negative",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "staged source fixtures are not activated in the positive and compile-error corpora"
+    },
+    {
+      "id": "parser-formatter-type-tooling-identity",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "receiver and borrowed-origin syntax type identity formatter LSP MCP and API projections are not activated"
+    },
+    {
+      "id": "legacy-oracle-differential",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "the exhaustive pre-cut to post-cut observation classification manifest does not exist"
+    },
+    {
+      "id": "ownership-performance-manifest",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "Task 284 ownership counters benchmark manifest and approved W0 budgets are not activated"
+    },
+    {
+      "id": "ownership-residue-zero",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "production residue scanner and completion rows cannot qualify until the atomic public cut"
     }
   ],
   "external_dependencies": [
