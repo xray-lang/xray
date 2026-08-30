@@ -504,7 +504,7 @@ module set, with global function, slot, representation, instruction, call, and
 argument rows plus pointer-free module partitions. Its only cross-partition ABI
 edge is the exact trivial signed-`i64` `PROGRAM_DIRECT` call and
 `CALL_DIRECT_I64` instruction; caller and callee slots and representations are
-rows of the same plan. The schema-5 AOT direct-call refinement now consumes that
+rows of the same plan. The schema-6 AOT direct-call refinement now consumes that
 single plan as lower translation authority: it resolves both global function
 rows through their owning semantic partitions, binds the stable entry and
 producer program-function identities, and records the unique global
@@ -551,9 +551,9 @@ authorize another graph family, dynamic reload, concurrent unload, or general
 product activation; all such boundaries remain fail closed.
 
 The Task 281 W3 leaf-aggregate cutover is a separate bounded family. A covered
-function is identified through its owning module's frozen PSC v5 row:
+function is identified through its owning module's frozen PSC v9 row:
 `XiFunc.psc_function_index` selects the PSC function identity and locator, which
-must join uniquely to the SemanticPlan 44 program-function binding and the exact
+must join uniquely to the SemanticPlan 45 program-function binding and the exact
 verified TargetPlan provenance and fingerprint. A mutable `XiFunc.semantic_plan`
 pointer is not required authority; when present it is only an additional exact
 agreement check. Missing, duplicate, foreign same-shape, or mutated identity
@@ -902,7 +902,7 @@ anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 25e81479447c0e37a37b7
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 14b7af26f15a2c9add8ec4fa7d58a782b4bdfda1f69a18904d668627d2238562
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c d816c4bbbb9baa3399944516d34865a86bfd2ce3561c2e7328c4d9262c53cebc
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 3a1b50209d93f7e098b67a9b23b79175050b1bf4ad297060b93e7aad257ad950
-anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 7d16dc053e4a544f8b9acf2e708d76c08e2022b82171b7d45d6950a9148aa779
+anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 8f25a04b08a3828ad6c338d71b95de790274a5bfa7e745ec803d358e03c780ec
 anchor-sha256: src/aot/xr_leaf_value_product_program_emission.c f87d8434d1c40dd948a4a9fcd64adfab03c177fd125f577686043223b601f524
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 8b195e252864f428ade7e800039df4c3d1205af552c1e6365a86c599cdad1942

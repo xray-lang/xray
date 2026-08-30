@@ -6,7 +6,7 @@ storage, ABI, TargetProfile, executor recipe, or standalone artifact codec.
 Its verified rows may enter Xi and then the pointer-free SemanticPlan/XSM
 projection defined below; they never imply TargetPlan admission on their own.
 
-1. ProgramSemanticClosure schema v8 has one mutable builder, one explicit
+1. ProgramSemanticClosure schema v9 has one mutable builder, one explicit
    `XrProgramSemanticFamily`, bounded module/dependency/type/type-field/
    function/function-parameter/call tables, and a typed failure kind. The
    builder canonicalizes all rows before freeze and cannot be reopened after
@@ -51,7 +51,7 @@ projection defined below; they never imply TargetPlan admission on their own.
    zero. Its source kind and complete locator participate in the closed-world
    evidence. A cross-module call requires an exact dependency; every function
    and module must be reachable from an explicit entry/export root.
-6. Freeze hashes schema v8, family, complete policy, every canonical row and
+6. Freeze hashes schema v9, family, complete policy, every canonical row and
    locator, then derives `XrGenerationClosureId` from the full closure
    fingerprint. The independent verifier reconstructs typed fingerprints,
    identities, ordered type-field and function-parameter domains, graph
@@ -155,7 +155,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     fail closed. The verifier independently reconstructs the same unique local
     declaration/PSC join instead of trusting the publisher's annotation or
     scanning same-shaped PSC rows.
-15. SemanticPlan schema 44 and program-provenance schema 4 admit the bounded
+15. SemanticPlan schema 45 and program-provenance schema 5 admit the bounded
     scalar, leaf aggregate, leaf value-product, and graph families only after
     PSC-to-Xi verification. The plan stores pointer-free
     PSC schema/family/fingerprint/GCI/counts, its exact module row, and typed
@@ -196,7 +196,7 @@ projection defined below; they never imply TargetPlan admission on their own.
 17. XSM exact-version encoding serializes counts and provenance followed by all program
     type, type-field, function, dependency, and call bindings. Their counts participate in
     decoder storage/payload budgets; every field participates in the
-    SemanticPlan fingerprint. Decode requires schema 44, exact bounds and
+    SemanticPlan fingerprint. Decode requires schema 45, exact bounds and
     payload digest, reconstructs the frozen plan, and reruns generic semantic
     verification. A dependency-bearing graph entry is accepted only by the
     module-set decoder with the exact ordered producer plan; the zero-dependency
@@ -205,7 +205,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     ordinal, stable type or source-class identity, family, flag, reserved,
     fingerprint, or join mutations fail closed even when outer framing is
     otherwise valid.
-18. The implemented execution boundary closes source -> PSC v8 -> Xi -> SemanticPlan 44 ->
+18. The implemented execution boundary closes source -> PSC v9 -> Xi -> SemanticPlan 45 ->
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
@@ -246,9 +246,9 @@ projection defined below; they never imply TargetPlan admission on their own.
     or C-emission execution authority; execution additionally requires the exact
     independently verified leaf instruction group and consumer gates.
 20. The bounded W3 AOT consumer joins a Xi function to that execution authority
-    only through the owning module's frozen PSC v8 and
+    only through the owning module's frozen PSC v9 and
     `XiFunc.psc_function_index`: the selected PSC function identity and locator
-    must match one SemanticPlan 44 program-function binding, which must in turn
+    must match one SemanticPlan 45 program-function binding, which must in turn
     match the verified TargetPlan semantic provenance and fingerprint. A mutable
     `XiFunc.semantic_plan` pointer is optional and, when present, can only confirm
     the same identity. Missing, duplicate, foreign same-shape, or re-signed

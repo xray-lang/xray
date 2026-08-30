@@ -463,7 +463,7 @@ row names the declared class and no callee at all; a method identity on such a
 row is refused as stale, and a class that does declare an instance constructor
 keeps the ordinary method callsite and composes that body's effects.
 
-SemanticPlan schema 44 names local and imported construction without erasing
+SemanticPlan schema 45 names local and imported construction without erasing
 their module boundary. A local construction target names only the declaration:
 the instance result and the class object loaded from its unique local shared
 slot must name the same frozen source class. An imported construction target
@@ -493,7 +493,7 @@ The admitted scalar, leaf-value, and bounded two-module scalar graph families
 consume frozen PSC and Xi authority as typed external construction/verification
 inputs. The scalar family also requires its sealed CallDecision and exact
 TargetProfile; the leaf-value and graph families require both to be absent.
-SemanticPlan schema 44 and program-provenance schema 4 project the graph into
+SemanticPlan schema 45 and program-provenance schema 5 project the graph into
 one exact plan per Xi partition. The zero-dependency producer carries its pure
 unary function/export authority; the entry carries its pure nullary function,
 ordered dependency, resolver binding, program call, and `SOURCE_EXPORT` target.

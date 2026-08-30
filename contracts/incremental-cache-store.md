@@ -109,9 +109,9 @@ invalidation, compiler-session ownership, or any compatibility reader.
     later operation must derive the same key and independently verify the raw
     bytes again before it can count as a hit.
 12. For the bounded two-source-module scalar product graph, the native source
-    driver publishes one independently verified schema-v5
+    driver publishes one independently verified schema-v9
     `SCALAR_MODULE_GRAPH_DIRECT_CALL` PSC/GCI before Xi lowering and carries
-    that immutable authority into two Xi partitions and two SemanticPlan 44
+    that immutable authority into two Xi partitions and two SemanticPlan 45
     artifacts. Each
     graph spec must match exactly one PSC module row through canonical source
     semantic module authority; duplicate, missing, stale, or foreign rows abort

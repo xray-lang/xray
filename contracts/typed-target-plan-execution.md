@@ -29,7 +29,7 @@ C-emission recipe consumes these rows; the old method-name emitter is not an
 authorized product fallback.
 
 The bounded leaf-value aggregate direct-call family is one exact executable
-family within schema 56, not a second aggregate-only plan. SemanticPlan 44
+family within schema 56, not a second aggregate-only plan. SemanticPlan 45
 program bindings project one target-profile-derived aggregate layout,
 caller/callee value and slot rows, one `VALUE/READ` argument, and a caller-storage
 result with no adapter or ownership transfer. The callee group is exactly
@@ -104,13 +104,13 @@ global row namespace. It does not translate local indexes, construct a
   fallback, or second executable plan.
 
 The AOT direct-call refinement is the first lower consumer of this graph
-authority. Schema 5 resolves the caller and callee global function rows through
+authority. Schema 6 resolves the caller and callee global function rows through
 their owning semantic partitions, records their stable program-function symbol
 identities, and binds the unique global `CALL_DIRECT_I64` instruction to the
 `PROGRAM_DIRECT` call. Freeze and independent verification re-derive those
 facts from the same TargetPlan. A committed program-direct row cannot become a
 refusal, legacy resolution, or per-module executable plan: missing or
-contradictory evidence fails the consumer. The schema-2 program C-emission
+contradictory evidence fails the consumer. The schema-3 program C-emission
 binding then consumes that same verified program TargetPlan. It matches every
 partition to exactly one Xi module through its PSC row and attached
 SemanticPlan, joins the global functions and direct call to unique Xi nodes
@@ -145,7 +145,7 @@ authority. Current schema 56 retains the exact graph and partition sections, mut
 excludes ordinary and graph directory shapes, binds the header semantic
 fingerprint to the full canonical module set, and materializes only through that
 set plus the exact target profile.
-`MODULE_PARTITIONS` is a fixed 208-byte row format with at most 256 rows;
+`MODULE_PARTITIONS` is a fixed 216-byte row format with at most 256 rows;
 `PROGRAM_GRAPHS` is a fixed 340-byte row format with at most one row. Round-trip
 is byte-identical, while wrong count/order, duplicate/missing modules, re-signed
 graph or partition mutations, and ordinary/graph substitution fail closed. The
@@ -155,7 +155,7 @@ one-argument direct-`i64` graph and binds the verified Program TargetPlan to the
 same live manifest, decoded cache, program fingerprint, module-set fingerprint,
 and GCI. The source AOT product builds
 and verifies the graph plan, builds and independently verifies its global AOT
-direct-call binding and schema-2 program C-emission binding, publishes
+direct-call binding and schema-3 program C-emission binding, publishes
 deterministic module summaries, and emits and links the covered graph without
 constructing per-module TargetPlans. Bounded source-AOT
 `execution=cgen-ready` is reported only after the program C-emission binding is
@@ -429,7 +429,7 @@ failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
 TargetPlan schema 56 is a hard cutover from v55 and every earlier TargetPlan
-schema. It requires SemanticPlan schema 44, program-provenance schema 4, and
+schema. It requires SemanticPlan schema 45, program-provenance schema 5, and
 its exact generated Xi operation registry. Schema 54 preserves the PSC7 leaf
 value-product family whose canonical Xi construct/project proof
 has the exact x64 48-byte/8-byte layout and ordinal-bound target rows; it does
@@ -770,7 +770,7 @@ Evidence:
   primitive/super row equivalence, directory field mutations, every stream
   byte mutation, and fail-closed noncanonical/truncated/overflow/unknown/count/
   trailing forms while exercising the public XSM/XTP generation route. It
-  freezes 208-byte module-partition rows with a 256-row limit and 340-byte
+  freezes 216-byte module-partition rows with a 256-row limit and 340-byte
   program-graph rows with a one-row limit. It also round-trips the exact
   lifecycle root/cleanup rows and rejects mutation
   of every identity-bearing lifecycle field.
@@ -911,7 +911,7 @@ anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759e
 anchor-sha256: src/aot/xaot_driver.c fe7e07948f141102aafd611e93b0a3dfb7c0837e2f77e1757fc32b00307c1795
 anchor-sha256: src/aot/xaot_prepare.c 645908d0b41bf63693ed07515795525c248027d92b92c47f81d3412adf442032
 anchor-sha256: src/aot/xaot_verify.c 7d9295861d3be074ede618497268bb5d47c8f537c0c759f78adec000143cd12b
-anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 7d16dc053e4a544f8b9acf2e708d76c08e2022b82171b7d45d6950a9148aa779
+anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 8f25a04b08a3828ad6c338d71b95de790274a5bfa7e745ec803d358e03c780ec
 anchor-sha256: src/aot/xr_leaf_value_product_program_emission.c f87d8434d1c40dd948a4a9fcd64adfab03c177fd125f577686043223b601f524
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 8b195e252864f428ade7e800039df4c3d1205af552c1e6365a86c599cdad1942

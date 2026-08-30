@@ -36,7 +36,7 @@ roots, or general product activation.
    complete data layout, atomic widths/orders, float features, vector
    features/width, runtime profile, ABI, object header, structured String
    literal view materialization, and provider set before building the profile.
-   TargetProfile schema 2 carries the verified String-literal field layout,
+   TargetProfile schema 3 carries the verified String-literal field layout,
    dynamic tag, ownership/termination policy, and materialization recipe; a
    caller-supplied raw digest is not authority. The independent verifier
    re-derives the same fields; caller-authored profile or runtime/provider/
@@ -61,7 +61,7 @@ roots, or general product activation.
    type identity and rejects incomplete or mutated representation facts; no Xi
    type, name, or legacy plan can authorize it. The
    aggregate family admits the bounded leaf-value direct-local family only
-   through SemanticPlan 44 program provenance and typed type, field, function,
+   through SemanticPlan 45 program provenance and typed type, field, function,
    and call bindings. It derives field geometry from the verified target profile
    and declaration ordinals, binds caller and callee to one trivial aggregate
    representation, and records the return in caller storage with no adapter or
@@ -261,13 +261,13 @@ roots, or general product activation.
    authority. Builder and verifier derive that judgement independently from
    SemanticPlan, while String and other reference-capable children continue to
    fail closed at this element-indexing boundary.
-5. Runtime loading accepts only an XTP v54 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v56 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V54 is a breaking hard cutover from
-   v53 and all earlier XTP schemas. It requires SemanticPlan schema 44 and
-   TargetPlan schema 56, including exact PSC v8 provenance, typed program
-   bindings, and the direct-local scalar-ref v1 call-row interpretation; no
-   compatibility alias is accepted. It
+   independent TargetPlan verification. V56 is a breaking hard cutover from
+   v55 and all earlier XTP schemas. It requires SemanticPlan/XSM schema 45,
+   TargetProfile schema 3, TargetPlan schema 56, program-provenance schema 5,
+   and exact PSC v9 provenance, typed program bindings, and the direct-local
+   scalar-ref v1 call-row interpretation; no compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
    expectation section and preserves the compact instruction stream introduced
    by v34. It additionally carries exact Array HOF result/callback authority,
@@ -332,7 +332,7 @@ roots, or general product activation.
    materializer. TargetPlan schema 56 carries one program-graph row and canonical
    module partitions over global TargetPlan tables; each partition identifies
    its SemanticPlan through the full canonical program module set and records
-   pointer-free row ranges. `MODULE_PARTITIONS` uses fixed 208-byte rows and has
+   pointer-free row ranges. `MODULE_PARTITIONS` uses fixed 216-byte rows and has
    a hard limit of 256 rows; `PROGRAM_GRAPHS` uses one fixed 340-byte row and
    has a hard limit of one row. The materializer rejects ordinary/graph
    directory shape substitution, locates the entry from the graph and partition rows,
@@ -366,7 +366,7 @@ roots, or general product activation.
    SemanticPlan verifier before the runtime builds its canonical native
    TargetProfile. They do not guess SemanticPlan or TargetProfile authority
    from a host name, file name, sibling artifact, or caller-authored
-   fingerprint. A dependency-bearing schema-44 XSM cannot be decoded as a
+   fingerprint. A dependency-bearing schema-45 XSM cannot be decoded as a
    standalone artifact: the currently admitted module-set route requires the
    exact two fragments of this bounded capability and canonicalizes arbitrary
    input order only from their verified program-module rows. The decoder
