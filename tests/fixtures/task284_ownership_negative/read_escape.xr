@@ -1,0 +1,11 @@
+class Store {
+    saved: Array<i64>?
+}
+
+fn save(store: ref Store, data: Array<i64>) {
+    store.saved = data
+}
+
+fn main() {}
+
+main()

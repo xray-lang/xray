@@ -1,0 +1,18 @@
+class Buffer {
+    value: i64
+
+    constructor(value: i64) {
+        this.value = value
+    }
+
+    move finish() -> i64 {
+        return this.value
+    }
+}
+
+fn main() {
+    var buffer = Buffer(1)
+    print(buffer.finish())
+}
+
+main()

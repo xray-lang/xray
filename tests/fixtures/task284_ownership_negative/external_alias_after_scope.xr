@@ -1,0 +1,15 @@
+fn consume(data: move Array<i64>) -> i64 {
+    return len(data)
+}
+
+fn main() {
+    var data: Array<i64> = [1, 2, 3]
+    {
+        var alias = data
+        print(len(alias))
+    }
+    var task = go consume(move data)
+    print(await task)
+}
+
+main()

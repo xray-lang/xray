@@ -1,0 +1,8 @@
+fn observe_after_suspend(data: Array<i64>) -> i64 {
+    Coro.yield()
+    return len(data)
+}
+
+fn main() {}
+
+main()

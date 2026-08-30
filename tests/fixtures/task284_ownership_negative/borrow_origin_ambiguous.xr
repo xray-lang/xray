@@ -1,0 +1,10 @@
+fn choose(a: Slice<u8>, b: Slice<u8>, first: bool) -> const Slice<u8> {
+    if (first) {
+        return a
+    }
+    return b
+}
+
+fn main() {}
+
+main()

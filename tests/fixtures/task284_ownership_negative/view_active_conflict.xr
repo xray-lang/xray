@@ -1,0 +1,11 @@
+fn mutate(owner: ref Array<u8>, view: Slice<u8>) {
+    owner.push(view[0])
+}
+
+fn main() {
+    var data: Array<u8> = [1, 2, 3]
+    var view: Slice<u8> = data[:]
+    mutate(ref data, view)
+}
+
+main()

@@ -1,0 +1,547 @@
+{
+  "schema": "ownership-source-contract-boundary/1",
+  "frozen_base": {
+    "commit": "49f71d1ea0f8e12aa2af8e64fb5d8d1c6f3ee79c",
+    "tree": "478e72a21e54ae5cc182caaa77cf9e526725a0a6"
+  },
+  "current_train_base": {
+    "commit": "5f5df6c5778bcf9d54b3b0e9cf29cabd5e27822a",
+    "tree": "366fc89b4ebe12b5cf700021f441679e3e2b19b2"
+  },
+  "activation": "staging-only-before-i1-r4",
+  "owned_fact": "Source-backed ownership authority inventory and constructed negative oracles",
+  "allowed_layers": [
+    "read-only-source-inventory",
+    "independent-fixtures",
+    "negative-oracles",
+    "non-authoritative-consumer-staging"
+  ],
+  "shared_hotspots": [
+    "parser-and-public-ast",
+    "program-semantic-closure-and-semantic-plan",
+    "target-plan-and-xtp",
+    "runtime-public-api",
+    "root-cmake-and-generated-projections",
+    "contract-anchors",
+    "completion-baseline"
+  ],
+  "explicitly_unowned": [
+    "public-parser-or-ast-activation",
+    "schema-version-or-contract-anchor",
+    "runtime-public-api-or-artifact-identity",
+    "root-build-registration-or-generated-projection",
+    "completion-or-legacy-baseline"
+  ],
+  "boundary_surfaces": [
+    {
+      "id": "parser-ast",
+      "current_owner": "frontend parser and AST declarations",
+      "replacement_owner": "canonical receiver mode and BorrowOriginSet syntax nodes",
+      "single_writer": "LOCK-FRONTEND",
+      "activation_boundary": "I1/R4 plus train lock"
+    },
+    {
+      "id": "parameter-function-type",
+      "current_owner": "XrParamMode and XrFunctionType",
+      "replacement_owner": "receiver mode and normalized origin set in structural identity",
+      "single_writer": "LOCK-FRONTEND and LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train locks"
+    },
+    {
+      "id": "receiver",
+      "current_owner": "body-inferred mutates_receiver",
+      "replacement_owner": "declaration-owned READ REF MOVE receiver contract",
+      "single_writer": "LOCK-FRONTEND and LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train locks"
+    },
+    {
+      "id": "view-return",
+      "current_owner": "body-derived scalar view source",
+      "replacement_owner": "signature-owned normalized BorrowOriginSet",
+      "single_writer": "LOCK-FRONTEND and LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train locks"
+    },
+    {
+      "id": "alias-loan",
+      "current_owner": "XaRootAliasState and XaLoan last-use",
+      "replacement_owner": "monotone domain transfer and forward view validity",
+      "single_writer": "LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train lock"
+    },
+    {
+      "id": "program-semantic-closure",
+      "current_owner": "XrProgramSemanticClosure frozen rows",
+      "replacement_owner": "PSC ownership declaration and origin rows",
+      "single_writer": "LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train lock"
+    },
+    {
+      "id": "storage-domain",
+      "current_owner": "XrSemanticStorageDomain and runtime storage promotion",
+      "replacement_owner": "typed edge closure and creation-time ownership domain plan",
+      "single_writer": "LOCK-SCHEMA and LOCK-RUNTIME",
+      "activation_boundary": "I1/R4 plus train locks"
+    },
+    {
+      "id": "xi-arc",
+      "current_owner": "Xi ownership inference and ARC liveness",
+      "replacement_owner": "verified ownership plan consumer with backend-only liveness",
+      "single_writer": "LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train lock"
+    },
+    {
+      "id": "semantic-plan",
+      "current_owner": "XrSemanticPlan",
+      "replacement_owner": "canonical ownership obligations, checks, domains, edges, and diagnostics",
+      "single_writer": "LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train lock"
+    },
+    {
+      "id": "target-plan",
+      "current_owner": "XrTargetPlan and XTP codec",
+      "replacement_owner": "lowered ownership adoption and handoff rows",
+      "single_writer": "LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train lock"
+    },
+    {
+      "id": "vm",
+      "current_owner": "VM execution of Xi move and channel/task handoff",
+      "replacement_owner": "verified plan execution without ownership inference",
+      "single_writer": "LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train lock"
+    },
+    {
+      "id": "aot",
+      "current_owner": "AOT generated-C storage promotion",
+      "replacement_owner": "verified O(1) identity handoff",
+      "single_writer": "LOCK-BUILD-GEN and LOCK-SCHEMA",
+      "activation_boundary": "I1/R4 plus train locks"
+    },
+    {
+      "id": "runtime",
+      "current_owner": "runtime storage headers and object graph walkers",
+      "replacement_owner": "typed adoption token and governed construction-only traversal",
+      "single_writer": "LOCK-RUNTIME",
+      "activation_boundary": "I1/R4 plus train lock"
+    },
+    {
+      "id": "lsp",
+      "current_owner": "frontend-derived hover signature and formatter data",
+      "replacement_owner": "canonical receiver and origin spelling",
+      "single_writer": "LOCK-FRONTEND and LOCK-BUILD-GEN",
+      "activation_boundary": "public syntax activation"
+    },
+    {
+      "id": "docs",
+      "current_owner": "docs task 01a0510d-17d5-7130-ac01-c45bd1c5dca8",
+      "replacement_owner": "same docs task after executable contract activation",
+      "single_writer": "frozen docs task",
+      "activation_boundary": "implementation evidence delivered by integration train"
+    },
+    {
+      "id": "ports",
+      "current_owner": "xray-ports downstream source and API consumers",
+      "replacement_owner": "ports migration from canonical API inventory",
+      "single_writer": "integration train coordinated downstream lane",
+      "activation_boundary": "public syntax and API identity activation"
+    }
+  ],
+  "rows": [
+    {
+      "id": "recoverable-root-alias",
+      "current_owner": "XaRootAliasState stores root-wide LOCAL_ALIASED and future-use recovery can authorize a later move",
+      "replacement_owner": "Monotone XaDomainTransferState with typed external-edge witnesses",
+      "deletion_phase": "P3",
+      "deletion_boundary": "Delete LOCAL_ALIASED and every alias-to-UNIQUE backedge after binding, container, field, closure, return, and foreign edges publish a monotone domain proof",
+      "required_locks": ["LOCK-SCHEMA", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["domain-lattice-join", "external-alias-negatives", "source-move-verifier-mutation"],
+      "producers": [
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "XaRootAliasState root_alias;", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xa_ownership.c", "anchor": "XR_FUNC void xa_mark_root_alias_state(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": ": XA_ROOT_LOCAL_ALIASED;", "occurrences": 1}
+      ],
+      "consumers": [
+        {"path": "src/frontend/analyzer/xa_ownership.c", "anchor": "XR_FUNC XaSymbol *xa_find_live_strong_alias_after_current(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_expr.c", "anchor": "links->root_alias == XA_ROOT_LOCAL_ALIASED", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "links->root_alias == XA_ROOT_LOCAL_ALIASED", "occurrences": 1}
+      ],
+      "residue": [
+        {"path": "src/frontend/analyzer/xa_ownership.h", "anchor": "XA_ROOT_LOCAL_ALIASED", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "The recoverable alias state no longer exists"},
+        {"path": "src/frontend/analyzer/xa_ownership.c", "anchor": "xa_mark_root_alias_state_in_scope", "occurrences": 3, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "No root-wide alias state writer remains"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_internal.h", "anchor": "xa_find_live_strong_alias_after_current", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "No future live-alias query can authorize transfer"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/unit/analyzer/test_analyzer.c",
+          "anchor": "analyzer_inferred_unique_alias_nll_guards_move",
+          "occurrences": 2,
+          "baseline_expected": "dead local alias permits move while a live alias rejects it",
+          "post_cut_expected": "any external strong alias permanently rejects domain transfer"
+        },
+        {
+          "path": "tests/compile_errors/ownership/179_move_rejects_container_stored_root.xr",
+          "anchor": "holder.push(a)",
+          "occurrences": 1,
+          "baseline_expected": "container-stored root rejects move",
+          "post_cut_expected": "typed external edge rejects move at the first witness"
+        }
+      ]
+    },
+    {
+      "id": "source-view-last-use",
+      "current_owner": "XaLoan.last_use plus backward future-use queries decide source view legality",
+      "replacement_owner": "Forward XaViewValidityState with canonical origin sets and typed invalidation effects",
+      "deletion_phase": "P4",
+      "deletion_boundary": "Delete source-legality future-use queries after owner actions and CFG joins publish atomic forward validity transitions; preserve Xi ARC and register-allocation liveness",
+      "required_locks": ["LOCK-SCHEMA", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["view-validity-join", "invalidation-order", "no-source-last-use-residue"],
+      "producers": [
+        {"path": "src/frontend/analyzer/xa_ownership.h", "anchor": "XaCfgPoint last_use;", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xa_ownership.c", "anchor": "XR_FUNC void xa_register_active_loan(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xa_ownership.c", "anchor": "static bool xa_active_loan_may_be_live_after_mutation(", "occurrences": 1}
+      ],
+      "consumers": [
+        {"path": "src/frontend/analyzer/xa_ownership.c", "anchor": "XR_FUNC void xa_check_active_loan_owner_path_mutation(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "XR_FUNC bool xa_block_uses_symbol_name_from(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "XR_FUNC bool xa_node_uses_symbol_name(", "occurrences": 2}
+      ],
+      "residue": [
+        {"path": "src/frontend/analyzer/xa_ownership.c", "anchor": "xa_active_loan_may_be_live_after_mutation", "occurrences": 2, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "No current owner action asks whether a view will be used later"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "xa_block_uses_symbol_name_from", "occurrences": 4, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "The ownership future-name walker is removed"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "xa_node_uses_symbol_name", "occurrences": 83, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "The recursive ownership future-name walker is removed"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "xa_symbol_used_after_current_statement", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "The ownership last-use entry point is removed"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_internal.h", "anchor": "xa_block_uses_symbol_name_from", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "The future-block walker declaration is removed"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_internal.h", "anchor": "xa_node_uses_symbol_name", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "The recursive walker declaration is removed"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_internal.h", "anchor": "xa_symbol_used_after_current_statement", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "The ownership last-use declaration is removed"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/regression/07_strings/0733_string_bytes_receiver_nll.xr",
+          "anchor": "borrow_ends_after_last_use",
+          "occurrences": 1,
+          "baseline_expected": "owner mutation is allowed after the last textual view use",
+          "post_cut_expected": "owner mutation follows forward validity and explicit invalidation order"
+        },
+        {
+          "path": "tests/compile_errors/type/span_active_borrow_owner_mutation.xr",
+          "anchor": "bytes.push(2)",
+          "occurrences": 1,
+          "baseline_expected": "owner mutation is rejected while the view is later used",
+          "post_cut_expected": "later view use reports OWN-E-VIEW-INVALIDATED"
+        }
+      ]
+    },
+    {
+      "id": "body-inferred-receiver",
+      "current_owner": "Recursive method-body mutation scan, transitive fixed point, imported propagation, and mutates_receiver boolean",
+      "replacement_owner": "Declaration-owned READ REF MOVE receiver mode in type identity and every plan",
+      "deletion_phase": "P5",
+      "deletion_boundary": "Delete the recursive scanner, fixed point, imported boolean, and lowering inference after declaration validation and both executors consume receiver mode",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["receiver-parser-kats", "override-identity", "vm-aot-receiver-differential"],
+      "producers": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "static bool xa_method_body_mutates_receiver(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "static bool xa_class_propagate_receiver_mutations(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "bool mutates_receiver;", "occurrences": 1}
+      ],
+      "consumers": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor.c", "anchor": "xa_propagate_receiver_mutations_for_ast(analyzer, ast)", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "method_sym->mutates_receiver", "occurrences": 1},
+        {"path": "src/ir/xi_lower_class.inc.c", "anchor": "method_sym->mutates_receiver ? XR_PARAM_REF : XR_PARAM_READ", "occurrences": 1},
+        {"path": "src/ir/xi_lower_expr.c", "anchor": "selection->target_symbol->mutates_receiver ? XR_PARAM_REF : XR_PARAM_READ", "occurrences": 1}
+      ],
+      "residue": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "xa_method_body_mutates_receiver", "occurrences": 53, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "No recursive body scan grants receiver permission"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "xa_propagate_receiver_mutations_for_ast", "occurrences": 2, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "No receiver-permission fixed point remains"},
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "mutates_receiver", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "XaSymbol carries declared receiver mode instead of an inferred boolean"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor.c", "anchor": "sym->mutates_receiver = export_sym->mutates_receiver;", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Imports copy declared receiver mode"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "sym->mutates_receiver = export_sym->mutates_receiver;", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Dynamic call symbols copy declared receiver mode"},
+        {"path": "src/frontend/analyzer/xanalyzer_memory_effect.c", "anchor": "row->symbol->mutates_receiver", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Memory effects validate declared receiver mode without granting it"},
+        {"path": "src/frontend/analyzer/xanalyzer.c", "anchor": "view->mutates_receiver = source->mutates_receiver;", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Cloned symbols preserve declared receiver mode"},
+        {"path": "src/frontend/analyzer/xanalyzer_builtins.h", "anchor": "bool mutates_receiver;", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "The typed native manifest publishes READ REF MOVE receiver mode"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/regression/13_types/1434_param_mode_receiver_mutation_boundary.xr",
+          "anchor": "counter.bump()",
+          "occurrences": 1,
+          "baseline_expected": "body scan grants a mutating receiver",
+          "post_cut_expected": "explicit REF receiver grants mutation"
+        },
+        {
+          "path": "tests/compile_errors/ownership/007_in_instance_mutating_method.xr",
+          "anchor": "counter.bump()",
+          "occurrences": 1,
+          "baseline_expected": "READ argument boundary rejects the inferred receiver mutation",
+          "post_cut_expected": "declared receiver and argument modes reject the same conflict"
+        }
+      ]
+    },
+    {
+      "id": "body-inferred-borrow-origin",
+      "current_owner": "Return-body summary publishes one source kind and one parameter index",
+      "replacement_owner": "Signature-owned sorted and deduplicated BorrowOriginSet",
+      "deletion_phase": "P5",
+      "deletion_boundary": "Delete body-derived origin authority and scalar source-plus-parameter fields after parser, type identity, imports, plans, and calls carry the canonical set",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["origin-parser-kats", "origin-set-normalization", "import-plan-roundtrip"],
+      "producers": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "static void xa_summary_mark_return(", "occurrences": 2},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "summary->view_return_source = source;", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "summary->view_return_source = XR_VIEW_RETURN_MULTI;", "occurrences": 1}
+      ],
+      "consumers": [
+        {"path": "src/ir/xi.h", "anchor": "uint8_t view_return_source;", "occurrences": 1},
+        {"path": "src/ir/xi_lower.c", "anchor": "func->view_return_source", "occurrences": 1},
+        {"path": "src/ir/xi_lower_expr.c", "anchor": "callee_type->function.view_return_source", "occurrences": 1},
+        {"path": "src/plan/semantic/xr_semantic_builder.c", "anchor": ";view:%u:%d:%u", "occurrences": 1}
+      ],
+      "residue": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "view_return_source", "occurrences": 15, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Declaration validation consumes normalized BorrowOriginSet"},
+        {"path": "src/ir/xi.h", "anchor": "view_return_param", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Xi carries an interned origin-set row instead of one parameter"},
+        {"path": "src/ir/xi_lower_expr.c", "anchor": "view_return_param", "occurrences": 2, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Call lowering maps every declared origin candidate"},
+        {"path": "src/runtime/value/xtype.h", "anchor": "XrViewReturnSourceKind view_return_source;", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Function type identity owns a normalized origin-set row"},
+        {"path": "src/runtime/value/xtype.h", "anchor": "int16_t view_return_param;", "occurrences": 1, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "The scalar parameter field is removed"},
+        {"path": "src/runtime/value/xtype.c", "anchor": "view_return_source", "occurrences": 12, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Type creation copy equality and matching consume normalized origin sets"},
+        {"path": "src/runtime/value/xtype.c", "anchor": "view_return_param", "occurrences": 10, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "No scalar origin parameter remains in runtime type identity"},
+        {"path": "src/runtime/value/xtype_generic.c", "anchor": "view_return_source", "occurrences": 2, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Generic substitution copies normalized origin sets"},
+        {"path": "src/runtime/value/xtype_generic.c", "anchor": "view_return_param", "occurrences": 2, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Generic substitution has no scalar origin field"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "required_signature->function.view_return_source", "occurrences": 3, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Interface matching compares normalized origin sets"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/regression/14_typed_array/1421_view_return_through_renamed_callee.xr",
+          "anchor": "view_return_provenance",
+          "occurrences": 1,
+          "baseline_expected": "renamed call preserves the body-derived scalar origin",
+          "post_cut_expected": "renamed call preserves the declared normalized origin set"
+        },
+        {
+          "path": "tests/compile_errors/type/slice_return_multi_source_rejected.xr",
+          "anchor": "fn choose",
+          "occurrences": 1,
+          "baseline_expected": "body inference rejects multiple sources",
+          "post_cut_expected": "omitted multi-candidate origin reports OWN-E-VIEW-ORIGIN-AMBIGUOUS"
+        }
+      ]
+    },
+    {
+      "id": "read-retain-return-alias",
+      "current_owner": "XA_RETAIN_LOCAL_ALIAS and XA_RETURN_PROVENANCE_ALIAS permit ordinary managed READ aliases to escape",
+      "replacement_owner": "Strict call-bound READ plus only declared const Slice borrowed returns from eligible READ receiver, parameter, or static origins",
+      "deletion_phase": "P2",
+      "deletion_boundary": "Delete READ local-alias retain, ordinary managed alias return, capture, and caller exceptions after every callable form consumes declared mode, origin, and effect contracts",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["read-store-negative", "read-return-negative", "read-capture-negative", "foreign-read-negative"],
+      "producers": [
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "XA_RETAIN_LOCAL_ALIAS", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "XA_RETURN_PROVENANCE_ALIAS", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "summary->effects[slot].retain = XA_RETAIN_LOCAL_ALIAS;", "occurrences": 3}
+      ],
+      "consumers": [
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "static inline bool xa_param_effect_retains_or_escapes(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "xa_param_effect_retains_or_escapes(effect)", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "A read parameter may cross the boundary as a +0 alias", "occurrences": 1}
+      ],
+      "residue": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "XA_RETAIN_LOCAL_ALIAS", "occurrences": 3, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "READ never grants an ordinary local retain"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "XA_RETURN_PROVENANCE_ALIAS", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "READ never returns an ordinary managed alias"},
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "xa_param_effect_retains_or_escapes", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "The helper may classify non-READ effects but cannot authorize READ escape"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/unit/analyzer/test_analyzer.c",
+          "anchor": "read->retain == XA_RETAIN_LOCAL_ALIAS",
+          "occurrences": 1,
+          "baseline_expected": "An ordinary READ alias return records local retain provenance",
+          "post_cut_expected": "The ordinary alias return is rejected and no READ retain summary is published"
+        },
+        {
+          "path": "tests/fixtures/task284_ownership_negative/read_escape.xr",
+          "anchor": "store.saved = data",
+          "occurrences": 1,
+          "baseline_expected": "legacy body summary accepts an escaping READ alias",
+          "post_cut_expected": "OWN-E-READ-ESCAPE at the store"
+        }
+      ]
+    },
+    {
+      "id": "read-ref-suspend-authority",
+      "current_owner": "Suspend effect summaries and parameter ownership checks are separate authorities without a total READ REF crossing rule",
+      "replacement_owner": "Declared parameter mode crossed with the canonical complete suspend effect row",
+      "deletion_phase": "P2",
+      "deletion_boundary": "Delete direct body and name queries from READ REF legality while retaining the canonical suspend-effect producer for the total checker",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["read-suspend-negative", "ref-suspend-negative", "unknown-target-fail-closed"],
+      "producers": [
+        {"path": "src/frontend/analyzer/xanalyzer_suspend.c", "anchor": "XA_SEM_EFFECT_SCHED_SUSPEND", "occurrences": 3},
+        {"path": "src/frontend/analyzer/xanalyzer_suspend.c", "anchor": "row->symbol->links.effect_id = effect_id;", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "XaEffectId effect_id;", "occurrences": 1}
+      ],
+      "consumers": [
+        {"path": "src/frontend/analyzer/xanalyzer_suspend.c", "anchor": "void xa_verify_no_suspend(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_suspend.c", "anchor": "mem.withSliceMut callback rejects argument", "occurrences": 2},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "static bool xa_thread_spawn_body_may_suspend(", "occurrences": 2}
+      ],
+      "residue": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "xa_thread_spawn_body_may_suspend", "occurrences": 6, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 6, "post_cut_expectation": "The system-thread checker may retain its separate restriction but READ REF legality does not call it"},
+        {"path": "src/frontend/analyzer/xanalyzer_suspend.c", "anchor": "sus_is_suspending_handle_method", "occurrences": 2, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 2, "post_cut_expectation": "The canonical effect producer may retain a typed builtin lookup"},
+        {"path": "src/frontend/analyzer/xanalyzer_suspend.c", "anchor": "sus_call_is_coro_yield", "occurrences": 2, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 2, "post_cut_expectation": "The canonical effect producer continues to identify the language suspend primitive"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/compile_errors/ffi/041_with_slice_mut_callback_no_suspend.xr",
+          "anchor": "print(await task)",
+          "occurrences": 1,
+          "baseline_expected": "special callback contract rejects suspension",
+          "post_cut_expected": "canonical REF no-suspend rule rejects suspension"
+        },
+        {
+          "path": "tests/fixtures/task284_ownership_negative/read_suspend.xr",
+          "anchor": "Coro.yield()",
+          "occurrences": 1,
+          "baseline_expected": "READ and suspend authorities are not composed",
+          "post_cut_expected": "OWN-E-READ-SUSPEND at the first boundary"
+        }
+      ]
+    },
+    {
+      "id": "typed-domain-edge-authority",
+      "current_owner": "Storage domains, graph promotion, and boundary name checks classify edges without one canonical typed edge taxonomy",
+      "replacement_owner": "SemanticPlan-owned internal-owned external-strong cross-domain const sync weak foreign and unknown edge rows",
+      "deletion_phase": "P3",
+      "deletion_boundary": "Delete dispersed edge classification after the total domain solver, obligation verifier, VM, and AOT consume the same complete typed rows",
+      "required_locks": ["LOCK-SCHEMA", "LOCK-RUNTIME", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["domain-edge-mutation", "unknown-edge-mutation", "domain-join-fail-closed"],
+      "producers": [
+        {"path": "src/base/xstorage.h", "anchor": "typedef enum XrSemanticStorageDomain", "occurrences": 1},
+        {"path": "src/plan/semantic/xr_semantic_verify.c", "anchor": "uint8_t domains[XR_STORAGE_FOREIGN + 1];", "occurrences": 1},
+        {"path": "src/aot/xrt_coll.h", "anchor": "xrt_value_set_storage_graph", "occurrences": 20}
+      ],
+      "consumers": [
+        {"path": "src/plan/semantic/xr_semantic_verify.c", "anchor": "capture->storage_domain == XR_STORAGE_DOMAIN_UNKNOWN", "occurrences": 1},
+        {"path": "src/ir/xi_own.c", "anchor": "channel_send_method_payload_arg", "occurrences": 2},
+        {"path": "tests/unit/runtime/test_ownership_audit.c", "anchor": "domain transfer is rejected during drain", "occurrences": 1}
+      ],
+      "residue": [
+        {"path": "src/base/xstorage.h", "anchor": "XR_STORAGE_DOMAIN_UNKNOWN", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "UNKNOWN remains the fail-closed storage-domain lattice bottom"},
+        {"path": "src/aot/xrt_coll.h", "anchor": "xrt_value_set_storage_graph", "occurrences": 20, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 20, "post_cut_expectation": "This row cedes traversal cleanup to the graph-retag row; no edge taxonomy may be inferred from it"},
+        {"path": "src/frontend/analyzer/xanalyzer_escape.c", "anchor": "ea_is_channel_send", "occurrences": 2, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Resolved typed method identity selects transfer boundaries"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/unit/runtime/test_ownership_audit.c",
+          "anchor": "test_exact_domain_drain_cleanup_matrix",
+          "occurrences": 2,
+          "baseline_expected": "runtime audit rejects malformed transition evidence",
+          "post_cut_expected": "plan verifier rejects typed edge corruption before execution"
+        },
+        {
+          "path": "tests/fixtures/task284_ownership_negative/domain_edge.mutation.json",
+          "anchor": "OWN-E-DOMAIN-EDGE",
+          "occurrences": 1,
+          "baseline_expected": "typed domain edge row is unavailable",
+          "post_cut_expected": "resigned hostile plan is rejected before VM or AOT"
+        }
+      ]
+    },
+    {
+      "id": "move-boundary-graph-retag",
+      "current_owner": "Transfer callers recursively publish or retag reachable storage through xrt_value_set_storage_graph",
+      "replacement_owner": "Creation-time transferable domain plan and O(1) root-token identity handoff",
+      "deletion_phase": "P7",
+      "deletion_boundary": "Delete graph walks and promotion callbacks from transfer paths; retain only callbacks proven construction-or-seal-only, or move that role to a distinct construction traversal owner",
+      "required_locks": ["LOCK-SCHEMA", "LOCK-RUNTIME", "LOCK-BUILD-GEN", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["handoff-zero-node-walk", "vm-aot-identity", "generated-c-provider-matrix"],
+      "producers": [
+        {"path": "src/aot/xrt_coll.h", "anchor": "static inline XrValue xrt_value_set_storage_graph(", "occurrences": 2},
+        {"path": "src/aot/xrt_coll.h", "anchor": "xrt_coll_set_storage_header", "occurrences": 3},
+        {"path": "src/aot/xrt_class.h", "anchor": "promote_storage", "occurrences": 4}
+      ],
+      "consumers": [
+        {"path": "src/aot/xi_cgen_program_entry.inc.c", "anchor": "xrt_value_set_storage", "occurrences": 1},
+        {"path": "src/aot/xi_cgen_coro.inc.c", "anchor": "xrt_value_set_storage", "occurrences": 2},
+        {"path": "src/aot/xi_cgen_class_native_helpers.inc.c", "anchor": "promote_storage", "occurrences": 2}
+      ],
+      "residue": [
+        {"path": "src/aot/xrt_coll.h", "anchor": "xrt_value_set_storage_graph", "occurrences": 20, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 20, "post_cut_expectation": "Any remaining calls are construction-or-seal-only and unreachable from handoff"},
+        {"path": "src/aot/xi_cgen_program_entry.inc.c", "anchor": "xrt_value_set_storage", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Program-entry transfer performs O(1) identity handoff"},
+        {"path": "src/aot/xi_cgen_coro.inc.c", "anchor": "xrt_value_set_storage", "occurrences": 2, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Coroutine transfer performs O(1) identity handoff"},
+        {"path": "src/aot/xi_cgen_class_native_helpers.inc.c", "anchor": "promote_storage", "occurrences": 2, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 2, "post_cut_expectation": "Generated callbacks remain only if a construction-or-seal path owns them"},
+        {"path": "src/aot/xi_cgen_struct_helpers.inc.c", "anchor": "promote_storage", "occurrences": 2, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 2, "post_cut_expectation": "Generated struct callbacks remain only if a construction-or-seal path owns them"},
+        {"path": "src/aot/xi_cgen_class_native_helpers.inc.c", "anchor": "xrt_value_set_storage", "occurrences": 4, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 4, "post_cut_expectation": "These emissions remain only for creation-time allocation or construction-owned field sealing"},
+        {"path": "src/aot/xi_cgen_dispatch_helpers.inc.c", "anchor": "xrt_value_set_storage", "occurrences": 2, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 2, "post_cut_expectation": "These emissions remain only for copy or constructor result creation"},
+        {"path": "src/aot/xi_cgen_dispatch_helpers.inc.c", "anchor": "xrt_object_set_storage", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "Object storage is assigned at creation"},
+        {"path": "src/aot/xi_cgen_dispatch_helpers.inc.c", "anchor": "xrt_array_set_storage(", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "Array storage is assigned at creation"},
+        {"path": "src/aot/xi_cgen_dispatch_helpers.inc.c", "anchor": "xrt_array_set_storage_ptr", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "Pointer-backed array storage is assigned at creation"},
+        {"path": "src/aot/xi_cgen_dispatch_helpers.inc.c", "anchor": "xrt_map_set_storage", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "Map storage is assigned at creation"},
+        {"path": "src/aot/xi_cgen_dispatch_helpers.inc.c", "anchor": "xrt_set_set_storage", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "Set storage is assigned at creation"},
+        {"path": "src/aot/xi_cgen_array_builtin_helpers.inc.c", "anchor": "xrt_array_set_storage(", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "Copied array storage is assigned at creation"},
+        {"path": "src/aot/xi_cgen_array_builtin_helpers.inc.c", "anchor": "xrt_array_set_storage_ptr", "occurrences": 1, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 1, "post_cut_expectation": "Copied pointer-backed array storage is assigned at creation"},
+        {"path": "src/aot/xi_cgen_struct_helpers.inc.c", "anchor": "xrt_value_set_storage", "occurrences": 2, "post_cut_disposition": "retain-bounded", "post_cut_occurrences_max": 2, "post_cut_expectation": "Struct field traversal remains only inside a construction-or-seal callback"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/unit/aot/test_xaot_transfer_plan.c",
+          "anchor": "MOVE_UNIQUE",
+          "occurrences": 1,
+          "baseline_expected": "AOT transfer plan identifies unique move boundaries",
+          "post_cut_expected": "the same boundary emits identity handoff with zero visited nodes"
+        },
+        {
+          "path": "tests/unit/ir/test_xi_cgen.c",
+          "anchor": "xrt_value_set_storage(xrt_box_obj(",
+          "occurrences": 3,
+          "baseline_expected": "generated C contains transfer-time promotion",
+          "post_cut_expected": "this generated transfer-time promotion assertion is deleted"
+        }
+      ]
+    },
+    {
+      "id": "name-driven-ownership-permission",
+      "current_owner": "Copy, container, channel, and boundary permissions contain source-spelling selectors beside typed registries",
+      "replacement_owner": "Resolved stable identity plus generated typed NativeSymbolContract rows",
+      "deletion_phase": "P6",
+      "deletion_boundary": "Delete only spelling-as-authority branches after analyzer, Xi, plans, VM, and AOT consume typed identity; preserve sealed registry consumers",
+      "required_locks": ["LOCK-SCHEMA", "LOCK-BUILD-GEN", "LOCK-RESIDUE"],
+      "prerequisite_gates": ["same-name-fake-builtin-negative", "registry-identity-positive", "generated-table-sync"],
+      "producers": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "static bool xa_call_is_copy_builtin(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "static bool xa_method_stores_argument(", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "static bool xa_is_channel_send_boundary_method(", "occurrences": 1}
+      ],
+      "consumers": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "if (xa_call_is_copy_builtin(call) && slot == 0)", "occurrences": 1},
+        {"path": "src/ir/xi_own.c", "anchor": "static bool channel_send_method_payload_arg(", "occurrences": 1},
+        {"path": "src/ir/xi_own.c", "anchor": "strcmp(name, \"copy\") == 0 || strcmp(name, \"array_copy_new\") == 0", "occurrences": 1}
+      ],
+      "residue": [
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "xa_call_is_copy_builtin", "occurrences": 4, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Copy permission comes only from stable native identity"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "xa_is_channel_send_boundary_method", "occurrences": 4, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Channel transfer permission comes only from stable method identity"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "xa_call_is_copy_builtin", "occurrences": 4, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Binding ownership does not recognize copy by source spelling"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_stmt.c", "anchor": "strcmp(name, \"copy\") == 0", "occurrences": 1, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Fresh-root classification consumes typed constructor identity"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "strcmp(call->callee->as.variable.name, \"copy\") == 0", "occurrences": 2, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Declaration summaries consume typed copy identity"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "xa_summary_method_stores_argument", "occurrences": 4, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Parameter retain summaries consume typed method effects"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "xa_summary_call_requires_owned_move_argument", "occurrences": 4, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Channel move requirements consume typed method identity"},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "xa_method_stores_argument", "occurrences": 2, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Call escape checks consume typed method effects"},
+        {"path": "src/ir/xi_own.c", "anchor": "channel_send_method_payload_arg", "occurrences": 2, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "Xi consumes the typed transfer row instead of a method-name predicate"}
+      ],
+      "witnesses": [
+        {
+          "path": "tests/regression/14_typed_array/1420_view_return_through_user_copy.xr",
+          "anchor": "user_copy",
+          "occurrences": 2,
+          "baseline_expected": "a user function named like copy does not receive builtin provenance",
+          "post_cut_expected": "stable identity preserves acceptance and borrowed provenance without spelling checks"
+        },
+        {
+          "path": "tests/compile_errors/ownership/045_channel_send_bare_array_rejected.xr",
+          "anchor": "send",
+          "occurrences": 1,
+          "baseline_expected": "channel spelling activates transfer enforcement",
+          "post_cut_expected": "typed channel method identity activates transfer enforcement"
+        }
+      ]
+    }
+  ]
+}
