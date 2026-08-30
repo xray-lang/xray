@@ -96,7 +96,7 @@ def find_forbidden_chains(root: Path,
 
 def self_test() -> int:
     with tempfile.TemporaryDirectory(prefix="xray-runtime-header-lint-") as directory:
-        root = Path(directory)
+        root = Path(directory).resolve(strict=True)
         (root / "include").mkdir()
         (root / "src/runtime").mkdir(parents=True)
         (root / "src/frontend").mkdir(parents=True)
