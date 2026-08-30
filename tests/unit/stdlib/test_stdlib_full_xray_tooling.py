@@ -131,7 +131,6 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
             policy="xray_semantic",
             audience="production",
             semantic_source="stdlib/time/time.xr",
-            factory_source="",
         )
         evidence = completion.ProbeEvidence(
             available=True,
@@ -152,7 +151,6 @@ class SchemaAndPlanEvidenceTest(unittest.TestCase):
             policy="xray_semantic",
             audience="production",
             semantic_source="stdlib/csv/csv.xr",
-            factory_source="",
         )
         identity = valid_plan()
         evidence = completion.ProbeEvidence(
@@ -251,7 +249,11 @@ class StrictProbeReaderTest(unittest.TestCase):
 
 class InventoryTraceTest(unittest.TestCase):
     def test_sync_manual_native_classes_are_traceable(self) -> None:
-        traced = inventory.manual_native_class_exports(ROOT, "stdlib/sync/sync.c")
+        manifest = inventory.load_manifest(ROOT)
+        sync_module = next(
+            module for module in manifest.modules if module["name"] == "sync"
+        )
+        traced = inventory.manual_native_class_exports(sync_module)
         self.assertEqual(
             {"CountdownLatch", "EventCount", "ResultGroup", "Semaphore", "WorkQueue"},
             set(traced),
@@ -266,25 +268,30 @@ class InventoryTraceTest(unittest.TestCase):
         self.assertEqual(set(traced), set(sync_rows))
         self.assertTrue(
             all(
-                row.semantic_source == "stdlib/sync/sync.c"
+                row.semantic_source == "stdlib/stdlib_boundary.toml"
+                for row in sync_rows.values()
+            )
+        )
+        self.assertTrue(
+            all(
+                row.vm_binding == f"{traced[row.symbol][1]}:{row.symbol}"
                 for row in sync_rows.values()
             )
         )
         self.assertTrue(any(module.name == "sync" for module in modules))
 
-    def test_comments_and_bare_strings_are_not_exports(self) -> None:
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name).resolve()
-        source = root / "stdlib" / "fake" / "fake.c"
-        source.parent.mkdir(parents=True)
-        source.write_text(
-            '// fake_export_native_class(vm, module, "Commented", TYPE);\n'
-            'const char *name = "BareString";\n',
-            encoding="utf-8",
+    def test_incomplete_native_type_export_rows_are_not_exports(self) -> None:
+        traced = inventory.manual_native_class_exports(
+            {
+                "native_type_exports": [
+                    {"name": "Declared", "builtin_type": "XR_TDECLARED"},
+                    {"name": "MissingType"},
+                    {"builtin_type": "XR_TMISSING_NAME"},
+                ]
+            }
         )
         self.assertEqual(
-            {}, inventory.manual_native_class_exports(root, "stdlib/fake/fake.c")
+            {"Declared": ("stdlib/stdlib_boundary.toml", "XR_TDECLARED")}, traced
         )
 
 
