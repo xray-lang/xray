@@ -3,8 +3,8 @@
   "activation": "staging-only-before-i1-r4",
   "authority": "non-authoritative dependency and deletion ledger for one integration-train activation batch",
   "train_base": {
-    "commit": "5f5df6c5778bcf9d54b3b0e9cf29cabd5e27822a",
-    "tree": "366fc89b4ebe12b5cf700021f441679e3e2b19b2"
+    "commit": "1275dff1edb3c437516a3ef2a456f7d123034808",
+    "tree": "b39091f083a4622d8317f06a5964e76b4332b582"
   },
   "activation_batch": {
     "atomic": true,
