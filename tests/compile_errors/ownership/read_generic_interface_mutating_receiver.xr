@@ -1,0 +1,22 @@
+interface Mutator {
+    bump() -> i64
+}
+
+class Counter implements Mutator {
+    value: i64
+
+    constructor(value: i64) {
+        this.value = value
+    }
+
+    bump() -> i64 {
+        this.value = this.value + 1
+        return this.value
+    }
+}
+
+fn mutate<T: Mutator>(counter: T) -> i64 {
+    return counter.bump()
+}
+
+print(mutate<Counter>(Counter(1)))

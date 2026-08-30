@@ -1,0 +1,44 @@
+interface Mutator {
+    bump() -> i64
+}
+
+class RefCounter implements Mutator {
+    value: i64
+
+    constructor(value: i64) {
+        this.value = value
+    }
+
+    bump() -> i64 {
+        this.value = this.value + 1
+        return this.value
+    }
+}
+
+struct ValueCounter implements Mutator {
+    value: i64
+
+    bump() -> i64 {
+        this.value = this.value + 1
+        return this.value
+    }
+}
+
+fn mutateClassPath(counter: Mutator) -> i64 {
+    return counter.bump()
+}
+
+fn mutateStructPath(counter: Mutator) -> i64 {
+    return counter.bump()
+}
+
+fn main() {
+    var refCounter = RefCounter(1)
+    var valueCounter = ValueCounter{value: 10}
+    print(mutateClassPath(refCounter))
+    print(refCounter.value)
+    print(mutateStructPath(valueCounter))
+    print(valueCounter.value)
+}
+
+main()
