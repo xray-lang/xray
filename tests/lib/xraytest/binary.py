@@ -103,6 +103,18 @@ def symbols(binary: Path, *, undefined_only: bool = False,
 
 
 _DUMPBIN_LINKER_MEMBER = re.compile(r"^\s*[0-9A-Fa-f]+\s+([^\s]+)\s*$")
+_DUMPBIN_OBJECT_SYMBOL = re.compile(
+    r"^\s*[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+"
+    r"(?P<section>UNDEF|SECT[0-9A-Fa-f]+|ABS|DEBUG)\s+.*?"
+    r"(?P<storage>External|WeakExternal|Static|Label|Function|File|Section|CLRToken)"
+    r"\s+\|\s*(?P<symbol>\S+)\s*$",
+    re.IGNORECASE,
+)
+_DUMPBIN_SYMBOL_ROW_START = re.compile(r"^\s*[0-9A-Fa-f]+(?:\s|$)")
+
+
+class SymbolInspectionError(RuntimeError):
+    """An installed artifact inspector failed or returned malformed output."""
 
 
 def parse_defined_symbol_names(text: str, kind: str) -> list[str]:
@@ -144,18 +156,80 @@ def defined_symbol_names(binary: Path, timeout: float | None = 120
     return None
 
 
+def parse_dumpbin_undefined_symbol_names(text: str) -> "Optional[list[str]]":
+    """Parse external undefined symbols from ``dumpbin /symbols`` output."""
+    names: set[str] = set()
+    for line in text.splitlines():
+        symbol_row = (
+            "|" in line or
+            "external" in line.lower() or
+            _DUMPBIN_SYMBOL_ROW_START.match(line) is not None
+        )
+        if not symbol_row:
+            continue
+        match = _DUMPBIN_OBJECT_SYMBOL.match(line)
+        if not match:
+            return None
+        if (match.group("section").upper() != "UNDEF" or
+                match.group("storage").lower() not in ("external", "weakexternal")):
+            continue
+        symbol = match.group("symbol")
+        if symbol:
+            names.add(strip_underscore(symbol))
+    return sorted(names)
+
+
+_NM_UNDEFINED_SYMBOL = re.compile(
+    r"^(?P<symbol>\S+)\s+(?P<kind>[A-Za-z?])\s+"
+    r"(?P<value>[0-9A-Fa-f]+|-)\s+(?P<size>[0-9A-Fa-f]+|-)\s*$"
+)
+
+
+def parse_nm_undefined_symbol_names(text: str) -> "Optional[list[str]]":
+    """Parse GNU, LLVM, Darwin, and COFF ``nm -u -P`` rows fail-closed."""
+    names: set[str] = set()
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        match = _NM_UNDEFINED_SYMBOL.match(line)
+        if not match:
+            return None
+        if match.group("kind") not in ("U", "w", "v"):
+            return None
+        names.add(strip_underscore(match.group("symbol")))
+    return sorted(names)
+
+
 def undefined_symbol_names(binary: Path, timeout: float | None = 120
                            ) -> "Optional[list[str]]":
-    """Sorted, de-duplicated undefined symbol names with any '_' prefix removed."""
-    lines = symbols(binary, undefined_only=True, timeout=timeout)
-    if lines is None:
-        return None
-    names = set()
-    for line in lines:
-        parts = line.split()
-        if parts:
-            names.add(strip_underscore(parts[-1]))
-    return sorted(names)
+    """Sorted undefined symbols, or None only when no inspector is installed."""
+    nm = find_nm()
+    if nm:
+        result = proc.run([nm, "-u", "-P", binary], timeout=timeout)
+        if result.ok:
+            names = parse_nm_undefined_symbol_names(
+                result.stdout.decode("utf-8", "replace")
+            )
+            if names is None:
+                raise SymbolInspectionError("nm returned malformed undefined-symbol rows")
+            return names
+
+    dumpbin = find_dumpbin()
+    if dumpbin:
+        result = proc.run([dumpbin, "/nologo", "/symbols", binary], timeout=timeout)
+        if result.ok:
+            names = parse_dumpbin_undefined_symbol_names(
+                result.stdout.decode("utf-8", "replace")
+            )
+            if names is None:
+                raise SymbolInspectionError(
+                    "dumpbin returned malformed undefined-symbol rows"
+                )
+            return names
+        raise SymbolInspectionError("installed object symbol inspectors failed")
+    if nm:
+        raise SymbolInspectionError("installed nm failed")
+    return None
 
 
 def disassemble(binary: Path, timeout: float | None = 300) -> "str | None":

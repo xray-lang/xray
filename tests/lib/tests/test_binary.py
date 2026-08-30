@@ -7,6 +7,8 @@ toolchain.
 """
 
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from _support import bootstrap_xraytest
 
@@ -103,6 +105,145 @@ class DefinedSymbolParsingTest(unittest.TestCase):
             binary.parse_defined_symbol_names(text, "dumpbin"),
             ["xr_artifact_classify", retired_constructor],
         )
+
+    def test_dumpbin_undefined_object_symbols(self):
+        text = "\n".join([
+            "00A 00000000 UNDEF  notype ()    External     | _memcpy",
+            "00B 00000000 SECT3  notype ()    External     | generated_entry",
+            "00C 00000000 UNDEF  notype ()    External     | xr_aot_spawn",
+            "00D 00000000 UNDEF  notype       Static       | local_placeholder",
+            "00E 00000000 UNDEF  notype       WeakExternal | __imp_malloc",
+            "00F 00000000 DEBUG  notype       Static       | .file",
+        ])
+        self.assertEqual(
+            binary.parse_dumpbin_undefined_symbol_names(text),
+            ["_imp_malloc", "memcpy", "xr_aot_spawn"],
+        )
+
+    def test_dumpbin_malformed_external_row_fails_closed(self):
+        text = "00G 00000000 UNDEF notype () External | xr_aot_spawn\n"
+        self.assertIsNone(binary.parse_dumpbin_undefined_symbol_names(text))
+
+    def test_dumpbin_missing_pipe_fails_closed(self):
+        text = "00A 00000000 UNDEF notype () External xr_aot_spawn\n"
+        self.assertIsNone(binary.parse_dumpbin_undefined_symbol_names(text))
+
+    def test_dumpbin_pipe_garbage_fails_closed(self):
+        self.assertIsNone(binary.parse_dumpbin_undefined_symbol_names("malformed | row\n"))
+
+    def test_dumpbin_partial_output_fails_closed(self):
+        text = "\n".join([
+            "00A 00000000 UNDEF notype () External | xr_aot_spawn",
+            "00B 00000000 UNDEF notype () External xrt_closure_new",
+        ])
+        self.assertIsNone(binary.parse_dumpbin_undefined_symbol_names(text))
+
+    def test_dumpbin_index_only_partial_row_fails_closed(self):
+        text = "00A 00000000 UNDEF notype () External | xr_aot_spawn\n00B\n"
+        self.assertIsNone(binary.parse_dumpbin_undefined_symbol_names(text))
+
+    def test_dumpbin_symbol_trailing_garbage_fails_closed(self):
+        text = "00A 00000000 UNDEF notype () External | xr_aot_spawn trailing\n"
+        self.assertIsNone(binary.parse_dumpbin_undefined_symbol_names(text))
+
+    def test_nm_undefined_gnu_and_llvm_rows(self):
+        text = "_memcpy U 0 0\nweak_hook w 0 0\nweak_object v - -\n"
+        self.assertEqual(
+            binary.parse_nm_undefined_symbol_names(text),
+            ["memcpy", "weak_hook", "weak_object"],
+        )
+
+    def test_nm_undefined_darwin_rows(self):
+        text = "_memcpy U 0 0\n_xr_aot_spawn U 0 0\n"
+        self.assertEqual(
+            binary.parse_nm_undefined_symbol_names(text), ["memcpy", "xr_aot_spawn"]
+        )
+
+    def test_nm_undefined_coff_decorated_rows(self):
+        text = "__imp_memcpy U 0 0\n?provider_hook@@YAXXZ U 0 0\n"
+        self.assertEqual(
+            binary.parse_nm_undefined_symbol_names(text),
+            ["?provider_hook@@YAXXZ", "_imp_memcpy"],
+        )
+
+    def test_nm_malformed_row_fails_closed(self):
+        text = "fatal: truncated object file\n"
+        self.assertIsNone(binary.parse_nm_undefined_symbol_names(text))
+
+    def test_nm_partial_output_fails_closed(self):
+        text = "xr_aot_spawn U 0 0\nxrt_closure_new U 0\n"
+        self.assertIsNone(binary.parse_nm_undefined_symbol_names(text))
+
+    def test_nm_non_posix_and_defined_rows_fail_closed(self):
+        self.assertIsNone(binary.parse_nm_undefined_symbol_names("_missing\n"))
+        self.assertIsNone(binary.parse_nm_undefined_symbol_names("00000000 U missing\n"))
+        self.assertIsNone(binary.parse_nm_undefined_symbol_names("defined T 0 0\n"))
+
+    def test_nm_invalid_fields_fail_closed(self):
+        for text in (
+            "missing UU 0 0\n",
+            "missing U invalid 0\n",
+            "missing U 0 invalid\n",
+            "missing U 0 0 trailing\n",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(binary.parse_nm_undefined_symbol_names(text))
+
+    def test_nm_empty_undefined_output_is_valid(self):
+        self.assertEqual(binary.parse_nm_undefined_symbol_names("\n"), [])
+
+    def test_undefined_symbols_fall_back_to_dumpbin(self):
+        text = "00A 00000000 UNDEF notype () External | _xr_aot_spawn\n"
+        nm_failure = mock.Mock(ok=False, stdout=b"")
+        dumpbin_result = mock.Mock(ok=True, stdout=text.encode("utf-8"))
+        artifact = Path(__file__)
+        with mock.patch.object(binary, "find_nm", return_value="nm"), mock.patch.object(
+            binary, "find_dumpbin", return_value="dumpbin"
+        ), mock.patch.object(
+            binary.proc, "run", side_effect=(nm_failure, dumpbin_result)
+        ) as run:
+            names = binary.undefined_symbol_names(binary=artifact)
+        self.assertEqual(names, ["xr_aot_spawn"])
+        self.assertEqual(
+            run.call_args_list,
+            [
+                mock.call(["nm", "-u", "-P", artifact], timeout=120),
+                mock.call(["dumpbin", "/nologo", "/symbols", artifact], timeout=120),
+            ],
+        )
+
+    def test_dumpbin_parse_failure_does_not_return_partial_symbols(self):
+        malformed = "00G 00000000 UNDEF notype () External | xr_aot_spawn\n"
+        result = mock.Mock(ok=True, stdout=malformed.encode("utf-8"))
+        with mock.patch.object(binary, "find_nm", return_value=None), mock.patch.object(
+            binary, "find_dumpbin", return_value="dumpbin"
+        ), mock.patch.object(binary.proc, "run", return_value=result):
+            with self.assertRaises(binary.SymbolInspectionError):
+                binary.undefined_symbol_names(Path(__file__))
+
+    def test_nm_parse_failure_does_not_return_partial_symbols(self):
+        malformed = "xr_aot_spawn U 0 0\nxrt_closure_new U 0\n"
+        result = mock.Mock(ok=True, stdout=malformed.encode("utf-8"))
+        with mock.patch.object(binary, "find_nm", return_value="nm"), mock.patch.object(
+            binary, "find_dumpbin", return_value="dumpbin"
+        ), mock.patch.object(binary.proc, "run", return_value=result) as run:
+            with self.assertRaises(binary.SymbolInspectionError):
+                binary.undefined_symbol_names(Path(__file__))
+        run.assert_called_once_with(["nm", "-u", "-P", Path(__file__)], timeout=120)
+
+    def test_no_undefined_symbol_inspector_returns_none(self):
+        with mock.patch.object(binary, "find_nm", return_value=None), mock.patch.object(
+            binary, "find_dumpbin", return_value=None
+        ):
+            self.assertIsNone(binary.undefined_symbol_names(Path(__file__)))
+
+    def test_failed_installed_inspectors_raise(self):
+        failure = mock.Mock(ok=False, stdout=b"")
+        with mock.patch.object(binary, "find_nm", return_value="nm"), mock.patch.object(
+            binary, "find_dumpbin", return_value="dumpbin"
+        ), mock.patch.object(binary.proc, "run", side_effect=(failure, failure)):
+            with self.assertRaises(binary.SymbolInspectionError):
+                binary.undefined_symbol_names(Path(__file__))
 
 
 if __name__ == "__main__":
