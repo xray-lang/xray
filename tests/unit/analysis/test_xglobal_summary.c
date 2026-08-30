@@ -132,6 +132,57 @@ static bool build_global_evidence_from_source(const char *source, XgGlobalEviden
     return true;
 }
 
+static bool build_analyzed_global_evidence_from_source(const char *source, XgGlobalEvidence *out,
+                                                       XaAnalyzer **out_analyzer,
+                                                       AstNode **out_ast) {
+    XrModuleSpec spec;
+    XrModuleGraph graph;
+    int topo_order[1] = {0};
+    XaAnalyzer *analyzer;
+    AstNode *ast;
+    bool ok;
+
+    if (!source || !out || !out_analyzer)
+        return false;
+    memset(out, 0, sizeof(*out));
+    *out_analyzer = NULL;
+    if (out_ast)
+        *out_ast = NULL;
+    ast = xr_parse(g_session, source);
+    if (!ast)
+        return false;
+
+    init_memory_module_spec(&spec);
+    spec.ast = ast;
+    spec.source_path = "xglobal-core-identity.xr";
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    analyzer = xa_analyzer_new(g_session);
+    if (!analyzer)
+        return false;
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, spec.source_path, ast);
+    ok = analyzer->diagnostic_count == 0 &&
+         xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+             out, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer);
+    xa_analyzer_set_graph(analyzer, NULL);
+    if (!ok) {
+        xa_analyzer_free(analyzer);
+        xg_global_evidence_free(out);
+        memset(out, 0, sizeof(*out));
+    } else {
+        *out_analyzer = analyzer;
+        if (out_ast)
+            *out_ast = ast;
+    }
+    return ok;
+}
+
 static uint32_t evidence_body_count_with_capability(const XgGlobalEvidence *ev, uint32_t cap) {
     uint32_t count = 0;
     if (!ev)
@@ -7478,6 +7529,120 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_requires_stable_identity_for_core_print) {
+    setup_parser_session();
+    const char *source = "fn emit() { print(1) }\n";
+    XgGlobalEvidence ev;
+    const XgBodySummary *emit;
+    const XgCallsiteSummary *call;
+    XaAnalyzer *analyzer = NULL;
+    uint32_t composed_effects = UINT32_MAX;
+
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, NULL));
+    emit = evidence_find_body_by_name(&ev, "emit");
+    ASSERT_NOT_NULL(emit);
+    ASSERT_EQ_UINT(emit->callsite_count, 1);
+    call = xg_global_evidence_find_callsite(&ev, emit->callsite_start);
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_UINT(call->kind, XG_CALL_NATIVE);
+    ASSERT_EQ_UINT(call->method_name_id, xg_name_id("print"));
+    ASSERT_TRUE((emit->effect_bits & XG_BODY_MAY_CALL) != 0);
+    ASSERT_TRUE((emit->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
+    ASSERT_TRUE((emit->escape_bits & XG_BODY_ESCAPE_NATIVE) == 0);
+    ASSERT_TRUE((emit->capability_bits & XG_CAP_NATIVE) == 0);
+    ASSERT_TRUE(xg_body_effects_compose_closed_world_calls(&ev, emit, &composed_effects));
+    ASSERT_EQ_UINT(composed_effects, 0);
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+
+    ASSERT_TRUE(build_global_evidence_from_source(source, &ev));
+    emit = evidence_find_body_by_name(&ev, "emit");
+    ASSERT_NOT_NULL(emit);
+    ASSERT_EQ_UINT(emit->callsite_count, 1);
+    call = xg_global_evidence_find_callsite(&ev, emit->callsite_start);
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_UINT(call->kind, XG_CALL_CLOSURE);
+    ASSERT_EQ_UINT(call->static_target_func_id, XG_NO_ID);
+    ASSERT_TRUE(!xg_body_effects_compose_closed_world_calls(&ev, emit, &composed_effects));
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_keeps_shadowing_print_and_dump_as_closures) {
+    setup_parser_session();
+    const char *source = "fn callPrint(print: fn()) { print() }\n"
+                         "fn callDump(dump: fn()) { dump() }\n";
+    XgGlobalEvidence ev;
+    const XgBodySummary *call_print;
+    const XgBodySummary *call_dump;
+    const XgCallsiteSummary *print_call;
+    const XgCallsiteSummary *dump_call;
+    XaAnalyzer *analyzer = NULL;
+    AstNode *ast = NULL;
+    AstNode *call_print_decl;
+    AstNode *call_dump_decl;
+    XaSymbol *print_symbol;
+    XaSymbol *dump_symbol;
+    uint32_t composed_effects = UINT32_MAX;
+
+    ASSERT_TRUE(build_analyzed_global_evidence_from_source(source, &ev, &analyzer, &ast));
+    ASSERT_EQ_INT(analyzer->diagnostic_count, 0);
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_INT(ast->type, AST_PROGRAM);
+    ASSERT_EQ_INT(ast->as.program.count, 2);
+    call_print_decl = ast->as.program.statements[0];
+    call_dump_decl = ast->as.program.statements[1];
+    ASSERT_NOT_NULL(call_print_decl);
+    ASSERT_NOT_NULL(call_dump_decl);
+    ASSERT_EQ_INT(call_print_decl->type, AST_FUNCTION_DECL);
+    ASSERT_EQ_INT(call_dump_decl->type, AST_FUNCTION_DECL);
+    ASSERT_EQ_INT(call_print_decl->as.function_decl.param_count, 1);
+    ASSERT_EQ_INT(call_dump_decl->as.function_decl.param_count, 1);
+    ASSERT_TRUE(call_print_decl->as.function_decl.params[0]->symbol_id != 0);
+    ASSERT_TRUE(call_dump_decl->as.function_decl.params[0]->symbol_id != 0);
+    print_symbol = xa_scope_lookup_by_id(analyzer->global_scope,
+                                         call_print_decl->as.function_decl.params[0]->symbol_id);
+    dump_symbol = xa_scope_lookup_by_id(analyzer->global_scope,
+                                        call_dump_decl->as.function_decl.params[0]->symbol_id);
+    ASSERT_NOT_NULL(print_symbol);
+    ASSERT_NOT_NULL(dump_symbol);
+    ASSERT_EQ_INT(print_symbol->kind, XA_SYM_PARAMETER);
+    ASSERT_EQ_INT(dump_symbol->kind, XA_SYM_PARAMETER);
+    ASSERT_FALSE(print_symbol->is_builtin);
+    ASSERT_FALSE(dump_symbol->is_builtin);
+    ASSERT_EQ_INT(print_symbol->links.core_builtin_id, XR_CORE_BUILTIN_NONE);
+    ASSERT_EQ_INT(dump_symbol->links.core_builtin_id, XR_CORE_BUILTIN_NONE);
+
+    call_print = evidence_find_body_by_name(&ev, "callPrint");
+    call_dump = evidence_find_body_by_name(&ev, "callDump");
+    ASSERT_NOT_NULL(call_print);
+    ASSERT_NOT_NULL(call_dump);
+
+    ASSERT_EQ_UINT(call_print->callsite_count, 1);
+    print_call = xg_global_evidence_find_callsite(&ev, call_print->callsite_start);
+    ASSERT_NOT_NULL(print_call);
+    ASSERT_EQ_UINT(print_call->kind, XG_CALL_CLOSURE);
+    ASSERT_EQ_UINT(print_call->static_target_func_id, XG_NO_ID);
+    ASSERT_TRUE((call_print->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
+    ASSERT_TRUE((call_print->escape_bits & XG_BODY_ESCAPE_NATIVE) == 0);
+    ASSERT_TRUE((call_print->capability_bits & XG_CAP_NATIVE) == 0);
+    ASSERT_FALSE(xg_body_effects_compose_closed_world_calls(&ev, call_print, &composed_effects));
+
+    ASSERT_EQ_UINT(call_dump->callsite_count, 1);
+    dump_call = xg_global_evidence_find_callsite(&ev, call_dump->callsite_start);
+    ASSERT_NOT_NULL(dump_call);
+    ASSERT_EQ_UINT(dump_call->kind, XG_CALL_CLOSURE);
+    ASSERT_EQ_UINT(dump_call->static_target_func_id, XG_NO_ID);
+    ASSERT_TRUE((call_dump->effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
+    ASSERT_TRUE((call_dump->escape_bits & XG_BODY_ESCAPE_NATIVE) == 0);
+    ASSERT_TRUE((call_dump->capability_bits & XG_CAP_NATIVE) == 0);
+    ASSERT_FALSE(xg_body_effects_compose_closed_world_calls(&ev, call_dump, &composed_effects));
+
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites) {
     setup_parser_session();
     const char *source = "fn caller(x: u32) -> i64 { return x as i64 }\n";
@@ -10782,7 +10947,7 @@ TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
         "    if (values.containsKey(token)) { return values.get(token) }\n"
         "    return 0\n"
         "}\n"
-        "print(userHashEqPlan())\n";
+        "userHashEqPlan()\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -11964,9 +12129,9 @@ TEST(global_evidence_producer_records_non_string_readonly_static_map_set_tables)
     setup_parser_session();
     const char *source = "const NUMS: Map<i64, i64> = #{1: 7, 2: 9}\n"
                          "const SEEN: Set<i64> = #[1, 2]\n"
-                         "print(NUMS[1])\n"
-                         "print(NUMS.get(2))\n"
-                         "print(SEEN.contains(1))\n";
+                         "NUMS[1]\n"
+                         "NUMS.get(2)\n"
+                         "SEEN.contains(1)\n";
     XgGlobalEvidence ev;
     ASSERT_TRUE(build_global_evidence_from_source(source, &ev));
     ASSERT_EQ_UINT(ev.nmap_shapes, 2);
@@ -12943,25 +13108,9 @@ TEST(global_evidence_producer_marks_typed_coro_local_and_pool_submit) {
 TEST(global_evidence_producer_keeps_runtime_control_plane_on_coro_root) {
     setup_parser_session();
     const char *source = "import runtime\n"
-                         "print(runtime.liveBytes())\n";
-    AstNode *ast = xr_parse(g_session, source);
-    ASSERT_NOT_NULL(ast);
-
-    XrModuleSpec spec;
-    init_memory_module_spec(&spec);
-    spec.ast = ast;
-    int topo_order[1] = {0};
-    XrModuleGraph graph;
-    memset(&graph, 0, sizeof(graph));
-    graph.specs = &spec;
-    graph.spec_count = 1;
-    graph.topo_order = topo_order;
-    graph.topo_count = 1;
-    graph.entry_index = 0;
-
+                         "runtime.liveBytes()\n";
     XgGlobalEvidence ev;
-    ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_TRUE(build_global_evidence_from_source(source, &ev));
     ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE), 1);
     ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_OBSERVES_TASK_ID), 1);
 
@@ -12998,7 +13147,7 @@ TEST(global_evidence_producer_keeps_runtime_control_plane_on_coro_root) {
 TEST(global_evidence_producer_marks_internal_yield_module_suspendable) {
     setup_parser_session();
     const char *source = "import test_yield\n"
-                         "print(test_yield.simple())\n";
+                         "test_yield.simple()\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -13075,10 +13224,10 @@ TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
     const char *source = "import path\n"
                          "import { sep as directSep, join } from path\n"
                          "import os\n"
-                         "print(path.join(\"a\", \"b\"))\n"
-                         "print(os.sep())\n"
-                         "print(directSep)\n"
-                         "print(join(\"c\", \"d\"))\n";
+                         "path.join(\"a\", \"b\")\n"
+                         "os.sep()\n"
+                         "join(directSep, \"x\")\n"
+                         "join(\"c\", \"d\")\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -13197,7 +13346,7 @@ TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
                          "    }\n"
                          "}\n"
                          "var b = Barrier(1)\n"
-                         "print(b.wait())\n";
+                         "b.wait()\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -13248,7 +13397,7 @@ TEST(global_evidence_producer_marks_module_init_body) {
     const char *source = "fn inc(x: i64) -> i64 { return x + 1 }\n"
                          "const ch = Channel<i64>(1)\n"
                          "var task = go inc(41)\n"
-                         "print(await task)\n";
+                         "await task\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -14016,6 +14165,8 @@ RUN_TEST(global_evidence_producer_disambiguates_same_location_callsites);
 RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
+RUN_TEST(global_evidence_producer_requires_stable_identity_for_core_print);
+RUN_TEST(global_evidence_producer_keeps_shadowing_print_and_dump_as_closures);
 RUN_TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites);
 RUN_TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_composes_recursive_direct_call_effects);

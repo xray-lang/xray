@@ -2291,6 +2291,20 @@ static bool body_owned_local_rebind_is_scalar(XgBodyCollect *bc, const char *nam
     }
 }
 
+static const XrCoreIntrinsicDesc *body_variable_core_intrinsic(XgBodyCollect *bc,
+                                                               const VariableNode *variable) {
+    XaSymbol *symbol;
+    XaSymbolLinks *links;
+
+    if (!bc || !bc->producer || !bc->producer->analyzer || !variable || variable->symbol_id == 0)
+        return NULL;
+    symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, variable->symbol_id);
+    if (!symbol || symbol->kind != XA_SYM_FUNCTION || !symbol->is_builtin)
+        return NULL;
+    links = xa_analyzer_get_links(bc->producer->analyzer, symbol);
+    return links ? xr_core_intrinsic_by_id(links->core_builtin_id) : NULL;
+}
+
 static void body_note_variable_read(XgBodyCollect *bc, const VariableNode *var) {
     XaSymbol *symbol = NULL;
     XaSymbolLinks *links = NULL;
@@ -2298,6 +2312,8 @@ static void body_note_variable_read(XgBodyCollect *bc, const VariableNode *var) 
     if (!bc || !var || !var->name)
         return;
     if (body_has_symbol_local(bc, var->name, var->symbol_id))
+        return;
+    if (body_variable_core_intrinsic(bc, var))
         return;
     if (bc->producer && bc->producer->analyzer && var->symbol_id != 0) {
         symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, var->symbol_id);
@@ -8437,14 +8453,11 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.method_name_id = callee_name_id;
             if (strcmp(callee_name, "typeName") == 0)
                 bc->metadata_use_bits |= XG_METADATA_TYPENAME;
-        } else if (xr_core_intrinsic_by_source_name(callee_name, strlen(callee_name))) {
-            /* A core intrinsic is a sealed language operation: the callee is
-             * the compiler itself, no user body runs, and there is no callee
-             * summary to compose.  Leaving it on the closure kind would hand
-             * every program that prints or asserts an open function-value
-             * target set, which no whole-program effect or reachability proof
-             * can close.  A user function of the same name is a plain declared
-             * target and is classified above, before this branch is reached. */
+        } else if (body_variable_core_intrinsic(bc, &callee->as.variable)) {
+            /* A resolved core identity is a sealed language operation: the
+             * compiler runs it without a user body or callee summary. Source
+             * spelling never grants that identity, so user functions with the
+             * same name remain ordinary declared targets. */
             row.kind = XG_CALL_NATIVE;
             row.method_id = (XgMethodId) callee_name_id;
             row.method_name_id = callee_name_id;
