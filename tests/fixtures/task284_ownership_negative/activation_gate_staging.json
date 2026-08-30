@@ -3,8 +3,8 @@
   "activation": "staging-only-before-i1-r4",
   "authority": "non-authoritative executable gate ledger; CURRENT identifies an existing entrypoint and never a Task 284 PASS",
   "train_base": {
-    "commit": "814e5df8154b77b357515f445b8162b53470dac2",
-    "tree": "ad6ceedbf2eaa0533883abb356b168c1b6267a66"
+    "commit": "eabe56cc986cf2147d02254ae1b1acaa1418663f",
+    "tree": "45f708658f0945bf3f588be332859d3ecde58782"
   },
   "current_entrypoint_semantics": "CURRENT means the repository has a complete command entrypoint; every gate remains UNRUN until the atomic public cut and its exact activated assets are present",
   "gates": [

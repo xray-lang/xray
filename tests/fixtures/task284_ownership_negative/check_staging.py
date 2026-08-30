@@ -22,8 +22,8 @@ POSITIVE_FIXTURE_DIR = HERE.parent / "task284_ownership_positive"
 
 FROZEN_COMMIT = "49f71d1ea0f8e12aa2af8e64fb5d8d1c6f3ee79c"
 FROZEN_TREE = "478e72a21e54ae5cc182caaa77cf9e526725a0a6"
-TRAIN_COMMIT = "814e5df8154b77b357515f445b8162b53470dac2"
-TRAIN_TREE = "ad6ceedbf2eaa0533883abb356b168c1b6267a66"
+TRAIN_COMMIT = "eabe56cc986cf2147d02254ae1b1acaa1418663f"
+TRAIN_TREE = "45f708658f0945bf3f588be332859d3ecde58782"
 
 EXPECTED_SURFACES = {
     "parser-ast": "LOCK-FRONTEND",
@@ -1191,9 +1191,9 @@ ALLOWED_LOCKS = {
     "LOCK-FRONTEND", "LOCK-SCHEMA", "LOCK-RUNTIME", "LOCK-BUILD-GEN", "LOCK-RESIDUE",
 }
 EXPECTED_STAGING_SHA256 = {
-    "typed_contract_staging.json": "3f496e67fae72bcb68fc40952ab8ca5927e58a55cf7b08e3f34a7163364111a1",
-    "atomic_cut_staging.json": "1622d25d463bb3988a6a54f2c550adf9948d2a9f895f34567c7f670aa47eed9f",
-    "activation_gate_staging.json": "7c2cc74b5afcc2af0ee2d735dd6902ef1d767ced2097310d1a25e6d18bacfbef",
+    "typed_contract_staging.json": "35e77f9a78b4469f8075833436caafbadac9ee3cad597c68b68c61cc67d228ba",
+    "atomic_cut_staging.json": "8d9675b268b8d8e1b7a4a9125b6fcac89276a7bb256f84cdde19d2cb21df68fb",
+    "activation_gate_staging.json": "45bc7035433457b8b8a185dc709b0cd904e238756ff82821f42987a2da5bf431",
 }
 EXPECTED_STAGING_FILES = {
     TYPED_CONTRACT_PATH.name, ATOMIC_CUT_PATH.name, ACTIVATION_GATE_PATH.name,
@@ -1214,7 +1214,7 @@ EXPECTED_CURRENT_ENTRYPOINT_SEMANTICS = (
     "until the atomic public cut and its exact activated assets are present"
 )
 EXPECTED_GATE_METADATA_CANONICAL_SHA256 = (
-    "2f3336d73107b1354d046a0a01fc0a2221fbe477cdf322558a6541c5a3afdc21"
+    "891cfca521c3d6fe40603a588bdd461046de2eff5b0fa6527bc02c4e99b7ebd7"
 )
 EXPECTED_CURRENT_GATE_IDS = {
     "matching-default-release-binary",
