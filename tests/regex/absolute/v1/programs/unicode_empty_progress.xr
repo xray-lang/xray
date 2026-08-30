@@ -1,0 +1,18 @@
+import regex
+
+var empty = regex.compile("")
+var matches = regex.findAll(empty, "中😀")
+print(len(matches))
+var index = 0
+while (index < len(matches)) {
+    print(matches[index].start)
+    index = index + 1
+}
+print(regex.count(empty, "中😀"))
+print(regex.replaceAll(regex.compile(""), "中😀", "-"))
+print(regex.replace(regex.compile(""), "é中😀", "-"))
+print(regex.replaceAll(regex.compile(""), "é中😀", "-"))
+
+var parts = regex.split(empty, "中😀", 0)
+print(len(parts))
+print(parts[0])

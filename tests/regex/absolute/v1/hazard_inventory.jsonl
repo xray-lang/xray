@@ -1,0 +1,1 @@
+{"activation_owner":"canonical_matcher","current_outcome":"invalid-utf8-force-unwrap","id":"unicode_empty_replace_invalid_utf8","input_utf8_hex":"e4b8adf09f9880","operation":"replace_all","pattern_utf8_hex":"","replacement_utf8_hex":"2d","required_end_state":"scalar-boundary-valid-utf8-or-typed-error-never-panic","state":"red"}

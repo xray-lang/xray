@@ -1,0 +1,28 @@
+import regex
+
+print(regex.findText(regex.compile("a|ab"), "ab"))
+print(regex.findText(regex.compile("ab|a"), "ab"))
+print(regex.fullFind(regex.compile("a|ab"), "ab") != null)
+
+print(regex.test(regex.compile("[\\d]"), "d"))
+print(regex.test(regex.compile("[\\d]"), "5"))
+print(regex.test(regex.compile("abc$"), "abc\n"))
+print(regex.findText(regex.compile("<.+?>"), "<a><b>"))
+print(regex.test(regex.compile("(?is)a.C"), "A\nc"))
+
+print(regex.replaceAll(regex.compile("([a-z]+)"), "abc", "[$3]"))
+print(regex.replaceAll(regex.compile("x*$"), "abc", "-"))
+print(regex.replaceAll(regex.compile("x*"), "abc", "-"))
+print(len(regex.split(regex.compile(","), "a,b,c", 0)))
+print(len(regex.findAll(regex.compile("\\d"), "1234", 0)))
+
+var trailing = regex.split(regex.compile(","), "a,")
+print(len(trailing))
+print(len(trailing[1]))
+
+var named = regex.find(regex.compile("(?P<word>[a-z]+)"), "abc")
+print(named!.groups[1])
+
+var shifted = regex.find(regex.compile("^a"), "bba", 2)
+print(shifted!.start)
+print(regex.find(regex.compile("^a"), "bba", 0) == null)

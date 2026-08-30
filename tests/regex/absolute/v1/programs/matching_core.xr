@@ -1,0 +1,59 @@
+import regex
+import { RegexError } from regex
+
+print(regex.findText(regex.compile("a|ab"), "ab"))
+print(regex.findText(regex.compile("a{2,4}"), "aaaa"))
+print(regex.findText(regex.compile("a{2,4}?"), "aaaa"))
+print(regex.test(regex.compile("hello", "i"), "HELLO"))
+print(regex.test(regex.compile("^b", "m"), "a\nb"))
+print(regex.test(regex.compile("a.b", "s"), "a\nb"))
+
+var captured = regex.find(regex.compile("([a-z]+)(\\d+)"), "abc123")
+print(captured!.text)
+print(len(captured!.groups))
+print(captured!.groups[1])
+print(captured!.groups[2])
+
+var end = regex.compile("$")
+print(regex.count(end, "abc"))
+print(len(regex.findAll(end, "abc")))
+print(regex.replaceAll(regex.compile("x*"), "ab", "-"))
+
+print(regex.findText(regex.compile("\\p{Han}+"), "ab中文cd"))
+print(regex.test(regex.compile("^.$"), "中"))
+print(regex.test(regex.compile("é", "i"), "É"))
+
+var parts = regex.split(regex.compile(","), "a,b,c", 2)
+print(len(parts))
+print(parts[0])
+print(parts[1])
+print(regex.replaceAll(regex.compile("([a-z]+)(\\d+)"), "abc123", "$2-$1"))
+
+var error_position = -1
+try {
+    var invalid = regex.compile("a(")
+    print(regex.test(invalid, "a"))
+} catch (e: RegexError) {
+    match (e) {
+        RegexError.InvalidPattern(message, position) -> {
+            error_position = position
+        },
+    }
+}
+print(error_position)
+
+var too_many = ""
+var group_index = 0
+while (group_index < 35) {
+    too_many = too_many + "(a)"
+    group_index = group_index + 1
+}
+var rejected_limit = false
+try {
+    var oversized = regex.compile(too_many)
+    print(regex.test(oversized, "a"))
+} catch (e: RegexError) {
+    rejected_limit = true
+}
+print(rejected_limit)
+print(regex.isValid("(?=a)b"))
