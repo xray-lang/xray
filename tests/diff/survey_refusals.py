@@ -24,6 +24,8 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -31,21 +33,15 @@ import run_backend_diff as backend_diff
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA = 2
+SCHEMA = 3
 KIND = "xray-live-refusal-root-cause"
 GENERATOR = "tests/diff/survey_refusals.py"
 SURVEY = re.compile(
     r"^\[refusal-survey\] owner=([a-z0-9-]+) family=([^\s]+)(?:\s+(.*))?$"
 )
 DIAGNOSTIC_REGISTRY = "contracts/target-machine/diagnostic-codes.toml"
-REGISTRY_CODE = re.compile(r'^id = "(XR_[A-Z]+_[0-9]{4})"$', re.M)
-# Only the governed registry decides what a diagnostic code is. Matching an
-# XR_-shaped token instead answers a different question: it accepts internal
-# enumerator names that carry no stable identity, and it rejects or accepts
-# registered codes according to the punctuation that happens to follow them.
-# Both spellings a source may use are covered because the code, not its
-# separator, is what is looked up.
-DIAGNOSTIC_SHAPE = re.compile(r"\b(XR_[A-Z0-9_]+)(?::[ \t]*|[ \t]+)([^\r\n]+)")
+DIAGNOSTIC_ID = re.compile(r"XR_[A-Z0-9_]+")
+DIAGNOSTIC_TOKEN = re.compile(r"\bXR_[A-Z0-9_]+\b")
 OWNER_VALUES = {
     "semantic-plan-verifier",
     "target-plan-builder",
@@ -58,21 +54,41 @@ def registered_diagnostic_codes(root: Path) -> frozenset[str]:
     path = root / DIAGNOSTIC_REGISTRY
     if not path.is_file():
         raise RuntimeError(f"diagnostic registry missing: {DIAGNOSTIC_REGISTRY}")
-    codes = frozenset(REGISTRY_CODE.findall(path.read_text(encoding="utf-8", errors="strict")))
+    try:
+        registry = tomllib.loads(path.read_text(encoding="utf-8", errors="strict"))
+    except tomllib.TOMLDecodeError as error:
+        raise RuntimeError(f"diagnostic registry is not valid TOML: {error}") from error
+    rows = registry.get("code")
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError(f"diagnostic registry declares no codes: {DIAGNOSTIC_REGISTRY}")
+    codes: set[str] = set()
+    for index, row in enumerate(rows):
+        code = row.get("id") if isinstance(row, dict) else None
+        if not isinstance(code, str) or DIAGNOSTIC_ID.fullmatch(code) is None:
+            raise RuntimeError(f"diagnostic registry code[{index}] has a malformed id")
+        if code in codes:
+            raise RuntimeError(f"diagnostic registry contains duplicate id: {code}")
+        codes.add(code)
     if not codes:
         raise RuntimeError(f"diagnostic registry declares no codes: {DIAGNOSTIC_REGISTRY}")
-    return codes
+    return frozenset(codes)
 
 
-def find_diagnostic(text: str, codes: frozenset[str]) -> dict[str, str] | None:
-    """Report the first registered code in the log, with the message it introduces."""
-    best: tuple[int, str, str] | None = None
-    for match in DIAGNOSTIC_SHAPE.finditer(text):
-        if match.group(1) not in codes:
-            continue
-        if best is None or match.start() < best[0]:
-            best = (match.start(), match.group(1), match.group(2).strip())
-    return None if best is None else {"code": best[1], "message": best[2]}
+def diagnostic_codes_in_text(text: str, codes: frozenset[str]) -> list[str]:
+    """Return registered diagnostic occurrences in source order."""
+    return [
+        match.group(0)
+        for match in DIAGNOSTIC_TOKEN.finditer(text)
+        if match.group(0) in codes
+    ]
+
+
+def first_registered_log_diagnostic(log: bytes, codes: frozenset[str]) -> str | None:
+    """Return the first registered log code for zero-row debt triage only."""
+    found = diagnostic_codes_in_text(
+        log.decode("utf-8", errors="backslashreplace"), codes
+    )
+    return found[0] if found else None
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -205,9 +221,7 @@ def blocking_fact(family: str, detail: str) -> str:
     return "|".join(parts)
 
 
-def parse_refusals(
-    log: bytes, codes: frozenset[str]
-) -> tuple[list[dict[str, Any]], dict[str, str] | None]:
+def parse_refusals(log: bytes, codes: frozenset[str]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     text = log.decode("utf-8", errors="backslashreplace")
     for line_number, line in enumerate(text.splitlines(), start=1):
@@ -218,35 +232,65 @@ def parse_refusals(
         owner, family, detail = match.group(1), match.group(2), match.group(3) or ""
         if owner not in OWNER_VALUES:
             raise RuntimeError(f"unknown refusal owner {owner!r}")
+        row_codes = diagnostic_codes_in_text(source_text, codes)
         rows.append({
             "sequence": len(rows),
             "line_number": line_number,
             "source_text": source_text,
             "owner": owner,
             "family": family,
+            "diagnostic_code": row_codes[0] if len(row_codes) == 1 else None,
             "detail": detail,
             "blocking_fact": blocking_fact(family, detail),
         })
-    return rows, find_diagnostic(text, codes)
+    return rows
 
 
-def missing_evidence_gap(diagnostic: dict[str, str] | None) -> dict[str, str | None]:
+def missing_source_gap(log: bytes, codes: frozenset[str]) -> dict[str, Any]:
+    diagnostic = first_registered_log_diagnostic(log, codes)
     if diagnostic is not None:
         return {
-            "classification": "diagnostic-without-structured-refusal",
-            "diagnostic_code": diagnostic["code"],
-            "required_action": "emit-source-owned-structured-refusal",
+            "classification": "diagnostic-without-source-refusal",
+            "owner": None,
+            "family": None,
+            "observed_diagnostic_codes": [diagnostic],
+            "required_action": "emit-source-refusal-with-one-registered-diagnostic",
         }
     return {
-        "classification": "opaque-refusal-without-structured-diagnostic",
-        "diagnostic_code": None,
-        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
+        "classification": "opaque-refusal-without-source-diagnostic",
+        "owner": None,
+        "family": None,
+        "observed_diagnostic_codes": [],
+        "required_action": "emit-stable-diagnostic-and-source-refusal",
+    }
+
+
+def row_evidence_gap(row: dict[str, Any], codes: frozenset[str]) -> dict[str, Any] | None:
+    observed = diagnostic_codes_in_text(str(row["source_text"]), codes)
+    if len(observed) == 1:
+        return None
+    return {
+        "classification": (
+            "source-refusal-without-diagnostic"
+            if not observed
+            else "source-refusal-with-ambiguous-diagnostic"
+        ),
+        "owner": row["owner"],
+        "family": row["family"],
+        "observed_diagnostic_codes": observed,
+        "required_action": "bind-exactly-one-registered-diagnostic-on-source-row",
     }
 
 
 def self_test() -> int:
     codes = registered_diagnostic_codes(ROOT)
-    for required in ("XR_TARGET_1000", "XR_TARGET_1003", "XR_CORO_4003"):
+    for required in (
+        "XR_TARGET_1000",
+        "XR_TARGET_1003",
+        "XR_CORO_4003",
+        "XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE",
+        "XR_AOT_TAIL_CALL_CONFORMANCE_LIVE_OPCODE",
+    ):
         if required not in codes:
             print(f"diagnostic registry does not carry {required}", file=sys.stderr)
             return 1
@@ -259,39 +303,27 @@ def self_test() -> int:
         "XR_TARGET_1000: product TargetPlan requires one canonical program authority"
     )
     log = ("noise\n" + decision_source + "\n" + product_source + "\n").encode("utf-8")
-    rows, diagnostic = parse_refusals(log, codes)
+    rows = parse_refusals(log, codes)
     if len(rows) != 2 or rows[0]["sequence"] != 0 or rows[1]["sequence"] != 1 \
             or rows[0]["line_number"] != 2 or rows[1]["line_number"] != 3 \
             or rows[0]["source_text"] != decision_source \
             or rows[1]["source_text"] != product_source \
+            or rows[0]["diagnostic_code"] != "XR_TARGET_1003" \
+            or rows[1]["diagnostic_code"] != "XR_TARGET_1000" \
             or rows[1]["family"] != "program_authority" \
-            or rows[1]["detail"] != product_source.split(" family=program_authority ", 1)[1] \
-            or diagnostic != {"code": "XR_TARGET_1003", "message": "unsupported storage opcode=17 parameter-ordinal=2"}:
+            or rows[1]["detail"] != product_source.split(" family=program_authority ", 1)[1]:
         print("live refusal generator self-test lost or reordered source evidence", file=sys.stderr)
-        return 1
-    if missing_evidence_gap(diagnostic) != {
-        "classification": "diagnostic-without-structured-refusal",
-        "diagnostic_code": "XR_TARGET_1003",
-        "required_action": "emit-source-owned-structured-refusal",
-    } or missing_evidence_gap(None) != {
-        "classification": "opaque-refusal-without-structured-diagnostic",
-        "diagnostic_code": None,
-        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
-    }:
-        print("live refusal generator self-test misclassified evidence gaps", file=sys.stderr)
         return 1
     colon_free_log = (
         b"Error: Xi pipeline failed at ownership: XR_CORO_4003 func '<main>': "
         b"state 1 error continuation is not derivable\n"
     )
-    colon_free_rows, colon_free = parse_refusals(colon_free_log, codes)
-    if colon_free_rows or colon_free != {
-        "code": "XR_CORO_4003",
-        "message": "func '<main>': state 1 error continuation is not derivable",
-    } or missing_evidence_gap(colon_free) != {
-        "classification": "diagnostic-without-structured-refusal",
-        "diagnostic_code": "XR_CORO_4003",
-        "required_action": "emit-source-owned-structured-refusal",
+    if parse_refusals(colon_free_log, codes) or missing_source_gap(colon_free_log, codes) != {
+        "classification": "diagnostic-without-source-refusal",
+        "owner": None,
+        "family": None,
+        "observed_diagnostic_codes": ["XR_CORO_4003"],
+        "required_action": "emit-source-refusal-with-one-registered-diagnostic",
     }:
         print(
             "live refusal generator self-test lost a space-separated diagnostic code",
@@ -309,9 +341,7 @@ def self_test() -> int:
         "Error: XR_TARGET_1006: module representation materialization failed for 'm': "
         "XR_AOT_REFINEMENT_REPRESENTATION record=0 value=5 operation=6\n"
     ).encode("utf-8")
-    materialization_rows, materialization_diagnostic = parse_refusals(
-        materialization_log, codes
-    )
+    materialization_rows = parse_refusals(materialization_log, codes)
     expected_materialization_fact = (
         "refinement_materialization|XR_TARGET_1006: materialized AOT value representation "
         "does not match verified refinement authority|definer-opcode=4|use-opcode=17|"
@@ -320,46 +350,59 @@ def self_test() -> int:
     if len(materialization_rows) != 1 \
             or materialization_rows[0]["owner"] != "aot-representation-refinement" \
             or materialization_rows[0]["family"] != "refinement_materialization" \
+            or materialization_rows[0]["diagnostic_code"] != "XR_TARGET_1006" \
             or materialization_rows[0]["blocking_fact"] != expected_materialization_fact \
-            or materialization_diagnostic != {
-                "code": "XR_TARGET_1006",
-                "message": (
-                    "materialized AOT value representation does not match verified refinement "
-                    "authority definer-opcode=4 use-opcode=17 definition-rep=3 use-rep=0 "
-                    "machine-rep=0"
-                ),
-            }:
+            or row_evidence_gap(materialization_rows[0], codes) is not None:
         print("live refusal generator self-test lost materialization evidence", file=sys.stderr)
         return 1
-    # An internal enumerator name is XR_-shaped but carries no registered
-    # identity, so a refusal that names one still owes a stable diagnostic.
-    # Reading it as a code would report that debt as already paid.
-    unregistered_log = (
-        b"Error: module representation materialization failed for 'm': "
-        b"XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE record=0 value=5 operation=6\n"
+    named_source = (
+        "[refusal-survey] owner=aot-representation-refinement "
+        "family=refinement_definition_oracle "
+        "XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE record=0 value=5 operation=6"
     )
-    if "XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE" in codes:
-        print("registry unexpectedly carries an enumerator name", file=sys.stderr)
+    named_rows = parse_refusals((named_source + "\n").encode(), codes)
+    if len(named_rows) != 1 \
+            or named_rows[0]["diagnostic_code"] != "XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE":
+        print("live refusal generator self-test lost a named registry code", file=sys.stderr)
         return 1
-    unregistered_rows, unregistered = parse_refusals(unregistered_log, codes)
-    if unregistered_rows or unregistered is not None:
-        print(
-            "live refusal generator self-test read an unregistered name as a code",
-            file=sys.stderr,
-        )
+    uncoded_source = (
+        "[refusal-survey] owner=target-plan-builder family=calls "
+        "XR_INTERNAL_ONLY value=5"
+    )
+    uncoded_log = (
+        uncoded_source + "\nError: XR_TARGET_1000: later terminal diagnostic\n"
+    ).encode()
+    uncoded_rows = parse_refusals(uncoded_log, codes)
+    if len(uncoded_rows) != 1 or uncoded_rows[0]["diagnostic_code"] is not None \
+            or row_evidence_gap(uncoded_rows[0], codes) is None:
+        print("live refusal generator self-test let a terminal diagnostic pay row debt", file=sys.stderr)
         return 1
-    # The uncoded classification must be reached through the log parser, not by
-    # handing it None: that shortcut leaves the lookup itself untested and is
-    # how a code-losing pattern stayed green.
-    uncoded_log = b"Error: Xi pipeline failed at ownership: coroutine lowering failed closed\n"
-    uncoded_rows, uncoded = parse_refusals(uncoded_log, codes)
-    if uncoded_rows or uncoded is not None or missing_evidence_gap(uncoded) != {
-        "classification": "opaque-refusal-without-structured-diagnostic",
-        "diagnostic_code": None,
-        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
-    }:
-        print("live refusal generator self-test misread an uncoded refusal", file=sys.stderr)
+    ambiguous_source = (
+        "[refusal-survey] owner=target-plan-builder family=calls "
+        "XR_TARGET_1000 XR_TARGET_1003 conflicting diagnostics"
+    )
+    ambiguous_rows = parse_refusals((ambiguous_source + "\n").encode(), codes)
+    gap = row_evidence_gap(ambiguous_rows[0], codes)
+    if ambiguous_rows[0]["diagnostic_code"] is not None or gap is None \
+            or gap["classification"] != "source-refusal-with-ambiguous-diagnostic":
+        print("live refusal generator self-test accepted ambiguous row diagnostics", file=sys.stderr)
         return 1
+    with tempfile.TemporaryDirectory(prefix="xray-refusal-registry-") as temp:
+        test_root = Path(temp)
+        registry = test_root / DIAGNOSTIC_REGISTRY
+        registry.parent.mkdir(parents=True)
+        for text in (
+            '[[code]]\nid = "XR_DUPLICATE"\n[[code]]\nid = "XR_DUPLICATE"\n',
+            '[[code]]\nid = "not-a-diagnostic"\n',
+        ):
+            registry.write_text(text, encoding="utf-8")
+            try:
+                registered_diagnostic_codes(test_root)
+            except RuntimeError:
+                pass
+            else:
+                print("live refusal generator self-test accepted an invalid registry", file=sys.stderr)
+                return 1
     print("live refusal manifest generator self-test: PASS")
     return 0
 
@@ -496,9 +539,18 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
 
     log_root.mkdir(parents=True, exist_ok=True)
     manifest_results: list[dict[str, Any]] = []
-    root_events: collections.Counter[tuple[str, str, str]] = collections.Counter()
-    root_cases: dict[tuple[str, str, str], set[str]] = collections.defaultdict(set)
-    gap_cases: dict[tuple[str, str | None, str], list[str]] = collections.defaultdict(list)
+    root_events: collections.Counter[tuple[str, str, str | None, str]] = collections.Counter()
+    root_cases: dict[tuple[str, str, str | None, str], set[str]] = collections.defaultdict(set)
+    gap_events: collections.Counter[
+        tuple[str, str | None, str | None, tuple[str, ...], str]
+    ] = collections.Counter()
+    gap_cases: dict[
+        tuple[str, str | None, str | None, tuple[str, ...], str], set[str]
+    ] = collections.defaultdict(set)
+    incomplete_cases: set[str] = set()
+    missing_source_cases: set[str] = set()
+    bound_event_count = 0
+    unbound_event_count = 0
     invalid = False
     input_by_case = {row["path"]: row for row in inputs}
     for result in sorted(results, key=lambda row: row.order):
@@ -511,9 +563,8 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             "outcome": outcome,
             "first_refusal": None,
             "refusals": [],
-            "diagnostic": None,
             "build_log": None,
-            "evidence_gap": None,
+            "failure": None,
         }
         if result.status == "refused":
             log = result.refusal_build_logs.get("aot", b"")
@@ -523,32 +574,50 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             log_name = f"{result.order:04d}-{digest[:16]}.log"
             log_path = log_root / log_name
             log_path.write_bytes(log)
-            refusals, diagnostic = parse_refusals(log, codes)
+            refusals = parse_refusals(log, codes)
             if not refusals:
                 invalid = True
-                gap = missing_evidence_gap(diagnostic)
-                row["evidence_gap"] = gap
+                incomplete_cases.add(result.name)
+                missing_source_cases.add(result.name)
+                gap = missing_source_gap(log, codes)
                 gap_key = (
-                    str(gap["classification"]), gap["diagnostic_code"],
+                    str(gap["classification"]), gap["owner"], gap["family"],
+                    tuple(gap["observed_diagnostic_codes"]),
                     str(gap["required_action"]),
                 )
-                gap_cases[gap_key].append(result.name)
+                gap_events[gap_key] += 1
+                gap_cases[gap_key].add(result.name)
             row["refusals"] = refusals
             row["first_refusal"] = refusals[0] if refusals else None
-            row["diagnostic"] = diagnostic
             row["build_log"] = {
                 "path": log_path.relative_to(output.parent).as_posix(),
                 "sha256": digest,
                 "size_bytes": len(log),
             }
             for refusal in refusals:
-                key = (refusal["owner"], refusal["family"], refusal["blocking_fact"])
+                gap = row_evidence_gap(refusal, codes)
+                if gap is None:
+                    bound_event_count += 1
+                else:
+                    invalid = True
+                    unbound_event_count += 1
+                    incomplete_cases.add(result.name)
+                    gap_key = (
+                        str(gap["classification"]), gap["owner"], gap["family"],
+                        tuple(gap["observed_diagnostic_codes"]),
+                        str(gap["required_action"]),
+                    )
+                    gap_events[gap_key] += 1
+                    gap_cases[gap_key].add(result.name)
+                key = (
+                    refusal["owner"], refusal["family"],
+                    refusal["diagnostic_code"], refusal["blocking_fact"],
+                )
                 root_events[key] += 1
                 root_cases[key].add(result.name)
         elif result.status == "fail":
             invalid = True
-            row["diagnostic"] = {"code": "DIFFERENTIAL_FAILURE", "message": result.output}
-        governed = input_by_case[result.name]
+            row["failure"] = result.output
         manifest_results.append(row)
 
     counts = collections.Counter(row["outcome"] for row in manifest_results)
@@ -560,25 +629,42 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
         invalid = True
     roots = [
         {
+            "diagnostic_code": diagnostic_code,
             "owner": owner,
             "family": family,
             "blocking_fact": fact,
-            "event_count": root_events[(owner, family, fact)],
+            "event_count": root_events[(owner, family, diagnostic_code, fact)],
             "case_count": len(case_names),
             "cases": sorted(case_names),
         }
-        for (owner, family, fact), case_names in sorted(root_cases.items())
+        for (owner, family, diagnostic_code, fact), case_names in sorted(
+            root_cases.items(),
+            key=lambda item: (
+                item[0][0], item[0][1], item[0][2] or "", item[0][3]
+            ),
+        )
     ]
     evidence_gaps = [
         {
             "classification": classification,
-            "diagnostic_code": diagnostic_code,
+            "owner": owner,
+            "family": family,
+            "observed_diagnostic_codes": list(observed_codes),
             "required_action": required_action,
+            "event_count": gap_events[
+                (classification, owner, family, observed_codes, required_action)
+            ],
             "case_count": len(case_names),
             "cases": sorted(case_names),
         }
-        for (classification, diagnostic_code, required_action), case_names in sorted(
-            gap_cases.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][2])
+        for (
+            classification, owner, family, observed_codes, required_action
+        ), case_names in sorted(
+            gap_cases.items(),
+            key=lambda item: (
+                item[0][0], item[0][1] or "", item[0][2] or "",
+                item[0][3], item[0][4],
+            ),
         )
     ]
     manifest = {
@@ -621,13 +707,12 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             "refused_count": counts["refused"],
             "skipped_count": counts["skip"],
             "failed_count": counts["fail"],
-            "structured_refusal_count": counts["refused"] - sum(
-                len(case_names) for case_names in gap_cases.values()
-            ),
-            "missing_refusal_evidence_count": sum(
-                len(case_names) for case_names in gap_cases.values()
-            ),
+            "complete_refusal_count": counts["refused"] - len(incomplete_cases),
+            "incomplete_refusal_count": len(incomplete_cases),
+            "missing_source_refusal_case_count": len(missing_source_cases),
             "refusal_event_count": sum(root_events.values()),
+            "diagnostic_bound_refusal_event_count": bound_event_count,
+            "unbound_refusal_event_count": unbound_event_count,
             "root_cause_count": len(roots),
         },
     }
@@ -664,9 +749,11 @@ def main() -> int:
         f"comparable={summary['comparable_count']} refused={summary['refused_count']} "
         f"expected-rejection={summary['expected_rejection_count']} "
         f"skipped={summary['skipped_count']} failed={summary['failed_count']} "
-        f"structured-refusals={summary['structured_refusal_count']} "
-        f"missing-refusal-evidence={summary['missing_refusal_evidence_count']} "
+        f"complete-refusals={summary['complete_refusal_count']} "
+        f"incomplete-refusals={summary['incomplete_refusal_count']} "
         f"refusal-events={summary['refusal_event_count']} "
+        f"bound-events={summary['diagnostic_bound_refusal_event_count']} "
+        f"unbound-events={summary['unbound_refusal_event_count']} "
         f"new-refusals={len(manifest['coverage']['new_refusals'])} "
         f"resolved-refusals={len(manifest['coverage']['resolved_refusals'])}"
     )
@@ -674,8 +761,10 @@ def main() -> int:
         print(
             "  evidence gap: "
             f"classification={gap['classification']} "
-            f"diagnostic={gap['diagnostic_code'] or '<none>'} "
-            f"cases={gap['case_count']} action={gap['required_action']}"
+            f"owner={gap['owner'] or '<none>'} family={gap['family'] or '<none>'} "
+            f"diagnostics={','.join(gap['observed_diagnostic_codes']) or '<none>'} "
+            f"events={gap['event_count']} cases={gap['case_count']} "
+            f"action={gap['required_action']}"
         )
     for label, field in (
         ("new refusal", "new_refusals"),
