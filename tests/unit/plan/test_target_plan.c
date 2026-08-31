@@ -3393,7 +3393,8 @@ static XrSemanticPlan *build_direct_local_class_argument_semantic(XiOwnership ca
 
 static XrSemanticPlan *build_direct_local_tagged_ref_semantic(XrType *value_type,
                                                               bool register_source_class,
-                                                              bool append_stringbuilder) {
+                                                              bool append_stringbuilder,
+                                                              bool forward_ref_parameter) {
     XiFunc *root = xi_func_new("target_array_ref_root", &stub_int);
     XiFunc *child = xi_func_new("target_array_ref_child", &stub_int);
     REQUIRE(root != NULL && child != NULL);
@@ -3412,6 +3413,8 @@ static XrSemanticPlan *build_direct_local_tagged_ref_semantic(XrType *value_type
     child->params[0] = xi_param(child, child_entry, 0, value_type);
     REQUIRE((append_stringbuilder || root->params[0] != NULL) && child->params[0] != NULL);
     REQUIRE(xi_func_set_param_passing_mode(child, 0, XR_PARAM_REF));
+    if (forward_ref_parameter)
+        REQUIRE(xi_func_set_param_passing_mode(root, 0, XR_PARAM_REF));
     if (!append_stringbuilder)
         root->params[0]->transfer_mode = XR_TRANSFER_SHARE;
     child->params[0]->transfer_mode = XR_TRANSFER_SHARE;
@@ -3444,12 +3447,15 @@ static XrSemanticPlan *build_direct_local_tagged_ref_semantic(XrType *value_type
     XiValue *root_value =
         append_stringbuilder ? emit_exact_string_builder(root, root_entry) : root->params[0];
     XiValue *closure = xi_value_new(root, root_entry, XI_STACK_ALLOC, &stub_function, 0);
-    XiValue *place = xi_value_new(root, root_entry, XI_LOCAL_ADDR, value_type, 1);
+    XiValue *place = forward_ref_parameter
+                         ? root_value
+                         : xi_value_new(root, root_entry, XI_LOCAL_ADDR, value_type, 1);
     XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 2);
     REQUIRE(closure != NULL && place != NULL && call != NULL);
     closure->aux_int = XI_CLOSURE_NEW;
     closure->aux = child;
-    place->args[0] = root_value;
+    if (!forward_ref_parameter)
+        place->args[0] = root_value;
     call->args[0] = closure;
     call->args[1] = place;
 
@@ -3461,12 +3467,13 @@ static XrSemanticPlan *build_direct_local_tagged_ref_semantic(XrType *value_type
     memset(argument_plan, 0, sizeof(*argument_plan));
     argument_plan->param_mode = XR_PARAM_REF;
     argument_plan->access = XR_CALL_ARG_REF;
-    argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    argument_plan->origin =
+        forward_ref_parameter ? XI_PLACE_ORIGIN_PARAM : XI_PLACE_ORIGIN_STACK_LOCAL;
     argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
     argument_plan->escape = XI_PLACE_ESCAPE_NONE;
     argument_plan->addressable = true;
     argument_plan->origin_var_id = 0;
-    argument_plan->place = root_value;
+    argument_plan->place = place;
     call_plan->args = argument_plan;
     call_plan->nargs = 1;
     call_plan->verified = true;
@@ -5759,7 +5766,8 @@ static void test_direct_local_class_argument_authority(void) {
 
 static void test_direct_local_source_class_array_ref_authority(void) {
     XrSemanticPlan *semantic =
-        build_direct_local_tagged_ref_semantic(&stub_target_source_instance_array, true, false);
+        build_direct_local_tagged_ref_semantic(&stub_target_source_instance_array, true, false,
+                                               false);
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
@@ -5819,11 +5827,88 @@ static void test_direct_local_source_class_array_ref_authority(void) {
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
 
-    semantic = build_direct_local_tagged_ref_semantic(&stub_target_string_array, false, false);
+    semantic =
+        build_direct_local_tagged_ref_semantic(&stub_target_string_array, false, false, false);
     plan = NULL;
     error[0] = '\0';
     REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan == NULL &&
             strncmp(error, "XR_TARGET_1003", 14) == 0);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
+static void test_direct_local_forwarded_source_class_ref_authority(void) {
+    XrSemanticPlan *semantic = build_direct_local_tagged_ref_semantic(
+        &stub_target_source_instance, true, false, true);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "forwarded source-class ref TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->calls_count == 1 &&
+            plan->call_arguments_count == 1 &&
+            (plan->completed_family_mask &
+             XR_TARGET_FAMILY_DIRECT_LOCAL_TAGGED_REF_ARGUMENT_STORAGE) != 0);
+
+    XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    XrSemanticOperandRecord *operand =
+        argument->semantic_operand < semantic->operand_count
+            ? &semantic->operands[argument->semantic_operand]
+            : NULL;
+    REQUIRE(operand != NULL && operand->origin == XI_PLACE_ORIGIN_PARAM &&
+            argument->mode == XR_TARGET_CALL_REFERENCE &&
+            argument->ownership == XR_TARGET_CALL_BORROW &&
+            argument->caller_slot < plan->slots_count &&
+            argument->callee_slot < plan->slots_count &&
+            plan->slots[argument->caller_slot].role == XR_TARGET_SLOT_PARAMETER &&
+            plan->machine_reps[argument->register_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+            plan->machine_reps[argument->memory_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+            plan->machine_reps[argument->callee_register_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+            plan->machine_reps[argument->callee_memory_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
+
+    uint8_t saved_origin = operand->origin;
+    operand->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    resign_mutated_semantic_target(semantic, plan);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    operand->origin = saved_origin;
+    resign_mutated_semantic_target(semantic, plan);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, 0);
+    const XrSemanticOperationRecord *call =
+        target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    bool emission_built = call != NULL &&
+                          xr_c_emission_plan_build(plan, semantic, profile_fingerprint, &emission,
+                                                   error, sizeof(error));
+    if (!emission_built)
+        fprintf(stderr, "forwarded source-class ref C emission failed: %s\n", error);
+    REQUIRE(emission_built &&
+            emission != NULL && xr_c_emission_plan_call_argument_count(emission) == 1 &&
+            xr_c_emission_plan_verify(emission, plan, semantic, profile_fingerprint, error,
+                                      sizeof(error)));
+    XrCCallArgumentEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_call_argument_view(emission, call->result_value, 0, &view, error,
+                                                  sizeof(error)) &&
+            view.semantic_value == operand->value &&
+            view.caller_register_kind == XR_MACHINE_REP_RAW_PTR &&
+            view.caller_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+            view.callee_register_kind == XR_MACHINE_REP_RAW_PTR &&
+            view.callee_memory_kind == XR_MACHINE_REP_RAW_PTR && view.c_type &&
+            strcmp(view.c_type, "XrValue *") == 0);
+    uint16_t saved_caller_kind = emission->call_arguments[0].caller_register_kind;
+    emission->call_arguments[0].caller_register_kind = XR_MACHINE_REP_DYN_VALUE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, semantic, profile_fingerprint, error,
+                                       sizeof(error)));
+    emission->call_arguments[0].caller_register_kind = saved_caller_kind;
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, semantic, profile_fingerprint, error,
+                                      sizeof(error)));
+    xr_c_emission_plan_free(emission);
+
+    xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
 }
@@ -7590,7 +7675,7 @@ static void test_stringbuilder_clear_call_authority(void) {
 
 static void test_direct_local_stringbuilder_ref_append_authority(void) {
     XrSemanticPlan *semantic =
-        build_direct_local_tagged_ref_semantic(&stub_string_builder, false, true);
+        build_direct_local_tagged_ref_semantic(&stub_string_builder, false, true, false);
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
@@ -9224,6 +9309,11 @@ int main(int argc, char **argv) {
         puts("Direct-local source-class Array ref authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "direct-local-forwarded-source-class-ref-authority") == 0) {
+        test_direct_local_forwarded_source_class_ref_authority();
+        puts("Direct-local forwarded source-class ref authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "direct-local-managed-aggregate-precursor") == 0) {
         test_direct_local_managed_aggregate_lifecycle_authority();
         puts("Direct-local managed aggregate precursor tests passed");
@@ -9379,6 +9469,7 @@ int main(int argc, char **argv) {
     test_direct_local_scalar_ref_argument_authority();
     test_direct_local_class_argument_authority();
     test_direct_local_source_class_array_ref_authority();
+    test_direct_local_forwarded_source_class_ref_authority();
     test_direct_local_managed_aggregate_lifecycle_authority();
     test_source_instance_method_target_fails_closed();
     test_open_source_instance_method_target_fails_closed();

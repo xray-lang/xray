@@ -2098,6 +2098,38 @@ static bool semantic_direct_local_ref_place_is_exact(const XrSemanticPlan *plan,
             return false;
         definition = candidate;
     }
+    /* Forwarding `ref p` does not manufacture a LOCAL_ADDR.  Lowering passes
+     * the caller's XI_PARAM place through unchanged and marks the call operand
+     * as parameter-origin.  Admit that shape only when the source parameter is
+     * itself one exact scalar or tagged ref contract in the same function; the
+     * existing parameter storage is then the caller storage for the nested
+     * call. */
+    if (definition && definition->opcode == XI_PARAM && call_operand &&
+        call_operand->origin == XI_PLACE_ORIGIN_PARAM &&
+        definition->function == semantic_function &&
+        definition->result_type == call_operand->type && definition->operand_count == 0 &&
+        definition->result_value == call_operand->value) {
+        const XrSemanticParameterRecord *forwarded = NULL;
+        uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(plan);
+        for (uint32_t i = 0; i < parameter_count; i++) {
+            const XrSemanticParameterRecord *candidate = xr_semantic_plan_parameter(plan, i);
+            if (!candidate || candidate->function != semantic_function ||
+                candidate->value != definition->result_value)
+                continue;
+            if (forwarded)
+                return false;
+            forwarded = candidate;
+        }
+        bool exact_forward =
+            forwarded && forwarded->type == call_operand->type &&
+            (semantic_direct_local_tagged_ref_parameter_is_exact(plan, forwarded, NULL) ||
+             semantic_direct_local_scalar_ref_parameter_is_exact(plan, forwarded, NULL));
+        if (!exact_forward)
+            return false;
+        if (storage_value)
+            *storage_value = forwarded->value;
+        return true;
+    }
     const XrSemanticOperandRecord *source = NULL;
     if (!call_operand || !xr_semantic_ref_argument_local_addr_is_exact(plan, definition,
                                                                        call_operand->type, &source))
@@ -5157,15 +5189,36 @@ static bool builder_ref_caller_storage_is_exact(const XrTargetPlanBuilder *build
 
     XrTargetMachineRepRecord owned_rep;
     XrTargetMachineRepRecord borrowed_rep;
+    XrTargetMachineRepRecord forwarded_ref_rep;
     const XrTargetMachineFacts *facts = xr_target_profile_machine_facts(builder->profile);
     if (!make_dynamic_value_rep(facts, &owned_rep) ||
-        !make_borrowed_dynamic_value_rep(facts, &borrowed_rep))
+        !make_borrowed_dynamic_value_rep(facts, &borrowed_rep) ||
+        !make_machine_rep(facts, XR_MACHINE_REP_RAW_PTR, &forwarded_ref_rep))
         return false;
+    forwarded_ref_rep.ownership = XR_TARGET_OWNERSHIP_BORROWED;
     bool owned = compare_rep_record(&match->register_rep, &owned_rep) == 0 &&
                  compare_rep_record(&match->memory_rep, &owned_rep) == 0;
     bool borrowed = compare_rep_record(&match->register_rep, &borrowed_rep) == 0 &&
                     compare_rep_record(&match->memory_rep, &borrowed_rep) == 0;
-    if (!owned && !borrowed)
+    const XrSemanticParameterRecord *forwarded = NULL;
+    for (uint32_t i = 0;
+         i < (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan); i++) {
+        const XrSemanticParameterRecord *candidate =
+            xr_semantic_plan_parameter(builder->semantic_plan, i);
+        if (!candidate || candidate->function != semantic_function ||
+            candidate->value != semantic_value)
+            continue;
+        if (forwarded)
+            return false;
+        forwarded = candidate;
+    }
+    bool forwarded_ref =
+        forwarded && forwarded->type == semantic_type &&
+        semantic_direct_local_tagged_ref_parameter_is_exact(builder->semantic_plan, forwarded,
+                                                             NULL) &&
+        compare_rep_record(&match->register_rep, &forwarded_ref_rep) == 0 &&
+        compare_rep_record(&match->memory_rep, &forwarded_ref_rep) == 0;
+    if (!owned && !borrowed && !forwarded_ref)
         return false;
 
     const XrTargetSlotIntent *slot_match = NULL;
@@ -5182,7 +5235,10 @@ static bool builder_ref_caller_storage_is_exact(const XrTargetPlanBuilder *build
         slot_match->semantic_value != semantic_value ||
         compare_rep_record(&slot_match->register_rep, &match->register_rep) != 0 ||
         compare_rep_record(&slot_match->memory_rep, &match->memory_rep) != 0 ||
-        slot_match->root_kind != XR_TARGET_ROOT_DYNAMIC || slot_match->ownership != ownership ||
+        slot_match->root_kind !=
+            (forwarded_ref ? XR_TARGET_ROOT_NONE : XR_TARGET_ROOT_DYNAMIC) ||
+        slot_match->ownership != ownership ||
+        (forwarded_ref && slot_match->role != XR_TARGET_SLOT_PARAMETER) ||
         slot_match->logical_slot != XR_SEMANTIC_INDEX_NONE ||
         slot_match->debug_variable != XR_SEMANTIC_INDEX_NONE)
         return false;

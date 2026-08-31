@@ -2065,6 +2065,41 @@ static bool build_direct_local_tagged_ref_argument_view(const XrTargetPlan *targ
     const XrTargetValueRepRecord *parameter_binding =
         parameter ? xr_target_plan_value_rep(target_plan, parameter->value) : NULL;
     uint8_t parameter_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    const XrSemanticParameterRecord *forwarded_parameter = NULL;
+    for (uint32_t i = 0; semantic && operand && operation &&
+                         i < (uint32_t) xr_semantic_plan_parameter_count(semantic);
+         i++) {
+        const XrSemanticParameterRecord *candidate = xr_semantic_plan_parameter(semantic, i);
+        if (!candidate || candidate->function != operation->function ||
+            candidate->value != operand->value)
+            continue;
+        if (forwarded_parameter) {
+            forwarded_parameter = NULL;
+            break;
+        }
+        forwarded_parameter = candidate;
+    }
+    bool local_tagged_caller =
+        caller_register && caller_memory && caller_slot &&
+        caller_register->kind == XR_MACHINE_REP_DYN_VALUE &&
+        caller_memory->kind == XR_MACHINE_REP_DYN_VALUE &&
+        caller_register->ownership == caller_memory->ownership &&
+        (caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED ||
+         caller_register->ownership == XR_TARGET_OWNERSHIP_BORROWED) &&
+        caller_slot->root_kind == XR_TARGET_ROOT_DYNAMIC;
+    bool forwarded_tagged_caller =
+        caller_register && caller_memory && caller_slot && operand &&
+        operand->origin == XI_PLACE_ORIGIN_PARAM && forwarded_parameter &&
+        forwarded_parameter->type == operand->type &&
+        exact_direct_local_tagged_ref_parameter_prior(target_plan, forwarded_parameter, NULL) &&
+        caller_register->kind == XR_MACHINE_REP_RAW_PTR &&
+        caller_memory->kind == XR_MACHINE_REP_RAW_PTR &&
+        caller_register->root_kind == XR_TARGET_ROOT_NONE &&
+        caller_memory->root_kind == XR_TARGET_ROOT_NONE &&
+        caller_register->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+        caller_memory->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+        caller_slot->root_kind == XR_TARGET_ROOT_NONE &&
+        caller_slot->role == XR_TARGET_SLOT_PARAMETER;
     XrStableId expected_identity = {{0}};
     if (!semantic || !argument || !out || !call || !operation || !callee || !operand ||
         !semantic_target || !parameter || !parameter_binding || !caller_slot || !callee_slot ||
@@ -2101,9 +2136,7 @@ static bool build_direct_local_tagged_ref_argument_view(const XrTargetPlan *targ
         caller_slot->register_rep != argument->register_rep ||
         caller_slot->memory_rep != argument->memory_rep ||
         caller_slot->ownership != caller_register->ownership ||
-        caller_register->ownership != caller_memory->ownership ||
-        (caller_register->ownership != XR_TARGET_OWNERSHIP_OWNED &&
-         caller_register->ownership != XR_TARGET_OWNERSHIP_BORROWED) ||
+        (!local_tagged_caller && !forwarded_tagged_caller) ||
         parameter_binding->slot != argument->callee_slot ||
         parameter_binding->register_rep != argument->callee_register_rep ||
         parameter_binding->memory_rep != argument->callee_memory_rep ||
@@ -2112,8 +2145,6 @@ static bool build_direct_local_tagged_ref_argument_view(const XrTargetPlan *targ
         callee_slot->memory_rep != argument->callee_memory_rep ||
         callee_slot->role != XR_TARGET_SLOT_PARAMETER ||
         callee_slot->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
-        caller_register->kind != XR_MACHINE_REP_DYN_VALUE ||
-        caller_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
         callee_register->kind != XR_MACHINE_REP_RAW_PTR ||
         callee_memory->kind != XR_MACHINE_REP_RAW_PTR ||
         !exact_direct_local_tagged_ref_parameter_prior(target_plan, parameter,
@@ -3916,8 +3947,10 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
         const char *scalar_ref_c_type =
             argument->caller_register_kind == XR_MACHINE_REP_I64 ? "int64_t *" : NULL;
         bool exact_tagged_ref = argument->c_type && strcmp(argument->c_type, "XrValue *") == 0 &&
-                                argument->caller_register_kind == XR_MACHINE_REP_DYN_VALUE &&
-                                argument->caller_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+                                ((argument->caller_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+                                  argument->caller_memory_kind == XR_MACHINE_REP_DYN_VALUE) ||
+                                 (argument->caller_register_kind == XR_MACHINE_REP_RAW_PTR &&
+                                  argument->caller_memory_kind == XR_MACHINE_REP_RAW_PTR)) &&
                                 argument->callee_register_kind == XR_MACHINE_REP_RAW_PTR &&
                                 argument->callee_memory_kind == XR_MACHINE_REP_RAW_PTR &&
                                 argument->array_element_storage < XR_TARGET_ARRAY_STORAGE_COUNT;

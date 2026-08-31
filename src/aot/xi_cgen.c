@@ -3289,9 +3289,13 @@ static bool cg_direct_local_tagged_ref_argument_emission(XiCgenCtx *ctx, const X
                          strcmp(out->c_type, "int64_t *") == 0;
     if (scalar_ref_v1)
         return false;
+    bool tagged_caller =
+        (out->caller_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+         out->caller_memory_kind == XR_MACHINE_REP_DYN_VALUE) ||
+        (out->caller_register_kind == XR_MACHINE_REP_RAW_PTR &&
+         out->caller_memory_kind == XR_MACHINE_REP_RAW_PTR);
     if (out->semantic_call_value != semantic_call || out->semantic_value != semantic_argument ||
-        out->ordinal != ordinal || out->caller_register_kind != XR_MACHINE_REP_DYN_VALUE ||
-        out->caller_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
+        out->ordinal != ordinal || !tagged_caller ||
         out->callee_register_kind != XR_MACHINE_REP_RAW_PTR ||
         out->callee_memory_kind != XR_MACHINE_REP_RAW_PTR ||
         out->mode != XR_TARGET_CALL_REFERENCE || out->ownership != XR_TARGET_CALL_BORROW ||

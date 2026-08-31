@@ -1480,6 +1480,34 @@ static bool semantic_direct_local_ref_place_is_exact_verify(
             return false;
         definition = candidate;
     }
+    if (definition && definition->opcode == XI_PARAM && call_operand &&
+        call_operand->origin == XI_PLACE_ORIGIN_PARAM &&
+        definition->function == semantic_function &&
+        definition->result_type == call_operand->type && definition->operand_count == 0 &&
+        definition->result_value == call_operand->value) {
+        const XrSemanticParameterRecord *forwarded = NULL;
+        uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(semantic);
+        for (uint32_t i = 0; i < parameter_count; i++) {
+            const XrSemanticParameterRecord *candidate = xr_semantic_plan_parameter(semantic, i);
+            if (!candidate || candidate->function != semantic_function ||
+                candidate->value != definition->result_value)
+                continue;
+            if (forwarded)
+                return false;
+            forwarded = candidate;
+        }
+        bool exact_forward =
+            forwarded && forwarded->type == call_operand->type &&
+            (semantic_direct_local_tagged_ref_parameter_is_exact_verify(semantic, forwarded,
+                                                                         NULL) ||
+             semantic_direct_local_scalar_ref_parameter_is_exact_verify(semantic, forwarded,
+                                                                         NULL));
+        if (!exact_forward)
+            return false;
+        if (storage_value)
+            *storage_value = forwarded->value;
+        return true;
+    }
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
     if (!definition || !operands || definition->opcode != XI_LOCAL_ADDR ||
@@ -7048,7 +7076,15 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     parameter && managed_aggregate_type == parameter->type;
                 if (argument_adt_enum)
                     argument_kind = XR_MACHINE_REP_DYN_VALUE;
-                if (argument_tagged_ref || argument_container_value)
+                if (argument_tagged_ref)
+                    argument_kind =
+                        operand->origin == XI_PLACE_ORIGIN_PARAM && caller_value &&
+                                caller_value->register_rep < plan->machine_reps_count &&
+                                plan->machine_reps[caller_value->register_rep].kind ==
+                                    XR_MACHINE_REP_RAW_PTR
+                            ? XR_MACHINE_REP_RAW_PTR
+                            : XR_MACHINE_REP_DYN_VALUE;
+                if (argument_container_value)
                     argument_kind = XR_MACHINE_REP_DYN_VALUE;
                 if (argument_leaf_aggregate || argument_managed_aggregate)
                     argument_kind = XR_MACHINE_REP_AGGREGATE;
@@ -7095,21 +7131,37 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     caller_value->memory_rep < plan->machine_reps_count &&
                     callee_value->register_rep < plan->machine_reps_count &&
                     callee_value->memory_rep < plan->machine_reps_count &&
-                    plan->machine_reps[caller_value->register_rep].kind ==
-                        XR_MACHINE_REP_DYN_VALUE &&
-                    plan->machine_reps[caller_value->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
                     plan->machine_reps[callee_value->register_rep].kind == XR_MACHINE_REP_RAW_PTR &&
                     plan->machine_reps[callee_value->memory_rep].kind == XR_MACHINE_REP_RAW_PTR &&
-                    plan->machine_reps[caller_value->register_rep].ownership ==
-                        plan->machine_reps[caller_value->memory_rep].ownership &&
-                    (plan->machine_reps[caller_value->register_rep].ownership ==
-                         XR_TARGET_OWNERSHIP_OWNED ||
-                     plan->machine_reps[caller_value->register_rep].ownership ==
-                         XR_TARGET_OWNERSHIP_BORROWED) &&
                     plan->machine_reps[callee_value->register_rep].ownership ==
                         XR_TARGET_OWNERSHIP_BORROWED &&
                     plan->machine_reps[callee_value->memory_rep].ownership ==
-                        XR_TARGET_OWNERSHIP_BORROWED;
+                        XR_TARGET_OWNERSHIP_BORROWED &&
+                    ((plan->machine_reps[caller_value->register_rep].kind ==
+                          XR_MACHINE_REP_DYN_VALUE &&
+                      plan->machine_reps[caller_value->memory_rep].kind ==
+                          XR_MACHINE_REP_DYN_VALUE &&
+                      plan->machine_reps[caller_value->register_rep].ownership ==
+                          plan->machine_reps[caller_value->memory_rep].ownership &&
+                      (plan->machine_reps[caller_value->register_rep].ownership ==
+                           XR_TARGET_OWNERSHIP_OWNED ||
+                       plan->machine_reps[caller_value->register_rep].ownership ==
+                           XR_TARGET_OWNERSHIP_BORROWED)) ||
+                     (operand->origin == XI_PLACE_ORIGIN_PARAM &&
+                      plan->machine_reps[caller_value->register_rep].kind ==
+                          XR_MACHINE_REP_RAW_PTR &&
+                      plan->machine_reps[caller_value->memory_rep].kind ==
+                          XR_MACHINE_REP_RAW_PTR &&
+                      plan->machine_reps[caller_value->register_rep].root_kind ==
+                          XR_TARGET_ROOT_NONE &&
+                      plan->machine_reps[caller_value->memory_rep].root_kind ==
+                          XR_TARGET_ROOT_NONE &&
+                      plan->machine_reps[caller_value->register_rep].ownership ==
+                          XR_TARGET_OWNERSHIP_BORROWED &&
+                      plan->machine_reps[caller_value->memory_rep].ownership ==
+                          XR_TARGET_OWNERSHIP_BORROWED &&
+                      caller_value->slot < plan->slots_count &&
+                      plan->slots[caller_value->slot].role == XR_TARGET_SLOT_PARAMETER));
                 /* The declaration decides whether the callee borrows or owns a
                  * by-value container; the caller may itself hold either
                  * ownership while handing over the same tagged carrier. */

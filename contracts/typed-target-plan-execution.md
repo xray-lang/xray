@@ -441,6 +441,17 @@ transfer, and addressability. It additionally makes the caller's exact
 incorrect subject-`I64` row. This changes the valid artifact set even though no
 wire row changes size, so v51 and every earlier artifact are rejected rather
 than reinterpreted.
+The direct-local tagged-ref family separately binds an addressable borrowed
+`XrValue *` boundary for exact Arrays, StringBuilder values and source-class
+instances. Its caller storage is either the dynamic value named by one exact
+`LOCAL_ADDR` or the borrowed raw-pointer parameter named by one exact
+parameter-origin operand. In the latter form TargetPlan and CEmission preserve
+the raw pointer through the nested call; they do not reinterpret the parameter
+as a dynamic value or take its address again. Builder, independent verifier and
+C projection each reject a missing parameter identity, wrong origin, duplicate
+parameter row, representation drift, ownership drift or nonlocal alias. This
+is not general pointer forwarding and grants no SOURCE_EXPORT or ref-result
+execution authority.
 The generated builtin receiver registry and stable method-symbol registry are
 the sole authority for exact `Map<K,V>.entriesIterator()` calls and their
 bounded `Iterator<(K,V)>.hasNext()`/`next()` continuations; selector spelling
@@ -863,14 +874,14 @@ anchor-sha256: src/plan/target/xr_target_plan.h 2eea159120925f7710d1ca4d986f9bad
 anchor-sha256: src/plan/target/xr_target_plan.c 81051eadeaacfba20da1ba84f994504d1927e825217a13ca517c675b16d22201
 anchor-sha256: src/plan/target/xr_target_plan_internal.h e4e69c596140608354c8100b2c60ec1f57d218105f30ed13f758b1503d4f8938
 anchor-sha256: src/plan/target/xr_target_builder.h 2281c6768da662fae0fbe52c5601ad78b63df1d4cc8bf4eabb8d8b7ff24ef282
-anchor-sha256: src/plan/target/xr_target_builder.c d27e05bc59d35c7f119648d308d4f9750d7c785845dd63cb217278279e9fcfa1
+anchor-sha256: src/plan/target/xr_target_builder.c bb3cec0051bdc56c47da81e7e9b42b77a51e681c98ffeef8c6851bdc4fd4ec4d
 anchor-sha256: src/plan/target/xr_target_call_abi_shape.h 158cf1b96a4668f648d4798d4db89d59215a3553c6ad47b15c24c073a22aecda
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 176e904160cc3e2b370609917a65b56ae55cb961343f18d686124730ab3d951a
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction.h 5caceef008f17a2f871efecd54ab37c311a41abbc6539b2b81eef6feb1aee8a0
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction.c a846c95862c5339f70028337cbaaf85172368339c48caf14b503f9409181df3a
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction_verify.c ed37eeab5dd84ead0a90baa5d541c04c8eb2076b0d4b6ff88ba2bd42126b5996
-anchor-sha256: src/plan/target/xr_target_verify.c 444de4dabe797fb3fa43d8d25f536c03f8a91d5d39e7279022ab962e1ae8ea04
+anchor-sha256: src/plan/target/xr_target_verify.c 96523f454803e5a68205dd14947a68fe3a3c2812aaa1cd1f0c6e8a3c58c14aac
 anchor-sha256: src/plan/format/xr_xtp_schema.h 9a98661028b7b74bd2a9f4a8a855ac7352daec86b895b32015f0e0477db60c8f
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
@@ -920,7 +931,7 @@ anchor-sha256: src/runtime/object/xarray.c a1b82a9df6dbfa060f3a3ac5b5a5dee200d51
 anchor-sha256: src/vm/xvm_dispatch_collection.inc.c 522f67fa27199b54d2c20942ff344e0b1a657635e28a4e45084737d603a635eb
 anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86fabdfa079523ca4fd504bd5badb491ee
 anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
-anchor-sha256: tests/unit/plan/test_target_plan.c 280acf9b548ec078bf92c88ee1ee0ab3623def2f95e073cd9c0830c69470833e
+anchor-sha256: tests/unit/plan/test_target_plan.c 7a7bab4eba2449f904eb875c48ab7e35cde9315a310bd0948728bb97750a85b7
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 1c09d9175acb0870f42515071a88cdf6beb1f28becdb179fd9b3435945bed680
@@ -937,12 +948,12 @@ anchor-sha256: src/aot/xr_leaf_value_product_program_emission.c f87d8434d1c40dd9
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 8b195e252864f428ade7e800039df4c3d1205af552c1e6365a86c599cdad1942
 anchor-sha256: tests/target-machine/compiler_archive_link_probe.c 08438b01702053fc9c1fe5a3b17e639262397221bd67351e3f0218eead0ca355
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 5083ff599e4045d8ed46b2bef3a720cc83cdcfa88bf0bd7903f29e17382e22ca
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 512b427eda13816f7b1a19ff46f1443608ded14d46118b0d4682cee559bb498d
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10e3219107cda157e37096f9f7a961e91ffbea78ea1fe
-anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 25e81479447c0e37a37b7dff98ff27c41b0751daf539bb796aeb3c06902cdc37
+anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 022a99ffcd7990f061e219356081f2f6f864a7f83b2b56c231f8a1fa16c5e6d0
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 14b7af26f15a2c9add8ec4fa7d58a782b4bdfda1f69a18904d668627d2238562
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c d816c4bbbb9baa3399944516d34865a86bfd2ce3561c2e7328c4d9262c53cebc
-anchor-sha256: src/aot/xi_cgen.c 3775dfcaab6c23dc6eb8e98db0df2ab8cda2160bbbe12f6d36d70089d387ef21
+anchor-sha256: src/aot/xi_cgen.c dda2d964f2575d104e57c242b0fa57e7d0b723a4c7afeafb85d01ebe6f335824
 anchor-sha256: src/aot/xi_cgen_call_resolve.inc.c a9c62500a1d1eb5bed34b8d31ec1a89816385c2d59f5bfe0263928b7d87d6b53
 anchor-sha256: src/aot/xi_cgen_import_helpers.inc.c 30076f1af20caef31c12ed09d9a7b99c81e9dbc0882090f4f043f306a8627bb3
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77

@@ -344,6 +344,20 @@ create or repair this authority. This does not authorize owned/moved Array
 parameters, SOURCE_EXPORT parameters, another container, or general pointer
 ABI inference.
 
+The same tagged-ref boundary also admits an exact source-class instance and
+permits one already-borrowed `ref` parameter to be forwarded to another exact
+direct-local `ref` parameter. A local place crosses from an owned-or-borrowed
+dynamic caller slot into the callee's borrowed raw-pointer slot; a forwarded
+place instead preserves the caller parameter's borrowed raw-pointer slot and
+passes that pointer through unchanged. The source operand must be the unique
+parameter row in the same function, carry parameter origin, match the callee
+type, mode, transfer, ownership, lifetime, escape and addressability exactly,
+and remain under the same source-class identity. CEmission distinguishes the
+two forms from their frozen caller representation, so CGen adds an address only
+for the local place and never adds a second pointer level to a forwarded ref.
+This grants no ref result, arbitrary pointer forwarding, cross-function alias,
+SOURCE_EXPORT ref, or non-source-class instance authority.
+
 The same generation binds two further exact direct-local `Array<T>` boundaries,
 and both stay in the tagged carrier instead of taking the pointer level a ref
 parameter needs. A borrowed by-value parameter shares the caller's allocation
@@ -919,9 +933,9 @@ anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 160ba76cf05aa8aa6f531646
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 650a3f6009010841b462567a86b104c00feb2112cc180905511da4f2f3040dff
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.h e95422b2cf84d1dc5e0a94e542344172e569660196da81ac2a9a79fc7d8123a4
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 8d187b7e0f3efb58d6061f13c0342b55ef0918ccafd6d8e9ec437afca8c613cd
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 5083ff599e4045d8ed46b2bef3a720cc83cdcfa88bf0bd7903f29e17382e22ca
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 512b427eda13816f7b1a19ff46f1443608ded14d46118b0d4682cee559bb498d
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10e3219107cda157e37096f9f7a961e91ffbea78ea1fe
-anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 25e81479447c0e37a37b7dff98ff27c41b0751daf539bb796aeb3c06902cdc37
+anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 022a99ffcd7990f061e219356081f2f6f864a7f83b2b56c231f8a1fa16c5e6d0
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 14b7af26f15a2c9add8ec4fa7d58a782b4bdfda1f69a18904d668627d2238562
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c d816c4bbbb9baa3399944516d34865a86bfd2ce3561c2e7328c4d9262c53cebc
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 3a1b50209d93f7e098b67a9b23b79175050b1bf4ad297060b93e7aad257ad950
@@ -947,7 +961,7 @@ anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c beb41376aa7a07437592b99ddce71
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 706460461cfc548a14773f320bc4764f034b5446a810246ee00d9a562061f379
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ea9c4ac67c31537fc6f41326f09481e702c1592f159946d54da89eae8a5a1baf
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: src/aot/xi_cgen.c 3775dfcaab6c23dc6eb8e98db0df2ab8cda2160bbbe12f6d36d70089d387ef21
+anchor-sha256: src/aot/xi_cgen.c dda2d964f2575d104e57c242b0fa57e7d0b723a4c7afeafb85d01ebe6f335824
 anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
 anchor-sha256: src/ir/xi_opt.c 416cd34f77c8efeea65f105eb4bf0ee2d82cba5a859a7e4e5983cc971aeab4e1
 anchor-sha256: src/aot/xrt_coll.h b94938ed2676895322929b84ff56185fdbda0755b62303f07add4a693c953998

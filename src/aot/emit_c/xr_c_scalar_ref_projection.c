@@ -157,12 +157,25 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_argument(
     const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
     const XrTargetCallRecord *call =
         argument && calls && argument->call < call_count ? &calls[argument->call] : NULL;
+    const XrSemanticPlan *semantic = plan ? xr_target_plan_semantic_plan(plan) : NULL;
+    const XrSemanticParameterRecord *parameter =
+        argument && semantic
+            ? xr_semantic_plan_parameter(semantic, argument->callee_parameter)
+            : NULL;
+    const XrSemanticTypeRecord *type =
+        parameter ? xr_semantic_plan_type(semantic, parameter->type) : NULL;
+    /* Claim only the scalar-ref type domain.  Tagged refs also carry
+     * REFERENCE/BORROW and use NONE as their element-storage discriminant for
+     * source classes and StringBuilder; claiming those rows here would turn a
+     * disjoint consumer family into a false malformed scalar projection. */
+    bool scalar_type_claim = type && type->kind == XR_KIND_INT && type->scalar_rep == XR_NATIVE_I64;
     bool claim = call &&
                  (call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
                   call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL) &&
                  argument->mode == XR_TARGET_CALL_REFERENCE &&
                  argument->ownership == XR_TARGET_CALL_BORROW &&
-                 argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE;
+                 argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+                 scalar_type_claim;
     if (!claim)
         return XR_C_SCALAR_REF_NOT_THIS_FAMILY;
     if (!plan || !argument || !out ||
