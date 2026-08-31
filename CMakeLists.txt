@@ -305,8 +305,8 @@ configure_file(
 # ============================================================================
 # XISA Code Generation (Python xisagen: .def → generated headers)
 # ============================================================================
-# Uses tools/xisagen/xisagen.py to regenerate headers from .def sources.
-# Generated headers are checked into git, so this only runs when .def changes.
+# Uses tools/xisagen/xisagen.py to verify checked-in projections on every
+# dependent build. The build edge is read-only and never regenerates sources.
 
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
@@ -516,6 +516,7 @@ add_custom_target(gen-xi-lowering
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
             ${CMAKE_SOURCE_DIR}
+            ${XRAY_XI_LOWERING_VALIDATION_STAMP}
     DEPENDS ${XRAY_XI_LOWERING_VALIDATION_STAMP}
             ${XRAY_GEN_XI_LOWERING_DEPS}
     COMMENT "xisagen: verifying checked-in Xi lowering projections"
@@ -2207,6 +2208,7 @@ if(BUILD_TESTS)
 
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
+    add_dependencies(test_xi_lowering_gen gen-xi-lowering)
 
     add_executable(xray_package_payload_fixture
         tests/benchmarks/compiler/global_evidence_cache/package_payload_fixture.c
@@ -4558,7 +4560,7 @@ if(BUILD_TESTS)
     set_tests_properties(xi_generator_self_test PROPERTIES
         LABELS "meta;xi;generator;target-machine"
         PROCESSORS 1
-        COST 230
+        COST 515
         TIMEOUT 600
     )
 
