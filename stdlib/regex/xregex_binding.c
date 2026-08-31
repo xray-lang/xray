@@ -105,7 +105,6 @@ static XrValue regex_match_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!inst)
         return xr_null();
     xr_rc_retain_value(args[2]);
-    xr_rc_retain_value(args[3]);
     xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_START, args[0]);
     xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_END, args[1]);
     xr_instance_set_field_fast(inst, XR_REGEX_MATCH_FIELD_TEXT, args[2]);
