@@ -58,6 +58,7 @@
 #include "../shared/xr_swiss_index.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_ops_gen.h"
+#include "../ir/xi_lowering_coverage_gen.h"
 #include "../ir/xi_opt.h"
 #include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
@@ -15809,3 +15810,17 @@ static bool cg_aot_stdlib_import_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
 }
 
 #include "xi_cgen_program_entry.inc.c"
+
+#define XI_LOWERING_ASSERT_CONSUMER_BINDING(                                      \
+    op_ident, op_name, owner_path, owner_symbol, witness_kind)                    \
+    _Static_assert(sizeof(&(owner_symbol)) > 0,                                   \
+                   "missing AOT-C lowering consumer owner: " op_name);
+XI_LOWERING_CONSUMER_BINDINGS(XI_LOWERING_ASSERT_CONSUMER_BINDING)
+#undef XI_LOWERING_ASSERT_CONSUMER_BINDING
+
+#define XI_LOWERING_ASSERT_CONSUMER_ROUTER_WITNESS(                               \
+    op_ident, op_name, router_path, router_symbol, owner_path, owner_symbol)       \
+    _Static_assert(sizeof(&(router_symbol)) > 0,                                  \
+                   "missing AOT-C lowering consumer router witness: " op_name);
+XI_LOWERING_CONSUMER_ROUTER_WITNESSES(XI_LOWERING_ASSERT_CONSUMER_ROUTER_WITNESS)
+#undef XI_LOWERING_ASSERT_CONSUMER_ROUTER_WITNESS

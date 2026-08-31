@@ -102,7 +102,7 @@ A change to these rules re-runs and, where the expected output moves, updates:
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def f3ac159a211d1f5ce8bc7d8202f31eaf413f91bfed0752ff28dda3ad84f1e5ea
+anchor-sha256: xisa/xi/ops.def fc58bc8c488be1de970490a1d288a3518a4b48e7586ed35b32d994599f80fabe
 anchor-sha256: src/ir/xi_tbaa.c 304e00919092f45875e76dc0d9e958bc706ecc8cf0f0b89ed80d51392276f6f4
 anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3f6f3a381d634c027
 anchor-sha256: src/ir/xi_opt_licm.c 06f7494501b87db38c4426987c7f8242451624d10686309e100f3ca66dac819f

@@ -521,6 +521,28 @@ static void test_backend_policy_generated_metadata(void) {
     assert(xi_op_is_backend_legal(XI_ERR_SET));
     assert(xi_op_is_backend_legal(XI_ERR_RETURN));
     assert(xi_op_is_backend_legal(XI_ERR_CATCH));
+    assert(xi_op_is_backend_legal(XI_CODEGEN_COMPILER_FENCE));
+    assert(xi_op_is_backend_legal(XI_GO));
+    assert(xi_op_is_backend_legal(XI_THREAD_SPAWN));
+    assert(xi_op_is_backend_legal(XI_AWAIT));
+    assert(xi_op_is_backend_legal(XI_CHAN_SEND));
+    assert(xi_op_is_backend_legal(XI_CHAN_RECV));
+    assert(xi_op_is_backend_legal(XI_CHAN_TRY_SEND));
+    assert(xi_op_is_backend_legal(XI_CHAN_TRY_RECV));
+    assert(xi_op_is_backend_legal(XI_CHAN_IS_CLOSED));
+    assert(xi_op_is_backend_legal(XI_TIME_AFTER));
+    assert(xi_op_is_backend_legal(XI_CHAN_TIMER_DISPOSE));
+    assert(xi_op_is_backend_legal(XI_SELECT_BLOCK));
+    assert(xi_op_is_backend_legal(XI_YIELD));
+    assert(xi_op_is_backend_legal(XI_GEN_YIELD));
+    assert(xi_op_is_backend_legal(XI_CHAN_NEW));
+    assert(xi_op_is_backend_legal(XI_SCOPE_ENTER));
+    assert(xi_op_is_backend_legal(XI_SCOPE_EXIT));
+    assert(xi_op_is_backend_legal(XI_CORO_OP));
+    assert(xi_op_is_backend_legal(XI_PHI));
+    assert(xi_op_is_backend_legal(XI_PAR_FOR));
+    assert(xi_op_is_backend_legal(XI_PAR_MAP));
+    assert(xi_op_is_backend_legal(XI_PAR_REDUCE));
     assert(!xi_op_is_backend_legal(XI_EXTRACT));
     assert(!xi_op_is_backend_legal(XI_MULTI_RET));
 
@@ -528,6 +550,10 @@ static void test_backend_policy_generated_metadata(void) {
     assert(!xi_op_is_backend_legal(XI_ITER_NEXT));
     assert(!xi_op_is_backend_legal(XI_ITER_VALID));
     assert(!xi_op_is_backend_legal(XI_REGEX_COMPILE));
+    assert(!xi_op_is_backend_legal(XI_TASK_GROUP_NEW));
+    assert(!xi_op_is_backend_legal(XI_TASK_GROUP_SPAWN_RANGE));
+    assert(!xi_op_is_backend_legal(XI_TASK_GROUP_AWAIT_REDUCE));
+    assert(!xi_op_is_backend_legal(XI_TASK_GROUP_JOIN));
 
     assert(xi_op_backend_rewrite(XI_ITER_NEW) == XI_GEN_BACKEND_REWRITE_BUILTIN);
     assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_NEW), "iter_new") == 0);

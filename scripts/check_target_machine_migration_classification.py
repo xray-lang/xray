@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import importlib.util
 import json
 import os
 import re
@@ -51,24 +52,74 @@ def is_exact_relative_path(value: Any) -> bool:
     )
 
 
-def semantic_owner_counts(root: Path, semantic: dict[str, Any], errors: list[str]) -> tuple[int, int]:
+def canonical_semantic_owner_inventory(root: Path) -> dict[str, Any]:
+    path = root / "scripts/target_machine_phase0.py"
+    spec = importlib.util.spec_from_file_location("migration_classification_phase0", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load canonical target-machine inventory from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.semantic_owner_inventory(root)
+
+
+def semantic_owner_counts(root: Path, semantic: dict[str, Any], errors: list[str],
+                          canonical: dict[str, Any] | None = None) -> tuple[int, int]:
     """Validate target applicability without conflating adapters with owners."""
     operations = semantic.get("operations")
     if not isinstance(operations, list) or semantic.get("operation_count") != len(operations):
         errors.append("semantic owner inventory is malformed")
         return 0, 0
+    if canonical is None:
+        try:
+            canonical = canonical_semantic_owner_inventory(root)
+        except (OSError, RuntimeError, AttributeError, ImportError, SystemExit) as error:
+            errors.append(f"canonical semantic owner projection failed: {error}")
+            return 0, 0
+    canonical_operations = canonical.get("operations")
+    if (not isinstance(canonical_operations, list) or
+            canonical.get("operation_count") != len(canonical_operations)):
+        errors.append("canonical semantic owner inventory is malformed")
+        return 0, 0
+    if semantic != canonical:
+        errors.append("semantic owner inventory differs from the exact Phase 0 projection")
+    canonical_by_id = {
+        row.get("operation_id"): row
+        for row in canonical_operations
+        if isinstance(row, dict) and isinstance(row.get("operation_id"), str)
+    }
+    actual_ids = {
+        row.get("operation_id")
+        for row in operations
+        if isinstance(row, dict) and isinstance(row.get("operation_id"), str)
+    }
+    if actual_ids != set(canonical_by_id):
+        errors.append("semantic owner operation identities differ from the canonical projection")
     adapter = "representation adapter"
     dual = 0
     shared = 0
     for row in operations:
         operation_id = row.get("operation_id", "<missing>")
-        if not operation_id or not row.get("migration_task"):
+        if not isinstance(operation_id, str) or not operation_id or not row.get("migration_task"):
             errors.append(f"{operation_id}: semantic owner row lacks identity or migration task")
+            continue
         targets = set(row.get("targets", []))
-        is_shared = row.get("family") == "shared-kernel"
+        is_shared = operation_id.startswith("shared.")
+        is_xi = operation_id.startswith("xi.")
+        shared_family = row.get("family") == "shared-kernel"
+        if is_shared != shared_family or not (is_shared or is_xi):
+            errors.append(f"{operation_id}: semantic owner family is not exact")
+            continue
+        canonical_row = canonical_by_id.get(operation_id)
+        if canonical_row is None:
+            errors.append(f"{operation_id}: operation is absent from the canonical projection")
+            continue
+        for label in ("family", "targets", "current_vm_owner", "current_aot_owner",
+                      "current_shared_owner", "future_semantic_owner"):
+            if row.get(label) != canonical_row.get(label):
+                errors.append(f"{operation_id}: {label} differs from the canonical projection")
         if is_shared:
             shared += 1
-        source_backed = is_shared or row.get("future_semantic_owner") != "SemanticPlan.operation_registry"
         vm_applicable = ("vm" if is_shared else "vm-bytecode") in targets
         aot_applicable = ("aot" if is_shared else "aot-c") in targets
         for label, applicable in (("current_vm_owner", vm_applicable),
@@ -77,12 +128,23 @@ def semantic_owner_counts(root: Path, semantic: dict[str, Any], errors: list[str
             if not applicable:
                 if value is not None:
                     errors.append(f"{operation_id}: inapplicable {label} must be null")
-            elif source_backed:
+            elif is_shared:
                 if value != adapter:
                     errors.append(f"{operation_id}: applicable {label} is not the governed adapter")
-            elif not isinstance(value, str) or not value or value == adapter:
-                errors.append(f"{operation_id}: generic {label} lacks its live executor owner")
-        if not source_backed and (vm_applicable or aot_applicable):
+            elif (
+                not isinstance(value, str)
+                or not value
+                or value != value.strip()
+                or value == adapter
+            ):
+                errors.append(
+                    f"{operation_id}: applicable {label} lacks a nonempty lowering owner"
+                )
+        if (
+            is_xi
+            and row.get("future_semantic_owner") == "SemanticPlan.operation_registry"
+            and (vm_applicable or aot_applicable)
+        ):
             dual += 1
         owner = row.get("current_shared_owner")
         if not is_exact_relative_path(owner) or not (root / owner).is_file():
@@ -90,7 +152,8 @@ def semantic_owner_counts(root: Path, semantic: dict[str, Any], errors: list[str
     return dual, shared
 
 
-def validate_inventory_rows(root: Path, data: dict[str, Any], errors: list[str]) -> dict[str, int]:
+def validate_inventory_rows(root: Path, data: dict[str, Any], errors: list[str],
+                            canonical: dict[str, Any] | None = None) -> dict[str, int]:
     discovery = data.get("discovery", {})
     counts: dict[str, int] = {}
 
@@ -117,7 +180,7 @@ def validate_inventory_rows(root: Path, data: dict[str, Any], errors: list[str])
         counts["aot_private_plan"] = len(rows) + len(mixed)
 
     semantic = read_json(root / discovery.get("semantic_owner_inventory", "<missing>"))
-    dual, shared = semantic_owner_counts(root, semantic, errors)
+    dual, shared = semantic_owner_counts(root, semantic, errors, canonical)
     counts["semantic_dual_owner"] = dual
     counts["shared_kernel"] = shared
     return counts
@@ -143,7 +206,8 @@ def install_blocks(root: Path) -> list[str]:
     return blocks
 
 
-def validate(root: Path, data: dict[str, Any]) -> tuple[list[str], dict[str, int]]:
+def validate(root: Path, data: dict[str, Any],
+             canonical: dict[str, Any] | None = None) -> tuple[list[str], dict[str, int]]:
     errors: list[str] = []
     if data.get("schema") != 1 or data.get("checker") != CHECKER:
         errors.append("manifest schema or checker identity is not exact")
@@ -299,7 +363,7 @@ def validate(root: Path, data: dict[str, Any]) -> tuple[list[str], dict[str, int
         errors.append("runtime generation lifecycle overclaims the future generation closure")
 
     try:
-        counts = validate_inventory_rows(root, data, errors)
+        counts = validate_inventory_rows(root, data, errors, canonical)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(str(error))
         counts = {}
@@ -307,7 +371,13 @@ def validate(root: Path, data: dict[str, Any]) -> tuple[list[str], dict[str, int
 
 
 def self_test(root: Path, data: dict[str, Any]) -> int:
-    errors, _ = validate(root, data)
+    try:
+        canonical = canonical_semantic_owner_inventory(root)
+    except (OSError, RuntimeError, AttributeError, ImportError, SystemExit) as error:
+        print(f"migration classification self-test: canonical projection failed: {error}",
+              file=sys.stderr)
+        return 1
+    errors, _ = validate(root, data, canonical)
     if errors:
         print("migration classification self-test: live manifest is invalid", file=sys.stderr)
         for error in errors:
@@ -316,16 +386,49 @@ def self_test(root: Path, data: dict[str, Any]) -> int:
 
     semantic = read_json(root / data["discovery"]["semantic_owner_inventory"])
     semantic_errors: list[str] = []
-    semantic_owner_counts(root, semantic, semantic_errors)
+    semantic_owner_counts(root, semantic, semantic_errors, canonical)
     if semantic_errors:
         print("migration classification self-test: semantic inventory is invalid", file=sys.stderr)
         return 1
+
+    xi_source_positive = next(
+        row for row in semantic["operations"]
+        if row.get("operation_id", "").startswith("xi.")
+        and "vm-bytecode" in row.get("targets", [])
+        and "aot-c" in row.get("targets", [])
+        and row.get("future_semantic_owner") != "SemanticPlan.operation_registry"
+    )
+    xi_generic_positive = next(
+        row for row in semantic["operations"]
+        if row.get("operation_id", "").startswith("xi.")
+        and "vm-bytecode" in row.get("targets", [])
+        and "aot-c" in row.get("targets", [])
+        and row.get("future_semantic_owner") == "SemanticPlan.operation_registry"
+    )
+    shared_positive = next(
+        row for row in semantic["operations"]
+        if row.get("operation_id", "").startswith("shared.")
+        and "vm" in row.get("targets", [])
+        and "aot" in row.get("targets", [])
+    )
+    positive = {
+        "operation_count": 3,
+        "operations": [
+            copy.deepcopy(xi_source_positive),
+            copy.deepcopy(xi_generic_positive),
+            copy.deepcopy(shared_positive),
+        ],
+    }
+    positive_errors: list[str] = []
+    semantic_owner_counts(root, positive, positive_errors, positive)
+    if positive_errors:
+        raise AssertionError("semantic owner positive classification escaped")
 
     def require_semantic_error(name: str, mutate) -> None:
         candidate = copy.deepcopy(semantic)
         mutate(candidate["operations"])
         found: list[str] = []
-        semantic_owner_counts(root, candidate, found)
+        semantic_owner_counts(root, candidate, found, canonical)
         if not found:
             raise AssertionError(f"semantic owner mutation escaped: {name}")
 
@@ -335,21 +438,102 @@ def self_test(root: Path, data: dict[str, Any]) -> int:
                    "vm-bytecode" not in item.get("targets", []))
         row["current_vm_owner"] = "representation adapter"
 
-    def erase_explicit_adapter(rows: list[dict[str, Any]]) -> None:
+    def erase_applicable_xi_owner(rows: list[dict[str, Any]]) -> None:
         row = next(item for item in rows
-                   if item.get("future_semantic_owner") != "SemanticPlan.operation_registry" and
+                   if item.get("operation_id", "").startswith("xi.") and
                    "vm-bytecode" in item.get("targets", []))
         row["current_vm_owner"] = None
 
-    def conflate_generic_adapter(rows: list[dict[str, Any]]) -> None:
+    def conflate_xi_adapter(rows: list[dict[str, Any]]) -> None:
         row = next(item for item in rows
-                   if item.get("future_semantic_owner") == "SemanticPlan.operation_registry" and
+                   if item.get("operation_id", "").startswith("xi.") and
                    "aot-c" in item.get("targets", []))
         row["current_aot_owner"] = "representation adapter"
 
+    def blank_xi_owner(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi.") and
+                   "aot-c" in item.get("targets", []))
+        row["current_aot_owner"] = ""
+
+    def whitespace_xi_owner(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi.") and
+                   "vm-bytecode" in item.get("targets", []))
+        row["current_vm_owner"] = "  "
+
+    def erase_shared_adapter(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("shared.") and
+                   "vm" in item.get("targets", []))
+        row["current_vm_owner"] = None
+
+    def replace_shared_adapter(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("shared.") and
+                   "aot" in item.get("targets", []))
+        row["current_aot_owner"] = "src/aot/xi_to_c_dispatch_gen.h::xicgen_add"
+
+    def bind_shared_inapplicable(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("shared.") and
+                   "vm" not in item.get("targets", []))
+        row["current_vm_owner"] = "representation adapter"
+
+    def mismatch_shared_family(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("shared."))
+        row["family"] = "not-shared-kernel"
+
+    def forge_missing_owner(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi.") and
+                   "aot-c" in item.get("targets", []))
+        row["current_aot_owner"] = "src/aot/does_not_exist.c::missing_owner"
+
+    def forge_traversal_owner(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi.") and
+                   "aot-c" in item.get("targets", []))
+        row["current_aot_owner"] = "../outside.c::missing_owner"
+
+    def forge_empty_symbol(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi.") and
+                   "aot-c" in item.get("targets", []))
+        row["current_aot_owner"] = "src/aot/xi_cgen.c::"
+
+    def forge_garbage_owner(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi.") and
+                   "vm-bytecode" in item.get("targets", []))
+        row["current_vm_owner"] = "garbage"
+
+    def mismatch_xi_namespace(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi."))
+        row["operation_id"] = "shared." + row["operation_id"].removeprefix("xi.")
+
+    def mismatch_xi_family(rows: list[dict[str, Any]]) -> None:
+        row = next(item for item in rows
+                   if item.get("operation_id", "").startswith("xi."))
+        row["family"] = "shared-kernel"
+
     require_semantic_error("inapplicable-binding", bind_inapplicable)
-    require_semantic_error("missing-explicit-adapter", erase_explicit_adapter)
-    require_semantic_error("generic-adapter-conflation", conflate_generic_adapter)
+    require_semantic_error("missing-xi-owner", erase_applicable_xi_owner)
+    require_semantic_error("xi-adapter-conflation", conflate_xi_adapter)
+    require_semantic_error("blank-xi-owner", blank_xi_owner)
+    require_semantic_error("whitespace-xi-owner", whitespace_xi_owner)
+    require_semantic_error("missing-shared-adapter", erase_shared_adapter)
+    require_semantic_error("wrong-shared-adapter", replace_shared_adapter)
+    require_semantic_error("shared-inapplicable-binding", bind_shared_inapplicable)
+    require_semantic_error("shared-family-mismatch", mismatch_shared_family)
+    require_semantic_error("missing-owner-path", forge_missing_owner)
+    require_semantic_error("traversal-owner-path", forge_traversal_owner)
+    require_semantic_error("empty-owner-symbol", forge_empty_symbol)
+    require_semantic_error("garbage-owner", forge_garbage_owner)
+    require_semantic_error("xi-namespace-mismatch", mismatch_xi_namespace)
+    require_semantic_error("xi-family-mismatch", mismatch_xi_family)
 
     mutations: list[tuple[str, Any]] = []
     wrong_category = copy.deepcopy(data)
@@ -428,7 +612,7 @@ def self_test(root: Path, data: dict[str, Any]) -> int:
                 break
         mutations.append(("survivor-only-residue-scan", scan_on_legacy))
     for name, mutation in mutations:
-        mutation_errors, _ = validate(root, mutation)
+        mutation_errors, _ = validate(root, mutation, canonical)
         if not mutation_errors:
             print(f"migration classification self-test missed {name}", file=sys.stderr)
             return 1

@@ -17,6 +17,8 @@ Usage:
   python3 xisagen.py xi-ops  <ops.def>     <output.h>
   <python-3.11+> xisagen.py semantic-ops <ops.def> <output-root>
   python3 xisagen.py xi-lowering <ops.def> <lowering.def> <output-root>
+  python3 xisagen.py xi-lowering-check <ops.def> <lowering.def> <output-root>
+  python3 xisagen.py xi-lowering-validate <ops.def> <lowering.def> <stamp> <depfile>
   python3 xisagen.py xi-verify <ops.def> <verifier.def> <output.h>
   python3 xisagen.py aot-rep <rep.def>     <output.h>
   python3 xisagen.py aot-abi <rep.def> <abi.def> <output.h>
@@ -33,10 +35,19 @@ import re
 import os
 import hashlib
 import json
-from dataclasses import dataclass, field
+import tempfile
+import functools
+import stat
+import errno
+import subprocess
+import time
+import shlex
+import shutil
+import contextlib
+import io
+from collections import Counter
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-
-import c_emission_rules
 
 # ============================================================
 # Common utilities
@@ -57,6 +68,19 @@ def write_file(path: str, content: str):
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content)
+
+def write_file_if_changed(path: str, content: str) -> bool:
+    """Publish generated text only when its canonical content changed."""
+    try:
+        with open(path, 'r', encoding='utf-8') as stream:
+            if stream.read() == content:
+                return False
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        die(f"cannot compare generated output {path}: {error}")
+    write_file(path, content)
+    return True
 
 # ============================================================
 # S-expression lexer + parser for .def files
@@ -1677,22 +1701,6 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    return NULL;')
     lines.append('}')
     lines.append('')
-    lines.append('static inline bool xi_generated_op_backend_legal(uint16_t op) {')
-    lines.append('    switch ((XiOp) op) {')
-    for op in ops:
-        if 'aot-c' in op.targets:
-            lines.append(f'        case XI_{op.ident}:')
-            lines.append('            return xi_generated_op_backend_rewrite(op) ==')
-            lines.append('                       XI_GEN_BACKEND_REWRITE_NONE &&')
-            lines.append('                   xi_generated_op_lowering_policy(op) !=')
-            lines.append('                       XI_GEN_LOWERING_VERIFIER_ONLY;')
-        else:
-            lines.append(f'        case XI_{op.ident}: return false;')
-    lines.append('        case XI_OP_COUNT: break;')
-    lines.append('    }')
-    lines.append('    return false;')
-    lines.append('}')
-    lines.append('')
     lines.append('static inline uint8_t xi_generated_op_escape_use(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for op in ops:
@@ -1787,6 +1795,12 @@ VALID_XI_LOWERING_TARGETS = {
     'aot-verify',
     'vm-bytecode',
 }
+
+VALID_XI_LOWERING_KEYS = {
+    ':match',
+    ':required-targets',
+    ':aot-c-consumer',
+} | {':' + target for target in VALID_XI_LOWERING_TARGETS}
 
 VALID_XI_LOWERING_TARGET_ATTRS = {
     'fresh-dst',
@@ -1942,6 +1956,61 @@ XI_AOT_C_TEMPLATE_COMPARE = {
 }
 
 @dataclass
+class XiConsumerRouterWitness:
+    source_path: str
+    symbol: str
+
+
+@dataclass(frozen=True)
+class XiConsumerActivationWitness:
+    source_path: str
+    caller: str
+    args: tuple[str, ...]
+    count: int
+
+
+@dataclass(frozen=True)
+class XiConsumerEmitterWitness:
+    source_path: str
+    symbol: str
+
+
+@dataclass(frozen=True)
+class XiConsumerPredicateWitness:
+    source_path: str
+    symbol: str
+    domain_source_path: str | None = None
+    domain_symbol: str | None = None
+
+
+@dataclass(frozen=True)
+class XiConsumerOutputCallWitness:
+    symbol: str
+    args: tuple[str, ...]
+    prefix: bool
+
+
+@dataclass(frozen=True)
+class XiConsumerOutputSequenceWitness:
+    calls: tuple[XiConsumerOutputCallWitness, ...]
+    count: int
+
+
+@dataclass
+class XiConsumerBinding:
+    source_path: str
+    symbol: str
+    witness_kind: str
+    routers: tuple[XiConsumerRouterWitness, ...] = ()
+    structural_family: str | None = None
+    structural_category: str | None = None
+    activations: tuple[XiConsumerActivationWitness, ...] = ()
+    output_sequences: tuple[XiConsumerOutputSequenceWitness, ...] = ()
+    emitters: tuple[XiConsumerEmitterWitness, ...] = ()
+    predicates: tuple[XiConsumerPredicateWitness, ...] = ()
+
+
+@dataclass
 class XiLoweringDef:
     op_name: str
     ident: str
@@ -1950,8 +2019,255 @@ class XiLoweringDef:
     target_drivers: dict
     target_rejects: dict
     target_attrs: dict
+    target_consumers: dict = field(default_factory=dict)
     match: SList | None = None
     template: str = 'custom'
+
+
+XI_C11_KEYWORDS = {
+    '_Alignas', '_Alignof', '_Atomic', '_Bool', '_Complex', '_Generic',
+    '_Imaginary', '_Noreturn', '_Static_assert', '_Thread_local', 'auto',
+    'break', 'case', 'char', 'const', 'continue', 'default', 'do', 'double',
+    'else', 'enum', 'extern', 'float', 'for', 'goto', 'if', 'inline', 'int',
+    'long', 'register', 'restrict', 'return', 'short', 'signed', 'sizeof',
+    'static', 'struct', 'switch', 'typedef', 'union', 'unsigned', 'void',
+    'volatile', 'while',
+}
+
+XI_CONSUMER_STRUCTURAL_CATEGORIES = {
+    'edge-parallel-copy',
+    'sync-storage',
+    'coroutine-frame-storage',
+    'coroutine-local-storage',
+}
+
+XI_CONSUMER_STRUCTURAL_FAMILIES = {
+    'phi': XI_CONSUMER_STRUCTURAL_CATEGORIES,
+}
+
+
+def _xi_consumer_c_ident(expr: SExpr, context: str) -> str:
+    value = _sexpr_atom_value(expr, context)
+    if (not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', value) or
+            value in XI_C11_KEYWORDS):
+        die(f"{context}: invalid C identifier '{value}'")
+    return value
+
+
+def _xi_consumer_source_path(expr: SExpr, context: str) -> str:
+    if not isinstance(expr, SAtom) or not expr.is_string:
+        die(f"{context}: consumer source path must be a string")
+    value = expr.str_value
+    path = Path(value)
+    if (not value or '\\' in value or path.is_absolute() or
+            path.as_posix() != value or any(part in {'', '.', '..'} for part in path.parts) or
+            any(char in value for char in '*?[]') or
+            len(path.parts) < 3 or path.parts[0:2] != ('src', 'aot') or
+            path.suffix != '.c'):
+        die(f"{context}: invalid canonical AOT consumer source path '{value}'")
+    return value
+
+
+def _xi_consumer_arg_list(expr: SExpr, context: str) -> tuple[str, ...]:
+    if (not isinstance(expr, SList) or not expr.children or
+            _sexpr_atom_value(expr.children[0], context) != 'args'):
+        die(f"{context}: expected (args ...)")
+    args = tuple(_sexpr_atom_value(value, context) for value in expr.children[1:])
+    if any(not value or value != value.strip() for value in args):
+        die(f"{context}: call arguments must be exact nonempty tokens")
+    return args
+
+
+def _xi_consumer_positive_count(expr: SExpr, context: str) -> int:
+    if (not isinstance(expr, SList) or len(expr.children) != 2 or
+            _sexpr_atom_value(expr.children[0], context) != 'count'):
+        die(f"{context}: expected (count positive-integer)")
+    value = _sexpr_atom_value(expr.children[1], context)
+    if not re.fullmatch(r'[1-9][0-9]*', value):
+        die(f"{context}: count must be a positive integer")
+    return int(value)
+
+
+def _xi_parse_activation_witness(expr: SList, context: str
+                                 ) -> XiConsumerActivationWitness:
+    if len(expr.children) != 5:
+        die(f"{context}: activation must name path, caller, args, and count")
+    return XiConsumerActivationWitness(
+        _xi_consumer_source_path(expr.children[1], context),
+        _xi_consumer_c_ident(expr.children[2], context),
+        _xi_consumer_arg_list(expr.children[3], context),
+        _xi_consumer_positive_count(expr.children[4], context),
+    )
+
+
+def _xi_parse_emitter_witness(expr: SList, context: str
+                              ) -> XiConsumerEmitterWitness:
+    if len(expr.children) != 3:
+        die(f"{context}: emitter must name one path and symbol")
+    return XiConsumerEmitterWitness(
+        _xi_consumer_source_path(expr.children[1], context),
+        _xi_consumer_c_ident(expr.children[2], context),
+    )
+
+
+def _xi_parse_predicate_witness(expr: SList, context: str
+                                ) -> XiConsumerPredicateWitness:
+    if len(expr.children) not in {3, 4}:
+        die(f"{context}: predicate must name one path and symbol with an "
+            "optional exact domain")
+    domain_source_path = None
+    domain_symbol = None
+    if len(expr.children) == 4:
+        domain = expr.children[3]
+        if (not isinstance(domain, SList) or len(domain.children) != 3 or
+                _sexpr_atom_value(domain.children[0], context) != 'domain'):
+            die(f"{context}: predicate domain must name one path and symbol")
+        domain_source_path = _xi_consumer_source_path(domain.children[1], context)
+        domain_symbol = _xi_consumer_c_ident(domain.children[2], context)
+    return XiConsumerPredicateWitness(
+        _xi_consumer_source_path(expr.children[1], context),
+        _xi_consumer_c_ident(expr.children[2], context),
+        domain_source_path,
+        domain_symbol,
+    )
+
+
+def _xi_parse_output_sequence_witness(expr: SList, context: str
+                                      ) -> XiConsumerOutputSequenceWitness:
+    if len(expr.children) < 3:
+        die(f"{context}: output-sequence requires call entries and a count")
+    calls: list[XiConsumerOutputCallWitness] = []
+    for call in expr.children[1:-1]:
+        if not isinstance(call, SList) or len(call.children) != 3:
+            die(f"{context}: output sequence call shape is not exact")
+        kind = _sexpr_atom_value(call.children[0], context)
+        if kind not in {'call', 'call-prefix'}:
+            die(f"{context}: output sequence uses unknown call kind '{kind}'")
+        calls.append(XiConsumerOutputCallWitness(
+            _xi_consumer_c_ident(call.children[1], context),
+            _xi_consumer_arg_list(call.children[2], context),
+            kind == 'call-prefix',
+        ))
+    if not calls:
+        die(f"{context}: output-sequence cannot be empty")
+    return XiConsumerOutputSequenceWitness(
+        tuple(calls), _xi_consumer_positive_count(expr.children[-1], context))
+
+
+def _xi_parse_consumer_binding(expr: SExpr, op_name: str,
+                               target: str) -> XiConsumerBinding:
+    context = f"{op_name}:{target}:consumer"
+    if not isinstance(expr, SList) or len(expr.children) < 4:
+        die(f"{context}: binding must be (binding \"path\" symbol witness ...)")
+    if _sexpr_atom_value(expr.children[0], context) != 'binding':
+        die(f"{context}: expected binding entry")
+    source_path = _xi_consumer_source_path(expr.children[1], context)
+    symbol = _xi_consumer_c_ident(expr.children[2], context)
+    witnesses = expr.children[3:]
+    if any(not isinstance(witness, SList) or not witness.children
+           for witness in witnesses):
+        die(f"{context}: binding witness must be selector, guarded-selector, "
+            "selected-by, structural, predicate, activation, or output-sequence")
+    kinds = [_sexpr_atom_value(witness.children[0], context) for witness in witnesses]
+    primary = [witness for witness, kind in zip(witnesses, kinds)
+               if kind in {'selector', 'guarded-selector', 'selected-by', 'structural'}]
+    activations = tuple(
+        _xi_parse_activation_witness(witness, context)
+        for witness, kind in zip(witnesses, kinds) if kind == 'activation')
+    emitters = tuple(
+        _xi_parse_emitter_witness(witness, context)
+        for witness, kind in zip(witnesses, kinds) if kind == 'emitter')
+    predicates = tuple(
+        _xi_parse_predicate_witness(witness, context)
+        for witness, kind in zip(witnesses, kinds) if kind == 'predicate')
+    output_sequences = tuple(
+        _xi_parse_output_sequence_witness(witness, context)
+        for witness, kind in zip(witnesses, kinds) if kind == 'output-sequence')
+    unknown = sorted(set(kinds) - {
+        'selector', 'guarded-selector', 'selected-by', 'structural',
+        'predicate', 'activation', 'emitter', 'output-sequence',
+    })
+    if unknown:
+        die(f"{context}: unknown binding witness kind(s): {', '.join(unknown)}")
+    primary_kinds = [_sexpr_atom_value(witness.children[0], context)
+                     for witness in primary]
+    if primary_kinds == ['selector']:
+        if len(primary[0].children) != 1:
+            die(f"{context}: selector witness takes no arguments")
+        binding = XiConsumerBinding(source_path, symbol, 'selector')
+    elif primary_kinds == ['guarded-selector']:
+        if len(primary[0].children) != 1:
+            die(f"{context}: guarded-selector witness takes no arguments")
+        binding = XiConsumerBinding(source_path, symbol, 'guarded-selector')
+    elif primary_kinds and set(primary_kinds) == {'selected-by'}:
+        routers = []
+        for witness in primary:
+            if len(witness.children) != 3:
+                die(f"{context}: selected-by witness must name one router path and symbol")
+            routers.append(XiConsumerRouterWitness(
+                _xi_consumer_source_path(witness.children[1], context),
+                _xi_consumer_c_ident(witness.children[2], context),
+            ))
+        identities = [(router.source_path, router.symbol) for router in routers]
+        if len(set(identities)) != len(identities):
+            die(f"{context}: duplicate selected-by router witness")
+        binding = XiConsumerBinding(source_path, symbol, 'selected-by', tuple(routers))
+    elif primary_kinds == ['structural']:
+        witness = primary[0]
+        if len(witness.children) != 3:
+            die(f"{context}: structural witness must name a family and category")
+        family = _sexpr_atom_value(witness.children[1], context)
+        category = _sexpr_atom_value(witness.children[2], context)
+        allowed_categories = XI_CONSUMER_STRUCTURAL_FAMILIES.get(family)
+        if allowed_categories is None or op_name != 'xi.' + family:
+            die(f"{context}: structural family '{family}' does not match the Xi operation")
+        if category not in allowed_categories:
+            die(f"{context}: unknown structural witness category '{category}'")
+        binding = XiConsumerBinding(source_path, symbol, 'structural', (), family, category)
+    else:
+        die(f"{context}: consumer binding mixes incompatible primary witness kinds")
+    if len(set(activations)) != len(activations):
+        die(f"{context}: duplicate activation witness")
+    if len(set(emitters)) != len(emitters):
+        die(f"{context}: duplicate emitter witness")
+    if len(set(predicates)) != len(predicates):
+        die(f"{context}: duplicate predicate witness")
+    if binding.witness_kind in {'selector', 'guarded-selector'}:
+        if not emitters:
+            die(f"{context}: selector witness requires an exact terminal emitter")
+    elif emitters:
+        die(f"{context}: emitter witness is only valid with selector ownership")
+    if binding.witness_kind != 'selector' and predicates:
+        die(f"{context}: predicate witness is only valid with selector ownership")
+    if len(set(output_sequences)) != len(output_sequences):
+        die(f"{context}: duplicate output-sequence witness")
+    binding.activations = activations
+    binding.output_sequences = output_sequences
+    binding.emitters = emitters
+    binding.predicates = predicates
+    return binding
+
+
+def _xi_parse_consumer(expr: SList, op_name: str,
+                       target: str) -> list[XiConsumerBinding]:
+    context = f"{op_name}:{target}:consumer"
+    if len(expr.children) < 3:
+        die(f"{context}: expected (consumer xi-cgen-direct (binding ...))")
+    consumer = _sexpr_atom_value(expr.children[1], context)
+    if consumer != 'xi-cgen-direct':
+        die(f"{context}: unknown direct consumer '{consumer}'")
+    bindings = [
+        _xi_parse_consumer_binding(binding, op_name, target)
+        for binding in expr.children[2:]
+    ]
+    identities = [(binding.source_path, binding.symbol) for binding in bindings]
+    if len(set(identities)) != len(identities):
+        die(f"{context}: duplicate consumer owner binding")
+    structural = [binding.structural_category for binding in bindings
+                  if binding.witness_kind == 'structural']
+    if len(set(structural)) != len(structural):
+        die(f"{context}: duplicate structural witness category")
+    return bindings
 
 
 def _xi_lowering_parse_bool_attr(value: SExpr, context: str) -> bool:
@@ -1964,15 +2280,24 @@ def _xi_lowering_parse_bool_attr(value: SExpr, context: str) -> bool:
 
 
 def _xi_lowering_target_entry(form: SList, target: str,
-                              op_name: str) -> tuple[str | None, bool, dict]:
-    value = _xi_get_kw(form, ':' + target)
+                              op_name: str) -> tuple[str | None, list, dict]:
+    target_key = ':' + target
+    if sum(1 for item in form.children
+           if isinstance(item, SAtom) and item.value == target_key) > 1:
+        die(f"{op_name}:{target}: duplicate target entry")
+    value = _xi_get_kw(form, target_key)
     if value is None:
-        return None, False, {}
+        return None, [], {}
     if not isinstance(value, SList) or len(value.children) < 2:
-        die(f"{op_name}:{target}: expected (driver name) or (reject name)")
+        die(f"{op_name}:{target}: expected (driver name), (reject name), or "
+            "(consumer xi-cgen-direct (binding ...))")
     kind = _sexpr_atom_value(value.children[0], f"{op_name}:{target}")
-    if kind not in {'driver', 'reject'}:
-        die(f"{op_name}:{target}: expected driver or reject entry")
+    if kind not in {'driver', 'reject', 'consumer'}:
+        die(f"{op_name}:{target}: expected driver, reject, or consumer entry")
+    if kind == 'consumer':
+        if target != 'aot-c':
+            die(f"{op_name}:{target}: direct consumer is only valid for aot-c")
+        return kind, _xi_parse_consumer(value, op_name, target), {}
     attrs = {}
     if len(value.children) > 2:
         extras = value.children[2:]
@@ -1991,22 +2316,39 @@ def _xi_lowering_target_entry(form: SList, target: str,
                                                       f"{op_name}:{target}:{key}")
     if any(attrs.values()) and kind == 'reject':
         die(f"{op_name}:{target}: rejected target cannot require VM target attributes")
-    return _sexpr_atom_value(value.children[1], f"{op_name}:{target}"), kind == 'reject', attrs
+    return kind, [_sexpr_atom_value(value.children[1], f"{op_name}:{target}")], attrs
 
 
-def _xi_lowering_target_entries(form: SList, op_name: str) -> tuple[dict, dict, dict]:
+def _xi_lowering_target_entries(form: SList, op_name: str) -> tuple[dict, dict, dict, dict]:
     drivers = {}
     rejects = {}
+    consumers = {}
     attrs = {}
     for target in sorted(VALID_XI_LOWERING_TARGETS):
-        driver, reject, target_attrs = _xi_lowering_target_entry(form, target, op_name)
-        if driver is not None:
-            drivers[target] = driver
-            if target_attrs:
-                attrs[target] = target_attrs
-            if reject:
-                rejects[target] = driver
-    return drivers, rejects, attrs
+        kind, names, target_attrs = _xi_lowering_target_entry(form, target, op_name)
+        if kind is None:
+            continue
+        if kind == 'driver':
+            drivers[target] = names[0]
+        elif kind == 'reject':
+            rejects[target] = names[0]
+        else:
+            consumers[target] = names
+        if target_attrs:
+            attrs[target] = target_attrs
+    supplemental = _xi_get_kw(form, ':aot-c-consumer')
+    if supplemental is not None:
+        if 'aot-c' in consumers:
+            die(f"{op_name}:aot-c-consumer: duplicate direct consumer authority")
+        if (not isinstance(supplemental, SList) or
+                not supplemental.children or
+                _sexpr_atom_value(supplemental.children[0],
+                                  f"{op_name}:aot-c-consumer") != 'consumer'):
+            die(f"{op_name}:aot-c-consumer: expected "
+                "(consumer xi-cgen-direct (binding ...))")
+        consumers['aot-c'] = _xi_parse_consumer(
+            supplemental, op_name, 'aot-c')
+    return drivers, rejects, consumers, attrs
 
 
 def _xi_lowering_template_from_match(match: SList | None, op_name: str) -> str:
@@ -2018,6 +2360,69 @@ def _xi_lowering_template_from_match(match: SList | None, op_name: str) -> str:
     return template
 
 
+def _xi_normalized_lowering_targets(targets) -> set[str]:
+    return {
+        'aot-c' if target == 'aot-c-stmt' else target
+        for target in targets
+    }
+
+
+def _xi_canonical_lowering_target(target: str) -> str:
+    return 'aot-c' if target == 'aot-c-stmt' else target
+
+
+def _xi_validate_closed_lowering_form(form: SList, op_name: str) -> None:
+    fields = form.children[2:]
+    if len(fields) % 2 != 0:
+        die(f"{op_name}: lowering fields must be exact keyword/value pairs")
+    seen: set[str] = set()
+    for index in range(0, len(fields), 2):
+        key = fields[index]
+        if (not isinstance(key, SAtom) or key.is_string or
+                not key.value.startswith(':')):
+            die(f"{op_name}: lowering field key must be a non-string keyword")
+        if key.value not in VALID_XI_LOWERING_KEYS:
+            die(f"{op_name}: unknown lowering field '{key.value}'")
+        if key.value in seen:
+            die(f"{op_name}: duplicate lowering field '{key.value}'")
+        seen.add(key.value)
+
+
+def _xi_validate_canonical_target_ownership(
+        op_name: str, required: list[str], drivers: dict[str, str],
+        rejects: dict[str, str], consumers: dict[str, list[XiConsumerBinding]]) -> None:
+    normalized_required = [_xi_canonical_lowering_target(target) for target in required]
+    if len(normalized_required) != len(set(normalized_required)):
+        die(f"{op_name}: required targets contain a canonical target collision")
+    owners: dict[str, list[str]] = {}
+    for kind, entries in (
+            ('driver', drivers), ('reject', rejects), ('consumer', consumers)):
+        for target in entries:
+            canonical = _xi_canonical_lowering_target(target)
+            owners.setdefault(canonical, []).append(f"{target}:{kind}")
+    collisions = {target: entries for target, entries in owners.items()
+                  if len(entries) > 1}
+    for target, entries in list(collisions.items()):
+        if target == 'aot-c' and set(entries) in (
+                {'aot-c:driver', 'aot-c:consumer'},
+                {'aot-c-stmt:driver', 'aot-c:consumer'}):
+            del collisions[target]
+    if collisions:
+        details = '; '.join(
+            f"{target}=" + ','.join(entries)
+            for target, entries in sorted(collisions.items())
+        )
+        die(f"{op_name}: canonical lowering target has multiple authorities: {details}")
+
+
+def _xi_expected_stmt_driver(op_name: str) -> str:
+    suffix = op_name.removeprefix('xi.').replace('.', '_').replace('-', '_')
+    expected = 'xicgen_stmt_' + suffix
+    if not re.fullmatch(r'[a-z_][a-z0-9_]*', expected):
+        die(f"{op_name}: cannot derive a canonical AOT statement driver")
+    return expected
+
+
 def _xi_validate_lowering_policy(entries: list[XiLoweringDef], ops: list[XiOpDef],
                                  path: str) -> None:
     entry_names = {entry.op_name for entry in entries}
@@ -2025,20 +2430,32 @@ def _xi_validate_lowering_policy(entries: list[XiLoweringDef], ops: list[XiOpDef
                if op.lowering_policy == 'generated' and op.name not in entry_names]
     if missing:
         die(f"{path}: missing lowering entry for generated Xi op(s): {', '.join(missing)}")
+    missing_special = [op.name for op in ops
+                       if op.lowering_policy == 'special' and 'aot-c' in op.targets and
+                       op.name not in entry_names]
+    if missing_special:
+        die(f"{path}: missing direct consumer entry for special AOT Xi op(s): "
+            f"{', '.join(missing_special)}")
     op_by_name = {op.name: op for op in ops}
     for entry in entries:
         op = op_by_name[entry.op_name]
-        if op.lowering_policy != 'generated':
+        if op.lowering_policy not in {'generated', 'special'}:
             die(f"{path}: Xi op '{entry.op_name}' has lowering-policy "
                 f"'{op.lowering_policy}' but also has a lowering entry")
+        if op.lowering_policy == 'special':
+            if (set(entry.target_consumers) != {'aot-c'} or entry.target_drivers or
+                    entry.target_rejects or entry.target_attrs or
+                    entry.required_targets != ['aot-c']):
+                die(f"{path}: special AOT Xi op '{entry.op_name}' must have exactly one "
+                    "required aot-c direct consumer target")
+            continue
     for entry in entries:
         op = op_by_name[entry.op_name]
+        if op.lowering_policy == 'special':
+            continue
         op_targets = {target for target in op.targets if target != 'aot-verify'}
-        lowering_targets = {
-            'aot-c' if target == 'aot-c-stmt' else target
-            for target in entry.targets
-            if target != 'aot-verify'
-        }
+        lowering_targets = _xi_normalized_lowering_targets(
+            target for target in entry.targets if target != 'aot-verify')
         if op_targets != lowering_targets:
             expected = ', '.join(sorted(op_targets)) if op_targets else 'none'
             actual = ', '.join(sorted(lowering_targets)) if lowering_targets else 'none'
@@ -2066,13 +2483,21 @@ def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') 
         if op_name in seen:
             die(f"{path}: duplicate lowering entry for '{op_name}'")
         seen.add(op_name)
+        _xi_validate_closed_lowering_form(form, op_name)
         required = _xi_parse_atom_list(_xi_get_kw_list(form, ':required-targets'),
                                       f"{op_name}:required-targets")
         for target in required:
             if target not in VALID_XI_LOWERING_TARGETS:
                 die(f"{path}: lowering '{op_name}' uses unknown required target '{target}'")
-        target_drivers, target_rejects, target_attrs = _xi_lowering_target_entries(form, op_name)
-        targets = sorted(target_drivers.keys())
+        target_drivers, target_rejects, target_consumers, target_attrs = \
+            _xi_lowering_target_entries(form, op_name)
+        _xi_validate_canonical_target_ownership(
+            op_name, required, target_drivers, target_rejects, target_consumers)
+        stmt_driver = target_drivers.get('aot-c-stmt')
+        if stmt_driver is not None and stmt_driver != _xi_expected_stmt_driver(op_name):
+            die(f"{path}: {op_name}:aot-c-stmt driver must be "
+                f"{_xi_expected_stmt_driver(op_name)}, got {stmt_driver}")
+        targets = sorted(set(target_drivers) | set(target_rejects) | set(target_consumers))
         if not targets:
             die(f"{path}: lowering '{op_name}' has no target emit")
         missing = [target for target in required if target not in targets]
@@ -2084,18 +2509,2558 @@ def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') 
                                      targets=targets, target_drivers=target_drivers,
                                      target_rejects=target_rejects,
                                      target_attrs=target_attrs,
+                                     target_consumers=target_consumers,
                                      match=match, template=template))
     _xi_validate_lowering_policy(entries, ops, path)
     return entries
 
 
-def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
+@functools.lru_cache(maxsize=16384)
+def _xi_c_source_without_literals(text: str, *, blank_preprocessor: bool = True) -> str:
+    """Blank C comments and literals while preserving source layout."""
+    chars = list(text)
+    i = 0
+    state = 'normal'
+    while i < len(chars):
+        current = chars[i]
+        following = chars[i + 1] if i + 1 < len(chars) else ''
+        if state == 'normal':
+            if current == '/' and following == '/':
+                chars[i] = chars[i + 1] = ' '
+                i += 2
+                state = 'line-comment'
+                continue
+            if current == '/' and following == '*':
+                chars[i] = chars[i + 1] = ' '
+                i += 2
+                state = 'block-comment'
+                continue
+            if current == '"':
+                chars[i] = ' '
+                state = 'string'
+            elif current == "'":
+                chars[i] = ' '
+                state = 'char'
+        elif state == 'line-comment':
+            if current == '\n':
+                state = 'normal'
+            else:
+                chars[i] = ' '
+        elif state == 'block-comment':
+            if current == '*' and following == '/':
+                chars[i] = chars[i + 1] = ' '
+                i += 2
+                state = 'normal'
+                continue
+            if current != '\n':
+                chars[i] = ' '
+        elif state in {'string', 'char'}:
+            delimiter = '"' if state == 'string' else "'"
+            if current == '\\' and following:
+                if current != '\n':
+                    chars[i] = ' '
+                if following != '\n':
+                    chars[i + 1] = ' '
+                i += 2
+                continue
+            if current == delimiter:
+                chars[i] = ' '
+                state = 'normal'
+            elif current != '\n':
+                chars[i] = ' '
+        i += 1
+    sanitized = ''.join(chars)
+    if not blank_preprocessor:
+        return sanitized
+    lines = sanitized.splitlines(keepends=True)
+    continuation = False
+    for index, line in enumerate(lines):
+        stripped = line.lstrip()
+        if continuation or stripped.startswith('#'):
+            continuation = line.rstrip('\r\n').endswith('\\')
+            lines[index] = ''.join('\n' if char == '\n' else ' ' for char in line)
+        else:
+            continuation = False
+    return ''.join(lines)
+
+
+def _xi_matching_delimiter(text: str, start: int, opening: str,
+                           closing: str) -> int | None:
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == opening:
+            depth += 1
+        elif text[index] == closing:
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+@functools.lru_cache(maxsize=512)
+def _xi_c_file_scope_function_body_ranges(text: str) -> dict[str, list[tuple[int, int]]]:
+    source = _xi_c_source_without_literals(text)
+    brace_depth = 0
+    depths = [0] * (len(source) + 1)
+    for index, char in enumerate(source):
+        depths[index] = brace_depth
+        if char == '{':
+            brace_depth += 1
+        elif char == '}':
+            brace_depth = max(0, brace_depth - 1)
+    ranges = {}
+    for match in re.finditer(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', source):
+        if depths[match.start()] != 0:
+            continue
+        symbol = match.group(1)
+        open_paren = source.find('(', match.start())
+        close_paren = _xi_matching_delimiter(source, open_paren, '(', ')')
+        if close_paren is None:
+            continue
+        cursor = close_paren + 1
+        while cursor < len(source) and source[cursor].isspace():
+            cursor += 1
+        while cursor < len(source) and source[cursor] not in '{;':
+            cursor += 1
+        if cursor >= len(source) or source[cursor] != '{':
+            continue
+        close_brace = _xi_matching_delimiter(source, cursor, '{', '}')
+        if close_brace is None:
+            continue
+        ranges.setdefault(symbol, []).append((cursor + 1, close_brace))
+    return ranges
+
+
+def _xi_c_file_scope_function_bodies(text: str) -> dict[str, list[str]]:
+    source = _xi_c_source_without_literals(text)
+    return {
+        symbol: [source[start:end] for start, end in ranges]
+        for symbol, ranges in _xi_c_file_scope_function_body_ranges(text).items()
+    }
+
+
+@functools.lru_cache(maxsize=256)
+def _xi_c_file_scope_function_value_parameters(text: str) -> dict[str, set[str]]:
+    """Return XiValue pointer parameter names for file-scope definitions."""
+    source = _xi_c_source_without_literals(text)
+    depths = _xi_brace_depths(source)
+    parameters: dict[str, set[str]] = {}
+    for match in re.finditer(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', source):
+        if depths[match.start()] != 0:
+            continue
+        symbol = match.group(1)
+        open_paren = source.find('(', match.start())
+        close_paren = _xi_matching_delimiter(source, open_paren, '(', ')')
+        if close_paren is None:
+            continue
+        cursor = close_paren + 1
+        while cursor < len(source) and source[cursor].isspace():
+            cursor += 1
+        while cursor < len(source) and source[cursor] not in '{;':
+            cursor += 1
+        if cursor >= len(source) or source[cursor] != '{':
+            continue
+        for parameter in _xi_split_c_arguments(
+                source[open_paren + 1:close_paren]):
+            value = re.fullmatch(
+                r'(?:const)?XiValue(?:const)?\*+(?:const)?'
+                r'([A-Za-z_][A-Za-z0-9_]*)',
+                _xi_normalize_c_expr(parameter))
+            if value is not None:
+                parameters.setdefault(symbol, set()).add(value.group(1))
+    return parameters
+
+
+def _xi_conditional_preprocessor_depth(text: str, end: int) -> int:
+    sanitized = _xi_c_source_without_literals(text, blank_preprocessor=False)[:end]
+    depth = 0
+    for line in sanitized.splitlines():
+        match = re.match(r'^\s*#\s*(if|ifdef|ifndef|endif)\b', line)
+        if not match:
+            continue
+        if match.group(1) == 'endif':
+            depth = max(0, depth - 1)
+        else:
+            depth += 1
+    return depth
+
+
+def _xi_c_function_bodies(text: str, symbol: str) -> list[str]:
+    return _xi_c_file_scope_function_bodies(text).get(symbol, [])
+
+
+def _xi_c_call_present(text: str, symbol: str) -> bool:
+    return re.search(rf'\b{re.escape(symbol)}\s*\(', text) is not None
+
+
+def _xi_c_call_count(text: str, symbol: str) -> int:
+    return len(re.findall(rf'\b{re.escape(symbol)}\s*\(', text))
+
+
+def _xi_normalize_c_expr(text: str) -> str:
+    return re.sub(r'\s+', '', text)
+
+
+def _xi_split_c_arguments(text: str) -> tuple[str, ...]:
+    if not text.strip():
+        return ()
+    parts = []
+    start = 0
+    paren = bracket = brace = 0
+    for index, char in enumerate(text):
+        if char == '(':
+            paren += 1
+        elif char == ')':
+            paren = max(0, paren - 1)
+        elif char == '[':
+            bracket += 1
+        elif char == ']':
+            bracket = max(0, bracket - 1)
+        elif char == '{':
+            brace += 1
+        elif char == '}':
+            brace = max(0, brace - 1)
+        elif char == ',' and paren == 0 and bracket == 0 and brace == 0:
+            parts.append(_xi_normalize_c_expr(text[start:index]))
+            start = index + 1
+    parts.append(_xi_normalize_c_expr(text[start:]))
+    return tuple(parts)
+
+
+def _xi_c_call_records(text: str, symbol: str
+                       ) -> list[tuple[int, int, tuple[str, ...]]]:
+    records = []
+    for match in re.finditer(rf'\b{re.escape(symbol)}\s*\(', text):
+        open_paren = text.find('(', match.start())
+        close_paren = _xi_matching_delimiter(text, open_paren, '(', ')')
+        if close_paren is None:
+            continue
+        records.append((match.start(), close_paren + 1,
+                        _xi_split_c_arguments(text[open_paren + 1:close_paren])))
+    return records
+
+
+def _xi_exact_guard_call_count(body: str, symbol: str,
+                               expected_args: tuple[str, ...]) -> int:
+    expected = _xi_normalize_c_expr(symbol + '(' + ','.join(expected_args) + ')')
+    return sum(
+        1 for _, _, condition, _, _ in _xi_if_statement_records(body)
+        if _xi_normalize_c_expr(condition) == expected
+    )
+
+
+def _xi_brace_depths(text: str) -> list[int]:
+    brace_depth = 0
+    depths = [0] * (len(text) + 1)
+    for index, char in enumerate(text):
+        depths[index] = brace_depth
+        if char == '{':
+            brace_depth += 1
+        elif char == '}':
+            brace_depth = max(0, brace_depth - 1)
+    return depths
+
+
+def _xi_top_level_match_positions(text: str, pattern: str) -> list[int]:
+    depths = _xi_brace_depths(text)
+    return [match.start() for match in re.finditer(pattern, text)
+            if depths[match.start()] == 0]
+
+
+def _xi_top_level_bare_call_positions(text: str, callee_pattern: str) -> list[int]:
+    depths = _xi_brace_depths(text)
+    positions = []
+    pattern = rf'(?:^|[;}}])\s*(?P<call>\b(?:{callee_pattern})\s*\()'
+    for match in re.finditer(pattern, text):
+        position = match.start('call')
+        if depths[position] == 0:
+            positions.append(position)
+    return positions
+
+
+def _xi_top_level_call_present(text: str, symbol: str) -> bool:
+    return bool(_xi_top_level_bare_call_positions(text, re.escape(symbol)))
+
+
+def _xi_top_level_bare_return_positions(text: str, expression: str) -> list[int]:
+    depths = _xi_brace_depths(text)
+    positions = []
+    pattern = rf'(?:^|[;}}])\s*(?P<return>\breturn{expression}\s*;)'
+    for match in re.finditer(pattern, text):
+        position = match.start('return')
+        if depths[position] == 0:
+            positions.append(position)
+    return positions
+
+
+def _xi_top_level_any_return_positions(text: str) -> list[int]:
+    return _xi_top_level_bare_return_positions(text, r'(?:\s+[^;]+)?')
+
+
+def _xi_top_level_call_reachable(text: str, symbol: str) -> bool:
+    calls = _xi_top_level_bare_call_positions(text, re.escape(symbol))
+    returns = _xi_top_level_any_return_positions(text)
+    return any(not any(ret < call for ret in returns) for call in calls)
+
+
+def _xi_top_level_call_precedes_return(text: str, symbol: str) -> bool:
+    calls = _xi_top_level_bare_call_positions(text, re.escape(symbol))
+    all_returns = _xi_top_level_any_return_positions(text)
+    returns = _xi_top_level_bare_return_positions(text, r'(?:\s+true)?')
+    return any(not any(ret < call for ret in all_returns) and
+               any(call < ret for ret in returns) for call in calls)
+
+
+def _xi_call_record_reachable(text: str, position: int,
+                              terminators: set[str]) -> bool:
+    """Reject calls preceded by an unconditional stop in their lexical branch."""
+    depths = _xi_brace_depths(text)
+    target_depth = depths[position]
+    block_start = 0
+    for index in range(position - 1, -1, -1):
+        if text[index] == '{' and depths[index] + 1 == target_depth:
+            block_start = index + 1
+            break
+    prefix = text[block_start:position]
+    label_positions = _xi_top_level_match_positions(
+        prefix, r'(?:^|[;}]|\n)\s*(?:case\b[^:]*|default)\s*:')
+    if label_positions:
+        label_start = label_positions[-1]
+        colon = prefix.find(':', label_start)
+        if colon >= 0:
+            prefix = prefix[colon + 1:]
+    if _xi_top_level_any_return_positions(prefix):
+        return False
+    return not any(
+        _xi_top_level_bare_call_positions(prefix, re.escape(terminator))
+        for terminator in terminators)
+
+
+def _xi_reachable_activation_callers(
+        aot_functions: tuple[tuple[str, str, str], ...],
+        activation_callers: set[tuple[str, str]],
+        terminators: set[str]) -> set[tuple[str, str]]:
+    """Trace declared activation callers from the two CGen translation roots."""
+    bodies = {(source_path, symbol): body
+              for source_path, symbol, body in aot_functions}
+    roots = {key for key in activation_callers
+             if key[1] in {'xi_cgen_func', 'xi_cgen_coro_func'}}
+    reachable = set(roots)
+    pending = list(sorted(roots))
+    while pending:
+        body = bodies[pending.pop()]
+        for key in sorted(activation_callers - reachable):
+            calls = _xi_c_call_records(body, key[1])
+            if any(_xi_call_record_reachable(body, position, terminators)
+                   for position, _, _ in calls):
+                reachable.add(key)
+                pending.append(key)
+    return reachable
+
+
+def _xi_selector_matches(body: str, selector: str) -> list[tuple[int, int]]:
+    root_value = r'\bv\s*->\s*op\b'
+    selector_token = rf'\b{re.escape(selector)}\b'
+    patterns = [
+        rf'\bcase\s+{selector_token}\s*:',
+        rf'{root_value}\s*==\s*{selector_token}',
+        rf'{selector_token}\s*==\s*{root_value}',
+    ]
+    matches = []
+    for pattern in patterns:
+        matches.extend((match.start(), match.end()) for match in re.finditer(pattern, body))
+    return sorted(set(matches))
+
+
+def _xi_switch_statements(text: str) -> list[tuple[str, str]]:
+    brace_depth = 0
+    depths = [0] * (len(text) + 1)
+    for index, char in enumerate(text):
+        depths[index] = brace_depth
+        if char == '{':
+            brace_depth += 1
+        elif char == '}':
+            brace_depth = max(0, brace_depth - 1)
+    switches = []
+    for match in re.finditer(r'\bswitch\s*\(', text):
+        if depths[match.start()] != 0:
+            continue
+        open_paren = text.find('(', match.start())
+        close_paren = _xi_matching_delimiter(text, open_paren, '(', ')')
+        if close_paren is None:
+            continue
+        cursor = close_paren + 1
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if cursor >= len(text) or text[cursor] != '{':
+            continue
+        close_brace = _xi_matching_delimiter(text, cursor, '{', '}')
+        if close_brace is None:
+            continue
+        switches.append((text[open_paren + 1:close_paren],
+                         text[cursor + 1:close_brace]))
+    return switches
+
+
+def _xi_switch_case_branches(body: str) -> dict[str, list[str]]:
+    brace_depth = 0
+    depths = [0] * (len(body) + 1)
+    for index, char in enumerate(body):
+        depths[index] = brace_depth
+        if char == '{':
+            brace_depth += 1
+        elif char == '}':
+            brace_depth = max(0, brace_depth - 1)
+    labels = []
+    for match in re.finditer(r'\bcase\s+(XI_[A-Z0-9_]+)\s*:|\bdefault\s*:', body):
+        if depths[match.start()] == 0:
+            labels.append((match.start(), match.end(), match.group(1)))
+    branches = {}
+    for index, (_, end, selector) in enumerate(labels):
+        if selector is None:
+            continue
+        branch_end = labels[index + 1][0] if index + 1 < len(labels) else len(body)
+        branches.setdefault(selector, []).append(body[end:branch_end])
+    return branches
+
+
+def _xi_switch_routes_to_owner(body: str, selector: str,
+                               owner: str | None,
+                               known_emitters: set[str] | None = None,
+                               terminators: set[str] | None = None) -> bool:
+    for discriminant, switch_body in _xi_switch_statements(body):
+        if re.fullmatch(r'\s*v\s*->\s*op\s*', discriminant) is None:
+            continue
+        for branch in _xi_switch_case_branches(switch_body).get(selector, []):
+            foreign_emitter = owner is not None and any(
+                emitter != owner and _xi_c_call_present(branch, emitter)
+                for emitter in known_emitters or set())
+            if ((owner is None and _xi_terminal_emission_branch(
+                    branch, known_emitters, terminators)) or
+                    (owner is not None and not foreign_emitter and
+                     _xi_top_level_call_precedes_return(branch, owner))):
+                return True
+    return False
+
+
+def _xi_positive_emission_precedes_return(
+        branch: str, return_pattern: str,
+        known_emitters: set[str] | None = None,
+        terminators: set[str] | None = None) -> bool:
+    if _xi_top_level_match_positions(
+            branch, r'\bctx\s*->\s*error\s*=\s*true\b'):
+        return False
+    semantic_emission_pattern = (
+        r'(?!(?:emit_codegen_abort|emit_thread_spawn_abort_stmt|'
+        r'emit_value_generated_line_reset|emit_value_source_line|'
+        r'emit_debug_source_var_sync)\b)'
+        r'(?:emit_[A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*_emit_[A-Za-z0-9_]*)'
+    )
+    if known_emitters is not None:
+        if not known_emitters:
+            return False
+        semantic_emission_pattern = '(?:' + '|'.join(
+            re.escape(symbol) for symbol in sorted(known_emitters)) + ')'
+    semantic_emissions = [position for position in _xi_top_level_bare_call_positions(
+        branch, semantic_emission_pattern)
+        if re.match(r'[^;]*\bout\b[^;]*\)', branch[position:])]
+    any_emissions = [position for position in _xi_top_level_bare_call_positions(
+        branch,
+        r'(?:emit_[A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*_emit_[A-Za-z0-9_]*)')
+        if re.match(r'[^;]*\bout\b[^;]*\)', branch[position:])]
+    generated_text = [position for position in _xi_top_level_bare_call_positions(
+        branch, r'fprintf')
+        if re.match(r'fprintf\s*\(\s*out\b', branch[position:])]
+    emissions = semantic_emissions
+    if known_emitters is None and not emissions and any_emissions and generated_text:
+        emissions = [min(any_emissions + generated_text)]
+    return_expression = r'' if return_pattern == r'\breturn\s*;' else r'\s+true'
+    returns = _xi_top_level_bare_return_positions(branch, return_expression)
+    all_returns = _xi_top_level_any_return_positions(branch)
+    terminal_positions = []
+    for symbol in terminators or set():
+        terminal_positions.extend(
+            _xi_top_level_bare_call_positions(branch, re.escape(symbol)))
+    return any(not any(stop < emission for stop in all_returns + terminal_positions) and
+               any(emission < ret for ret in returns) for emission in emissions)
+
+
+def _xi_terminal_emission_branch(
+        branch: str, known_emitters: set[str] | None = None,
+        terminators: set[str] | None = None) -> bool:
+    return _xi_positive_emission_precedes_return(
+        branch, r'\breturn\s*;', known_emitters, terminators)
+
+
+def _xi_strip_balanced_parentheses(text: str) -> str:
+    value = text.strip()
+    while value.startswith('('):
+        end = _xi_matching_delimiter(value, 0, '(', ')')
+        if end != len(value) - 1:
+            break
+        value = value[1:-1].strip()
+    return value
+
+
+def _xi_split_top_level(text: str, operator: str) -> list[str]:
+    parts = []
+    start = 0
+    paren_depth = 0
+    index = 0
+    while index < len(text):
+        if text[index] == '(':
+            paren_depth += 1
+        elif text[index] == ')':
+            paren_depth = max(0, paren_depth - 1)
+        elif paren_depth == 0 and text.startswith(operator, index):
+            parts.append(text[start:index])
+            index += len(operator)
+            start = index
+            continue
+        index += 1
+    parts.append(text[start:])
+    return parts
+
+
+def _xi_exact_positive_selector(term: str) -> str | None:
+    value = _xi_strip_balanced_parentheses(term)
+    root_value = r'v\s*->\s*op'
+    selector = r'(XI_[A-Z0-9_]+)'
+    for pattern in (rf'{root_value}\s*==\s*{selector}',
+                    rf'{selector}\s*==\s*{root_value}'):
+        match = re.fullmatch(pattern, value)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _xi_positive_selector_disjunction(condition: str) -> set[str] | None:
+    value = _xi_strip_balanced_parentheses(condition)
+    selectors = []
+    for term in _xi_split_top_level(value, '||'):
+        selector = _xi_exact_positive_selector(term)
+        if selector is None:
+            return None
+        selectors.append(selector)
+    return set(selectors)
+
+
+def _xi_condition_has_selector_disjunct(condition: str, selector: str) -> bool:
+    value = _xi_strip_balanced_parentheses(condition)
+    return any(_xi_exact_positive_selector(term) == selector
+               for term in _xi_split_top_level(value, '||'))
+
+
+def _xi_condition_has_static_false_gate(condition: str) -> bool:
+    value = _xi_strip_balanced_parentheses(condition)
+    return any(_xi_strip_balanced_parentheses(term) in {'false', '0'}
+               for term in _xi_split_top_level(value, '&&'))
+
+
+def _xi_direct_selector_present(
+        body: str, selector: str, known_emitters: set[str] | None = None,
+        terminators: set[str] | None = None,
+        allow_nested_emitter_route: bool = False) -> bool:
+    if allow_nested_emitter_route and known_emitters is not None and any(
+            _xi_selector_routes_to_owner(body, selector, emitter, known_emitters)
+            for emitter in known_emitters):
+        return True
+    if _xi_switch_routes_to_owner(
+            body, selector, None, known_emitters, terminators):
+        return True
+    for condition, then_branch, _ in _xi_if_statements(body, top_level_only=True):
+        if (_xi_condition_has_selector_disjunct(condition, selector) and
+                _xi_terminal_emission_branch(
+                    then_branch, known_emitters, terminators)):
+            return True
+    return False
+
+
+def _xi_guarded_selector_present(
+        body: str, selector: str, known_emitters: set[str] | None = None,
+        terminators: set[str] | None = None) -> bool:
+    guard = re.match(
+        rf'^\s*if\s*\(\s*!\s*v\s*\|\|\s*v\s*->\s*op\s*!=\s*'
+        rf'\b{re.escape(selector)}\b\s*\)\s*return\s+false\s*;',
+        body,
+    )
+    return guard is not None and _xi_positive_emission_precedes_return(
+        body[guard.end():], r'\breturn\s+true\s*;', known_emitters, terminators)
+
+
+def _xi_if_statement_records(
+        text: str, *, top_level_only: bool = False
+) -> list[tuple[int, int, str, str, str]]:
+    statements = []
+    depths = _xi_brace_depths(text)
+    for match in re.finditer(r'\bif\s*\(', text):
+        if top_level_only and depths[match.start()] != 0:
+            continue
+        open_paren = text.find('(', match.start())
+        close_paren = _xi_matching_delimiter(text, open_paren, '(', ')')
+        if close_paren is None:
+            continue
+        cursor = close_paren + 1
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if cursor < len(text) and text[cursor] == '{':
+            then_end = _xi_matching_delimiter(text, cursor, '{', '}')
+            if then_end is None:
+                continue
+            then_branch = text[cursor + 1:then_end]
+            after_then = then_end + 1
+        else:
+            then_end = text.find(';', cursor)
+            if then_end < 0:
+                continue
+            then_branch = text[cursor:then_end + 1]
+            after_then = then_end + 1
+        while after_then < len(text) and text[after_then].isspace():
+            after_then += 1
+        else_branch = ''
+        statement_end = after_then
+        if re.match(r'else\b', text[after_then:]):
+            else_cursor = after_then + 4
+            while else_cursor < len(text) and text[else_cursor].isspace():
+                else_cursor += 1
+            if else_cursor < len(text) and text[else_cursor] == '{':
+                else_end = _xi_matching_delimiter(text, else_cursor, '{', '}')
+                if else_end is not None:
+                    else_branch = text[else_cursor + 1:else_end]
+                    statement_end = else_end + 1
+            else:
+                else_end = text.find(';', else_cursor)
+                if else_end >= 0:
+                    else_branch = text[else_cursor:else_end + 1]
+                    statement_end = else_end + 1
+        statements.append((match.start(), statement_end,
+                           text[open_paren + 1:close_paren],
+                           then_branch, else_branch))
+    return statements
+
+
+def _xi_if_statements(text: str, *, top_level_only: bool = False
+                      ) -> list[tuple[str, str, str]]:
+    return [(condition, then_branch, else_branch)
+            for _, _, condition, then_branch, else_branch in
+            _xi_if_statement_records(text, top_level_only=top_level_only)]
+
+
+def _xi_root_op_selectors(condition: str) -> set[str]:
+    return _xi_positive_selector_disjunction(condition) or set()
+
+
+def _xi_selector_routes_to_owner(body: str, selector: str, owner: str,
+                                 known_emitters: set[str] | None = None) -> bool:
+    if _xi_switch_routes_to_owner(
+            body, selector, owner, known_emitters=known_emitters):
+        return True
+    for _, _, condition, then_branch, else_branch in \
+            _xi_if_statement_records(body, top_level_only=True):
+        outer_selectors = _xi_root_op_selectors(condition)
+        if selector not in outer_selectors:
+            continue
+        if outer_selectors == {selector} and _xi_c_call_present(then_branch, owner):
+            foreign_emitter = any(
+                emitter != owner and _xi_c_call_present(then_branch, emitter)
+                for emitter in known_emitters or set())
+            if (not foreign_emitter and
+                    _xi_top_level_call_precedes_return(then_branch, owner)):
+                return True
+        for nested_start, nested_end, nested_condition, nested_then, nested_else in \
+                _xi_if_statement_records(then_branch, top_level_only=True):
+            nested_selectors = _xi_root_op_selectors(nested_condition)
+            routed = (
+                selector in nested_selectors and
+                _xi_top_level_call_reachable(nested_then, owner) and
+                not any(emitter != owner and
+                        _xi_c_call_present(nested_then, emitter)
+                        for emitter in known_emitters or set())
+            ) or (
+                selector not in nested_selectors and
+                outer_selectors == nested_selectors | {selector} and
+                _xi_top_level_call_reachable(nested_else, owner) and
+                not any(emitter != owner and
+                        _xi_c_call_present(nested_else, emitter)
+                        for emitter in known_emitters or set())
+            )
+            if routed:
+                returns = _xi_top_level_bare_return_positions(then_branch, r'')
+                if (not any(ret < nested_start for ret in returns) and
+                        any(nested_end < ret for ret in returns)):
+                    return True
+    return False
+
+
+def _xi_require_function_body(source_root: Path, source_path: str, symbol: str,
+                              context: str,
+                              source_text: dict[str, str]) -> str:
+    del source_root
+    text = source_text.get(source_path)
+    if text is None:
+        die(f"{context}: consumer source is outside the validated xi_cgen.c "
+            f"translation unit: {source_path}")
+    ranges = _xi_c_file_scope_function_body_ranges(text).get(symbol, [])
+    if len(ranges) != 1:
+        die(f"{context}: expected one file-scope definition of {source_path}::{symbol}, "
+            f"found {len(ranges)}")
+    start, end = ranges[0]
+    if _xi_conditional_preprocessor_depth(text, start) != 0:
+        die(f"{context}: governed consumer function {source_path}::{symbol} "
+            "is enclosed by conditional preprocessing")
+    directive_source = _xi_c_source_without_literals(
+        text, blank_preprocessor=False)[start:end]
+    if re.search(r'^\s*#\s*(?:if|ifdef|ifndef|elif|else|endif)\b',
+                 directive_source, re.MULTILINE):
+        die(f"{context}: governed consumer function {source_path}::{symbol} "
+            "contains conditional preprocessing")
+    body = _xi_c_source_without_literals(text)[start:end]
+    if any(_xi_condition_has_static_false_gate(condition)
+           for condition, _, _ in _xi_if_statements(body)):
+        die(f"{context}: governed consumer function {source_path}::{symbol} "
+            "contains a statically false conditional branch")
+    return body
+
+
+def _xi_validate_activation_census(
+        source_root: Path, binding: XiConsumerBinding,
+        aot_functions: list[tuple[str, str, str]], context: str,
+        source_text: dict[str, str], terminators: set[str],
+        reachable_activation_callers: set[tuple[str, str]]) -> None:
+    if not binding.activations:
+        return
+    declared: Counter[tuple[str, str, tuple[str, ...]]] = Counter()
+    for activation in binding.activations:
+        _xi_require_function_body(source_root, activation.source_path,
+                                  activation.caller, context, source_text)
+        if (activation.source_path, activation.caller) not in \
+                reachable_activation_callers:
+            die(f"{context}: activation census for {activation.source_path}::"
+                f"{activation.caller} differs from lowering.def: caller is not "
+                "reachable from a CGen root")
+        declared[(activation.source_path, activation.caller,
+                  tuple(_xi_normalize_c_expr(arg) for arg in activation.args))] += \
+            activation.count
+    discovered: Counter[tuple[str, str, tuple[str, ...]]] = Counter()
+    for source_path, caller, body in aot_functions:
+        calls = _xi_c_call_records(body, binding.symbol)
+        if not calls:
+            continue
+        for position, _, args in calls:
+            if not _xi_call_record_reachable(body, position, terminators):
+                continue
+            discovered[(source_path, caller, args)] += 1
+    if discovered != declared:
+        missing = sorted((key, count) for key, count in (declared - discovered).items())
+        extra = sorted((key, count) for key, count in (discovered - declared).items())
+        details = []
+        if missing:
+            details.append('missing ' + ', '.join(
+                f'{path}::{caller}{args} x{count}'
+                for (path, caller, args), count in missing))
+        if extra:
+            details.append('undeclared ' + ', '.join(
+                f'{path}::{caller}{args} x{count}'
+                for (path, caller, args), count in extra))
+        die(f"{context}: activation census for {binding.source_path}::{binding.symbol} "
+            "differs from lowering.def: " + '; '.join(details))
+    if binding.witness_kind == 'guarded-selector':
+        for activation in binding.activations:
+            caller_body = next((body for source_path, symbol, body in aot_functions
+                                if source_path == activation.source_path and
+                                symbol == activation.caller), None)
+            if caller_body is None:
+                die(f"{context}: activation caller is missing: "
+                    f"{activation.source_path}::{activation.caller}")
+            actual = _xi_exact_guard_call_count(
+                caller_body, binding.symbol,
+                tuple(_xi_normalize_c_expr(arg) for arg in activation.args))
+            if actual != activation.count:
+                die(f"{context}: guarded activation must be the complete if predicate in "
+                    f"{activation.source_path}::{activation.caller}; expected "
+                    f"{activation.count}, found {actual}")
+
+
+def _xi_output_call_matches(actual: tuple[str, ...],
+                            expected: XiConsumerOutputCallWitness) -> bool:
+    wanted = tuple(_xi_normalize_c_expr(arg) for arg in expected.args)
+    return actual[:len(wanted)] == wanted if expected.prefix else actual == wanted
+
+
+def _xi_validate_output_sequences(binding: XiConsumerBinding, body: str,
+                                  context: str, terminators: set[str]) -> None:
+    for sequence in binding.output_sequences:
+        records = []
+        for call in sequence.calls:
+            records.append([
+                (start, end, args)
+                for start, end, args in _xi_c_call_records(body, call.symbol)
+                if _xi_output_call_matches(args, call)
+            ])
+        matches = 0
+        for candidate in records[0]:
+            if not _xi_call_record_reachable(body, candidate[0], terminators):
+                continue
+            previous = candidate
+            complete = True
+            for following in records[1:]:
+                adjacent = next((record for record in following
+                                 if record[0] > previous[1] and
+                                 re.fullmatch(r'\s*;\s*', body[previous[1]:record[0]])), None)
+                if adjacent is None:
+                    complete = False
+                    break
+                previous = adjacent
+            if complete:
+                matches += 1
+        if matches != sequence.count:
+            die(f"{context}: {binding.source_path}::{binding.symbol} output sequence "
+                f"expected {sequence.count} exact occurrence(s), found {matches}")
+
+
+def _xi_validate_structural_consumer(source_root: Path, binding: XiConsumerBinding,
+                                     context: str,
+                                     source_text: dict[str, str],
+                                     terminators: set[str]) -> None:
+    body = _xi_require_function_body(source_root, binding.source_path,
+                                     binding.symbol, context, source_text)
+    common = ('XiPhi', 'phis', 'next', 'emit_phi_ref')
+    category_tokens = {
+        'edge-parallel-copy': ('emit_phi_tmp_ref', 'emit_phi_incoming_as_rep',
+                               'cg_phi_copy_should_emit'),
+        'sync-storage': ('cg_phi_has_storage', 'emit_phi_tmp_ref'),
+        'coroutine-frame-storage': ('cg_coro_phi_needs_frame', 'cg_coro_decl_ctype'),
+        'coroutine-local-storage': ('cg_phi_has_storage', 'cg_coro_phi_needs_frame',
+                                    'emit_phi_tmp_ref'),
+    }
+    required = common + category_tokens[binding.structural_category]
+    missing = [token for token in required
+               if re.search(rf'\b{re.escape(token)}\b', body) is None]
+    if missing:
+        die(f"{context}: structural owner {binding.source_path}::{binding.symbol} "
+            f"lacks {binding.structural_category} witness token(s): {', '.join(missing)}")
+    _xi_validate_output_sequences(binding, body, context, terminators)
+
+
+def xi_lowering_consumer_source_paths(entries: list[XiLoweringDef]) -> set[str]:
+    paths = {
+        binding.source_path
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+    }
+    paths.update(
+        router.source_path
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for router in binding.routers
+    )
+    paths.update(
+        activation.source_path
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for activation in binding.activations
+    )
+    paths.update(
+        emitter.source_path
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for emitter in binding.emitters
+    )
+    paths.update(
+        predicate.source_path
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for predicate in binding.predicates
+    )
+    paths.update(
+        predicate.domain_source_path
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for predicate in binding.predicates
+        if predicate.domain_source_path is not None
+    )
+    return paths
+
+
+@dataclass(frozen=True)
+class XiLoweringValidationSnapshot:
+    sources: tuple[tuple[str, bytes], ...]
+    include_directories: tuple[str, ...] = ()
+    directories: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+    def source_bytes(self) -> dict[str, bytes]:
+        return dict(self.sources)
+
+    def source_text(self) -> dict[str, str]:
+        texts = {}
+        for relative, data in self.sources:
+            try:
+                texts[relative] = data.decode('utf-8', errors='strict')
+            except UnicodeDecodeError as error:
+                die(f"xi-lowering: source is not UTF-8: {relative}: {error}")
+        return texts
+
+    def fingerprint(self) -> str:
+        digest = hashlib.sha256()
+        digest.update(b'xi-cgen-quoted-include-directories/1\0')
+        for relative in self.include_directories:
+            digest.update(relative.encode('utf-8'))
+            digest.update(b'\0')
+        digest.update(b'xi-cgen-quoted-include-directory-entries/1\0')
+        for relative, entries in self.directories:
+            digest.update(relative.encode('utf-8'))
+            digest.update(b'\0')
+            for entry in entries:
+                digest.update(entry.encode('utf-8'))
+                digest.update(b'\0')
+        digest.update(b'xi-cgen-quoted-include-sources/1\0')
+        for relative, data in self.sources:
+            digest.update(relative.encode('utf-8'))
+            digest.update(b'\0')
+            digest.update(len(data).to_bytes(8, 'big'))
+            digest.update(data)
+        return digest.hexdigest()
+
+
+@dataclass(frozen=True)
+class XiAotDiscoverySnapshot:
+    sources: tuple[tuple[str, bytes], ...]
+    directories: tuple[tuple[str, tuple[str, ...]], ...]
+
+    def source_text(self) -> dict[str, str]:
+        texts = {}
+        for relative, data in self.sources:
+            try:
+                texts[relative] = data.decode('utf-8', errors='strict')
+            except UnicodeDecodeError as error:
+                die(f"xi-lowering: discovery source is not UTF-8: {relative}: {error}")
+        return texts
+
+    def fingerprint(self) -> str:
+        digest = hashlib.sha256()
+        digest.update(b'xi-aot-discovery-sources/1\0')
+        for relative, data in self.sources:
+            digest.update(relative.encode('utf-8'))
+            digest.update(b'\0')
+            digest.update(len(data).to_bytes(8, 'big'))
+            digest.update(data)
+        digest.update(b'xi-aot-discovery-directories/1\0')
+        for relative, entries in self.directories:
+            digest.update(relative.encode('utf-8'))
+            digest.update(b'\0')
+            for entry in entries:
+                digest.update(entry.encode('utf-8'))
+                digest.update(b'\0')
+        return digest.hexdigest()
+
+
+@functools.lru_cache(maxsize=16)
+def _xi_aot_discovery_functions(
+        snapshot: XiAotDiscoverySnapshot) -> tuple[tuple[str, str, str], ...]:
+    functions = []
+    for relative, data in snapshot.sources:
+        for symbol, bodies in _xi_aot_source_functions(data):
+            functions.extend((relative, symbol, body) for body in bodies)
+    return tuple(functions)
+
+
+@functools.lru_cache(maxsize=512)
+def _xi_aot_source_functions(
+        data: bytes) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    text = data.decode('utf-8', errors='strict')
+    return tuple(sorted(
+        (symbol, tuple(bodies))
+        for symbol, bodies in _xi_c_file_scope_function_bodies(text).items()))
+
+
+def _xi_repository_relative_name(source_root: Path, path: Path,
+                                 context: str) -> str:
+    """Return one canonical in-repository name without resolving any component."""
+    source_root = Path(os.path.abspath(os.fspath(source_root)))
+    raw = Path(os.fspath(path))
+    if ('..' in raw.parts or
+            (os.name != 'nt' and '\\' in os.fspath(path))):
+        die(f"{context} uses parent traversal or backslashes: {path}")
+    lexical = Path(os.path.abspath(os.fspath(
+        raw if raw.is_absolute() else source_root / raw)))
+    try:
+        relative = lexical.relative_to(source_root)
+    except ValueError:
+        die(f"{context} escapes repository root: {path}")
+    if (not relative.parts or
+            any(component in {'', '.', '..'} for component in relative.parts)):
+        die(f"{context} is not a canonical repository file name: {path}")
+    return relative.as_posix()
+
+
+def _xi_repository_relative_parts(relative: str, context: str) -> tuple[str, ...]:
+    path = Path(relative)
+    if (not relative or '\\' in relative or path.is_absolute() or
+            path.as_posix() != relative or
+            any(component in {'', '.', '..'} for component in path.parts)):
+        die(f"{context} is not a canonical repository-relative path: {relative}")
+    return path.parts
+
+
+def _xi_posix_open_repository_object(
+        source_root: Path, relative: str, context: str, *, directory: bool,
+        before_open_hook=None) -> int:
+    """Open one object through anchored descriptors without following symlinks."""
+    parts = _xi_repository_relative_parts(relative, context)
+    root_flags = (os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0) |
+                  getattr(os, 'O_DIRECTORY', 0) |
+                  getattr(os, 'O_NOFOLLOW', 0))
+    if not getattr(os, 'O_NOFOLLOW', 0) or os.open not in os.supports_dir_fd:
+        die("xi-lowering: descriptor-relative no-follow opens are unavailable")
+    opened = [os.open(os.fspath(source_root), root_flags)]
+    try:
+        if not stat.S_ISDIR(os.fstat(opened[-1]).st_mode):
+            die(f"{context} repository root is not a directory: {source_root}")
+        for index, component in enumerate(parts):
+            final = index + 1 == len(parts)
+            if before_open_hook is not None:
+                before_open_hook(relative, index, component, final)
+            expect_directory = not final or directory
+            flags = (os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0) |
+                     getattr(os, 'O_NOFOLLOW', 0))
+            if expect_directory:
+                flags |= getattr(os, 'O_DIRECTORY', 0)
+            else:
+                flags |= getattr(os, 'O_NONBLOCK', 0)
+            try:
+                child = os.open(component, flags, dir_fd=opened[-1])
+            except OSError as error:
+                die(f"{context} cannot open {relative} without following links: {error}")
+            opened.append(child)
+            child_stat = os.fstat(child)
+            expected = stat.S_ISDIR(child_stat.st_mode) if expect_directory \
+                else stat.S_ISREG(child_stat.st_mode)
+            if not expected:
+                kind = 'directory' if expect_directory else 'regular file'
+                die(f"{context} is not a {kind}: {relative}")
+        final = opened[-1]
+        for parent in reversed(opened[:-1]):
+            os.close(parent)
+        opened = [final]
+        return opened.pop()
+    except BaseException:
+        for descriptor in reversed(opened):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        raise
+
+
+@functools.lru_cache(maxsize=1)
+def _xi_windows_file_info_type():
+    import ctypes
+    from ctypes import wintypes
+
+    class ByHandleFileInformation(ctypes.Structure):
+        _fields_ = [
+            ('dwFileAttributes', wintypes.DWORD),
+            ('ftCreationTime', wintypes.FILETIME),
+            ('ftLastAccessTime', wintypes.FILETIME),
+            ('ftLastWriteTime', wintypes.FILETIME),
+            ('dwVolumeSerialNumber', wintypes.DWORD),
+            ('nFileSizeHigh', wintypes.DWORD),
+            ('nFileSizeLow', wintypes.DWORD),
+            ('nNumberOfLinks', wintypes.DWORD),
+            ('nFileIndexHigh', wintypes.DWORD),
+            ('nFileIndexLow', wintypes.DWORD),
+        ]
+
+    return ByHandleFileInformation
+
+
+@functools.lru_cache(maxsize=1)
+def _xi_windows_kernel32():
+    import ctypes
+    from ctypes import wintypes
+
+    info_type = _xi_windows_file_info_type()
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+        wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.GetFileInformationByHandle.argtypes = [
+        wintypes.HANDLE, ctypes.POINTER(info_type)]
+    kernel32.GetFileInformationByHandle.restype = wintypes.BOOL
+    kernel32.ReadFile.argtypes = [
+        wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    kernel32.ReadFile.restype = wintypes.BOOL
+    kernel32.GetFileType.argtypes = [wintypes.HANDLE]
+    kernel32.GetFileType.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    return kernel32
+
+
+def _xi_windows_handle_info(handle: int):
+    import ctypes
+    from ctypes import wintypes
+
+    info = _xi_windows_file_info_type()()
+    if not _xi_windows_kernel32().GetFileInformationByHandle(
+            wintypes.HANDLE(handle), ctypes.byref(info)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return info
+
+
+def _xi_windows_component_access(expect_directory: bool | None) -> int:
+    file_read_attributes = 0x0080
+    generic_read = 0x80000000
+    return file_read_attributes if expect_directory is True \
+        else generic_read | file_read_attributes
+
+
+def _xi_windows_open_repository_object(
+        source_root: Path, relative: str, context: str, *, directory: bool | None,
+        before_open_hook=None) -> tuple[list[int], object]:
+    """Lock every Windows path component and reject reparse points."""
+    import ctypes
+    from ctypes import wintypes
+
+    parts = _xi_repository_relative_parts(relative, context)
+    kernel32 = _xi_windows_kernel32()
+    create_file = kernel32.CreateFileW
+    close_handle = kernel32.CloseHandle
+    invalid = ctypes.c_void_p(-1).value
+    file_attribute_directory = 0x00000010
+    file_attribute_reparse_point = 0x00000400
+    file_flag_backup_semantics = 0x02000000
+    file_flag_open_reparse_point = 0x00200000
+    file_read_attributes = 0x0080
+    file_share_read = 0x00000001
+    open_existing = 3
+    handles: list[int] = []
+    cursor = Path(os.path.abspath(os.fspath(source_root)))
+    try:
+        root_handle = create_file(
+            os.fspath(cursor), file_read_attributes, file_share_read, None,
+            open_existing,
+            file_flag_open_reparse_point | file_flag_backup_semantics, None)
+        if root_handle == invalid:
+            raise ctypes.WinError(ctypes.get_last_error())
+        handles.append(root_handle)
+        root_info = _xi_windows_handle_info(root_handle)
+        if (root_info.dwFileAttributes & file_attribute_reparse_point or
+                not root_info.dwFileAttributes & file_attribute_directory):
+            die(f"{context} repository root is not a regular directory: {cursor}")
+        for index, component in enumerate(parts):
+            final = index + 1 == len(parts)
+            if before_open_hook is not None:
+                before_open_hook(relative, index, component, final)
+            cursor /= component
+            expect_directory = True if not final else directory
+            access = _xi_windows_component_access(expect_directory)
+            flags = file_flag_open_reparse_point | file_flag_backup_semantics
+            handle = create_file(
+                os.fspath(cursor), access, file_share_read, None, open_existing,
+                flags, None)
+            if handle == invalid:
+                raise ctypes.WinError(ctypes.get_last_error())
+            handles.append(handle)
+            info = _xi_windows_handle_info(handle)
+            if info.dwFileAttributes & file_attribute_reparse_point:
+                die(f"{context} uses a reparse-point path component: {cursor}")
+            is_directory = bool(info.dwFileAttributes & file_attribute_directory)
+            if expect_directory is not None and is_directory != expect_directory:
+                kind = 'directory' if expect_directory else 'regular file'
+                die(f"{context} is not a {kind}: {cursor}")
+            if not is_directory and kernel32.GetFileType(
+                    wintypes.HANDLE(handle)) != 0x0001:
+                die(f"{context} is not a regular disk file: {cursor}")
+        return handles, info
+    except BaseException:
+        for handle in reversed(handles):
+            close_handle(wintypes.HANDLE(handle))
+        raise
+
+
+def _xi_stable_file_identity(file_stat) -> tuple[int, ...]:
+    return (file_stat.st_dev, file_stat.st_ino, file_stat.st_mode,
+            file_stat.st_size, file_stat.st_mtime_ns, file_stat.st_ctime_ns)
+
+
+def _xi_windows_read_open_file(handle: int, before, relative: str,
+                               context: str) -> bytes:
+    import ctypes
+    from ctypes import wintypes
+
+    chunks = []
+    read_file = _xi_windows_kernel32().ReadFile
+    while True:
+        buffer = ctypes.create_string_buffer(65536)
+        count = wintypes.DWORD()
+        if not read_file(wintypes.HANDLE(handle), buffer, len(buffer),
+                         ctypes.byref(count), None):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if count.value == 0:
+            break
+        chunks.append(buffer.raw[:count.value])
+    after = _xi_windows_handle_info(handle)
+    before_identity = (
+        before.dwVolumeSerialNumber, before.nFileIndexHigh,
+        before.nFileIndexLow, before.nFileSizeHigh, before.nFileSizeLow,
+        before.ftLastWriteTime.dwHighDateTime,
+        before.ftLastWriteTime.dwLowDateTime)
+    after_identity = (
+        after.dwVolumeSerialNumber, after.nFileIndexHigh,
+        after.nFileIndexLow, after.nFileSizeHigh, after.nFileSizeLow,
+        after.ftLastWriteTime.dwHighDateTime,
+        after.ftLastWriteTime.dwLowDateTime)
+    if before_identity != after_identity:
+        die(f"{context} changed while it was being captured: {relative}")
+    return b''.join(chunks)
+
+
+def _xi_secure_repository_file_bytes(
+        source_root: Path, relative: str, context: str,
+        before_open_hook=None) -> bytes:
+    """Read one stable regular file through a no-follow, component-bound handle."""
+    source_root = Path(os.path.abspath(os.fspath(source_root)))
+    if os.name == 'nt':
+        import ctypes
+        from ctypes import wintypes
+
+        handles, before = _xi_windows_open_repository_object(
+            source_root, relative, context, directory=False,
+            before_open_hook=before_open_hook)
+        handle = handles[-1]
+        try:
+            return _xi_windows_read_open_file(
+                handle, before, relative, context)
+        finally:
+            for open_handle in reversed(handles):
+                _xi_windows_kernel32().CloseHandle(wintypes.HANDLE(open_handle))
+
+    file_fd = _xi_posix_open_repository_object(
+        source_root, relative, context, directory=False,
+        before_open_hook=before_open_hook)
+    try:
+        before = os.fstat(file_fd)
+        chunks = []
+        while True:
+            chunk = os.read(file_fd, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(file_fd)
+        if _xi_stable_file_identity(before) != _xi_stable_file_identity(after):
+            die(f"{context} changed while it was being captured: {relative}")
+        return b''.join(chunks)
+    finally:
+        os.close(file_fd)
+
+
+def _xi_capture_aot_discovery_census_posix(
+        source_root: Path, before_open_hook=None) -> XiAotDiscoverySnapshot:
+    sources: dict[str, bytes] = {}
+    directories: list[tuple[str, tuple[str, ...]]] = []
+    root_fd = _xi_posix_open_repository_object(
+        source_root, 'src/aot', 'xi-lowering: AOT discovery root', directory=True,
+        before_open_hook=before_open_hook)
+
+    def capture(directory_fd: int, relative_directory: str) -> None:
+        before = os.fstat(directory_fd)
+        try:
+            entries = tuple(sorted(os.listdir(directory_fd)))
+        except OSError as error:
+            die(f"xi-lowering: cannot enumerate AOT discovery directory "
+                f"{relative_directory}: {error}")
+        directories.append((relative_directory, entries))
+        for child in entries:
+            if child in {'', '.', '..'} or '/' in child or '\\' in child:
+                die(f"xi-lowering: invalid AOT discovery entry: {child}")
+            relative = f"{relative_directory}/{child}"
+            if before_open_hook is not None:
+                parts = Path(relative).parts
+                before_open_hook(relative, len(parts) - 1, child, True)
+            flags = (os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0) |
+                     getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+            try:
+                child_fd = os.open(child, flags, dir_fd=directory_fd)
+            except OSError as error:
+                die(f"xi-lowering: cannot open AOT discovery entry {relative} "
+                    f"without following links: {error}")
+            try:
+                child_stat = os.fstat(child_fd)
+                if stat.S_ISDIR(child_stat.st_mode):
+                    capture(child_fd, relative)
+                elif stat.S_ISREG(child_stat.st_mode) and child.endswith('.c'):
+                    file_before = _xi_stable_file_identity(child_stat)
+                    chunks = []
+                    while True:
+                        chunk = os.read(child_fd, 65536)
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                    file_after = _xi_stable_file_identity(os.fstat(child_fd))
+                    if file_before != file_after:
+                        die("xi-lowering: AOT discovery source changed while it "
+                            f"was captured: {relative}")
+                    data = b''.join(chunks)
+                    try:
+                        data.decode('utf-8', errors='strict')
+                    except UnicodeDecodeError as error:
+                        die(f"xi-lowering: cannot capture AOT discovery source "
+                            f"{relative}: {error}")
+                    sources[relative] = data
+                elif not stat.S_ISREG(child_stat.st_mode):
+                    die(f"xi-lowering: AOT discovery entry is not a regular "
+                        f"file or directory: {relative}")
+            finally:
+                os.close(child_fd)
+        after = os.fstat(directory_fd)
+        if _xi_stable_file_identity(before) != _xi_stable_file_identity(after):
+            die("xi-lowering: AOT discovery directory changed while it was "
+                f"captured: {relative_directory}")
+
+    try:
+        capture(root_fd, 'src/aot')
+    finally:
+        os.close(root_fd)
+    return XiAotDiscoverySnapshot(
+        tuple(sorted(sources.items())), tuple(sorted(directories)))
+
+
+def _xi_capture_aot_discovery_census_windows(
+        source_root: Path, before_open_hook=None) -> XiAotDiscoverySnapshot:
+    import ctypes
+    from ctypes import wintypes
+
+    sources: dict[str, bytes] = {}
+    directories: list[tuple[str, tuple[str, ...]]] = []
+    directory_attribute = 0x00000010
+
+    def capture(relative_directory: str, handles=None, before=None) -> None:
+        if handles is None:
+            handles, before = _xi_windows_open_repository_object(
+                source_root, relative_directory,
+                'xi-lowering: AOT discovery directory', directory=True,
+                before_open_hook=before_open_hook)
+        try:
+            path = source_root / Path(relative_directory)
+            entries = tuple(sorted(os.listdir(path)))
+            directories.append((relative_directory, entries))
+            for child in entries:
+                if child in {'', '.', '..'} or '/' in child or '\\' in child:
+                    die(f"xi-lowering: invalid AOT discovery entry: {child}")
+                relative = f"{relative_directory}/{child}"
+                child_handles, info = _xi_windows_open_repository_object(
+                    source_root, relative, 'xi-lowering: AOT discovery entry',
+                    directory=None, before_open_hook=before_open_hook)
+                is_directory = bool(info.dwFileAttributes & directory_attribute)
+                if is_directory:
+                    capture(relative, child_handles, info)
+                elif child.endswith('.c'):
+                    try:
+                        data = _xi_windows_read_open_file(
+                            child_handles[-1], info, relative,
+                            'xi-lowering: AOT discovery source')
+                        try:
+                            data.decode('utf-8', errors='strict')
+                        except UnicodeDecodeError as error:
+                            die(f"xi-lowering: cannot capture AOT discovery source "
+                                f"{relative}: {error}")
+                        sources[relative] = data
+                    finally:
+                        for handle in reversed(child_handles):
+                            _xi_windows_kernel32().CloseHandle(
+                                wintypes.HANDLE(handle))
+                else:
+                    for handle in reversed(child_handles):
+                        _xi_windows_kernel32().CloseHandle(
+                            wintypes.HANDLE(handle))
+            after = _xi_windows_handle_info(handles[-1])
+            before_identity = (
+                before.ftLastWriteTime.dwHighDateTime,
+                before.ftLastWriteTime.dwLowDateTime)
+            after_identity = (
+                after.ftLastWriteTime.dwHighDateTime,
+                after.ftLastWriteTime.dwLowDateTime)
+            if before_identity != after_identity:
+                die("xi-lowering: AOT discovery directory changed while it was "
+                    f"captured: {relative_directory}")
+        finally:
+            for handle in reversed(handles):
+                _xi_windows_kernel32().CloseHandle(wintypes.HANDLE(handle))
+
+    capture('src/aot')
+    return XiAotDiscoverySnapshot(
+        tuple(sorted(sources.items())), tuple(sorted(directories)))
+
+
+def _xi_capture_aot_discovery_census(
+        source_root: Path, before_open_hook=None) -> XiAotDiscoverySnapshot:
+    """Capture every AOT C source and directory without pathname re-resolution."""
+    source_root = Path(os.path.abspath(os.fspath(source_root)))
+    if os.name == 'nt':
+        return _xi_capture_aot_discovery_census_windows(
+            source_root, before_open_hook)
+    return _xi_capture_aot_discovery_census_posix(
+        source_root, before_open_hook)
+
+
+@functools.lru_cache(maxsize=1024)
+def _xi_preprocessor_logical_source(source: str, context: str) -> str:
+    """Apply the preprocessing phases needed to identify include directives."""
+    trigraphs = {
+        '??=': '#', '??/': '\\', "??'": '^', '??(': '[', '??)': ']',
+        '??!': '|', '??<': '{', '??>': '}', '??-': '~',
+    }
+    for spelling, replacement in trigraphs.items():
+        source = source.replace(spelling, replacement)
+    source = re.sub(r'\\(?:\r\n|\n|\r)', '', source)
+    output = []
+    index = 0
+    state = 'normal'
+    while index < len(source):
+        current = source[index]
+        following = source[index + 1] if index + 1 < len(source) else ''
+        if state == 'normal':
+            if current == '/' and following == '/':
+                output.append(' ')
+                index += 2
+                state = 'line-comment'
+                continue
+            if current == '/' and following == '*':
+                output.append(' ')
+                index += 2
+                state = 'block-comment'
+                continue
+            output.append(current)
+            if current == '"':
+                state = 'string'
+            elif current == "'":
+                state = 'char'
+        elif state == 'line-comment':
+            if current in {'\r', '\n'}:
+                output.append(current)
+                state = 'normal'
+        elif state == 'block-comment':
+            if current == '*' and following == '/':
+                output.append(' ')
+                index += 2
+                state = 'normal'
+                continue
+            if current in {'\r', '\n'}:
+                output.append(current)
+        else:
+            output.append(current)
+            delimiter = '"' if state == 'string' else "'"
+            if current == '\\' and following:
+                output.append(following)
+                index += 2
+                continue
+            if current == delimiter:
+                state = 'normal'
+        index += 1
+    if state == 'block-comment':
+        die(f"{context}: unterminated preprocessing comment")
+    if state in {'string', 'char'}:
+        die(f"{context}: unterminated preprocessing literal")
+    return ''.join(output)
+
+
+def _xi_local_c_include_spellings(source: str, context: str) -> list[str]:
+    """Parse every compiler-visible literal repository include or fail closed."""
+    includes = []
+    logical = _xi_preprocessor_logical_source(source, context)
+    directive = re.compile(
+        r'(?m)^[^\S\r\n]*(?:#|%:)[^\S\r\n]*include\b([^\r\n]*)$')
+    for match in directive.finditer(logical):
+        operand = match.group(1).strip()
+        if operand.startswith('<'):
+            angle = re.fullmatch(r'<([^>\r\n]*)>', operand)
+            if angle is None:
+                die(f"{context}: malformed angle-bracket include")
+            continue
+        if not operand.startswith('"'):
+            die(f"{context}: include operands must be literal quoted or "
+                "angle-bracket header names; macro-expanded includes are "
+                "forbidden")
+        closing = operand.find('"', 1)
+        if closing < 0:
+            die(f"{context}: unterminated local C include path")
+        spelling = operand[1:closing]
+        trailing = operand[closing + 1:]
+        if trailing.strip():
+            die(f"{context}: local C include has non-comment trailing tokens")
+        includes.append(spelling)
+    return includes
+
+
+def _xi_cgen_cmake_include_directories(source_root: Path) -> tuple[str, ...]:
+    """Read the single governed repository search order from the C compile edge."""
+    cmake_path = source_root / 'CMakeLists.txt'
+    try:
+        os.lstat(cmake_path)
+    except FileNotFoundError:
+        die("xi-lowering: CMakeLists.txt is required to project the Xi CGen "
+            "quoted-include search order")
+    data = _xi_secure_repository_file_bytes(
+        source_root, 'CMakeLists.txt', 'xi-lowering: C include search order')
+    try:
+        text = data.decode('utf-8', errors='strict')
+    except UnicodeDecodeError as error:
+        die(f"xi-lowering: CMake include search order is not UTF-8: {error}")
+    matches = list(re.finditer(
+        r'(?ms)^set\(XRAY_COMMON_INCLUDES[^\S\r\n]*\r?\n'
+        r'(?P<body>.*?)^\)', text))
+    if len(matches) != 1:
+        die("xi-lowering: CMake must define exactly one literal "
+            "XRAY_COMMON_INCLUDES search order")
+    prefix = '${CMAKE_CURRENT_SOURCE_DIR}/'
+    parsed = []
+    for raw_line in matches[0].group('body').splitlines():
+        line = raw_line.split('#', 1)[0].strip()
+        if not line:
+            continue
+        if not line.startswith(prefix):
+            die("xi-lowering: XRAY_COMMON_INCLUDES must contain only literal "
+                f"repository directories: {line}")
+        relative = line[len(prefix):]
+        _xi_repository_relative_parts(
+            relative, 'xi-lowering: C include search directory')
+        parsed.append(relative)
+    actual = tuple(parsed)
+    if not actual or len(actual) != len(set(actual)):
+        die("xi-lowering: XRAY_COMMON_INCLUDES must be non-empty and contain "
+            "no duplicate repository directories")
+    return actual
+
+
+def _xi_secure_repository_directory_entries(
+        source_root: Path, relative: str, context: str,
+        before_open_hook=None) -> tuple[str, ...]:
+    """Capture one stable directory listing through a held no-follow handle."""
+    if relative == '.':
+        if os.name == 'nt':
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = _xi_windows_kernel32()
+            handle = kernel32.CreateFileW(
+                os.fspath(source_root), 0x0080, 0x00000001, None, 3,
+                0x00200000 | 0x02000000, None)
+            if handle == ctypes.c_void_p(-1).value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            try:
+                before = _xi_windows_handle_info(handle)
+                if before.dwFileAttributes & 0x00000400 or not \
+                        before.dwFileAttributes & 0x00000010:
+                    die(f"{context} repository root is not a regular directory")
+                entries = tuple(sorted(os.listdir(source_root)))
+                after = _xi_windows_handle_info(handle)
+                before_identity = (
+                    before.ftLastWriteTime.dwHighDateTime,
+                    before.ftLastWriteTime.dwLowDateTime)
+                after_identity = (
+                    after.ftLastWriteTime.dwHighDateTime,
+                    after.ftLastWriteTime.dwLowDateTime)
+                if before_identity != after_identity:
+                    die(f"{context} changed while captured: {relative}")
+                return entries
+            finally:
+                kernel32.CloseHandle(wintypes.HANDLE(handle))
+        flags = (os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0) |
+                 getattr(os, 'O_DIRECTORY', 0) |
+                 getattr(os, 'O_NOFOLLOW', 0))
+        directory_fd = os.open(os.fspath(source_root), flags)
+    elif os.name == 'nt':
+        import ctypes
+        from ctypes import wintypes
+
+        handles, before = _xi_windows_open_repository_object(
+            source_root, relative, context, directory=True,
+            before_open_hook=before_open_hook)
+        try:
+            entries = tuple(sorted(os.listdir(source_root / relative)))
+            after = _xi_windows_handle_info(handles[-1])
+            before_identity = (
+                before.ftLastWriteTime.dwHighDateTime,
+                before.ftLastWriteTime.dwLowDateTime)
+            after_identity = (
+                after.ftLastWriteTime.dwHighDateTime,
+                after.ftLastWriteTime.dwLowDateTime)
+            if before_identity != after_identity:
+                die(f"{context} changed while captured: {relative}")
+            return entries
+        finally:
+            for handle in reversed(handles):
+                _xi_windows_kernel32().CloseHandle(wintypes.HANDLE(handle))
+    else:
+        directory_fd = _xi_posix_open_repository_object(
+            source_root, relative, context, directory=True,
+            before_open_hook=before_open_hook)
+    try:
+        before = _xi_stable_file_identity(os.fstat(directory_fd))
+        entries = tuple(sorted(os.listdir(directory_fd)))
+        after = _xi_stable_file_identity(os.fstat(directory_fd))
+        if before != after:
+            die(f"{context} changed while captured: {relative}")
+        return entries
+    finally:
+        os.close(directory_fd)
+
+
+def _xi_include_candidate(base: str, spelling: str) -> str:
+    """Join one compiler search directory without erasing a checked child."""
+    stack = [] if base == '.' else list(Path(base).parts)
+    saw_child = False
+    for component in Path(spelling).parts:
+        if component == '..':
+            if saw_child or not stack:
+                die("xi-lowering: local include parent traversal may only precede "
+                    f"all child components and remain in-repository: {spelling}")
+            stack.pop()
+            continue
+        saw_child = True
+        stack.append(component)
+    if not stack:
+        die(f"xi-lowering: local include resolves to the repository root: {spelling}")
+    return Path(*stack).as_posix()
+
+
+def _xi_canonical_quoted_include(
+        source_root: Path, including: str, spelling: str,
+        include_directories: tuple[str, ...],
+        captured_directories: dict[str, tuple[str, ...]],
+        before_open_hook=None) -> tuple[str, bytes]:
+    """Resolve exactly as the C compiler: current directory, then ordered -I roots."""
+    path = Path(spelling)
+    if (not spelling or path.is_absolute() or '\\' in spelling or
+            any(component in {'', '.'} for component in path.parts)):
+        die("xi-lowering: local include must use a canonical relative spelling: "
+            f"{spelling}")
+
+    def capture_directory(relative: str) -> tuple[str, ...] | None:
+        if relative in captured_directories:
+            return captured_directories[relative]
+        try:
+            mode = os.lstat(source_root if relative == '.' else source_root / relative).st_mode
+        except FileNotFoundError:
+            return None
+        if stat.S_ISLNK(mode):
+            die(f"xi-lowering: local include search directory is a symlink: {relative}")
+        if not stat.S_ISDIR(mode):
+            return None
+        entries = _xi_secure_repository_directory_entries(
+            source_root, relative, 'xi-lowering: local include search directory',
+            before_open_hook=before_open_hook)
+        captured_directories[relative] = entries
+        return entries
+
+    search_directories = (Path(including).parent.as_posix(), *include_directories)
+    for search_directory in dict.fromkeys(search_directories):
+        if capture_directory(search_directory) is None:
+            continue
+        candidate = _xi_include_candidate(search_directory, spelling)
+        parent = Path(candidate).parent.as_posix()
+        if capture_directory(parent) is None:
+            continue
+        try:
+            mode = os.lstat(source_root / candidate).st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(mode):
+            die(f"xi-lowering: local include resolves through a symlink: {candidate}")
+        if not stat.S_ISREG(mode):
+            continue
+        data = _xi_secure_repository_file_bytes(
+            source_root, candidate, 'xi-lowering: local C include',
+            before_open_hook=before_open_hook)
+        return candidate, data
+    die(f"xi-lowering: local include cannot be resolved in-repository: {spelling}")
+
+
+def capture_xi_lowering_validation_snapshot(
+        source_root: Path, before_open_hook=None) -> XiLoweringValidationSnapshot:
+    """Capture repository-local quoted includes through governed ordered roots.
+
+    Build-tree include roots are intentionally outside this descriptor-bound
+    domain, so a quoted include that would require one fails closed.
+    """
+    source_root = Path(os.path.abspath(os.fspath(source_root)))
+    include_directories = _xi_cgen_cmake_include_directories(source_root)
+    captured_directories: dict[str, tuple[str, ...]] = {}
+    for relative in include_directories:
+        try:
+            mode = os.lstat(source_root / relative).st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(mode):
+            die(f"xi-lowering: C include search directory is a symlink: {relative}")
+        if not stat.S_ISDIR(mode):
+            die(f"xi-lowering: C include search path is not a directory: {relative}")
+        captured_directories[relative] = _xi_secure_repository_directory_entries(
+            source_root, relative, 'xi-lowering: C include search directory',
+            before_open_hook=before_open_hook)
+    pending: list[tuple[str, bytes | None]] = [('src/aot/xi_cgen.c', None)]
+    visited: dict[str, bytes] = {}
+    while pending:
+        relative, captured_data = pending.pop()
+        canonical = _xi_repository_relative_name(
+            source_root, source_root / relative, 'xi-lowering: local C include')
+        if canonical in visited:
+            continue
+        try:
+            data = captured_data
+            if data is None:
+                data = _xi_secure_repository_file_bytes(
+                    source_root, canonical, 'xi-lowering: local C include',
+                    before_open_hook=before_open_hook)
+            source = data.decode('utf-8', errors='strict')
+        except UnicodeDecodeError as error:
+            die(f"xi-lowering: cannot capture local C include {canonical}: {error}")
+        visited[canonical] = data
+        for include_spelling in _xi_local_c_include_spellings(
+                source, f"xi-lowering: local C include in {canonical}"):
+            included_relative, included_data = _xi_canonical_quoted_include(
+                source_root, canonical, include_spelling, include_directories,
+                captured_directories, before_open_hook=before_open_hook)
+            pending.append((included_relative, included_data))
+    return XiLoweringValidationSnapshot(
+        tuple(sorted(visited.items())), include_directories,
+        tuple(sorted(captured_directories.items())))
+
+
+def xi_lowering_aot_validation_paths(entries: list[XiLoweringDef],
+                                     source_root: Path,
+                                     snapshot: XiLoweringValidationSnapshot | None = None
+                                     ) -> list[Path]:
+    source_root = Path(os.path.abspath(os.fspath(source_root)))
+    snapshot = snapshot or capture_xi_lowering_validation_snapshot(source_root)
+    closure = {relative for relative, _ in snapshot.sources}
+    declared = xi_lowering_consumer_source_paths(entries)
+    missing = sorted(declared - closure)
+    if missing:
+        die("xi-lowering: direct consumer witness source is outside the xi_cgen.c "
+            "translation unit: " + ', '.join(missing))
+    return [source_root / relative for relative in sorted(closure)]
+
+
+def xi_lowering_validation_dependency_paths(
+        entries: list[XiLoweringDef], source_root: Path,
+        snapshot: XiLoweringValidationSnapshot,
+        discovery_snapshot: XiAotDiscoverySnapshot) -> list[Path]:
+    """Return closure and discovery inputs without creating a second owner list."""
+    xi_lowering_aot_validation_paths(entries, source_root, snapshot)
+    relatives = {relative for relative, _ in snapshot.sources}
+    relatives.update(relative for relative, _ in snapshot.directories)
+    relatives.update(relative for relative, _ in discovery_snapshot.sources)
+    relatives.update(relative for relative, _ in discovery_snapshot.directories)
+    if (source_root / 'CMakeLists.txt').exists():
+        relatives.add('CMakeLists.txt')
+    return [source_root / relative for relative in sorted(relatives)]
+
+
+def xi_lowering_noreturn_symbols(source_text: dict[str, str]) -> set[str]:
+    symbols = {'abort', 'exit', '_Exit', 'quick_exit',
+               '__builtin_trap', '__builtin_unreachable'}
+    declaration = re.compile(
+        r'(?m)^\s*(?:_Noreturn|XR_NORETURN|noreturn|\[\[noreturn\]\])\b'
+        r'[^;{}]*?\b([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+    for text in source_text.values():
+        source = _xi_c_source_without_literals(
+            text, blank_preprocessor=False)
+        symbols.update(match.group(1) for match in declaration.finditer(source))
+    return symbols
+
+
+def _xi_validate_governed_token_aliases(
+        entries: list[XiLoweringDef], source_text: dict[str, str],
+        context: str,
+        predicate_helpers: dict[str, set[str]]) -> None:
+    """Reject semantic aliases while leaving non-routing observations alone."""
+    selectors = {'XI_' + entry.ident for entry in entries}
+    symbols = {
+        symbol
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for symbol in (
+            binding.symbol,
+            *(router.symbol for router in binding.routers),
+            *(activation.caller for activation in binding.activations),
+            *(emitter.symbol for emitter in binding.emitters),
+            *(predicate.symbol for predicate in binding.predicates),
+        )
+    }
+    generated_macro_projections = {
+        'src/ir/xi_lowering_coverage_gen.h',
+        'src/ir/xi_ops_gen.h',
+        'src/plan/target/xr_target_instruction_gen.h',
+    }
+    governed = selectors | symbols
+    governed_pattern = re.compile(
+        r'\b(?:' + '|'.join(re.escape(token) for token in sorted(governed)) + r')\b')
+    symbol_pattern = re.compile(
+        r'\b(?:' + '|'.join(re.escape(symbol) for symbol in sorted(symbols)) + r')\b')
+    macro_definitions: dict[str, str] = {}
+    definition_pattern = re.compile(
+        r'^\s*(?:#|%:)\s*define\s+([A-Za-z_][A-Za-z0-9_]*)'
+        r'(?:\s*\([^\r\n]*?\))?\s*(.*?)\s*$')
+    for relative, text in sorted(source_text.items()):
+        logical = _xi_preprocessor_logical_source(
+            text, f'{context}: {relative}')
+        for line in logical.splitlines():
+            if not re.match(r'\s*(?:#|%:)', line):
+                continue
+            definition = definition_pattern.match(line)
+            if definition is not None:
+                macro_definitions[definition.group(1)] = definition.group(2)
+            if relative not in generated_macro_projections:
+                hidden = sorted(set(governed_pattern.findall(line)))
+                if hidden:
+                    die(f"{context}: governed token appears in preprocessing "
+                        f"directive in {relative}: {', '.join(hidden)}")
+
+    behavioral_macros = {
+        name for name, replacement in macro_definitions.items()
+        if (re.search(r'(?:->|\.)\s*op\b|\bcase\b', replacement) is not None or
+            symbol_pattern.search(replacement) is not None)
+    }
+    changed = True
+    while changed:
+        changed = False
+        for name, replacement in macro_definitions.items():
+            if name in behavioral_macros:
+                continue
+            if any(re.search(rf'\b{re.escape(target)}\s*\(', replacement)
+                   for target in behavioral_macros):
+                behavioral_macros.add(name)
+                changed = True
+
+    behavioral_functions = set()
+    for text in source_text.values():
+        for symbol, bodies in _xi_c_file_scope_function_bodies(text).items():
+            if any(re.search(r'(?:->|\.)\s*op\b', body) is not None and
+                   symbol_pattern.search(body) is not None
+                   for body in bodies):
+                behavioral_functions.add(symbol)
+
+    selector_pattern = re.compile(
+        r'\b(?:' + '|'.join(re.escape(selector) for selector in sorted(selectors)) + r')\b')
+    behavioral_calls = behavioral_macros | behavioral_functions
+    behavioral_call_pattern = None
+    if behavioral_calls:
+        behavioral_call_pattern = re.compile(
+            r'\b(?:' + '|'.join(
+                re.escape(symbol) for symbol in sorted(behavioral_calls)) + r')\s*\(')
+
+    predicate_ranges: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for relative, text in source_text.items():
+        ranges = _xi_c_file_scope_function_body_ranges(text)
+        for selector, helpers in predicate_helpers.items():
+            predicate_ranges[(relative, selector)] = [
+                item
+                for helper in helpers
+                for item in ranges.get(helper, [])
+            ]
+
+    for relative, text in sorted(source_text.items()):
+        code = _xi_c_source_without_literals(text)
+        for match in symbol_pattern.finditer(code):
+            if re.match(r'\s*\(', code[match.end():]) is None:
+                die(f"{context}: governed function token is used through an "
+                    f"alias in {relative}: {match.group(0)}")
+        for match in selector_pattern.finditer(code):
+            prefix = code[max(code.rfind(';', 0, match.start()),
+                              code.rfind('{', 0, match.start()),
+                              code.rfind('}', 0, match.start()),
+                              code.rfind('\n', 0, match.start())) + 1:match.start()]
+            designated_op = re.search(
+                r'(?:^|[,;{])\s*\.\s*op\s*=\s*'
+                r'(?:\(\s*[A-Za-z_][A-Za-z0-9_\s*]*\)\s*)*$',
+                prefix) is not None
+            aggregate_open = code.rfind('{', 0, match.start())
+            aggregate_boundary = max(
+                code.rfind(';', 0, match.start()),
+                code.rfind('}', 0, match.start()),
+                code.rfind('\n', 0, match.start()))
+            aggregate_prefix = ''
+            if aggregate_open > aggregate_boundary:
+                aggregate_prefix = code[
+                    max(code.rfind(';', 0, aggregate_open),
+                        code.rfind('}', 0, aggregate_open),
+                        code.rfind('\n', 0, aggregate_open)) + 1:aggregate_open]
+            aggregate_alias = (
+                not designated_op and aggregate_open > aggregate_boundary and
+                re.search(r'=\s*$', aggregate_prefix) is not None)
+            suffix = code[match.end():code.find('\n', match.end())
+                          if code.find('\n', match.end()) >= 0 else len(code)]
+            direct_field_comparison = (
+                re.search(r'(?:->|\.)\s*[A-Za-z_][A-Za-z0-9_]*\s*==\s*$',
+                          prefix) is not None or
+                re.match(r'\s*==\s*[A-Za-z_][A-Za-z0-9_]*'
+                         r'\s*(?:->|\.)\s*[A-Za-z_][A-Za-z0-9_]*\b',
+                         suffix) is not None)
+            assignment_rhs = (
+                not designated_op and not direct_field_comparison and re.search(
+                    r'(?<![.!>])\b[A-Za-z_][A-Za-z0-9_]*\s*'
+                    r'(?<![=!<>])=(?!=)', prefix) is not None)
+            alias_form = (re.search(
+                    r'(?<![.!>])\b[A-Za-z_][A-Za-z0-9_]*\s*='
+                    r'\s*(?:\(\s*[A-Za-z_][A-Za-z0-9_\s*]*\)\s*)*'
+                    r'&?\s*$', prefix) or re.search(r'&\s*$', prefix) or
+                    aggregate_alias or assignment_rhs)
+            selector = match.group(0)
+            predicate_alias = any(
+                start <= match.start() < end
+                for start, end in predicate_ranges.get((relative, selector), []))
+            if alias_form and not predicate_alias:
+                line = code.count('\n', 0, match.start()) + 1
+                die(f"{context}: governed selector is used through an "
+                    f"initializer alias in {relative}:{line}: {match.group(0)}")
+        if behavioral_call_pattern is not None:
+            for match in behavioral_call_pattern.finditer(code):
+                open_paren = match.end() - 1
+                end = _xi_matching_delimiter(code, open_paren, '(', ')')
+                if end is None:
+                    die(f"{context}: behavioral macro or function call is "
+                        f"unmatched in {relative}")
+                hidden = sorted(set(
+                    selector_pattern.findall(code[open_paren + 1:end])))
+                if hidden:
+                    die(f"{context}: governed selector is hidden in a macro argument "
+                        f"in {relative}: {', '.join(hidden)}")
+
+
+@functools.lru_cache(maxsize=4096)
+def _xi_function_selector_helper_tokens(
+        body: str) -> tuple[frozenset[str], frozenset[str]]:
+    """Extract predicate and factory selector literals from one function body."""
+    source = _xi_c_source_without_literals(body)
+    returns = re.findall(r'\breturn\s+([^;]+);', source)
+    comparison = re.compile(
+        r'(?:\b[A-Za-z_][A-Za-z0-9_]*(?:\s*->\s*op)?\b)\s*==\s*'
+        r'\b(XI_[A-Z0-9_]+)\b|\b(XI_[A-Z0-9_]+)\b\s*==\s*'
+        r'(?:\b[A-Za-z_][A-Za-z0-9_]*(?:\s*->\s*op)?\b)')
+    predicates = set()
+    factories = set()
+    for expression in returns:
+        for match in comparison.finditer(expression):
+            predicates.add(match.group(1) or match.group(2))
+        value = expression.strip()
+        while True:
+            cast = re.match(
+                r'^\(\s*[A-Za-z_][A-Za-z0-9_\s*]*\)\s*', value)
+            if cast is None:
+                break
+            value = value[cast.end():].strip()
+        value = _xi_strip_balanced_parentheses(value)
+        if re.fullmatch(r'XI_[A-Z0-9_]+', value):
+            factories.add(value)
+    return frozenset(predicates), frozenset(factories)
+
+
+def _xi_selector_predicate_helpers(
+        aot_functions: tuple[tuple[str, str, str], ...],
+        selectors: set[str]) -> dict[str, set[str]]:
+    """Map selector predicates that can hide a caller's terminal branch."""
+    helpers = {selector: set() for selector in selectors}
+    for _, symbol, body in aot_functions:
+        predicates, _ = _xi_function_selector_helper_tokens(body)
+        for selector in selectors.intersection(predicates):
+            helpers[selector].add(symbol)
+    return helpers
+
+
+def _xi_selector_factory_helpers(
+        aot_functions: tuple[tuple[str, str, str], ...],
+        selectors: set[str]) -> dict[str, set[str]]:
+    """Map helpers that return a governed selector for a caller comparison."""
+    helpers = {selector: set() for selector in selectors}
+    for _, symbol, body in aot_functions:
+        _, factories = _xi_function_selector_helper_tokens(body)
+        for selector in selectors.intersection(factories):
+            helpers[selector].add(symbol)
+    return helpers
+
+
+def _xi_exact_positive_selector_for_roots(
+        term: str, root_values: set[str]) -> tuple[str, str] | None:
+    value = _xi_strip_balanced_parentheses(term)
+    selector = r'(XI_[A-Z0-9_]+)'
+    for root in sorted(root_values):
+        root_op = rf'\b{re.escape(root)}\s*->\s*op\b'
+        for pattern in (rf'{root_op}\s*==\s*{selector}',
+                        rf'{selector}\s*==\s*{root_op}'):
+            match = re.fullmatch(pattern, value)
+            if match:
+                return root, match.group(1)
+    return None
+
+
+def _xi_exact_positive_selector_set(
+        expression: str, root_values: set[str]) -> tuple[str, frozenset[str]] | None:
+    value = _xi_strip_balanced_parentheses(expression)
+    matches = [
+        _xi_exact_positive_selector_for_roots(term, root_values)
+        for term in _xi_split_top_level(value, '||')
+    ]
+    if not matches or any(match is None for match in matches):
+        return None
+    roots = {match[0] for match in matches if match is not None}
+    selectors = [match[1] for match in matches if match is not None]
+    if len(roots) != 1 or len(selectors) != len(set(selectors)):
+        return None
+    return next(iter(roots)), frozenset(selectors)
+
+
+def _xi_declared_positive_selector_predicate_present(
+        body: str, selectors: set[str], root_values: set[str]) -> bool:
+    """Prove one helper returns exactly a declared positive selector set."""
+    source = _xi_c_source_without_literals(body)
+    returns = [expression.strip()
+               for expression in re.findall(r'\breturn\s+([^;]+);', source)]
+    positive = [expression for expression in returns
+                if _xi_normalize_c_expr(expression) != 'false']
+    if len(positive) != 1 or not root_values:
+        return False
+    parsed = _xi_exact_positive_selector_set(positive[0], root_values)
+    if parsed is None or parsed[1] != frozenset(selectors):
+        return False
+    if any(_xi_normalize_c_expr(expression) not in {'false'}
+           for expression in returns if expression != positive[0]):
+        return False
+    return set(re.findall(r'\bXI_[A-Z0-9_]+\b', source)) == selectors
+
+
+def _xi_exact_negative_selector_set(
+        expression: str, root_values: set[str]) -> tuple[str, frozenset[str]] | None:
+    value = _xi_strip_balanced_parentheses(expression)
+    matches: list[tuple[str, str]] = []
+    selector = r'(XI_[A-Z0-9_]+)'
+    for term in _xi_split_top_level(value, '&&'):
+        stripped = _xi_strip_balanced_parentheses(term)
+        found = None
+        for root in sorted(root_values):
+            root_op = rf'\b{re.escape(root)}\s*->\s*op\b'
+            for pattern in (rf'{root_op}\s*!=\s*{selector}',
+                            rf'{selector}\s*!=\s*{root_op}'):
+                match = re.fullmatch(pattern, stripped)
+                if match:
+                    found = (root, match.group(1))
+                    break
+            if found is not None:
+                break
+        if found is None:
+            return None
+        matches.append(found)
+    roots = {root for root, _ in matches}
+    selector_values = [selector_value for _, selector_value in matches]
+    if (len(roots) != 1 or
+            len(selector_values) != len(set(selector_values))):
+        return None
+    return next(iter(roots)), frozenset(selector_values)
+
+
+def _xi_declared_selector_domain_present(
+        body: str, selectors: set[str], root_values: set[str]) -> str | None:
+    """Return the guarded Xi root when a leading false guard is exact."""
+    source = _xi_c_source_without_literals(body)
+    records = _xi_if_statement_records(source, top_level_only=True)
+    if not records or source[:records[0][0]].strip():
+        return None
+    start, end, condition, then_branch, _ = records[0]
+    if start != 0 and source[:start].strip():
+        return None
+    if _xi_normalize_c_expr(then_branch) != 'returnfalse;':
+        return None
+    terms = [_xi_strip_balanced_parentheses(term)
+             for term in _xi_split_top_level(
+                 _xi_strip_balanced_parentheses(condition), '||')]
+    domains = [parsed for parsed in (
+        _xi_exact_negative_selector_set(term, root_values) for term in terms)
+               if parsed is not None]
+    if len(domains) != 1 or domains[0][1] != frozenset(selectors):
+        return None
+    root = domains[0][0]
+    if _xi_normalize_c_expr('!' + root) not in {
+            _xi_normalize_c_expr(term) for term in terms}:
+        return None
+    if any(_xi_strip_balanced_parentheses(term) in {'true', 'false'}
+           for term in terms):
+        return None
+    returns = [(match.start(), _xi_normalize_c_expr(match.group(1)))
+               for match in re.finditer(r'\breturn\s+([^;]+);', source)]
+    if not any(value == 'true' and position >= end
+               for position, value in returns):
+        return None
+    if any(value not in {'false', 'true'} for _, value in returns):
+        return None
+    if set(re.findall(r'\bXI_[A-Z0-9_]+\b', source)) != selectors:
+        return None
+    return root
+
+
+def _xi_declared_selector_predicate_delegates(
+        body: str, domain_symbol: str, root_value: str) -> bool:
+    """Prove an outer predicate is dominated by its exact domain helper."""
+    source = _xi_c_source_without_literals(body)
+    records = _xi_if_statement_records(source, top_level_only=True)
+    if not records or source[:records[0][0]].strip():
+        return False
+    _, end, condition, then_branch, _ = records[0]
+    if _xi_normalize_c_expr(then_branch) != 'returnfalse;':
+        return False
+    matching_roots = set()
+    for term in _xi_split_top_level(
+            _xi_strip_balanced_parentheses(condition), '||'):
+        value = _xi_strip_balanced_parentheses(term)
+        match = re.fullmatch(
+            rf'!\s*{re.escape(domain_symbol)}\s*\((.*)\)', value, re.S)
+        if match is None:
+            continue
+        arguments = _xi_split_c_arguments(match.group(1))
+        if _xi_normalize_c_expr(root_value) in arguments:
+            matching_roots.add(root_value)
+    if matching_roots != {root_value}:
+        return False
+    returns = [(match.start(), _xi_normalize_c_expr(match.group(1)))
+               for match in re.finditer(r'\breturn\s+([^;]+);', source)]
+    return (any(value == 'true' and position >= end
+                for position, value in returns) and
+            all(value in {'false', 'true'} for _, value in returns))
+
+
+def _xi_predicate_terminal_emission_precedes_return(
+        branch: str, known_emitters: set[str], terminators: set[str]) -> bool:
+    """Prove a declared predicate branch reaches an exact nested emitter."""
+    returns = _xi_top_level_bare_return_positions(branch, r'')
+    if not returns:
+        return False
+    for emitter in known_emitters:
+        for position, _, args in _xi_c_call_records(branch, emitter):
+            if ('out' in args and
+                    _xi_call_record_reachable(branch, position, terminators) and
+                    any(position < terminal_return for terminal_return in returns)):
+                return True
+    return False
+
+
+def _xi_hidden_selector_route_present(
+        body: str, selector: str, predicate_symbols: set[str],
+        factory_symbols: set[str], root_values: set[str],
+        known_emitters: set[str], terminators: set[str]) -> bool:
+    """Find terminal branches whose selector was wrapped or cast away."""
+    token = re.compile(rf'\b{re.escape(selector)}\b')
+
+    def predicate_uses_root_value(condition: str) -> bool:
+        normalized_roots = {
+            _xi_normalize_c_expr(expression)
+            for name in root_values
+            for expression in (name, f'{name}->op')
+        }
+        for helper in predicate_symbols:
+            for match in re.finditer(rf'\b{re.escape(helper)}\s*\(', condition):
+                open_paren = condition.find('(', match.start())
+                close_paren = _xi_matching_delimiter(
+                    condition, open_paren, '(', ')')
+                if close_paren is None:
+                    return True
+                arguments = _xi_split_c_arguments(
+                    condition[open_paren + 1:close_paren])
+                if any(_xi_normalize_c_expr(
+                        _xi_strip_balanced_parentheses(argument)) in normalized_roots
+                       for argument in arguments):
+                    return True
+        return False
+
+    factory_pattern = None
+    if factory_symbols:
+        factory_pattern = re.compile(
+            r'\b(?:' + '|'.join(
+                re.escape(symbol) for symbol in sorted(factory_symbols)) +
+            r')\s*\(')
+    for condition, then_branch, _ in _xi_if_statements(body, top_level_only=True):
+        direct_field_selector = re.search(
+            rf'(?:->|\.)\s*op\s*==\s*\b{re.escape(selector)}\b',
+            condition) is not None
+        negative_field_selector = re.search(
+            rf'(?:->|\.)\s*op\s*!=\s*'
+            rf'(?:\(\s*[A-Za-z_][A-Za-z0-9_\s*]*\)\s*)*'
+            rf'\b{re.escape(selector)}\b|\b{re.escape(selector)}\b\s*!=\s*'
+            rf'(?:[A-Za-z_][A-Za-z0-9_]*\s*(?:->|\.)\s*op)',
+            condition) is not None
+        hidden_literal = (
+            token.search(condition) is not None and
+            not direct_field_selector and
+            not negative_field_selector and
+            not _xi_condition_has_selector_disjunct(condition, selector))
+        hidden_helper = (
+            predicate_uses_root_value(condition) or
+            (factory_pattern is not None and
+             factory_pattern.search(condition) is not None))
+        terminal = _xi_terminal_emission_branch(
+            then_branch, known_emitters, terminators)
+        if (hidden_helper and predicate_symbols and
+                _xi_predicate_terminal_emission_precedes_return(
+                    then_branch, known_emitters, terminators)):
+            terminal = True
+        if (hidden_literal or hidden_helper) and terminal:
+            return True
+    return False
+
+
+def _xi_terminal_selector_census(
+        aot_functions: tuple[tuple[str, str, str], ...], selectors: set[str],
+        known_emitters: set[str], terminators: set[str],
+        declared_routes: dict[str, set[tuple[str, str]]],
+        predicate_helpers: dict[str, set[str]],
+        factory_helpers: dict[str, set[str]],
+        root_values: dict[tuple[str, str], set[str]],
+) -> dict[str, set[tuple[str, str]]]:
+    """Find terminal selectors by source function without an entries x functions scan."""
+    census = {selector: set() for selector in selectors}
+    if not known_emitters:
+        return census
+    token_pattern = re.compile(r'\bXI_[A-Z0-9_]+\b')
+    emitter_pattern = re.compile(
+        r'\b(?:' + '|'.join(
+            re.escape(symbol) for symbol in sorted(known_emitters)) + r')\s*\(')
+    for source_path, symbol, function_body in aot_functions:
+        if emitter_pattern.search(function_body) is None:
+            continue
+        candidates = set(token_pattern.findall(function_body)) & selectors
+        candidates.update(
+            selector for selector, helpers in predicate_helpers.items()
+            if any(re.search(rf'\b{re.escape(helper)}\s*\(', function_body)
+                   for helper in helpers))
+        candidates.update(
+            selector for selector, helpers in factory_helpers.items()
+            if any(re.search(rf'\b{re.escape(helper)}\s*\(', function_body)
+                   for helper in helpers))
+        for selector in candidates:
+            if (source_path, symbol) in declared_routes.get(selector, set()):
+                continue
+            if _xi_direct_selector_present(
+                    function_body, selector, known_emitters, terminators):
+                census[selector].add((source_path, symbol))
+            elif _xi_hidden_selector_route_present(
+                    function_body, selector, predicate_helpers[selector],
+                    factory_helpers[selector],
+                    root_values.get((source_path, symbol), set()),
+                    known_emitters, terminators):
+                census[selector].add((source_path, symbol))
+    return census
+
+
+def validate_xi_lowering_consumer_sources(
+        entries: list[XiLoweringDef], source_root: Path, path: str = '<input>',
+        snapshot: XiLoweringValidationSnapshot | None = None,
+        discovery_snapshot: XiAotDiscoverySnapshot | None = None
+) -> XiLoweringValidationSnapshot:
+    source_root = Path(os.path.abspath(os.fspath(source_root)))
+    snapshot = snapshot or capture_xi_lowering_validation_snapshot(source_root)
+    validation_paths = xi_lowering_aot_validation_paths(entries, source_root, snapshot)
+    source_text = snapshot.source_text()
+    discovery_snapshot = discovery_snapshot or _xi_capture_aot_discovery_census(
+        source_root)
+    discovery_text = discovery_snapshot.source_text()
+    combined_sources = dict(discovery_snapshot.sources)
+    combined_sources.update(snapshot.sources)
+    combined_snapshot = XiAotDiscoverySnapshot(
+        tuple(sorted(combined_sources.items())), discovery_snapshot.directories)
+    combined_text = combined_snapshot.source_text()
+    aot_functions = _xi_aot_discovery_functions(combined_snapshot)
+    governed_selectors = {'XI_' + entry.ident for entry in entries}
+    declared_selector_predicate_helpers = {
+        'XI_' + entry.ident: {
+            predicate.symbol
+            for bindings in entry.target_consumers.values()
+            for binding in bindings
+            for predicate in binding.predicates
+        }
+        for entry in entries
+    }
+    declared_predicate_selectors: dict[
+        XiConsumerPredicateWitness, set[str]] = {}
+    outer_predicate_domains: dict[tuple[str, str], set[tuple[str | None,
+                                                              str | None]]] = {}
+    for entry in entries:
+        selector = 'XI_' + entry.ident
+        for bindings in entry.target_consumers.values():
+            for binding in bindings:
+                for predicate in binding.predicates:
+                    declared_predicate_selectors.setdefault(
+                        predicate, set()).add(selector)
+                    outer_predicate_domains.setdefault(
+                        (predicate.source_path, predicate.symbol), set()).add(
+                            (predicate.domain_source_path,
+                             predicate.domain_symbol))
+    inconsistent_predicates = sorted(
+        f'{source_path}::{symbol}'
+        for (source_path, symbol), domains in outer_predicate_domains.items()
+        if len(domains) != 1)
+    if inconsistent_predicates:
+        die(f"{path}: predicate domain declaration differs across Xi rows: "
+            + ', '.join(inconsistent_predicates))
+    inferred_selector_predicate_helpers = _xi_selector_predicate_helpers(
+        aot_functions, governed_selectors)
+    selector_predicate_helpers = {
+        selector: (declared_selector_predicate_helpers[selector] |
+                   inferred_selector_predicate_helpers[selector])
+        for selector in governed_selectors
+    }
+    selector_factory_helpers = _xi_selector_factory_helpers(
+        aot_functions, governed_selectors)
+    _xi_validate_governed_token_aliases(
+        entries, combined_text, path, declared_selector_predicate_helpers)
+    declared_locations: dict[str, set[str]] = {}
+    for entry in entries:
+        for bindings in entry.target_consumers.values():
+            for binding in bindings:
+                declared_locations.setdefault(binding.symbol, set()).add(binding.source_path)
+                for router in binding.routers:
+                    declared_locations.setdefault(router.symbol, set()).add(router.source_path)
+                for activation in binding.activations:
+                    declared_locations.setdefault(activation.caller, set()).add(
+                        activation.source_path)
+                for emitter in binding.emitters:
+                    declared_locations.setdefault(emitter.symbol, set()).add(
+                        emitter.source_path)
+                for predicate in binding.predicates:
+                    declared_locations.setdefault(predicate.symbol, set()).add(
+                        predicate.source_path)
+                    if predicate.domain_symbol is not None:
+                        declared_locations.setdefault(
+                            predicate.domain_symbol, set()).add(
+                                predicate.domain_source_path)
+    definition_paths: dict[str, set[str]] = {}
+    for relative, symbol, _ in aot_functions:
+        definition_paths.setdefault(symbol, set()).add(relative)
+    for symbol, expected_paths in declared_locations.items():
+        discovered_paths = definition_paths.get(symbol, set())
+        if discovered_paths != expected_paths:
+            die(f"{path}: repository AOT source census for {symbol} differs from "
+                f"lowering.def: expected {sorted(expected_paths)}, "
+                f"found {sorted(discovered_paths)}")
+    known_emitters = {
+        emitter.symbol
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for emitter in binding.emitters
+    }
+    terminal_emitters = known_emitters | {
+        call.symbol
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for sequence in binding.output_sequences
+        for call in sequence.calls
+        if call.symbol != 'fprintf'
+    } | {
+        binding.symbol
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        if binding.witness_kind == 'selected-by'
+    }
+    terminators = xi_lowering_noreturn_symbols(source_text)
+    function_root_values = {
+        (relative, symbol): values
+        for relative, text in combined_text.items()
+        for symbol, values in _xi_c_file_scope_function_value_parameters(text).items()
+    }
+    for predicate, selectors in declared_predicate_selectors.items():
+        context = f"{path}: predicate {predicate.source_path}::{predicate.symbol}"
+        predicate_body = _xi_require_function_body(
+            source_root, predicate.source_path, predicate.symbol,
+            context, source_text)
+        predicate_roots = function_root_values.get(
+            (predicate.source_path, predicate.symbol), set())
+        if predicate.domain_symbol is None:
+            if not _xi_declared_positive_selector_predicate_present(
+                    predicate_body, selectors, predicate_roots):
+                die(f"{context} does not return exactly the declared positive "
+                    f"selector set {sorted(selectors)}")
+            continue
+        domain_body = _xi_require_function_body(
+            source_root, predicate.domain_source_path,
+            predicate.domain_symbol, context, source_text)
+        domain_roots = function_root_values.get(
+            (predicate.domain_source_path, predicate.domain_symbol), set())
+        domain_root = _xi_declared_selector_domain_present(
+            domain_body, selectors, domain_roots)
+        if domain_root is None:
+            die(f"{context} domain {predicate.domain_source_path}::"
+                f"{predicate.domain_symbol} does not admit exactly the "
+                f"declared selector set {sorted(selectors)}")
+        if not _xi_declared_selector_predicate_delegates(
+                predicate_body, predicate.domain_symbol, domain_root):
+            die(f"{context} is not fail-closed through its declared "
+                f"selector domain {predicate.domain_symbol}")
+    activation_callers = {
+        (activation.source_path, activation.caller)
+        for entry in entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for activation in binding.activations
+    }
+    reachable_activation_callers = _xi_reachable_activation_callers(
+        aot_functions, activation_callers, terminators)
+    declared_routes: dict[str, set[tuple[str, str]]] = {}
+    for entry in entries:
+        selector = 'XI_' + entry.ident
+        declared_routes[selector] = {
+            (router.source_path, router.symbol)
+            for bindings in entry.target_consumers.values()
+            for binding in bindings
+            for router in binding.routers
+        } - {
+            (binding.source_path, binding.symbol)
+            for bindings in entry.target_consumers.values()
+            for binding in bindings
+            if binding.witness_kind == 'selector'
+        }
+    terminal_selector_census = _xi_terminal_selector_census(
+        aot_functions, governed_selectors, terminal_emitters, terminators,
+        declared_routes, selector_predicate_helpers,
+        selector_factory_helpers, function_root_values)
+    for entry in entries:
+        selector = 'XI_' + entry.ident
+        for target, bindings in entry.target_consumers.items():
+            structural = [binding for binding in bindings
+                          if binding.witness_kind == 'structural']
+            if structural:
+                categories = {binding.structural_category for binding in structural}
+                if len(structural) != len(bindings) or categories != XI_CONSUMER_STRUCTURAL_CATEGORIES:
+                    die(f"{path}: {entry.op_name}:{target}: structural consumer must bind "
+                        "the complete four-category ownership set")
+            for binding in bindings:
+                context = f"{path}: {entry.op_name}:{target}"
+                body = _xi_require_function_body(source_root, binding.source_path,
+                                                 binding.symbol, context, source_text)
+                if binding.witness_kind in {'guarded-selector', 'structural'} and \
+                        not binding.activations:
+                    die(f"{context}: {binding.source_path}::{binding.symbol} must declare "
+                        "its complete activation census")
+                if (binding.witness_kind == 'structural' and
+                        binding.structural_category != 'edge-parallel-copy' and
+                        not binding.output_sequences):
+                    die(f"{context}: {binding.source_path}::{binding.symbol} must declare "
+                        "its exact structural output sequence")
+                _xi_validate_activation_census(
+                    source_root, binding, aot_functions, context, source_text,
+                    terminators, reachable_activation_callers)
+                binding_emitters = {emitter.symbol for emitter in binding.emitters}
+                if binding.witness_kind == 'selector':
+                    direct = _xi_direct_selector_present(
+                        body, selector, binding_emitters, terminators,
+                        allow_nested_emitter_route=True)
+                    hidden = _xi_hidden_selector_route_present(
+                        body, selector,
+                        {predicate.symbol for predicate in binding.predicates},
+                        selector_factory_helpers[selector],
+                        function_root_values.get(
+                            (binding.source_path, binding.symbol), set()),
+                        binding_emitters, terminators)
+                    if not direct and not hidden:
+                        die(f"{context}: {binding.source_path}::{binding.symbol} does not "
+                            f"select {selector} from v->op")
+                elif binding.witness_kind == 'guarded-selector':
+                    if not _xi_guarded_selector_present(
+                            body, selector, binding_emitters, terminators):
+                        die(f"{context}: {binding.source_path}::{binding.symbol} lacks the "
+                            f"leading fail-closed guard for {selector}")
+                elif binding.witness_kind == 'selected-by':
+                    for router in binding.routers:
+                        router_body = _xi_require_function_body(
+                            source_root, router.source_path, router.symbol, context,
+                            source_text)
+                        if not _xi_selector_routes_to_owner(router_body, selector,
+                                                           binding.symbol,
+                                                           known_emitters):
+                            die(f"{context}: {router.source_path}::{router.symbol} does not "
+                                f"route {selector} to {binding.source_path}::{binding.symbol}")
+                    declared = {(router.source_path, router.symbol)
+                                for router in binding.routers}
+                    discovered = {
+                        (source_path, symbol)
+                        for source_path, symbol, function_body in aot_functions
+                        if selector in function_body and
+                        binding.symbol in function_body and
+                        _xi_selector_routes_to_owner(function_body, selector,
+                                                     binding.symbol,
+                                                     known_emitters)
+                    }
+                    if discovered != declared:
+                        missing = sorted(discovered - declared)
+                        stale = sorted(declared - discovered)
+                        details = []
+                        if missing:
+                            details.append('undeclared route(s): ' + ', '.join(
+                                f'{source_path}::{symbol}' for source_path, symbol in missing))
+                        if stale:
+                            details.append('stale route(s): ' + ', '.join(
+                                f'{source_path}::{symbol}' for source_path, symbol in stale))
+                        die(f"{context}: direct-consumer router census mismatch: " +
+                            '; '.join(details))
+                else:
+                    _xi_validate_structural_consumer(
+                        source_root, binding, context, source_text, terminators)
+            declared_guarded = {
+                (binding.source_path, binding.symbol)
+                for binding in bindings
+                if binding.witness_kind == 'guarded-selector'
+            }
+            if declared_guarded:
+                discovered_guarded = {
+                    (source_path, symbol)
+                    for source_path, symbol, function_body in aot_functions
+                    if selector in function_body and _xi_guarded_selector_present(
+                        function_body, selector, known_emitters, terminators)
+                }
+                if discovered_guarded != declared_guarded:
+                    die(f"{path}: {entry.op_name}:{target}: guarded-selector census mismatch")
+        declared_selectors = {
+            (binding.source_path, binding.symbol)
+            for bindings in entry.target_consumers.values()
+            for binding in bindings
+            if binding.witness_kind == 'selector'
+        }
+        discovered_selectors = terminal_selector_census[selector]
+        if discovered_selectors != declared_selectors:
+            missing = sorted(discovered_selectors - declared_selectors)
+            stale = sorted(declared_selectors - discovered_selectors)
+            details = []
+            if missing:
+                details.append('undeclared terminal selector(s): ' + ', '.join(
+                    f'{source_path}::{symbol}' for source_path, symbol in missing))
+            if stale:
+                details.append('stale terminal selector(s): ' + ', '.join(
+                    f'{source_path}::{symbol}' for source_path, symbol in stale))
+            die(f"{path}: {entry.op_name}:aot-c: direct-consumer selector census "
+                "mismatch: " + '; '.join(details))
+    return snapshot
+
+
+def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef],
+                                         ops: list[XiOpDef]) -> str:
     main_targets = {'vm-bytecode', 'aot-c'}
     patterned_entries = [entry for entry in entries if entry.template != 'custom']
-    main_backend_entries = [entry for entry in entries if main_targets <= set(entry.targets)]
+    main_backend_entries = [
+        entry for entry in entries
+        if main_targets <= _xi_normalized_lowering_targets(entry.targets)
+    ]
     main_backend_patterned_entries = [
         entry for entry in patterned_entries
-        if main_targets <= set(entry.targets)
+        if main_targets <= _xi_normalized_lowering_targets(entry.targets)
     ]
     lines = []
     lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
@@ -2106,7 +5071,7 @@ def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
     lines.append('')
     lines.append('#include <stdbool.h>')
     lines.append('#include <stdint.h>')
-    lines.append('#include "xi.h"')
+    lines.append('#include "xi_ops_gen.h"')
     lines.append('')
     lines.append('#define XI_LOWER_TARGET_NONE 0')
     for i, target in enumerate(sorted(VALID_XI_LOWERING_TARGETS)):
@@ -2126,6 +5091,17 @@ def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
         f'enum {{ XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT = {len(main_backend_patterned_entries)} }};')
     lines.append(f'enum {{ XI_LOWERING_REJECTED_TARGET_COUNT = {sum(len(entry.target_rejects) for entry in entries)} }};')
     lines.append(f'enum {{ XI_LOWERING_REJECTED_ENTRY_COUNT = {sum(1 for entry in entries if entry.target_rejects)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_TARGET_COUNT = {sum(len(entry.target_consumers) for entry in entries)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_ENTRY_COUNT = {sum(1 for entry in entries if entry.target_consumers)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_BINDING_COUNT = {sum(len(bindings) for entry in entries for bindings in entry.target_consumers.values())} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_ROUTER_WITNESS_COUNT = {sum(len(binding.routers) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_EMITTER_WITNESS_COUNT = {sum(len(binding.emitters) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_PREDICATE_WITNESS_COUNT = {sum(len(binding.predicates) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_PREDICATE_DOMAIN_WITNESS_COUNT = {sum(1 for entry in entries for bindings in entry.target_consumers.values() for binding in bindings for predicate in binding.predicates if predicate.domain_symbol is not None)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_GUARDED_SELECTOR_COUNT = {sum(1 for entry in entries for bindings in entry.target_consumers.values() for binding in bindings if binding.witness_kind == "guarded-selector")} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_ACTIVATION_EDGE_COUNT = {sum(len(binding.activations) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_ACTIVATION_CALL_COUNT = {sum(activation.count for entry in entries for bindings in entry.target_consumers.values() for binding in bindings for activation in binding.activations)} }};')
+    lines.append(f'enum {{ XI_LOWERING_CONSUMER_OUTPUT_SEQUENCE_COUNT = {sum(len(binding.output_sequences) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)} }};')
     for target in sorted(VALID_XI_LOWERING_TARGETS):
         ident = _xi_c_ident(target)
         lines.append(
@@ -2138,15 +5114,83 @@ def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
         target_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.targets)
         required_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.required_targets)
         reject_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_rejects.keys()))
+        consumer_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_consumers.keys()))
         suffix = ' \\' if i + 1 < len(entries) else ''
-        lines.append(f'    X({entry.ident}, "{entry.op_name}", {target_bits}, {required_bits}, {reject_bits}){suffix}')
+        lines.append(f'    X({entry.ident}, "{entry.op_name}", {target_bits}, {required_bits}, '
+                     f'{reject_bits}, {consumer_bits}){suffix}')
     lines.append('')
     lines.append('')
-    lines.append('static inline uint32_t xi_lowering_generated_targets(uint16_t op) {')
+    lines.append('#define XI_LOWERING_CONSUMER_BINDINGS(X) \\')
+    consumer_rows = [
+        (entry, binding)
+        for entry in entries
+        for _, bindings in sorted(entry.target_consumers.items())
+        for binding in bindings
+    ]
+    for i, (entry, binding) in enumerate(consumer_rows):
+        suffix = ' \\' if i + 1 < len(consumer_rows) else ''
+        witness = ('XI_LOWERING_CONSUMER_WITNESS_' +
+                   _xi_c_ident(binding.witness_kind if binding.witness_kind != 'structural'
+                               else 'structural-' + binding.structural_category))
+        lines.append(f'    X({entry.ident}, "{entry.op_name}", "{binding.source_path}", '
+                     f'{binding.symbol}, {witness}){suffix}')
+    lines.append('')
+    lines.append('')
+    lines.append('#define XI_LOWERING_CONSUMER_ROUTER_WITNESSES(X) \\')
+    router_rows = [
+        (entry, binding, router)
+        for entry in entries
+        for _, bindings in sorted(entry.target_consumers.items())
+        for binding in bindings
+        for router in binding.routers
+    ]
+    for i, (entry, binding, router) in enumerate(router_rows):
+        suffix = ' \\' if i + 1 < len(router_rows) else ''
+        lines.append(f'    X({entry.ident}, "{entry.op_name}", "{router.source_path}", '
+                     f'{router.symbol}, "{binding.source_path}", {binding.symbol}){suffix}')
+    lines.append('')
+    lines.append('')
+    lines.append('#define XI_LOWERING_CONSUMER_EMITTER_WITNESSES(X) \\')
+    emitter_rows = [
+        (entry, binding, emitter)
+        for entry in entries
+        for _, bindings in sorted(entry.target_consumers.items())
+        for binding in bindings
+        for emitter in binding.emitters
+    ]
+    for i, (entry, binding, emitter) in enumerate(emitter_rows):
+        suffix = ' \\' if i + 1 < len(emitter_rows) else ''
+        lines.append(f'    X({entry.ident}, "{entry.op_name}", "{binding.source_path}", '
+                     f'{binding.symbol}, "{emitter.source_path}", {emitter.symbol}){suffix}')
+    lines.append('')
+    lines.append('')
+    lines.append('static inline uint32_t xi_lowering_covered_targets(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in entries:
         target_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.targets)
         lines.append(f'        case XI_{entry.ident}: return {target_bits};')
+    lines.append('        case XI_OP_COUNT: return 0;')
+    lines.append('        default: return 0;')
+    lines.append('    }')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint32_t xi_lowering_driver_targets(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in entries:
+        driver_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_drivers.keys()))
+        lines.append(f'        case XI_{entry.ident}: return {driver_bits};')
+    lines.append('        case XI_OP_COUNT: return 0;')
+    lines.append('        default: return 0;')
+    lines.append('    }')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint32_t xi_lowering_consumer_targets(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in entries:
+        consumer_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_consumers.keys()))
+        lines.append(f'        case XI_{entry.ident}: return {consumer_bits};')
     lines.append('        case XI_OP_COUNT: return 0;')
     lines.append('        default: return 0;')
     lines.append('    }')
@@ -2191,11 +5235,25 @@ def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
     lines.append('}')
     lines.append('')
     lines.append('static inline bool xi_lowering_has_target(uint16_t op, uint32_t target) {')
-    lines.append('    return (xi_lowering_generated_targets(op) & target) == target;')
+    lines.append('    return (xi_lowering_covered_targets(op) & target) == target;')
     lines.append('}')
     lines.append('')
     lines.append('static inline bool xi_lowering_target_is_rejected(uint16_t op, uint32_t target) {')
     lines.append('    return (xi_lowering_rejected_targets(op) & target) == target;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline bool xi_lowering_op_backend_legal(uint16_t op) {')
+    lines.append('    if (xi_generated_op_backend_rewrite(op) != XI_GEN_BACKEND_REWRITE_NONE)')
+    lines.append('        return false;')
+    lines.append('    if (xi_generated_op_lowering_policy(op) == XI_GEN_LOWERING_VERIFIER_ONLY)')
+    lines.append('        return false;')
+    lines.append('    uint32_t aot_implementations =')
+    lines.append('        xi_lowering_covered_targets(op) &')
+    lines.append('        (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_AOT_C_STMT);')
+    lines.append('    uint32_t aot_rejections =')
+    lines.append('        xi_lowering_rejected_targets(op) &')
+    lines.append('        (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_AOT_C_STMT);')
+    lines.append('    return aot_implementations != 0 && aot_rejections == 0;')
     lines.append('}')
     lines.append('')
     lines.append('#endif  /* XI_LOWERING_COVERAGE_GEN_H */')
@@ -2797,13 +5855,16 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     return '\n'.join(lines)
 
 
-def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
+def generate_xi_lowering_test(entries: list[XiLoweringDef], ops: list[XiOpDef]) -> str:
     main_targets = {'vm-bytecode', 'aot-c'}
     patterned_entries = [entry for entry in entries if entry.template != 'custom']
-    main_backend_entries = [entry for entry in entries if main_targets <= set(entry.targets)]
+    main_backend_entries = [
+        entry for entry in entries
+        if main_targets <= _xi_normalized_lowering_targets(entry.targets)
+    ]
     main_backend_patterned_entries = [
         entry for entry in patterned_entries
-        if main_targets <= set(entry.targets)
+        if main_targets <= _xi_normalized_lowering_targets(entry.targets)
     ]
     lines = []
     lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
@@ -2828,6 +5889,28 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
         f'    assert(XI_LOWERING_REJECTED_TARGET_COUNT == {sum(len(entry.target_rejects) for entry in entries)});')
     lines.append(
         f'    assert(XI_LOWERING_REJECTED_ENTRY_COUNT == {sum(1 for entry in entries if entry.target_rejects)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_TARGET_COUNT == {sum(len(entry.target_consumers) for entry in entries)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_ENTRY_COUNT == {sum(1 for entry in entries if entry.target_consumers)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_BINDING_COUNT == {sum(len(bindings) for entry in entries for bindings in entry.target_consumers.values())});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_ROUTER_WITNESS_COUNT == {sum(len(binding.routers) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_EMITTER_WITNESS_COUNT == {sum(len(binding.emitters) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_PREDICATE_WITNESS_COUNT == {sum(len(binding.predicates) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_PREDICATE_DOMAIN_WITNESS_COUNT == {sum(1 for entry in entries for bindings in entry.target_consumers.values() for binding in bindings for predicate in binding.predicates if predicate.domain_symbol is not None)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_GUARDED_SELECTOR_COUNT == {sum(1 for entry in entries for bindings in entry.target_consumers.values() for binding in bindings if binding.witness_kind == "guarded-selector")});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_ACTIVATION_EDGE_COUNT == {sum(len(binding.activations) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_ACTIVATION_CALL_COUNT == {sum(activation.count for entry in entries for bindings in entry.target_consumers.values() for binding in bindings for activation in binding.activations)});')
+    lines.append(
+        f'    assert(XI_LOWERING_CONSUMER_OUTPUT_SEQUENCE_COUNT == {sum(len(binding.output_sequences) for entry in entries for bindings in entry.target_consumers.values() for binding in bindings)});')
     for target in sorted(VALID_XI_LOWERING_TARGETS):
         ident = _xi_c_ident(target)
         lines.append(
@@ -2838,11 +5921,21 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
         target_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.targets)
         required_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.required_targets)
         reject_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_rejects.keys()))
+        driver_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_drivers.keys()))
+        consumer_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_consumers.keys()))
         template = f'XI_LOWER_TEMPLATE_{_xi_c_ident(entry.template)}'
         patterned = 'true' if entry.template != 'custom' else 'false'
-        lines.append(f'    assert(xi_lowering_generated_targets(XI_{entry.ident}) == ({target_bits}));')
+        aot_targets = {'aot-c', 'aot-c-stmt'}
+        aot_implementations = set(entry.targets) & aot_targets
+        aot_rejections = set(entry.target_rejects) & aot_targets
+        backend_legal = ('true' if aot_implementations and not aot_rejections
+                         else 'false')
+        lines.append(f'    assert(xi_lowering_covered_targets(XI_{entry.ident}) == ({target_bits}));')
+        lines.append(f'    assert(xi_lowering_driver_targets(XI_{entry.ident}) == ({driver_bits}));')
+        lines.append(f'    assert(xi_lowering_consumer_targets(XI_{entry.ident}) == ({consumer_bits}));')
         lines.append(f'    assert(xi_lowering_required_targets(XI_{entry.ident}) == ({required_bits}));')
         lines.append(f'    assert(xi_lowering_rejected_targets(XI_{entry.ident}) == ({reject_bits}));')
+        lines.append(f'    assert(xi_lowering_op_backend_legal(XI_{entry.ident}) == {backend_legal});')
         lines.append(f'    assert(xi_lowering_template_kind(XI_{entry.ident}) == {template});')
         lines.append(f'    assert(xi_lowering_is_patterned(XI_{entry.ident}) == {patterned});')
         if 'vm-bytecode' in entry.target_drivers and entry.template != 'custom':
@@ -2892,6 +5985,12 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
         fresh_dst = 'true' if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst',
                                                                             False) else 'false'
         lines.append(f'    assert(xi_emit_vm_requires_fresh_dst(XI_{entry.ident}) == {fresh_dst});')
+    for op in ops:
+        if op.lowering_policy == 'special':
+            legal = 'true' if 'aot-c' in op.targets else 'false'
+            lines.append(f'    assert(xi_lowering_op_backend_legal(XI_{op.ident}) == {legal});')
+        elif op.lowering_policy == 'verifier-only':
+            lines.append(f'    assert(!xi_lowering_op_backend_legal(XI_{op.ident}));')
     lines.append('    printf("Xi lowering generated coverage: %d entries\\n", XI_LOWERING_ENTRY_COUNT);')
     lines.append('    return 0;')
     lines.append('}')
@@ -2899,9 +5998,11 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
     return '\n'.join(lines)
 
 
-def write_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef]) -> list[str]:
-    outputs = [
-        ('src/ir/xi_lowering_coverage_gen.h', generate_xi_lowering_coverage_header(entries)),
+def _xi_lowering_output_contents(
+        entries: list[XiLoweringDef],
+        ops: list[XiOpDef]) -> list[tuple[str, str]]:
+    return [
+        ('src/ir/xi_lowering_coverage_gen.h', generate_xi_lowering_coverage_header(entries, ops)),
         ('src/ir/xi_emit_vm_gen.h', generate_xi_vm_dispatch_header(entries)),
         ('src/vm/xvm_template_width_gen.inc.c', generate_xi_vm_template_width_dispatch(entries)),
         ('src/vm/xvm_template_bitwise_binary_gen.inc.c',
@@ -2920,14 +6021,36 @@ def write_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef]) ->
          generate_xi_target_dispatch_header(entries, 'aot-c-stmt',
                                             'XI_TO_C_STMT_DISPATCH_GEN_H',
                                             'XI_TO_C_STMT_LOWERING_DRIVERS')),
-        ('tests/unit/ir/test_xi_lowering_gen.c', generate_xi_lowering_test(entries)),
+        ('tests/unit/ir/test_xi_lowering_gen.c', generate_xi_lowering_test(entries, ops)),
     ]
+
+
+def write_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef],
+                              ops: list[XiOpDef]) -> list[str]:
     written = []
-    for relpath, content in outputs:
+    for relpath, content in _xi_lowering_output_contents(entries, ops):
         path = os.path.join(output_root, relpath)
-        write_file(path, content)
+        write_file_if_changed(path, content)
         written.append(path)
     return written
+
+
+def check_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef],
+                              ops: list[XiOpDef]) -> list[str]:
+    """Reject a missing or stale checked-in projection without rewriting it."""
+    root = Path(os.path.abspath(output_root))
+    checked = []
+    for relpath, content in _xi_lowering_output_contents(entries, ops):
+        try:
+            actual = _xi_secure_repository_file_bytes(
+                root, relpath, 'xi-lowering: checked-in projection')
+        except SystemExit:
+            raise
+        if actual != content.encode('utf-8'):
+            die("xi-lowering: checked-in projection differs from canonical "
+                f"content: {relpath}; regenerate it before building")
+        checked.append(os.fspath(root / relpath))
+    return checked
 
 
 # ============================================================
@@ -4186,14 +7309,1116 @@ def cmd_semantic_ops(args: list[str]):
 def cmd_xi_lowering(args: list[str]):
     if len(args) != 3:
         die("usage: xisagen.py xi-lowering <ops.def> <lowering.def> <output-root>")
-    ops = parse_xi_ops_def(read_file(args[0]), args[0])
-    entries = parse_xi_lowering_def(read_file(args[1]), ops, args[1])
+    ops_path = Path(os.path.abspath(args[0]))
+    lowering_path = Path(os.path.abspath(args[1]))
+    source_root = ops_path.parents[2]
+    ops_relative = _xi_repository_relative_name(
+        source_root, ops_path, 'xi-lowering: ops schema')
+    lowering_relative = _xi_repository_relative_name(
+        source_root, lowering_path, 'xi-lowering: lowering schema')
+    ops_source = _xi_secure_repository_file_bytes(
+        source_root, ops_relative, 'xi-lowering: ops schema')
+    lowering_source = _xi_secure_repository_file_bytes(
+        source_root, lowering_relative, 'xi-lowering: lowering schema')
+    try:
+        ops_text = ops_source.decode('utf-8', errors='strict')
+        lowering_text = lowering_source.decode('utf-8', errors='strict')
+    except UnicodeDecodeError as error:
+        die(f"xi-lowering: schema input is not UTF-8: {error}")
+    ops = parse_xi_ops_def(ops_text, args[0])
+    entries = parse_xi_lowering_def(lowering_text, ops, args[1])
     if not entries:
         die(f"no Xi lowering entries parsed from {args[1]}")
-    outputs = write_xi_lowering_outputs(args[2], entries)
+    snapshot = capture_xi_lowering_validation_snapshot(source_root)
+    discovery_snapshot = _xi_capture_aot_discovery_census(source_root)
+    validate_xi_lowering_consumer_sources(
+        entries, source_root, args[1], snapshot, discovery_snapshot)
+    expected_stamp = _xi_lowering_validation_stamp_content(
+        ops_source, lowering_source, snapshot, discovery_snapshot)
+    validation_stamp = os.environ.get('XRAY_XI_LOWERING_VALIDATION_STAMP')
+    if validation_stamp:
+        _xi_require_lowering_validation_stamp(
+            Path(validation_stamp), expected_stamp)
+    if (_xi_secure_repository_file_bytes(
+            source_root, ops_relative,
+            'xi-lowering: ops schema') != ops_source or
+            _xi_secure_repository_file_bytes(
+                source_root, lowering_relative,
+                'xi-lowering: lowering schema') != lowering_source or
+            capture_xi_lowering_validation_snapshot(source_root) != snapshot or
+            _xi_capture_aot_discovery_census(source_root) != discovery_snapshot):
+        die("xi-lowering: validated inputs changed before generation")
+    outputs = write_xi_lowering_outputs(args[2], entries, ops)
     print(f"xisagen: parsed {len(entries)} Xi lowering entries from {args[1]}", file=sys.stderr)
     for path in outputs:
         print(f"xisagen: generated {path}", file=sys.stderr)
+
+
+def cmd_xi_lowering_check(args: list[str]):
+    if len(args) != 3:
+        die("usage: xisagen.py xi-lowering-check "
+            "<ops.def> <lowering.def> <output-root>")
+    ops_path = Path(os.path.abspath(args[0]))
+    lowering_path = Path(os.path.abspath(args[1]))
+    source_root = ops_path.parents[2]
+    ops_relative = _xi_repository_relative_name(
+        source_root, ops_path, 'xi-lowering-check: ops schema')
+    lowering_relative = _xi_repository_relative_name(
+        source_root, lowering_path, 'xi-lowering-check: lowering schema')
+    ops_source = _xi_secure_repository_file_bytes(
+        source_root, ops_relative, 'xi-lowering-check: ops schema')
+    lowering_source = _xi_secure_repository_file_bytes(
+        source_root, lowering_relative, 'xi-lowering-check: lowering schema')
+    try:
+        ops_text = ops_source.decode('utf-8', errors='strict')
+        lowering_text = lowering_source.decode('utf-8', errors='strict')
+    except UnicodeDecodeError as error:
+        die(f"xi-lowering-check: schema input is not UTF-8: {error}")
+    ops = parse_xi_ops_def(ops_text, args[0])
+    entries = parse_xi_lowering_def(lowering_text, ops, args[1])
+    if not entries:
+        die(f"no Xi lowering entries parsed from {args[1]}")
+    outputs = check_xi_lowering_outputs(args[2], entries, ops)
+    print(f"xisagen: verified {len(outputs)} checked-in Xi lowering projections",
+          file=sys.stderr)
+
+
+def _xi_depfile_escape(path: str) -> str:
+    if any(char in path for char in '\0\r\n'):
+        die("xi-lowering: depfile path contains a forbidden control character")
+    escaped = []
+    for char in path:
+        if char == '$':
+            escaped.append('$$')
+        elif char in {'\\', '#', ' ', '\t', ':'}:
+            escaped.append('\\' + char)
+        else:
+            escaped.append(char)
+    return ''.join(escaped)
+
+
+def _xi_lowering_validation_stamp_content(
+        ops_source: bytes, lowering_source: bytes,
+        snapshot: XiLoweringValidationSnapshot,
+        discovery_snapshot: XiAotDiscoverySnapshot) -> str:
+    return (
+        "xi-lowering-source-validation/2\n"
+        f"ops_sha256={hashlib.sha256(ops_source).hexdigest()}\n"
+        f"lowering_sha256={hashlib.sha256(lowering_source).hexdigest()}\n"
+        f"aot_sources={len(snapshot.sources)}\n"
+        f"include_directories={len(snapshot.include_directories)}\n"
+        f"include_directory_snapshots={len(snapshot.directories)}\n"
+        f"closure_fingerprint={snapshot.fingerprint()}\n"
+        f"discovery_sources={len(discovery_snapshot.sources)}\n"
+        f"discovery_directories={len(discovery_snapshot.directories)}\n"
+        f"discovery_fingerprint={discovery_snapshot.fingerprint()}\n"
+    )
+
+
+def _xi_require_lowering_validation_stamp(
+        stamp: Path, expected_content: str) -> None:
+    if os.name == 'nt':
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = _xi_windows_kernel32()
+        handle = kernel32.CreateFileW(
+            os.fspath(stamp), _xi_windows_component_access(False), 0x00000001,
+            None, 3, 0x00200000, None)
+        if handle == ctypes.c_void_p(-1).value:
+            die(f"xi-lowering: cannot open validation stamp {stamp}: "
+                f"{ctypes.WinError(ctypes.get_last_error())}")
+        try:
+            info = _xi_windows_handle_info(handle)
+            if (info.dwFileAttributes & 0x00000410 or
+                    kernel32.GetFileType(wintypes.HANDLE(handle)) != 0x0001):
+                die(f"xi-lowering: validation stamp is not a regular file: {stamp}")
+            content = _xi_windows_read_open_file(
+                handle, info, os.fspath(stamp),
+                'xi-lowering: validation stamp')
+        finally:
+            kernel32.CloseHandle(wintypes.HANDLE(handle))
+    else:
+        flags = (os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0) |
+                 getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+        try:
+            descriptor = os.open(stamp, flags)
+        except OSError as error:
+            die(f"xi-lowering: cannot open validation stamp {stamp}: {error}")
+        try:
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode):
+                die(f"xi-lowering: validation stamp is not a regular file: {stamp}")
+            chunks = []
+            while True:
+                chunk = os.read(descriptor, 65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            if _xi_stable_file_identity(before) != \
+                    _xi_stable_file_identity(os.fstat(descriptor)):
+                die(f"xi-lowering: validation stamp changed while read: {stamp}")
+            content = b''.join(chunks)
+        finally:
+            os.close(descriptor)
+    if content != expected_content.encode('utf-8'):
+        die("xi-lowering: validation stamp does not match the descriptor-bound "
+            "schema, compile closure, and discovery snapshots")
+
+
+def _xi_stage_atomic_write(path: Path, content: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(
+        prefix=path.name + '.tmp.', dir=path.parent)
+    try:
+        with os.fdopen(handle, 'w', encoding='utf-8', newline='\n') as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return Path(temporary)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _xi_remove_atomic_temps(path: Path) -> None:
+    if not path.parent.exists():
+        return
+    for temporary in path.parent.glob(path.name + '.tmp.*'):
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _xi_sync_parent_directory(path: Path) -> None:
+    if os.name == 'nt':
+        return
+    directory_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _xi_atomic_write(path: Path, content: str) -> None:
+    _xi_remove_atomic_temps(path)
+    temporary = _xi_stage_atomic_write(path, content)
+    try:
+        os.replace(temporary, path)
+        _xi_sync_parent_directory(path)
+    except BaseException:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _xi_publish_lowering_validation_artifacts(
+        *, ops_path: Path, ops_source: bytes,
+        lowering_path: Path, lowering_source: bytes,
+        source_root: Path, snapshot: XiLoweringValidationSnapshot,
+        discovery_snapshot: XiAotDiscoverySnapshot,
+        depfile: Path, depfile_content: str,
+        stamp: Path, stamp_content: str,
+        after_stamp_hook=None) -> None:
+    """Publish an exact proof, then fail closed unless its inputs recapture."""
+    try:
+        stamp.unlink()
+    except FileNotFoundError:
+        pass
+    _xi_remove_atomic_temps(stamp)
+    _xi_remove_atomic_temps(depfile)
+    try:
+        _xi_atomic_write(depfile, depfile_content)
+        _xi_atomic_write(stamp, stamp_content)
+        if after_stamp_hook is not None:
+            after_stamp_hook()
+        ops_relative = _xi_repository_relative_name(
+            source_root, ops_path, 'xi-lowering: ops schema')
+        lowering_relative = _xi_repository_relative_name(
+            source_root, lowering_path, 'xi-lowering: lowering schema')
+        unchanged = (
+            _xi_secure_repository_file_bytes(
+                source_root, ops_relative,
+                'xi-lowering: ops schema') == ops_source and
+            _xi_secure_repository_file_bytes(
+                source_root, lowering_relative,
+                'xi-lowering: lowering schema') == lowering_source and
+            capture_xi_lowering_validation_snapshot(source_root) == snapshot and
+            _xi_capture_aot_discovery_census(source_root) == discovery_snapshot)
+        if not unchanged:
+            die("xi-lowering: validation inputs changed after the proof stamp "
+                "was published")
+    except BaseException:
+        try:
+            stamp.unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            depfile.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _test_xi_lowering_build_artifacts() -> None:
+    print("  test_xi_lowering_build_artifacts...", end='', file=sys.stderr)
+    assert _xi_windows_component_access(True) == 0x0080
+    assert _xi_windows_component_access(False) & 0x80000000
+    assert _xi_windows_component_access(None) & 0x80000000
+    if os.name == 'nt':
+        kernel32 = _xi_windows_kernel32()
+        assert len(kernel32.CreateFileW.argtypes) == 7
+        assert len(kernel32.GetFileInformationByHandle.argtypes) == 2
+        assert (kernel32.GetFileInformationByHandle.argtypes[1]._type_ is
+                _xi_windows_file_info_type())
+        assert len(kernel32.ReadFile.argtypes) == 5
+        assert len(kernel32.GetFileType.argtypes) == 1
+        assert len(kernel32.CloseHandle.argtypes) == 1
+    windows_path = r'C:\xray build\owner#1$.c'
+    assert _xi_depfile_escape(windows_path) == \
+        r'C\:\\xray\ build\\owner\#1$$.c'
+    assert _xi_depfile_escape('owner\tfile.c') == 'owner\\\tfile.c'
+    for hostile in ('owner\0file.c', 'owner\rfile.c', 'owner\nfile.c'):
+        try:
+            _xi_depfile_escape(hostile)
+            assert False, "depfile control characters must fail closed"
+        except SystemExit:
+            pass
+    assert _xi_local_c_include_spellings(
+        '#include "owner.c" /* first */ /* second */ // tracked\n',
+        'literal include fixture') == ['owner.c']
+    assert _xi_local_c_include_spellings(
+        '#include <stddef.h>\n#include "owner.h"\n',
+        'header include fixture') == ['owner.h']
+    try:
+        _xi_local_c_include_spellings(
+            '#define OWNER "../../outside.c"\n#include OWNER\n',
+            'hostile include operand fixture')
+        assert False, "macro-expanded includes must fail closed"
+    except SystemExit:
+        pass
+    assert _xi_local_c_include_spellings(
+        '#\finclude "../../outside.c"\n',
+        'form-feed include fixture') == ['../../outside.c']
+    assert _xi_local_c_include_spellings(
+        '#\vinclude "../../outside.c"\n',
+        'vertical-tab include fixture') == ['../../outside.c']
+
+    with tempfile.TemporaryDirectory(prefix='xisagen-lowering-build-') as directory:
+        root = Path(directory)
+        (root / 'CMakeLists.txt').write_text(
+            'set(XRAY_COMMON_INCLUDES\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/include\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/src\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/src/base\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/src/aot\n'
+            ')\n', encoding='utf-8')
+        aot = root / 'src/aot'
+        aot.mkdir(parents=True)
+        (aot / 'xi_cgen.c').write_text(
+            '#include "owner.c" /* first */ /* second */ // tracked\n',
+            encoding='utf-8')
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n', encoding='utf-8')
+        (aot / 'router.c').write_text(
+            'static void route(void) {}\n', encoding='utf-8')
+        if os.name == 'nt':
+            from ctypes import wintypes
+
+            handles, info = _xi_windows_open_repository_object(
+                root, 'src/aot/owner.c', 'xi-lowering: Windows ABI self-test',
+                directory=False)
+            try:
+                assert isinstance(info, _xi_windows_file_info_type())
+                assert isinstance(
+                    _xi_windows_handle_info(handles[-1]),
+                    _xi_windows_file_info_type())
+            finally:
+                for handle in reversed(handles):
+                    _xi_windows_kernel32().CloseHandle(
+                        wintypes.HANDLE(handle))
+        nested = aot / 'nested'
+        nested.mkdir()
+        (nested / 'unrelated.c').write_text(
+            'static void unrelated(void) {}\n', encoding='utf-8')
+        include_directory = root / 'include'
+        base_directory = root / 'src/base'
+        include_directory.mkdir()
+        base_directory.mkdir()
+        (include_directory / 'ordered_owner.h').write_text(
+            'static void include_order_owner(void) {}\n', encoding='utf-8')
+        (base_directory / 'ordered_owner.h').write_text(
+            'static void base_order_owner(void) {}\n', encoding='utf-8')
+
+        snapshot = capture_xi_lowering_validation_snapshot(root)
+        assert [relative for relative, _ in snapshot.sources] == [
+            'src/aot/owner.c',
+            'src/aot/router.c',
+            'src/aot/xi_cgen.c',
+        ]
+        assert 'src/aot/nested/unrelated.c' not in snapshot.source_bytes()
+        assert {'include', 'src', 'src/base', 'src/aot'} <= {
+            relative for relative, _ in snapshot.directories}
+        discovery = _xi_capture_aot_discovery_census(root)
+        assert 'src/aot/nested/unrelated.c' in dict(discovery.sources)
+        assert {relative for relative, _ in discovery.directories} == {
+            'src/aot', 'src/aot/nested'}
+        old_fingerprint = snapshot.fingerprint()
+
+        (aot / 'xi_cgen.c').write_text(
+            '#include "ordered_owner.h"\n', encoding='utf-8')
+        ordered = capture_xi_lowering_validation_snapshot(root)
+        assert 'include/ordered_owner.h' in ordered.source_bytes()
+        assert 'src/base/ordered_owner.h' not in ordered.source_bytes()
+        (aot / 'ordered_owner.h').write_text(
+            'static void local_order_owner(void) {}\n', encoding='utf-8')
+        local_first = capture_xi_lowering_validation_snapshot(root)
+        assert 'src/aot/ordered_owner.h' in local_first.source_bytes()
+        assert 'include/ordered_owner.h' not in local_first.source_bytes()
+        assert local_first.fingerprint() != ordered.fingerprint()
+        (aot / 'ordered_owner.h').unlink()
+        (root / 'src/parent_owner.h').write_text(
+            'static void parent_owner(void) {}\n', encoding='utf-8')
+        (aot / 'xi_cgen.c').write_text(
+            '#include "../parent_owner.h"\n', encoding='utf-8')
+        parent_relative = capture_xi_lowering_validation_snapshot(root)
+        assert 'src/parent_owner.h' in parent_relative.source_bytes()
+        (root / 'src/parent_owner.h').unlink()
+        (aot / 'xi_cgen.c').write_text(
+            '#include "owner.c" /* first */ /* second */ // tracked\n',
+            encoding='utf-8')
+
+        (aot / 'new_owner.c').write_text(
+            'static void new_owner(void) {}\n', encoding='utf-8')
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n#include "new_owner.c"\n', encoding='utf-8')
+        expanded = capture_xi_lowering_validation_snapshot(root)
+        assert 'src/aot/new_owner.c' in expanded.source_bytes()
+        assert expanded.fingerprint() != old_fingerprint
+
+        (aot / 'new_owner.c').unlink()
+        try:
+            capture_xi_lowering_validation_snapshot(root)
+            assert False, "a deleted include-closure member must fail closed"
+        except SystemExit:
+            pass
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n', encoding='utf-8')
+
+        if hasattr(os, 'symlink'):
+            symlink = aot / 'owner-link.c'
+            directory_symlink = aot / 'outside-link'
+            external = root.parent / f'{root.name}-outside'
+            symlink_mutations = 0
+            try:
+                for target in ('owner.c', 'router.c'):
+                    try:
+                        symlink.unlink()
+                    except FileNotFoundError:
+                        pass
+                    symlink.symlink_to(target)
+                    symlink_mutations += 1
+                    (aot / 'xi_cgen.c').write_text(
+                        '#include "owner-link.c"\n', encoding='utf-8')
+                    try:
+                        capture_xi_lowering_validation_snapshot(root)
+                        assert False, "a lexical include symlink retarget must fail closed"
+                    except SystemExit:
+                        pass
+                external.mkdir()
+                (external / 'owner.c').write_text(
+                    'static void outside_owner(void) {}\n', encoding='utf-8')
+                directory_symlink.symlink_to(external, target_is_directory=True)
+                symlink_mutations += 1
+                for hostile_include in (
+                        'outside-link/owner.c',
+                        'outside-link/../owner.c',
+                        '../../outside-link/../src/aot/owner.c'):
+                    (aot / 'xi_cgen.c').write_text(
+                        f'#include "{hostile_include}"\n', encoding='utf-8')
+                    try:
+                        capture_xi_lowering_validation_snapshot(root)
+                        assert False, "symlink/parent traversal include must fail closed"
+                    except SystemExit:
+                        pass
+
+                for hostile_directive in (
+                        '#include "../../outside.c" /*a*/ /*b*/\n',
+                        '#include /*prefix*/ "../outside.c"\n',
+                        '#inc\\\nlude "../../outside.c"\n',
+                        '#/**/include "../../outside.c"\n',
+                        '%:include "../../outside.c"\n',
+                        '??=include "../../outside.c"\n',
+                        '#\finclude "../../outside.c"\n',
+                        '#\vinclude "../../outside.c"\n',
+                        '#include "owner.c" trailing\n'):
+                    (aot / 'xi_cgen.c').write_text(
+                        hostile_directive, encoding='utf-8')
+                    try:
+                        capture_xi_lowering_validation_snapshot(root)
+                        assert False, "noncanonical local C include must fail closed"
+                    except SystemExit:
+                        pass
+            except OSError as error:
+                unsupported = {
+                    errno.EACCES, errno.EPERM, errno.ENOTSUP,
+                    getattr(errno, 'EOPNOTSUPP', errno.ENOTSUP),
+                }
+                if error.errno not in unsupported:
+                    raise
+            finally:
+                try:
+                    symlink.unlink()
+                except FileNotFoundError:
+                    pass
+                try:
+                    directory_symlink.unlink()
+                except FileNotFoundError:
+                    pass
+                try:
+                    (external / 'owner.c').unlink()
+                    external.rmdir()
+                except FileNotFoundError:
+                    pass
+            (aot / 'xi_cgen.c').write_text(
+                '#include "owner.c" /* first */ /* second */ // tracked\n',
+                encoding='utf-8')
+            if os.name != 'nt' and getattr(os, 'O_NOFOLLOW', 0):
+                assert symlink_mutations == 3
+
+            owner = aot / 'owner.c'
+            owner_saved = aot / 'owner.saved'
+            file_swapped = False
+
+            def swap_file_before_open(relative, _index, _component, final) -> None:
+                nonlocal file_swapped
+                if (not file_swapped and final and
+                        relative == 'src/aot/owner.c'):
+                    owner.rename(owner_saved)
+                    owner.symlink_to('router.c')
+                    file_swapped = True
+
+            file_swap_rejected = False
+            try:
+                capture_xi_lowering_validation_snapshot(
+                    root, before_open_hook=swap_file_before_open)
+                assert False, "a check-to-open file symlink swap must fail closed"
+            except SystemExit:
+                file_swap_rejected = True
+            finally:
+                if owner.is_symlink():
+                    owner.unlink()
+                if owner_saved.exists():
+                    owner_saved.rename(owner)
+            assert file_swap_rejected and file_swapped
+
+            closure_header = nested / 'closure-owner.h'
+            closure_header.write_text(
+                'static void closure_owner(void) {}\n', encoding='utf-8')
+            owner.write_text(
+                '#include "router.c"\n#include "nested/closure-owner.h"\n',
+                encoding='utf-8')
+            closure_nested_saved = aot / 'nested.closure-saved'
+            closure_external = root / 'closure-external'
+            closure_directory_swapped = False
+
+            def swap_closure_directory_before_open(
+                    relative, _index, component, final) -> None:
+                nonlocal closure_directory_swapped
+                if (not closure_directory_swapped and not final and
+                        relative == 'src/aot/nested/closure-owner.h' and
+                        component == 'nested'):
+                    nested.rename(closure_nested_saved)
+                    closure_external.mkdir()
+                    (closure_external / 'closure-owner.h').write_text(
+                        'static void alternate_closure_owner(void) {}\n',
+                        encoding='utf-8')
+                    nested.symlink_to(closure_external, target_is_directory=True)
+                    closure_directory_swapped = True
+
+            closure_directory_swap_rejected = False
+            try:
+                capture_xi_lowering_validation_snapshot(
+                    root, before_open_hook=swap_closure_directory_before_open)
+                assert False, "a closure directory symlink swap must fail closed"
+            except SystemExit:
+                closure_directory_swap_rejected = True
+            finally:
+                if nested.is_symlink():
+                    nested.unlink()
+                if closure_nested_saved.exists():
+                    closure_nested_saved.rename(nested)
+                try:
+                    (closure_external / 'closure-owner.h').unlink()
+                    closure_external.rmdir()
+                except FileNotFoundError:
+                    pass
+                owner.write_text('#include "router.c"\n', encoding='utf-8')
+                try:
+                    closure_header.unlink()
+                except FileNotFoundError:
+                    pass
+            assert closure_directory_swap_rejected and closure_directory_swapped
+
+            nested_saved = aot / 'nested.saved'
+            discovery_external = root / 'discovery-external'
+            directory_swapped = False
+
+            def swap_directory_before_open(
+                    relative, _index, _component, final) -> None:
+                nonlocal directory_swapped
+                if (not directory_swapped and final and
+                        relative == 'src/aot/nested'):
+                    nested.rename(nested_saved)
+                    discovery_external.mkdir()
+                    (discovery_external / 'unrelated.c').write_text(
+                        'static void alternate(void) {}\n', encoding='utf-8')
+                    nested.symlink_to(discovery_external, target_is_directory=True)
+                    directory_swapped = True
+
+            directory_swap_rejected = False
+            try:
+                _xi_capture_aot_discovery_census(
+                    root, before_open_hook=swap_directory_before_open)
+                assert False, "a check-to-open directory symlink swap must fail closed"
+            except SystemExit:
+                directory_swap_rejected = True
+            finally:
+                if nested.is_symlink():
+                    nested.unlink()
+                if nested_saved.exists():
+                    nested_saved.rename(nested)
+                try:
+                    (discovery_external / 'unrelated.c').unlink()
+                    discovery_external.rmdir()
+                except FileNotFoundError:
+                    pass
+            assert directory_swap_rejected and directory_swapped
+
+        fixture_snapshot = capture_xi_lowering_validation_snapshot(root)
+        fixture_discovery = _xi_capture_aot_discovery_census(root)
+        fixture_dependencies = xi_lowering_validation_dependency_paths(
+            [], root, fixture_snapshot, fixture_discovery)
+        fixture_relatives = {
+            path.relative_to(root).as_posix() for path in fixture_dependencies}
+        assert fixture_relatives == {
+            'CMakeLists.txt', 'include', 'src', 'src/base', 'src/aot',
+            'src/aot/nested',
+            'src/aot/nested/unrelated.c', 'src/aot/owner.c',
+            'src/aot/router.c', 'src/aot/xi_cgen.c'}
+        assert 'src/aot/nested/unrelated.c' not in fixture_snapshot.source_bytes()
+        (nested / 'unrelated.c').write_text(
+            'static void unrelated(void) { /* discovery content drift */ }\n',
+            encoding='utf-8')
+        assert capture_xi_lowering_validation_snapshot(root) == fixture_snapshot
+        assert _xi_capture_aot_discovery_census(root) != fixture_discovery
+        (nested / 'unrelated.c').write_text(
+            'static void unrelated(void) {}\n', encoding='utf-8')
+        added_unrelated = nested / 'added_unrelated.c'
+        added_unrelated.write_text(
+            'static void added_unrelated(void) {}\n', encoding='utf-8')
+        assert _xi_capture_aot_discovery_census(root) != fixture_discovery
+        added_unrelated.unlink()
+        assert _xi_capture_aot_discovery_census(root) == fixture_discovery
+
+        ops_path = root / 'xisa/xi/ops.def'
+        lowering_path = root / 'xisa/xi/lowering.def'
+        ops_path.parent.mkdir(parents=True)
+        ops_path.write_text('ops\n', encoding='utf-8')
+        lowering_path.write_text('lowering\n', encoding='utf-8')
+        sealed_snapshot = capture_xi_lowering_validation_snapshot(root)
+        sealed_discovery = _xi_capture_aot_discovery_census(root)
+        stamp = root / 'build/sealed.stamp'
+        depfile = root / 'build/sealed.d'
+
+        def mutate_after_stamp() -> None:
+            (aot / 'owner.c').write_text(
+                '#include "router.c"\n/* post-publication mutation */\n',
+                encoding='utf-8')
+
+        try:
+            _xi_publish_lowering_validation_artifacts(
+                ops_path=ops_path, ops_source=ops_path.read_bytes(),
+                lowering_path=lowering_path,
+                lowering_source=lowering_path.read_bytes(), source_root=root,
+                snapshot=sealed_snapshot, discovery_snapshot=sealed_discovery,
+                depfile=depfile, depfile_content='sealed: inputs\n',
+                stamp=stamp, stamp_content='sealed\n',
+                after_stamp_hook=mutate_after_stamp)
+            assert False, "post-publication source mutation must fail closed"
+        except SystemExit:
+            pass
+        assert not stamp.exists()
+        assert not depfile.exists()
+
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n', encoding='utf-8')
+        destructive_snapshot = capture_xi_lowering_validation_snapshot(root)
+        destructive_discovery = _xi_capture_aot_discovery_census(root)
+
+        def delete_after_stamp() -> None:
+            (aot / 'owner.c').unlink()
+
+        try:
+            _xi_publish_lowering_validation_artifacts(
+                ops_path=ops_path, ops_source=ops_path.read_bytes(),
+                lowering_path=lowering_path,
+                lowering_source=lowering_path.read_bytes(), source_root=root,
+                snapshot=destructive_snapshot,
+                discovery_snapshot=destructive_discovery,
+                depfile=depfile, depfile_content='sealed: inputs\n',
+                stamp=stamp, stamp_content='sealed\n',
+                after_stamp_hook=delete_after_stamp)
+            assert False, "destructive post-publication mutation must fail closed"
+        except SystemExit:
+            pass
+        assert not stamp.exists()
+        assert not depfile.exists()
+
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n', encoding='utf-8')
+        interrupted_snapshot = capture_xi_lowering_validation_snapshot(root)
+        interrupted_discovery = _xi_capture_aot_discovery_census(root)
+
+        def interrupt_after_stamp() -> None:
+            raise KeyboardInterrupt("simulated interruption after stamp publication")
+
+        try:
+            _xi_publish_lowering_validation_artifacts(
+                ops_path=ops_path, ops_source=ops_path.read_bytes(),
+                lowering_path=lowering_path,
+                lowering_source=lowering_path.read_bytes(), source_root=root,
+                snapshot=interrupted_snapshot,
+                discovery_snapshot=interrupted_discovery,
+                depfile=depfile, depfile_content='sealed: inputs\n',
+                stamp=stamp, stamp_content='sealed\n',
+                after_stamp_hook=interrupt_after_stamp)
+            assert False, "interruption after stamp publication must fail closed"
+        except KeyboardInterrupt:
+            pass
+        assert not stamp.exists()
+        assert not depfile.exists()
+        assert not list(stamp.parent.glob(stamp.name + '.*'))
+
+        orphaned_proof = _xi_lowering_validation_stamp_content(
+            ops_path.read_bytes(), lowering_path.read_bytes(),
+            interrupted_snapshot, interrupted_discovery)
+        _xi_atomic_write(stamp, orphaned_proof)
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n/* changed after orphaned proof */\n',
+            encoding='utf-8')
+        current_snapshot = capture_xi_lowering_validation_snapshot(root)
+        current_discovery = _xi_capture_aot_discovery_census(root)
+        current_proof = _xi_lowering_validation_stamp_content(
+            ops_path.read_bytes(), lowering_path.read_bytes(),
+            current_snapshot, current_discovery)
+        try:
+            _xi_require_lowering_validation_stamp(stamp, current_proof)
+            assert False, "generation must reject an orphaned stale proof stamp"
+        except SystemExit:
+            pass
+        stamp.unlink()
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n', encoding='utf-8')
+
+        kill_stamp = root / 'build/killed.stamp'
+        kill_depfile = root / 'build/killed.d'
+        kill_marker = root / 'build/killed.after-publish'
+        child_source = r'''
+import importlib.util
+import pathlib
+import sys
+import time
+
+module_path = pathlib.Path(sys.argv[1])
+root = pathlib.Path(sys.argv[2])
+marker = pathlib.Path(sys.argv[3])
+stamp = pathlib.Path(sys.argv[4])
+depfile = pathlib.Path(sys.argv[5])
+spec = importlib.util.spec_from_file_location('xisagen_kill_child', module_path)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+ops_path = root / 'xisa/xi/ops.def'
+lowering_path = root / 'xisa/xi/lowering.def'
+ops_source = ops_path.read_bytes()
+lowering_source = lowering_path.read_bytes()
+snapshot = module.capture_xi_lowering_validation_snapshot(root)
+discovery = module._xi_capture_aot_discovery_census(root)
+proof = module._xi_lowering_validation_stamp_content(
+    ops_source, lowering_source, snapshot, discovery)
+def after_publish():
+    marker.write_text('published\n', encoding='utf-8')
+    while True:
+        time.sleep(60)
+module._xi_publish_lowering_validation_artifacts(
+    ops_path=ops_path, ops_source=ops_source,
+    lowering_path=lowering_path, lowering_source=lowering_source,
+    source_root=root, snapshot=snapshot, discovery_snapshot=discovery,
+    depfile=depfile, depfile_content='killed: inputs\n',
+    stamp=stamp, stamp_content=proof, after_stamp_hook=after_publish)
+'''
+        killed = subprocess.Popen(
+            [sys.executable, '-B', '-c', child_source,
+             str(Path(__file__).resolve()), str(root), str(kill_marker),
+             str(kill_stamp), str(kill_depfile)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 10
+            while (not kill_marker.exists() and killed.poll() is None and
+                   time.monotonic() < deadline):
+                time.sleep(0.01)
+            assert kill_marker.exists(), \
+                "kill-window child must publish the proof before termination"
+            killed.kill()
+            killed.communicate(timeout=10)
+        finally:
+            if killed.poll() is None:
+                killed.kill()
+                killed.communicate(timeout=10)
+        assert killed.returncode != 0
+        assert kill_stamp.exists() and kill_depfile.exists()
+        killed_unchanged_snapshot = capture_xi_lowering_validation_snapshot(root)
+        killed_unchanged_discovery = _xi_capture_aot_discovery_census(root)
+        killed_unchanged_proof = _xi_lowering_validation_stamp_content(
+            ops_path.read_bytes(), lowering_path.read_bytes(),
+            killed_unchanged_snapshot, killed_unchanged_discovery)
+        _xi_require_lowering_validation_stamp(
+            kill_stamp, killed_unchanged_proof)
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n/* drift after killed publisher */\n',
+            encoding='utf-8')
+        killed_snapshot = capture_xi_lowering_validation_snapshot(root)
+        killed_discovery = _xi_capture_aot_discovery_census(root)
+        killed_current_proof = _xi_lowering_validation_stamp_content(
+            ops_path.read_bytes(), lowering_path.read_bytes(),
+            killed_snapshot, killed_discovery)
+        try:
+            _xi_require_lowering_validation_stamp(
+                kill_stamp, killed_current_proof)
+            assert False, "generation must reject a killed publisher's stale proof"
+        except SystemExit:
+            pass
+        _xi_publish_lowering_validation_artifacts(
+            ops_path=ops_path, ops_source=ops_path.read_bytes(),
+            lowering_path=lowering_path,
+            lowering_source=lowering_path.read_bytes(), source_root=root,
+            snapshot=killed_snapshot, discovery_snapshot=killed_discovery,
+            depfile=kill_depfile, depfile_content='killed: inputs\n',
+            stamp=kill_stamp, stamp_content=killed_current_proof)
+        _xi_require_lowering_validation_stamp(
+            kill_stamp, killed_current_proof)
+        (aot / 'owner.c').write_text(
+            '#include "router.c"\n', encoding='utf-8')
+
+        artifact = root / 'build output' / 'stamp file.txt'
+        _xi_atomic_write(artifact, 'first\n')
+        _xi_atomic_write(artifact, 'replacement\n')
+        assert artifact.read_text(encoding='utf-8') == 'replacement\n'
+        assert list(artifact.parent.iterdir()) == [artifact]
+    print(" PASS", file=sys.stderr)
+
+
+def _test_xi_lowering_ninja_failed_edge() -> None:
+    print("  test_xi_lowering_ninja_failed_edge...", end='', file=sys.stderr)
+    ninja = shutil.which('ninja')
+    if ninja is None:
+        die("xisagen self-test requires Ninja; install ninja and retry")
+
+    def ninja_command(arguments: list[object]) -> str:
+        values = [os.fspath(value) for value in arguments]
+        if os.name == 'nt':
+            command = subprocess.list2cmdline(values)
+        else:
+            command = shlex.join(values)
+        return command.replace('$', '$$')
+
+    validator_source = r'''
+import importlib.util
+import os
+import pathlib
+import signal
+import sys
+
+module_path = pathlib.Path(sys.argv[1])
+root = pathlib.Path(sys.argv[2])
+mode_path = pathlib.Path(sys.argv[3])
+stamp = root / 'build/proof.stamp'
+depfile = root / 'build/proof.d'
+events = root / 'build/events.log'
+spec = importlib.util.spec_from_file_location('xisagen_ninja_validator', module_path)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+def record(event):
+    with events.open('a', encoding='utf-8') as stream:
+        stream.write(event + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+
+ops_path = root / 'xisa/xi/ops.def'
+lowering_path = root / 'xisa/xi/lowering.def'
+ops_source = ops_path.read_bytes()
+lowering_source = lowering_path.read_bytes()
+snapshot = module.capture_xi_lowering_validation_snapshot(root)
+discovery = module._xi_capture_aot_discovery_census(root)
+dependencies = module.xi_lowering_validation_dependency_paths(
+    [], root, snapshot, discovery)
+dependencies.extend((ops_path, lowering_path))
+dependency_text = ' '.join(
+    module._xi_depfile_escape(path.as_posix())
+    for path in sorted(set(dependencies)))
+depfile_content = 'build/proof.stamp: ' + dependency_text + '\n'
+proof = module._xi_lowering_validation_stamp_content(
+    ops_source, lowering_source, snapshot, discovery)
+
+def after_publish():
+    record('validation-published-' + mode_path.read_text(encoding='utf-8').strip())
+    if mode_path.read_text(encoding='utf-8').strip() == 'kill':
+        if os.name == 'nt':
+            os._exit(91)
+        os.kill(os.getpid(), signal.SIGKILL)
+
+module._xi_publish_lowering_validation_artifacts(
+    ops_path=ops_path, ops_source=ops_source,
+    lowering_path=lowering_path, lowering_source=lowering_source,
+    source_root=root, snapshot=snapshot, discovery_snapshot=discovery,
+    depfile=depfile, depfile_content=depfile_content,
+    stamp=stamp, stamp_content=proof, after_stamp_hook=after_publish)
+record('validation-success')
+'''
+    checker_source = r'''
+import os
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+projection = root / 'tracked_projection.txt'
+events = root / 'build/events.log'
+if projection.read_bytes() != b'canonical\n':
+    print('checked-in projection mismatch', file=sys.stderr)
+    sys.exit(2)
+with events.open('a', encoding='utf-8') as stream:
+    stream.write('verification-success\n')
+    stream.flush()
+    os.fsync(stream.fileno())
+'''
+
+    with tempfile.TemporaryDirectory(
+            prefix='xisagen-ninja-failed-edge-') as directory:
+        root = Path(directory)
+        aot = root / 'src/aot'
+        schema = root / 'xisa/xi'
+        build = root / 'build'
+        aot.mkdir(parents=True)
+        schema.mkdir(parents=True)
+        build.mkdir()
+        (root / 'CMakeLists.txt').write_text(
+            'set(XRAY_COMMON_INCLUDES\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/include\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/src\n'
+            '    ${CMAKE_CURRENT_SOURCE_DIR}/src/aot\n'
+            ')\n', encoding='utf-8')
+        (root / 'include').mkdir()
+        (aot / 'xi_cgen.c').write_text(
+            '#include "owner.c"\n', encoding='utf-8')
+        owner = aot / 'owner.c'
+        owner.write_text('static void owner(void) {}\n', encoding='utf-8')
+        (schema / 'ops.def').write_text('ops\n', encoding='utf-8')
+        (schema / 'lowering.def').write_text('lowering\n', encoding='utf-8')
+        mode = root / 'mode.txt'
+        mode.write_text('pass\n', encoding='utf-8')
+        projection = root / 'tracked_projection.txt'
+        projection.write_text('canonical\n', encoding='utf-8')
+        validator = root / 'validator.py'
+        checker = root / 'checker.py'
+        validator.write_text(validator_source, encoding='utf-8')
+        checker.write_text(checker_source, encoding='utf-8')
+        module_path = Path(__file__).resolve()
+        build_file = root / 'build.ninja'
+        build_file.write_text(
+            'ninja_required_version = 1.10\n'
+            'rule validate\n'
+            f'  command = {ninja_command([sys.executable, "-B", validator, module_path, root, mode])}\n'
+            '  depfile = build/proof.d\n'
+            '  deps = gcc\n'
+            'rule verify\n'
+            f'  command = {ninja_command([sys.executable, "-B", checker, root])}\n'
+            'build build/proof.stamp: validate xisa/xi/ops.def xisa/xi/lowering.def\n'
+            'build force: phony\n'
+            'build build/verify: verify build/proof.stamp tracked_projection.txt | force\n'
+            'default build/verify\n',
+            encoding='utf-8')
+
+        def run_ninja() -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [ninja, '-f', build_file.name, '-v'], cwd=root,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, timeout=30, check=False)
+
+        initial = run_ninja()
+        assert initial.returncode == 0, initial.stdout
+        first_proof = (build / 'proof.stamp').read_text(encoding='utf-8')
+        initial_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert initial_events.count('validation-success') == 1
+        assert initial_events.count('verification-success') == 1
+        initial_identity = _xi_stable_file_identity(projection.stat())
+
+        unchanged = run_ninja()
+        assert unchanged.returncode == 0, unchanged.stdout
+        unchanged_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert unchanged_events.count('validation-success') == 1
+        assert unchanged_events.count('verification-success') == 2
+        assert _xi_stable_file_identity(projection.stat()) == initial_identity
+
+        added = aot / 'added.c'
+        added.write_text(
+            'static void added(void) {}\n', encoding='utf-8')
+        added_result = run_ninja()
+        assert added_result.returncode == 0, added_result.stdout
+        added_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert added_events.count('validation-success') == 2
+        assert added_events.count('verification-success') == 3
+        added.unlink()
+        deleted_result = run_ninja()
+        assert deleted_result.returncode == 0, deleted_result.stdout
+        deleted_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert deleted_events.count('validation-success') == 3
+        assert deleted_events.count('verification-success') == 4
+
+        projection.write_text('corrupt\n', encoding='utf-8')
+        corrupt = run_ninja()
+        assert corrupt.returncode != 0, corrupt.stdout
+        assert 'checked-in projection mismatch' in corrupt.stdout
+        corrupt_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert corrupt_events.count('validation-success') == 3
+        assert corrupt_events.count('verification-success') == 4
+        projection.write_text('canonical\n', encoding='utf-8')
+        repaired = run_ninja()
+        assert repaired.returncode == 0, repaired.stdout
+        repaired_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert repaired_events.count('validation-success') == 3
+        assert repaired_events.count('verification-success') == 5
+
+        owner.write_text(
+            'static void owner(void) { /* changed input */ }\n',
+            encoding='utf-8')
+        mode.write_text('kill\n', encoding='utf-8')
+        killed = run_ninja()
+        assert killed.returncode != 0, killed.stdout
+        killed_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert 'validation-published-kill' in killed_events
+        assert killed_events.count('validation-success') == 3
+        assert killed_events.count('verification-success') == 5
+
+        failed_retry = run_ninja()
+        assert failed_retry.returncode != 0, failed_retry.stdout
+        retry_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert retry_events.count('validation-published-kill') == 2
+        assert retry_events.count('validation-success') == 3
+        assert retry_events.count('verification-success') == 5
+
+        mode.write_text('pass\n', encoding='utf-8')
+        recovered = run_ninja()
+        assert recovered.returncode == 0, recovered.stdout
+        recovered_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert recovered_events.count('validation-success') == 4
+        assert recovered_events.count('verification-success') == 6
+        assert (build / 'proof.stamp').read_text(encoding='utf-8') != first_proof
+
+        cleaned = subprocess.run(
+            [ninja, '-f', build_file.name, '-t', 'clean'], cwd=root,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=30, check=False)
+        assert cleaned.returncode == 0, cleaned.stdout
+        assert projection.read_text(encoding='utf-8') == 'canonical\n'
+        assert not (build / 'proof.stamp').exists()
+        rebuilt = run_ninja()
+        assert rebuilt.returncode == 0, rebuilt.stdout
+        rebuilt_events = (build / 'events.log').read_text(
+            encoding='utf-8').splitlines()
+        assert rebuilt_events.count('validation-success') == 5
+        assert rebuilt_events.count('verification-success') == 7
+    print(" PASS", file=sys.stderr)
+
+
+def cmd_xi_lowering_validate(args: list[str]):
+    if len(args) != 4:
+        die("usage: xisagen.py xi-lowering-validate "
+            "<ops.def> <lowering.def> <stamp> <depfile>")
+    ops_path = Path(os.path.abspath(args[0]))
+    lowering_path = Path(os.path.abspath(args[1]))
+    stamp = Path(args[2]).resolve()
+    depfile = Path(args[3]).resolve()
+    source_root = ops_path.parents[2]
+    ops_relative = _xi_repository_relative_name(
+        source_root, ops_path, 'xi-lowering: ops schema')
+    lowering_relative = _xi_repository_relative_name(
+        source_root, lowering_path, 'xi-lowering: lowering schema')
+    ops_source = _xi_secure_repository_file_bytes(
+        source_root, ops_relative, 'xi-lowering: ops schema')
+    lowering_source = _xi_secure_repository_file_bytes(
+        source_root, lowering_relative, 'xi-lowering: lowering schema')
+    try:
+        ops_text = ops_source.decode('utf-8', errors='strict')
+        lowering_text = lowering_source.decode('utf-8', errors='strict')
+    except UnicodeDecodeError as error:
+        die(f"xi-lowering: schema input is not UTF-8: {error}")
+    ops = parse_xi_ops_def(ops_text, str(ops_path))
+    entries = parse_xi_lowering_def(
+        lowering_text, ops, str(lowering_path))
+    if not entries:
+        die(f"no Xi lowering entries parsed from {lowering_path}")
+    snapshot = capture_xi_lowering_validation_snapshot(source_root)
+    discovery_snapshot = _xi_capture_aot_discovery_census(source_root)
+    validate_xi_lowering_consumer_sources(
+        entries, source_root, str(lowering_path), snapshot, discovery_snapshot)
+    if (_xi_secure_repository_file_bytes(
+            source_root, ops_relative,
+            'xi-lowering: ops schema') != ops_source or
+            _xi_secure_repository_file_bytes(
+                source_root, lowering_relative,
+                'xi-lowering: lowering schema') != lowering_source or
+            capture_xi_lowering_validation_snapshot(source_root) != snapshot or
+            _xi_capture_aot_discovery_census(source_root) != discovery_snapshot):
+        die("xi-lowering: validation inputs changed while the snapshot was being verified")
+    dependencies = xi_lowering_validation_dependency_paths(
+        entries, source_root, snapshot, discovery_snapshot)
+    dependencies.extend({ops_path.parent, lowering_path.parent})
+    dependencies = sorted(set(dependencies))
+    dependency_text = ' '.join(
+        _xi_depfile_escape(path.as_posix()) for path in dependencies)
+    depfile_content = f"{_xi_depfile_escape(stamp.as_posix())}: {dependency_text}\n"
+    stamp_content = _xi_lowering_validation_stamp_content(
+        ops_source, lowering_source, snapshot, discovery_snapshot)
+    _xi_publish_lowering_validation_artifacts(
+        ops_path=ops_path, ops_source=ops_source,
+        lowering_path=lowering_path, lowering_source=lowering_source,
+        source_root=source_root, snapshot=snapshot,
+        discovery_snapshot=discovery_snapshot, depfile=depfile,
+        depfile_content=depfile_content, stamp=stamp,
+        stamp_content=stamp_content)
+    print(f"xisagen: validated {len(entries)} Xi lowering entries; "
+          f"tracked {len(snapshot.sources)} AOT source inputs and "
+          f"{len(snapshot.directories)} include directories and "
+          f"{len(discovery_snapshot.directories)} discovery directories",
+          file=sys.stderr)
 
 
 def cmd_xi_verify(args: list[str]):
@@ -4246,6 +8471,8 @@ def cmd_aot_layout(args: list[str]):
 
 
 def cmd_aot_c_emission_rules(args: list[str]):
+    import c_emission_rules
+
     if len(args) != 2:
         die("usage: xisagen.py aot-c-emission-rules <rules.def> <output-root>")
     try:
@@ -4272,12 +8499,16 @@ def cmd_target_vm_ops(args: list[str]):
 
 
 def cmd_test(args: list[str]):
+    import c_emission_rules
+
     """Run self-tests."""
     print("xisagen self-test:", file=sys.stderr)
     _test_sexpr_parser()
     _test_xi_ops_parser()
     _test_xi_semantic_ops_parser()
     _test_xi_lowering_parser()
+    _test_xi_lowering_build_artifacts()
+    _test_xi_lowering_ninja_failed_edge()
     _test_xi_verifier_parser()
     _test_aot_rep_parser()
     _test_aot_abi_parser()
@@ -4500,7 +8731,7 @@ def _test_xi_ops_parser():
     assert 'case XI_ITER_NEW: return XI_GEN_BACKEND_REWRITE_BUILTIN;' in header
     assert 'xi_generated_op_backend_rewrite_name' in header
     assert 'case XI_ITER_NEW: return "iter_new";' in header
-    assert 'xi_generated_op_backend_legal' in header
+    assert 'xi_generated_op_backend_legal' not in header
     assert 'xi_generated_op_escape_use' in header
     assert 'case XI_STORE_FIELD: return XI_GEN_ESCAPE_USE_HEAP;' in header
     assert 'xi_generated_op_escape_alloc' in header
@@ -4779,6 +9010,25 @@ def _test_xi_lowering_parser():
       :requires ()
       :observable ()
       :targets (vm-bytecode aot-c aot-verify))
+    (define-xi-op xi.codegen.compiler-fence
+      :class memory-write
+      :arity 0
+      :result-kind void
+      :result-ownership none
+      :own-use borrow
+      :tbaa-group top
+      :effects (side-effect memory-read memory-write)
+      :requires ()
+      :observable (compiler-order)
+      :targets (vm-bytecode aot-c aot-verify))
+    (define-xi-op xi.await
+      :class coroutine
+      :arity 1
+      :own-use borrow
+      :effects (side-effect may-suspend)
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
     (define-xi-op xi.phi
       :class pure
       :arity variadic
@@ -4815,26 +9065,113 @@ def _test_xi_lowering_parser():
       :aot-c (driver xicgen_add))
     (lower xi.copy
       :match ()
-      :required-targets (vm-bytecode aot-c aot-c-stmt)
+      :required-targets (vm-bytecode aot-c)
       :vm-bytecode (driver xi_emit_copy)
-      :aot-c (driver xicgen_copy)
-      :aot-c-stmt (driver xicgen_stmt_copy))
+      :aot-c (driver xicgen_copy))
+    (lower xi.codegen.compiler-fence
+      :match ()
+      :required-targets (vm-bytecode aot-c-stmt)
+      :vm-bytecode (driver emit_codegen_compiler_fence)
+      :aot-c-stmt (driver xicgen_stmt_codegen_compiler_fence))
+    (lower xi.await
+      :match ()
+      :required-targets (vm-bytecode aot-c)
+      :vm-bytecode (driver xi_emit_await)
+      :aot-c (consumer xi-cgen-direct
+        (binding "src/aot/fixture.c" emit_coro_value_stmt
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value))
+        (binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value))))
+    (lower xi.phi
+      :required-targets (aot-c)
+      :aot-c (consumer xi-cgen-direct
+        (binding "src/aot/fixture.c" emit_phi_copies
+          (structural phi edge-parallel-copy))
+        (binding "src/aot/fixture.c" emit_declarations
+          (structural phi sync-storage))
+        (binding "src/aot/fixture.c" emit_coro_frame_type
+          (structural phi coroutine-frame-storage))
+        (binding "src/aot/fixture.c" emit_coro_local_declarations
+          (structural phi coroutine-local-storage))))
     '''
     ops = parse_xi_ops_def(ops_text)
     entries = parse_xi_lowering_def(lowering_text, ops)
-    assert len(entries) == 2
+    assert len(entries) == 5
     assert entries[0].ident == 'ADD'
     assert entries[0].targets == ['aot-c', 'vm-bytecode']
     assert entries[0].template == 'value-binary'
     assert entries[0].target_attrs['vm-bytecode']['fresh-dst'] is True
-    assert entries[1].target_drivers['aot-c-stmt'] == 'xicgen_stmt_copy'
+    assert entries[1].target_drivers['aot-c'] == 'xicgen_copy'
+    assert 'aot-c-stmt' not in entries[1].target_drivers
     assert entries[1].template == 'custom'
-    header = generate_xi_lowering_coverage_header(entries)
-    assert 'XI_LOWERING_ENTRY_COUNT = 2' in header
+    assert entries[2].target_drivers['aot-c-stmt'] == \
+        'xicgen_stmt_codegen_compiler_fence'
+    assert [binding.symbol for binding in entries[3].target_consumers['aot-c']] == [
+        'emit_coro_value_stmt', 'emit_value_rhs'
+    ]
+    assert entries[3].target_consumers['aot-c'][0].emitters == (
+        XiConsumerEmitterWitness('src/aot/fixture.c', 'emit_real_value'),)
+    assert {binding.structural_category
+            for binding in entries[4].target_consumers['aot-c']} == \
+        XI_CONSUMER_STRUCTURAL_CATEGORIES
+
+    def reject_lowering(candidate: str, reason: str) -> None:
+        try:
+            parse_xi_lowering_def(candidate, ops)
+            assert False, reason
+        except SystemExit:
+            pass
+
+    reject_lowering(
+        lowering_text.replace('(lower xi.add\n', '(lower xi.add\n      :bogus kept\n', 1),
+        'unknown lowering field should be rejected')
+    reject_lowering(
+        lowering_text.replace(':match (value-binary)',
+                              ':match (value-binary)\n      :match ()', 1),
+        'duplicate lowering field should be rejected')
+    reject_lowering(
+        lowering_text.replace(':aot-c (driver xicgen_add))',
+                              ':aot-c (driver xicgen_add) trailing)', 1),
+        'stray lowering field should be rejected')
+    reject_lowering(
+        lowering_text.replace(':required-targets (vm-bytecode aot-c)',
+                              ':required-targets (vm-bytecode aot-c)\n'
+                              '      :required-targets (vm-bytecode aot-c)', 1),
+        'duplicate required-targets should be rejected')
+    reject_lowering(
+        lowering_text.replace(
+            ':aot-c-stmt (driver xicgen_stmt_codegen_compiler_fence)',
+            ':aot-c-stmt (driver xicgen_stmt_try)', 1),
+        'statement driver remap should be rejected')
+    header = generate_xi_lowering_coverage_header(entries, ops)
+    assert 'XI_LOWERING_ENTRY_COUNT = 5' in header
     assert 'XI_LOWERING_PATTERNED_ENTRY_COUNT = 1' in header
+    assert 'XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT = 4' in header
     assert 'XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT = 1' in header
+    assert 'XI_LOWERING_CONSUMER_TARGET_COUNT = 2' in header
+    assert 'XI_LOWERING_CONSUMER_BINDING_COUNT = 6' in header
+    assert 'XI_LOWERING_CONSUMER_ROUTER_WITNESS_COUNT = 0' in header
+    assert 'XI_LOWERING_CONSUMER_EMITTER_WITNESS_COUNT = 2' in header
+    assert 'XI_LOWERING_CONSUMER_PREDICATE_WITNESS_COUNT = 0' in header
+    assert 'XI_LOWERING_CONSUMER_GUARDED_SELECTOR_COUNT = 0' in header
+    assert 'XI_LOWERING_CONSUMER_ACTIVATION_EDGE_COUNT = 0' in header
+    assert 'XI_LOWERING_CONSUMER_ACTIVATION_CALL_COUNT = 0' in header
+    assert 'XI_LOWERING_CONSUMER_OUTPUT_SEQUENCE_COUNT = 0' in header
+    assert ('X(AWAIT, "xi.await", "src/aot/fixture.c", emit_coro_value_stmt, '
+            'XI_LOWERING_CONSUMER_WITNESS_SELECTOR)' in header)
+    assert ('X(AWAIT, "xi.await", "src/aot/fixture.c", emit_coro_value_stmt, '
+            '"src/aot/fixture.c", emit_real_value)' in header)
+    assert ('X(PHI, "xi.phi", "src/aot/fixture.c", emit_coro_frame_type, '
+            'XI_LOWERING_CONSUMER_WITNESS_STRUCTURAL_COROUTINE_FRAME_STORAGE)'
+            in header)
     assert 'case XI_ADD: return XI_LOWER_TEMPLATE_VALUE_BINARY;' in header
     assert 'case XI_ADD: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE;' in header
+    assert ('case XI_CODEGEN_COMPILER_FENCE: return '
+            'XI_LOWER_TARGET_AOT_C_STMT | XI_LOWER_TARGET_VM_BYTECODE;'
+            in header)
+    assert 'return aot_implementations != 0 && aot_rejections == 0;' in header
     vm_header = generate_xi_vm_dispatch_header(entries)
     assert 'X(ADD, xi_emit_add)' in vm_header
     assert 'case XI_ADD: return OP_ADD;' in vm_header
@@ -4920,12 +9257,15 @@ def _test_xi_lowering_parser():
     assert 'XVM_TEMPLATE_COMPARE_DEEP_CASE(OP_CMP_NE, true, XR_OP_NE_FLAG' in vm_compare
     assert 'XVM_TEMPLATE_COMPARE_ORDER_CASE(OP_CMP_LT, XR_OP_LT_FLAG' in vm_compare
     assert vm_compare.count('OP_CMP_LT') == 1
-    lowering_test = generate_xi_lowering_test(entries)
+    lowering_test = generate_xi_lowering_test(entries, ops)
     assert 'xi_emit_vm_requires_fresh_dst(XI_ADD) == true' in lowering_test
     assert 'xi_emit_vm_requires_fresh_dst(XI_COPY) == false' in lowering_test
+    assert ('xi_lowering_op_backend_legal(XI_CODEGEN_COMPILER_FENCE) == true'
+            in lowering_test)
     assert 'xi_lowering_template_kind(XI_ADD) == XI_LOWER_TEMPLATE_VALUE_BINARY' in lowering_test
     aot_header = generate_xi_to_c_dispatch_header(entries)
     assert 'X(ADD, "xi.add", xicgen_add)' in aot_header
+    assert 'emit_coro_value_stmt' not in aot_header
     assert 'XI_TO_C_TEMPLATE_ARITH_DRIVERS' in aot_header
     assert 'case XI_ADD: return "xrt_add";' in aot_header
     assert 'xi_to_c_template_arith_native_op' in aot_header
@@ -4934,7 +9274,33 @@ def _test_xi_lowering_parser():
     assert 'xi_to_c_template_width_uses_f64_lane' in aot_header
     stmt_header = generate_xi_target_dispatch_header(entries, 'aot-c-stmt', 'TEST_STMT_H',
                                                      'TEST_STMT')
-    assert 'X(COPY, "xi.copy", xicgen_stmt_copy)' in stmt_header
+    assert 'xi.copy' not in stmt_header
+    assert ('X(CODEGEN_COMPILER_FENCE, "xi.codegen.compiler-fence", '
+            'xicgen_stmt_codegen_compiler_fence)' in stmt_header)
+    rejected_stmt_text = lowering_text.replace(
+        ':aot-c-stmt (driver xicgen_stmt_codegen_compiler_fence)',
+        ':aot-c-stmt (reject unsupported_compiler_fence)')
+    rejected_stmt_entries = parse_xi_lowering_def(rejected_stmt_text, ops)
+    rejected_stmt_test = generate_xi_lowering_test(rejected_stmt_entries, ops)
+    assert ('xi_lowering_op_backend_legal(XI_CODEGEN_COMPILER_FENCE) == false'
+            in rejected_stmt_test)
+    mixed_aot_text = lowering_text.replace(
+        '''    (lower xi.codegen.compiler-fence
+      :match ()
+      :required-targets (vm-bytecode aot-c-stmt)
+      :vm-bytecode (driver emit_codegen_compiler_fence)
+      :aot-c-stmt (driver xicgen_stmt_codegen_compiler_fence))''',
+        '''    (lower xi.codegen.compiler-fence
+      :match ()
+      :required-targets (vm-bytecode aot-c aot-c-stmt)
+      :vm-bytecode (driver emit_codegen_compiler_fence)
+      :aot-c (driver xicgen_codegen_compiler_fence)
+      :aot-c-stmt (reject unsupported_compiler_fence))''')
+    try:
+        parse_xi_lowering_def(mixed_aot_text, ops)
+        assert False, "normalized AOT driver/reject collision should be rejected"
+    except SystemExit:
+        pass
     try:
         parse_xi_lowering_def('''
         (lower xi.add
@@ -5048,6 +9414,1023 @@ def _test_xi_lowering_parser():
         assert False, "lowering target mismatch should be rejected"
     except SystemExit:
         pass
+    await_consumer = '''(consumer xi-cgen-direct
+        (binding "src/aot/fixture.c" emit_coro_value_stmt
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value))
+        (binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value)))'''
+    fixture_selector_binding = '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value))'''
+    multi_router_text = lowering_text.replace(
+        fixture_selector_binding,
+        '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selected-by "src/aot/fixture.c" emit_value_stmt)
+          (selected-by "src/aot/fixture.c" emit_block))''')
+    multi_router_entries = parse_xi_lowering_def(multi_router_text, ops)
+    multi_router_binding = multi_router_entries[3].target_consumers['aot-c'][1]
+    assert multi_router_binding.witness_kind == 'selected-by'
+    assert [(router.source_path, router.symbol)
+            for router in multi_router_binding.routers] == [
+        ('src/aot/fixture.c', 'emit_value_stmt'),
+        ('src/aot/fixture.c', 'emit_block'),
+    ]
+    guarded_selector_text = lowering_text.replace(
+        fixture_selector_binding,
+        '''(binding "src/aot/fixture.c" emit_value_rhs
+          (guarded-selector)
+          (emitter "src/aot/fixture.c" emit_real_value))''')
+    guarded_selector_entries = parse_xi_lowering_def(guarded_selector_text, ops)
+    assert (guarded_selector_entries[3].target_consumers['aot-c'][1].witness_kind ==
+            'guarded-selector')
+    invalid_consumers = (
+        (lowering_text.replace(
+            await_consumer, '(consumer xi-cgen-direct)'),
+         'consumer target without an owner should be rejected'),
+        (lowering_text.replace(
+            '(driver xi_emit_await)',
+            '(consumer xi-cgen-direct\n'
+            '        (binding "src/aot/fixture.c" emit_coro_value_stmt\n'
+            '          (selector)\n'
+            '          (emitter "src/aot/fixture.c" emit_real_value)))'),
+         'consumer owner on a VM target should be rejected'),
+        (lowering_text.replace(
+            await_consumer,
+            '''(consumer xi-cgen-direct
+        (binding "src/aot/fixture.c" emit_coro_value_stmt
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value))
+        (binding "src/aot/fixture.c" emit_coro_value_stmt
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value)))'''),
+         'duplicate consumer owner should be rejected'),
+        (lowering_text.replace(
+            ':aot-c ' + await_consumer,
+            ':aot-c ' + await_consumer + '\n'
+            '      :aot-c (driver xicgen_await)'),
+         'consumer and driver for one target should be rejected'),
+        (lowering_text.replace('"src/aot/fixture.c" emit_value_rhs',
+                               '"../fixture.c" emit_value_rhs'),
+         'non-canonical consumer path should be rejected'),
+        (lowering_text.replace('"src/aot/fixture.c" emit_value_rhs',
+                               '"src/aot/fixture.c" static'),
+         'C keyword consumer symbol should be rejected'),
+        (lowering_text.replace(
+            fixture_selector_binding,
+            '(binding "src/aot/fixture.c" emit_value_rhs (selected-by))'),
+         'selected-by without a router should be rejected'),
+        (lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selected-by "src/aot/fixture.c" emit_value_stmt)
+          (selected-by "src/aot/fixture.c" emit_value_stmt))'''),
+         'duplicate selected-by routers should be rejected'),
+        (lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value)
+          (selected-by "src/aot/fixture.c" emit_value_stmt))'''),
+         'selector and selected-by witnesses should not mix'),
+        (lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (guarded-selector extra)
+          (emitter "src/aot/fixture.c" emit_real_value))'''),
+         'guarded-selector arguments should be rejected'),
+        (lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value)
+          (guarded-selector))'''),
+         'selector and guarded-selector witnesses should not mix'),
+        (lowering_text.replace(
+            '(structural phi sync-storage)',
+            '''(structural phi sync-storage)
+          (selector)'''),
+         'structural and selector witnesses should not mix'),
+        (lowering_text.replace(
+            '(structural phi sync-storage)',
+            '''(structural phi sync-storage)
+          (selected-by "src/aot/fixture.c" emit_value_stmt)'''),
+         'structural and selected-by witnesses should not mix'),
+        (lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (structural await edge-parallel-copy))'''),
+         'non-phi structural ownership should be rejected'),
+        (lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selected-by "src/aot/fixture.c" emit_value_stmt)
+          (predicate "src/aot/fixture.c" predicate_owner))'''),
+         'predicate witness outside selector ownership should be rejected'),
+    )
+    for invalid_text, reason in invalid_consumers:
+        try:
+            parse_xi_lowering_def(invalid_text, ops)
+            assert False, reason
+        except SystemExit:
+            pass
+
+    def reject_consumer_schema_mutation(mutated_text: str,
+                                        expected_reason: str) -> None:
+        diagnostics = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(diagnostics):
+                parse_xi_lowering_def(mutated_text, ops)
+            assert False, expected_reason
+        except SystemExit:
+            assert expected_reason in diagnostics.getvalue()
+
+    reject_consumer_schema_mutation(
+        lowering_text.replace(
+            fixture_selector_binding,
+            '(binding "src/aot/fixture.c" emit_value_rhs (selector))'),
+        'selector witness requires an exact terminal emitter')
+    reject_consumer_schema_mutation(
+        lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c"))'''),
+        'emitter must name one path and symbol')
+    reject_consumer_schema_mutation(
+        lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value)
+          (emitter "src/aot/fixture.c" emit_real_value))'''),
+        'duplicate emitter witness')
+    reject_consumer_schema_mutation(
+        lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selected-by "src/aot/fixture.c" emit_value_stmt)
+          (emitter "src/aot/fixture.c" emit_real_value))'''),
+        'emitter witness is only valid with selector ownership')
+    reject_consumer_schema_mutation(
+        lowering_text.replace(
+            fixture_selector_binding,
+            '(binding "src/aot/fixture.c" emit_value_rhs (selected-by))'),
+        'selected-by witness must name one router path and symbol')
+    reject_consumer_schema_mutation(
+        lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value)
+          (predicate "src/aot/fixture.c"))'''),
+        'predicate must name one path and symbol')
+    reject_consumer_schema_mutation(
+        lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value)
+          (predicate "src/aot/fixture.c" predicate_owner)
+          (predicate "src/aot/fixture.c" predicate_owner))'''),
+        'duplicate predicate witness')
+    reject_consumer_schema_mutation(
+        lowering_text.replace(
+            fixture_selector_binding,
+            '''(binding "src/aot/fixture.c" emit_value_rhs
+          (selector)
+          (emitter "src/aot/fixture.c" emit_real_value)
+          (predicate "src/aot/fixture.c" predicate_owner
+            (domain "src/aot/fixture.c")))'''),
+        'predicate domain must name one path and symbol')
+    repository_root = Path(__file__).resolve().parents[2]
+    real_ops_path = repository_root / 'xisa/xi/ops.def'
+    real_lowering_path = repository_root / 'xisa/xi/lowering.def'
+    real_ops = parse_xi_ops_def(read_file(str(real_ops_path)), str(real_ops_path))
+    real_lowering_text = read_file(str(real_lowering_path))
+    real_entries = parse_xi_lowering_def(real_lowering_text, real_ops,
+                                         str(real_lowering_path))
+    real_snapshot = capture_xi_lowering_validation_snapshot(repository_root)
+    real_discovery = _xi_capture_aot_discovery_census(repository_root)
+    validated_baseline = validate_xi_lowering_consumer_sources(
+        real_entries, repository_root, str(real_lowering_path),
+        real_snapshot, real_discovery)
+    assert validated_baseline == real_snapshot
+    with tempfile.TemporaryDirectory(prefix='xisagen-lowering-no-touch-') as directory:
+        first_outputs = write_xi_lowering_outputs(directory, real_entries, real_ops)
+        assert len(first_outputs) == 12
+        for index, output in enumerate(first_outputs):
+            marker = 1_700_000_000_000_000_000 + index
+            os.utime(output, ns=(marker, marker))
+        before_outputs = {
+            output: (os.stat(output).st_mtime_ns, os.stat(output).st_size,
+                     os.stat(output).st_ino)
+            for output in first_outputs
+        }
+        second_outputs = write_xi_lowering_outputs(directory, real_entries, real_ops)
+        assert second_outputs == first_outputs
+        assert {
+            output: (os.stat(output).st_mtime_ns, os.stat(output).st_size,
+                     os.stat(output).st_ino)
+            for output in second_outputs
+        } == before_outputs
+        assert check_xi_lowering_outputs(
+            directory, real_entries, real_ops) == first_outputs
+        stale_output = Path(first_outputs[0])
+        stale_output.write_text(
+            stale_output.read_text(encoding='utf-8') + '/* stale */\n',
+            encoding='utf-8')
+        diagnostic = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(diagnostic):
+                check_xi_lowering_outputs(directory, real_entries, real_ops)
+            assert False, "a stale checked-in projection must fail closed"
+        except SystemExit:
+            assert 'checked-in projection differs from canonical content' in \
+                diagnostic.getvalue()
+    assert _xi_terminal_emission_branch(
+        'emit_aot_coro_op_stmt(ctx, out, f, v); return;')
+    assert not _xi_terminal_emission_branch(
+        'fprintf(out, "log only"); return;')
+    assert not _xi_guarded_selector_present(
+        'if (!v || v->op != XI_THREAD_SPAWN) return false; return false;',
+        'XI_THREAD_SPAWN')
+    assert not _xi_direct_selector_present(
+        'if (false) { if (v->op == XI_AWAIT) { '
+        'emit_real_value(out); return; } }',
+        'XI_AWAIT')
+    assert not _xi_selector_routes_to_owner(
+        'if (false) { if (v->op == XI_GO) { xicgen_go(); return; } }',
+        'XI_GO', 'xicgen_go')
+    assert not _xi_selector_routes_to_owner(
+        'if (v->op == XI_PAR_MAP || v->op == XI_PAR_REDUCE) { '
+        'if (false) { if (v->op == XI_PAR_MAP) xicgen_par_map(); '
+        'else xicgen_par_reduce(); } return; }',
+        'XI_PAR_MAP', 'xicgen_par_map')
+    assert not _xi_switch_routes_to_owner(
+        'switch (v->op) { case XI_GO: if (false) xicgen_go(); return true; }',
+        'XI_GO', 'xicgen_go')
+    assert not _xi_switch_routes_to_owner(
+        'switch (v->op) { case XI_GO: return true; xicgen_go(); return true; }',
+        'XI_GO', 'xicgen_go')
+    real_consumers = [entry for entry in real_entries if entry.target_consumers]
+    assert len(real_consumers) == 33
+    assert sum(len(bindings) for entry in real_consumers
+            for bindings in entry.target_consumers.values()) == 44
+    assert sum(len(binding.predicates) for entry in real_consumers
+               for bindings in entry.target_consumers.values()
+               for binding in bindings) == 6
+    assert sum(1 for entry in real_consumers
+               for bindings in entry.target_consumers.values()
+               for binding in bindings
+               for predicate in binding.predicates
+               if predicate.domain_symbol is not None) == 2
+    call_consumers = {
+        (entry.op_name, target, binding.source_path, binding.symbol,
+         binding.witness_kind,
+         tuple((emitter.source_path, emitter.symbol)
+               for emitter in binding.emitters))
+        for entry in real_consumers
+        if entry.op_name in {
+            'xi.call', 'xi.call.method', 'xi.call.method.direct',
+            'xi.call.builtin'}
+        for target, bindings in entry.target_consumers.items()
+        for binding in bindings
+    }
+    assert call_consumers == {
+        (op_name, 'aot-c', 'src/aot/xi_cgen.c', 'emit_value_stmt',
+         'selector', (('src/aot/xi_cgen.c', 'emit_value_rhs'),))
+        for op_name in {
+            'xi.call', 'xi.call.method', 'xi.call.method.direct',
+            'xi.call.builtin'}
+    }
+    assert {
+        (entry.op_name, predicate.source_path, predicate.symbol,
+         predicate.domain_source_path, predicate.domain_symbol)
+        for entry in real_consumers
+        if entry.op_name in {
+            'xi.call', 'xi.call.method', 'xi.call.method.direct',
+            'xi.call.builtin'}
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for predicate in binding.predicates
+    } == {
+        (op_name, 'src/aot/xi_cgen.c',
+         'cg_unused_call_result_emits_statement', None, None)
+        for op_name in {
+            'xi.call', 'xi.call.method', 'xi.call.method.direct',
+            'xi.call.builtin'}
+    }
+    assert sum(len(binding.routers) for entry in real_consumers
+               for bindings in entry.target_consumers.values()
+               for binding in bindings) == 6
+    assert sum(len(binding.activations) for entry in real_consumers
+               for bindings in entry.target_consumers.values()
+               for binding in bindings) == 13
+    assert sum(activation.count for entry in real_consumers
+               for bindings in entry.target_consumers.values()
+               for binding in bindings
+               for activation in binding.activations) == 15
+    assert sum(len(binding.output_sequences) for entry in real_consumers
+               for bindings in entry.target_consumers.values()
+               for binding in bindings) == 3
+    assert [(entry.op_name, binding.source_path, binding.symbol)
+            for entry in real_consumers
+            for bindings in entry.target_consumers.values()
+            for binding in bindings
+            if binding.witness_kind == 'guarded-selector'] == [
+        ('xi.thread.spawn', 'src/aot/xi_cgen_coro.inc.c',
+         'emit_thread_spawn_value_stmt')
+    ]
+
+    def reject_binding_mutation(op_name: str, binding_index: int,
+                                binding: XiConsumerBinding) -> None:
+        mutated = list(real_entries)
+        entry_index = next(index for index, entry in enumerate(mutated)
+                           if entry.op_name == op_name)
+        entry = mutated[entry_index]
+        target_consumers = dict(entry.target_consumers)
+        bindings = list(target_consumers['aot-c'])
+        bindings[binding_index] = binding
+        target_consumers['aot-c'] = bindings
+        mutated[entry_index] = replace(entry, target_consumers=target_consumers)
+        try:
+            validate_xi_lowering_consumer_sources(mutated, repository_root,
+                                                  'consumer binding mutation',
+                                                  real_snapshot, real_discovery)
+            assert False, "invalid source binding mutation should be rejected"
+        except SystemExit:
+            pass
+
+    await_entry = next(entry for entry in real_entries if entry.op_name == 'xi.await')
+    await_binding = await_entry.target_consumers['aot-c'][0]
+    reject_binding_mutation('xi.await', 0,
+                            replace(await_binding, symbol='missing_consumer_owner'))
+    reject_binding_mutation('xi.await', 0,
+                            replace(await_binding, symbol='emit_thread_spawn_value_stmt'))
+    reject_binding_mutation(
+        'xi.await', 0,
+        replace(await_binding, symbol='emit_coro_debug_result_source_var_sync'))
+    reject_binding_mutation(
+        'xi.await', 0,
+        replace(await_binding, source_path='src/aot/xi_cgen.c',
+                symbol='cg_debug_source_var_storage_value'))
+    phi_entry = next(entry for entry in real_entries if entry.op_name == 'xi.phi')
+    phi_binding = phi_entry.target_consumers['aot-c'][0]
+    reject_binding_mutation('xi.phi', 0,
+                            replace(phi_binding, symbol='emit_phi_ref'))
+    par_reduce_entry = next(entry for entry in real_entries
+                            if entry.op_name == 'xi.par.reduce')
+    par_reduce_binding = par_reduce_entry.target_consumers['aot-c'][0]
+    reject_binding_mutation('xi.par.reduce', 0,
+                            replace(par_reduce_binding, symbol='xicgen_par_map'))
+    mul_entry = next(entry for entry in real_entries if entry.op_name == 'xi.mul')
+    mul_binding = mul_entry.target_consumers['aot-c'][0]
+    assert mul_binding.predicates == (
+        XiConsumerPredicateWitness('src/aot/xi_cgen.c',
+                                   'cg_u64_mul_wide_pair',
+                                   'src/aot/xi_cgen.c',
+                                   'cg_u64_mul_wide_value_is_eligible'),)
+    reject_binding_mutation(
+        'xi.mul', 0,
+        replace(mul_binding, predicates=(XiConsumerPredicateWitness(
+            'src/aot/xi_cgen.c', 'cg_u64_mul_wide_value_is_eligible'),)))
+    reject_binding_mutation(
+        'xi.mul', 0,
+        replace(mul_binding, predicates=(XiConsumerPredicateWitness(
+            'src/aot/xi_cgen.c', 'emit_value_stmt'),)))
+
+    consumer_sources = {relative for relative, _ in real_snapshot.sources}
+
+    with tempfile.TemporaryDirectory(prefix='xisagen-aot-discovery-') as directory:
+        discovery_root = Path(directory)
+        (discovery_root / 'CMakeLists.txt').write_bytes(
+            (repository_root / 'CMakeLists.txt').read_bytes())
+        for relative, data in real_snapshot.sources:
+            destination = discovery_root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+        for source_path in sorted((repository_root / 'src/aot').rglob('*.c')):
+            relative = source_path.relative_to(repository_root)
+            destination = discovery_root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(source_path.read_bytes())
+        unrelated = discovery_root / 'src/aot/discovery/plain_unrelated.c'
+        unrelated.parent.mkdir(parents=True, exist_ok=True)
+        unrelated.write_text(
+            'static void plain_unrelated(void) {}\n', encoding='utf-8')
+        validate_xi_lowering_consumer_sources(
+            real_entries, discovery_root, 'plain unrelated discovery source')
+
+        def reject_discovery_source(name: str, source: str,
+                                    expected_reason: str) -> None:
+            hostile = discovery_root / f'src/aot/discovery/{name}.c'
+            hostile.write_text(source, encoding='utf-8')
+            diagnostics = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(diagnostics):
+                    validate_xi_lowering_consumer_sources(
+                        real_entries, discovery_root,
+                        f'undeclared matching AOT discovery source {name}')
+                assert False, f"undeclared matching AOT source {name} must fail closed"
+            except SystemExit:
+                message = diagnostics.getvalue()
+                assert expected_reason in message, (expected_reason, message)
+            finally:
+                hostile.unlink()
+
+        reject_discovery_source(
+            'undeclared_await_selector',
+            'static void undeclared_await_selector(XiValue *v, CgContext *ctx, '
+            'FILE *out, XiFunc *f) {\n'
+            '    if (v->op == XI_AWAIT) {\n'
+            '        emit_aot_coro_op_stmt(ctx, out, f, v);\n'
+            '        return;\n'
+            '    }\n'
+            '}\n',
+            'xi.await:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'undeclared_add_selector',
+            'static void undeclared_add_selector(XiValue *v, CgContext *ctx, '
+            'FILE *out, XiFunc *f) {\n'
+            '    if (v->op == XI_ADD) {\n'
+            '        emit_aot_coro_op_stmt(ctx, out, f, v);\n'
+            '        return;\n'
+            '    }\n'
+            '}\n',
+            'xi.add:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'undeclared_add_structural_emitter',
+            'static void undeclared_add_structural_emitter('
+            'XiValue *v, CgContext *ctx, FILE *out) {\n'
+            '    if (v->op == XI_ADD) {\n'
+            '        emit_phi_ref(ctx, out, 0);\n'
+            '        return;\n'
+            '    }\n'
+            '}\n',
+            'xi.add:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'undeclared_par_reduce_router',
+            'static void undeclared_par_reduce_router(XiValue *v, CgContext *ctx, '
+            'FILE *out, XiFunc *f, const char *prefix) {\n'
+            '    if (v->op == XI_PAR_REDUCE) {\n'
+            '        xicgen_par_reduce(ctx, out, f, v, prefix, false);\n'
+            '        return;\n'
+            '    }\n'
+            '}\n',
+            'xi.par.reduce:aot-c: direct-consumer router census mismatch')
+        reject_discovery_source(
+            'undeclared_par_reduce_direct_selector',
+            'static void undeclared_par_reduce_direct_selector('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f) {\n'
+            '    if (v->op == XI_PAR_REDUCE) {\n'
+            '        emit_aot_coro_op_stmt(ctx, out, f, v);\n'
+            '        return;\n'
+            '    }\n'
+            '}\n',
+            'xi.par.reduce:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'undeclared_phi_activation',
+            'static void undeclared_phi_activation(CgContext *ctx, FILE *out, '
+            'XiFunc *f, XiBlock *blk, size_t pred_idx) {\n'
+            '    emit_phi_copies(ctx, out, f, blk, pred_idx);\n'
+            '}\n',
+            'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
+        reject_discovery_source(
+            'undeclared_thread_spawn_guard',
+            'static bool undeclared_thread_spawn_guard(XiValue *v, CgContext *ctx, '
+            'FILE *out, XiFunc *f) {\n'
+            '    if (!v || v->op != XI_THREAD_SPAWN) return false;\n'
+            '    emit_aot_coro_op_stmt(ctx, out, f, v);\n'
+            '    return true;\n'
+            '}\n',
+            'xi.thread.spawn:aot-c: guarded-selector census mismatch')
+        reject_discovery_source(
+            'undeclared_thread_spawn_direct_selector',
+            'static void undeclared_thread_spawn_direct_selector('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f) {\n'
+            '    if (v->op == XI_THREAD_SPAWN) {\n'
+            '        emit_aot_coro_op_stmt(ctx, out, f, v);\n'
+            '        return;\n'
+            '    }\n'
+            '}\n',
+            'xi.thread.spawn:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'macro_go_owner',
+            '#define I1_ROUTE_GO(ctx, out, f, v, prefix) '
+            'xicgen_go(ctx, out, f, v, prefix)\n'
+            'static void macro_go_owner(XiValue *v, CgContext *ctx, FILE *out, '
+            'XiFunc *f, const char *prefix) {\n'
+            '    if (v->op == XI_GO) { I1_ROUTE_GO(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'governed token appears in preprocessing directive')
+        reject_discovery_source(
+            'macro_argument_go_owner',
+            '#define I1_SELECT_OWNER(op, body) if (v->op == (op)) { body; return; }\n'
+            'static void macro_argument_go_owner(XiValue *v, CgContext *ctx, '
+            'FILE *out, XiFunc *f, const char *prefix) {\n'
+            '    I1_SELECT_OWNER(XI_GO, xicgen_go(ctx, out, f, v, prefix));\n'
+            '}\n',
+            'governed selector is hidden in a macro argument')
+        reject_discovery_source(
+            'lowercase_macro_argument_go_owner',
+            '#define select_owner(op, body) if (v->op == (op)) { body; return; }\n'
+            'static void lowercase_macro_argument_go_owner('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f, '
+            'const char *prefix) {\n'
+            '    select_owner(XI_GO, xicgen_go(ctx, out, f, v, prefix));\n'
+            '}\n',
+            'governed selector is hidden in a macro argument')
+        reject_discovery_source(
+            'initializer_alias_go_owner',
+            'static void initializer_alias_go_owner('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f, '
+            'const char *prefix) {\n'
+            '    XiOp alias = XI_GO;\n'
+            '    if (v->op == alias) { xicgen_go(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'governed selector is used through an initializer alias')
+        reject_discovery_source(
+            'cast_initializer_alias_go_owner',
+            'static void cast_initializer_alias_go_owner('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f, '
+            'const char *prefix) {\n'
+            '    XiOp alias = (XiOp) XI_GO;\n'
+            '    if (v->op == alias) { xicgen_go(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'governed selector is used through an initializer alias')
+        reject_discovery_source(
+            'aggregate_alias_go_owner',
+            'static const XiOp aliases[] = { XI_GO };\n'
+            'static void aggregate_alias_go_owner('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f, '
+            'const char *prefix) {\n'
+            '    if (v->op == aliases[0]) { '
+            'xicgen_go(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'governed selector is used through an initializer alias')
+        reject_discovery_source(
+            'identity_wrapper_go_owner',
+            'static XiOp identity(XiOp op) { return op; }\n'
+            'static void identity_wrapper_go_owner('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f, '
+            'const char *prefix) {\n'
+            '    if (v->op == identity((XiOp) XI_GO)) { '
+            'xicgen_go(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'xi.go:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'stored_identity_alias_go_owner',
+            'static XiOp identity_alias(XiOp op) { return op; }\n'
+            'static void stored_identity_alias_go_owner('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f, '
+            'const char *prefix) {\n'
+            '    XiOp alias = identity_alias(XI_GO);\n'
+            '    if (v->op == alias) { '
+            'xicgen_go(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'governed selector is used through an initializer alias')
+        reject_discovery_source(
+            'scalar_selector_helper_go_owner',
+            'static bool is_go(XiOp op) { return op == XI_GO; }\n'
+            'static void scalar_selector_helper_go_owner('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f, '
+            'const char *prefix) {\n'
+            '    if (is_go(v->op)) { '
+            'xicgen_go(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'xi.go:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'value_selector_helper_go_owner',
+            'static bool value_is_go(const XiValue *v) { '
+            'return v && v->op == XI_GO; }\n'
+            'static void value_selector_helper_go_owner('
+            'XiValue *v, CgContext *ctx, FILE *out, XiFunc *f, '
+            'const char *prefix) {\n'
+            '    if (value_is_go(v)) { '
+            'xicgen_go(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'xi.go:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'renamed_second_argument_selector_helper_go_owner',
+            'static bool second_argument_is_go(bool enabled, XiOp selected) { '
+            'return enabled && selected == XI_GO; }\n'
+            'static void renamed_second_argument_selector_helper_go_owner('
+            'const XiValue *value, XiCgenCtx *ctx, FILE *out, '
+            'const XiFunc *f, const char *prefix) {\n'
+            '    if (second_argument_is_go(true, value->op)) { '
+            'xicgen_go(ctx, out, f, value, prefix); return; }\n'
+            '}\n',
+            'xi.go:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'selector_factory_go_owner',
+            'static XiOp go_op(void) { return XI_GO; }\n'
+            'static void selector_factory_go_owner('
+            'const XiValue *value, XiCgenCtx *ctx, FILE *out, '
+            'const XiFunc *f, const char *prefix) {\n'
+            '    if (value->op == go_op()) { '
+            'xicgen_go(ctx, out, f, value, prefix); return; }\n'
+            '}\n',
+            'xi.go:aot-c: direct-consumer selector census mismatch')
+        reject_discovery_source(
+            'function_pointer_go_owner',
+            'static void function_pointer_go_owner(XiValue *v, CgContext *ctx, '
+            'FILE *out, XiFunc *f, const char *prefix) {\n'
+            '    void (*route)(XiCgenCtx *, FILE *, const XiFunc *, const XiValue *, '
+            'const char *) = xicgen_go;\n'
+            '    if (v->op == XI_GO) { route(ctx, out, f, v, prefix); return; }\n'
+            '}\n',
+            'governed function token is used through an alias')
+
+        observation = discovery_root / 'src/aot/discovery/log_observation.c'
+        observation.write_text(
+            '#define XR_LOG(value) observe(value)\n'
+            'static void log_observation(void) { XR_LOG(XI_GO); }\n',
+            encoding='utf-8')
+        validate_xi_lowering_consumer_sources(
+            real_entries, discovery_root, 'non-routing selector observation')
+        observation.unlink()
+
+        xi_cgen_path = discovery_root / 'src/aot/xi_cgen.c'
+        xi_cgen_original = xi_cgen_path.read_text(encoding='utf-8')
+        header_owner = discovery_root / 'src/aot/discovery/header_go_owner.h'
+        header_owner.write_text(
+            'static void header_go_owner(XiValue *v, XiCgenCtx *ctx, FILE *out, '
+            'const XiFunc *f, const char *prefix) {\n'
+            '    if (v->op == XI_GO) { xicgen_go(ctx, out, f, v, prefix); return; }\n'
+            '}\n', encoding='utf-8')
+        xi_cgen_path.write_text(
+            xi_cgen_original + '\n#include "discovery/header_go_owner.h"\n',
+            encoding='utf-8')
+        diagnostics = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(diagnostics):
+                validate_xi_lowering_consumer_sources(
+                    real_entries, discovery_root, 'header-only undeclared owner')
+            assert False, "header-only undeclared owner must fail closed"
+        except SystemExit:
+            message = diagnostics.getvalue()
+            assert 'xi.go:aot-c: direct-consumer router census mismatch' in message
+            assert 'src/aot/discovery/header_go_owner.h::header_go_owner' in message
+        finally:
+            xi_cgen_path.write_text(xi_cgen_original, encoding='utf-8')
+            header_owner.unlink()
+
+        plain_header = discovery_root / 'src/aot/discovery/plain_unrelated.h'
+        plain_header.write_text('static inline int i1_plain(void) { return 1; }\n',
+                                encoding='utf-8')
+        xi_cgen_path.write_text(
+            xi_cgen_original + '\n#include "discovery/plain_unrelated.h"\n',
+            encoding='utf-8')
+        header_snapshot = capture_xi_lowering_validation_snapshot(discovery_root)
+        validate_xi_lowering_consumer_sources(
+            real_entries, discovery_root, 'plain included header')
+        plain_header.write_text('static inline int i1_plain(void) { return 2; }\n',
+                                encoding='utf-8')
+        assert capture_xi_lowering_validation_snapshot(discovery_root) != header_snapshot
+        xi_cgen_path.write_text(xi_cgen_original, encoding='utf-8')
+        plain_header.unlink()
+
+    def reject_source_mutation(relative: str,
+                               replacements: tuple[tuple[str, str], ...],
+                               expected_reason: str,
+                               append: str = '') -> None:
+        assert validated_baseline == real_snapshot
+        assert relative in consumer_sources
+        snapshot_sources = dict(real_snapshot.sources)
+        assert set(snapshot_sources) == consumer_sources
+        text = snapshot_sources[relative].decode('utf-8', errors='strict')
+        for old, new in replacements:
+            assert old in text
+            text = text.replace(old, new)
+        snapshot_sources[relative] = (text + append).encode('utf-8')
+        mutated_snapshot = XiLoweringValidationSnapshot(
+            tuple(sorted(snapshot_sources.items())),
+            real_snapshot.include_directories, real_snapshot.directories)
+        discovery_sources = dict(real_discovery.sources)
+        if relative in discovery_sources:
+            discovery_sources[relative] = snapshot_sources[relative]
+        mutated_discovery = XiAotDiscoverySnapshot(
+            tuple(sorted(discovery_sources.items())), real_discovery.directories)
+        diagnostics = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(diagnostics):
+                validate_xi_lowering_consumer_sources(
+                    real_entries, repository_root, 'consumer source mutation',
+                    mutated_snapshot, mutated_discovery)
+            assert False, "invalid consumer source mutation should be rejected"
+        except SystemExit:
+            message = diagnostics.getvalue()
+            assert message.startswith('xisagen: error: consumer source mutation:')
+            assert expected_reason in message, (expected_reason, message)
+            assert 'cannot open' not in message
+            assert 'outside the validated' not in message
+
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('v->op == XI_AWAIT', 'v->op == XI_REMOVED_AWAIT'),),
+        'does not select XI_AWAIT',
+        append='\n/* v->op == XI_AWAIT */\n'
+               'const char *xi_await_witness = "XI_AWAIT";\n')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('v->op == XI_AWAIT', 'v->op != XI_AWAIT'),),
+        'does not select XI_AWAIT')
+    call_selector_return = (
+        'return v->op == XI_CALL || v->op == XI_CALL_METHOD || '
+        'v->op == XI_CALL_METHOD_DIRECT ||\n'
+        '           v->op == XI_CALL_BUILTIN;')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        ((call_selector_return,
+          call_selector_return.replace(
+              'v->op == XI_CALL ||', 'v->op == XI_CALL || true ||')),),
+        'does not return exactly the declared positive selector set')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        ((call_selector_return,
+          call_selector_return.replace(
+              'v->op == XI_CALL ||', 'v->op != XI_CALL ||')),),
+        'does not return exactly the declared positive selector set')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        ((call_selector_return,
+          call_selector_return.replace(
+              'v->op == XI_CALL ||', 'f->op == XI_CALL ||')),),
+        'does not return exactly the declared positive selector set')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        ((call_selector_return, 'return true;'),),
+        'does not return exactly the declared positive selector set')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        ((call_selector_return,
+          call_selector_return.replace(
+              'v->op == XI_CALL_BUILTIN;',
+              'v->op == XI_CALL_BUILTIN || v->op == XI_ADD;')),),
+        'does not return exactly the declared positive selector set')
+    wide_domain = '(v->op != XI_MUL && v->op != XI_BIT_MUL_HIGH)'
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        ((wide_domain, '(v->op == XI_MUL || v->op == XI_BIT_MUL_HIGH)'),),
+        'does not admit exactly the declared selector set')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        ((wide_domain,
+          '(v->op != XI_MUL && v->op != XI_BIT_MUL_HIGH && false)'),),
+        'does not admit exactly the declared selector set')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('!cg_u64_mul_wide_value_is_eligible(ctx, f, v)',
+          'cg_u64_mul_wide_value_is_eligible(ctx, f, v)'),),
+        'is not fail-closed through its declared selector domain')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('!cg_u64_mul_wide_value_is_eligible(ctx, f, v)',
+          '!cg_u64_mul_wide_value_is_eligible(ctx, f, v->args[0])'),),
+        'is not fail-closed through its declared selector domain')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('emit_aot_coro_op_stmt(ctx, out, f, v);',
+          'fprintf(out, "log only");'),),
+        'does not select XI_CORO_OP')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('emit_aot_coro_op_stmt(ctx, out, f, v);',
+          'emit_fake(out); fprintf(out, "log only");'),),
+        'does not select XI_CORO_OP',
+        append='\nstatic void emit_fake(FILE *out) { '
+               'fprintf(out, "log only"); }\n')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('emit_aot_coro_op_stmt(ctx, out, f, v);',
+          'abort(); emit_aot_coro_op_stmt(ctx, out, f, v);'),),
+        'stale terminal selector(s): '
+        'src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('emit_aot_coro_op_stmt(ctx, out, f, v);',
+          'audit_noreturn(); emit_aot_coro_op_stmt(ctx, out, f, v);'),),
+        'stale terminal selector(s): '
+        'src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt',
+        append='\n_Noreturn static void audit_noreturn(void) { abort(); }\n')
+    thread_guard = ('    if (!v || v->op != XI_THREAD_SPAWN)\n'
+                    '        return false;')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        ((thread_guard,
+          '    if (v->op != XI_THREAD_SPAWN)\n        return false;'),),
+        'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        ((thread_guard,
+          '    if (!v || v->op == XI_THREAD_SPAWN)\n        return false;'),),
+        'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        ((thread_guard,
+          '    if (!v || v->op != XI_AWAIT)\n        return false;'),),
+        'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        ((thread_guard,
+          '    if (!v || v->op != XI_THREAD_SPAWN)\n        return true;'),),
+        'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        ((thread_guard, ''),),
+        'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        ((thread_guard,
+          '    emit_value_generated_line_reset(ctx, out, v);\n' + thread_guard),),
+        'lacks the leading fail-closed guard for XI_THREAD_SPAWN')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('static bool emit_thread_spawn_value_stmt(',
+          '#if 0\nstatic bool emit_thread_spawn_value_stmt('),
+         ('static bool cg_sync_go_param_needs_release(',
+          '#endif\nstatic bool cg_sync_go_param_needs_release(')),
+        'is enclosed by conditional preprocessing')
+    for selector_condition in (
+            'v->op == XI_CHAN_SEND || xi_value_is_channel_method_call(v, "send", 1)',
+            'v->op == XI_CHAN_RECV',
+            'v->op == XI_CHAN_TRY_SEND',
+            'v->op == XI_CHAN_TRY_RECV',
+            'v->op == XI_CHAN_IS_CLOSED',
+            'v->op == XI_CHAN_NEW'):
+        reject_source_mutation(
+            'src/aot/xi_cgen_coro.inc.c',
+            ((f'if ({selector_condition}) {{',
+              f'if (v->op == XI_REMOVED_CHANNEL_OWNER) {{'),),
+            'does not select ' + re.search(
+                r'XI_[A-Z0-9_]+', selector_condition).group(0))
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c', (),
+        'expected one file-scope definition',
+        append='\nstatic void emit_coro_value_stmt(void) {}\n')
+    reject_source_mutation(
+        'src/aot/xi_cgen_dispatch_helpers.inc.c',
+        (('case XI_PAR_REDUCE:', 'case XI_REMOVED_PAR_REDUCE:'),),
+        'does not route XI_PAR_REDUCE')
+    reject_source_mutation(
+        'src/aot/xi_cgen_dispatch_helpers.inc.c',
+        (('switch (v->op) {', 'switch (v->aux_int) {'),),
+        'does not route XI_PAR_FOR')
+    reject_source_mutation(
+        'src/aot/xi_cgen_dispatch_helpers.inc.c',
+        (('xicgen_par_reduce(ctx, out, f, v, prefix, false);',
+          'removed_par_reduce(ctx, out, f, v, prefix, false);'),),
+        'does not route XI_PAR_REDUCE')
+    reject_source_mutation(
+        'src/aot/xi_cgen_dispatch_helpers.inc.c',
+        (('xicgen_par_reduce(ctx, out, f, v, prefix, false);',
+          'emit_aot_coro_op_stmt(ctx, out, f, v);\n'
+          '            xicgen_par_reduce(ctx, out, f, v, prefix, false);'),),
+        'does not route XI_PAR_REDUCE')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('if (v->op == XI_GO) {', 'if (v->op == XI_GO && false) {'),),
+        'contains a statically false conditional branch')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('if (v->op == XI_PAR_MAP || v->op == XI_PAR_REDUCE) {',
+          'if ((v->op == XI_PAR_MAP || v->op == XI_PAR_REDUCE) && false) {'),),
+        'contains a statically false conditional branch')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('if (v->op == XI_PAR_MAP)', 'if (v->op != XI_PAR_MAP)'),),
+        'does not route XI_PAR_MAP')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('        xicgen_go(ctx, out, f, v, prefix);',
+          '        #if 0\n'
+          '        xicgen_go(ctx, out, f, v, prefix);\n'
+          '        #endif'),),
+        'contains conditional preprocessing')
+    assert not _xi_switch_routes_to_owner(
+        'switch (v->op) { case XI_OTHER: { switch (v->op) { '
+        'case XI_GO: xicgen_go(); } } }',
+        'XI_GO', 'xicgen_go')
+    reject_source_mutation(
+        'src/aot/xi_cgen_loop_helpers.inc.c',
+        (('emit_phi_copies(ctx, out, f, loop.guard, pre_idx);',
+          'removed_phi_copies(ctx, out, f, loop.guard, pre_idx);'),),
+        'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen_loop_helpers.inc.c',
+        (('emit_phi_copies(ctx, out, f, loop.guard, pre_idx);',
+          '#if 0\n'
+          '    emit_phi_copies(ctx, out, f, loop.guard, pre_idx);\n'
+          '#endif'),),
+        'contains conditional preprocessing')
+    reject_source_mutation(
+        'src/aot/xi_cgen_loop_helpers.inc.c',
+        (('emit_phi_copies(ctx, out, f, loop.guard, body_idx);',
+          'removed_phi_copies(ctx, out, f, loop.guard, body_idx);'),),
+        'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen_loop_helpers.inc.c',
+        (('emit_phi_copies(ctx, out, f, loop.body, entry_idx);',
+          'removed_phi_copies(ctx, out, f, loop.body, entry_idx);'),),
+        'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen_loop_helpers.inc.c',
+        (('emit_phi_copies(ctx, out, f, loop.body, body_idx);',
+          'removed_phi_copies(ctx, out, f, loop.body, body_idx);'),),
+        'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen_loop_helpers.inc.c',
+        (('emit_phi_copies(ctx, out, f, loop.guard, pre_idx);',
+          'emit_phi_copies(ctx, out, f, loop.guard, body_idx);'),),
+        'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen_loop_helpers.inc.c',
+        (('emit_phi_copies(ctx, out, f, loop.guard, pre_idx);',
+          'return true;\n    emit_phi_copies(ctx, out, f, loop.guard, pre_idx);'),),
+        'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen_loop_helpers.inc.c',
+        (('emit_phi_copies(ctx, out, f, loop.body, entry_idx);',
+          'emit_phi_copies(ctx, out, f, loop.body, body_idx);'),),
+        'activation census for src/aot/xi_cgen.c::emit_phi_copies differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('if (emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, false))',
+          'if (v->op == XI_OP_COUNT && '
+          'emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, false))'),),
+        'guarded activation must be the complete if predicate')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('if (emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, true))',
+          'if (v->op == XI_OP_COUNT && '
+          'emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, true))'),),
+        'guarded activation must be the complete if predicate')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('    emit_declarations(ctx, out, f);\n', ''),),
+        'activation census for src/aot/xi_cgen.c::emit_declarations differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('    emit_coro_frame_type(ctx, out, f, prefix);\n', ''),),
+        'activation census for src/aot/xi_cgen_coro.inc.c::emit_coro_frame_type differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('    emit_coro_local_declarations(ctx, out, f);\n', ''),),
+        'activation census for src/aot/xi_cgen_coro.inc.c::emit_coro_local_declarations differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('            fprintf(out, "    %s%s ",\n'
+          '                    cg_value_is_cleanup_live_local_source',
+          '            fprintf(stderr, "    %s%s ",\n'
+          '                    cg_value_is_cleanup_live_local_source'),),
+        'output sequence expected')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('            fprintf(out, "    %s ", cg_coro_decl_ctype',
+          '            fprintf(stderr, "    %s ", cg_coro_decl_ctype'),),
+        'output sequence expected')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('            fprintf(out, "    %s ", ctype);\n'
+          '            emit_phi_ref(ctx, out, phi);',
+          '            fprintf(stderr, "    %s ", ctype);\n'
+          '            emit_phi_ref(ctx, out, phi);'),),
+        'output sequence expected')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('            fprintf(out, "    %s ", ctype);\n'
+          '            emit_phi_ref(ctx, out, phi);',
+          '            abort();\n'
+          '            fprintf(out, "    %s ", ctype);\n'
+          '            emit_phi_ref(ctx, out, phi);'),),
+        'output sequence expected')
+    reject_source_mutation(
+        'src/aot/xi_cgen_coro.inc.c',
+        (('            fprintf(out, "    %s ", ctype);\n'
+          '            emit_phi_ref(ctx, out, phi);',
+          '            return;\n'
+          '            fprintf(out, "    %s ", ctype);\n'
+          '            emit_phi_ref(ctx, out, phi);'),),
+        'output sequence expected')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('if (emit_structured_counted_loop_stmt(ctx, out, f, blk, prefix))',
+          'if (removed_structured_counted_loop_stmt(ctx, out, f, blk, prefix))'),),
+        'activation census for src/aot/xi_cgen_loop_helpers.inc.c::'
+        'emit_structured_counted_loop_stmt differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('if (emit_structured_array_fill_loop_stmt(ctx, out, f, blk, prefix))',
+          'if (removed_structured_array_fill_loop_stmt(ctx, out, f, blk, prefix))'),),
+        'activation census for src/aot/xi_cgen_loop_helpers.inc.c::'
+        'emit_structured_array_fill_loop_stmt differs')
+    reject_source_mutation(
+        'src/aot/xi_cgen.c',
+        (('emit_phi_incoming_as_rep(ctx, out, phi, pred_idx);',
+          'removed_phi_incoming_as_rep(ctx, out, phi, pred_idx);'),),
+        'lacks edge-parallel-copy witness token(s): emit_phi_incoming_as_rep')
     print(" PASS", file=sys.stderr)
 
 
@@ -5386,6 +10769,8 @@ def main():
         'xi-ops': cmd_xi_ops,
         'semantic-ops': cmd_semantic_ops,
         'xi-lowering': cmd_xi_lowering,
+        'xi-lowering-check': cmd_xi_lowering_check,
+        'xi-lowering-validate': cmd_xi_lowering_validate,
         'xi-verify': cmd_xi_verify,
         'aot-rep': cmd_aot_rep,
         'aot-abi': cmd_aot_abi,

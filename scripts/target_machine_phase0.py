@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -27,6 +28,17 @@ from typing import Any, Iterable
 
 SCHEMA = 1
 GENERATOR_VERSION = "target-machine-phase0/1"
+EXPECTED_DIRECT_CONSUMER_OPERATIONS = 33
+EXPECTED_DIRECT_CONSUMER_BINDINGS = 44
+EXPECTED_DIRECT_CONSUMER_EMITTERS = 36
+EXPECTED_DIRECT_CONSUMER_PREDICATES = 6
+EXPECTED_DIRECT_CONSUMER_PREDICATE_DOMAINS = 2
+EXPECTED_DIRECT_CONSUMER_ROUTERS = 6
+EXPECTED_GUARDED_SELECTORS = 1
+EXPECTED_AOT_C_STMT_DRIVERS = 11
+EXPECTED_DIRECT_CONSUMER_ACTIVATION_EDGES = 13
+EXPECTED_DIRECT_CONSUMER_ACTIVATION_CALLS = 15
+EXPECTED_DIRECT_CONSUMER_OUTPUT_SEQUENCES = 3
 
 
 def read(path: Path) -> str:
@@ -73,14 +85,20 @@ def meta(root: Path, inputs: list[str]) -> dict[str, Any]:
     }
 
 
-def sexpr_atom(block: str, key: str, default: str = "none") -> str:
-    match = re.search(rf":{re.escape(key)}\s+([^\s()]+)", block)
-    return match.group(1) if match else default
-
-
-def sexpr_list(block: str, key: str) -> list[str]:
-    match = re.search(rf":{re.escape(key)}\s+\(([^)]*)\)", block)
-    return match.group(1).split() if match else []
+def load_xisagen(root: Path):
+    path = root / "tools/xisagen/xisagen.py"
+    spec = importlib.util.spec_from_file_location("target_machine_xisagen", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load canonical Xi schema parser from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    module_directory = str(path.parent)
+    sys.path.insert(0, module_directory)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(module_directory)
+    return module
 
 
 def op_family(op_class: str) -> str:
@@ -125,17 +143,156 @@ def oracle_for_family(family: str) -> str:
     return "typed-source-expected-result-plus-mutation-oracle"
 
 
-def semantic_owner_inventory(root: Path) -> dict[str, Any]:
+def _semantic_owner_inventory(root: Path, expected_consumer_operations: int,
+                              expected_consumer_bindings: int,
+                              expected_consumer_emitters: int,
+                              expected_consumer_predicates: int,
+                              expected_consumer_routers: int,
+                              expected_guarded_selectors: int,
+                              expected_stmt_drivers: int,
+                              expected_activation_edges: int = 0,
+                              expected_activation_calls: int = 0,
+                              expected_output_sequences: int = 0,
+                              expected_consumer_predicate_domains: int = 0
+                              ) -> dict[str, Any]:
     inputs = [
         "xisa/xi/ops.def",
+        "xisa/xi/lowering.def",
         "contracts/semantic-owners.toml",
         "src/ir/xi_emit_vm_gen.h",
+        "src/ir/xi_lowering_coverage_gen.h",
         "src/aot/xi_to_c_dispatch_gen.h",
+        "src/aot/xi_to_c_stmt_dispatch_gen.h",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c",
         "contracts/semantic-owner-registry.json",
     ]
-    text = read(root / inputs[0])
-    manifest = tomllib.loads(read(root / inputs[1]))
-    registry = json.loads(read(root / inputs[4]))
+    xisagen = load_xisagen(root)
+    ops = xisagen.parse_xi_ops_def(read(root / inputs[0]), str(root / inputs[0]))
+    entries = xisagen.parse_xi_lowering_def(read(root / inputs[1]), ops,
+                                             str(root / inputs[1]))
+    validation_snapshot = xisagen.validate_xi_lowering_consumer_sources(
+        entries, root, str(root / inputs[1]))
+    inputs.extend(relative for relative, _ in validation_snapshot.sources)
+    inputs = sorted(set(inputs))
+    consumer_entries = [entry for entry in entries if entry.target_consumers]
+    consumer_binding_count = sum(
+        len(bindings)
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+    )
+    consumer_emitter_count = sum(
+        len(binding.emitters)
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+    )
+    consumer_predicate_count = sum(
+        len(binding.predicates)
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+    )
+    consumer_predicate_domain_count = sum(
+        1
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for predicate in binding.predicates
+        if predicate.domain_symbol is not None
+    )
+    consumer_router_count = sum(
+        len(binding.routers)
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+    )
+    guarded_selector_count = sum(
+        1
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        if binding.witness_kind == "guarded-selector"
+    )
+    activation_edge_count = sum(
+        len(binding.activations)
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+    )
+    activation_call_count = sum(
+        activation.count
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+        for activation in binding.activations
+    )
+    output_sequence_count = sum(
+        len(binding.output_sequences)
+        for entry in consumer_entries
+        for bindings in entry.target_consumers.values()
+        for binding in bindings
+    )
+    stmt_entries = [entry for entry in entries
+                    if "aot-c-stmt" in entry.target_drivers]
+    if len(consumer_entries) != expected_consumer_operations:
+        raise RuntimeError(
+            f"direct AOT consumer operation count changed: expected "
+            f"{expected_consumer_operations}, got {len(consumer_entries)}")
+    if consumer_binding_count != expected_consumer_bindings:
+        raise RuntimeError(
+            f"direct AOT consumer binding count changed: expected "
+            f"{expected_consumer_bindings}, got {consumer_binding_count}")
+    if consumer_emitter_count != expected_consumer_emitters:
+        raise RuntimeError(
+            f"direct AOT consumer emitter count changed: expected "
+            f"{expected_consumer_emitters}, got {consumer_emitter_count}")
+    if consumer_predicate_count != expected_consumer_predicates:
+        raise RuntimeError(
+            f"direct AOT consumer predicate count changed: expected "
+            f"{expected_consumer_predicates}, got {consumer_predicate_count}")
+    if consumer_predicate_domain_count != expected_consumer_predicate_domains:
+        raise RuntimeError(
+            f"direct AOT consumer predicate-domain count changed: expected "
+            f"{expected_consumer_predicate_domains}, got "
+            f"{consumer_predicate_domain_count}")
+    if consumer_router_count != expected_consumer_routers:
+        raise RuntimeError(
+            f"direct AOT consumer router count changed: expected "
+            f"{expected_consumer_routers}, got {consumer_router_count}")
+    if guarded_selector_count != expected_guarded_selectors:
+        raise RuntimeError(
+            f"guarded selector count changed: expected {expected_guarded_selectors}, "
+            f"got {guarded_selector_count}")
+    if len(stmt_entries) != expected_stmt_drivers:
+        raise RuntimeError(
+            f"AOT statement driver count changed: expected {expected_stmt_drivers}, "
+            f"got {len(stmt_entries)}")
+    if activation_edge_count != expected_activation_edges:
+        raise RuntimeError(
+            f"direct AOT consumer activation edge count changed: expected "
+            f"{expected_activation_edges}, got {activation_edge_count}")
+    if activation_call_count != expected_activation_calls:
+        raise RuntimeError(
+            f"direct AOT consumer activation call count changed: expected "
+            f"{expected_activation_calls}, got {activation_call_count}")
+    if output_sequence_count != expected_output_sequences:
+        raise RuntimeError(
+            f"direct AOT consumer output sequence count changed: expected "
+            f"{expected_output_sequences}, got {output_sequence_count}")
+    expected_coverage = xisagen.generate_xi_lowering_coverage_header(entries, ops)
+    if read(root / "src/ir/xi_lowering_coverage_gen.h") != expected_coverage:
+        raise RuntimeError("generated Xi lowering coverage is stale")
+    expected_dispatch = xisagen.generate_xi_to_c_dispatch_header(entries)
+    if read(root / "src/aot/xi_to_c_dispatch_gen.h") != expected_dispatch:
+        raise RuntimeError("generated Xi AOT expression dispatch is stale")
+    expected_stmt_dispatch = xisagen.generate_xi_target_dispatch_header(
+        entries, "aot-c-stmt", "XI_TO_C_STMT_DISPATCH_GEN_H",
+        "XI_TO_C_STMT_LOWERING_DRIVERS")
+    if read(root / "src/aot/xi_to_c_stmt_dispatch_gen.h") != expected_stmt_dispatch:
+        raise RuntimeError("generated Xi AOT statement dispatch is stale")
+    manifest = tomllib.loads(read(root / "contracts/semantic-owners.toml"))
+    registry = json.loads(read(root / "contracts/semantic-owner-registry.json"))
     canonical_by_owner = {
         f"shared.{item['id']}": item["header"] for item in manifest.get("core", [])
     }
@@ -144,13 +301,14 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
         for item in manifest.get("operation", [])
         if item.get("typed_plan") and item.get("semantic_kernel")
     })
-    blocks = re.findall(r"\(define-xi-op\s+([^\s()]+)(.*?)(?=\n\(define-xi-op|\Z)", text, re.S)
     registry_by_operation = {
         row["operation"]: row for row in registry.get("operations", [])
     }
+    entry_by_operation = {entry.op_name: entry for entry in entries}
     rows: list[dict[str, Any]] = []
-    for name, body in blocks:
-        op_class = sexpr_atom(body, "class", "unclassified")
+    for op in ops:
+        name = op.name
+        op_class = op.cls
         family = op_family(op_class)
         registry_row = registry_by_operation.get(name)
         if registry_row is None:
@@ -162,7 +320,7 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
         if (not isinstance(observable_contract, str) or
                 not (root / observable_contract).is_file()):
             raise RuntimeError(f"{name}: observable contract is not a current source file")
-        targets = set(sexpr_list(body, "targets"))
+        targets = set(op.targets)
         consumers = set(registry_row.get("consumers", []))
         vm_applicable = "vm-bytecode" in targets
         aot_applicable = "aot-c" in targets
@@ -170,25 +328,41 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
             raise RuntimeError(f"{name}: VM target lacks its declared owner consumer")
         if explicit and aot_applicable and "cgen" not in consumers:
             raise RuntimeError(f"{name}: AOT target lacks its declared owner consumer")
+        current_aot_owner = None
+        if aot_applicable:
+            entry = entry_by_operation.get(name)
+            if entry is None:
+                raise RuntimeError(f"{name}: AOT target lacks canonical lowering metadata")
+            owners = []
+            if "aot-c" in entry.target_drivers:
+                owners.append("src/aot/xi_to_c_dispatch_gen.h::" +
+                              entry.target_drivers["aot-c"])
+            if "aot-c-stmt" in entry.target_drivers:
+                owners.append("src/aot/xi_to_c_stmt_dispatch_gen.h::" +
+                              entry.target_drivers["aot-c-stmt"])
+            owners.extend(
+                f"{binding.source_path}::{binding.symbol}"
+                for binding in entry.target_consumers.get("aot-c", []))
+            if not owners:
+                raise RuntimeError(f"{name}: AOT target has no non-rejected owner")
+            current_aot_owner = " + ".join(owners)
         rows.append({
             "operation_id": name,
             "family": family,
             "observable_contract": observable_contract,
-            "current_vm_owner": (("representation adapter" if explicit else
-                                  "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm")
-                                 if vm_applicable else None),
-            "current_aot_owner": (("representation adapter" if explicit else
-                                   "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c")
-                                  if aot_applicable else None),
+            "current_vm_owner": (
+                "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm"
+                if vm_applicable else None),
+            "current_aot_owner": current_aot_owner,
             "current_shared_owner": (canonical_source if explicit else "xisa/xi/ops.def"),
             "future_semantic_owner": (owner if explicit else "SemanticPlan.operation_registry"),
-            "effects": sexpr_list(body, "effects"),
-            "capabilities": sexpr_list(body, "requires"),
-            "observable_edges": sexpr_list(body, "observable"),
-            "ownership": sexpr_atom(body, "own-use", "explicit-none"),
-            "targets": sexpr_list(body, "targets"),
+            "effects": op.effects,
+            "capabilities": op.requires,
+            "observable_edges": op.observable,
+            "ownership": op.own_use,
+            "targets": op.targets,
             "error_panic_suspend_cancel_publication": [
-                item for item in sexpr_list(body, "effects") + sexpr_list(body, "observable")
+                item for item in op.effects + op.observable
                 if item in {"may-throw", "panic", "suspend", "cancel", "publication"}
             ],
             "independent_oracle": oracle_for_family(family),
@@ -230,6 +404,23 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
         "operations": rows,
     })
     return result
+
+
+def semantic_owner_inventory(root: Path) -> dict[str, Any]:
+    return _semantic_owner_inventory(
+        root,
+        EXPECTED_DIRECT_CONSUMER_OPERATIONS,
+        EXPECTED_DIRECT_CONSUMER_BINDINGS,
+        EXPECTED_DIRECT_CONSUMER_EMITTERS,
+        EXPECTED_DIRECT_CONSUMER_PREDICATES,
+        EXPECTED_DIRECT_CONSUMER_ROUTERS,
+        EXPECTED_GUARDED_SELECTORS,
+        EXPECTED_AOT_C_STMT_DRIVERS,
+        EXPECTED_DIRECT_CONSUMER_ACTIVATION_EDGES,
+        EXPECTED_DIRECT_CONSUMER_ACTIVATION_CALLS,
+        EXPECTED_DIRECT_CONSUMER_OUTPUT_SEQUENCES,
+        EXPECTED_DIRECT_CONSUMER_PREDICATE_DOMAINS,
+    )
 
 
 def struct_body(text: str, type_name: str) -> str:
@@ -828,12 +1019,32 @@ def self_test() -> int:
         ]
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        for relative in ("xisa/xi/ops.def", "contracts/semantic-owners.toml",
-                         "src/ir/xi_emit_vm_gen.h", "src/aot/xi_to_c_dispatch_gen.h",
+        repository_root = Path(__file__).resolve().parents[1]
+        for relative in ("CMakeLists.txt",
+                         "xisa/xi/ops.def", "xisa/xi/lowering.def",
+                         "contracts/semantic-owners.toml",
+                         "src/ir/xi_emit_vm_gen.h",
+                         "src/ir/xi_lowering_coverage_gen.h",
+                         "src/aot/xi_to_c_dispatch_gen.h",
+                         "src/aot/xi_to_c_stmt_dispatch_gen.h",
+                         "src/aot/xi_cgen.c", "src/aot/xi_cgen_coro.inc.c",
+                         "src/aot/xi_cgen_dispatch_helpers.inc.c",
+                         "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c",
+                         "src/aot/xi_cgen_loop_helpers.inc.c",
                          "contracts/semantic-owner-registry.json",
-                         "stdlib/fixture.xr", "src/shared/xr_fixture_core.h"):
+                         "stdlib/fixture.xr", "src/shared/xr_fixture_core.h",
+                         "contracts/xi-canonical-ops.md",
+                         "tools/xisagen/xisagen.py",
+                         "tools/xisagen/c_emission_rules.py"):
             (root / relative).parent.mkdir(parents=True, exist_ok=True)
             (root / relative).write_text("", encoding="utf-8")
+        for relative in ("tools/xisagen/xisagen.py", "tools/xisagen/c_emission_rules.py"):
+            (root / relative).write_text(read(repository_root / relative), encoding="utf-8")
+        (root / "CMakeLists.txt").write_text(
+            "set(XRAY_COMMON_INCLUDES\n"
+            "    ${CMAKE_CURRENT_SOURCE_DIR}/src/aot\n"
+            ")\n",
+            encoding="utf-8")
         (root / "xisa/xi/ops.def").write_text(
             "(define-xi-op xi.fixture\n"
             "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
@@ -841,10 +1052,58 @@ def self_test() -> int:
             "  :observable-contract \"stdlib/fixture.xr\")\n"
             "(define-xi-op xi.verifier\n"
             "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
-            "  :observable () :targets (aot-verify))\n"
+            "  :observable () :targets (aot-verify) :lowering-policy verifier-only)\n"
             "(define-xi-op xi.shared\n"
             "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
-            "  :observable () :targets (vm-bytecode aot-c))\n",
+            "  :observable () :targets (vm-bytecode aot-c))\n"
+            "(define-xi-op xi.shared.stmt\n"
+            "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
+            "  :observable () :targets (aot-c))\n"
+            "(define-xi-op xi.direct.fixture\n"
+            "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
+            "  :observable () :targets (aot-c))\n"
+            "(define-xi-op xi.special.fixture\n"
+            "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
+            "  :observable () :targets (aot-c) :lowering-policy special)\n"
+            "(define-xi-op xi.stmt.fixture\n"
+            "  :class runtime :arity 0 :own-use pass :effects () :requires ()\n"
+            "  :observable () :targets (aot-c))\n",
+            encoding="utf-8")
+        lowering_text = (
+            "(lower xi.fixture :required-targets (vm-bytecode)\n"
+            "  :vm-bytecode (driver fixture_vm))\n"
+            "(lower xi.shared :required-targets (vm-bytecode aot-c)\n"
+            "  :vm-bytecode (driver shared_vm) :aot-c (driver shared_aot))\n"
+            "(lower xi.shared.stmt :required-targets (aot-c-stmt)\n"
+            "  :aot-c-stmt (driver xicgen_stmt_shared_stmt))\n"
+            "(lower xi.direct.fixture :required-targets (aot-c)\n"
+            "  :aot-c (consumer xi-cgen-direct\n"
+            "    (binding \"src/aot/xi_cgen.c\" direct_fixture_owner\n"
+            "      (selector)\n"
+            "      (emitter \"src/aot/xi_cgen.c\" emit_fixture_value))))\n"
+            "(lower xi.special.fixture :required-targets (aot-c)\n"
+            "  :aot-c (consumer xi-cgen-direct\n"
+            "    (binding \"src/aot/xi_cgen.c\" special_fixture_owner\n"
+            "      (selected-by \"src/aot/xi_cgen.c\" special_fixture_router))))\n"
+            "(lower xi.stmt.fixture :required-targets (aot-c-stmt)\n"
+            "  :aot-c-stmt (driver xicgen_stmt_stmt_fixture))\n"
+        )
+        (root / "xisa/xi/lowering.def").write_text(lowering_text, encoding="utf-8")
+        (root / "src/aot/xi_cgen.c").write_text(
+            "static void emit_fixture_value(FILE *out) { fprintf(out, \"fixture\"); }\n"
+            "static void direct_fixture_owner(FILE *out, const XiValue *v) {\n"
+            "    if (v->op == XI_DIRECT_FIXTURE) {\n"
+            "        emit_fixture_value(out);\n"
+            "        return;\n"
+            "    }\n"
+            "}\n"
+            "static void special_fixture_owner(void) {}\n"
+            "static void special_fixture_router(const XiValue *v) {\n"
+            "    if (v->op == XI_SPECIAL_FIXTURE) {\n"
+            "        special_fixture_owner();\n"
+            "        return;\n"
+            "    }\n"
+            "}\n",
             encoding="utf-8")
         (root / "contracts/semantic-owners.toml").write_text(
             "[[core]]\nid = \"fixture\"\nheader = \"src/shared/xr_fixture_core.h\"\n"
@@ -865,27 +1124,143 @@ def self_test() -> int:
             {"operation": "xi.shared", "owner": "shared.fixture",
              "observable_contract": "src/shared/xr_fixture_core.h",
              "consumers": ["vm", "cgen"]},
+            {"operation": "xi.shared.stmt", "owner": "shared.fixture",
+             "observable_contract": "src/shared/xr_fixture_core.h",
+             "consumers": ["cgen"]},
+            {"operation": "xi.direct.fixture", "owner": "xi.direct.fixture",
+             "observable_contract": "contracts/xi-canonical-ops.md",
+             "consumers": ["cgen"]},
+            {"operation": "xi.special.fixture", "owner": "xi.special.fixture",
+             "observable_contract": "contracts/xi-canonical-ops.md",
+             "consumers": ["cgen"]},
+            {"operation": "xi.stmt.fixture", "owner": "xi.stmt.fixture",
+             "observable_contract": "contracts/xi-canonical-ops.md",
+             "consumers": ["cgen"]},
         ]}
         (root / "contracts/xi-canonical-ops.md").write_text("fixture\n", encoding="utf-8")
         (root / "contracts/semantic-owner-registry.json").write_text(
             json.dumps(registry), encoding="utf-8")
-        inventory = semantic_owner_inventory(root)
+        xisagen = load_xisagen(root)
+        ops = xisagen.parse_xi_ops_def(read(root / "xisa/xi/ops.def"))
+        entries = xisagen.parse_xi_lowering_def(lowering_text, ops)
+        (root / "src/ir/xi_lowering_coverage_gen.h").write_text(
+            xisagen.generate_xi_lowering_coverage_header(entries, ops), encoding="utf-8")
+        (root / "src/aot/xi_to_c_dispatch_gen.h").write_text(
+            xisagen.generate_xi_to_c_dispatch_header(entries), encoding="utf-8")
+        (root / "src/aot/xi_to_c_stmt_dispatch_gen.h").write_text(
+            xisagen.generate_xi_target_dispatch_header(
+                entries, "aot-c-stmt", "XI_TO_C_STMT_DISPATCH_GEN_H",
+                "XI_TO_C_STMT_LOWERING_DRIVERS"),
+            encoding="utf-8")
+        inventory = _semantic_owner_inventory(root, 2, 2, 1, 0, 1, 0, 2)
+        try:
+            _semantic_owner_inventory(root, 2, 2, 0, 0, 1, 0, 2)
+        except RuntimeError as error:
+            assert "consumer emitter count changed" in str(error)
+        else:
+            raise AssertionError("direct-consumer emitter-count drift was accepted")
         by_id = {row["operation_id"]: row for row in inventory["operations"]}
-        assert by_id["xi.fixture"]["current_vm_owner"] == "representation adapter"
+        assert by_id["xi.fixture"]["current_vm_owner"] == \
+            "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm"
         assert by_id["xi.fixture"]["current_aot_owner"] is None
         assert by_id["xi.verifier"]["current_vm_owner"] is None
         assert by_id["xi.verifier"]["current_aot_owner"] is None
-        assert by_id["xi.shared"]["current_vm_owner"] == "representation adapter"
-        assert by_id["xi.shared"]["current_aot_owner"] == "representation adapter"
+        assert by_id["xi.shared"]["current_vm_owner"] == \
+            "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm"
+        assert by_id["xi.shared"]["current_aot_owner"] == \
+            "src/aot/xi_to_c_dispatch_gen.h::shared_aot"
         assert by_id["xi.shared"]["current_shared_owner"] == "src/shared/xr_fixture_core.h"
         assert by_id["xi.shared"]["future_semantic_owner"] == "shared.fixture"
+        assert by_id["xi.shared.stmt"]["current_aot_owner"] == \
+            "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_shared_stmt"
+        assert by_id["xi.shared.stmt"]["current_shared_owner"] == \
+            "src/shared/xr_fixture_core.h"
+        assert by_id["xi.direct.fixture"]["current_aot_owner"] == \
+            "src/aot/xi_cgen.c::direct_fixture_owner"
+        assert by_id["xi.special.fixture"]["current_aot_owner"] == \
+            "src/aot/xi_cgen.c::special_fixture_owner"
+        assert by_id["xi.stmt.fixture"]["current_aot_owner"] == \
+            "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_stmt_fixture"
         assert by_id["shared.fixture"]["current_vm_owner"] == "representation adapter"
         assert by_id["shared.fixture"]["current_aot_owner"] is None
+        assert "src/aot/xi_cgen.c" in inventory["generated_from"]
+        assert len(inventory["generated_from"]) == len(set(inventory["generated_from"]))
+        assert "src/aot/xi_cgen_dispatch_helpers.inc.c" in inventory["generated_from"]
+        assert "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c" in inventory["generated_from"]
+        assert "src/aot/xi_cgen_loop_helpers.inc.c" not in inventory["generated_from"]
+        original_fingerprint = inventory["source_tree_fingerprint"]
+        cgen_text = read(root / "src/aot/xi_cgen.c")
+        (root / "src/aot/xi_cgen.c").write_text(
+            cgen_text + "/* fingerprint witness */\n", encoding="utf-8")
+        changed = _semantic_owner_inventory(root, 2, 2, 1, 0, 1, 0, 2)
+        assert changed["source_tree_fingerprint"] != original_fingerprint
+        (root / "src/aot/xi_cgen.c").write_text(cgen_text, encoding="utf-8")
+        for helper_path in (
+                root / "src/aot/xi_cgen_dispatch_helpers.inc.c",
+                root / "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c"):
+            helper_text = read(helper_path)
+            helper_path.write_text(
+                helper_text + "/* fingerprint witness */\n", encoding="utf-8")
+            changed = _semantic_owner_inventory(root, 2, 2, 1, 0, 1, 0, 2)
+            assert changed["source_tree_fingerprint"] != original_fingerprint
+            helper_path.write_text(helper_text, encoding="utf-8")
+        (root / "src/aot/xi_cgen.c").write_text(
+            cgen_text.replace("XI_DIRECT_FIXTURE", "XI_WRONG_FIXTURE"),
+            encoding="utf-8")
+        try:
+            _semantic_owner_inventory(root, 2, 2, 1, 0, 1, 0, 2)
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError("wrong direct-consumer selector was accepted")
+        (root / "src/aot/xi_cgen.c").write_text(cgen_text, encoding="utf-8")
+
+        (root / "xisa/xi/lowering.def").write_text(
+            lowering_text.replace(
+                "(lower xi.special.fixture :required-targets (aot-c)\n"
+                "  :aot-c (consumer xi-cgen-direct\n"
+                "    (binding \"src/aot/xi_cgen.c\" special_fixture_owner\n"
+                "      (selected-by \"src/aot/xi_cgen.c\" special_fixture_router))))\n",
+                ""),
+            encoding="utf-8")
+        try:
+            _semantic_owner_inventory(root, 2, 2, 1, 0, 1, 0, 2)
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError("missing special direct-consumer binding was accepted")
+        (root / "xisa/xi/lowering.def").write_text(lowering_text, encoding="utf-8")
+
+        stmt_reclassified = lowering_text.replace(
+            ":required-targets (aot-c-stmt)\n"
+            "  :aot-c-stmt (driver xicgen_stmt_stmt_fixture)",
+            ":required-targets (aot-c)\n"
+            "  :aot-c (driver xicgen_stmt_stmt_fixture)")
+        (root / "xisa/xi/lowering.def").write_text(stmt_reclassified, encoding="utf-8")
+        try:
+            _semantic_owner_inventory(root, 2, 2, 1, 0, 1, 0, 2)
+        except RuntimeError as error:
+            assert "statement driver count changed" in str(error)
+        else:
+            raise AssertionError("AOT statement-driver reclassification was accepted")
+        (root / "xisa/xi/lowering.def").write_text(lowering_text, encoding="utf-8")
+
+        dispatch_path = root / "src/aot/xi_to_c_dispatch_gen.h"
+        dispatch_text = read(dispatch_path)
+        dispatch_path.write_text(dispatch_text + "/* stale */\n", encoding="utf-8")
+        try:
+            _semantic_owner_inventory(root, 2, 2, 1, 0, 1, 0, 2)
+        except RuntimeError as error:
+            assert "expression dispatch is stale" in str(error)
+        else:
+            raise AssertionError("stale generated AOT dispatch was accepted")
+        dispatch_path.write_text(dispatch_text, encoding="utf-8")
+
         registry["operations"][0]["consumers"] = []
         (root / "contracts/semantic-owner-registry.json").write_text(
             json.dumps(registry), encoding="utf-8")
         try:
-            semantic_owner_inventory(root)
+            _semantic_owner_inventory(root, 2, 2, 1, 0, 1, 0, 2)
         except RuntimeError as error:
             assert "VM target lacks" in str(error)
         else:

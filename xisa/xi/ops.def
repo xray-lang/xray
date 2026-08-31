@@ -1631,7 +1631,7 @@
   :sync release
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.thread.spawn
   :class coroutine
@@ -1644,7 +1644,7 @@
   :sync release
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 ; Synchronous: constructs a coroutine-backed iterator over a generator function.
 ; It does NOT suspend the caller (the producer is pull-driven by the iterator),
@@ -1670,7 +1670,7 @@
   :sync acquire
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 ; High-level batch-parallel semantics. These ops stay special even after the
 ; first backend implementations because they are scheduling boundaries, not
@@ -1783,7 +1783,7 @@
   :sync acq-rel
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.chan.recv
   :class coroutine
@@ -1796,7 +1796,7 @@
   :sync acq-rel
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.chan.recv.status
   :class coroutine
@@ -1822,7 +1822,7 @@
   :sync acq-rel
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.chan.try.recv
   :class coroutine
@@ -1834,7 +1834,7 @@
   :sync acq-rel
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.chan.is.closed
   :class coroutine
@@ -1846,7 +1846,7 @@
   :sync acquire
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.time.after
   :class coroutine
@@ -1862,7 +1862,7 @@
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.chan.timer.dispose
   :class coroutine
@@ -1878,7 +1878,7 @@
   :sync acq-rel
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.select.block
   :class coroutine
@@ -1891,7 +1891,7 @@
   :sync acq-rel
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.yield
   :class coroutine
@@ -1901,7 +1901,7 @@
   :effects (side-effect may-suspend)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.gen.yield
   :class coroutine
@@ -1913,7 +1913,7 @@
   :effects (side-effect may-suspend)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.throw
   :class exception
@@ -2041,7 +2041,7 @@
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.set.new
   :class allocation
@@ -2192,7 +2192,7 @@
   :effects (side-effect)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.scope.exit
   :class coroutine
@@ -2202,7 +2202,7 @@
   :sync acquire
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.try
   :class exception
@@ -2365,7 +2365,7 @@
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.load
   :class vector

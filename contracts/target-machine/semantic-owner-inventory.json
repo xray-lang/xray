@@ -2,8 +2,195 @@
   "generated_from": [
     "contracts/semantic-owner-registry.json",
     "contracts/semantic-owners.toml",
+    "include/xray_value_abi.h",
+    "src/analysis/xglobal_summary.h",
+    "src/aot/emit_c/xr_c_emission_plan.h",
+    "src/aot/emit_c/xr_c_emission_rule_ids_gen.h",
+    "src/aot/emit_c/xr_c_emission_schema.h",
+    "src/aot/emit_c/xr_c_program_emission.h",
+    "src/aot/refine/xr_aot_scalar_value.h",
+    "src/aot/xaot_abi.h",
+    "src/aot/xaot_abi_gen.h",
+    "src/aot/xaot_artifact.h",
+    "src/aot/xaot_boundary.h",
+    "src/aot/xaot_bundle.h",
+    "src/aot/xaot_callable.h",
+    "src/aot/xaot_class_layout.h",
+    "src/aot/xaot_class_native.h",
+    "src/aot/xaot_container.h",
+    "src/aot/xaot_entry_plan.h",
+    "src/aot/xaot_layout_gen.h",
+    "src/aot/xaot_link.h",
+    "src/aot/xaot_rep.h",
+    "src/aot/xaot_rep_gen.h",
+    "src/aot/xaot_storage_plan.h",
+    "src/aot/xaot_struct_name.h",
+    "src/aot/xi_backend_plan_contract.h",
+    "src/aot/xi_cgen.c",
+    "src/aot/xi_cgen.h",
+    "src/aot/xi_cgen_abi_helpers.inc.c",
+    "src/aot/xi_cgen_arith_helpers.inc.c",
+    "src/aot/xi_cgen_array_builtin_helpers.inc.c",
+    "src/aot/xi_cgen_array_helpers.inc.c",
+    "src/aot/xi_cgen_call_resolve.inc.c",
+    "src/aot/xi_cgen_class_helpers.inc.c",
+    "src/aot/xi_cgen_class_native_helpers.inc.c",
+    "src/aot/xi_cgen_class_native_meta.inc.c",
+    "src/aot/xi_cgen_coro.inc.c",
+    "src/aot/xi_cgen_coro_resolver.inc.c",
+    "src/aot/xi_cgen_ctx_impl.inc.c",
+    "src/aot/xi_cgen_dispatch_helpers.inc.c",
+    "src/aot/xi_cgen_import_helpers.inc.c",
+    "src/aot/xi_cgen_loop_helpers.inc.c",
+    "src/aot/xi_cgen_method_symbols.inc.c",
+    "src/aot/xi_cgen_program_entry.inc.c",
+    "src/aot/xi_cgen_stdlib_helpers.inc.c",
+    "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c",
+    "src/aot/xi_cgen_struct_helpers.inc.c",
+    "src/aot/xi_cgen_time_ctx_helpers.inc.c",
+    "src/aot/xi_cgen_type_helpers.inc.c",
+    "src/aot/xi_cgen_value_helpers.inc.c",
     "src/aot/xi_to_c_dispatch_gen.h",
+    "src/aot/xi_to_c_stmt_dispatch_gen.h",
+    "src/aot/xr_leaf_value_product_program_emission.h",
+    "src/aot/xr_target_aggregate_c_projection.h",
+    "src/aot/xrt_method_symbols.h",
+    "src/aot/xstdlib_aot_methods_generated.inc.c",
+    "src/base/xchecks.h",
+    "src/base/xconstants.h",
+    "src/base/xdefs.h",
+    "src/base/xentry_plan.h",
+    "src/base/xforward_decl.h",
+    "src/base/xglobal_indices.h",
+    "src/base/xhash.h",
+    "src/base/xhashmap.h",
+    "src/base/xlocation.h",
+    "src/base/xmalloc.h",
+    "src/base/xmemstream.h",
+    "src/base/xnumber_parse_error.h",
+    "src/base/xplatform.h",
+    "src/base/xposix_compat.h",
+    "src/base/xstable_id.h",
+    "src/base/xstorage.h",
+    "src/base/xtarget_data_layout.h",
+    "src/base/xtoml.h",
+    "src/base/xutf8.h",
+    "src/coro/xaot_coro.h",
+    "src/coro/xslot_ref.h",
+    "src/coro/xtask.h",
+    "src/coro/xwait_state.h",
+    "src/frontend/analyzer/xa_alloc_effect.h",
+    "src/frontend/analyzer/xa_effect_db.h",
+    "src/frontend/analyzer/xa_intrinsic_registry.def",
+    "src/frontend/analyzer/xa_intrinsic_registry.h",
+    "src/frontend/analyzer/xa_memory_effect_db.h",
+    "src/frontend/analyzer/xa_ownership.h",
+    "src/frontend/analyzer/xa_selection.h",
+    "src/frontend/analyzer/xanalyzer_builtins.h",
+    "src/frontend/analyzer/xanalyzer_symbol.h",
+    "src/frontend/analyzer/xbuiltin_receiver_method.def",
+    "src/frontend/analyzer/xbuiltin_receiver_registry.h",
+    "src/frontend/analyzer/xconsteval.h",
+    "src/frontend/lexer/xlex.h",
+    "src/frontend/parser/xast_accessors.h",
+    "src/frontend/parser/xast_nodes.h",
+    "src/frontend/parser/xast_nodes_common.h",
+    "src/frontend/parser/xast_nodes_decl.h",
+    "src/frontend/parser/xast_nodes_expr.h",
+    "src/frontend/parser/xast_nodes_stmt.h",
+    "src/frontend/parser/xast_types.h",
+    "src/frontend/parser/xtype_ref.h",
+    "src/ir/xi.h",
+    "src/ir/xi_analysis.h",
+    "src/ir/xi_backend_lower.h",
+    "src/ir/xi_core_api.h",
+    "src/ir/xi_coro_analyze.h",
+    "src/ir/xi_coro_lower.h",
     "src/ir/xi_emit_vm_gen.h",
+    "src/ir/xi_escape.h",
+    "src/ir/xi_evidence.h",
+    "src/ir/xi_lowering_coverage_gen.h",
+    "src/ir/xi_method_sym.def",
+    "src/ir/xi_module.h",
+    "src/ir/xi_op_name.h",
+    "src/ir/xi_ops_gen.h",
+    "src/ir/xi_opt.h",
+    "src/ir/xi_own.h",
+    "src/ir/xi_pass.h",
+    "src/ir/xi_pass_policy.h",
+    "src/ir/xi_range.h",
+    "src/ir/xi_value_query.h",
+    "src/module/xnative_package.h",
+    "src/os/os_time.h",
+    "src/plan/semantic/xr_program_semantic_closure.h",
+    "src/plan/semantic/xr_semantic_enum_shape.h",
+    "src/plan/semantic/xr_semantic_ids.h",
+    "src/plan/semantic/xr_semantic_number_parse_error_shape.h",
+    "src/plan/semantic/xr_semantic_panic_catch_shape.h",
+    "src/plan/semantic/xr_semantic_plan.h",
+    "src/plan/target/xr_target_capability.h",
+    "src/plan/target/xr_target_instruction_gen.h",
+    "src/plan/target/xr_target_plan.h",
+    "src/plan/target/xr_target_profile.h",
+    "src/runtime/abi/xr_runtime_contract.h",
+    "src/runtime/abi/xr_runtime_descriptor.h",
+    "src/runtime/abi/xr_runtime_object_header.h",
+    "src/runtime/abi/xr_runtime_string_object.h",
+    "src/runtime/abi/xr_target_machine_facts.h",
+    "src/runtime/abi/xr_target_runtime_profile.h",
+    "src/runtime/class/xclass_info.h",
+    "src/runtime/class/xenum.h",
+    "src/runtime/core/xr_exec_context.h",
+    "src/runtime/mem/xobj_header.h",
+    "src/runtime/value/xenum_layout.h",
+    "src/runtime/value/xffi_scalar.def",
+    "src/runtime/value/xffi_sig.h",
+    "src/runtime/value/xslot_type.h",
+    "src/runtime/value/xstruct_layout.h",
+    "src/runtime/value/xtransfer_mode.h",
+    "src/runtime/value/xtype.h",
+    "src/runtime/value/xtype_names.h",
+    "src/runtime/value/xvalue.h",
+    "src/shared/xobject_shape.h",
+    "src/shared/xr_array_core.h",
+    "src/shared/xr_assertion_plan.h",
+    "src/shared/xr_atomic_compat.h",
+    "src/shared/xr_bits_core.h",
+    "src/shared/xr_byte_slice_scalar_core.h",
+    "src/shared/xr_codegen_opaque_core.h",
+    "src/shared/xr_conversion.h",
+    "src/shared/xr_copy_core.h",
+    "src/shared/xr_core_intrinsic.def",
+    "src/shared/xr_core_intrinsic.h",
+    "src/shared/xr_derive_flags.h",
+    "src/shared/xr_elem_type.h",
+    "src/shared/xr_enum_metadata_core.h",
+    "src/shared/xr_exact_scalar_registry.def",
+    "src/shared/xr_exact_scalar_registry.h",
+    "src/shared/xr_hash_core.h",
+    "src/shared/xr_int_arith_core.h",
+    "src/shared/xr_json_type.h",
+    "src/shared/xr_native_type_core.h",
+    "src/shared/xr_numeric_conversion_core.h",
+    "src/shared/xr_numeric_core.h",
+    "src/shared/xr_obj_header.h",
+    "src/shared/xr_owner_forward_core.h",
+    "src/shared/xr_param_mode.h",
+    "src/shared/xr_print_plan.h",
+    "src/shared/xr_raw_memory_core.h",
+    "src/shared/xr_reference_count_core.h",
+    "src/shared/xr_semantic_owner_ids_gen.h",
+    "src/shared/xr_slice_window_core.h",
+    "src/shared/xr_static_address_core.h",
+    "src/shared/xr_swiss_index.h",
+    "src/shared/xr_sync_core.h",
+    "src/shared/xr_target_simd_core.h",
+    "src/shared/xr_type_names.def",
+    "src/shared/xr_type_names_core.h",
+    "src/shared/xr_typed_ops.h",
+    "src/shared/xr_utf8_core.h",
+    "src/stdlib/xstdlib_defs_generated.h",
+    "xisa/xi/lowering.def",
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
@@ -1382,9 +1569,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_add",
       "current_shared_owner": "src/shared/xr_int_arith_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1404,7 +1591,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_struct_get",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1428,7 +1615,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_struct_new",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1454,7 +1641,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_struct_set",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1481,9 +1668,9 @@
       "capabilities": [
         "array-like"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_array_data_ptr",
       "current_shared_owner": "src/shared/xr_data_pointer_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "memory-read"
       ],
@@ -1505,7 +1692,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_array_extend",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1531,7 +1718,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_array_new",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1557,7 +1744,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_array_push",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1582,7 +1769,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-type",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_as",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -1604,9 +1791,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-side-effect",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_assertion",
       "current_shared_owner": "src/shared/xr_assertion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw"
@@ -1633,9 +1820,9 @@
       "capabilities": [
         "atomic-order"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_atomic",
       "current_shared_owner": "src/shared/xr_sync_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "memory-read"
       ],
@@ -1661,7 +1848,7 @@
       "capabilities": [
         "atomic-order"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_atomic",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1691,9 +1878,9 @@
       "capabilities": [
         "atomic-order"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_atomic",
       "current_shared_owner": "src/shared/xr_sync_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "memory-write"
@@ -1718,7 +1905,7 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_atomic",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1750,7 +1937,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -1771,15 +1958,16 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_band",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1799,9 +1987,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_exact_bit",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1821,9 +2009,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_exact_bit",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1843,9 +2031,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_exact_bit",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1865,9 +2053,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_exact_bit + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1887,9 +2075,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_exact_bit",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1909,9 +2097,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_exact_bit",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1931,9 +2119,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_exact_bit",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1953,9 +2141,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_bnot",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1975,9 +2163,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_bor",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -1997,7 +2185,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_box",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -2024,7 +2212,7 @@
         "complete-native-output",
         "dominating-success"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_buffer_materialize",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2054,9 +2242,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_bxor",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -2081,9 +2269,9 @@
         "append-grow",
         "alias-safe"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_array_append_from",
       "current_shared_owner": "src/shared/xr_byte_array_append_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2115,9 +2303,9 @@
         "bytes",
         "bounds"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_array_copy_from",
       "current_shared_owner": "src/shared/xr_byte_array_copy_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2150,9 +2338,9 @@
         "bounds",
         "overlap-safe"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_array_copy_within",
       "current_shared_owner": "src/shared/xr_byte_array_copy_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2186,9 +2374,9 @@
         "append-grow",
         "overlap-repeat"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_array_repeat_from",
       "current_shared_owner": "src/shared/xr_byte_array_repeat_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2220,9 +2408,9 @@
         "byte-slice",
         "bounds"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_common_prefix",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -2252,9 +2440,9 @@
         "byte-slice",
         "bounds"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_compare",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -2285,9 +2473,9 @@
         "bounds",
         "overlap-safe"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_copy",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2319,9 +2507,9 @@
         "byte-slice",
         "bounds"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_fill",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2353,9 +2541,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_load_f32",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -2386,9 +2574,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_load_f64",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -2419,9 +2607,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_load_u16",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -2452,9 +2640,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_load_u32",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -2485,9 +2673,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_load_u64",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -2518,9 +2706,9 @@
         "bounds",
         "overlap-repeat"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_repeat",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2553,9 +2741,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_store_f32",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2587,9 +2775,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_store_f64",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2621,9 +2809,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_store_u16",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2655,9 +2843,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_store_u32",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2689,9 +2877,9 @@
         "bounds",
         "endian"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_byte_slice_store_u64",
       "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -2719,7 +2907,7 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_call + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2748,7 +2936,7 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_call_builtin + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2777,7 +2965,7 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_call_method + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2806,7 +2994,7 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_call_method + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2835,7 +3023,7 @@
     {
       "benchmark_anchor": "target-machine/error-and-cleanup",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_catch",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2859,9 +3047,9 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_cell_get",
       "current_shared_owner": "src/shared/xr_cell_access_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "memory-read"
       ],
@@ -2885,7 +3073,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_cell_new",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2913,9 +3101,9 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_cell_set",
       "current_shared_owner": "src/shared/xr_cell_access_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "memory-write"
@@ -2940,7 +3128,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt + src/aot/xi_cgen.c::emit_value_rhs",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2958,13 +3146,14 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt + src/aot/xi_cgen.c::emit_value_rhs",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -2983,13 +3172,14 @@
       "ownership": "consume",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3008,13 +3198,14 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_chan_recv_status + src/aot/xi_cgen.c::emit_value_rhs",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -3036,7 +3227,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3055,13 +3246,14 @@
       "ownership": "stored-value",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3079,13 +3271,14 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3103,13 +3296,14 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt + src/aot/xi_cgen.c::emit_value_rhs",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3127,13 +3321,14 @@
       "ownership": "stored-value",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/xi-class-type",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_checktype",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3160,7 +3355,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_class_create",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3186,7 +3381,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-cleanup",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_cleanup_enter",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3212,7 +3407,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-cleanup",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_cleanup_err_check",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3238,7 +3433,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-cleanup",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_cleanup_leave",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3264,7 +3459,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_closure_new",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3290,9 +3485,9 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_codegen_compiler_fence",
       "current_shared_owner": "src/shared/xr_codegen_opaque_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "memory-read",
@@ -3318,9 +3513,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-pure",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_codegen_opaque",
       "current_shared_owner": "src/shared/xr_codegen_opaque_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-pure",
@@ -3342,7 +3537,7 @@
     {
       "benchmark_anchor": "target-machine/constant-and-target-query",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_const",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -3364,7 +3559,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_convert",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -3386,9 +3581,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-pure",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_copy",
       "current_shared_owner": "src/shared/xr_copy_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-pure",
@@ -3408,7 +3603,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt + src/aot/xi_cgen.c::emit_value_rhs",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3427,15 +3622,16 @@
       "ownership": "consume",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_div",
       "current_shared_owner": "src/shared/xr_int_arith_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -3455,7 +3651,7 @@
     {
       "benchmark_anchor": "target-machine/error-and-cleanup",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_end_try",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3479,7 +3675,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_enum_descriptor_box",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3505,7 +3701,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_enum_descriptor_unbox",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -3529,7 +3725,7 @@
       "capabilities": [
         "concrete-enum-metadata"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_enum_meta_get",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3558,9 +3754,9 @@
       "capabilities": [
         "concrete-enum-metadata"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_enum_payload_at",
       "current_shared_owner": "src/shared/xr_enum_metadata_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw"
       ],
@@ -3586,9 +3782,9 @@
       "capabilities": [
         "concrete-enum-metadata"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_enum_variant_at",
       "current_shared_owner": "src/shared/xr_enum_metadata_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw"
       ],
@@ -3612,9 +3808,9 @@
     {
       "benchmark_anchor": "target-machine/equality-and-order",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_eq",
       "current_shared_owner": "src/shared/xr_compare_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "equality-and-order",
@@ -3634,7 +3830,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-error",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_err_catch",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3658,7 +3854,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-error",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_err_check",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3682,7 +3878,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-error",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_err_return + src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3706,7 +3902,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-error",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_err_set",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3750,7 +3946,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_fixed_array_new + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3776,7 +3972,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_fixed_bytes_const + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3802,9 +3998,9 @@
     {
       "benchmark_anchor": "target-machine/equality-and-order",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_ge",
       "current_shared_owner": "src/shared/xr_compare_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "equality-and-order",
@@ -3824,7 +4020,7 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_gen_call",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3849,7 +4045,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3867,13 +4063,14 @@
       "ownership": "consume",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_get_builtin",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3920,7 +4117,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_get_shared",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3944,7 +4141,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt + src/aot/xi_cgen_dispatch_helpers.inc.c::xicgen_go",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -3962,15 +4159,16 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/equality-and-order",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_gt",
       "current_shared_owner": "src/shared/xr_compare_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "equality-and-order",
@@ -3990,7 +4188,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_import_ref",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4014,7 +4212,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_index_get",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4038,7 +4236,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_index_set",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4063,7 +4261,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-type",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_is",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -4085,9 +4283,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-type",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_isnull",
       "current_shared_owner": "src/shared/xr_null_test_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-type",
@@ -4180,7 +4378,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_json_decode",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4206,9 +4404,9 @@
     {
       "benchmark_anchor": "target-machine/equality-and-order",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_le",
       "current_shared_owner": "src/shared/xr_compare_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "equality-and-order",
@@ -4228,7 +4426,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_len",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4252,7 +4450,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_load_field",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4276,7 +4474,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_load_upval",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4303,7 +4501,7 @@
         "addressable",
         "call-bound"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_local_addr",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -4325,9 +4523,9 @@
     {
       "benchmark_anchor": "target-machine/equality-and-order",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_lt",
       "current_shared_owner": "src/shared/xr_compare_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "equality-and-order",
@@ -4347,7 +4545,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_map_new",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4373,9 +4571,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_mod",
       "current_shared_owner": "src/shared/xr_int_arith_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -4395,9 +4593,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_mul + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "src/shared/xr_int_arith_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -4437,9 +4635,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_narrow_f32",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -4459,9 +4657,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_narrow_i16",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -4481,9 +4679,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_narrow_i32",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -4503,9 +4701,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_narrow_i8",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -4525,9 +4723,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_narrow_u16",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -4547,9 +4745,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_narrow_u32",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -4569,9 +4767,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_narrow_u8",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -4591,9 +4789,9 @@
     {
       "benchmark_anchor": "target-machine/equality-and-order",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_ne",
       "current_shared_owner": "src/shared/xr_compare_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "equality-and-order",
@@ -4613,9 +4811,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_neg",
       "current_shared_owner": "src/shared/xr_numeric_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -4635,9 +4833,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-type",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_not",
       "current_shared_owner": "src/shared/xr_truthy_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-type",
@@ -4657,7 +4855,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_object_get_f",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4681,7 +4879,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_object_init_f",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4706,7 +4904,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_object_merge",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4732,7 +4930,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_object_new",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4758,7 +4956,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_object_set_f",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4783,9 +4981,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-pure",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_move",
       "current_shared_owner": "src/shared/xr_owner_forward_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-pure",
@@ -4805,7 +5003,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-parallel",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_cgen_dispatch_helpers.inc.c::xicgen_par_for",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4837,7 +5035,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-parallel",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_cgen_dispatch_helpers.inc.c::xicgen_par_map + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4870,7 +5068,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-parallel",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_cgen_dispatch_helpers.inc.c::xicgen_par_reduce + src/aot/xi_cgen.c::emit_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4903,7 +5101,7 @@
     {
       "benchmark_anchor": "target-machine/constant-and-target-query",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_param",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -4925,7 +5123,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-pure",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_cgen.c::emit_phi_copies + src/aot/xi_cgen.c::emit_declarations + src/aot/xi_cgen_coro.inc.c::emit_coro_frame_type + src/aot/xi_cgen_coro.inc.c::emit_coro_local_declarations",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -4949,7 +5147,7 @@
       "capabilities": [
         "call-bound-place"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_place_load",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -4975,7 +5173,7 @@
       "capabilities": [
         "call-bound-place"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_place_store",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5000,7 +5198,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-side-effect",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_print",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5028,9 +5226,9 @@
         "raw-pointer",
         "non-overlap"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_ptr_copy_nonoverlap",
       "current_shared_owner": "src/shared/xr_raw_memory_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "memory-read",
@@ -5056,9 +5254,9 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_ptr_load",
       "current_shared_owner": "src/shared/xr_raw_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "memory-read"
       ],
@@ -5080,9 +5278,9 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_ptr_store",
       "current_shared_owner": "src/shared/xr_raw_scalar_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "memory-write"
@@ -5105,9 +5303,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-sequence",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_range",
       "current_shared_owner": "src/shared/xr_range_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-sequence",
@@ -5129,7 +5327,7 @@
       "capabilities": [],
       "current_aot_owner": null,
       "current_shared_owner": "stdlib/regex/regex.xr",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "memory-write",
@@ -5152,9 +5350,9 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_release",
       "current_shared_owner": "src/shared/xr_reference_count_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "releases"
@@ -5177,9 +5375,9 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_retain",
       "current_shared_owner": "src/shared/xr_reference_count_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "retains"
@@ -5202,7 +5400,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5219,13 +5417,14 @@
       "ownership": "consume",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5243,15 +5442,16 @@
       "ownership": "consume",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/xi-class-pure",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_select",
       "current_shared_owner": "src/shared/xr_truthy_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-pure",
@@ -5271,7 +5471,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5290,6 +5490,7 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
@@ -5320,7 +5521,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_set_new",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5346,7 +5547,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_set_shared",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5371,9 +5572,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_shl",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -5393,9 +5594,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_shr",
       "current_shared_owner": "src/shared/xr_bits_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -5415,7 +5616,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-sequence",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_slice",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5443,9 +5644,9 @@
         "slice",
         "pod"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_span_as_bytes",
       "current_shared_owner": "src/shared/xr_pod_slice_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw"
       ],
@@ -5476,9 +5677,9 @@
         "same-element",
         "bounds"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_span_compare",
       "current_shared_owner": "src/shared/xr_pod_slice_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -5511,9 +5712,9 @@
         "bounds",
         "overlap-safe"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_span_copy",
       "current_shared_owner": "src/shared/xr_pod_slice_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -5546,9 +5747,9 @@
         "pod",
         "bounds"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_span_fill",
       "current_shared_owner": "src/shared/xr_pod_slice_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "side-effect",
         "may-throw",
@@ -5580,7 +5781,7 @@
         "pointer-layout",
         "owner-lifetime"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_slice_from_ptr",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5610,9 +5811,9 @@
         "pod",
         "aligned-length"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_span_reinterpret",
       "current_shared_owner": "src/shared/xr_pod_slice_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw"
       ],
@@ -5641,9 +5842,9 @@
         "slice",
         "bounds"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_span_window",
       "current_shared_owner": "src/shared/xr_slice_window_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "may-throw",
         "memory-read"
@@ -5670,7 +5871,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_move",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5694,7 +5895,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_stack_alloc",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": null,
       "effects": [
@@ -5722,7 +5923,7 @@
         "static-data",
         "addressable"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_static_addr",
       "current_shared_owner": "src/shared/xr_static_address_core.h",
       "current_vm_owner": null,
       "effects": [],
@@ -5746,9 +5947,9 @@
         "static-bytes",
         "addressable"
       ],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_static_bytes_ptr",
       "current_shared_owner": "src/shared/xr_data_pointer_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-pure",
@@ -5768,7 +5969,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_store_field",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5793,7 +5994,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_store_upval",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5818,9 +6019,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-sequence",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_str_concat",
       "current_shared_owner": "src/shared/xr_string_concat_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
         "memory-read",
         "memory-write"
@@ -5843,9 +6044,9 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_sub",
       "current_shared_owner": "src/shared/xr_int_arith_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
@@ -5865,7 +6066,7 @@
     {
       "benchmark_anchor": "target-machine/call-and-dispatch",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_call",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -5894,9 +6095,9 @@
     {
       "benchmark_anchor": "target-machine/constant-and-target-query",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_target_alignof",
       "current_shared_owner": "src/shared/xr_native_type_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "constant-and-target-query",
@@ -5916,9 +6117,9 @@
     {
       "benchmark_anchor": "target-machine/constant-and-target-query",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_target_simd_accelerated",
       "current_shared_owner": "src/shared/xr_target_simd_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "constant-and-target-query",
@@ -5938,9 +6139,9 @@
     {
       "benchmark_anchor": "target-machine/constant-and-target-query",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_target_simd_bytes",
       "current_shared_owner": "src/shared/xr_target_simd_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "constant-and-target-query",
@@ -5960,9 +6161,9 @@
     {
       "benchmark_anchor": "target-machine/constant-and-target-query",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_target_simd_runtime_selected",
       "current_shared_owner": "src/shared/xr_target_simd_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "constant-and-target-query",
@@ -5982,9 +6183,9 @@
     {
       "benchmark_anchor": "target-machine/constant-and-target-query",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_target_sizeof",
       "current_shared_owner": "src/shared/xr_native_type_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "constant-and-target-query",
@@ -6122,7 +6323,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_thread_spawn_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6140,13 +6341,14 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/error-and-cleanup",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_throw + src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6173,7 +6375,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6192,13 +6394,14 @@
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     },
     {
       "benchmark_anchor": "target-machine/error-and-cleanup",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_stmt_dispatch_gen.h::xicgen_stmt_try",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6222,7 +6425,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_tuple_get + src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6246,7 +6449,7 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_tuple_new",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6271,9 +6474,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-type",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_typeid",
       "current_shared_owner": "src/shared/xr_type_identity_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-type",
@@ -6293,7 +6496,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-type",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_typename",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6315,7 +6518,7 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_unbox",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6377,7 +6580,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6399,7 +6602,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6421,7 +6624,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6443,7 +6646,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6465,7 +6668,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6487,7 +6690,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6513,7 +6716,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6540,7 +6743,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6562,7 +6765,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6584,7 +6787,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6606,7 +6809,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6632,7 +6835,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6654,7 +6857,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6676,7 +6879,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6698,7 +6901,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6720,7 +6923,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6748,7 +6951,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6770,7 +6973,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": null,
       "effects": [],
@@ -6791,7 +6994,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
@@ -6813,7 +7016,7 @@
     {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": null,
       "effects": [],
@@ -6834,7 +7037,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_load_field",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6860,7 +7063,7 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_store_field",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -6887,9 +7090,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_widen_f32",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -6909,9 +7112,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_widen_i16",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -6931,9 +7134,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_widen_i32",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -6953,9 +7156,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_widen_i8",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -6975,9 +7178,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_widen_u16",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -6997,9 +7200,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_widen_u32",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -7019,9 +7222,9 @@
     {
       "benchmark_anchor": "target-machine/xi-class-conversion",
       "capabilities": [],
-      "current_aot_owner": "representation adapter",
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_widen_u8",
       "current_shared_owner": "src/shared/xr_numeric_conversion_core.h",
-      "current_vm_owner": "representation adapter",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "xi-class-conversion",
@@ -7041,7 +7244,7 @@
     {
       "benchmark_anchor": "target-machine/coroutine-and-scheduler",
       "capabilities": [],
-      "current_aot_owner": null,
+      "current_aot_owner": "src/aot/xi_cgen_coro.inc.c::emit_coro_value_stmt",
       "current_shared_owner": "xisa/xi/ops.def",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
       "effects": [
@@ -7059,6 +7262,7 @@
       "ownership": "consume",
       "targets": [
         "vm-bytecode",
+        "aot-c",
         "aot-verify"
       ]
     }
@@ -7070,5 +7274,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "bc812095ea3e3bf2b997f31016684fb529d614c8cc8f8bf9b681cd99a22d6c93"
+  "source_tree_fingerprint": "50d090d640b761297206b860436917528afa229a755cd064efd903ce28b017b8"
 }

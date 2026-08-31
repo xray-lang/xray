@@ -8,6 +8,7 @@ import copy
 import dataclasses
 import datetime
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -740,7 +741,19 @@ def terminal_inventory_findings(root: Path, manifest: dict[str, Any]) -> list[Fi
     return findings
 
 
-def dual_owner_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
+def canonical_semantic_owner_inventory(root: Path) -> dict[str, Any]:
+    path = root / "scripts/target_machine_phase0.py"
+    spec = importlib.util.spec_from_file_location("completion_phase0", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load canonical target-machine inventory from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.semantic_owner_inventory(root)
+
+
+def dual_owner_findings(root: Path, manifest: dict[str, Any],
+                        canonical: dict[str, Any] | None = None) -> list[Finding]:
     relative = manifest["dual_owner"]["inventory"]
     path = root / relative
     if not path.is_file():
@@ -750,6 +763,25 @@ def dual_owner_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
     if not isinstance(rows, list) or data.get("operation_count") != len(rows):
         return [finding("TM-COMP-DUAL-OWNER-SCHEMA", "dual-owner",
                         "semantic owner inventory row count is invalid")]
+    if canonical is None:
+        try:
+            canonical = canonical_semantic_owner_inventory(root)
+        except (OSError, RuntimeError, AttributeError, ImportError, SystemExit) as error:
+            return [finding("TM-COMP-DUAL-OWNER-SCHEMA", "dual-owner",
+                            f"canonical semantic owner projection failed: {error}")]
+    canonical_rows = canonical.get("operations")
+    if (not isinstance(canonical_rows, list) or
+            canonical.get("operation_count") != len(canonical_rows)):
+        return [finding("TM-COMP-DUAL-OWNER-SCHEMA", "dual-owner",
+                        "canonical semantic owner inventory row count is invalid")]
+    if data != canonical:
+        return [finding("TM-COMP-DUAL-OWNER-SCHEMA", "dual-owner",
+                        "semantic owner inventory differs from the exact Phase 0 projection")]
+    canonical_by_id = {
+        row.get("operation_id"): row
+        for row in canonical_rows
+        if isinstance(row, dict) and isinstance(row.get("operation_id"), str)
+    }
     adapter = manifest["dual_owner"]["mechanical_adapter"]
     ids: set[str] = set()
     errors: list[str] = []
@@ -761,12 +793,25 @@ def dual_owner_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
         if operation_id in ids:
             errors.append(f"{operation_id}: duplicate")
         ids.add(operation_id)
+        canonical_row = canonical_by_id.get(operation_id)
+        if canonical_row is None:
+            errors.append(f"{operation_id}: absent from canonical semantic owner projection")
+            continue
+        for label in ("family", "targets", "current_vm_owner", "current_aot_owner",
+                      "current_shared_owner", "future_semantic_owner"):
+            if row.get(label) != canonical_row.get(label):
+                errors.append(f"{operation_id}: {label} differs from canonical projection")
         owner = row.get("current_shared_owner")
         if not isinstance(owner, str) or not owner or not (root / owner).is_file():
             errors.append(f"{operation_id}: missing canonical source owner")
         targets = set(row.get("targets", []))
         is_shared = row.get("family") == "shared-kernel"
-        source_backed = is_shared or row.get("future_semantic_owner") != "SemanticPlan.operation_registry"
+        is_xi = operation_id.startswith("xi.")
+        if is_shared != operation_id.startswith("shared.") or not (is_shared or is_xi):
+            errors.append(f"{operation_id}: namespace and family disagree")
+            continue
+        generic_xi = is_xi and row.get("future_semantic_owner") == \
+            "SemanticPlan.operation_registry"
         vm_applicable = ("vm" if is_shared else "vm-bytecode") in targets
         aot_applicable = ("aot" if is_shared else "aot-c") in targets
         for label, applicable in (("current_vm_owner", vm_applicable),
@@ -775,13 +820,17 @@ def dual_owner_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
             if not applicable:
                 if value is not None:
                     errors.append(f"{operation_id}: inapplicable {label} must be null")
-            elif source_backed:
+            elif is_shared:
                 if value != adapter:
                     errors.append(f"{operation_id}: applicable {label} is not the governed adapter")
-            else:
-                errors.append(f"{operation_id}: executor owns observable semantics")
+            elif value == adapter or not isinstance(value, str) or not value.strip():
+                errors.append(f"{operation_id}: applicable {label} lacks an exact lowering owner")
+        if generic_xi and (vm_applicable or aot_applicable):
+            errors.append(f"{operation_id}: executor owns observable semantics")
         if not row.get("independent_oracle"):
             errors.append(f"{operation_id}: missing independent oracle")
+    if ids != set(canonical_by_id):
+        errors.append("semantic owner operation identities differ from canonical projection")
     if not errors:
         return []
     return [finding("TM-COMP-DUAL-OWNER", "dual-owner",
@@ -1961,22 +2010,65 @@ def self_test(manifest_path: Path) -> int:
                 "family": "shared-kernel", "future_semantic_owner": "SemanticOwnerRegistry/fixture",
                 "targets": ["vm", "aot"],
             }]}
+            owner_canonical = copy.deepcopy(owner_data)
             write_json(owner_root / owner_manifest["dual_owner"]["inventory"], owner_data)
-            if dual_owner_findings(owner_root, owner_manifest):
+            if dual_owner_findings(owner_root, owner_manifest, owner_canonical):
                 raise AssertionError("clean owner fixture rejected")
             owner_data["operations"][0]["current_vm_owner"] = "vm semantic owner"
             write_json(owner_root / owner_manifest["dual_owner"]["inventory"], owner_data)
             expect_mutation(results, "dual-owner", dual_owner_findings(
-                owner_root, owner_manifest), "TM-COMP-DUAL-OWNER")
+                owner_root, owner_manifest, owner_canonical),
+                "TM-COMP-DUAL-OWNER-SCHEMA")
             owner_data["operations"][0]["current_vm_owner"] = None
             owner_data["operations"][0]["targets"] = ["aot"]
+            owner_canonical = copy.deepcopy(owner_data)
             write_json(owner_root / owner_manifest["dual_owner"]["inventory"], owner_data)
-            if dual_owner_findings(owner_root, owner_manifest):
+            if dual_owner_findings(owner_root, owner_manifest, owner_canonical):
                 raise AssertionError("inapplicable-null owner fixture rejected")
             owner_data["operations"][0]["current_vm_owner"] = "representation adapter"
             write_json(owner_root / owner_manifest["dual_owner"]["inventory"], owner_data)
             expect_mutation(results, "dual-owner-inapplicable-binding", dual_owner_findings(
-                owner_root, owner_manifest), "TM-COMP-DUAL-OWNER")
+                owner_root, owner_manifest, owner_canonical),
+                "TM-COMP-DUAL-OWNER-SCHEMA")
+
+            xi_root = root / "xi-owner"
+            (xi_root / "contracts/target-machine").mkdir(parents=True)
+            (xi_root / "xisa/xi").mkdir(parents=True)
+            (xi_root / "xisa/xi/ops.def").write_text("fixture\n", encoding="utf-8")
+            xi_data = {"operation_count": 1, "operations": [{
+                "operation_id": "xi.fixture", "current_shared_owner": "xisa/xi/ops.def",
+                "current_vm_owner": (
+                    "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm"
+                ),
+                "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_fixture",
+                "independent_oracle": "fixture", "family": "runtime",
+                "future_semantic_owner": "fixture.owner",
+                "targets": ["vm-bytecode", "aot-c"],
+            }]}
+            xi_canonical = copy.deepcopy(xi_data)
+            write_json(xi_root / owner_manifest["dual_owner"]["inventory"], xi_data)
+            if dual_owner_findings(xi_root, owner_manifest, xi_canonical):
+                raise AssertionError("clean exact Xi owner fixture rejected")
+            for forged in (
+                    "src/aot/does_not_exist.c::missing_owner",
+                    "../outside.c::missing_owner",
+                    "src/aot/xi_cgen.c::",
+                    "garbage"):
+                xi_data["operations"][0]["current_aot_owner"] = forged
+                write_json(xi_root / owner_manifest["dual_owner"]["inventory"], xi_data)
+                rows = dual_owner_findings(xi_root, owner_manifest, xi_canonical)
+                if not any(row.code == "TM-COMP-DUAL-OWNER-SCHEMA" for row in rows):
+                    raise AssertionError(f"forged Xi owner escaped: {forged}")
+            results.append("dual-owner-provenance->TM-COMP-DUAL-OWNER-SCHEMA")
+            xi_data = copy.deepcopy(xi_canonical)
+            xi_data["operations"][0]["future_semantic_owner"] = \
+                "SemanticPlan.operation_registry"
+            xi_canonical = copy.deepcopy(xi_data)
+            write_json(xi_root / owner_manifest["dual_owner"]["inventory"], xi_data)
+            xi_debt = dual_owner_findings(xi_root, owner_manifest, xi_canonical)
+            if (len(xi_debt) != 1 or xi_debt[0].code != "TM-COMP-DUAL-OWNER" or
+                    xi_debt[0].count != 1):
+                raise AssertionError("generic Xi owner debt is not counted once per operation")
 
             inventory_root = root / "inventory"
             (inventory_root / "contracts/target-machine").mkdir(parents=True)
@@ -2017,6 +2109,7 @@ def self_test(manifest_path: Path) -> int:
             "full-validation-selection", "full-validation-execution",
             "full-validation-producer", "full-validation-build", "dual-owner",
             "dual-owner-inapplicable-binding",
+            "dual-owner-provenance",
             "terminal-inventory",
         }
         observed = {item.split("->", 1)[0] for item in results}

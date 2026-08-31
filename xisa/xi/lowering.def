@@ -89,7 +89,13 @@
   :match (value-binary)
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_arith)
-  :aot-c (driver xicgen_mul))
+  :aot-c (driver xicgen_mul)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_u64_mul_wide_pair_stmt)
+      (predicate "src/aot/xi_cgen.c" cg_u64_mul_wide_pair
+        (domain "src/aot/xi_cgen.c" cg_u64_mul_wide_value_is_eligible)))))
 
 (lower xi.div
   :match (value-binary)
@@ -173,7 +179,13 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_exact_bit)
-  :aot-c (driver xicgen_exact_bit))
+  :aot-c (driver xicgen_exact_bit)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_u64_mul_wide_pair_stmt)
+      (predicate "src/aot/xi_cgen.c" cg_u64_mul_wide_pair
+        (domain "src/aot/xi_cgen.c" cg_u64_mul_wide_value_is_eligible)))))
 
 (lower xi.not
   :match (value-unary)
@@ -415,19 +427,34 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_call :fresh-dst yes)
-  :aot-c (driver xicgen_call))
+  :aot-c (driver xicgen_call)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_rhs)
+      (predicate "src/aot/xi_cgen.c" cg_unused_call_result_emits_statement))))
 
 (lower xi.call.method
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_call_method :fresh-dst yes)
-  :aot-c (driver xicgen_call_method))
+  :aot-c (driver xicgen_call_method)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_rhs)
+      (predicate "src/aot/xi_cgen.c" cg_unused_call_result_emits_statement))))
 
 (lower xi.call.method.direct
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_call_method_direct :fresh-dst yes)
-  :aot-c (driver xicgen_call_method))
+  :aot-c (driver xicgen_call_method)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_rhs)
+      (predicate "src/aot/xi_cgen.c" cg_unused_call_result_emits_statement))))
 
 (lower xi.tail.call
   :match ()
@@ -439,7 +466,12 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_call_builtin)
-  :aot-c (driver xicgen_call_builtin))
+  :aot-c (driver xicgen_call_builtin)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_rhs)
+      (predicate "src/aot/xi_cgen.c" cg_unused_call_result_emits_statement))))
 
 (lower xi.atomic.load
   :match ()
@@ -469,7 +501,11 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_throw)
-  :aot-c (driver xicgen_throw))
+  :aot-c (driver xicgen_throw)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
 (lower xi.try
   :match ()
@@ -499,7 +535,11 @@
   :match ()
   :required-targets (vm-bytecode aot-c-stmt)
   :vm-bytecode (driver xi_emit_err_return)
-  :aot-c-stmt (driver xicgen_stmt_err_return))
+  :aot-c-stmt (driver xicgen_stmt_err_return)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
 (lower xi.err.check
   :match ()
@@ -686,6 +726,52 @@
   :vm-bytecode (driver xi_emit_isnull)
   :aot-c (driver xicgen_isnull))
 
+(lower xi.phi
+  :required-targets (aot-c)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_phi_copies
+      (structural phi edge-parallel-copy)
+      (activation "src/aot/xi_cgen.c" emit_block
+        (args ctx out f "blk->succs[0]" "find_pred_idx(blk->succs[0],blk)") (count 2))
+      (activation "src/aot/xi_cgen.c" emit_block
+        (args ctx out f "blk->succs[1]" "find_pred_idx(blk->succs[1],blk)") (count 1))
+      (activation "src/aot/xi_cgen_coro.inc.c" emit_coro_block
+        (args ctx out f "blk->succs[0]" "find_pred_idx(blk->succs[0],blk)") (count 2))
+      (activation "src/aot/xi_cgen_coro.inc.c" emit_coro_block
+        (args ctx out f "blk->succs[1]" "find_pred_idx(blk->succs[1],blk)") (count 1))
+      (activation "src/aot/xi_cgen_loop_helpers.inc.c" emit_structured_counted_loop_stmt
+        (args ctx out f loop.guard pre_idx) (count 1))
+      (activation "src/aot/xi_cgen_loop_helpers.inc.c" emit_structured_counted_loop_stmt
+        (args ctx out f loop.guard body_idx) (count 1))
+      (activation "src/aot/xi_cgen_loop_helpers.inc.c" emit_structured_array_fill_loop_stmt
+        (args ctx out f loop.body entry_idx) (count 1))
+      (activation "src/aot/xi_cgen_loop_helpers.inc.c" emit_structured_array_fill_loop_stmt
+        (args ctx out f loop.body body_idx) (count 1)))
+    (binding "src/aot/xi_cgen.c" emit_declarations
+      (structural phi sync-storage)
+      (activation "src/aot/xi_cgen.c" xi_cgen_func
+        (args ctx out f) (count 1))
+      (output-sequence
+        (call-prefix fprintf (args out))
+        (call emit_phi_ref (args ctx out phi))
+        (count 1)))
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_frame_type
+      (structural phi coroutine-frame-storage)
+      (activation "src/aot/xi_cgen_coro.inc.c" xi_cgen_coro_func
+        (args ctx out f prefix) (count 1))
+      (output-sequence
+        (call-prefix fprintf (args out))
+        (call emit_phi_ref (args ctx out phi))
+        (count 1)))
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_local_declarations
+      (structural phi coroutine-local-storage)
+      (activation "src/aot/xi_cgen_coro.inc.c" xi_cgen_coro_func
+        (args ctx out f) (count 1))
+      (output-sequence
+        (call-prefix fprintf (args out))
+        (call emit_phi_ref (args ctx out phi))
+        (count 1)))))
+
 (lower xi.is
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -853,13 +939,27 @@
 
 (lower xi.go
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_go :fresh-dst yes))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_go :fresh-dst yes)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_aot_frame_new_call_args))
+    (binding "src/aot/xi_cgen_dispatch_helpers.inc.c" xicgen_go
+      (selected-by "src/aot/xi_cgen.c" emit_value_rhs))))
 
 (lower xi.thread.spawn
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_thread_spawn :fresh-dst yes))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_thread_spawn :fresh-dst yes)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_thread_spawn_value_stmt
+      (guarded-selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_aot_frame_new_call_args)
+      (activation "src/aot/xi_cgen.c" emit_value_stmt
+        (args ctx out f v prefix false) (count 1))
+      (activation "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+        (args ctx out f v prefix true) (count 1)))))
 
 (lower xi.gen.call
   :match ()
@@ -869,74 +969,171 @@
 
 (lower xi.await
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_await))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_await)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_coro_boundary_error_check))))
+
+(lower xi.par.for
+  :required-targets (aot-c)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_dispatch_helpers.inc.c" xicgen_par_for
+      (selected-by "src/aot/xi_cgen_dispatch_helpers.inc.c" xi_to_c_emit_generated))))
+
+(lower xi.par.map
+  :required-targets (aot-c)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_dispatch_helpers.inc.c" xicgen_par_map
+      (selected-by "src/aot/xi_cgen_dispatch_helpers.inc.c" xi_to_c_emit_generated)
+      (selected-by "src/aot/xi_cgen.c" emit_value_stmt))
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_dispatch_helpers.inc.c" xicgen_par_map))))
+
+(lower xi.par.reduce
+  :required-targets (aot-c)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_dispatch_helpers.inc.c" xicgen_par_reduce
+      (selected-by "src/aot/xi_cgen_dispatch_helpers.inc.c" xi_to_c_emit_generated)
+      (selected-by "src/aot/xi_cgen.c" emit_value_stmt))
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_dispatch_helpers.inc.c" xicgen_par_reduce))))
 
 (lower xi.chan.send
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_chan_send))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_chan_send)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_coro_debug_result_source_var_sync))))
 
 (lower xi.chan.recv
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_chan_recv :fresh-dst yes))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_chan_recv :fresh-dst yes)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_coro_debug_result_source_var_sync))))
 
 (lower xi.chan.recv.status
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_chan_recv_status)
-  :aot-c (driver xicgen_chan_recv_status))
+  :aot-c (driver xicgen_chan_recv_status)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_rhs
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_conversion_suffix))))
 
 (lower xi.chan.try.send
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_chan_try_send))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_chan_try_send)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_vref))
+    (binding "src/aot/xi_cgen.c" emit_value_rhs
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
 (lower xi.chan.try.recv
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_chan_try_recv :fresh-dst yes))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_chan_try_recv :fresh-dst yes)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_coro_debug_result_source_var_sync))
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" cg_emit_channel_receive_payload_expression))))
 
 (lower xi.chan.is.closed
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_chan_is_closed))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_chan_is_closed)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_vref))
+    (binding "src/aot/xi_cgen.c" emit_value_rhs
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
 (lower xi.time.after
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_time_after))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_time_after)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_int64_arg))))
 
 (lower xi.chan.timer.dispose
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_chan_timer_dispose))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_chan_timer_dispose)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
 (lower xi.select.block
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_select_block :fresh-dst yes))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_select_block :fresh-dst yes)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_source_line))))
 
 (lower xi.yield
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_yield))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_yield)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_generated_line_reset))))
 
 (lower xi.gen.yield
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_gen_yield))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_gen_yield)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
 (lower xi.coro.op
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_coro_op))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_coro_op)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_aot_coro_op_stmt))
+    (binding "src/aot/xi_cgen.c" emit_value_rhs
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_conversion_suffix))))
 
 (lower xi.chan.new
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_chan_new))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_chan_new)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_int64_arg))
+    (binding "src/aot/xi_cgen.c" emit_value_rhs
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
 (lower xi.object.new
   :match ()
@@ -996,23 +1193,39 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_fixed_array_new)
-  :aot-c (driver xicgen_fixed_array_new))
+  :aot-c (driver xicgen_fixed_array_new)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_rhs))))
 
 (lower xi.fixed.bytes.const
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_fixed_bytes_const)
-  :aot-c (driver xicgen_fixed_bytes_const))
+  :aot-c (driver xicgen_fixed_bytes_const)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen.c" emit_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_rhs))))
 
 (lower xi.scope.enter
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_scope_enter))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_scope_enter)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen.c" emit_value_source_line))))
 
 (lower xi.scope.exit
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_scope_exit))
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_scope_exit)
+  :aot-c (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_coro.inc.c" emit_coro_scope_exit_error_check))))
 
 (lower xi.regex.compile
   :match ()
@@ -1029,7 +1242,11 @@
   :match ()
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_tuple_get)
-  :aot-c (driver xicgen_tuple_get))
+  :aot-c (driver xicgen_tuple_get)
+  :aot-c-consumer (consumer xi-cgen-direct
+    (binding "src/aot/xi_cgen_coro.inc.c" emit_coro_value_stmt
+      (selector)
+      (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
 (lower xi.byte.slice.load.u16
   :match ()

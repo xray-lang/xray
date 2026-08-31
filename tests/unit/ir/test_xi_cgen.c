@@ -1719,6 +1719,24 @@ static size_t count_op_in_func(const XiFunc *func, XiOp op) {
     return count;
 }
 
+static XiValue *find_unique_op_in_func(XiFunc *func, XiOp op) {
+    XiValue *match = NULL;
+    if (!func)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *block = func->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!value || value->op != op)
+                continue;
+            if (match)
+                return NULL;
+            match = value;
+        }
+    }
+    return match;
+}
+
 static size_t count_intrinsic_in_func(const XiFunc *func, XaIntrinsicId intrinsic_id) {
     size_t count = 0;
     if (!func)
@@ -10743,6 +10761,8 @@ TEST(cgen_codegen_controls_emit_provider_constructs_without_runtime_calls) {
     opaque->xa_intrinsic_id = XA_INTRINSIC_CODEGEN_OPAQUE;
     fence->xa_intrinsic_id = XA_INTRINSIC_CODEGEN_COMPILER_FENCE;
     xi_block_set_return(entry, opaque);
+    TEST_REQUIRE(count_op_in_func(ir, XI_CODEGEN_COMPILER_FENCE) == 1,
+                 "compiler-fence fixture must retain exactly one canonical Xi operation");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
@@ -10852,19 +10872,21 @@ TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
 }
 
 TEST(cgen_static_cleanup_isolates_existing_pending_error) {
-    const char *src = "enum E { Bad(code: i64) }\n"
+    const char *src = "enum AppErr {\n"
+                      "    Bad,\n"
+                      "}\n"
                       "fn run() -> i64 {\n"
                       "    var log: Array<i64> = []\n"
                       "    fn body() {\n"
                       "        defer { log.push(100) }\n"
-                      "        throw E.Bad(1)\n"
+                      "        throw AppErr.Bad\n"
                       "    }\n"
                       "    try { body() } catch (e) { log.push(1) }\n"
                       "    return log[0] + log[1]\n"
                       "}\n"
                       "print(run())\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiFunc *ir = compile_to_ir_with_module_graph(src);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -10884,8 +10906,163 @@ TEST(cgen_static_cleanup_isolates_existing_pending_error) {
            "throw path must still route through the pending-error channel before draining defers");
     assert(contains(code, "xrt_pending_error = XR_NULL_VAL;") &&
            "catch path must still clear the handled pending error");
-
     printf("  Generated static cleanup pending-error isolation %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_statement_drivers_have_independent_behavior_oracles) {
+    const char *src = "enum AppErr {\n"
+                      "    Bad,\n"
+                      "}\n"
+                      "fn stmt_fail() -> i64 {\n"
+                      "    throw AppErr.Bad\n"
+                      "}\n"
+                      "fn stmt_set() -> i64 {\n"
+                      "    var out = 0\n"
+                      "    try { throw AppErr.Bad } catch (e) { out = 1 }\n"
+                      "    return out\n"
+                      "}\n"
+                      "fn stmt_check() -> i64 {\n"
+                      "    var out = 0\n"
+                      "    try { out = stmt_fail() } catch (e) { out = 1 }\n"
+                      "    return out\n"
+                      "}\n"
+                      "fn stmt_cleanup() -> i64 {\n"
+                      "    var log: Array<i64> = []\n"
+                      "    defer { log.push(1) }\n"
+                      "    return 1\n"
+                      "}\n"
+                      "fn stmt_panic(xs: Array<i64>) -> i64 {\n"
+                      "    var out = 0\n"
+                      "    try { out = xs[99] } catch panic (p) { out = 1 }\n"
+                      "    return out\n"
+                      "}\n"
+                      "print(stmt_set())\n"
+                      "print(stmt_check())\n"
+                      "print(stmt_cleanup())\n"
+                      "print(stmt_panic([1]))\n";
+
+    XiFunc *ir = compile_to_ir_with_module_graph(src);
+    TEST_REQUIRE(ir != NULL, "statement-driver fixture compiles to Backend IR");
+    XiFunc *fail = test_find_child_function(ir, "stmt_fail");
+    XiFunc *set = test_find_child_function(ir, "stmt_set");
+    XiFunc *check = test_find_child_function(ir, "stmt_check");
+    XiFunc *cleanup = test_find_child_function(ir, "stmt_cleanup");
+    XiFunc *panic = test_find_child_function(ir, "stmt_panic");
+    TEST_REQUIRE(fail && set && check && cleanup && panic,
+                 "all independent statement-driver functions survive lowering");
+
+    TEST_REQUIRE(count_op_in_func(fail, XI_ERR_RETURN) == 1 &&
+                     count_op_in_func(fail, XI_ERR_SET) == 0,
+                 "stmt_fail isolates ERR_RETURN from ERR_SET");
+    TEST_REQUIRE(count_op_in_func(set, XI_ERR_SET) == 1 &&
+                     count_op_in_func(set, XI_ERR_CATCH) == 1 &&
+                     count_op_in_func(set, XI_ERR_RETURN) == 0 &&
+                     count_op_in_func(set, XI_TRY) == 0 &&
+                     count_op_in_func(set, XI_CATCH) == 0 &&
+                     count_op_in_func(set, XI_END_TRY) == 0,
+                 "stmt_set isolates value-error SET/CATCH from panic handlers");
+    TEST_REQUIRE(count_op_in_func(check, XI_ERR_CHECK) == 1 &&
+                     count_op_in_func(check, XI_ERR_CATCH) == 1 &&
+                     count_op_in_func(check, XI_ERR_SET) == 0,
+                 "stmt_check isolates the boolean ERR_CHECK branch");
+    const size_t cleanup_enters = count_op_in_func(cleanup, XI_CLEANUP_ENTER);
+    const size_t cleanup_leaves = count_op_in_func(cleanup, XI_CLEANUP_LEAVE);
+    const size_t cleanup_checks = count_op_in_func(cleanup, XI_CLEANUP_ERR_CHECK);
+    TEST_REQUIRE(cleanup_enters > 0 && cleanup_enters == cleanup_leaves &&
+                     cleanup_checks > 0,
+                 "stmt_cleanup retains enter/leave/error-check cleanup operations");
+    TEST_REQUIRE(count_op_in_func(panic, XI_TRY) == 1 &&
+                     count_op_in_func(panic, XI_CATCH) == 1 &&
+                     count_op_in_func(panic, XI_END_TRY) == 2,
+                 "stmt_panic retains one panic interval and both normal exits");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "all canonical statement drivers generate without fallback");
+    const char *fail_c = find_static_function_definition(code, "test_stmt_fail_");
+    const char *set_c = find_static_function_definition(code, "test_stmt_set_");
+    const char *check_c = find_static_function_definition(code, "test_stmt_check_");
+    const char *cleanup_c = find_static_function_definition(code, "test_stmt_cleanup_");
+    const char *panic_c = find_static_function_definition(code, "test_stmt_panic_");
+    TEST_REQUIRE(fail_c && set_c && check_c && cleanup_c && panic_c,
+                 "all statement-driver C functions are generated");
+    const char *fail_end = next_static_after(fail_c);
+    const char *set_end = next_static_after(set_c);
+    const char *check_end = next_static_after(check_c);
+    const char *cleanup_end = next_static_after(cleanup_c);
+    const char *panic_end = next_static_after(panic_c);
+
+    TEST_REQUIRE(count_between(fail_c, fail_end, "xrt_pending_error =") == 1 &&
+                     count_between(fail_c, fail_end,
+                                   "xrt_pending_error = XR_NULL_VAL;") == 0 &&
+                     count_between(fail_c, fail_end, "return 0;") == 1,
+                 "ERR_RETURN writes the value-error channel then returns the ABI default");
+    TEST_REQUIRE(count_between(set_c, set_end, "xrt_pending_error =") == 2 &&
+                     count_between(set_c, set_end,
+                                   "xrt_pending_error = XR_NULL_VAL;") == 1 &&
+                     count_between(set_c, set_end, "return 0;") == 0 &&
+                     count_between(set_c, set_end, "_ef") == 0,
+                 "ERR_SET and ERR_CATCH stay on the value-error channel");
+
+    XiValue *check_op = find_unique_op_in_func(check, XI_ERR_CHECK);
+    XiValue *check_catch = find_unique_op_in_func(check, XI_ERR_CATCH);
+    TEST_REQUIRE(check_op && check_catch,
+                 "ERR_CHECK and ERR_CATCH identities are unique in stmt_check");
+    char check_token[96];
+    char catch_token[96];
+    snprintf(check_token, sizeof(check_token), "v%u = xrt_has_pending_error();", check_op->id);
+    snprintf(catch_token, sizeof(catch_token), "v%u = xrt_pending_error", check_catch->id);
+    TEST_REQUIRE(count_between(check_c, check_end, check_token) == 1 &&
+                     count_between(check_c, check_end, catch_token) == 1 &&
+                     count_between(check_c, check_end,
+                                   "xrt_pending_error = XR_NULL_VAL;") == 1 &&
+                     count_between(check_c, check_end,
+                                   "if (XR_UNLIKELY(xrt_has_pending_error()))") == 0,
+                 "boolean ERR_CHECK branches to the exact ERR_CATCH value binding");
+
+    TEST_REQUIRE(count_between(cleanup_c, cleanup_end, "xrt_cleanup_enter();") ==
+                     cleanup_enters &&
+                     count_between(cleanup_c, cleanup_end, "xrt_cleanup_leave();") ==
+                     cleanup_leaves &&
+                     count_between(cleanup_c, cleanup_end, "xrt_cleanup_err_check();") ==
+                     cleanup_checks,
+                 "cleanup drivers emit one exact runtime action per Backend IR operation");
+    const char *cleanup_enter = strstr(cleanup_c, "xrt_cleanup_enter();");
+    const char *cleanup_check = strstr(cleanup_c, "xrt_cleanup_err_check();");
+    const char *cleanup_leave = strstr(cleanup_c, "xrt_cleanup_leave();");
+    TEST_REQUIRE(cleanup_enter && cleanup_check && cleanup_leave &&
+                     cleanup_enter < cleanup_check && cleanup_check < cleanup_leave &&
+                     cleanup_leave < cleanup_end,
+                 "cleanup frontier preserves enter, error-check, leave order");
+
+    XiValue *try_op = find_unique_op_in_func(panic, XI_TRY);
+    XiValue *catch_op = find_unique_op_in_func(panic, XI_CATCH);
+    TEST_REQUIRE(try_op && catch_op && try_op->aux,
+                 "panic interval exposes unique try/catch identities and target block");
+    const XiBlock *catch_block = (const XiBlock *) try_op->aux;
+    char frame_token[96];
+    char setjmp_token[96];
+    char goto_token[64];
+    char panic_catch_token[96];
+    char restore_token[96];
+    snprintf(frame_token, sizeof(frame_token), "XrtExcFrame _ef%u;", try_op->id);
+    snprintf(setjmp_token, sizeof(setjmp_token), "setjmp(_ef%u.buf)", try_op->id);
+    snprintf(goto_token, sizeof(goto_token), "goto L%u;", catch_block->id);
+    snprintf(panic_catch_token, sizeof(panic_catch_token),
+             "v%u = _ef%u.exception;", catch_op->id, try_op->id);
+    snprintf(restore_token, sizeof(restore_token), "xrt_exc_top = _ef%u.prev;", try_op->id);
+    TEST_REQUIRE(count_between(panic_c, panic_end, frame_token) == 1 &&
+                     count_between(panic_c, panic_end, setjmp_token) == 1 &&
+                     count_between(panic_c, panic_end, goto_token) == 1 &&
+                     count_between(panic_c, panic_end, panic_catch_token) == 1 &&
+                     count_between(panic_c, panic_end, restore_token) == 3,
+                 "TRY/CATCH/END_TRY preserve distinct panic-frame behavior");
+
+    printf("  Generated independent statement-driver fixture %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -14995,6 +15172,7 @@ int main(int argc, char **argv) {
     run_cgen_codegen_controls_emit_provider_constructs_without_runtime_calls();
     run_cgen_uses_closed_world_effects_for_conservative_direct_call_checks();
     run_cgen_static_cleanup_isolates_existing_pending_error();
+    run_cgen_statement_drivers_have_independent_behavior_oracles();
     run_cgen_err_return_stops_unreachable_tail();
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_unresolved_import_fails_fast();

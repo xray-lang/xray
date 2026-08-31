@@ -348,6 +348,14 @@ set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_compare_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_dispatch_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_stmt_dispatch_gen.h
+    ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_lowering_gen.c
+)
+
+set(XRAY_XI_LOWERING_VALIDATION_STAMP
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_sources.validated
+)
+set(XRAY_XI_LOWERING_VALIDATION_DEPFILE
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/xi_lowering_sources.d
 )
 
 set(XRAY_GEN_AOT_METADATA_DEPS
@@ -409,18 +417,6 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/verifier.def
     COMMENT "xisagen: generating xi_verify_gen.h from verifier.def"
-)
-
-add_custom_command(
-    OUTPUT  ${XRAY_GEN_XI_LOWERING_DEPS}
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
-            ${CMAKE_SOURCE_DIR}
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
-            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
-    COMMENT "xisagen: generating xi_lowering_coverage_gen.h from lowering.def"
 )
 
 add_custom_command(
@@ -499,8 +495,31 @@ add_custom_target(gen-xi-verify DEPENDS
     ${XRAY_GEN_XI_VERIFY_DEPS}
 )
 
-add_custom_target(gen-xi-lowering DEPENDS
-    ${XRAY_GEN_XI_LOWERING_DEPS}
+add_custom_command(
+    OUTPUT ${XRAY_XI_LOWERING_VALIDATION_STAMP}
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-validate
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
+            ${XRAY_XI_LOWERING_VALIDATION_STAMP}
+            ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
+    BYPRODUCTS ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
+    DEPFILE ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
+    COMMENT "xisagen: validating source-current Xi lowering consumers"
+    VERBATIM
+)
+
+add_custom_target(gen-xi-lowering
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering-check
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
+            ${CMAKE_SOURCE_DIR}
+    DEPENDS ${XRAY_XI_LOWERING_VALIDATION_STAMP}
+            ${XRAY_GEN_XI_LOWERING_DEPS}
+    COMMENT "xisagen: verifying checked-in Xi lowering projections"
+    VERBATIM
 )
 
 add_custom_target(gen-aot-metadata DEPENDS
@@ -4528,6 +4547,19 @@ if(BUILD_TESTS)
         LABELS "meta;semantic-owner;shared-core"
         PROCESSORS 1
         TIMEOUT 30
+    )
+
+    add_test(
+        NAME xi_generator_self_test
+        COMMAND ${XRAY_PYTHON} -B
+                ${CMAKE_CURRENT_SOURCE_DIR}/tools/xisagen/xisagen.py test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xi_generator_self_test PROPERTIES
+        LABELS "meta;xi;generator;target-machine"
+        PROCESSORS 1
+        COST 230
+        TIMEOUT 600
     )
 
     add_test(

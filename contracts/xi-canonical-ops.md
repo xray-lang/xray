@@ -13,9 +13,62 @@ compatibility opcode, reserved hole, or second bounds owner.
    is a generator error; no consumer may supply a default guess.
 3. `borrow`, `consume`, `pass`, `stored-value`, and `method-args` retain the
    meanings checked by the ARC verifier and used by ARC insertion.
-4. `xisa/xi/lowering.def` is the canonical generated-lowering dispatch table.
-   A frontend spelling may drift, but its semantic lowering must remain mapped
-   to the same Xi meaning unless this contract changes.
+4. `xisa/xi/lowering.def` is the canonical target-implementation table. An AOT
+   target entry is one generated `driver`, direct `consumer`, or explicit
+   `reject`. A driver row with a live source selector additionally carries an
+   `:aot-c-consumer` terminal witness; this records the source owner without
+   replacing its generated dispatch driver. A consumer is valid only for
+   `aot-c`; each terminal
+   emission or storage owner binds its canonical repository path and C symbol
+   to an operation-derived positive selector, a leading fail-closed guarded
+   selector, one or more router-to-terminal call edges, or one source-backed
+   structural category. Those bindings contribute canonical
+   target coverage and backend legality but never enter a generated dispatch
+   table or synthesize a stub. The current table contains 33 direct-consumer
+   operations, 44 terminal owner bindings, six router witnesses, 36 exact
+   terminal-emitter witnesses, six explicit selector-predicate witnesses, two
+   explicit predicate-domain witnesses, one
+   guarded selector, 13 activation-edge
+   records covering 15 exact calls, three exact output sequences, and 11
+   statement drivers. Routers are witnesses rather
+   than owners. Router-to-owner and terminal-selector censuses are independent:
+   a declared router that also emits terminal output is rejected as a second
+   owner even when its canonical owner call remains present. `xi.phi` has
+   exactly four structural owners for edge copies,
+   synchronous storage, coroutine-frame storage, and coroutine-local storage.
+   Backend rewrites and verifier-only operations remain illegal, and every
+   special AOT operation requires the same explicit consumer authority. For
+   every other operation, `aot-c` and `aot-c-stmt` are one canonical AOT
+   support domain, so a reject in either form overrides every implementation
+   in that domain. The normalized lowering coverage must exactly match
+   `ops.def`; an `ops.def` target alone is not an independent legality owner or
+   compatibility fallback. A recursive repository AOT-source census is
+   discovery-only: it rejects undeclared selector, router, guarded-selector,
+   activation, and structural behavior, but never promotes an unrelated C
+   function to semantic authority. `lowering.def` remains the sole declaration
+   owner; there is no inferred allowlist or second consumer registry. Both the
+   compile closure and discovery census bind every repository component before
+   reading it: POSIX uses descriptor-relative no-follow opens plus `fstat`, and
+   Windows holds non-reparse-point component handles without write/delete
+   sharing. A file or directory swapped to a link at the former check/open
+   boundary is rejected rather than read through the alternate target. A
+   governed selector cannot be stored in an initializer alias or passed through
+   a macro or helper whose body performs operation selection; macro names are
+   derived from their replacements rather than capitalization. A selector used
+   only as an argument to a non-routing observation is not an inferred owner and
+   does not fail the discovery-only census. The recursively captured validation
+   domain contains only repository-local quoted includes resolved through the
+   ordered repository `XRAY_COMMON_INCLUDES` roots; the build-tree generated
+   include root is intentionally outside that domain, and any quoted include
+   that would require it fails closed.
+   Trigraphs, directive-token line splicing, comments, and the `%:` digraph are
+   normalized before local-C includes enter the same canonical path gate. All
+   non-newline C directive whitespace is recognized, while macro-expanded
+   include operands are forbidden rather than interpreted by a second
+   preprocessor. A
+   frontend spelling may drift, but its semantic
+   lowering must remain mapped to the same Xi meaning unless this contract
+   changes.
 5. Changes migrate generated-file sync tests, Xi verifier/optimizer tests,
    backend differential cases, and any affected AOT shape evidence.
 6. Raw storage becoming a typed value is represented by an explicit canonical
@@ -105,5 +158,5 @@ compatibility opcode, reserved hole, or second bounds owner.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def f3ac159a211d1f5ce8bc7d8202f31eaf413f91bfed0752ff28dda3ad84f1e5ea
-anchor-sha256: xisa/xi/lowering.def b928743b1e7b3d0cc50bcf2d9779f4c755f189bcb0f6e710e7fa232bce7aa517
+anchor-sha256: xisa/xi/ops.def fc58bc8c488be1de970490a1d288a3518a4b48e7586ed35b32d994599f80fabe
+anchor-sha256: xisa/xi/lowering.def 0d8a4a0d774807005fde2678703158897858dcafde374cf3055f2b5144906d91
