@@ -1,0 +1,14 @@
+import regex
+
+print(regex.findText(regex.compile("\\p{Han}+"), "Hello你好World世界"))
+print(regex.findText(regex.compile("\\p{L}+"), "123abc"))
+print(regex.findText(regex.compile("\\p{N}+"), "abc123def"))
+print(regex.findText(regex.compile("\\p{Latin}+"), "你好HelloWorld"))
+print(regex.findText(regex.compile("\\P{Han}+"), "你好World"))
+print(regex.findText(regex.compile("\\p{ASCII}+"), "Hello世界"))
+print(regex.findText(regex.compile("\\p{Hiragana}+"), "Helloひらがな世界"))
+print(regex.findText(regex.compile("\\p{Katakana}+"), "Helloカタカナ世界"))
+print(regex.findText(regex.compile("\\p{Letter}+"), "123abc你好"))
+print(regex.findText(regex.compile("\\p{han}+"), "A中文B"))
+print(regex.test(regex.compile("^.$"), "中"))
+print(regex.test(regex.compile("é", "i"), "É"))

@@ -1,0 +1,25 @@
+import regex
+
+var escaped_slash = /a\/b/i
+print(regex.test(escaped_slash, "A/b"))
+
+var slash_class = /[\/]+/
+print(regex.findText(slash_class, "a///b"))
+
+var multiline = /^b/m
+print(regex.test(multiline, "a\nb"))
+
+var dotall = /a.b/s
+print(regex.test(dotall, "a\nb"))
+
+var quotient = 20 / 5
+print(quotient)
+print(regex.test(/[a-z]+/i, "ABC"))
+
+var literal_pair = /[a-z]+/i
+var dynamic_pair = regex.compile("[a-z]+", "i")
+print(regex.findText(literal_pair, "ABC"))
+print(regex.findText(dynamic_pair, "ABC"))
+
+var literal_array = [/a/, /b/i]
+print(regex.test(literal_array[1], "B"))

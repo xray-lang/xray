@@ -1,0 +1,159 @@
+{
+  "cases": [
+    {
+      "domains": [
+        "lexical",
+        "matching"
+      ],
+      "expected_sha256": "a372a1640390d928494e05e2ebfd446784603347d993567dbc9c5d035057c686",
+      "expected_stdout": "expected/literal_lexical.stdout",
+      "id": "literal_lexical",
+      "required_capabilities": [
+        "regex.dynamic.compile",
+        "regex.literal.syntax"
+      ],
+      "source": "programs/literal_lexical.xr",
+      "source_sha256": "a44678e8e04ac379a6eff79a780fd93f13cc47d74940acea9f381a907d3f4e2c"
+    },
+    {
+      "domains": [
+        "lexical"
+      ],
+      "expected_sha256": "6380638a66c16b9f3c28ccaa2894e9e5769d001a303f58ef0beee48044dbab3c",
+      "expected_stdout": "expected/literal_no_import.stdout",
+      "id": "literal_no_import",
+      "required_capabilities": [
+        "regex.literal.syntax"
+      ],
+      "source": "programs/literal_no_import.xr",
+      "source_sha256": "e41a47d77f273d87a0608fbf7e14222f5ddaddc747dd6ec25ba8a5fddee387fa"
+    },
+    {
+      "domains": [
+        "captures",
+        "errors",
+        "limits",
+        "matching",
+        "replace_split",
+        "unicode"
+      ],
+      "expected_sha256": "332ef1e9962bb7e4fa881af328eabf01260dc2a869727d55984273a3a5bbd131",
+      "expected_stdout": "expected/matching_core.stdout",
+      "id": "matching_core",
+      "required_capabilities": [
+        "regex.dynamic.compile",
+        "regex.unicode.properties"
+      ],
+      "source": "programs/matching_core.xr",
+      "source_sha256": "bea8f9629d8d1bf6798bb8f9093f9405382dc7c322bad7bf0fcbba2f7204b9d0"
+    },
+    {
+      "domains": [
+        "captures",
+        "empty_match",
+        "matching",
+        "replace_split"
+      ],
+      "expected_sha256": "6b1ac976abb45132d85a67e33d03731a656f9d848b9329d152f2251467dc6401",
+      "expected_stdout": "expected/semantic_edges.stdout",
+      "id": "semantic_edges",
+      "required_capabilities": [
+        "regex.dynamic.compile"
+      ],
+      "source": "programs/semantic_edges.xr",
+      "source_sha256": "9e7b5b234fceb7d144c69eeee17a4befd407c95669ea47505b0376554872aee1"
+    },
+    {
+      "domains": [
+        "empty_match",
+        "unicode"
+      ],
+      "expected_sha256": "f7e7e2fbbed62cd725ff4784799dcc795d0cb4042a8c49b88984048a0e3319e7",
+      "expected_stdout": "expected/unicode_empty_progress.stdout",
+      "id": "unicode_empty_progress",
+      "required_capabilities": [
+        "regex.dynamic.compile",
+        "regex.empty-match.scalar-progress"
+      ],
+      "source": "programs/unicode_empty_progress.xr",
+      "source_sha256": "f9bd8dd0b31a47e8fe04dd2b920afa0d56127d824c4fc0fb5ccb298741e8dfdc"
+    },
+    {
+      "domains": [
+        "matching",
+        "unicode"
+      ],
+      "expected_sha256": "01540a0605b44fca60aaaa34216c6da6a6799490ce1be71f51eede76972081b9",
+      "expected_stdout": "expected/unicode_properties.stdout",
+      "id": "unicode_properties",
+      "required_capabilities": [
+        "regex.dynamic.compile",
+        "regex.unicode.properties"
+      ],
+      "source": "programs/unicode_properties.xr",
+      "source_sha256": "0b65708f87f36d9ca2b41a09c4dd5d96f4a7f1f07b4a9b4246ab990a14cb24be"
+    }
+  ],
+  "engine_snapshot": {
+    "empty_match_progress": "one-utf8-byte-unsafe-red-baseline",
+    "error_codes": {
+      "bad_class": 9,
+      "bad_escape": 6,
+      "bad_repeat": 4,
+      "syntax": 1,
+      "too_deep": 8,
+      "too_many_groups": 7,
+      "trailing_backslash": 5,
+      "unmatched_bracket": 3,
+      "unmatched_paren": 2,
+      "unsupported": 10
+    },
+    "instruction_schema": "array-i64-header16-instruction4-unicode3-v1",
+    "limits": {
+      "max_capture_groups": 31,
+      "max_instructions": 10000,
+      "max_nesting": 100
+    },
+    "owner": "stdlib/regex/regex.xr",
+    "owner_sha256": "3ae33f32a1854fcafcf86f6f99c07013440ed7d221db6fde36003a3050aac7cf"
+  },
+  "exit_code": 0,
+  "hazard_inventory": "hazard_inventory.jsonl",
+  "hazard_inventory_sha256": "448c04402f090391a7f780ba5ede6c2efb65e50192aca9338d9fec7ce95c56ec",
+  "mutation_inventory": "mutation_inventory.jsonl",
+  "mutation_inventory_sha256": "ecdf5d3706ac798d51e69605370b2221bda0f70fb9f262bc5c09095170ae2c64",
+  "negative_inventory": "negative_inventory.jsonl",
+  "negative_inventory_sha256": "b1e9072e0c0fd5896dd1e940271a683425f6689b0452b7ca6a1e6ae0a1ea537a",
+  "oracle": "xray-regex-absolute-oracle",
+  "required_backends": [
+    "vm",
+    "aot"
+  ],
+  "schema": 1,
+  "semantic_contract": {
+    "empty_match_end_of_input": "emit-once-then-terminate",
+    "empty_match_progress": "unicode-scalar-boundary",
+    "find_all_zero_limit": "empty",
+    "ignore_case": "ascii-only",
+    "literal_suffix_flags": [
+      "i",
+      "m",
+      "s"
+    ],
+    "matching_priority": "leftmost-longest",
+    "non_multiline_dollar": "strict-text-end",
+    "split_zero_limit": "unlimited"
+  },
+  "stderr": "must-be-empty",
+  "stdout": "byte-exact-lf",
+  "unicode_contract": {
+    "case_fold": "ascii-only",
+    "name": "xray-unicode-15.0-simplified-source-v1",
+    "owner_digest_sha256": "d4114659635a0c6613cb2fc9bbcd4048428bd37cd3906e9ffee2eaf428b97974",
+    "owners": [
+      "src/base/xunicode.h",
+      "src/base/xunicode.c"
+    ],
+    "property_lookup": "exact-then-ascii-case-insensitive"
+  }
+}

@@ -1,0 +1,2 @@
+var direct = /a/
+print("constructed")
