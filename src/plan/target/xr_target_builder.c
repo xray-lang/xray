@@ -1213,6 +1213,28 @@ static bool semantic_direct_local_string_result_is_exact(const XrSemanticPlan *p
                xr_semantic_plan_type(plan, operation->result_type));
 }
 
+/* A SOURCE_EXPORT String result crosses two independently frozen type tables.
+ * The plan-local indexes may differ, so the boundary is the stable type ID;
+ * both sides must nevertheless prove the exact tagged String shape and the
+ * same fresh-owner return contract. */
+static bool semantic_source_export_string_result_is_exact(
+    const XrSemanticPlan *caller, const XrSemanticPlan *dependency,
+    const XrSemanticOperationRecord *operation, const XrSemanticFunctionRecord *callee) {
+    const XrSemanticTypeRecord *caller_type =
+        operation ? xr_semantic_plan_type(caller, operation->result_type) : NULL;
+    const XrSemanticTypeRecord *callee_type =
+        callee ? xr_semantic_plan_type(dependency, callee->return_type) : NULL;
+    return caller && dependency && operation && callee &&
+           (operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+           operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+           operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
+           operation->return_complete == 1 && operation->return_provenance == XR_SEM_RETURN_OWNED &&
+           callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED &&
+           xr_semantic_tagged_string_type_is_exact(caller_type) &&
+           xr_semantic_tagged_string_type_is_exact(callee_type) &&
+           xr_stable_id_equal(caller_type->id, callee_type->id);
+}
+
 /* Resolve the unique local call target that owns this operation. A duplicated
  * or foreign target row leaves the operation unclaimed. */
 static const XrSemanticFunctionRecord *
@@ -7253,8 +7275,44 @@ static bool builder_add_direct_local_string_boundary_storage(XrTargetPlanBuilder
             continue;
         const XrSemanticFunctionRecord *callee =
             semantic_direct_local_callee_for_operation(builder->semantic_plan, i);
-        if (!callee || !semantic_direct_local_string_result_is_exact(builder->semantic_plan,
-                                                                     operation, callee))
+        bool exact_string = callee && semantic_direct_local_string_result_is_exact(
+                                          builder->semantic_plan, operation, callee);
+        if (!exact_string) {
+            const XrSemanticPlan *dependency = NULL;
+            const XrSemanticFunctionRecord *source_callee = NULL;
+            bool source_target_found = false;
+            uint32_t target_count =
+                (uint32_t) xr_semantic_plan_call_target_count(builder->semantic_plan);
+            for (uint32_t target_index = 0; target_index < target_count; target_index++) {
+                const XrSemanticCallTargetRecord *target =
+                    xr_semantic_plan_call_target(builder->semantic_plan, target_index);
+                if (!target || target->operation != i ||
+                    target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+                    continue;
+                if (source_target_found) {
+                    source_callee = NULL;
+                    dependency = NULL;
+                    break;
+                }
+                source_target_found = true;
+                dependency = target->dependency < builder->semantic_dependency_count
+                                 ? builder->semantic_dependencies[target->dependency]
+                                 : NULL;
+                const XrSemanticSourceExportRecord *source_export =
+                    dependency &&
+                            target->source_export < xr_semantic_plan_source_export_count(dependency)
+                        ? xr_semantic_plan_source_export(dependency, target->source_export)
+                        : NULL;
+                source_callee = source_export &&
+                                        source_export->kind == XR_SEM_SOURCE_EXPORT_FUNCTION
+                                    ? xr_semantic_plan_function(dependency,
+                                                                source_export->function)
+                                    : NULL;
+            }
+            exact_string = semantic_source_export_string_result_is_exact(
+                builder->semantic_plan, dependency, operation, source_callee);
+        }
+        if (!exact_string)
             continue;
         valid = note_direct_local_string_boundary_storage(
             builder, &analysis, operation->result_value, operation->result_type,
@@ -10727,6 +10785,8 @@ static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint
         operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
     const XrSemanticTypeRecord *callee_result_type =
         callee ? xr_semantic_plan_type(dependency, callee->return_type) : NULL;
+    bool exact_string_result = semantic_source_export_string_result_is_exact(
+        plan, dependency, operation, callee);
     if (!target || !dependency || !source_export ||
         source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION || !callee ||
         !xr_stable_id_equal(source_export->exported_entity, callee->id) || !operation ||
@@ -10737,9 +10797,49 @@ static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint
         !xr_stable_id_equal(target->export_identity, source_export->id) ||
         !xr_stable_id_equal(target->callee_function, callee->id) || !result_type ||
         !callee_result_type || !xr_stable_id_equal(result_type->id, callee_result_type->id) ||
-        !call_type_is_exact_scalar(plan, operation->result_type))
-        return fail(error, error_size, "XR_TARGET_1003",
-                    "source-export call authority is incomplete");
+        (!call_type_is_exact_scalar(plan, operation->result_type) && !exact_string_result)) {
+        char detail[512];
+        snprintf(detail, sizeof(detail),
+                 "source-export call authority is incomplete target=%u dependency=%u export=%u "
+                 "target-kind=%u target-function=%u operation=%u opcode=%u operands=%u "
+                 "parameters=%u result-type=%u callee-result-type=%u result-id-match=%u "
+                 "scalar=%u result-kind=%u result-flags=%u result-builtin=%u string=%u "
+                 "adt-enum=%u aggregate=%d structural=%u result-ownership=%u alias=%d "
+                 "return-param=%d return-provenance=%u return-complete=%u callee-return-param=%d "
+                 "callee-return-provenance=%u export-name=%s callee-name=%s",
+                 target_index, target ? target->dependency : UINT32_MAX,
+                 target ? target->source_export : UINT32_MAX,
+                 target ? target->kind : UINT32_MAX,
+                 target ? target->function : UINT32_MAX,
+                 target ? target->operation : UINT32_MAX,
+                 operation ? operation->opcode : UINT32_MAX,
+                 operation ? operation->operand_count : UINT32_MAX,
+                 callee ? callee->parameter_count : UINT32_MAX,
+                 operation ? operation->result_type : UINT32_MAX,
+                 callee ? callee->return_type : UINT32_MAX,
+                 result_type && callee_result_type &&
+                         xr_stable_id_equal(result_type->id, callee_result_type->id),
+                 operation && call_type_is_exact_scalar(plan, operation->result_type),
+                 result_type ? result_type->kind : UINT32_MAX,
+                 result_type ? result_type->flags : UINT32_MAX,
+                 result_type ? result_type->builtin_type : UINT32_MAX,
+                 result_type && xr_semantic_tagged_string_type_is_exact(result_type),
+                 result_type && xr_semantic_adt_enum_type_is_exact(result_type),
+                 result_type ? xr_semantic_aggregate_type_kind(result_type) : -1,
+                 operation &&
+                         xr_semantic_source_structural_shape_is_exact(plan,
+                                                                      operation->result_type),
+                 operation ? operation->result_ownership : UINT32_MAX,
+                 operation ? operation->result_alias_operand : -2,
+                 operation ? operation->return_parameter : -2,
+                 operation ? operation->return_provenance : UINT32_MAX,
+                 operation ? operation->return_complete : UINT32_MAX,
+                 callee ? callee->return_parameter : -2,
+                 callee ? callee->return_provenance : UINT32_MAX,
+                 source_export && source_export->name ? source_export->name : "<none>",
+                 callee && callee->name ? callee->name : "<none>");
+        return fail(error, error_size, "XR_TARGET_1003", detail);
+    }
 
     XrTargetCallIntent call = {
         .semantic_call_target = target_index,
@@ -10754,7 +10854,8 @@ static bool collect_source_export_call_intent(XrTargetPlanBuilder *builder, uint
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = callee->parameter_count,
         .result_mode = XR_TARGET_CALL_VALUE,
-        .result_ownership = XR_TARGET_CALL_NONE,
+        .result_ownership =
+            exact_string_result ? XR_TARGET_CALL_RETURN_OWNED : XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT,
         .target_kind = XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
         .suspends = suspends,

@@ -2693,6 +2693,57 @@ static bool semantic_direct_local_string_result_is_exact(const XrSemanticPlan *s
            callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED;
 }
 
+/* Independent reconstruction of the cross-module String result boundary. */
+static bool semantic_source_export_string_result_is_exact_verify(
+    const XrSemanticPlan *caller, const XrSemanticPlan *dependency,
+    const XrSemanticOperationRecord *operation, const XrSemanticFunctionRecord *callee) {
+    const XrSemanticTypeRecord *caller_type =
+        operation ? xr_semantic_plan_type(caller, operation->result_type) : NULL;
+    const XrSemanticTypeRecord *callee_type =
+        callee ? xr_semantic_plan_type(dependency, callee->return_type) : NULL;
+    return caller && dependency && operation && callee &&
+           (operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+           operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+           operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
+           operation->return_complete == 1 && operation->return_provenance == XR_SEM_RETURN_OWNED &&
+           callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED &&
+           xr_semantic_tagged_string_type_is_exact(caller_type) &&
+           xr_semantic_tagged_string_type_is_exact(callee_type) &&
+           xr_stable_id_equal(caller_type->id, callee_type->id);
+}
+
+static bool semantic_source_export_string_result_for_operation_is_exact_verify(
+    const XrTargetPlan *plan, const XrTargetPartitionView *view, uint32_t operation_index) {
+    const XrSemanticPlan *semantic = view ? view->semantic : NULL;
+    const XrSemanticOperationRecord *operation =
+        semantic ? xr_semantic_plan_operation(semantic, operation_index) : NULL;
+    const XrSemanticCallTargetRecord *source_target = NULL;
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(semantic);
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *candidate = xr_semantic_plan_call_target(semantic, i);
+        if (!candidate || candidate->operation != operation_index ||
+            candidate->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            continue;
+        if (source_target)
+            return false;
+        source_target = candidate;
+    }
+    const XrSemanticPlan *dependency =
+        source_target
+            ? verifier_semantic_dependency(plan, semantic, source_target->dependency)
+            : NULL;
+    const XrSemanticSourceExportRecord *source_export =
+        dependency && source_target->source_export < xr_semantic_plan_source_export_count(dependency)
+            ? xr_semantic_plan_source_export(dependency, source_target->source_export)
+            : NULL;
+    const XrSemanticFunctionRecord *callee =
+        source_export && source_export->kind == XR_SEM_SOURCE_EXPORT_FUNCTION
+            ? xr_semantic_plan_function(dependency, source_export->function)
+            : NULL;
+    return source_target && semantic_source_export_string_result_is_exact_verify(
+                                semantic, dependency, operation, callee);
+}
+
 static bool semantic_direct_local_adt_enum_result_is_exact(const XrSemanticPlan *semantic,
                                                            uint32_t operation_index) {
     const XrSemanticOperationRecord *operation =
@@ -4172,6 +4223,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
             xr_semantic_string_convert_is_exact(semantic, operation) ||
             xr_semantic_string_utf8_static_call_is_exact(semantic, operation, NULL, NULL) ||
             semantic_direct_local_string_result_is_exact(semantic, i) ||
+            semantic_source_export_string_result_for_operation_is_exact_verify(plan, view, i) ||
             semantic_direct_local_array_result_is_exact_verify(semantic, i) ||
             semantic_direct_local_adt_enum_result_is_exact(semantic, i) ||
             xr_semantic_adt_enum_constructor_is_exact(semantic, operation, NULL) ||
@@ -4378,6 +4430,11 @@ static bool verify_value_binding(
     bool exact_direct_string_result =
         semantic_direct_local_string_result_is_exact(semantic, operation_index) && operation &&
         operation->result_value == semantic_value && operation->result_type == semantic_type;
+    bool exact_source_export_string_result =
+        semantic_source_export_string_result_for_operation_is_exact_verify(plan, view,
+                                                                            operation_index) &&
+        operation && operation->result_value == semantic_value &&
+        operation->result_type == semantic_type;
     bool exact_stringbuilder = semantic_stringbuilder_constructor_is_exact(semantic, operation);
     /* StringBuilder methods bind a dynamic result in their own right. Append
      * preserves the receiver's ownership, while toString creates a new owner. */
@@ -4530,7 +4587,8 @@ static bool verify_value_binding(
                 exact_array_shared_read || exact_tagged_ref_place_load || exact_class_object ||
                 exact_class_instance || exact_class_receiver || exact_string_literal ||
                 exact_bigint_value || exact_string_concat || exact_string_convert ||
-                exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
+                exact_direct_string_result || exact_source_export_string_result ||
+                exact_stringbuilder || exact_stringbuilder_append ||
                 exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
                 exact_identity_copy || exact_owner_forward || exact_string_runes ||
                 exact_map_entries_iterator || exact_map_entry_iterator_next ||
@@ -4607,7 +4665,8 @@ static bool verify_value_binding(
         exact_tagged_ref_place_load || exact_array_fill || exact_class_instance ||
         exact_class_receiver || exact_string_literal || exact_bigint_value || exact_string_concat ||
         exact_string_convert || exact_direct_string_result || exact_stringbuilder ||
-        exact_stringbuilder_append || exact_stringbuilder_to_string ||
+        exact_source_export_string_result || exact_stringbuilder_append ||
+        exact_stringbuilder_to_string ||
         exact_stringbuilder_append_string || exact_string_runes || exact_map_entries_iterator ||
         exact_map_entry_iterator_next || exact_string_slice_range || exact_rune_to_string ||
         exact_json_namespace_value || exact_panic_info_constructor || exact_array_member_result ||
@@ -6469,6 +6528,9 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             source_callee ? xr_semantic_plan_type(dependency, source_callee->return_type) : NULL;
         const XrSemanticTypeRecord *caller_result_type =
             operation ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
+        bool source_string_result = source &&
+                                    semantic_source_export_string_result_is_exact_verify(
+                                        semantic, dependency, operation, source_callee);
         bool source_callee_suspendable = false;
         bool source_suspendability_exact =
             !source ||
@@ -6655,7 +6717,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
             direct_string_result || direct_array_result || direct_adt_enum_result ||
             direct_class_instance_result || json_namespace_value || string_utf8_static ||
-            class_construction || adt_enum_constructor || array_intrinsic || array_fill ||
+            source_string_result || class_construction || adt_enum_constructor || array_intrinsic || array_fill ||
             panic_info_constructor || container_copy) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -6753,6 +6815,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                 (borrowed_stringbuilder_append ? XR_TARGET_CALL_BORROW
                  : stringbuilder_constructor || direct_string_result || direct_array_result ||
                          direct_adt_enum_result || direct_class_instance_result ||
+                         source_string_result ||
                          stringbuilder_append_rune || string_runes || string_slice_range ||
                          rune_to_string || stringbuilder_to_string || stringbuilder_append_string ||
                          json_namespace_value || string_utf8_static || class_construction ||
