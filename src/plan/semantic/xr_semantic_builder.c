@@ -3901,8 +3901,26 @@ static bool xi_rune_to_uint32_exact(const XiValue *value) {
            value->type->scalar_rep == XR_NATIVE_U32;
 }
 
-/* `r.toString()` on a rune from a `String.runes()` iterator: the one-rune
- * string. Sits beside toUInt32 -- same receiver family, different result. */
+static bool xi_required_rune_parameter_exact(const XiValue *value) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    if (!value || value->op != XI_PARAM || value->param_mode != XR_PARAM_READ ||
+        value->transfer_mode != XR_TRANSFER_SHARE || !function || !function->params ||
+        !value->type || value->type->kind != XR_KIND_RUNE || value->type->is_nullable)
+        return false;
+    uint32_t matches = 0;
+    for (uint16_t i = 0; i < function->nparams; i++) {
+        if (function->params[i] != value)
+            continue;
+        if (i >= function->min_params)
+            return false;
+        matches++;
+    }
+    return matches == 1;
+}
+
+/* `r.toString()` on a rune from a `String.runes()` iterator or the current
+ * function's unique required Rune parameter: the one-rune string. Sits beside
+ * toUInt32 -- same scalar receiver type, narrower producer authority. */
 static bool xi_rune_to_string_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
@@ -3911,7 +3929,7 @@ static bool xi_rune_to_string_exact(const XiValue *value) {
            value->aux_int == (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1 && receiver->type &&
            receiver->type->kind == XR_KIND_RUNE && value->type &&
            value->type->kind == XR_KIND_STRING && !value->type->is_nullable &&
-           xi_iterator_rune_source_exact(receiver);
+           (xi_iterator_rune_source_exact(receiver) || xi_required_rune_parameter_exact(receiver));
 }
 
 static bool xi_rune_is_whitespace_exact(const XiValue *value) {

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_semantic_rune_to_string_shape.h - Exact iterator-rune to string authority
+ * xr_semantic_rune_to_string_shape.h - Exact rune to string authority
  */
 
 #ifndef XR_SEMANTIC_RUNE_TO_STRING_SHAPE_H
@@ -13,6 +13,49 @@
 
 #include "xr_semantic_iterator_rune_nth_shape.h"
 #include "xr_semantic_string_shape.h"
+
+static inline bool
+xr_semantic_required_rune_parameter_is_exact(const XrSemanticPlan *plan,
+                                             const XrSemanticOperationRecord *operation,
+                                             uint32_t receiver_value) {
+    if (!plan || !operation)
+        return false;
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(plan, operation->function);
+    if (!function || function->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
+        function->parameter_count >
+            xr_semantic_plan_parameter_count(plan) - function->parameter_begin)
+        return false;
+    const XrSemanticParameterRecord *found = NULL;
+    for (uint32_t i = 0; i < function->parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, function->parameter_begin + i);
+        if (!parameter || parameter->value != receiver_value)
+            continue;
+        if (found || parameter->function != operation->function || parameter->ordinal != i ||
+            parameter->mode != XR_PARAM_READ || parameter->ownership != XI_OWN_NONE ||
+            parameter->transfer_mode != XR_TRANSFER_SHARE ||
+            parameter->flags != XR_SEM_PARAMETER_REQUIRED || parameter->reserved != 0)
+            return false;
+        found = parameter;
+    }
+    if (!found)
+        return false;
+
+    const XrSemanticOperationRecord *definition = NULL;
+    size_t operation_count = xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->result_value != receiver_value)
+            continue;
+        if (definition)
+            return false;
+        definition = candidate;
+    }
+    return !definition ||
+           (definition->function == operation->function && definition->opcode == XI_PARAM &&
+            definition->result_type == found->type && definition->operand_count == 0);
+}
 
 static inline bool
 xr_semantic_rune_to_string_receiver_is_exact(const XrSemanticPlan *plan,
@@ -30,14 +73,16 @@ xr_semantic_rune_to_string_receiver_is_exact(const XrSemanticPlan *plan,
             return false;
         definition = candidate;
     }
-    return definition && definition->function == operation->function &&
-           xr_semantic_iterator_rune_source_is_exact(plan, definition);
+    if (definition && definition->function == operation->function &&
+        xr_semantic_iterator_rune_source_is_exact(plan, definition))
+        return true;
+    return xr_semantic_required_rune_parameter_is_exact(plan, operation, receiver_value);
 }
 
-/* `r.toString()` where the rune came from a `String.runes()` iterator: the
- * one-rune string. This owned-String family retains its iterator-only receiver
- * proof even though the separate scalar-to-u32 conversion accepts every exact
- * Rune value. */
+/* `r.toString()` for a rune produced by `String.runes()` iteration or bound by
+ * this function's unique required Rune parameter: the one-rune string. The
+ * owned-String family admits only those two frozen producer shapes even though
+ * the separate scalar-to-u32 conversion accepts every exact Rune value. */
 static inline bool xr_semantic_rune_to_string_is_exact(const XrSemanticPlan *plan,
                                                        const XrSemanticOperationRecord *operation,
                                                        uint32_t *receiver_value) {

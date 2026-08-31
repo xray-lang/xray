@@ -274,6 +274,13 @@ the exact method, type, ownership, receiver identity, native-Rune binding, and
 dedicated call row; refinement re-proves that binding, and CEmission projects
 the frozen receiver into the immutable recipe. CGen consumes that recipe without
 selector, live type, arity, producer-shape, or generic-method fallback.
+For exact `rune.toString()`, the owned one-rune String result accepts only two
+producer authorities: the exact prior `String.runes()` iterator result or the
+current function's unique required Rune parameter. The latter is frozen by its
+function range, ordinal, value, exact Rune type, read mode, trivial ownership,
+and shared transfer. SemanticPlan, TargetPlan, refinement, and CEmission all
+consume that same producer proof; arbitrary Rune SSA values and generic method
+dispatch remain unauthorized.
 For exact `rune.isWhitespace()`, schema 30 owns the trivial native-bool result,
 its single native-Rune recipe operand, and fixed `xrt_rune_is_whitespace`
 helper. The semantic receiver must be the unique exact

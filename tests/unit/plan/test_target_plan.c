@@ -17,6 +17,7 @@
 #include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_container_copy_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_rune_to_string_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
@@ -1227,6 +1228,28 @@ static XrSemanticPlan *build_rune_to_string_semantic(void) {
     release_string->args[0] = to_string;
     release_runes->args[0] = runes;
     return finish_stringbuilder_semantic(function, entry, "rune.toString");
+}
+
+static XrSemanticPlan *build_direct_rune_parameter_to_string_semantic(void) {
+    XiFunc *function = xi_func_new("target_direct_rune_parameter_to_string", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *receiver = xi_param(function, entry, 0, &stub_rune);
+    XiValue *to_string = xi_value_new(function, entry, XI_CALL_METHOD, &stub_exact_string, 1);
+    XiValue *release_string = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(receiver && to_string && release_string);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = receiver;
+    to_string->args[0] = receiver;
+    to_string->aux = (void *) "toString";
+    to_string->aux_int = (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1;
+    to_string->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
+    release_string->args[0] = to_string;
+    return finish_stringbuilder_semantic(function, entry, "direct rune parameter toString");
 }
 
 static XrSemanticPlan *build_map_entry_iterator_semantic(XiMethodSymbolId factory_symbol,
@@ -8118,6 +8141,45 @@ static void test_rune_to_string_result_authority(void) {
     REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
     receiver->ownership_action = saved_u8;
     REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    semantic = build_direct_rune_parameter_to_string_semantic();
+    profile = build_profile(0);
+    plan = NULL;
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan);
+    call = find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_RUNE_TO_STRING);
+    operation = call ? &semantic->operations[call->semantic_operation] : NULL;
+    receiver = operation && operation->operand_begin < semantic->operand_count
+                   ? &semantic->operands[operation->operand_begin]
+                   : NULL;
+    REQUIRE(call && operation && receiver && semantic->parameter_count == 1 &&
+            semantic->parameters[0].value == receiver->value &&
+            semantic->parameters[0].function == operation->function &&
+            semantic->parameters[0].type == receiver->type &&
+            xr_semantic_rune_to_string_is_exact(semantic, operation, NULL));
+
+    XrSemanticParameterRecord *parameter = &semantic->parameters[0];
+    uint8_t saved_parameter_u8 = parameter->flags;
+    parameter->flags = 0;
+    REQUIRE(!xr_semantic_rune_to_string_is_exact(semantic, operation, NULL));
+    parameter->flags = saved_parameter_u8;
+    saved_parameter_u8 = parameter->ownership;
+    parameter->ownership = XI_OWN_BORROWED;
+    REQUIRE(!xr_semantic_rune_to_string_is_exact(semantic, operation, NULL));
+    parameter->ownership = saved_parameter_u8;
+    uint32_t saved_parameter_u32 = parameter->function;
+    parameter->function = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(!xr_semantic_rune_to_string_is_exact(semantic, operation, NULL));
+    parameter->function = saved_parameter_u32;
+    saved_parameter_u32 = parameter->type;
+    parameter->type = operation->result_type;
+    REQUIRE(!xr_semantic_rune_to_string_is_exact(semantic, operation, NULL));
+    parameter->type = saved_parameter_u32;
+    REQUIRE(xr_semantic_rune_to_string_is_exact(semantic, operation, NULL) &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
 
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);

@@ -529,7 +529,11 @@ the exact native-u32 `rune.toUInt32` recipe for any exact canonical Rune SSA
 receiver. TargetPlan independently reconstructs the exact method, type,
 ownership, receiver identity, native-Rune binding, and dedicated call row;
 refinement then re-proves that frozen binding instead of demanding a particular
-Rune producer. The exact native-bool `rune.isWhitespace` recipe remains under
+Rune producer. The owned one-rune String result of exact `rune.toString`
+admits only the same-function unique required Rune parameter or the frozen
+`String.runes` iterator producer; parameter function range, ordinal, type,
+mode, ownership, transfer, and value identity are independently checked. The
+exact native-bool `rune.isWhitespace` recipe remains under
 the iterator receiver proof. None grants general Iterator or Rune dispatch. It
 separately adds the exact owned String
 range-slice recipe only for a frozen required String parameter or exact String
@@ -916,7 +920,7 @@ anchor-sha256: src/runtime/object/xarray.c a1b82a9df6dbfa060f3a3ac5b5a5dee200d51
 anchor-sha256: src/vm/xvm_dispatch_collection.inc.c 522f67fa27199b54d2c20942ff344e0b1a657635e28a4e45084737d603a635eb
 anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86fabdfa079523ca4fd504bd5badb491ee
 anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
-anchor-sha256: tests/unit/plan/test_target_plan.c 3f4cefcd4ea3a6e30b95b93bc007ca1a5fefd319910ac21ec0e354037967e195
+anchor-sha256: tests/unit/plan/test_target_plan.c 280acf9b548ec078bf92c88ee1ee0ab3623def2f95e073cd9c0830c69470833e
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 1c09d9175acb0870f42515071a88cdf6beb1f28becdb179fd9b3435945bed680
