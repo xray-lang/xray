@@ -208,6 +208,16 @@ rows are re-fingerprinted. This layout rule grants no additional typed
 instruction family; execution remains unavailable until a complete family
 owns the corresponding rows.
 
+An Array receiver borrowed from a source-class field has one exact outer
+carrier authority. SemanticPlan must prove a unique `XI_LOAD_FIELD` result and
+an exact Array row; its receiver must name one frozen source class either
+directly or through the exact `ref Class` parameter-to-`XI_PLACE_LOAD` chain.
+TargetPlan binds that field result as a borrowed dynamic temporary and its
+verifier independently re-derives the same class, place-load, field-load,
+Array, and unique-definition facts. This does not grant generic instance field
+storage, infer a field declaration, or move element-layout ownership out of
+TargetPlan.
+
 The second executable family adds only non-suspending SOURCE_EXPORT calls whose
 parameters and result are exact signed `i64`, whose ownership is trivial, and
 whose adapter is identity. `CALL_ENTRY_I64` names a dense expectation row, not
@@ -877,14 +887,14 @@ anchor-sha256: src/plan/target/xr_target_plan.h 65fe85fc22f27830d244c06027a73bc6
 anchor-sha256: src/plan/target/xr_target_plan.c 81051eadeaacfba20da1ba84f994504d1927e825217a13ca517c675b16d22201
 anchor-sha256: src/plan/target/xr_target_plan_internal.h e4e69c596140608354c8100b2c60ec1f57d218105f30ed13f758b1503d4f8938
 anchor-sha256: src/plan/target/xr_target_builder.h 2281c6768da662fae0fbe52c5601ad78b63df1d4cc8bf4eabb8d8b7ff24ef282
-anchor-sha256: src/plan/target/xr_target_builder.c 72307097342b0de16e63eb1b367a16fd3205545cba8ad2624f6b28fc04be63c7
+anchor-sha256: src/plan/target/xr_target_builder.c 462557e4f64adce23d2449595cea0ab9c4d2a090ca6ce1d6efd2a390b2e92b52
 anchor-sha256: src/plan/target/xr_target_call_abi_shape.h 158cf1b96a4668f648d4798d4db89d59215a3553c6ad47b15c24c073a22aecda
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1221700922d2a310bfad444a7c4988303ef6a5a8aa955e9f6290d120ce2d7c4c
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 44c10027c2b1f96ccdf83df6ac5615e1c8f6c1daa28ad038bb84472034b1f018
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction.h 5caceef008f17a2f871efecd54ab37c311a41abbc6539b2b81eef6feb1aee8a0
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction.c a846c95862c5339f70028337cbaaf85172368339c48caf14b503f9409181df3a
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction_verify.c ed37eeab5dd84ead0a90baa5d541c04c8eb2076b0d4b6ff88ba2bd42126b5996
-anchor-sha256: src/plan/target/xr_target_verify.c 34b4fa0c27d5486ad0f7aea946a404a991e4bcbfc585f64442d4e918fb161743
+anchor-sha256: src/plan/target/xr_target_verify.c 469ac8163ee6cd9cd02343c28ed5fca29aedf2104c9ee9614a1d2ba20026b518
 anchor-sha256: src/plan/format/xr_xtp_schema.h 9a98661028b7b74bd2a9f4a8a855ac7352daec86b895b32015f0e0477db60c8f
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
@@ -934,7 +944,7 @@ anchor-sha256: src/runtime/object/xarray.c a1b82a9df6dbfa060f3a3ac5b5a5dee200d51
 anchor-sha256: src/vm/xvm_dispatch_collection.inc.c 522f67fa27199b54d2c20942ff344e0b1a657635e28a4e45084737d603a635eb
 anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86fabdfa079523ca4fd504bd5badb491ee
 anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
-anchor-sha256: tests/unit/plan/test_target_plan.c bb8b8661f542781f0e640b39999396caffff5b5fa5f06ae43f130dd0f1faa727
+anchor-sha256: tests/unit/plan/test_target_plan.c 96e82a53005393acac3805bce7b8d906c6e90a8c5e97c9e58c859b7dc4d2a577
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 1c09d9175acb0870f42515071a88cdf6beb1f28becdb179fd9b3435945bed680

@@ -18,6 +18,7 @@
 #ifndef XR_SEMANTIC_ARRAY_TYPE_SHAPE_H
 #define XR_SEMANTIC_ARRAY_TYPE_SHAPE_H
 
+#include "xr_semantic_class_shape.h"
 #include "xr_semantic_plan.h"
 #include "xr_semantic_shared_read_shape.h"
 #include "../../ir/xi_own.h"
@@ -104,6 +105,22 @@ static inline bool
 xr_semantic_tagged_array_shared_read_is_exact(const XrSemanticPlan *plan,
                                               const XrSemanticOperationRecord *operation) {
     return plan && operation && xr_semantic_shared_read_operation_is_exact(operation) &&
+           xr_semantic_array_type_row_is_exact(
+               xr_semantic_plan_type(plan, operation->result_type)) &&
+           xr_semantic_unique_value_definition(plan, operation->result_value) == operation;
+}
+
+/* A field read borrows the Array carrier from an exact source-class
+ * instance. The class judgement proves the load and receiver declaration;
+ * this judgement adds the exact Array result row and unique definition. It
+ * does not infer a field declaration or element layout: the frontend already
+ * froze the selected field in the result type, while TargetPlan remains the
+ * sole owner of element storage. */
+static inline bool
+xr_semantic_tagged_array_field_read_is_exact(const XrSemanticPlan *plan,
+                                             const XrSemanticOperationRecord *operation) {
+    return plan && operation &&
+           xr_semantic_class_field_read_source_class(plan, operation) != XR_SEMANTIC_INDEX_NONE &&
            xr_semantic_array_type_row_is_exact(
                xr_semantic_plan_type(plan, operation->result_type)) &&
            xr_semantic_unique_value_definition(plan, operation->result_value) == operation;
