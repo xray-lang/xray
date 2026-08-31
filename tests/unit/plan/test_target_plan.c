@@ -5988,7 +5988,7 @@ static void test_direct_local_value_aggregate_result_storage(void) {
     xr_target_profile_free(profile);
 }
 
-static void test_direct_local_managed_aggregate_precursor_fails_closed(void) {
+static void test_direct_local_managed_aggregate_lifecycle_authority(void) {
     XrSemanticPlan *semantic = build_direct_local_managed_aggregate_argument();
     const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, 0);
     const XrSemanticOperationRecord *operation =
@@ -6005,10 +6005,54 @@ static void test_direct_local_managed_aggregate_precursor_fails_closed(void) {
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
-    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
-    REQUIRE(plan == NULL &&
-            strstr(error, "direct-local managed aggregate needs frozen clone, drop, root, and "
-                          "generation authority") != NULL);
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "managed aggregate TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->calls_count == 1 &&
+            plan->call_arguments_count == 1 && xr_target_plan_verify(plan, error, sizeof(error)));
+    uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->layouts_count; i++)
+        if (plan->layouts[i].semantic_type == shape.semantic_type) {
+            REQUIRE(layout_index == XR_SEMANTIC_INDEX_NONE);
+            layout_index = i;
+        }
+    XrStableId zero = {{0}};
+    REQUIRE(layout_index != XR_SEMANTIC_INDEX_NONE);
+    XrTargetLayoutRecord *layout = &plan->layouts[layout_index];
+    XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    REQUIRE(layout->kind == XR_TARGET_LAYOUT_AGGREGATE && layout->field_count == 2 &&
+            layout->root_field_count == 1 && !xr_stable_id_equal(layout->destructor, zero) &&
+            !xr_stable_id_equal(layout->clone, zero) &&
+            !xr_stable_id_equal(layout->destructor, layout->clone) &&
+            xr_stable_id_equal(layout->equality_hash, zero) &&
+            argument->mode == XR_TARGET_CALL_VALUE &&
+            argument->ownership == XR_TARGET_CALL_READ &&
+            argument->register_rep < plan->machine_reps_count &&
+            argument->memory_rep < plan->machine_reps_count &&
+            plan->machine_reps[argument->register_rep].kind == XR_MACHINE_REP_AGGREGATE &&
+            plan->machine_reps[argument->memory_rep].kind == XR_MACHINE_REP_AGGREGATE &&
+            plan->root_maps_count == 0 && plan->cleanups_count == 0);
+
+    XrStableId saved_clone = layout->clone;
+    layout->clone.bytes[0] ^= 1u;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    layout->clone = saved_clone;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    XrStableId saved_destructor = layout->destructor;
+    layout->destructor.bytes[0] ^= 1u;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    layout->destructor = saved_destructor;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    uint16_t saved_roots = layout->root_field_count;
+    layout->root_field_count = 0;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    layout->root_field_count = saved_roots;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
 
     semantic = build_direct_local_managed_aggregate_argument();
@@ -8963,7 +9007,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (argc == 2 && strcmp(argv[1], "direct-local-managed-aggregate-precursor") == 0) {
-        test_direct_local_managed_aggregate_precursor_fails_closed();
+        test_direct_local_managed_aggregate_lifecycle_authority();
         puts("Direct-local managed aggregate precursor tests passed");
         return 0;
     }
@@ -9114,7 +9158,7 @@ int main(int argc, char **argv) {
     test_direct_local_scalar_ref_argument_authority();
     test_direct_local_class_argument_authority();
     test_direct_local_source_class_array_ref_authority();
-    test_direct_local_managed_aggregate_precursor_fails_closed();
+    test_direct_local_managed_aggregate_lifecycle_authority();
     test_source_instance_method_target_fails_closed();
     test_open_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();

@@ -351,6 +351,7 @@ enum {
     XR_TARGET_SURVEY_STORAGE_LEAF_AGGREGATE = 1u << 9,
     XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT = 1u << 10,
     XR_TARGET_SURVEY_STORAGE_VALUE_AGGREGATE = 1u << 11,
+    XR_TARGET_SURVEY_STORAGE_MANAGED_AGGREGATE = 1u << 12,
 };
 
 /* Setting XRAY_TARGET_TRACE prints, on stderr, why this pass refused to build a
@@ -1033,6 +1034,45 @@ static bool stable_identity_from_pair(const char *domain, XrStableId first, XrSt
                            second_hex, ordinal);
     return out && written > 0 && (size_t) written < sizeof(key) &&
            xr_stable_id_from_key(key, out, &digest);
+}
+
+/* A managed value aggregate keeps its fields inline, but the lifecycle recipe
+ * belongs to the generation that froze the SemanticPlan. The type ID alone
+ * would let a stale clone/drop recipe survive a source-current generation
+ * change; the semantic fingerprint alone would collapse every aggregate in a
+ * generation onto one recipe. Bind both, plus the semantic schema, and use
+ * separate domains for clone and drop so neither identity can stand in for
+ * the other. */
+static bool managed_aggregate_lifecycle_identity(const XrSemanticPlan *plan,
+                                                  uint32_t semantic_type,
+                                                  const char *domain, XrStableId *out) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    XrFingerprint fingerprint = xr_semantic_plan_fingerprint(plan);
+    char fingerprint_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+    char type_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[256];
+    XrFingerprint digest;
+    if (!plan || !type || !domain || !out)
+        return false;
+    xr_fingerprint_hex(fingerprint, fingerprint_hex);
+    xr_stable_id_hex(type->id, type_hex);
+    int written = snprintf(key, sizeof(key), "%s:schema=%u:generation=%s:type=%s", domain,
+                           xr_semantic_plan_schema(plan), fingerprint_hex, type_hex);
+    return written > 0 && (size_t) written < sizeof(key) &&
+           xr_stable_id_from_key(key, out, &digest);
+}
+
+static bool managed_aggregate_type_is_exact(const XrSemanticPlan *plan, uint32_t semantic_type) {
+    uint32_t stack[64] = {0};
+    uint32_t field_count = 0;
+    uint32_t managed_field_count = 0;
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    return type &&
+           (xr_semantic_aggregate_type_kind(type) == 1 ||
+            xr_semantic_source_structural_shape_is_exact(plan, semantic_type)) &&
+           xr_semantic_managed_aggregate_field_graph(plan, semantic_type, stack, 0, &field_count,
+                                                      &managed_field_count) &&
+           managed_field_count != 0;
 }
 
 static bool make_slot_identity(const XrSemanticPlan *plan, uint32_t function, uint8_t role,
@@ -8461,6 +8501,8 @@ static int aggregate_layout_eligibility(const XrSemanticPlan *plan, uint32_t sem
         return states[semantic_type] = -1;
     if (scalar == XR_TARGET_SCALAR_VALUE)
         return states[semantic_type] = scalar_kind == XR_MACHINE_REP_VOID ? 2 : 1;
+    if (xr_semantic_tagged_string_type_is_exact(type) || xr_semantic_adt_enum_type_is_exact(type))
+        return states[semantic_type] = 1;
     const XrSemanticProgramTypeBinding *leaf_binding = NULL;
     XrTargetLeafProgramTypeKind leaf_kind =
         semantic_leaf_program_type_kind(plan, semantic_type, &leaf_binding);
@@ -8482,7 +8524,9 @@ static int aggregate_layout_eligibility(const XrSemanticPlan *plan, uint32_t sem
     if (semantic_leaf_program_provenance(plan) && type && type->kind == XR_KIND_INSTANCE &&
         (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0)
         return states[semantic_type] = -1;
-    int aggregate = xr_semantic_aggregate_type_kind(type);
+    int aggregate = managed_aggregate_type_is_exact(plan, semantic_type)
+                        ? 1
+                        : xr_semantic_aggregate_type_kind(type);
     if (aggregate < 0)
         return states[semantic_type] = -1;
     if (aggregate == 0)
@@ -8536,6 +8580,17 @@ static bool collect_layout_dependency(XrTargetPlanBuilder *builder, uint32_t sem
         states[semantic_type] = 2;
         return true;
     }
+    if (xr_semantic_tagged_string_type_is_exact(type) || xr_semantic_adt_enum_type_is_exact(type)) {
+        XrTargetMachineRepRecord rep;
+        if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
+            !append_rep_intent(builder, &rep, error, error_size) ||
+            !append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                                  error_size))
+            return fail(error, error_size, "XR_TARGET_1002",
+                        "managed aggregate leaf layout is incomplete");
+        states[semantic_type] = 2;
+        return true;
+    }
     const XrSemanticProgramTypeBinding *leaf_binding = NULL;
     XrTargetLeafProgramTypeKind leaf_kind =
         semantic_leaf_program_type_kind(builder->semantic_plan, semantic_type, &leaf_binding);
@@ -8561,7 +8616,9 @@ static bool collect_layout_dependency(XrTargetPlanBuilder *builder, uint32_t sem
         type->kind == XR_KIND_INSTANCE && (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0)
         return fail(error, error_size, "XR_TARGET_1002",
                     "leaf aggregate lacks a typed program binding");
-    int aggregate = xr_semantic_aggregate_type_kind(type);
+    int aggregate = managed_aggregate_type_is_exact(builder->semantic_plan, semantic_type)
+                        ? 1
+                        : xr_semantic_aggregate_type_kind(type);
     if (aggregate <= 0)
         return fail(error, error_size, "XR_TARGET_1002",
                     "aggregate field lacks an exact supported value layout");
@@ -8615,7 +8672,8 @@ static bool note_aggregate_value(XrTargetPlanBuilder *builder,
         semantic_leaf_program_type_kind(builder->semantic_plan, semantic_type, &leaf_binding);
     if (leaf_kind == XR_TARGET_LEAF_PROGRAM_TYPE_INVALID)
         return fail(error, error_size, "XR_TARGET_1002", "leaf aggregate value binding is invalid");
-    int aggregate = leaf_kind == XR_TARGET_LEAF_PROGRAM_TYPE_AGGREGATE
+    int aggregate = leaf_kind == XR_TARGET_LEAF_PROGRAM_TYPE_AGGREGATE ||
+                            managed_aggregate_type_is_exact(builder->semantic_plan, semantic_type)
                         ? 1
                         : xr_semantic_aggregate_type_kind(type);
     if (aggregate < 0) {
@@ -10485,7 +10543,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
             (!exact_scalar && !exact_u8_slice && !exact_unit_enum && !exact_adt_enum &&
              !exact_class_instance && !exact_tagged_ref && !exact_array_value &&
-             !exact_string_value && !exact_leaf_aggregate_argument &&
+             !exact_string_value && !exact_managed_aggregate && !exact_leaf_aggregate_argument &&
              !exact_leaf_product_argument) ||
             (!exact_reference &&
              (parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
@@ -10497,6 +10555,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
              * of that would be the narrower of two spellings of one rule. */
             (parameter->ownership != XI_OWN_NONE && !exact_string_value && !exact_array_value &&
              !exact_class_instance &&
+             !(exact_managed_aggregate && parameter->ownership == XI_OWN_BORROWED) &&
              !(exact_adt_enum && parameter->ownership == XI_OWN_OWNED) &&
              !((exact_u8_slice || exact_unit_enum || exact_adt_enum || exact_tagged_ref) &&
                parameter->ownership == XI_OWN_BORROWED))) {
@@ -10588,10 +10647,6 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                             "operand[0] is the callee.\n",
                             ordinal, ordinal + 1u);
             }
-            if (exact_managed_aggregate)
-                return fail(error, error_size, "XR_TARGET_1003",
-                            "direct-local managed aggregate needs frozen clone, drop, root, and "
-                            "generation authority");
             uint32_t argument_storage_mask =
                 (exact_scalar ? XR_TARGET_SURVEY_STORAGE_SCALAR : 0u) |
                 (exact_u8_slice ? XR_TARGET_SURVEY_STORAGE_U8_SLICE : 0u) |
@@ -10602,7 +10657,8 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                 (exact_array_value ? XR_TARGET_SURVEY_STORAGE_ARRAY : 0u) |
                 (exact_string_value ? XR_TARGET_SURVEY_STORAGE_STRING : 0u) |
                 (exact_leaf_aggregate_argument ? XR_TARGET_SURVEY_STORAGE_LEAF_AGGREGATE : 0u) |
-                (exact_leaf_product_argument ? XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT : 0u);
+                (exact_leaf_product_argument ? XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT : 0u) |
+                (exact_managed_aggregate ? XR_TARGET_SURVEY_STORAGE_MANAGED_AGGREGATE : 0u);
             char detail[512];
             snprintf(detail, sizeof(detail),
                      "direct-local argument contract needs unsupported storage or ownership "
@@ -11782,6 +11838,16 @@ static bool materialize_layouts(XrTargetPlanBuilder *builder,
             .field_begin = field_begin,
             .field_count = (uint16_t) intent->element_count,
         };
+        if (intent->kind == XR_TARGET_LAYOUT_AGGREGATE &&
+            managed_aggregate_type_is_exact(builder->semantic_plan, intent->semantic_type) &&
+            (!managed_aggregate_lifecycle_identity(
+                 builder->semantic_plan, intent->semantic_type,
+                 "xray-target-managed-aggregate-drop-v1", &materialized->layouts[i].destructor) ||
+             !managed_aggregate_lifecycle_identity(
+                 builder->semantic_plan, intent->semantic_type,
+                 "xray-target-managed-aggregate-clone-v1", &materialized->layouts[i].clone)))
+            return fail(error, error_size, "XR_TARGET_1002",
+                        "managed aggregate lifecycle identity is incomplete");
         materialized->extents[i] = (XrTargetExtentRecord) {
             .id = i,
             .kind = XR_TARGET_EXTENT_FIXED,
@@ -11819,13 +11885,21 @@ static bool materialize_layouts(XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool materialize_field_representations(const XrTargetPlanBuilder *builder,
-                                              XrTargetMaterializedPlan *materialized, char *error,
-                                              size_t error_size) {
-    for (uint32_t layout_index = 0; layout_index < materialized->layout_count; layout_index++) {
+static bool materialize_layout_field_representations(
+    const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    uint32_t layout_index, uint8_t *states, char *error, size_t error_size) {
+    if (layout_index >= materialized->layout_count || states[layout_index] == 1)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate field representation graph is recursive");
+    if (states[layout_index] == 2)
+        return true;
+    states[layout_index] = 1;
+    {
         const XrTargetLayoutIntent *intent = &builder->layout_intents[layout_index];
-        if (intent->kind != XR_TARGET_LAYOUT_AGGREGATE)
-            continue;
+        if (intent->kind != XR_TARGET_LAYOUT_AGGREGATE) {
+            states[layout_index] = 2;
+            return true;
+        }
         const XrSemanticTypeRecord *type =
             xr_semantic_plan_type(builder->semantic_plan, intent->semantic_type);
         if (!type)
@@ -11842,6 +11916,11 @@ static bool materialize_field_representations(const XrTargetPlanBuilder *builder
                         .semantic_name)
                 return false;
             int child_layout = find_sorted_layout_intent(builder, child_type);
+            if (child_layout >= 0 &&
+                !materialize_layout_field_representations(builder, materialized,
+                                                          (uint32_t) child_layout, states, error,
+                                                          error_size))
+                return false;
             int rep =
                 child_layout < 0
                     ? -1
@@ -11854,10 +11933,34 @@ static bool materialize_field_representations(const XrTargetPlanBuilder *builder
                      ->fields[materialized->layouts[layout_index].field_begin + field_index];
             field->memory_rep = (uint16_t) rep;
             field->root_kind = materialized->machine_reps[rep].root_kind;
-            materialized->layouts[layout_index].root_field_count +=
-                field->root_kind != XR_TARGET_ROOT_NONE;
+            uint32_t root_count =
+                materialized->layouts[child_layout].kind == XR_TARGET_LAYOUT_AGGREGATE
+                    ? materialized->layouts[child_layout].root_field_count
+                    : (field->root_kind != XR_TARGET_ROOT_NONE ? 1u : 0u);
+            if (root_count > UINT16_MAX - materialized->layouts[layout_index].root_field_count)
+                return fail(error, error_size, "XR_TARGET_1002",
+                            "aggregate root cardinality exceeds its frozen width");
+            materialized->layouts[layout_index].root_field_count += (uint16_t) root_count;
         }
     }
+    states[layout_index] = 2;
+    return true;
+}
+
+static bool materialize_field_representations(const XrTargetPlanBuilder *builder,
+                                              XrTargetMaterializedPlan *materialized, char *error,
+                                              size_t error_size) {
+    uint8_t *states = (uint8_t *) allocate_records(materialized->layout_count, sizeof(*states));
+    if (materialized->layout_count && !states)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "aggregate root worklist allocation failed");
+    for (uint32_t i = 0; i < materialized->layout_count; i++)
+        if (!materialize_layout_field_representations(builder, materialized, i, states, error,
+                                                      error_size)) {
+            xr_free(states);
+            return false;
+        }
+    xr_free(states);
     return true;
 }
 

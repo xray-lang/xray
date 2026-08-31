@@ -71,6 +71,16 @@ roots, or general product activation.
    the bounded leaf VM/AOT family additionally requires the exact independently
    verified instruction group frozen by the typed execution contract. A loaded
    plan with layout rows but without that group remains execution unavailable. The
+   same aggregate family also admits one exact borrowed direct-local managed
+   value-aggregate argument. Its recursively frozen field graph contains only
+   scalar/unit-enum fields plus managed String or payload-enum leaves. The
+   layout records the transitive managed-root cardinality and distinct clone and
+   drop stable IDs derived from the SemanticPlan schema, full generation
+   fingerprint, and semantic type ID. Builder and independent verifier derive
+   those identities separately. The call itself remains a `READ`: it executes
+   neither clone nor drop and grants no owning transfer, generic aggregate ABI,
+   nullable/view/class/container field, or runtime lifecycle fallback.
+   The
    closure-storage family covers
    only an exact no-capture heap closure's outer `XrValue` slot as
    dynamic/owned/tagged storage. It does not authorize the closure object body,
@@ -466,8 +476,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h 4c92d70d5046a4af2363c9036b0ed
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h d7953b4ebe99522c473e41c4708d90dda44275261fdfce73002bcee0dcb77934
 anchor-sha256: src/plan/target/xr_target_plan.c e539426d3abe6e138df6e608299c77d0fcba4ec3993983c6d87625946c073f8c
-anchor-sha256: src/plan/target/xr_target_builder.c 70cc1c8f3fe56b8852ccc3ade71b218a00ad156db1705e946fb641ab8263807e
-anchor-sha256: src/plan/target/xr_target_verify.c 561078bf61b566c720f799ee04092d0ab1e9b36fd41394df5f0f00b249b3fa98
+anchor-sha256: src/plan/target/xr_target_builder.c 634553bf3257ff547b6add0d2b84ff0f80d63caa609d0e5de239dd4041d62b5a
+anchor-sha256: src/plan/target/xr_target_verify.c 6be2b0c607e92b4c70ce468687c17c98328ebac7942867bd332b7535d51eb51a
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 97413cd1fd368e8a61f9ae14c75c321b3b956b8313da7519bae361af4c24a894
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 5e81f18c79504cd7876910b0ad0d88b270fd19fbc6de7a44d5daa2bf47263692
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 47203f0c178dc46872e6d6ec8c680a8e0cbd0f5e4670e7a4380f030b2d61a043
@@ -477,7 +487,7 @@ anchor-sha256: src/runtime/xr_runtime_api.c 3cbd014aa9037a69efc4eacc2bbe70e723d6
 anchor-sha256: src/app/cli/xcmd_run.c 4bbdfcfe6426abc90b411dd271bb849297a930e3c6364692225d8ba08e1c2f98
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
-anchor-sha256: tests/unit/plan/test_target_plan.c 737d0111aceb24619cc36b89e8599821c9dbbc92962d4211b78a5febffa16201
+anchor-sha256: tests/unit/plan/test_target_plan.c aa2560fea6ab66dcf54d76523f38097b750c1ee3e2d7177c7bd1f6ffa48de188
 anchor-sha256: tests/unit/plan/test_xtp_format.c 779ffc99e671580b0b04f83758fec0408bfc171ac352c75f657c4e8fce81b226
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 405952f4bf7f109065170bbcbf997e844b493fc72fbf388b8fc93a416157926f

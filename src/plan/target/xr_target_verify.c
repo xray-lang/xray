@@ -116,6 +116,25 @@ static bool stable_id_is_zero(XrStableId id) {
     return combined == 0;
 }
 
+static bool verify_managed_aggregate_lifecycle_identity(const XrSemanticPlan *plan,
+                                                         uint32_t semantic_type,
+                                                         const char *domain, XrStableId *out) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    XrFingerprint fingerprint = xr_semantic_plan_fingerprint(plan);
+    char fingerprint_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+    char type_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[256];
+    XrFingerprint digest;
+    if (!plan || !type || !domain || !out)
+        return false;
+    xr_fingerprint_hex(fingerprint, fingerprint_hex);
+    xr_stable_id_hex(type->id, type_hex);
+    int written = snprintf(key, sizeof(key), "%s:schema=%u:generation=%s:type=%s", domain,
+                           xr_semantic_plan_schema(plan), fingerprint_hex, type_hex);
+    return written > 0 && (size_t) written < sizeof(key) &&
+           xr_stable_id_from_key(key, out, &digest);
+}
+
 typedef struct XrVerifyLeafProgramShape {
     const XrSemanticProgramTypeBinding *aggregate_binding;
     const XrSemanticProgramTypeBinding *scalar_binding;
@@ -2249,6 +2268,10 @@ static bool semantic_nullable_scalar_type_is_exact(const XrSemanticTypeRecord *t
     }
 }
 
+static bool verify_target_managed_aggregate_graph(const XrSemanticPlan *plan,
+                                                  uint32_t semantic_type, uint32_t *stack,
+                                                  uint32_t depth, uint32_t *managed_fields);
+
 static int semantic_aggregate_eligibility(const XrSemanticPlan *plan, uint32_t semantic_type,
                                           uint32_t *stack, uint32_t depth) {
     if (semantic_type >= xr_semantic_plan_type_count(plan) || depth >= 64)
@@ -2263,7 +2286,15 @@ static int semantic_aggregate_eligibility(const XrSemanticPlan *plan, uint32_t s
         return -1;
     if (scalar == 1)
         return scalar_kind == XR_MACHINE_REP_VOID ? 0 : 1;
-    int aggregate = xr_semantic_aggregate_type_kind(type);
+    if (xr_semantic_tagged_string_type_is_exact(type) || xr_semantic_adt_enum_type_is_exact(type))
+        return 1;
+    uint32_t managed_stack[64] = {0};
+    uint32_t managed_fields = 0;
+    int aggregate = verify_target_managed_aggregate_graph(plan, semantic_type, managed_stack, 0,
+                                                          &managed_fields) &&
+                            managed_fields != 0
+                        ? 1
+                        : xr_semantic_aggregate_type_kind(type);
     if (aggregate <= 0)
         return aggregate;
     uint32_t child_count = 0;
@@ -2283,6 +2314,98 @@ static int semantic_aggregate_eligibility(const XrSemanticPlan *plan, uint32_t s
             return child;
     }
     return 1;
+}
+
+/* Independent target-side reconstruction of the exact managed aggregate
+ * graph.  It intentionally does not call the builder's normalized graph
+ * predicate: target verification must reject a lifecycle row if either side
+ * broadens the admitted leaves, geometry, or recursion rule alone. */
+static bool verify_target_managed_aggregate_graph(const XrSemanticPlan *plan,
+                                                  uint32_t semantic_type, uint32_t *stack,
+                                                  uint32_t depth, uint32_t *managed_fields) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    if (!plan || !type || !stack || !managed_fields || depth >= 64u)
+        return false;
+    if (xr_semantic_tagged_string_type_is_exact(type) || xr_semantic_adt_enum_type_is_exact(type)) {
+        if (*managed_fields == UINT32_MAX)
+            return false;
+        (*managed_fields)++;
+        return true;
+    }
+    if (xr_semantic_unit_enum_type_is_exact(type))
+        return true;
+    switch ((XrTypeKind) type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE |
+                                   XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) == 0;
+        default:
+            break;
+    }
+    if (xr_semantic_aggregate_type_kind(type) != 1 &&
+        !xr_semantic_source_structural_shape_is_exact(plan, semantic_type))
+        return false;
+    for (uint32_t i = 0; i < depth; i++)
+        if (stack[i] == semantic_type)
+            return false;
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (!children || type->child_begin > child_count ||
+        type->child_count > child_count - type->child_begin ||
+        (type->kind == XR_KIND_FIXED_ARRAY
+             ? (type->child_count != 1 || type->aggregate_extent == 0)
+             : type->aggregate_extent != type->child_count))
+        return false;
+    stack[depth] = semantic_type;
+    uint32_t repetitions = type->kind == XR_KIND_FIXED_ARRAY ? type->aggregate_extent : 1u;
+    uint32_t dependencies = type->kind == XR_KIND_FIXED_ARRAY ? 1u : type->child_count;
+    for (uint32_t repetition = 0; repetition < repetitions; repetition++)
+        for (uint32_t i = 0; i < dependencies; i++)
+            if (!verify_target_managed_aggregate_graph(
+                    plan, children[type->child_begin + i], stack, depth + 1u, managed_fields))
+                return false;
+    return true;
+}
+
+static bool verify_target_managed_aggregate_argument(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t callee_index, const XrSemanticFunctionRecord *callee, uint32_t ordinal,
+    uint32_t *out_semantic_type) {
+    if (out_semantic_type)
+        *out_semantic_type = XR_SEMANTIC_INDEX_NONE;
+    if (!plan || !operation || !callee || !out_semantic_type ||
+        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        ordinal >= callee->parameter_count ||
+        operation->operand_count != (uint16_t) (callee->parameter_count + 1u))
+        return false;
+    uint32_t parameter_index = callee->parameter_begin + ordinal;
+    uint32_t operand_index = operation->operand_begin + ordinal + 1u;
+    const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticOperandRecord *operand =
+        operands && operand_index < operand_count ? &operands[operand_index] : NULL;
+    uint32_t stack[64] = {0};
+    uint32_t managed_fields = 0;
+    if (!parameter || !operand || parameter->function != callee_index ||
+        parameter->ordinal != ordinal || parameter->type != operand->type ||
+        parameter->mode != XR_PARAM_READ || parameter->ownership != XI_OWN_BORROWED ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & (uint8_t) ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+        parameter->reserved != 0 || operand->role != XR_SEM_OPERAND_ARGUMENT ||
+        operand->parameter != (int16_t) ordinal || operand->parameter_mode != XR_PARAM_READ ||
+        operand->transfer_mode != XR_TRANSFER_SHARE ||
+        operand->ownership_action != XR_SEM_OPERAND_BORROW ||
+        operand->access != XR_CALL_ARG_PLAIN || operand->origin != XI_PLACE_ORIGIN_NONE ||
+        operand->lifetime != XI_PLACE_LIFETIME_NONE || operand->escape != XI_PLACE_ESCAPE_NONE ||
+        operand->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        !verify_target_managed_aggregate_graph(plan, parameter->type, stack, 0, &managed_fields) ||
+        managed_fields == 0)
+        return false;
+    *out_semantic_type = parameter->type;
+    return true;
 }
 
 static bool semantic_fixed_array_count(const XrSemanticPlan *plan, uint32_t semantic_type,
@@ -5042,8 +5165,27 @@ static bool verify_layouts_partition(const XrTargetPlan *plan, const XrTargetPar
             scalar = 1;
             expected_rep = XR_MACHINE_REP_ENUM_ORDINAL;
         }
-        if (!semantic_type || !stable_id_is_zero(layout->destructor) ||
-            !stable_id_is_zero(layout->clone) || !stable_id_is_zero(layout->equality_hash) ||
+        uint32_t managed_stack[64] = {0};
+        uint32_t managed_fields = 0;
+        bool exact_managed_layout =
+            layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
+            verify_target_managed_aggregate_graph(semantic, layout->semantic_type, managed_stack,
+                                                  0, &managed_fields) &&
+            managed_fields != 0;
+        XrStableId expected_destructor = {{0}};
+        XrStableId expected_clone = {{0}};
+        bool lifecycle_exact =
+            exact_managed_layout
+                ? verify_managed_aggregate_lifecycle_identity(
+                      semantic, layout->semantic_type, "xray-target-managed-aggregate-drop-v1",
+                      &expected_destructor) &&
+                      verify_managed_aggregate_lifecycle_identity(
+                          semantic, layout->semantic_type,
+                          "xray-target-managed-aggregate-clone-v1", &expected_clone) &&
+                      xr_stable_id_equal(layout->destructor, expected_destructor) &&
+                      xr_stable_id_equal(layout->clone, expected_clone)
+                : stable_id_is_zero(layout->destructor) && stable_id_is_zero(layout->clone);
+        if (!semantic_type || !lifecycle_exact || !stable_id_is_zero(layout->equality_hash) ||
             plan->extents[layout->extent].kind != XR_TARGET_EXTENT_FIXED)
             return report(error, error_size, "XR_TARGET_1002",
                           "layout lacks an independently provable semantic contract");
@@ -5065,7 +5207,9 @@ static bool verify_layouts_partition(const XrTargetPlan *plan, const XrTargetPar
                               "scalar layout disagrees with its canonical machine representation");
         } else if (layout->kind == XR_TARGET_LAYOUT_DYNAMIC) {
             bool exact_dynamic_type =
-                exact_dynamic_types && exact_dynamic_types[layout->semantic_type] != 0;
+                (exact_dynamic_types && exact_dynamic_types[layout->semantic_type] != 0) ||
+                xr_semantic_tagged_string_type_is_exact(semantic_type) ||
+                xr_semantic_adt_enum_type_is_exact(semantic_type);
             uint32_t representation_count = 0;
             for (uint32_t r = 0; r < plan->machine_reps_count; r++) {
                 const XrTargetMachineRepRecord *rep = &plan->machine_reps[r];
@@ -5096,7 +5240,7 @@ static bool verify_layouts_partition(const XrTargetPlan *plan, const XrTargetPar
         } else {
             uint32_t expected_fields = semantic_type->aggregate_extent;
             if (scalar != 0 ||
-                (!program_leaf_aggregate && !program_leaf_product &&
+                (!program_leaf_aggregate && !program_leaf_product && !exact_managed_layout &&
                  xr_semantic_aggregate_type_kind(semantic_type) != 1) ||
                 semantic_type->child_begin > child_table_count ||
                 semantic_type->child_count > child_table_count - semantic_type->child_begin ||
@@ -5174,7 +5318,9 @@ static bool verify_layouts_partition(const XrTargetPlan *plan, const XrTargetPar
             }
             if (!checked_u32_add(field->offset, field->size, &previous_end))
                 return report(error, error_size, "XR_TARGET_1002", "field layout offset overflows");
-            roots += field->root_kind != XR_TARGET_ROOT_NONE;
+            roots += child_layout->kind == XR_TARGET_LAYOUT_AGGREGATE
+                         ? child_layout->root_field_count
+                         : (field->root_kind != XR_TARGET_ROOT_NONE ? 1u : 0u);
             if (field->align > expected_align)
                 expected_align = field->align;
         }
@@ -5183,6 +5329,7 @@ static bool verify_layouts_partition(const XrTargetPlan *plan, const XrTargetPar
             expected_align = semantic_type->aggregate_align;
         if (!xr_checked_align_u32(expected_size, expected_align, &expected_size) ||
             roots != layout->root_field_count ||
+            (exact_managed_layout && roots == 0) ||
             (layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
              (layout->align != expected_align || layout->fixed_prefix_size != expected_size)))
             return report(error, error_size, "XR_TARGET_1002",
@@ -6777,11 +6924,17 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     direct_leaf_program && ordinal == 0 && parameter == leaf_program.parameter &&
                     operand == leaf_program.argument &&
                     operand->type == leaf_program.aggregate_binding->semantic_type;
+                uint32_t managed_aggregate_type = XR_SEMANTIC_INDEX_NONE;
+                bool argument_managed_aggregate =
+                    !method && verify_target_managed_aggregate_argument(
+                                   semantic, operation, target->function, callee, ordinal,
+                                   &managed_aggregate_type) &&
+                    parameter && managed_aggregate_type == parameter->type;
                 if (argument_adt_enum)
                     argument_kind = XR_MACHINE_REP_DYN_VALUE;
                 if (argument_tagged_ref || argument_container_value)
                     argument_kind = XR_MACHINE_REP_DYN_VALUE;
-                if (argument_leaf_aggregate)
+                if (argument_leaf_aggregate || argument_managed_aggregate)
                     argument_kind = XR_MACHINE_REP_AGGREGATE;
                 /* Recomputed through the same shared judgement the callee's own
                  * storage family uses, so an argument this verifier admits can
@@ -6903,7 +7056,8 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
                     (argument_scalar == 1 || argument_u8_slice || argument_unit_enum ||
                      argument_adt_enum || argument_class_instance || argument_tagged_ref ||
-                     argument_container_value || argument_leaf_aggregate) &&
+                     argument_container_value || argument_leaf_aggregate ||
+                     argument_managed_aggregate) &&
                     (argument_reference ||
                      (parameter->mode == XR_PARAM_READ && operand->access == XR_CALL_ARG_PLAIN &&
                       (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0)) &&
@@ -6916,6 +7070,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     (parameter->ownership == XI_OWN_NONE || argument_string_value ||
                      argument_array_value ||
                      argument_class_instance ||
+                     (argument_managed_aggregate && parameter->ownership == XI_OWN_BORROWED) ||
                      (argument_adt_enum && parameter->ownership == XI_OWN_OWNED) ||
                      ((argument_u8_slice || argument_unit_enum || argument_adt_enum ||
                        argument_tagged_ref) &&
