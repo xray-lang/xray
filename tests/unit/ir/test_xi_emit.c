@@ -15,6 +15,7 @@
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_number_parse_error_shape.h"
+#include "../../../src/shared/xr_exact_scalar_registry.h"
 #include "../../../include/xray_vm.h"
 
 #include <stdio.h>
@@ -35,6 +36,8 @@ static XrType stub_uint64 = {
     .kind = XR_KIND_INT, .id = 8, .frozen = true, .scalar_rep = XR_NATIVE_U64};
 static XrType stub_float64 = {
     .kind = XR_KIND_FLOAT, .id = 9, .frozen = true, .scalar_rep = XR_NATIVE_F64};
+static XrType stub_enum = {
+    .kind = XR_KIND_ENUM, .id = 10, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -427,7 +430,9 @@ TEST(emit_if_then_else) {
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *entry = f->entry;
 
-    XiValue *cond = xi_param(f, entry, 0, &stub_bool);
+    XiValue *lhs = xi_param(f, entry, 0, &stub_int);
+    XiValue *rhs = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *cond = xi_binary(f, entry, XI_GT, &stub_bool, lhs, rhs);
 
     XiBlock *then_b = xi_block_new(f);
     then_b->sealed = true;
@@ -463,6 +468,11 @@ TEST(emit_if_then_else) {
     assert(ret_count == 2 && "should have 2 RETURN1 instructions");
 
     xr_instruction_unit_free(proto);
+
+    cond->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    cond->conversion.kind = XR_CONVERSION_NONE;
     xi_func_free(f);
 }
 
@@ -652,6 +662,196 @@ TEST(conversion_bytecode_modes_are_disjoint) {
     assert(!xr_conversion_bytecode_is_numeric(XR_CONVERSION_BC_PARSE_OPTIONAL));
     assert(!xr_conversion_bytecode_is_parse_required(XR_CONVERSION_BC_PARSE_OPTIONAL));
     assert(xr_conversion_bytecode_is_parse_optional(XR_CONVERSION_BC_PARSE_OPTIONAL));
+
+    XrConversionWitness ordinal = {
+        .kind = XR_CONVERSION_ENUM_ORDINAL,
+        .source_scalar_rep = XR_SCALAR_REP_NONE,
+        .target_scalar_rep = XR_NATIVE_ISIZE,
+    };
+    uint16_t enum_packed = xr_conversion_bytecode_pack(&ordinal, 32);
+    assert(xr_conversion_bytecode_is_enum_ordinal(enum_packed));
+    assert(xr_conversion_bytecode_kind(enum_packed) == XR_CONVERSION_ENUM_ORDINAL);
+    assert(!xr_conversion_bytecode_is_numeric(enum_packed));
+    assert(!xr_conversion_bytecode_is_parse_required(enum_packed));
+    assert(!xr_conversion_bytecode_is_parse_optional(enum_packed));
+    assert(xr_conversion_bytecode_pointer_bits(enum_packed) == 32);
+    assert(!xr_conversion_bytecode_is_enum_ordinal(
+        (uint16_t) (enum_packed | XR_CONVERSION_BC_PRESENT)));
+    assert(!xr_conversion_bytecode_is_numeric(
+        (uint16_t) (enum_packed | XR_CONVERSION_BC_PRESENT)));
+    assert(!xr_conversion_bytecode_is_parse_required(
+        (uint16_t) (enum_packed | XR_CONVERSION_BC_PARSE_OPTIONAL)));
+    assert(!xr_conversion_bytecode_is_enum_ordinal(
+        (uint16_t) (enum_packed | XR_CONVERSION_BC_PARSE_OPTIONAL)));
+    assert(!xr_conversion_bytecode_is_enum_ordinal(XR_CONVERSION_BC_PARSE_REQUIRED));
+    assert(!xr_conversion_bytecode_is_enum_ordinal(XR_CONVERSION_BC_PARSE_OPTIONAL));
+    assert(!xr_conversion_bytecode_is_enum_ordinal(UINT16_C(0x0800)));
+    assert(!xr_conversion_bytecode_is_enum_ordinal(UINT16_C(0x4000)));
+    assert(!xr_conversion_bytecode_is_enum_ordinal(
+        (uint16_t) (enum_packed | UINT16_C(0x0001))));
+
+    uint16_t enum_target_none =
+        (uint16_t) (XR_CONVERSION_BC_ENUM_ORDINAL | ((uint16_t) XR_SCALAR_REP_NONE << 5));
+    uint16_t enum_target_f64 =
+        (uint16_t) (XR_CONVERSION_BC_ENUM_ORDINAL | ((uint16_t) XR_NATIVE_F64 << 5));
+    assert(!xr_conversion_bytecode_is_enum_ordinal(enum_target_none));
+    assert(!xr_conversion_bytecode_is_enum_ordinal(enum_target_f64));
+
+    ordinal.target_scalar_rep = XR_SCALAR_REP_NONE;
+    assert(xr_conversion_bytecode_pack(&ordinal, 64) == 0);
+    ordinal.target_scalar_rep = XR_NATIVE_F64;
+    assert(xr_conversion_bytecode_pack(&ordinal, 64) == 0);
+    ordinal.target_scalar_rep = XR_NATIVE_I64;
+    ordinal.is_compile_time = true;
+    assert(xr_conversion_bytecode_pack(&ordinal, 64) == 0);
+    ordinal.is_compile_time = false;
+}
+
+TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
+    XiFunc *f = make_func("enum_ordinal", &stub_uint64);
+    XiBlock *entry = f->entry;
+    XiValue *source = xi_param(f, entry, 0, &stub_enum);
+    XiValue *convert = xi_value_new(f, entry, XI_CONVERT, &stub_uint64, 1);
+    convert->args[0] = source;
+    convert->conversion = (XrConversionWitness) {
+        .kind = XR_CONVERSION_ENUM_ORDINAL,
+        .source_scalar_rep = XR_SCALAR_REP_NONE,
+        .target_scalar_rep = XR_NATIVE_U64,
+        .is_implicit = false,
+    };
+    xi_block_set_return(entry, convert);
+
+    XrProto *proto = NULL;
+    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    assert(status == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) != OP_TOINT)
+            continue;
+        uint16_t packed = (uint16_t) GETARG_C(inst);
+        assert(xr_conversion_bytecode_is_enum_ordinal(packed));
+        assert(!xr_conversion_bytecode_is_numeric(packed));
+        assert(!xr_conversion_bytecode_is_parse_required(packed));
+        assert(!xr_conversion_bytecode_is_parse_optional(packed));
+        assert(xr_conversion_bytecode_target_rep(packed) == XR_NATIVE_U64);
+        found = true;
+    }
+    assert(found && "enum ordinal conversion must use OP_TOINT's dedicated mode");
+
+    xr_instruction_unit_free(proto);
+
+    convert->xa_intrinsic_id = XA_INTRINSIC_I64_PARSE;
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->xa_intrinsic_id = XA_INTRINSIC_NONE;
+
+    XrType *saved_source_type = source->type;
+    source->type = &stub_int;
+    convert->xa_intrinsic_id = XA_INTRINSIC_I64_PARSE;
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->xa_intrinsic_id = XA_INTRINSIC_NONE;
+    source->type = saved_source_type;
+
+    /* Enum conversions must have exactly one operand; extra operands must not
+     * be silently ignored by the emitter. */
+    convert->nargs = 2;
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->nargs = 1;
+
+    convert->op = XI_AS;
+    convert->conversion.kind = XR_CONVERSION_DYNAMIC_CHECKED;
+    convert->aux_int = (8 << 1);
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->op = XI_CONVERT;
+    convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    convert->aux_int = 0;
+
+    XrType *saved_mixed_source_type = source->type;
+    source->type = &stub_int;
+    convert->op = XI_AS;
+    convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    convert->aux_int = (8 << 1);
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->aux_int = 0;
+    convert->op = XI_CONVERT;
+    source->type = saved_mixed_source_type;
+
+    convert->op = XI_NEG;
+    convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->op = XI_CONVERT;
+
+    source->type->is_nullable = true;
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    source->type->is_nullable = false;
+    source->type->scalar_rep = XR_NATIVE_I64;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    source->type->scalar_rep = XR_SCALAR_REP_NONE;
+
+    /* The target type and witness must both carry a supported integer
+     * representation; NONE must not reach the bytecode encoder. */
+    uint8_t saved_target_rep = stub_uint64.scalar_rep;
+    uint8_t saved_witness_target_rep = convert->conversion.target_scalar_rep;
+    stub_uint64.scalar_rep = XR_SCALAR_REP_NONE;
+    convert->conversion.target_scalar_rep = XR_SCALAR_REP_NONE;
+    proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->conversion.target_scalar_rep = saved_witness_target_rep;
+    stub_uint64.scalar_rep = saved_target_rep;
+
+    convert->conversion.is_implicit = true;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->conversion.is_implicit = false;
+    convert->conversion.kind = XR_CONVERSION_NONE;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    convert->conversion.is_compile_time = true;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    convert->conversion.is_compile_time = false;
+    stub_uint64.is_nullable = true;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    stub_uint64.is_nullable = false;
+    xi_func_free(f);
+}
+
+TEST(emit_fused_compare_rejects_enum_ordinal_witness) {
+    XiFunc *f = make_func("fused_enum_witness", &stub_int);
+    XiBlock *entry = f->entry;
+    XiValue *lhs = xi_param(f, entry, 0, &stub_int);
+    XiValue *rhs = xi_param(f, entry, 1, &stub_int);
+    XiValue *compare = xi_binary(f, entry, XI_EQ, &stub_bool, lhs, rhs);
+    XiBlock *then_block = xi_block_new(f);
+    XiBlock *else_block = xi_block_new(f);
+    assert(lhs && rhs && compare && then_block && else_block);
+    then_block->sealed = true;
+    else_block->sealed = true;
+    compare->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    xi_block_set_if(entry, compare, then_block, else_block);
+    xi_block_set_return(then_block, xi_const_int(f, then_block, 1, &stub_int));
+    xi_block_set_return(else_block, xi_const_int(f, else_block, 0, &stub_int));
+
+    XrProto *proto = NULL;
+    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    xi_func_free(f);
+}
+
+TEST(conversion_scalar_rep_predicate_matches_exact_registry) {
+    size_t count = 0;
+    const XrExactScalarDesc *rows = xr_exact_scalar_rows(&count);
+    assert(rows != NULL && count > 0);
+    for (size_t i = 0; i < count; i++) {
+        bool expected = rows[i].family == XR_EXACT_SCALAR_FAMILY_INTEGER;
+        assert(xr_conversion_scalar_rep_is_integer(rows[i].native_type) == expected);
+    }
+    assert(!xr_conversion_scalar_rep_is_integer(XR_SCALAR_REP_NONE));
 }
 
 TEST(number_parse_error_builtin_identity_requires_matching_typed_metadata) {
@@ -1690,6 +1890,9 @@ int main(void) {
     run_emit_codegen_compiler_fence_projects_to_void_without_runtime_effect();
     run_emit_numeric_conversion_packs_typed_witness();
     run_conversion_bytecode_modes_are_disjoint();
+    run_emit_enum_ordinal_conversion_uses_a_distinct_typed_mode();
+    run_emit_fused_compare_rejects_enum_ordinal_witness();
+    run_conversion_scalar_rep_predicate_matches_exact_registry();
     run_emit_scalar_parse_intrinsics_use_exact_vm_modes();
 
     /* Float constants */

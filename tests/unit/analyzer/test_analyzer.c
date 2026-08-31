@@ -6523,7 +6523,7 @@ TEST(analyzer_enum_identity_is_nominal) {
     a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     program = xr_parse(g_session, "enum Color { Red, Green, Blue }\n"
-                                  "var c: Color = Color.Red\n"
+                                  "var c: Color = Color.Green\n"
                                   "var same: Color = c\n"
                                   "var n = c as i64\n");
     ASSERT(program != NULL);
@@ -6531,6 +6531,76 @@ TEST(analyzer_enum_identity_is_nominal) {
     int count = 0;
     xa_analyzer_get_diagnostics(a, &count);
     ASSERT(count == 0);
+    ASSERT(program->as.program.count == 4);
+    AstNode *ordinal_decl = program->as.program.statements[3];
+    ASSERT(ordinal_decl && ordinal_decl->type == AST_VAR_DECL);
+    AstNode *ordinal_cast = ordinal_decl->as.var_decl.initializer;
+    ASSERT(ordinal_cast && ordinal_cast->type == AST_AS_EXPR && !ordinal_cast->as.as_expr.is_safe);
+    XrConversionWitness ordinal_witness = {0};
+    ASSERT(xa_analyzer_get_node_conversion(a, ordinal_cast, &ordinal_witness));
+    ASSERT(ordinal_witness.kind == XR_CONVERSION_ENUM_ORDINAL);
+    ASSERT(ordinal_witness.source_scalar_rep == XR_SCALAR_REP_NONE);
+    ASSERT(ordinal_witness.target_scalar_rep == XR_NATIVE_I64);
+    ASSERT(!ordinal_witness.is_implicit);
+
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "enum Color { Red, Green }\n"
+                                  "var c: Color = Color.Green\n"
+                                  "var result = c as i64?\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "nonnull_enum_safe_cast_stays_dynamic.xr", program);
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 0);
+    ASSERT(program->as.program.count == 3);
+    ordinal_decl = program->as.program.statements[2];
+    ordinal_cast = ordinal_decl->as.var_decl.initializer;
+    ASSERT(ordinal_cast && ordinal_cast->type == AST_AS_EXPR && ordinal_cast->as.as_expr.is_safe);
+    ASSERT(xa_analyzer_get_node_conversion(a, ordinal_cast, &ordinal_witness));
+    ASSERT(ordinal_witness.kind == XR_CONVERSION_DYNAMIC_NULLABLE);
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "enum Color { Red, Green }\n"
+                                  "var value: Color? = null\n"
+                                  "var result = value as i64\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "nullable_enum_ordinal_stays_dynamic.xr", program);
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 0);
+    ASSERT(program->as.program.count == 3);
+    ordinal_decl = program->as.program.statements[2];
+    ordinal_cast = ordinal_decl->as.var_decl.initializer;
+    ASSERT(ordinal_cast && ordinal_cast->type == AST_AS_EXPR && !ordinal_cast->as.as_expr.is_safe);
+    ASSERT(xa_analyzer_get_node_conversion(a, ordinal_cast, &ordinal_witness));
+    ASSERT(ordinal_witness.kind == XR_CONVERSION_DYNAMIC_CHECKED);
+    ASSERT(ordinal_witness.source_scalar_rep == XR_SCALAR_REP_NONE);
+    ASSERT(ordinal_witness.target_scalar_rep == XR_SCALAR_REP_NONE);
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "enum Color { Red, Green }\n"
+                                  "var value: Color? = null\n"
+                                  "var result = value as i64?\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "nullable_enum_safe_cast_stays_dynamic.xr", program);
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 0);
+    ASSERT(program->as.program.count == 3);
+    ordinal_decl = program->as.program.statements[2];
+    ordinal_cast = ordinal_decl->as.var_decl.initializer;
+    ASSERT(ordinal_cast && ordinal_cast->type == AST_AS_EXPR && ordinal_cast->as.as_expr.is_safe);
+    ASSERT(xa_analyzer_get_node_conversion(a, ordinal_cast, &ordinal_witness));
+    ASSERT(ordinal_witness.kind == XR_CONVERSION_DYNAMIC_NULLABLE);
+    ASSERT(ordinal_witness.source_scalar_rep == XR_SCALAR_REP_NONE);
+    ASSERT(ordinal_witness.target_scalar_rep == XR_SCALAR_REP_NONE);
 
     xa_analyzer_free(a);
     setup_pool();

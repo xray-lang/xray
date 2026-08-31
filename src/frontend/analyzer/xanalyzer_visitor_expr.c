@@ -5110,6 +5110,13 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
         conversion.source_scalar_rep = source->scalar_rep;
         conversion.target_scalar_rep = target->scalar_rep;
         conversion.is_implicit = false;
+    } else if (source && source->kind == XR_KIND_ENUM && !source->is_nullable &&
+               source->scalar_rep == XR_SCALAR_REP_NONE && target && !target->is_nullable &&
+               XR_TYPE_IS_INT(target) && !node->as.as_expr.is_safe) {
+        conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+        conversion.source_scalar_rep = XR_SCALAR_REP_NONE;
+        conversion.target_scalar_rep = target->scalar_rep;
+        conversion.is_implicit = false;
     } else {
         conversion.kind = node->as.as_expr.is_safe ? XR_CONVERSION_DYNAMIC_NULLABLE
                                                    : XR_CONVERSION_DYNAMIC_CHECKED;

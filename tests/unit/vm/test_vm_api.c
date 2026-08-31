@@ -306,6 +306,82 @@ TEST(vm_vararg_entry) {
     xray_vm_delete(iso);
 }
 
+TEST(vm_enum_ordinal_conversion_uses_packed_typed_mode) {
+    XrVMConfig params = {0};
+    XrVMRuntime *iso = xray_vm_new_full(&params);
+    ASSERT_NOT_NULL(iso);
+
+    const char *src = "enum VmApiErr { CheckFailed }\n"
+                      "enum VmOrdinal { Idle, Ready }\n"
+                      "var ready: VmOrdinal = VmOrdinal.Ready\n"
+                      "var compact: u8 = ready as u8\n"
+                      "var values: Array<VmOrdinal> = [ready, ready]\n"
+                      "var boxed: i64 = values[1] as i64\n"
+                      "if (compact != 1 || boxed != 1) { throw VmApiErr.CheckFailed }\n";
+    int rc = xr_isolate_dostring(iso, src, &k_vm_api_memory_authority);
+    ASSERT_EQ_INT(rc, 0);
+
+    xray_vm_delete(iso);
+}
+
+static void assert_malformed_enum_conversion_mode_fails_closed(OpCode opcode) {
+    XrVMConfig params = {0};
+    XrVMRuntime *iso = xray_vm_new_full(&params);
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *proto = xr_instruction_unit_new();
+    ASSERT_NOT_NULL(proto);
+    proto->source_file = xr_strdup("<enum-ordinal-malformed-mode>");
+    ASSERT_NOT_NULL(proto->source_file);
+    proto->maxstacksize = 2;
+    xr_instruction_unit_write(proto, CREATE_AsBx(OP_LOADI, 1, 1), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(opcode, 0, 1, UINT16_C(0x0800)), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN1, 0, 0, 0), 1);
+
+    bool saved_suppression = xr_isolate_get_suppress_exception_print(iso);
+    xr_isolate_set_suppress_exception_print(iso, true);
+    XrExecutionContext *previous = xr_exec_context_enter(xr_runtime_core_root_exec(iso->core_rt));
+    XrVMResult result = xr_vm_interpret_proto(iso, proto);
+    xr_exec_context_restore(previous);
+    xr_isolate_set_suppress_exception_print(iso, saved_suppression);
+
+    ASSERT_EQ_INT(result, XR_VM_RUNTIME_ERROR);
+    xr_instruction_unit_free(proto);
+    xray_vm_delete(iso);
+}
+
+static void assert_enum_mode_rejects_non_enum_value(OpCode opcode) {
+    XrVMConfig params = {0};
+    XrVMRuntime *iso = xray_vm_new_full(&params);
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *proto = xr_instruction_unit_new();
+    ASSERT_NOT_NULL(proto);
+    proto->source_file = xr_strdup("<enum-ordinal-non-enum>");
+    ASSERT_NOT_NULL(proto->source_file);
+    proto->maxstacksize = 2;
+    xr_instruction_unit_write(proto, CREATE_AsBx(OP_LOADI, 1, 1), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(opcode, 0, 1, XR_CONVERSION_BC_ENUM_ORDINAL), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN1, 0, 0, 0), 1);
+
+    bool saved_suppression = xr_isolate_get_suppress_exception_print(iso);
+    xr_isolate_set_suppress_exception_print(iso, true);
+    XrExecutionContext *previous = xr_exec_context_enter(xr_runtime_core_root_exec(iso->core_rt));
+    XrVMResult result = xr_vm_interpret_proto(iso, proto);
+    xr_exec_context_restore(previous);
+    xr_isolate_set_suppress_exception_print(iso, saved_suppression);
+
+    ASSERT_EQ_INT(result, XR_VM_RUNTIME_ERROR);
+    xr_instruction_unit_free(proto);
+    xray_vm_delete(iso);
+}
+
+TEST(vm_enum_ordinal_malformed_modes_fail_closed) {
+    assert_malformed_enum_conversion_mode_fails_closed(OP_TOINT);
+    assert_malformed_enum_conversion_mode_fails_closed(OP_TOFLOAT);
+    assert_enum_mode_rejects_non_enum_value(OP_TOINT);
+}
+
 TEST(vm_dofile_debug_null_out_proto_releases_proto) {
     char path[] = "/tmp/xray_vm_debug_null_XXXXXX";
     int fd = xr_test_mkstemp(path);
@@ -356,5 +432,7 @@ RUN_TEST_SUITE("End-to-end entry path");
 RUN_TEST(vm_deep_recursion_via_dostring);
 RUN_TEST(vm_large_maxstacksize_entry);
 RUN_TEST(vm_vararg_entry);
+RUN_TEST(vm_enum_ordinal_conversion_uses_packed_typed_mode);
+RUN_TEST(vm_enum_ordinal_malformed_modes_fail_closed);
 RUN_TEST(vm_dofile_debug_null_out_proto_releases_proto);
 TEST_MAIN_END()

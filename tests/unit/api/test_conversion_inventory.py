@@ -70,6 +70,22 @@ def main() -> int:
             print("invalid source must fail closed without emitting an inventory", file=sys.stderr)
             return 1
 
+        enum_ordinal = Path(tmp) / "enum_ordinal.xr"
+        enum_ordinal.write_text(
+            "enum Ordinal { Idle, Ready }\n"
+            "var member: Ordinal = Ordinal.Ready\n"
+            "var value = member as i64\n",
+            encoding="utf-8",
+        )
+        ordinal = run(xray, enum_ordinal)
+        if ordinal.returncode != 0:
+            print(ordinal.stderr, file=sys.stderr)
+            return 1
+        ordinal_payload = json.loads(ordinal.stdout)
+        if ordinal_payload.get("kinds", {}).get("enum_ordinal") != 1:
+            print("enum ordinal conversion is missing from the inventory", file=sys.stderr)
+            return 1
+
     print(f"conversion inventory: PASS ({len(records)} classified records)")
     return 0
 

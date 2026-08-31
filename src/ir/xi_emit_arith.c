@@ -289,18 +289,27 @@ XR_FUNC void xi_emit_cmp(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 /* Type conversion */
 XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs < 1) {
+    if (!v || v->nargs < 1 || !v->args[0]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    struct XrType *target = v->type;
+    if (!target) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    bool enum_integer_shape = v->args[0]->type && v->args[0]->type->kind == XR_KIND_ENUM &&
+                               XR_TYPE_IS_INT(target);
+    if ((enum_integer_shape || v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) &&
+        (v->op != XI_CONVERT || v->nargs != 1 ||
+         v->conversion.kind != XR_CONVERSION_ENUM_ORDINAL ||
+         v->xa_intrinsic_id != XA_INTRINSIC_NONE)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
     XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    struct XrType *target = v->type;
-    if (!target) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
     if (v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE ||
         v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ||
         v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE ||
@@ -316,6 +325,23 @@ XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     uint16_t conversion = xr_conversion_bytecode_pack(
         &v->conversion, (uint8_t) (ctx->target_data_layout->pointer.size * 8u));
+    if (v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) {
+        if (!v->args[0] || !v->args[0]->type || v->args[0]->type->kind != XR_KIND_ENUM ||
+            v->args[0]->type->is_nullable ||
+            v->args[0]->type->scalar_rep != XR_SCALAR_REP_NONE || !XR_TYPE_IS_INT(target) ||
+            target->is_nullable || !xr_conversion_scalar_rep_is_integer(target->scalar_rep) ||
+            v->conversion.source_scalar_rep != XR_SCALAR_REP_NONE ||
+            v->conversion.target_scalar_rep != target->scalar_rep || v->conversion.is_implicit ||
+            v->conversion.is_compile_time || v->xa_intrinsic_id != XA_INTRINSIC_NONE ||
+            (v->flags & XI_FLAG_MAY_THROW) != 0 ||
+            !xr_conversion_bytecode_is_enum_ordinal(conversion) ||
+            xr_conversion_bytecode_target_rep(conversion) != target->scalar_rep) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        emit_inst(ctx, CREATE_ABC(OP_TOINT, dst, src, conversion));
+        return;
+    }
     switch (target->kind) {
         case XR_KIND_INT:
             emit_inst(ctx, CREATE_ABC(OP_TOINT, dst, src, conversion));
@@ -482,10 +508,20 @@ XR_FUNC void xi_emit_is(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
  *   aux_int = (tid << 1) | is_safe   — tid is XrTypeId, -1 if unknown
  *   aux     = type name string (arena-allocated) for error messages */
 XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs < 1) {
+    if (!v || v->nargs < 1 || !v->args[0]) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
+    bool enum_integer_shape = v->args[0] && v->args[0]->type && v->type &&
+                              v->args[0]->type->kind == XR_KIND_ENUM &&
+                              !v->args[0]->type->is_nullable &&
+                              v->type->kind == XR_KIND_INT && !v->type->is_nullable;
+    if (((v->aux_int & 1) == 0 && enum_integer_shape) ||
+        v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
     XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;

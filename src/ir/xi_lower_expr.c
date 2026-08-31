@@ -10472,6 +10472,26 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
             result->flags |= XI_FLAG_MAY_THROW;
         return result;
     }
+    if (!as->is_safe && cast_type && source_type && source_type->kind == XR_KIND_ENUM &&
+        !source_type->is_nullable && source_type->scalar_rep == XR_SCALAR_REP_NONE &&
+        !cast_type->is_nullable && XR_TYPE_IS_INT(cast_type)) {
+        if (!has_conversion || conversion.kind != XR_CONVERSION_ENUM_ORDINAL ||
+            conversion.source_scalar_rep != XR_SCALAR_REP_NONE ||
+            conversion.target_scalar_rep != cast_type->scalar_rep || conversion.is_implicit ||
+            conversion.is_compile_time) {
+            fprintf(stderr, "[LOWER] enum ordinal `as` lacks an exact conversion witness at line %d\n",
+                    (int) node->line);
+            l->had_error = true;
+            return NULL;
+        }
+        XiValue *result = xi_value_new(l->func, l->cur_block, XI_CONVERT, cast_type, 1);
+        if (!result)
+            return NULL;
+        result->args[0] = val;
+        result->conversion = conversion;
+        result->line = (uint32_t) node->line;
+        return result;
+    }
     if (!as->is_safe && has_conversion && xr_conversion_kind_is_numeric(conversion.kind)) {
         fprintf(stderr,
                 "[LOWER] unresolved numeric conversion '%s' must not reach dynamic XI_AS at line "

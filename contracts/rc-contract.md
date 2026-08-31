@@ -121,8 +121,8 @@ this one. A contract names what it proves; this line names what it does not.
 
 anchor-sha256: src/ir/xi_arc_verify.c b0344b309501c8daa318f5669974aba949d93187fb5087fd20ecc6a5be4e83a6
 anchor-sha256: src/ir/xi_arc.c 011abf35a6d8bb8ddbc35eed30dd1c57d3a8628f11b5a36e75bb97639f146de0
-anchor-sha256: src/ir/xi_lower_expr.c 779ebb074a86396543e0499e4fca1db75b3d5a9a9efeffd67ffac94147103487
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c c1c6bdc62a3cdc9ec9f11dc6851f8d09202befb5a2b3d52a8cafe404690c641c
+anchor-sha256: src/ir/xi_lower_expr.c 255f4e9d373d03f25a13afe05ce2ec69e0d2da60452e61b4a5d547a464cd63ab
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 706460461cfc548a14773f320bc4764f034b5446a810246ee00d9a562061f379
 anchor-sha256: src/aot/xrt_coll.h b94938ed2676895322929b84ff56185fdbda0755b62303f07add4a693c953998
 anchor-sha256: src/runtime/mem/xfixed_heap.c 46e45573a71b10592f12f5215f374c6dd896b4cf0e16bfc85f04b586a33fb5c3
 anchor-sha256: src/runtime/core/xr_runtime_core.c cce6b3b7d317c83c167fadd906b742c90b48d5e84f7816993335c825f9465169

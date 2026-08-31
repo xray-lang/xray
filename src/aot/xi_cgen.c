@@ -11063,6 +11063,15 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         XiValue *v = blk->values[i];
         if (!v)
             continue;
+        if (v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL && v->op != XI_CONVERT) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: enum-ordinal conversion requires XI_CONVERT operation\n");
+            fprintf(out, "    ");
+            emit_codegen_abort_expr(out);
+            fprintf(out, ";\n");
+            ctx->error = true;
+            return;
+        }
         if (mt_call && v == mt_call) {
             after_mt_call = true;
             continue;

@@ -724,6 +724,14 @@ emission rather than falling back to compiler-host layout.
   conversion core and must not substitute host-language signed casts, the host
   floating-point environment, canonical type spellings, or compiler-host
   pointer width for this evidence.
+- T8a: VM and AOT extract the
+  canonical `member_index` from the frozen compact or tagged enum
+  representation, then normalize it through the shared integer-width
+  conversion core to the exact target integer representation. Numeric bytecode
+  mode and enum-ordinal mode are disjoint. Invalid representations,
+  representation guessing, host-language casts, and fallback paths are
+  forbidden. Compact and boxed nonzero VM/AOT oracles must produce the same
+  ordinal result.
 - T9: a first-class `CFn` call may lower to generated-C `musttail` only when the
   call is the return block's final owned instruction, any following error check
   has no ARC cleanup, and the caller and callee native C signatures match
@@ -921,12 +929,12 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5a
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c c053f25b71fb2a2df09b0519bd05e9d75a960d8b1354787b2e4fee9e612cf070
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c beb41376aa7a07437592b99ddce71c4ce21b5442c6d00042cb5a268dd0355e4e
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c c1c6bdc62a3cdc9ec9f11dc6851f8d09202befb5a2b3d52a8cafe404690c641c
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 706460461cfc548a14773f320bc4764f034b5446a810246ee00d9a562061f379
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ea9c4ac67c31537fc6f41326f09481e702c1592f159946d54da89eae8a5a1baf
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: src/aot/xi_cgen.c 6b3ee58859a86bc033f9f54c0c997a07b8bd76dd94f7a9e5153044efc0ce68de
+anchor-sha256: src/aot/xi_cgen.c 3775dfcaab6c23dc6eb8e98db0df2ab8cda2160bbbe12f6d36d70089d387ef21
 anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
-anchor-sha256: src/ir/xi_opt.c dcd20b395eac3655f8d79b03f611d63332e0ac0cf6ba1793c8d098844de26020
+anchor-sha256: src/ir/xi_opt.c 416cd34f77c8efeea65f105eb4bf0ee2d82cba5a859a7e4e5983cc971aeab4e1
 anchor-sha256: src/aot/xrt_coll.h b94938ed2676895322929b84ff56185fdbda0755b62303f07add4a693c953998
 anchor-sha256: src/aot/xrt_core_freestanding.h 357372683ceeb4e51f65ea00ae40c7f22f05187ab271368562ab10e0db40e082
 anchor-sha256: src/aot/xrt_method.h 4a4b691a60a66b84e216221bb3c124e9c09edc0fb7c01db3dc8265645c2c6a55

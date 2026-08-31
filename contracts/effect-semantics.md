@@ -388,6 +388,12 @@ it cannot add, remove, or complete a source-semantic effect dimension.
     marked `XI_FLAG_MAY_THROW`; its only conversion failure is
     `XR_ERR_OVERFLOW` (`E0422`), and the Xi verifier rejects missing throw
     evidence. Optimization must not erase or speculate that failure edge.
+    `XR_CONVERSION_ENUM_ORDINAL` is a distinct non-numeric-source witness for
+    an explicit unsafe enum-to-integer conversion. It is non-throwing and never
+    carries `XI_FLAG_MAY_THROW`; its source is an exact enum/member ordinal and
+    its destination is an exact native integer representation. Compact versus
+    tagged source storage is owned by the frozen representation plan. Missing,
+    dynamic, mixed, or forged authority fails closed.
 12. `@inline`, `@noinline`, `codegen.opaque`, and
     `codegen.compilerFence` are semantic-neutral code-shape controls. They do
     not add or remove errors, allocation, suspension, blocking, IO, unsafe,
@@ -548,9 +554,9 @@ anchor-sha256: src/ir/xi.h d05506f5f95df50cb214319064749fa72bbd80718d0731a84c10b
 anchor-sha256: src/ir/xi_lower.c 5c83d887833b6197c71328aa2f126d4a18bd8dfc318f73cdc9e745fd2b4408e7
 anchor-sha256: src/app/cli/xcmd_verify.c 4d806bacb7a94efeba2d3d05e1ef657596fb7cbac2f315aff0d40f0e4de49629
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
-anchor-sha256: tests/unit/analyzer/test_analyzer.c 8edabf61c929ecf8b65d6b0da31dc9c073e1cccbdac69444394a50539bf5e600
+anchor-sha256: tests/unit/analyzer/test_analyzer.c 229473611804707567d96209bab6303720801b790b667ea37947d83318c64279
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
-anchor-sha256: tests/unit/ir/test_xi_lower.c f5f8c5c79decb124f3a654bb6b5dcf78dae35a7cef6b4ba0e0f43d4fe0d15ad9
+anchor-sha256: tests/unit/ir/test_xi_lower.c 7cd256e80754054e8214694dd93f12f6abd4d1f84f9282c8da56716d95b8b873
 anchor-sha256: src/frontend/analyzer/xanalyzer.c e29cc529be1ef32282a6f81bcaf55ab756c2fd60bd0509226cd90d44d114c161
 anchor-sha256: src/frontend/analyzer/xanalyzer.h c12244d5565e4e0ceb65177b8bf24f08c7161b6145d6c5d41fe4555d03f74988
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c e33606ab608e06c87de7e65a65576b15f4e69f509a15e12504e4fd58f27e49a6

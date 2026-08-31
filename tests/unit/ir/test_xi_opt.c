@@ -1743,6 +1743,147 @@ TEST(select_rep_box_const_for_return) {
     xi_func_free(f);
 }
 
+typedef enum SelectRepEnumOrdinalMutation {
+    SELECT_REP_ENUM_ORDINAL_VALID,
+    SELECT_REP_ENUM_ORDINAL_WITNESS_KIND,
+    SELECT_REP_ENUM_ORDINAL_SOURCE_KIND,
+    SELECT_REP_ENUM_ORDINAL_SOURCE_REP,
+    SELECT_REP_ENUM_ORDINAL_SOURCE_NULLABLE,
+    SELECT_REP_ENUM_ORDINAL_TARGET_KIND,
+    SELECT_REP_ENUM_ORDINAL_TARGET_NULLABLE,
+    SELECT_REP_ENUM_ORDINAL_SOURCE_WITNESS,
+    SELECT_REP_ENUM_ORDINAL_TARGET_WITNESS,
+    SELECT_REP_ENUM_ORDINAL_TARGET_REP,
+    SELECT_REP_ENUM_ORDINAL_TARGET_NONINTEGER,
+    SELECT_REP_ENUM_ORDINAL_OP,
+    SELECT_REP_ENUM_ORDINAL_ARITY,
+    SELECT_REP_ENUM_ORDINAL_OPERAND,
+    SELECT_REP_ENUM_ORDINAL_SOURCE_TYPE,
+    SELECT_REP_ENUM_ORDINAL_TARGET_TYPE,
+    SELECT_REP_ENUM_ORDINAL_IMPLICIT,
+    SELECT_REP_ENUM_ORDINAL_COMPTIME,
+    SELECT_REP_ENUM_ORDINAL_INTRINSIC,
+    SELECT_REP_ENUM_ORDINAL_MAY_THROW,
+    SELECT_REP_ENUM_ORDINAL_MUTATION_COUNT,
+} SelectRepEnumOrdinalMutation;
+
+TEST(select_rep_enum_ordinal_requires_exact_native_witness) {
+    for (uint8_t mutation = 0; mutation < SELECT_REP_ENUM_ORDINAL_MUTATION_COUNT; mutation++) {
+        XrType enum_type = {
+            .kind = XR_KIND_ENUM, .id = 60, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+        XrType int_type = {
+            .kind = XR_KIND_INT, .id = 61, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+        XiFunc *f = make_func("select_rep_enum_ordinal", &stub_void);
+        XiBlock *blk = f->entry;
+        XiValue *source = xi_param(f, blk, 0, &enum_type);
+        XiValue *convert = xi_value_new(f, blk, XI_CONVERT, &int_type, 2);
+        XiValue *print = xi_value_new(f, blk, XI_PRINT, &stub_void, 1);
+        REQUIRE(source && convert && print);
+        convert->args[0] = source;
+        convert->args[1] = source;
+        convert->nargs = 1;
+        convert->conversion = (XrConversionWitness) {
+            .kind = XR_CONVERSION_ENUM_ORDINAL,
+            .source_scalar_rep = XR_SCALAR_REP_NONE,
+            .target_scalar_rep = XR_NATIVE_I64,
+            .is_implicit = false,
+            .is_compile_time = false,
+        };
+        print->args[0] = convert;
+        xi_block_set_return(blk, NULL);
+
+        switch ((SelectRepEnumOrdinalMutation) mutation) {
+            case SELECT_REP_ENUM_ORDINAL_SOURCE_KIND:
+                enum_type.kind = XR_KIND_INT;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_WITNESS_KIND:
+                convert->conversion.kind = XR_CONVERSION_NONE;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_SOURCE_REP:
+                enum_type.scalar_rep = XR_NATIVE_I64;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_SOURCE_NULLABLE:
+                enum_type.is_nullable = true;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_TARGET_KIND:
+                int_type.kind = XR_KIND_FLOAT;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_TARGET_NULLABLE:
+                int_type.is_nullable = true;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_SOURCE_WITNESS:
+                convert->conversion.source_scalar_rep = XR_NATIVE_I64;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_TARGET_WITNESS:
+                convert->conversion.target_scalar_rep = XR_NATIVE_U64;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_TARGET_REP:
+                int_type.scalar_rep = XR_SCALAR_REP_NONE;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_TARGET_NONINTEGER:
+                int_type.scalar_rep = XR_NATIVE_F64;
+                convert->conversion.target_scalar_rep = XR_NATIVE_F64;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_OP:
+                convert->op = XI_NEG;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_ARITY:
+                convert->nargs = 2;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_OPERAND:
+                convert->args[0] = NULL;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_SOURCE_TYPE:
+                source->type = NULL;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_TARGET_TYPE:
+                convert->type = NULL;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_IMPLICIT:
+                convert->conversion.is_implicit = true;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_COMPTIME:
+                convert->conversion.is_compile_time = true;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_INTRINSIC:
+                REQUIRE(convert->xa_intrinsic_id == 0);
+                convert->xa_intrinsic_id = UINT32_C(1);
+                break;
+            case SELECT_REP_ENUM_ORDINAL_MAY_THROW:
+                convert->flags |= XI_FLAG_MAY_THROW;
+                break;
+            case SELECT_REP_ENUM_ORDINAL_VALID:
+            case SELECT_REP_ENUM_ORDINAL_MUTATION_COUNT:
+                break;
+        }
+
+        XiRepPolicy policy = xi_rep_policy_tagged_boundary();
+        xi_opt_select_rep_with_policy(f, &policy);
+        if (mutation == SELECT_REP_ENUM_ORDINAL_VALID) {
+            REQUIRE(convert->rep == XR_REP_I64);
+            REQUIRE(convert->args[0] == source);
+            REQUIRE(source->rep == XR_REP_TAGGED);
+            REQUIRE(print->args[0] != convert && print->args[0]->op == XI_BOX);
+            REQUIRE(print->args[0]->args[0] == convert);
+        } else {
+            REQUIRE(convert->rep == XR_REP_TAGGED);
+            REQUIRE(print->args[0] == convert);
+            if (mutation == SELECT_REP_ENUM_ORDINAL_OPERAND)
+                REQUIRE(convert->args[0] == NULL);
+            else if (convert->args[0] != source) {
+                REQUIRE(convert->args[0]->op == XI_BOX);
+                REQUIRE(convert->args[0]->nargs == 1 && convert->args[0]->args[0] == source);
+                REQUIRE(convert->args[0]->backend_origin == XI_BACKEND_VALUE_REP_BOX);
+            }
+            if (convert->args[0]) {
+                REQUIRE(convert->args[0]->rep == XR_REP_TAGGED);
+                REQUIRE(convert->args[0]->op != XI_UNBOX);
+            }
+        }
+        xi_func_free(f);
+    }
+}
+
 TEST(select_rep_unbox_param_for_arith) {
     /* Typed int param gets I64 rep directly (no UNBOX needed for ADD).
      * Return value still needs BOX (I64 → TAGGED for caller). */
@@ -2739,6 +2880,7 @@ int main(void) {
 
     /* SelectRepresentations */
     run_select_rep_box_const_for_return();
+    run_select_rep_enum_ordinal_requires_exact_native_witness();
     run_select_rep_unbox_param_for_arith();
     run_select_rep_identity_copy_preserves_source_carrier();
     run_select_rep_no_change_for_call();

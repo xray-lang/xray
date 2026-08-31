@@ -3244,6 +3244,71 @@ TEST(numeric_as_carries_typed_conversion_evidence) {
     xi_func_free(f);
 }
 
+TEST(enum_ordinal_as_lowers_to_typed_convert) {
+    XiFunc *f = lower_source("enum Ordinal { Zero, Two }\n"
+                             "fn run() -> i64 { return Ordinal.Two as i64 }\n"
+                             "print(run())\n");
+    assert(f != NULL);
+    XiValue *convert = func_tree_find_op(f, XI_CONVERT);
+    assert(convert && convert->args[0] && convert->args[0]->type &&
+           convert->args[0]->type->kind == XR_KIND_ENUM && convert->type &&
+           convert->type->kind == XR_KIND_INT &&
+           convert->conversion.kind == XR_CONVERSION_ENUM_ORDINAL &&
+           convert->conversion.source_scalar_rep == XR_SCALAR_REP_NONE &&
+           convert->conversion.target_scalar_rep == XR_NATIVE_I64 &&
+           !convert->conversion.is_implicit &&
+           (convert->flags & XI_FLAG_MAY_THROW) == 0);
+    assert(!func_tree_has_op(f, XI_AS));
+    xi_func_free(f);
+}
+
+static bool lower_enum_after_conversion_mutation(XrConversionKind kind, uint8_t target_rep) {
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    const XrCompileUnitIdentity identity = {
+        .kind = XR_COMPILE_UNIT_MEMORY,
+        .module_identity = "memory-module-v1:id=19:xi-lower-fixture-v1",
+    };
+    assert(xr_compiler_session_set_compile_unit_identity(session, &identity));
+    AstNode *program = xr_parse(session, "enum Ordinal { Zero, Two }\n"
+                                      "var value = Ordinal.Two as i64\n"
+                                      "print(value)\n");
+    assert(program != NULL);
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    assert(analyzer != NULL);
+    xa_analyzer_analyze(analyzer, "enum_witness_mutation.xr", program);
+    AstNode *decl = program->as.program.statements[1];
+    AstNode *cast = decl && decl->type == AST_VAR_DECL ? decl->as.var_decl.initializer : NULL;
+    XrConversionWitness witness = {0};
+    assert(cast && xa_analyzer_get_node_conversion(analyzer, cast, &witness));
+    witness.kind = kind;
+    witness.target_scalar_rep = target_rep;
+    xa_analyzer_set_node_conversion(analyzer, cast, &witness);
+
+    XrCompilerSessionScope canon_scope;
+    bool has_canon_scope = program->as.program.arena &&
+                           xr_compiler_session_push_arena(session, program->as.program.arena,
+                                                           "enum_witness_mutation.xr", &canon_scope);
+    xr_canon_program(program, analyzer, session);
+    if (has_canon_scope)
+        xr_compiler_session_pop_arena(&canon_scope);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    analyzer->current_file = "enum_witness_mutation.xr";
+    XiFunc *lowered = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
+    bool rejected = lowered == NULL;
+    if (lowered)
+        xi_func_free(lowered);
+    xa_typed_program_free(typed.program);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+    (void) xr_compiler_session_set_compile_unit_identity(session, NULL);
+    return rejected;
+}
+
+TEST(enum_ordinal_lowering_rejects_forged_analyzer_witness) {
+    assert(lower_enum_after_conversion_mutation(XR_CONVERSION_NONE, XR_NATIVE_I64));
+    assert(lower_enum_after_conversion_mutation(XR_CONVERSION_ENUM_ORDINAL, XR_NATIVE_U64));
+}
+
 TEST(implicit_numeric_boundaries_carry_lossless_widen_evidence) {
     XiFunc *f = lower_source("fn accept(value: u64) -> u64 { return value }\n"
                              "fn widenReturn(source: u8) -> u64 { return source }\n"
@@ -3501,6 +3566,8 @@ int main(void) {
     run_read_value_struct_param_uses_internal_call_place();
     run_as_to_scalar_rep_int_lowers_to_narrow();
     run_numeric_as_carries_typed_conversion_evidence();
+    run_enum_ordinal_as_lowers_to_typed_convert();
+    run_enum_ordinal_lowering_rejects_forged_analyzer_witness();
     run_implicit_numeric_boundaries_carry_lossless_widen_evidence();
     run_force_unwrap();
     run_destructure_decl();

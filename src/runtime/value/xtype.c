@@ -24,6 +24,10 @@
 
 #include "xtype_internal.h"
 
+XR_FUNC bool xr_conversion_scalar_rep_is_integer(uint8_t scalar_rep) {
+    return xr_scalar_rep_is_integer(scalar_rep);
+}
+
 bool xr_type_is_json_value(const XrType *type) {
     if (!type)
         return false;
@@ -1516,7 +1520,7 @@ static int xr_numeric_scalar_width(uint8_t scalar_rep) {
     }
 }
 
-const char *xr_conversion_kind_name(XrConversionKind kind) {
+XR_FUNC const char *xr_conversion_kind_name(XrConversionKind kind) {
     switch (kind) {
         case XR_CONVERSION_NONE:
             return "none";
@@ -1534,6 +1538,8 @@ const char *xr_conversion_kind_name(XrConversionKind kind) {
             return "explicit_target_width";
         case XR_CONVERSION_EXPLICIT_INT_FLOAT:
             return "explicit_int_float";
+        case XR_CONVERSION_ENUM_ORDINAL:
+            return "enum_ordinal";
         case XR_CONVERSION_DYNAMIC_CHECKED:
             return "dynamic_checked";
         case XR_CONVERSION_DYNAMIC_NULLABLE:
