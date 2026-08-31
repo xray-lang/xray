@@ -1299,9 +1299,8 @@ semantic_stringbuilder_constructor_is_exact(const XrSemanticPlan *plan,
     return semantic_stringbuilder_type_is_exact(type);
 }
 
-static bool
-semantic_stringbuilder_append_result_is_exact(const XrSemanticPlan *plan,
-                                              const XrSemanticOperationRecord *operation) {
+static bool semantic_stringbuilder_receiver_alias_result_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
     const XrSemanticFunctionRecord *function =
         operation ? xr_semantic_plan_function(plan, operation->function) : NULL;
     return operation &&
@@ -1339,7 +1338,7 @@ static bool semantic_stringbuilder_append_rune_is_exact(const XrSemanticPlan *pl
         operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
         strcmp(metadata[operation->metadata_begin], "append") != 0 ||
         operation->result_alias_operand != 0 ||
-        !semantic_stringbuilder_append_result_is_exact(plan, operation))
+        !semantic_stringbuilder_receiver_alias_result_is_exact(plan, operation))
         return false;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticOperandRecord *argument = receiver + 1;
@@ -1404,7 +1403,7 @@ semantic_stringbuilder_append_string_is_exact(const XrSemanticPlan *plan,
         operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
         strcmp(metadata[operation->metadata_begin], "append") != 0 ||
         operation->result_alias_operand != 0 ||
-        !semantic_stringbuilder_append_result_is_exact(plan, operation))
+        !semantic_stringbuilder_receiver_alias_result_is_exact(plan, operation))
         return false;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticOperandRecord *argument = receiver + 1;
@@ -1421,6 +1420,33 @@ semantic_stringbuilder_append_string_is_exact(const XrSemanticPlan *plan,
         *receiver_value = receiver->value;
     if (argument_value)
         *argument_value = argument->value;
+    return true;
+}
+
+static bool semantic_stringbuilder_clear_is_exact(const XrSemanticPlan *plan,
+                                                  const XrSemanticOperationRecord *operation,
+                                                  uint32_t *receiver_value) {
+    uint32_t operand_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!plan || !operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->opcode != XI_CALL_METHOD ||
+        operation->semantic_immediate != (int64_t) XI_METHOD_SYMBOL_CLEAR << 1 ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        !metadata || !metadata[operation->metadata_begin] ||
+        strcmp(metadata[operation->metadata_begin], "clear") != 0 ||
+        operation->result_alias_operand != 0 ||
+        !semantic_stringbuilder_receiver_alias_result_is_exact(plan, operation))
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(plan, receiver->type);
+    if (!semantic_stringbuilder_type_is_exact(receiver_type) ||
+        operation->result_type != receiver->type || receiver->role != XR_SEM_OPERAND_RECEIVER ||
+        receiver->parameter != -1 || receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver->value;
     return true;
 }
 
@@ -3881,25 +3907,29 @@ static bool note_stringbuilder_constructor_storage_value(XrTargetPlanBuilder *bu
     return true;
 }
 
-static bool note_stringbuilder_append_rune_storage_value(XrTargetPlanBuilder *builder,
-                                                         XrTargetValueStorageAnalysis *analysis,
-                                                         uint32_t semantic_operation, char *error,
-                                                         size_t error_size) {
+static bool note_stringbuilder_receiver_alias_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, bool clear, char *error, size_t error_size) {
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
-    if (!semantic_stringbuilder_append_rune_is_exact(builder->semantic_plan, operation, &receiver,
-                                                     NULL) ||
+    bool exact = clear ? semantic_stringbuilder_clear_is_exact(builder->semantic_plan, operation,
+                                                               &receiver)
+                       : semantic_stringbuilder_append_rune_is_exact(
+                             builder->semantic_plan, operation, &receiver, NULL);
+    if (!exact ||
         operation->result_value >= analysis->total_values ||
         operation->function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
         receiver >= analysis->total_values || analysis->defined_values[operation->result_value])
         return fail(error, error_size, "XR_TARGET_1003",
-                    "StringBuilder.append(rune) result authority is incomplete");
+                    clear ? "StringBuilder.clear result authority is incomplete"
+                          : "StringBuilder.append(rune) result authority is incomplete");
     XrTargetMachineRepRecord rep;
     bool borrowed = operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
     if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep))
         return fail(error, error_size, "XR_TARGET_1003",
-                    "target profile cannot materialize StringBuilder.append(rune) result");
+                    clear ? "target profile cannot materialize StringBuilder.clear result"
+                          : "target profile cannot materialize StringBuilder.append(rune) result");
     rep.ownership = borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED;
     if (!append_rep_intent(builder, &rep, error, error_size))
         return false;
@@ -3907,7 +3937,8 @@ static bool note_stringbuilder_append_rune_storage_value(XrTargetPlanBuilder *bu
     if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
                             operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
         return fail(error, error_size, "XR_TARGET_1003",
-                    "StringBuilder.append(rune) result slot identity is incomplete");
+                    clear ? "StringBuilder.clear result slot identity is incomplete"
+                          : "StringBuilder.append(rune) result slot identity is incomplete");
     XrTargetSlotIntent slot = {
         .identity = slot_identity,
         .function = operation->function,
@@ -6517,8 +6548,8 @@ static bool builder_add_stringbuilder_append_rune_storage(XrTargetPlanBuilder *b
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
         if (operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE)
-            valid = note_stringbuilder_append_rune_storage_value(builder, &analysis, i, error,
-                                                                 error_size);
+            valid = note_stringbuilder_receiver_alias_storage_value(builder, &analysis, i, false,
+                                                                    error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
     if (!valid) {
@@ -6526,6 +6557,38 @@ static bool builder_add_stringbuilder_append_rune_storage(XrTargetPlanBuilder *b
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE;
+    return true;
+}
+
+static bool builder_add_stringbuilder_clear_storage(XrTargetPlanBuilder *builder, char *error,
+                                                    size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.value_types[value->semantic_value] = value->semantic_type;
+            analysis.value_functions[value->semantic_value] = value->semantic_function;
+        }
+    }
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (semantic_stringbuilder_clear_is_exact(builder->semantic_plan, operation, NULL))
+            valid = note_stringbuilder_receiver_alias_storage_value(builder, &analysis, i, true,
+                                                                    error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE;
     return true;
 }
 
@@ -9947,6 +10010,39 @@ static bool collect_stringbuilder_append_string_call_intent(
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_stringbuilder_clear_call_intent(XrTargetPlanBuilder *builder,
+                                                    uint32_t operation_index,
+                                                    const XrSemanticOperationRecord *operation,
+                                                    char *error, size_t error_size) {
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic_stringbuilder_clear_is_exact(builder->semantic_plan, operation, &receiver))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "StringBuilder.clear dispatch authority is incomplete");
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    bool borrowed = operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = borrowed ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_RETURN_OWNED,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CLEAR,
+        .target_kind = XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR,
+    };
+    if (!type || !stable_identity_from_pair("xray-target-stringbuilder-clear-v1", operation->id,
+                                            type->id, receiver, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "StringBuilder.clear call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_json_namespace_value_call_intent(XrTargetPlanBuilder *builder,
                                                      uint32_t operation_index,
                                                      const XrSemanticOperationRecord *operation,
@@ -11401,6 +11497,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (semantic_stringbuilder_append_string_is_exact(plan, operation, NULL, NULL)) {
             valid = collect_stringbuilder_append_string_call_intent(builder, i, operation, error,
                                                                     error_size);
+        } else if (semantic_stringbuilder_clear_is_exact(plan, operation, NULL)) {
+            valid = collect_stringbuilder_clear_call_intent(builder, i, operation, error,
+                                                            error_size);
         } else if (xr_semantic_string_utf8_static_call_is_exact(plan, operation, NULL, NULL)) {
             valid =
                 collect_string_utf8_static_call_intent(builder, i, operation, error, error_size);
@@ -16087,6 +16186,7 @@ static const XrTargetFamily k_target_families[] = {
     {"stringbuilder_append_rune_storage", builder_add_stringbuilder_append_rune_storage},
     {"stringbuilder_to_string_storage", builder_add_stringbuilder_to_string_storage},
     {"stringbuilder_append_string_storage", builder_add_stringbuilder_append_string_storage},
+    {"stringbuilder_clear_storage", builder_add_stringbuilder_clear_storage},
     {"json_namespace_value_storage", builder_add_json_namespace_value_storage},
     {"panic_info_constructor_storage", builder_add_panic_info_constructor_storage},
     {"container_copy_result_storage", builder_add_container_copy_result_storage},

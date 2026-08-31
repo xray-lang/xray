@@ -2101,10 +2101,10 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-56-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-57-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
         test_previous_schema_is_rejected();
-        puts("XTP schema 56 cutover tests passed");
+        puts("XTP schema 57 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

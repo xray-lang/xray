@@ -1203,6 +1203,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING;
         bool stringbuilder_append_string =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING;
+        bool stringbuilder_clear =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR;
         bool json_namespace_value =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_JSON_NAMESPACE_VALUE;
         bool array_member_scalar =
@@ -1239,7 +1241,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              !string_runes && !iterator_rune_has_next && !iterator_rune_next &&
              !iterator_rune_nth && !rune_to_uint32 && !rune_to_string && !rune_is_whitespace &&
              !string_slice_range && !string_utf8_static && !stringbuilder_to_string &&
-             !stringbuilder_append_string && !json_namespace_value && !array_member_scalar &&
+             !stringbuilder_append_string && !stringbuilder_clear && !json_namespace_value &&
+             !array_member_scalar &&
              !native_module_scalar && !native_namespace_yieldable && !native_target_leaf &&
              !source_class_constructor && !adt_enum_constructor && !array_intrinsic &&
              !array_fill && !array_hof && !panic_info_constructor && !scalar_copy &&
@@ -1251,7 +1254,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              plan->calls[i].semantic_call_target >= xr_semantic_plan_call_target_count(semantic)) ||
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
-              string_runes || iterator_rune_has_next || iterator_rune_next || iterator_rune_nth ||
+              stringbuilder_clear || string_runes || iterator_rune_has_next || iterator_rune_next ||
+              iterator_rune_nth ||
               rune_to_uint32 || rune_to_string || rune_is_whitespace || string_slice_range ||
               string_utf8_static || json_namespace_value || array_member_scalar ||
               native_module_scalar || native_target_leaf || adt_enum_constructor ||

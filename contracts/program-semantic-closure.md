@@ -117,7 +117,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     operations. The independent Xi verifier rechecks all six ordinals, the `u8`
     member, both caller/callee joins, exact operation coverage, and an
     authority-free module initializer. Ordinary TypedProgram publication and
-    SemanticPlan and schema-56 TargetPlan preserve the exact six-member layout,
+    SemanticPlan and schema-57 TargetPlan preserve the exact six-member layout,
     two caller-storage calls, and ordinal-bound instructions. Typed VM and the
     hosted-fragment C projection execute only after independent TargetPlan
     verification grants the leaf-value-product family. Ordinary product
@@ -209,7 +209,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
-    then builds one schema-56 program TargetPlan from the complete canonical
+    then builds one schema-57 program TargetPlan from the complete canonical
     SemanticPlan module set. The plan has one program-graph row, two module
     partitions over global rows, one aggregate semantic fingerprint, and the
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` call and argument authority. Only
@@ -286,7 +286,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     and their XSM round-trips close the same graph authority. Target construction
     consumes the full canonical plan set in `program_module_row` order while the
     entry fragment separately carries only its ordered direct dependency.
-    It emits one verified schema-56 TargetPlan with global functions, slots,
+    It emits one verified schema-57 TargetPlan with global functions, slots,
     values, instructions, calls, arguments, debug facts, layouts, extents, and
     capabilities; module partitions are bounded pointer-free views and are not
     independent plans. The cross-partition edge is exactly one
@@ -410,7 +410,7 @@ anchor-sha256: tests/unit/plan/test_semantic_plan.c 9a633fb5ccc4cbd1eab6c6b9fef0
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 405952f4bf7f109065170bbcbf997e844b493fc72fbf388b8fc93a416157926f
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c cbe6f96c6b2857639e67fbeefcbe2c4fde388e6119172116fbcfe31291094a35
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 618cd82e5acd711031f2d0bd1529582f7e157528a0589155a3379466a6cba1c8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 97053c4f88d4360850febc92149fbad9dc2ad8b5bb69d24f203cc80b8818d683
 anchor-sha256: tests/unit/CMakeLists.txt aa38eb96bac02a44dfb9529e7223a739396d00491912b6e488f433877c55c672
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da

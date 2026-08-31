@@ -944,7 +944,7 @@ static XrSemanticPlan *build_shared_const_i64_array_semantic(void) {
     return semantic;
 }
 
-/* The three StringBuilder method families are all stated against the same
+/* The StringBuilder method families are all stated against the same
  * exact constructor receiver, so every fixture starts from one. */
 static XiValue *emit_exact_string_builder(XiFunc *function, XiBlock *entry) {
     XiValue *builder = xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_string_builder, 0);
@@ -1040,6 +1040,29 @@ static XrSemanticPlan *build_stringbuilder_append_string_semantic(void) {
     REQUIRE(release != NULL);
     release->args[0] = append;
     return finish_stringbuilder_semantic(function, entry, "StringBuilder.append(string)");
+}
+
+static XrSemanticPlan *build_stringbuilder_clear_semantic(void) {
+    XiFunc *function = xi_func_new("target_stringbuilder_clear", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *builder = emit_exact_string_builder(function, entry);
+    XiValue *clear = xi_value_new(function, entry, XI_CALL_METHOD, &stub_string_builder, 1);
+    REQUIRE(clear != NULL);
+    clear->args[0] = builder;
+    clear->aux = (void *) "clear";
+    clear->aux_int = (int64_t) XI_METHOD_SYMBOL_CLEAR << 1;
+    clear->result_alias_operand = 0;
+    clear->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM,
+        .param_index = 0,
+        .complete = true,
+    };
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = builder;
+    return finish_stringbuilder_semantic(function, entry, "StringBuilder.clear");
 }
 
 /* Keep Iterator<rune> as semantic type zero, matching the hosted text module
@@ -2330,10 +2353,10 @@ static void test_plan_snapshot_and_determinism(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "ac47272bca2ded2b8f4847806f9ef1283feb48e986def9451a415a7d03bec552") != 0)
+    if (strcmp(target_hex, "df9872b6b46651c3044e269f37085d98f6a70012d0fc1808d897e9c52e63d17b") != 0)
         fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "ac47272bca2ded2b8f4847806f9ef1283feb48e986def9451a415a7d03bec552") == 0);
+                   "df9872b6b46651c3044e269f37085d98f6a70012d0fc1808d897e9c52e63d17b") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -7504,6 +7527,44 @@ static void test_stringbuilder_append_string_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_stringbuilder_clear_call_authority(void) {
+    XrSemanticPlan *semantic = build_stringbuilder_clear_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "StringBuilder.clear TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan &&
+            (plan->completed_family_mask & XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE) != 0);
+    expect_dynamic_stringbuilder_call(plan, XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CLEAR,
+                                      XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR,
+                                      XR_TARGET_CALL_RETURN_OWNED, XR_TARGET_OWNERSHIP_OWNED);
+
+    XrSemanticOperationRecord *operation = NULL;
+    for (uint32_t i = 0; i < semantic->operation_count; i++) {
+        XrSemanticOperationRecord *candidate = &semantic->operations[i];
+        if (candidate->opcode == XI_CALL_METHOD && candidate->metadata_count == 1 &&
+            candidate->metadata_begin < semantic->metadata_count &&
+            strcmp(semantic->metadata[candidate->metadata_begin], "clear") == 0) {
+            REQUIRE(operation == NULL);
+            operation = candidate;
+        }
+    }
+    REQUIRE(operation != NULL);
+    int32_t saved_alias = operation->result_alias_operand;
+    operation->result_alias_operand = -1;
+    resign_mutated_semantic_target(semantic, plan);
+    expect_verify_failure(plan, "XR_TARGET_1000");
+    operation->result_alias_operand = saved_alias;
+    resign_mutated_semantic_target(semantic, plan);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_direct_local_stringbuilder_ref_append_authority(void) {
     XrSemanticPlan *semantic =
         build_direct_local_tagged_ref_semantic(&stub_string_builder, false, true);
@@ -9178,6 +9239,7 @@ int main(int argc, char **argv) {
         test_direct_local_stringbuilder_ref_append_authority();
         test_stringbuilder_to_string_call_authority();
         test_stringbuilder_append_string_call_authority();
+        test_stringbuilder_clear_call_authority();
         puts("StringBuilder TargetPlan authority tests passed");
         return 0;
     }
@@ -9220,6 +9282,7 @@ int main(int argc, char **argv) {
     test_direct_local_stringbuilder_ref_append_authority();
     test_stringbuilder_to_string_call_authority();
     test_stringbuilder_append_string_call_authority();
+    test_stringbuilder_clear_call_authority();
     test_string_runes_call_authority();
     test_string_slice_range_call_authority();
     test_iterator_rune_has_next_call_authority();

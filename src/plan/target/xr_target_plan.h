@@ -79,6 +79,7 @@ typedef enum XrTargetPlanFamily {
 #define XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE (UINT64_C(1) << 45)
 #define XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE (UINT64_C(1) << 46)
 #define XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE (UINT64_C(1) << 47)
+#define XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE (UINT64_C(1) << 48)
 
 typedef enum XrTargetExecutionFamily {
     /* One closed signed-i64 program per function. It is not a straight line:
@@ -103,7 +104,7 @@ typedef enum XrTargetExecutionFamily {
     XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 = UINT64_C(1) << 4,
     /* One pointer-free six-field value product whose exact x64 layout is
      * i64/i64/u8/i64/i64/i64.  Both nullary callers and their common callee
-     * execute only after the complete schema-56 instruction groups prove the
+     * execute only after the complete schema-57 instruction groups prove the
      * layout, ordinal accesses, caller-owned result storage, and return. */
     XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6 = UINT64_C(1) << 5,
     /* One source-backed signed-i64 predicate program whose ADD/SUB/MUL answer
@@ -151,6 +152,7 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |                              \
                  XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                                \
                  XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                            \
+                 XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE |                                    \
                  XR_TARGET_FAMILY_JSON_NAMESPACE_VALUE_STORAGE |                                   \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_BOUNDARY_STORAGE |                           \
                  XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                                       \
@@ -333,6 +335,7 @@ typedef enum XrTargetCallConvention {
     /* Runtime-owned `String.fromUtf8*` static dispatch.  The frozen method
      * symbol, not selector spelling, distinguishes strict and lossy decoding. */
     XR_TARGET_CALL_CONVENTION_STRING_UTF8_STATIC,
+    XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CLEAR,
     XR_TARGET_CALL_CONVENTION_COUNT,
 } XrTargetCallConvention;
 
@@ -414,6 +417,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR,
     XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE,
     XR_TARGET_CALL_TARGET_STRING_UTF8_STATIC,
+    XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR,
     XR_TARGET_CALL_TARGET_COUNT,
 } XrTargetCallTargetKind;
 

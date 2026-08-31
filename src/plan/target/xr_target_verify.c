@@ -2769,9 +2769,8 @@ static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *typ
            type->canonical_key && strcmp(type->canonical_key, expected_type_key) == 0;
 }
 
-static bool
-semantic_stringbuilder_append_result_is_exact_verify(const XrSemanticPlan *semantic,
-                                                     const XrSemanticOperationRecord *operation) {
+static bool semantic_stringbuilder_receiver_alias_result_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation) {
     const XrSemanticFunctionRecord *function =
         operation ? xr_semantic_plan_function(semantic, operation->function) : NULL;
     return operation &&
@@ -2805,6 +2804,10 @@ static bool
 operation_is_exact_stringbuilder_append_string(const XrSemanticPlan *semantic,
                                                const XrSemanticOperationRecord *operation,
                                                uint32_t *argument_value);
+
+static bool operation_is_exact_stringbuilder_clear(const XrSemanticPlan *semantic,
+                                                   const XrSemanticOperationRecord *operation,
+                                                   uint32_t *receiver_value);
 
 static bool operation_is_exact_json_namespace_value(const XrSemanticPlan *semantic,
                                                     const XrSemanticOperationRecord *operation,
@@ -4234,6 +4237,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
             operation_is_exact_stringbuilder_append_rune(semantic, operation, NULL, NULL) ||
             operation_is_exact_stringbuilder_to_string(semantic, operation, NULL) ||
             operation_is_exact_stringbuilder_append_string(semantic, operation, NULL) ||
+            operation_is_exact_stringbuilder_clear(semantic, operation, NULL) ||
             xr_semantic_string_runes_is_exact(semantic, operation, NULL) ||
             xr_semantic_iterator_rune_has_next_is_exact(semantic, operation, NULL) ||
             xr_semantic_iterator_rune_next_is_exact(semantic, operation, NULL) ||
@@ -4444,6 +4448,8 @@ static bool verify_value_binding(
         operation_is_exact_stringbuilder_to_string(semantic, operation, NULL);
     bool exact_stringbuilder_append_string =
         operation_is_exact_stringbuilder_append_string(semantic, operation, NULL);
+    bool exact_stringbuilder_clear =
+        operation_is_exact_stringbuilder_clear(semantic, operation, NULL);
     /* A copy that only renames its operand carries the source's binding, so the
      * result having one is expected rather than unexplained. Same statement of
      * the shape the builder used to give it that binding. */
@@ -4590,6 +4596,7 @@ static bool verify_value_binding(
                 exact_direct_string_result || exact_source_export_string_result ||
                 exact_stringbuilder || exact_stringbuilder_append ||
                 exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
+                exact_stringbuilder_clear ||
                 exact_identity_copy || exact_owner_forward || exact_string_runes ||
                 exact_map_entries_iterator || exact_map_entry_iterator_next ||
                 exact_string_slice_range || exact_rune_to_string || exact_json_namespace_value ||
@@ -4667,7 +4674,8 @@ static bool verify_value_binding(
         exact_string_convert || exact_direct_string_result || exact_stringbuilder ||
         exact_source_export_string_result || exact_stringbuilder_append ||
         exact_stringbuilder_to_string ||
-        exact_stringbuilder_append_string || exact_string_runes || exact_map_entries_iterator ||
+        exact_stringbuilder_append_string || exact_stringbuilder_clear || exact_string_runes ||
+        exact_map_entries_iterator ||
         exact_map_entry_iterator_next || exact_string_slice_range || exact_rune_to_string ||
         exact_json_namespace_value || exact_panic_info_constructor || exact_array_member_result ||
         exact_direct_callee || exact_go_callee || exact_go_task || exact_channel ||
@@ -4785,7 +4793,8 @@ static bool verify_value_binding(
              exact_tagged_ref_place_load ||
              (exact_array_value_parameter && !array_parameter_callee_owns) ||
              exact_string_value_parameter_borrowed ||
-             ((exact_stringbuilder_append || exact_stringbuilder_append_string) && operation &&
+             ((exact_stringbuilder_append || exact_stringbuilder_append_string ||
+               exact_stringbuilder_clear) && operation &&
               operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED) ||
              (exact_dynamic_value && xr_semantic_dynamic_value_is_borrowed(operation)) ||
              (exact_channel && operation && operation->opcode == XI_COPY))
@@ -5678,13 +5687,43 @@ operation_is_exact_stringbuilder_append_string(const XrSemanticPlan *semantic,
      * should not have written. */
     bool exact = semantic_stringbuilder_type_is_exact(rt) && at && at->kind == XR_KIND_STRING &&
                  operation->result_type == receiver->type &&
-                 semantic_stringbuilder_append_result_is_exact_verify(semantic, operation) &&
+                 semantic_stringbuilder_receiver_alias_result_is_exact_verify(semantic,
+                                                                               operation) &&
                  receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
                  receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
                  argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
                  argument->flags == XR_SEM_OPERAND_CALL_CONTRACT;
     if (exact && argument_value)
         *argument_value = argument->value;
+    return exact;
+}
+
+static bool operation_is_exact_stringbuilder_clear(const XrSemanticPlan *semantic,
+                                                   const XrSemanticOperationRecord *operation,
+                                                   uint32_t *receiver_value) {
+    uint32_t operand_count = 0, metadata_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
+    if (!semantic || !operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->opcode != XI_CALL_METHOD ||
+        operation->semantic_immediate != (int64_t) XI_METHOD_SYMBOL_CLEAR << 1 ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        !operands || !metadata || !metadata[operation->metadata_begin] ||
+        strcmp(metadata[operation->metadata_begin], "clear") != 0 ||
+        operation->result_alias_operand != 0 ||
+        !semantic_stringbuilder_receiver_alias_result_is_exact_verify(semantic, operation))
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *receiver_type =
+        xr_semantic_plan_type(semantic, receiver->type);
+    bool exact = semantic_stringbuilder_type_is_exact(receiver_type) &&
+                 operation->result_type == receiver->type &&
+                 receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT;
+    if (exact && receiver_value)
+        *receiver_value = receiver->value;
     return exact;
 }
 
@@ -6095,7 +6134,7 @@ static bool operation_is_exact_stringbuilder_append_rune(const XrSemanticPlan *s
         operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
         strcmp(metadata[operation->metadata_begin], "append") != 0 ||
         operation->result_alias_operand != 0 ||
-        !semantic_stringbuilder_append_result_is_exact_verify(semantic, operation))
+        !semantic_stringbuilder_receiver_alias_result_is_exact_verify(semantic, operation))
         return false;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticOperandRecord *argument = receiver + 1;
@@ -6345,6 +6384,13 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             expected_calls++;
         }
         if (operation_is_exact_stringbuilder_append_string(semantic, operation, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
+        if (operation_is_exact_stringbuilder_clear(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
                 break;
@@ -6613,6 +6659,10 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         bool stringbuilder_append_string =
             !semantic_target && operation_is_exact_stringbuilder_append_string(
                                     semantic, operation, &append_string_argument);
+        uint32_t stringbuilder_clear_receiver = XR_SEMANTIC_INDEX_NONE;
+        bool stringbuilder_clear =
+            !semantic_target && operation_is_exact_stringbuilder_clear(
+                                    semantic, operation, &stringbuilder_clear_receiver);
         uint32_t json_value_argument = XR_SEMANTIC_INDEX_NONE;
         bool json_namespace_value =
             !semantic_target &&
@@ -6715,6 +6765,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         bool direct_aggregate_result =
             direct_leaf_program || direct_product_program || direct_value_aggregate_result;
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
+            stringbuilder_clear ||
             direct_string_result || direct_array_result || direct_adt_enum_result ||
             direct_class_instance_result || json_namespace_value || string_utf8_static ||
             source_string_result || class_construction || adt_enum_constructor || array_intrinsic || array_fill ||
@@ -6735,7 +6786,8 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
         bool borrowed_stringbuilder_append =
-            (stringbuilder_append_rune || stringbuilder_append_string) && operation &&
+            (stringbuilder_append_rune || stringbuilder_append_string || stringbuilder_clear) &&
+            operation &&
             operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
         if (map_entries_iterator) {
             result_scalar = 1;
@@ -6818,6 +6870,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                          source_string_result ||
                          stringbuilder_append_rune || string_runes || string_slice_range ||
                          rune_to_string || stringbuilder_to_string || stringbuilder_append_string ||
+                         stringbuilder_clear ||
                          json_namespace_value || string_utf8_static || class_construction ||
                          adt_enum_constructor || array_intrinsic || panic_info_constructor ||
                          container_copy || map_entries_iterator || map_entry_iterator_next ||
@@ -8014,6 +8067,31 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
             (void) string_slice_start;
             (void) string_slice_end;
+            if (!valid)
+                break;
+        } else if (stringbuilder_clear) {
+            bool borrowed = operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+            valid =
+                result_type && !suspends &&
+                reconstruct_call_identity("xray-target-stringbuilder-clear-v1", operation->id,
+                                          result_type->id, stringbuilder_clear_receiver,
+                                          &expected_identity) &&
+                xr_stable_id_equal(call->identity, expected_identity) &&
+                call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                stable_id_is_zero(call->source_export_identity) &&
+                stable_id_is_zero(call->source_callee_identity) && call->argument_count == 0 &&
+                call->flags == 0 &&
+                call->calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CLEAR &&
+                call->target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR &&
+                call->result_ownership ==
+                    (borrowed ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_RETURN_OWNED) &&
+                result && result->slot < plan->slots_count &&
+                plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                plan->slots[result->slot].ownership ==
+                    (borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED);
             if (!valid)
                 break;
         } else if (stringbuilder_to_string) {
