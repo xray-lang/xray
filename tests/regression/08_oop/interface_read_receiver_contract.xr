@@ -1,0 +1,51 @@
+interface ReadCounter {
+    current() -> i64
+}
+
+class RefCounter implements ReadCounter {
+    value: i64
+
+    constructor(value: i64) {
+        this.value = value
+    }
+
+    current() -> i64 {
+        return this.value
+    }
+}
+
+struct ValueCounter implements ReadCounter {
+    value: i64
+
+    current() -> i64 {
+        return this.value
+    }
+}
+
+fn directClass(counter: RefCounter) -> i64 {
+    return counter.current()
+}
+
+fn directStruct(counter: ValueCounter) -> i64 {
+    return counter.current()
+}
+
+fn erased(counter: ReadCounter) -> i64 {
+    return counter.current()
+}
+
+fn genericRead<T: ReadCounter>(counter: T) -> i64 {
+    return counter.current()
+}
+
+@test
+fn test_read_receiver_contract() {
+    var refCounter = RefCounter(11)
+    var valueCounter = ValueCounter{value: 22}
+    assert(directClass(refCounter) == 11)
+    assert(directStruct(valueCounter) == 22)
+    assert(erased(refCounter) == 11)
+    assert(erased(valueCounter) == 22)
+    assert(genericRead<RefCounter>(refCounter) == 11)
+    assert(genericRead<ValueCounter>(valueCounter) == 22)
+}

@@ -1,0 +1,14 @@
+struct Counter {
+    value: i64
+
+    bump() {
+        this.value = this.value + 1
+    }
+}
+
+fn view(counter: Counter) {
+    counter.bump()
+}
+
+var counter = Counter{value: 1}
+view(counter)

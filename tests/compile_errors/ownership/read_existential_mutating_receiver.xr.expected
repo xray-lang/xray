@@ -1,0 +1,5 @@
+--> 28:20 E0353
+Cannot call mutating method 'bump' on read parameter 'counter' (readonly capability)
+
+--> 32:20 E0353
+Cannot call mutating method 'bump' on read parameter 'counter' (readonly capability)
