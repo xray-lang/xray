@@ -14,6 +14,7 @@
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_enum_shape.h"
 #include "xr_semantic_string_shape.h"
+#include "xr_semantic_local_call_target_shape.h"
 #include <limits.h>
 #include <string.h>
 
@@ -262,7 +263,7 @@ xr_semantic_direct_local_aggregate_result_is_exact(const XrSemanticPlan *plan,
                                                    const XrSemanticOperationRecord *operation,
                                                    const XrSemanticFunctionRecord *callee) {
     return plan && operation && callee &&
-           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+           xr_semantic_local_call_result_opcode_is_exact(operation) &&
            operation->result_type == callee->return_type &&
            operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&

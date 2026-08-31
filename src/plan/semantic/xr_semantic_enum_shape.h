@@ -19,6 +19,7 @@
 #define XR_SEMANTIC_ENUM_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "xr_semantic_local_call_target_shape.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
@@ -89,7 +90,7 @@ xr_semantic_direct_local_adt_enum_result_is_exact(const XrSemanticPlan *plan,
                                                   const XrSemanticOperationRecord *operation,
                                                   const XrSemanticFunctionRecord *callee) {
     return plan && operation && callee &&
-           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+           xr_semantic_local_call_result_opcode_is_exact(operation) &&
            operation->result_type == callee->return_type &&
            operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
@@ -113,8 +114,7 @@ xr_semantic_direct_local_unit_enum_result_is_exact(const XrSemanticPlan *plan,
                                                    const XrSemanticOperationRecord *operation,
                                                    const XrSemanticFunctionRecord *callee) {
     return plan && operation && callee &&
-           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
-            operation->opcode == XI_CALL_METHOD) &&
+           xr_semantic_local_call_result_opcode_is_exact(operation) &&
            operation->result_type == callee->return_type &&
            operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&

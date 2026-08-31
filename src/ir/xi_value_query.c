@@ -12,6 +12,7 @@
 #include "xi_analysis.h"
 #include "xi_module.h"
 #include "xi_range.h"
+#include "xi_receiver_alias.h"
 #include "../runtime/value/xtype.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <string.h>
@@ -114,6 +115,102 @@ XR_FUNC const XiImportRef *xi_value_import_ref(const XiFunc *func, const XiValue
         return (const XiImportRef *) value->aux;
     if (value->op == XI_GET_SHARED)
         return xi_shared_slot_import_ref(func, (int) value->aux_int);
+    return NULL;
+}
+
+static const XiModule *xi_value_owning_module(const XiFunc *function) {
+    for (const XiFunc *owner = function; owner; owner = owner->parent_func)
+        if (owner->module)
+            return owner->module;
+    return NULL;
+}
+
+static const XiValue *xi_value_method_receiver_identity(const XiValue *receiver) {
+    while (receiver && receiver->nargs > 0 &&
+           (xi_copy_is_identity_alias(receiver) || xi_call_result_aliases_receiver(receiver)))
+        receiver = receiver->args[0];
+    return receiver;
+}
+
+XR_FUNC XiFunc *xi_value_resolve_method_callee(const XiFunc *caller, const XiValue *call) {
+    if (!caller || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs < 1 || !call->args[0] || !call->aux)
+        return NULL;
+
+    const XiImportRef *namespace_ref = xi_value_import_ref(caller, call->args[0]);
+    const char *member = (const char *) call->aux;
+    if (namespace_ref && !namespace_ref->member_name && namespace_ref->resolved_module) {
+        const XiModule *module = namespace_ref->resolved_module;
+        for (uint16_t i = 0; i < module->nexports; i++) {
+            const XiModuleExport *exported = &module->exports[i];
+            if (exported->function && exported->name && strcmp(exported->name, member) == 0)
+                return exported->function;
+        }
+    }
+
+    const XiValue *receiver = xi_value_method_receiver_identity(call->args[0]);
+    const XiModule *module = xi_value_owning_module(caller);
+    const XiClassData *selected = NULL;
+    bool expect_static = false;
+
+    /* Generic method bodies carry an erased receiver type. Parameter zero is
+     * still bound to exactly one class-member row in this module, so recover
+     * that frozen declaration before consulting the type. */
+    if (module && module->init && caller->params && caller->nparams > 0 &&
+        receiver == caller->params[0]) {
+        for (uint16_t ci = 0; ci < module->nclasses && !selected; ci++) {
+            const XiClassData *candidate = module->classes[ci];
+            for (uint16_t mi = 0;
+                 candidate && candidate->methods && candidate->child_idx && mi < candidate->nmethod;
+                 mi++) {
+                uint16_t child = candidate->child_idx[mi];
+                if (child < module->init->nchildren && module->init->children[child] == caller) {
+                    selected = candidate;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!selected && receiver->op == XI_GET_SHARED && receiver->aux_int >= 0 && module &&
+        module->slot_classes && receiver->aux_int < module->nslots) {
+        selected = module->slot_classes[receiver->aux_int];
+        expect_static = selected != NULL;
+    } else {
+        const XiImportRef *ref = xi_value_import_ref(caller, receiver);
+        if (ref && ref->resolved_module && ref->resolved_shared_slot >= 0 &&
+            ref->resolved_module->slot_classes &&
+            ref->resolved_shared_slot < ref->resolved_module->nslots) {
+            module = ref->resolved_module;
+            selected = module->slot_classes[ref->resolved_shared_slot];
+            expect_static = selected != NULL;
+        }
+    }
+
+    const XrType *receiver_type = receiver->type;
+    if (!selected && receiver_type &&
+        (receiver_type->kind == XR_KIND_INSTANCE || receiver_type->kind == XR_KIND_CLASS) &&
+        receiver_type->instance.class_ref) {
+        expect_static = receiver_type->kind == XR_KIND_CLASS;
+        for (uint16_t ci = 0; module && ci < module->nclasses; ci++) {
+            const XiClassData *candidate = module->classes[ci];
+            if (candidate && candidate->class_info == receiver_type->instance.class_ref) {
+                selected = candidate;
+                break;
+            }
+        }
+    }
+    if (!selected || !module || !selected->methods || !selected->child_idx)
+        return NULL;
+    for (uint16_t mi = 0; mi < selected->nmethod; mi++) {
+        const XiClassMethod *method = &selected->methods[mi];
+        if (method->is_static != expect_static || !method->name ||
+            strcmp(method->name, member) != 0)
+            continue;
+        uint16_t child = selected->child_idx[mi];
+        if (module->init && child < module->init->nchildren)
+            return module->init->children[child];
+    }
     return NULL;
 }
 

@@ -1386,25 +1386,6 @@ static bool semantic_direct_local_array_type_is_exact_verify(const XrSemanticPla
         semantic, type_index, indexes_elements, false, storage);
 }
 
-/* A borrowed `Array<T>` parameter in either passing mode. Both modes borrow the
- * caller's allocation and release nothing; they differ only in whether the
- * callee receives a pointer to the caller's cell (ref, so it may rebind) or the
- * tagged value itself (by value). One judgement with the mode as its parameter,
- * so the two cannot drift apart. */
-static bool
-semantic_direct_local_array_parameter_is_exact_verify(const XrSemanticPlan *semantic,
-                                                      const XrSemanticParameterRecord *parameter,
-                                                      uint8_t mode, uint8_t *storage) {
-    if (!semantic || !parameter ||
-        parameter->function >= xr_semantic_plan_function_count(semantic) ||
-        parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != mode ||
-        parameter->ownership != XI_OWN_BORROWED || parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0)
-        return false;
-    return semantic_direct_local_array_type_is_exact_verify(semantic, parameter->type,
-                                                            mode == XR_PARAM_REF, storage);
-}
-
 static bool semantic_direct_local_tagged_ref_parameter_is_exact_verify(
     const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
     return parameter && parameter->function < xr_semantic_plan_function_count(semantic) &&
@@ -1433,9 +1414,12 @@ static bool semantic_direct_local_scalar_ref_parameter_is_exact_verify(
 }
 
 static bool semantic_direct_local_array_value_parameter_is_exact_verify(
-    const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
-    return semantic_direct_local_array_parameter_is_exact_verify(semantic, parameter, XR_PARAM_READ,
-                                                                 storage);
+    const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter, uint8_t *storage,
+    bool *callee_owns) {
+    return xr_semantic_direct_local_array_value_parameter_is_exact(semantic, parameter,
+                                                                   callee_owns) &&
+           semantic_direct_local_array_type_is_exact_verify(semantic, parameter->type, false,
+                                                            storage);
 }
 
 /* A direct-local call that hands back a freshly owned `Array<T>`. The container
@@ -1450,7 +1434,7 @@ static bool semantic_direct_local_array_result_is_exact_verify(const XrSemanticP
             ? NULL
             : xr_semantic_plan_operation(semantic, operation_index);
     if (!semantic || !operation ||
-        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        !xr_semantic_local_call_result_opcode_is_exact(operation) ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
         operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
@@ -2548,11 +2532,14 @@ static const XrSemanticFunctionRecord *
 semantic_direct_local_callee_for_operation(const XrSemanticPlan *semantic,
                                            uint32_t operation_index) {
     size_t target_count = xr_semantic_plan_call_target_count(semantic);
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, operation_index);
     const XrSemanticFunctionRecord *callee = NULL;
     for (size_t i = 0; i < target_count; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, i);
         if (!target || target->operation != operation_index ||
-            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            !xr_semantic_call_target_names_local_function(
+                target, operation, (uint32_t) xr_semantic_plan_function_count(semantic)))
             continue;
         if (callee)
             return NULL;
@@ -2570,7 +2557,7 @@ static bool semantic_direct_local_string_result_is_exact(const XrSemanticPlan *s
             ? NULL
             : xr_semantic_plan_operation(semantic, operation_index);
     if (!semantic || !operation ||
-        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        !xr_semantic_local_call_result_opcode_is_exact(operation) ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
         operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
@@ -4113,8 +4100,8 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
                  xr_semantic_plan_type(semantic, parameter->type)) &&
              !semantic_direct_local_tagged_ref_parameter_is_exact_verify(semantic, parameter,
                                                                          &array_storage) &&
-             !semantic_direct_local_array_value_parameter_is_exact_verify(semantic, parameter,
-                                                                          &array_storage)))
+             !semantic_direct_local_array_value_parameter_is_exact_verify(
+                 semantic, parameter, &array_storage, NULL)))
             continue;
         exact_types[parameter->type] = 1;
     }
@@ -4361,8 +4348,10 @@ static bool verify_value_binding(
      * shared read of that array gets -- not to the pointer a ref parameter
      * needs. */
     uint8_t exact_array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    bool array_parameter_callee_owns = false;
     bool exact_array_value_parameter = semantic_direct_local_array_value_parameter_is_exact_verify(
-                                           semantic, parameter, &exact_array_value_storage) &&
+                                           semantic, parameter, &exact_array_value_storage,
+                                           &array_parameter_callee_owns) &&
                                        parameter->type == semantic_type;
     /* A String handed over by value. A String has no carrier other than the
      * outer tagged value, so it is bound to the same tagged binding an Array by
@@ -4461,9 +4450,19 @@ static bool verify_value_binding(
             (exact_product_type && product_program.calls[caller] == operation &&
              product_program.call_bindings[caller]->operation == operation_index &&
              operation->result_value == semantic_value);
+    const XrSemanticFunctionRecord *direct_aggregate_callee =
+        operation ? semantic_direct_local_callee_for_operation(semantic, operation_index) : NULL;
+    uint32_t direct_aggregate_stack[64] = {0};
+    bool exact_direct_value_aggregate_result =
+        operation && operation->result_value == semantic_value &&
+        operation->result_type == semantic_type &&
+        xr_semantic_direct_local_aggregate_result_is_exact(
+            semantic, operation, direct_aggregate_callee) &&
+        semantic_aggregate_eligibility(semantic, semantic_type, direct_aggregate_stack, 0) == 1;
     bool deferred_operation =
         deferred_functions[semantic_function] ||
-        (!exact_direct_aggregate_result && !exact_direct_product_result && operation &&
+        (!exact_direct_aggregate_result && !exact_direct_product_result &&
+         !exact_direct_value_aggregate_result && operation &&
          operation->opcode < XI_OP_COUNT &&
          (xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_CALL ||
           xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_COROUTINE));
@@ -4601,7 +4600,8 @@ static bool verify_value_binding(
              exact_native_module_namespace || exact_nullable_scalar ||
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
              exact_adt_enum_borrowed || exact_string_shared_read || exact_array_shared_read ||
-             exact_tagged_ref_place_load || exact_array_value_parameter ||
+             exact_tagged_ref_place_load ||
+             (exact_array_value_parameter && !array_parameter_callee_owns) ||
              exact_string_value_parameter_borrowed ||
              ((exact_stringbuilder_append || exact_stringbuilder_append_string) && operation &&
               operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED) ||
@@ -6495,7 +6495,16 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     (product_program.call_bindings[caller]->operation == call->semantic_operation &&
                      product_program.calls[caller] == operation &&
                      product_program.callee == callee);
-        bool direct_aggregate_result = direct_leaf_program || direct_product_program;
+        uint32_t direct_aggregate_stack[64] = {0};
+        bool direct_value_aggregate_result =
+            direct && operation && target->function < semantic_functions &&
+            (operation->effects & XI_EFFECT_MAY_SUSPEND) == 0 && operation->opcode != XI_GO &&
+            suspendable[target->function] == 0 &&
+            xr_semantic_direct_local_aggregate_result_is_exact(semantic, operation, callee) &&
+            semantic_aggregate_eligibility(semantic, operation->result_type,
+                                           direct_aggregate_stack, 0) == 1;
+        bool direct_aggregate_result =
+            direct_leaf_program || direct_product_program || direct_value_aggregate_result;
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
             direct_string_result || direct_array_result || direct_adt_enum_result ||
             direct_class_instance_result || json_namespace_value || string_utf8_static ||
@@ -6661,7 +6670,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                  * a slot the caller owns outright with no dynamic root to
                  * trace and no ownership to release. Every other result
                  * stays a trivial scalar slot. */
-                (!(direct_string_result || direct_adt_enum_result) ||
+                (!(direct_string_result || direct_array_result || direct_adt_enum_result) ||
                  (result->slot < plan->slots_count &&
                   plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
                   plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED)) &&
@@ -6742,6 +6751,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                  * containers carried by that one tagged value, so they are one
                  * argument shape rather than two. */
                 uint8_t array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+                bool argument_array_callee_owns = false;
                 bool argument_string_callee_owns = false;
                 bool argument_string_value =
                     parameter && parameter->type == operand->type &&
@@ -6750,16 +6760,17 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                 bool argument_array_value =
                     parameter && parameter->type == operand->type &&
                     semantic_direct_local_array_value_parameter_is_exact_verify(
-                        semantic, parameter, &array_value_storage);
+                        semantic, parameter, &array_value_storage,
+                        &argument_array_callee_owns);
                 bool argument_container_value =
                     (argument_string_value || argument_array_value) &&
                     operand->transfer_mode == XR_TRANSFER_SHARE &&
                     /* The call site must state the same allocation answer the
                      * declaration proved: a callee that holds an owning
-                     * reference is one the caller hands its own over to. An
-                     * Array by value is always borrowed, so it states so. */
+                     * reference is one the caller hands its own over to. */
                     operand->ownership_action ==
-                        (argument_string_value && argument_string_callee_owns
+                        ((argument_array_value && argument_array_callee_owns) ||
+                                 (argument_string_value && argument_string_callee_owns)
                              ? XR_SEM_OPERAND_CONSUME
                              : XR_SEM_OPERAND_BORROW);
                 bool argument_leaf_aggregate =
@@ -6830,17 +6841,16 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                         XR_TARGET_OWNERSHIP_BORROWED &&
                     plan->machine_reps[callee_value->memory_rep].ownership ==
                         XR_TARGET_OWNERSHIP_BORROWED;
-                /* The callee always borrows a container it is handed by value.
-                 * What the caller holds is its own business: a freshly built
-                 * array or a fresh concatenation is owned, a shared read of a
-                 * local is borrowed, and all of them hand over the same tagged
-                 * carrier. So the two sides agree on representation and may
-                 * differ on ownership. */
+                /* The declaration decides whether the callee borrows or owns a
+                 * by-value container; the caller may itself hold either
+                 * ownership while handing over the same tagged carrier. */
                 bool container_value_borrow_boundary =
                     argument_container_value &&
                     verify_tagged_container_value_boundary(plan, caller_value, callee_value,
-                                                           argument_string_value &&
-                                                                   argument_string_callee_owns
+                                                           (argument_array_value &&
+                                                                argument_array_callee_owns) ||
+                                                                   (argument_string_value &&
+                                                                    argument_string_callee_owns)
                                                                ? XR_TARGET_OWNERSHIP_OWNED
                                                                : XR_TARGET_OWNERSHIP_BORROWED);
                 /* Rebuild the class hand-over from the semantic parameter. The
@@ -6904,10 +6914,11 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                      * parameter may declare and required the call site to state the matching one.
                      */
                     (parameter->ownership == XI_OWN_NONE || argument_string_value ||
+                     argument_array_value ||
                      argument_class_instance ||
                      (argument_adt_enum && parameter->ownership == XI_OWN_OWNED) ||
                      ((argument_u8_slice || argument_unit_enum || argument_adt_enum ||
-                       argument_tagged_ref || argument_container_value) &&
+                       argument_tagged_ref) &&
                       parameter->ownership == XI_OWN_BORROWED)) &&
                     caller_value && callee_value &&
                     slot_binds_value_in_function(

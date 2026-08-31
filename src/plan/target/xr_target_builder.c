@@ -350,6 +350,7 @@ enum {
     XR_TARGET_SURVEY_STORAGE_U8_SLICE = 1u << 8,
     XR_TARGET_SURVEY_STORAGE_LEAF_AGGREGATE = 1u << 9,
     XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT = 1u << 10,
+    XR_TARGET_SURVEY_STORAGE_VALUE_AGGREGATE = 1u << 11,
 };
 
 /* Setting XRAY_TARGET_TRACE prints, on stderr, why this pass refused to build a
@@ -1162,7 +1163,7 @@ static bool semantic_direct_local_string_result_is_exact(const XrSemanticPlan *p
                                                          const XrSemanticOperationRecord *operation,
                                                          const XrSemanticFunctionRecord *callee) {
     return plan && operation && callee &&
-           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+           xr_semantic_local_call_result_opcode_is_exact(operation) &&
            operation->result_type == callee->return_type &&
            operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
@@ -1172,16 +1173,19 @@ static bool semantic_direct_local_string_result_is_exact(const XrSemanticPlan *p
                xr_semantic_plan_type(plan, operation->result_type));
 }
 
-/* Resolve the unique DIRECT_LOCAL call target that owns this operation. A
- * duplicated or foreign target row leaves the operation unclaimed. */
+/* Resolve the unique local call target that owns this operation. A duplicated
+ * or foreign target row leaves the operation unclaimed. */
 static const XrSemanticFunctionRecord *
 semantic_direct_local_callee_for_operation(const XrSemanticPlan *plan, uint32_t operation_index) {
     size_t target_count = xr_semantic_plan_call_target_count(plan);
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(plan, operation_index);
     const XrSemanticFunctionRecord *callee = NULL;
     for (size_t i = 0; i < target_count; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
         if (!target || target->operation != operation_index ||
-            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            !xr_semantic_call_target_names_local_function(
+                target, operation, (uint32_t) xr_semantic_plan_function_count(plan)))
             continue;
         if (callee)
             return NULL;
@@ -1903,34 +1907,6 @@ static bool append_tagged_boundary_layout_intent(XrTargetPlanBuilder *builder,
     return fail(error, error_size, "XR_TARGET_1002", "Array layout intent is missing");
 }
 
-/* A borrowed `Array<T>` parameter, in whichever of the two passing modes the
- * declaration asked for.
- *
- * Both modes borrow, and for the same reason: an Array is a reference-capable
- * container, so the callee sees the caller's allocation either way and releases
- * nothing. The modes differ only in what the callee may do to the binding. A
- * ref parameter names the caller's cell and may rebind it, so it arrives as a
- * pointer to that cell; a by-value parameter arrives as the tagged value
- * itself. Everything else the two demand of the declaration is identical, which
- * is why they are one judgement with the mode as its parameter rather than two
- * that could drift apart.
- *
- * The mode is also what decides how much of the element the boundary has to
- * know: only the ref parameter reaches elements, so only it demands one scalar
- * element storage. */
-static bool
-semantic_direct_local_array_parameter_is_exact(const XrSemanticPlan *plan,
-                                               const XrSemanticParameterRecord *parameter,
-                                               uint8_t mode, uint8_t *storage) {
-    return parameter && parameter->function < xr_semantic_plan_function_count(plan) &&
-           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == mode &&
-           parameter->ownership == XI_OWN_BORROWED &&
-           parameter->transfer_mode == XR_TRANSFER_SHARE &&
-           (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
-           semantic_direct_local_array_type_is_exact(plan, parameter->type, mode == XR_PARAM_REF,
-                                                     storage);
-}
-
 /* What a ref parameter may bind. An Array states an element storage because the
  * callee reaches its elements; a class instance has no elements to reach, so it
  * states none -- but it crosses the boundary in exactly the carrier an Array
@@ -1970,8 +1946,10 @@ semantic_direct_local_scalar_ref_parameter_is_exact(const XrSemanticPlan *plan,
 }
 
 static bool semantic_direct_local_array_value_parameter_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
-    return semantic_direct_local_array_parameter_is_exact(plan, parameter, XR_PARAM_READ, storage);
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, uint8_t *storage,
+    bool *callee_owns) {
+    return xr_semantic_direct_local_array_value_parameter_is_exact(plan, parameter, callee_owns) &&
+           semantic_direct_local_array_type_is_exact(plan, parameter->type, false, storage);
 }
 
 /* A direct-local call that returns `T?`.
@@ -1987,7 +1965,7 @@ semantic_direct_local_nullable_scalar_result_is_exact(const XrSemanticPlan *plan
                                                       const XrSemanticOperationRecord *operation,
                                                       const XrSemanticFunctionRecord *callee) {
     return plan && operation && callee &&
-           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+           xr_semantic_local_call_result_opcode_is_exact(operation) &&
            operation->result_type == callee->return_type &&
            operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
@@ -2008,7 +1986,7 @@ static bool semantic_direct_local_array_result_is_exact(const XrSemanticPlan *pl
                                                         const XrSemanticOperationRecord *operation,
                                                         const XrSemanticFunctionRecord *callee) {
     return plan && operation && callee &&
-           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+           xr_semantic_local_call_result_opcode_is_exact(operation) &&
            operation->result_type == callee->return_type &&
            operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
@@ -5192,21 +5170,23 @@ static bool builder_add_direct_local_tagged_ref_argument_storage(XrTargetPlanBui
             error_size);
     }
     uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
-    /* An Array parameter passed by value. It shares the caller's allocation for
-     * the extent of the call, so it borrows the tagged value it is handed and
-     * needs no place of its own. */
+    /* An Array parameter passed by value. It uses one tagged carrier; the
+     * declaration decides whether the callee borrows or consumes it. */
     for (uint32_t i = 0; valid && i < parameter_count; i++) {
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(builder->semantic_plan, i);
         uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        bool callee_owns = false;
         if (!semantic_direct_local_array_value_parameter_is_exact(builder->semantic_plan, parameter,
-                                                                  &storage) ||
+                                                                  &storage, &callee_owns) ||
             parameter->value >= analysis.total_values || analysis.defined_values[parameter->value])
             continue;
         valid = note_direct_local_tagged_boundary_storage(
             builder, &analysis, parameter->value, parameter->type, parameter->function,
             XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER,
-            XR_TARGET_TAGGED_CARRIER_BORROWED_VALUE, parameter->id, error, error_size);
+            callee_owns ? XR_TARGET_TAGGED_CARRIER_OWNED_VALUE
+                        : XR_TARGET_TAGGED_CARRIER_BORROWED_VALUE,
+            parameter->id, error, error_size);
     }
     for (uint32_t i = 0; valid && i < parameter_count; i++) {
         const XrSemanticParameterRecord *parameter =
@@ -7321,13 +7301,12 @@ static bool builder_add_direct_local_aggregate_result_storage(XrTargetPlanBuilde
         return fail(error, error_size, "XR_TARGET_1003",
                     "leaf product program provenance is incomplete");
     }
-    uint32_t count =
-        semantic_leaf_program_provenance(builder->semantic_plan)
-            ? (uint32_t) xr_semantic_plan_program_call_binding_count(builder->semantic_plan)
-        : semantic_product_program_provenance(builder->semantic_plan)
+    uint32_t program_call_count =
+        semantic_leaf_program_provenance(builder->semantic_plan) ||
+                semantic_product_program_provenance(builder->semantic_plan)
             ? (uint32_t) xr_semantic_plan_program_call_binding_count(builder->semantic_plan)
             : 0u;
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < program_call_count; i++) {
         const XrSemanticProgramCallBinding *binding =
             xr_semantic_plan_program_call_binding(builder->semantic_plan, i);
         const XrSemanticOperationRecord *operation =
@@ -7336,14 +7315,36 @@ static bool builder_add_direct_local_aggregate_result_storage(XrTargetPlanBuilde
             binding ? xr_semantic_plan_function(builder->semantic_plan, binding->target_function)
                     : NULL;
         if (!binding ||
-            (!semantic_leaf_program_direct_call_is_exact(builder->semantic_plan, binding->operation,
-                                                         operation, callee, NULL) &&
+            (!semantic_leaf_program_direct_call_is_exact(builder->semantic_plan,
+                                                         binding->operation, operation, callee,
+                                                         NULL) &&
              !semantic_product_direct_call_is_exact(builder->semantic_plan, binding->operation,
                                                     operation, callee, NULL))) {
             builder->poisoned = true;
             return fail(error, error_size, "XR_TARGET_1003",
                         "leaf aggregate program call binding is incomplete");
         }
+    }
+    uint32_t count =
+        (uint32_t) xr_semantic_plan_call_target_count(builder->semantic_plan);
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(builder->semantic_plan, i);
+        const XrSemanticOperationRecord *operation =
+            target ? xr_semantic_plan_operation(builder->semantic_plan, target->operation) : NULL;
+        const XrSemanticFunctionRecord *callee =
+            target ? xr_semantic_plan_function(builder->semantic_plan, target->function) : NULL;
+        if (!target || target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL || !operation || !callee)
+            continue;
+        bool exact_result =
+            xr_semantic_direct_local_aggregate_result_is_exact(builder->semantic_plan, operation,
+                                                               callee) ||
+            semantic_leaf_program_direct_call_is_exact(builder->semantic_plan, target->operation,
+                                                       operation, callee, NULL) ||
+            semantic_product_direct_call_is_exact(builder->semantic_plan, target->operation,
+                                                  operation, callee, NULL);
+        if (!exact_result)
+            continue;
         bool bound = false;
         for (uint32_t v = 0; !bound && v < builder->value_intent_count; v++)
             bound = builder->value_intents[v].semantic_value == operation->result_value &&
@@ -8748,6 +8749,8 @@ static bool collect_aggregate_intents(XrTargetPlanBuilder *builder,
         const XrSemanticFunctionRecord *direct_callee =
             semantic_direct_local_callee_for_operation(builder->semantic_plan, i);
         bool direct_local_aggregate_result =
+            xr_semantic_direct_local_aggregate_result_is_exact(builder->semantic_plan, operation,
+                                                               direct_callee) ||
             semantic_leaf_program_direct_call_is_exact(builder->semantic_plan, i, operation,
                                                        direct_callee, NULL) ||
             semantic_product_direct_call_is_exact(builder->semantic_plan, i, operation,
@@ -10208,6 +10211,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                                               &leaf_product) &&
         target->function ==
             xr_semantic_plan_program_call_for_operation(plan, target->operation)->target_function;
+    bool exact_value_aggregate =
+        !suspends &&
+        xr_semantic_direct_local_aggregate_result_is_exact(plan, operation, callee) &&
+        find_layout_intent(builder, operation->result_type) >= 0;
     if (callee->parameter_count == UINT16_MAX ||
         operation->operand_count != (uint32_t) callee->parameter_count + operand_shift ||
         callee->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
@@ -10222,7 +10229,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          !semantic_direct_local_array_result_is_exact(plan, operation, callee) &&
          xr_semantic_class_instance_result_source_class(plan, operation) ==
              XR_SEMANTIC_INDEX_NONE &&
-         !exact_leaf_aggregate && !exact_leaf_product)) {
+         !exact_leaf_aggregate && !exact_leaf_product && !exact_value_aggregate)) {
         if (target_trace_enabled()) {
             fprintf(stderr,
                     "[target] refused in direct-local signature: the call's arity, its result type "
@@ -10263,6 +10270,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                                        plan, operation) != XR_SEMANTIC_INDEX_NONE);
             target_trace_judgement("result is an exact typed leaf aggregate", exact_leaf_aggregate);
             target_trace_judgement("result is an exact typed leaf product", exact_leaf_product);
+            target_trace_judgement("result is an exact value aggregate", exact_value_aggregate);
             fprintf(stderr,
                     "[target]   read it as: an arity or type line marked \"differs\" is the whole "
                     "refusal; if all of them match, the result type reached no storage family and "
@@ -10292,7 +10300,8 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                  ? XR_TARGET_SURVEY_STORAGE_CLASS_INSTANCE
                  : 0u) |
             (exact_leaf_aggregate ? XR_TARGET_SURVEY_STORAGE_LEAF_AGGREGATE : 0u) |
-            (exact_leaf_product ? XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT : 0u);
+            (exact_leaf_product ? XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT : 0u) |
+            (exact_value_aggregate ? XR_TARGET_SURVEY_STORAGE_VALUE_AGGREGATE : 0u);
         char detail[384];
         snprintf(detail, sizeof(detail),
                  "direct-local signature or result storage is incomplete opcode=%u "
@@ -10322,8 +10331,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         .result_value = operation->result_value,
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = callee->parameter_count,
-        .result_mode = (exact_leaf_aggregate || exact_leaf_product) ? XR_TARGET_CALL_CALLER_STORAGE
-                                                                    : XR_TARGET_CALL_VALUE,
+        .result_mode = (exact_leaf_aggregate || exact_leaf_product || exact_value_aggregate)
+                           ? XR_TARGET_CALL_CALLER_STORAGE
+                           : XR_TARGET_CALL_VALUE,
         .result_ownership =
             (semantic_direct_local_string_result_is_exact(plan, operation, callee) ||
              xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) ||
@@ -10420,10 +10430,14 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          * produced the value the caller names, a construction or a shared read,
          * was bound by the family that owns that shape. */
         uint8_t array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        bool array_callee_owns = false;
         bool exact_array_value = parameter && parameter->type == operand->type &&
                                  semantic_direct_local_array_value_parameter_is_exact(
-                                     plan, parameter, &array_value_storage) &&
-                                 operand->ownership_action == XR_SEM_OPERAND_BORROW &&
+                                     plan, parameter, &array_value_storage,
+                                     &array_callee_owns) &&
+                                 operand->ownership_action ==
+                                     (array_callee_owns ? XR_SEM_OPERAND_CONSUME
+                                                        : XR_SEM_OPERAND_BORROW) &&
                                  operand->transfer_mode == XR_TRANSFER_SHARE;
         /* A String handed over by value. It reaches the callee the same way an
          * Array by value does -- the tagged value is copied, the allocation is
@@ -10481,10 +10495,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
              * ownerships a String parameter may declare and required the call
              * site to state the matching one, so a second table restating half
              * of that would be the narrower of two spellings of one rule. */
-            (parameter->ownership != XI_OWN_NONE && !exact_string_value && !exact_class_instance &&
+            (parameter->ownership != XI_OWN_NONE && !exact_string_value && !exact_array_value &&
+             !exact_class_instance &&
              !(exact_adt_enum && parameter->ownership == XI_OWN_OWNED) &&
-             !((exact_u8_slice || exact_unit_enum || exact_adt_enum || exact_tagged_ref ||
-                exact_array_value) &&
+             !((exact_u8_slice || exact_unit_enum || exact_adt_enum || exact_tagged_ref) &&
                parameter->ownership == XI_OWN_BORROWED))) {
             if (target_trace_enabled()) {
                 fprintf(stderr,
@@ -14820,9 +14834,17 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
         const XrTargetValueRepRecord *result =
             find_materialized_value(materialized, intent->result_value);
         if (!result || intent->argument_begin != next_argument ||
-            intent->argument_count > materialized->call_argument_count - next_argument)
-            return fail(error, error_size, "XR_TARGET_1003",
-                        "call result or argument partition cannot bind canonical storage");
+            intent->argument_count > materialized->call_argument_count - next_argument) {
+            char detail[256];
+            snprintf(detail, sizeof(detail),
+                     "call result or argument partition cannot bind canonical storage "
+                     "call=%u operation=%u result-value=%u result-bound=%u argument-begin=%u "
+                     "expected-begin=%u argument-count=%u table-count=%u",
+                     i, intent->semantic_operation, intent->result_value, result != NULL,
+                     intent->argument_begin, next_argument, intent->argument_count,
+                     materialized->call_argument_count);
+            return fail(error, error_size, "XR_TARGET_1003", detail);
+        }
         XrTargetCallRecord *call = &materialized->calls[i];
         bool result_is_void =
             result && result->memory_rep < materialized->machine_rep_count &&
@@ -14980,6 +15002,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
              * outer value, so both cross this boundary as a plain argument the
              * callee borrows, and the rep agreement they need is the same one. */
             uint8_t exact_array_value_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+            bool array_callee_owns = false;
             bool string_callee_owns = false;
             bool container_value_argument =
                 parameter && argument_intent->mode == XR_TARGET_CALL_VALUE &&
@@ -14987,14 +15010,16 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 argument_intent->flags == 0 &&
                 argument_intent->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
                 (semantic_direct_local_array_value_parameter_is_exact(
-                     builder->semantic_plan, parameter, &exact_array_value_storage) ||
+                     builder->semantic_plan, parameter, &exact_array_value_storage,
+                     &array_callee_owns) ||
                  xr_semantic_direct_local_string_value_parameter_is_exact(
                      builder->semantic_plan, parameter, &string_callee_owns));
             bool container_value_borrow_boundary =
                 container_value_argument &&
                 tagged_container_value_boundary(materialized, caller, callee,
-                                                string_callee_owns ? XR_TARGET_OWNERSHIP_OWNED
-                                                                   : XR_TARGET_OWNERSHIP_BORROWED);
+                                                (array_callee_owns || string_callee_owns)
+                                                    ? XR_TARGET_OWNERSHIP_OWNED
+                                                    : XR_TARGET_OWNERSHIP_BORROWED);
             /* A class instance crosses in the ownership its parameter states.
              * Borrowing and consuming calls use the same tagged carrier; only
              * the callee-side ownership changes. */

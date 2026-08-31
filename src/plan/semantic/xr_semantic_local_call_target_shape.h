@@ -17,6 +17,18 @@
 #include "xr_semantic_plan.h"
 #include "../../ir/xi.h"
 
+/* The result side of an already-resolved local call has the same ABI whether
+ * the source spelled a plain call, a tail call, or an instance-method call.
+ * This helper deliberately answers only the opcode question: callers must
+ * still prove the unique local target and pass its exact callee record before
+ * using any result-family judgement. */
+static inline bool
+xr_semantic_local_call_result_opcode_is_exact(const XrSemanticOperationRecord *operation) {
+    return operation &&
+           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
+            operation->opcode == XI_CALL_METHOD);
+}
+
 /* Whether the target names a function of this module and sits on the opcode
  * that spelling requires. DIRECT_LOCAL comes from a plain call whose callee is
  * an operand; SOURCE_INSTANCE_METHOD_LOCAL comes from a method call whose

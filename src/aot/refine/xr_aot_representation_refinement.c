@@ -1234,7 +1234,7 @@ static bool aot_direct_local_string_result_is_exact(const XrSemanticPlan *semant
                         XR_SEM_TYPE_AGGREGATE_EXACT;
     uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
     if (!semantic || !operation || !type ||
-        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        !xr_semantic_local_call_result_opcode_is_exact(operation) ||
         operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
         operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
         type->kind != XR_KIND_STRING || type->child_count != 0 ||
@@ -1247,7 +1247,8 @@ static bool aot_direct_local_string_result_is_exact(const XrSemanticPlan *semant
     for (size_t i = 0; i < target_count; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, i);
         if (!target || target->operation != operation_index ||
-            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            !xr_semantic_call_target_names_local_function(
+                target, operation, (uint32_t) xr_semantic_plan_function_count(semantic)))
             continue;
         if (callee)
             return false;
@@ -1613,22 +1614,6 @@ static bool aot_direct_ref_subject_type_is_exact(const XrSemanticPlan *semantic,
     return aot_array_type_is_exact(semantic, type_index, true, storage);
 }
 
-/* A borrowed `Array<T>` parameter in whichever passing mode was declared. Both
- * modes borrow the caller's allocation and release nothing; they differ only in
- * whether the callee is handed a pointer to the caller's cell (ref, so it may
- * rebind) or the tagged value itself. One judgement with the mode as its
- * parameter, so the two cannot drift apart. */
-static bool aot_array_parameter_is_exact(const XrSemanticPlan *semantic,
-                                         const XrSemanticParameterRecord *parameter, uint8_t mode,
-                                         uint8_t *storage) {
-    return parameter && parameter->function < xr_semantic_plan_function_count(semantic) &&
-           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == mode &&
-           parameter->ownership == XI_OWN_BORROWED &&
-           parameter->transfer_mode == XR_TRANSFER_SHARE &&
-           (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
-           aot_array_type_is_exact(semantic, parameter->type, mode == XR_PARAM_REF, storage);
-}
-
 static bool aot_tagged_ref_parameter_is_exact(const XrSemanticPlan *semantic,
                                               const XrSemanticParameterRecord *parameter,
                                               uint8_t *storage) {
@@ -1643,8 +1628,10 @@ static bool aot_tagged_ref_parameter_is_exact(const XrSemanticPlan *semantic,
 
 static bool aot_array_value_parameter_is_exact(const XrSemanticPlan *semantic,
                                                const XrSemanticParameterRecord *parameter,
-                                               uint8_t *storage) {
-    return aot_array_parameter_is_exact(semantic, parameter, XR_PARAM_READ, storage);
+                                               uint8_t *storage, bool *callee_owns) {
+    return xr_semantic_direct_local_array_value_parameter_is_exact(semantic, parameter,
+                                                                   callee_owns) &&
+           aot_array_type_is_exact(semantic, parameter->type, false, storage);
 }
 
 /* A direct-local call that hands back a freshly owned `Array<T>`. The container
@@ -1655,7 +1642,7 @@ static bool aot_direct_local_array_result_is_exact(const XrSemanticPlan *semanti
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(semantic, operation_index);
     if (!semantic || !operation ||
-        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        !xr_semantic_local_call_result_opcode_is_exact(operation) ||
         operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
         operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
         !aot_array_type_is_exact(semantic, operation->result_type, false, NULL))
@@ -1665,7 +1652,8 @@ static bool aot_direct_local_array_result_is_exact(const XrSemanticPlan *semanti
     for (size_t i = 0; i < target_count; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, i);
         if (!target || target->operation != operation_index ||
-            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+            !xr_semantic_call_target_names_local_function(
+                target, operation, (uint32_t) xr_semantic_plan_function_count(semantic)))
             continue;
         if (callee)
             return false;
@@ -7386,10 +7374,8 @@ static bool tagged_value_parameter_rows_are_exact(const VerifyAuthority *ctx,
            slot->root_kind == XR_TARGET_ROOT_DYNAMIC && slot->ownership == callee_ownership;
 }
 
-/* An `Array<T>` parameter handed over by value. It borrows the caller's
- * allocation for the extent of the call, so it is bound to the same borrowed
- * tagged carrier a shared read of that array gets rather than to the pointer a
- * ref parameter needs. */
+/* An `Array<T>` parameter handed over by value. It uses one tagged carrier;
+ * the declaration decides whether the callee borrows or owns it. */
 static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthority *ctx,
                                                               uint32_t semantic_value,
                                                               XrRep *out_storage,
@@ -7402,9 +7388,11 @@ static bool oracle_direct_local_array_value_parameter_storage(const VerifyAuthor
             ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
             : NULL;
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    if (!aot_array_value_parameter_is_exact(ctx->semantic, parameter, &storage) ||
+    bool callee_owns = false;
+    if (!aot_array_value_parameter_is_exact(ctx->semantic, parameter, &storage, &callee_owns) ||
         !tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter,
-                                               XR_TARGET_OWNERSHIP_BORROWED))
+                                               callee_owns ? XR_TARGET_OWNERSHIP_OWNED
+                                                           : XR_TARGET_OWNERSHIP_BORROWED))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -10557,6 +10545,7 @@ static bool oracle_leaf_aggregate_return_storage(const VerifyAuthority *ctx, uin
 static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value, XrRep *out_storage,
                                   uint16_t *out_machine_kind) {
     return oracle_leaf_aggregate_return_storage(ctx, value, out_storage, out_machine_kind) ||
+           oracle_value_aggregate_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_machine_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_u8_slice_parameter_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_nullable_scalar_storage(ctx, value, out_storage, out_machine_kind) ||

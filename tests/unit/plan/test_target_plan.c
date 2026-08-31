@@ -4781,6 +4781,16 @@ static XrSemanticPlan *build_direct_local_aggregate_call(void) {
     XiValue *call = xi_value_new(root, root_entry, XI_CALL, &aggregate, 1);
     REQUIRE(call != NULL);
     call->args[0] = closure;
+    call->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    child->arc_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
     XiValue *root_int = xi_const_int(root, root_entry, 2, &stub_int);
     XiValue *root_bool = xi_const_bool(root, root_entry, false, &stub_bool);
     XiValue *root_result = xi_value_new(root, root_entry, XI_TUPLE_NEW, &aggregate, 2);
@@ -5933,15 +5943,48 @@ static void test_coroutine_state_call_family(void) {
     test_tail_coroutine_chain_fingerprint();
 }
 
-static void test_direct_local_future_storage_fails_closed(void) {
+static void test_direct_local_value_aggregate_result_storage(void) {
     XrTargetProfile *profile = build_profile(0);
     char error[512] = {0};
     XrTargetPlan *plan = NULL;
-    XrSemanticPlan *aggregate = build_direct_local_aggregate_call();
-    error[0] = '\0';
-    REQUIRE(!xr_target_plan_build(aggregate, profile, &plan, error, sizeof(error)));
-    REQUIRE(plan == NULL && strncmp(error, "XR_TARGET_1003", 14) == 0);
-    xr_semantic_plan_free(aggregate);
+    XrSemanticPlan *semantic = build_direct_local_aggregate_call();
+    const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, 0);
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    const XrSemanticFunctionRecord *callee =
+        target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+    REQUIRE(target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL && operation && callee &&
+            xr_semantic_direct_local_aggregate_result_is_exact(semantic, operation, callee));
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    REQUIRE(plan != NULL && plan->calls_count == 1);
+    XrTargetCallRecord *call = &plan->calls[0];
+    const XrTargetValueRepRecord *result =
+        xr_target_plan_value_rep(plan, operation->result_value);
+    REQUIRE(call->semantic_operation == target->operation &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
+            call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
+            call->result_mode == XR_TARGET_CALL_CALLER_STORAGE &&
+            call->result_ownership == XR_TARGET_CALL_NONE && result &&
+            call->result_slot == result->slot && call->caller_storage_slot == result->slot &&
+            result->register_rep < plan->machine_reps_count &&
+            result->memory_rep < plan->machine_reps_count &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_AGGREGATE &&
+            plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_AGGREGATE);
+    uint8_t saved_mode = call->result_mode;
+    call->result_mode = XR_TARGET_CALL_VALUE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_mode = saved_mode;
+    uint32_t saved_storage = call->caller_storage_slot;
+    call->caller_storage_slot = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->caller_storage_slot = saved_storage;
+    uint8_t saved_ownership = call->result_ownership;
+    call->result_ownership = XR_TARGET_CALL_RETURN_OWNED;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = saved_ownership;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
 }
 
@@ -8924,6 +8967,11 @@ int main(int argc, char **argv) {
         puts("Direct-local managed aggregate precursor tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "direct-local-value-aggregate-result") == 0) {
+        test_direct_local_value_aggregate_result_storage();
+        puts("Direct-local value aggregate result tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "coroutine-lifecycle-authority") == 0) {
         test_owned_string_coroutine_lifecycle_authority();
         test_large_coroutine_lifecycle_projection_is_bounded();
@@ -9070,7 +9118,7 @@ int main(int argc, char **argv) {
     test_source_instance_method_target_fails_closed();
     test_open_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();
-    test_direct_local_future_storage_fails_closed();
+    test_direct_local_value_aggregate_result_storage();
     test_structural_mutations_fail_closed();
     test_value_rep_mutations_fail_closed();
     test_freeze_rejects_invalid_draft();

@@ -48,6 +48,14 @@ XR_FUNC bool xi_value_type_is_unknown(const XiValue *v);
  * duplicate shared-slot scans. */
 XR_FUNC const XiImportRef *xi_value_import_ref(const XiFunc *func, const XiValue *value);
 
+/* Resolve a statically known namespace or source-instance method to its exact
+ * Xi function. Coroutine analysis and ARC both need the same answer: if either
+ * layer reconstructs only one spelling, suspendability and parameter ownership
+ * can disagree for the same call. NULL means the method is not closed by the
+ * current module graph; callers must stay conservative rather than use names
+ * as authority. */
+XR_FUNC XiFunc *xi_value_resolve_method_callee(const XiFunc *caller, const XiValue *call);
+
 /* True when the module-graph import resolver has already run over this
  * reference and bound it to no source module, function, shared slot or export
  * slot: the sealed native ABI registry is then its only possible target.

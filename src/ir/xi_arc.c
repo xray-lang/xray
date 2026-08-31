@@ -515,7 +515,6 @@ static bool op_is_call(uint16_t op) {
 }
 
 static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv);
-static XiFunc *arc_resolve_namespace_method_callee(const XiFunc *caller, const XiValue *user);
 
 /* The one place that answers "which function does this call reach". A resolved
  * callee carries the whole-program fixed point for its return ABI, which is
@@ -530,7 +529,7 @@ static XiFunc *arc_callee_of(const XiFunc *caller, const XiValue *call) {
     if ((call->op == XI_CALL || call->op == XI_TAIL_CALL) && call->nargs >= 1)
         return arc_resolve_callee(caller, call->args[0]);
     if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT)
-        return arc_resolve_namespace_method_callee(caller, call);
+        return xi_value_resolve_method_callee(caller, call);
     return NULL;
 }
 
@@ -900,30 +899,6 @@ static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
     }
     const XiImportRef *ref = xi_value_import_ref(caller, cv);
     return ref ? ref->resolved_func : NULL;
-}
-
-/* Resolve the callee of a namespace-member call: a CALL_METHOD whose receiver
- * is a whole-module import (`mod.f(...)`). The receiver is dropped at
- * emission on every backend (the target is a free function), so call argument
- * i binds callee parameter i-1 exactly like a plain call. Returns NULL when
- * the receiver is not a resolved namespace import or the member is not an
- * exported function — the arguments then keep the conservative moved-in
- * classification (leak-safe, never a double free). */
-static XiFunc *arc_resolve_namespace_method_callee(const XiFunc *caller, const XiValue *user) {
-    if ((user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) || user->nargs < 1 ||
-        !user->aux)
-        return NULL;
-    const XiImportRef *ref = xi_value_import_ref(caller, user->args[0]);
-    if (!ref || ref->member_name || !ref->resolved_module)
-        return NULL;
-    const char *member = (const char *) user->aux;
-    const XiModule *mod = ref->resolved_module;
-    for (uint16_t ei = 0; ei < mod->nexports; ei++) {
-        const XiModuleExport *exp = &mod->exports[ei];
-        if (exp->function && exp->name && strcmp(exp->name, member) == 0)
-            return exp->function;
-    }
-    return NULL;
 }
 
 static XiReturnOwnership arc_return_ownership(uint8_t kind, int16_t param_index, bool complete) {

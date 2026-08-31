@@ -20,6 +20,7 @@
 
 #include "xr_semantic_plan.h"
 #include "xr_semantic_shared_read_shape.h"
+#include "../../ir/xi_own.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
@@ -70,6 +71,26 @@ static inline bool xr_semantic_array_type_row_is_exact(const XrSemanticTypeRecor
     if (type->flags & XR_SEM_TYPE_CONST)
         return strncmp(type->canonical_key, expected_const, (size_t) const_length) == 0;
     return strncmp(type->canonical_key, expected, (size_t) length) == 0;
+}
+
+/* An Array parameter handed over by value uses the same tagged carrier whether
+ * the callee borrows or consumes the allocation. The declaration is the sole
+ * ownership authority: a read-only body borrows, while a body that retains or
+ * consumes the value owns and releases it. Target construction, independent
+ * verification, and AOT refinement all use this judgement before applying
+ * their target-specific element-storage checks. */
+static inline bool xr_semantic_direct_local_array_value_parameter_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, bool *callee_owns) {
+    if (!plan || !parameter || parameter->function >= xr_semantic_plan_function_count(plan) ||
+        parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_READ ||
+        (parameter->ownership != XI_OWN_BORROWED && parameter->ownership != XI_OWN_OWNED) ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        !xr_semantic_array_type_row_is_exact(xr_semantic_plan_type(plan, parameter->type)))
+        return false;
+    if (callee_owns)
+        *callee_owns = parameter->ownership == XI_OWN_OWNED;
+    return true;
 }
 
 /* A borrowed read of an Array held in a shared cell. The shared operation
