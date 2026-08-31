@@ -8758,6 +8758,14 @@ def _test_xi_lowering_actual_ninja_edge() -> None:
     if cmake is None:
         die("xisagen self-test requires CMake; install cmake and retry")
     repository_root = Path(__file__).resolve().parents[2]
+    repository_cmake = (repository_root / 'CMakeLists.txt').read_text(
+        encoding='utf-8')
+    generated_closure_marker = (
+        'set(XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS')
+    validation_dependency_marker = (
+        '${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}')
+    assert generated_closure_marker in repository_cmake
+    assert repository_cmake.count(validation_dependency_marker) == 1
     ops_source = (repository_root / 'xisa/xi/ops.def').read_bytes()
     lowering_source = (repository_root / 'xisa/xi/lowering.def').read_bytes()
     ops = parse_xi_ops_def(ops_source.decode('utf-8'), 'actual-edge ops')
@@ -8847,6 +8855,10 @@ with events.open('a', encoding='utf-8') as stream:
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
+        generated_closure = root / 'src/aot/xaot_rep_gen.h'
+        generated_closure_seed = root / 'xaot_rep_gen.seed'
+        generated_closure_seed.write_bytes(generated_closure.read_bytes())
+        generated_closure.unlink()
         build = root / 'build'
         build.mkdir()
         mode = root / 'mode.txt'
@@ -8871,9 +8883,19 @@ with events.open('a', encoding='utf-8') as stream:
             f'set(VALIDATOR "{validator.as_posix()}")\n'
             f'set(CHECKER "{checker.as_posix()}")\n'
             f'set(MODE "{mode.as_posix()}")\n'
+            'set(GENERATED_CLOSURE '
+            '${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xaot_rep_gen.h)\n'
+            'set(GENERATED_CLOSURE_SEED '
+            '${CMAKE_CURRENT_SOURCE_DIR}/xaot_rep_gen.seed)\n'
             'set(STAMP ${CMAKE_CURRENT_BINARY_DIR}/xi.validated)\n'
             'set(DEPFILE ${CMAKE_CURRENT_BINARY_DIR}/xi.d)\n'
             'set(PROJECTIONS\n' + projection_lines + ')\n'
+            'add_custom_command(\n'
+            '  OUTPUT ${GENERATED_CLOSURE}\n'
+            '  COMMAND ${CMAKE_COMMAND} -E copy_if_different '
+            '${GENERATED_CLOSURE_SEED} ${GENERATED_CLOSURE}\n'
+            '  DEPENDS ${GENERATED_CLOSURE_SEED}\n'
+            '  VERBATIM)\n'
             'add_custom_command(\n'
             '  OUTPUT ${STAMP}\n'
             f'  COMMAND "{sys.executable}" -B ${{VALIDATOR}} ${{XISAGEN}} '
@@ -8881,7 +8903,8 @@ with events.open('a', encoding='utf-8') as stream:
             '  BYPRODUCTS ${DEPFILE}\n'
             '  DEPENDS ${XISAGEN} ${VALIDATOR} ${MODE} '
             '${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/ops.def '
-            '${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/lowering.def\n'
+            '${CMAKE_CURRENT_SOURCE_DIR}/xisa/xi/lowering.def '
+            '${GENERATED_CLOSURE}\n'
             '  DEPFILE ${DEPFILE}\n'
             '  VERBATIM)\n'
             'add_custom_target(gen-xi-lowering\n'

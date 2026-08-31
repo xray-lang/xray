@@ -377,6 +377,25 @@ set(XRAY_GEN_STDLIB_METADATA_DEPS
     ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_stdlib_generated.inc
 )
 
+# The Xi lowering validator snapshots the compiler-visible AOT translation
+# closure.  Some members of that closure are checked-in projections produced
+# by other build edges.  Order those producers before the snapshot so a cold
+# parallel build cannot validate while a projection is being replaced.
+set(XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS
+    ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
+    ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_instruction_gen.h
+    ${CMAKE_SOURCE_DIR}/src/shared/xr_semantic_owner_ids_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_ids_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/src/aot/xstdlib_aot_methods_generated.inc.c
+    ${CMAKE_SOURCE_DIR}/src/aot/xaot_stdlib_generated.inc.c
+    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_defs_generated.h
+)
+
 add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
     COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-ops
@@ -506,6 +525,7 @@ add_custom_command(
     DEPENDS ${XISAGEN}
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
+            ${XRAY_XI_LOWERING_GENERATED_CLOSURE_DEPS}
     DEPFILE ${XRAY_XI_LOWERING_VALIDATION_DEPFILE}
     COMMENT "xisagen: validating source-current Xi lowering consumers"
     VERBATIM
