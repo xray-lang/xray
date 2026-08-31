@@ -352,8 +352,9 @@ static const char *copy_canonical_source_file(XrSemanticBuildContext *ctx, const
  * here, so the key and the record flag can no longer disagree. */
 static bool semantic_type_is_value(const XrType *type) {
     return type &&
-           (type->is_value_type || (type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
-                                    type->instance.class_ref->struct_layout));
+           (type->kind == XR_KIND_STRUCT_OBJECT || type->is_value_type ||
+            (type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
+             type->instance.class_ref->struct_layout));
 }
 
 static uint32_t program_type_row_for_source(const XrSemanticBuildContext *ctx, const XrType *type);

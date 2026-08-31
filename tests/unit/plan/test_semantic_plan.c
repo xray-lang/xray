@@ -2572,6 +2572,21 @@ static void test_typed_entity_identity_table(void) {
     uintptr_t source_address = 0;
     XrSemanticPlan *first = build_entity_identity_plan_with_source(&source_address);
     XrSemanticPlan *second = build_entity_identity_plan();
+    XrSemanticTypeRecord *struct_object = NULL;
+    for (uint32_t i = 0; i < first->type_count; i++) {
+        if (first->types[i].kind != XR_KIND_STRUCT_OBJECT)
+            continue;
+        REQUIRE(struct_object == NULL);
+        struct_object = &first->types[i];
+    }
+    REQUIRE(struct_object != NULL && (struct_object->flags & XR_SEM_TYPE_VALUE) != 0);
+    uint8_t saved_struct_flags = struct_object->flags;
+    struct_object->flags &= (uint8_t) ~XR_SEM_TYPE_VALUE;
+    char mutation_error[512] = {0};
+    REQUIRE(!xr_semantic_plan_verify(first, mutation_error, sizeof(mutation_error)) &&
+            strncmp(mutation_error, "XR_SEM_0012", strlen("XR_SEM_0012")) == 0);
+    struct_object->flags = saved_struct_flags;
+    REQUIRE(xr_semantic_plan_verify(first, mutation_error, sizeof(mutation_error)));
     uint32_t kinds[XR_SEM_ENTITY_KIND_COUNT] = {0};
     for (uint32_t i = 0; i < first->entity_count; i++) {
         const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(first, i);
@@ -2658,7 +2673,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "581a75b551c70fa0f19249651c01f939") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "60ffda97746cadf58574b9eee3cb19ce") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(
@@ -2683,7 +2698,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "b230a694f304f31044e50451f18124e9") == 0);
+    REQUIRE(strcmp(loan_id_hex, "0116e921042eb821008deef671323489") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&

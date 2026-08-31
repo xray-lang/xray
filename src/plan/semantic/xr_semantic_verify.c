@@ -965,6 +965,10 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
             return report(error, error_size, "XR_SEM_0002", "builtin type identity is not exact");
         if (type->kind >= XR_KIND_COUNT)
             return report(error, error_size, "XR_SEM_0005", "plan contains an invalid type kind");
+        if (type->kind == XR_KIND_STRUCT_OBJECT &&
+            (type->flags & XR_SEM_TYPE_VALUE) == 0)
+            return report(error, error_size, "XR_SEM_0012",
+                          "struct object lacks value-aggregate identity");
         if ((type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0 &&
             (type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
             return report(error, error_size, "XR_OWN_3000",
