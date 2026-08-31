@@ -1,0 +1,574 @@
+{
+  "schema": "ownership-activation-gate-staging/1",
+  "activation": "staging-only-before-i1-r4",
+  "authority": "non-authoritative executable gate ledger; CURRENT identifies an existing entrypoint and never a Task 284 PASS",
+  "train_base": {
+    "commit": "eabe56cc986cf2147d02254ae1b1acaa1418663f",
+    "tree": "45f708658f0945bf3f588be332859d3ecde58782"
+  },
+  "current_entrypoint_semantics": "CURRENT means the repository has a complete command entrypoint; every gate remains UNRUN until the atomic public cut and its exact activated assets are present",
+  "gates": [
+    {
+      "id": "matching-default-release-binary",
+      "owner": "integration-train build identity",
+      "entrypoint_state": "CURRENT",
+      "commands": [
+        "cmake --preset default",
+        "cmake --build build --target xray -j4",
+        "./build/xray --version --json",
+        "./build/xray toolchain doctor --json"
+      ],
+      "cwd": "repository-root",
+      "environment": "independent Ninja Release default-preset build with fastpaths on, clean current source, and no foreign-worktree binary",
+      "required_host_provider": "current train host plus the native provider reported by toolchain doctor",
+      "skip_policy": "no skip; configure, build, identity, or provider mismatch is failure",
+      "pass_criteria": "build succeeds and compiler commit, dirty state, profile, and provider exactly match the clean current source",
+      "evidence_artifacts": [
+        "build/CMakeCache.txt",
+        "build/xray",
+        "xray --version --json output",
+        "toolchain doctor --json output",
+        "build log"
+      ],
+      "future_assets": [
+        "clean activated train tree after stdlib/sync/sync.xr XR_SEM_0019 is removed"
+      ]
+    },
+    {
+      "id": "semantic-plan-build-check-replay",
+      "owner": "SemanticPlan builder verifier and Xi replay",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^(test_semantic_plan|test_xi_program_semantic)$'"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build",
+      "required_host_provider": "any supported host; no native provider required",
+      "skip_policy": "no skip or allowlist; every activated ownership row needs positive build, check, replay, and mutation rejection",
+      "pass_criteria": "build, independent verify, and replay agree byte-for-byte on ownership obligations and every hostile mutation rejects",
+      "evidence_artifacts": [
+        "build/Testing/Temporary/LastTest.log"
+      ],
+      "future_assets": [
+        "Task 284 SemanticPlan ownership obligation, check, and replay unit cases",
+        "per-field mutation cases"
+      ]
+    },
+    {
+      "id": "semantic-and-target-plan-hostile-input",
+      "owner": "SemanticPlan XSM and TargetPlan XTP verifier-loader owners",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^(test_semantic_plan|test_target_plan|test_xtp_format|test_xtp_resource_stress|test_xtp_fuzz_entry|test_runtime_target_plan_load_archive)$'"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build",
+      "required_host_provider": "any supported host; no native provider required",
+      "skip_policy": "no skip; malformed, truncated, foreign, or unknown ownership rows must fail closed",
+      "pass_criteria": "valid typed rows round-trip and every malformed source-plan, target-plan, and artifact mutation is independently rejected",
+      "evidence_artifacts": [
+        "build/Testing/Temporary/LastTest.log"
+      ],
+      "future_assets": [
+        "Task 284 hostile XSM ownership rows",
+        "Task 284 hostile XTP and TargetPlan ownership rows",
+        "unknown-enum, missing-proof, wrong-origin, wrong-domain, and fingerprint-preserving semantic mutations"
+      ]
+    },
+    {
+      "id": "vm-aot-same-plan-differential",
+      "owner": "backend differential runner",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^backend_diff$'"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build with the differential job limits supplied by CTest",
+      "required_host_provider": "host with a supported native C provider",
+      "skip_policy": "no new skip, baseline, or allowlist; source-declared backend exclusions cannot substitute for Task 284 coverage",
+      "pass_criteria": "the same source and verified plan produce byte-identical VM and AOT outcomes for every activated Task 284 case",
+      "evidence_artifacts": [
+        "build/Testing/Temporary/LastTest.log",
+        "backend differential per-case logs"
+      ],
+      "future_assets": [
+        "Task 284 governed differential case manifest",
+        "positive and negative ownership cases with exact plan identity evidence"
+      ]
+    },
+    {
+      "id": "o1-handoff-no-graph-walk",
+      "owner": "ownership handoff executor and lifecycle audit",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^(test_typed_lifecycle_audit|coroutine_lifecycle_projection_contract|xi_rc_count_smoke)$'"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build with verifier and ownership counters enabled",
+      "required_host_provider": "supported VM and AOT host-provider used by the activation differential",
+      "skip_policy": "no skip, reduced graph, disabled counter, or copy fallback",
+      "pass_criteria": "visited_node_count is zero, payload address and domain identity are unchanged, no deep copy or retag occurs, and latency is independent of reachable-node count",
+      "evidence_artifacts": [
+        "build/Testing/Temporary/LastTest.log",
+        "Task 284 handoff counter and benchmark report",
+        "generated-C shape log"
+      ],
+      "future_assets": [
+        "flat, tree, DAG, and cycle handoff fixtures",
+        "visited-node, copy, retag, and atomic-operation counters",
+        "size-sweep benchmark manifest"
+      ]
+    },
+    {
+      "id": "handoff-cleanup-drop-once",
+      "owner": "runtime lifecycle cleanup and VM-AOT executors",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^(test_typed_lifecycle|test_typed_lifecycle_audit|backend_diff_liveness|parallel_vm_lanes)$'"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build with normal verifier and cleanup instrumentation",
+      "required_host_provider": "supported VM and AOT host-provider",
+      "skip_policy": "no skip, timeout suppression, case reduction, or cleanup allowlist",
+      "pass_criteria": "success, channel close, full, timeout, cancel, and task-failure paths each drop the transferred root exactly once with no leak, use-after-free, or double-free",
+      "evidence_artifacts": [
+        "build/Testing/Temporary/LastTest.log",
+        "Task 284 lifecycle and drop audit report"
+      ],
+      "future_assets": [
+        "Task 284 channel close, full, and timeout fixtures",
+        "cancel and task-failure fixtures",
+        "drop-once audit assertions"
+      ]
+    },
+    {
+      "id": "meta-ownership-inventory",
+      "owner": "meta ownership inventory checker",
+      "entrypoint_state": "CURRENT",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^meta_ownership_inventory$'"
+      ],
+      "cwd": "repository-root",
+      "environment": "configured independent Ninja build with Python 3",
+      "required_host_provider": "any supported host; no native provider required",
+      "skip_policy": "no skip; every maximum-category budget remains zero",
+      "pass_criteria": "AST_PTR_INTO_IR, PTR_ACROSS_GROWTH, and CGEN_BORROWED_NAME remain zero on the final activated tree",
+      "evidence_artifacts": [
+        "build/Testing/Temporary/LastTest.log"
+      ],
+      "future_assets": [
+        "final activated Task 284 source and generated paths"
+      ]
+    },
+    {
+      "id": "generated-c-w1-w4",
+      "owner": "generated-C W1-W4 verifier",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^(test_cgen_verify_output|test_xi_cgen)$'"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build with W1-W4 verification always enabled",
+      "required_host_provider": "any supported build host; provider compilation is covered by separate provider gates",
+      "skip_policy": "no bypass or downgrade; verifier ICE is mandatory and malformed generated C may not reach a host compiler",
+      "pass_criteria": "W1 balance, W2 identifier hygiene, W3 scope hygiene, and W4 use-before-definition injections reject, and every activated Task 284 path passes",
+      "evidence_artifacts": [
+        "build/Testing/Temporary/LastTest.log",
+        "Task 284 generated-C outputs"
+      ],
+      "future_assets": [
+        "Task 284 generated-C positive output fixtures",
+        "one hostile injection per affected W1-W4 category"
+      ]
+    },
+    {
+      "id": "contract-freeze-and-hostile-artifact",
+      "owner": "contract freeze checker and semantic-target artifact loaders",
+      "entrypoint_state": "CURRENT",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^(contract_freeze|contract_freeze_injection|test_xtp_format|test_xtp_resource_stress|test_xtp_fuzz_entry|test_runtime_target_plan_load_archive)$'"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build at the final activated commit",
+      "required_host_provider": "any supported host; no native provider required",
+      "skip_policy": "no stale anchor, compatibility reader, schema alias, or hostile-artifact allowlist",
+      "pass_criteria": "all changed anchors are exact, injection self-test fails closed, and malformed, old, and foreign ownership artifacts reject",
+      "evidence_artifacts": [
+        "build/Testing/Temporary/LastTest.log",
+        "updated contract anchor records",
+        "hostile artifact logs"
+      ],
+      "future_assets": [
+        "Task 284 exact schema and artifact fixtures",
+        "old-schema, unknown-field, truncated, and semantically mutated ownership artifacts"
+      ]
+    },
+    {
+      "id": "live-refusal-schema3-row-binding",
+      "owner": "live refusal survey and manifest checker",
+      "entrypoint_state": "CURRENT",
+      "commands": [
+        "python3 tests/diff/survey_refusals.py --build build --output build/task284-live-refusal-manifest.json",
+        "python3 scripts/check_live_refusal_manifest.py --root . --build build --manifest build/task284-live-refusal-manifest.json"
+      ],
+      "cwd": "repository-root",
+      "environment": "clean current source with the exact independent Ninja Release VM-fastpaths-off compiler and matching provider",
+      "required_host_provider": "same hosted native provider frozen by toolchain doctor and the generated manifest",
+      "skip_policy": "only canonical source-declared backend exclusions; no compatibility schema, missing-row waiver, evidence-debt allowance, or ratchet rewrite",
+      "pass_criteria": "schema 3 is exclusive, every source-emitted refusal row binds exactly one registered same-line diagnostic, and evidence debt and refusal-ratchet drift are zero",
+      "evidence_artifacts": [
+        "build/task284-live-refusal-manifest.json",
+        "manifest raw native build logs",
+        "generator and verifier stdout and stderr"
+      ],
+      "future_assets": [
+        "Task 284 cases admitted to canonical unsharded differential discovery",
+        "registered diagnostics on every new source-emitted ownership refusal row"
+      ]
+    },
+    {
+      "id": "asan-focused",
+      "owner": "Task 284 compiler IR and AOT slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake -E env 'XR_ASAN_CTEST_REGEX=^(test_ownership_audit|test_xa_program_semantic_closure|test_semantic_plan|test_target_plan|test_xi_program_semantic|test_xi_source_move_verify|test_runtime_target_plan_load_archive|test_xr_aot_refinement|test_cgen_verify_output)$' 'XR_ASAN_DIFF_REGEX=^backend_diff$' XR_ASAN_BILI_MAIN=tests/aot/basic/inferred_move_transfer.xr ctest --test-dir build --output-on-failure -R '^asan_focused$' -O build/task284-asan-focused.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "independent script-owned build-asan with ASan and UBSan Debug assertions and fastpaths off",
+      "required_host_provider": "supported ASan and UBSan host",
+      "skip_policy": "optional xxhash absence may be informational only; selected tests, backend differential, and required BILI workload may not skip",
+      "pass_criteria": "the script passes with no sanitizer report and every selected activated identity is discovered and run",
+      "evidence_artifacts": [
+        "build/task284-asan-focused.log",
+        "build-asan/xray identity",
+        "sanitizer lane log"
+      ],
+      "future_assets": [
+        "activated Task 284 positive AOT workload",
+        "activated focused test identities"
+      ]
+    },
+    {
+      "id": "aot-ubsan-generated-output",
+      "owner": "AOT generated-output sanitizer lane",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake -E env XR_AOT_UBSAN_TOOLCHAIN=clang XR_AOT_UBSAN_CASES=tests/aot/basic/inferred_move_transfer.xr ctest --test-dir build --output-on-failure -R '^aot_ubsan$' -O build/task284-aot-ubsan-generated-output.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release compiler while the script instruments real generated native output",
+      "required_host_provider": "ready native Clang plus nm",
+      "skip_policy": "the current runner can exit zero after SKIP and cannot qualify this gate alone; the activated gate requires a strict result verifier that rejects every SKIP, unsupported-toolchain pass-through, and case-count mismatch",
+      "pass_criteria": "the generated executable contains verified UBSan instrumentation, every activated case exits zero with its exact oracle, and no UBSan diagnostic occurs",
+      "evidence_artifacts": [
+        "build/task284-aot-ubsan-generated-output.log",
+        "per-case generated, native, and instrumentation evidence"
+      ],
+      "future_assets": [
+        "newline-separated activated Task 284 AOT case list",
+        "strict result verifier that parses the runner log, rejects every SKIP, and proves the exact activated case count ran"
+      ]
+    },
+    {
+      "id": "lsan-strict",
+      "owner": "Task 284 runtime memory slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake -E env 'XR_LSAN_CTEST_REGEX=^(test_ownership_audit|test_xa_program_semantic_closure|test_semantic_plan|test_target_plan|test_xi_program_semantic|test_xi_source_move_verify|test_runtime_target_plan_load_archive|test_xr_aot_refinement|test_cgen_verify_output)$' ctest --test-dir build --output-on-failure -R '^lsan_strict$' -O build/task284-lsan-strict.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "independent build-lsan with ASan, UBSan, and detect_leaks enabled",
+      "required_host_provider": "Linux LeakSanitizer host",
+      "skip_policy": "non-Linux is not applicable and never PASS; final qualification requires Linux evidence and no suppression-budget growth",
+      "pass_criteria": "the script passes, all selected activated identities run, and unsuppressed leaks are zero",
+      "evidence_artifacts": [
+        "build/task284-lsan-strict.log",
+        "build-lsan identity",
+        "scripts/lsan.supp hash"
+      ],
+      "future_assets": [
+        "activated Task 284 runtime and drop tests in the focused regex"
+      ]
+    },
+    {
+      "id": "tsan-focused-if-applicable",
+      "owner": "Task 284 runtime concurrency slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "ctest --test-dir build --output-on-failure -R '^tsan_focused$' -O build/task284-tsan-focused.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "independent script-owned build-tsan with Clang TSan and fixed workers",
+      "required_host_provider": "non-Windows host with a working Clang TSan runtime",
+      "skip_policy": "Windows is not applicable; on an applicable host probe, build, and runtime failure are red rather than skip",
+      "pass_criteria": "the lane reports VERDICT PASS with no TSan warning across the fixed set and activated Task 284 handoff, cancel, and drop cases",
+      "evidence_artifacts": [
+        "build/task284-tsan-focused.log",
+        "build-tsan identity",
+        "TSan per-process logs"
+      ],
+      "future_assets": [
+        "approved activated Task 284 concurrency asset and CTest registration"
+      ]
+    },
+    {
+      "id": "provider-appleclang",
+      "owner": "Task 284 AOT provider slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake --build build --target xray",
+        "build/xray toolchain doctor --target native --provider clang --cc clang --json > build/task284-provider-appleclang.doctor.json",
+        "build/xray run tests/aot/basic/inferred_move_transfer.xr > build/task284-provider-appleclang.vm.out",
+        "build/xray build --native -c --toolchain clang --cc clang --target native -o build/task284-provider-appleclang.c tests/aot/basic/inferred_move_transfer.xr",
+        "build/xray build --native --toolchain clang --cc clang --target native -o build/task284-provider-appleclang tests/aot/basic/inferred_move_transfer.xr",
+        "build/task284-provider-appleclang > build/task284-provider-appleclang.native.out",
+        "cmake -E compare_files build/task284-provider-appleclang.vm.out build/task284-provider-appleclang.native.out"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build",
+      "required_host_provider": "Darwin AppleClang",
+      "skip_policy": "no skip, fallback, or provider substitution",
+      "pass_criteria": "doctor reports apple-clang ready with fallbackUsed false, generated C passes W1-W4, and VM and native outputs are byte-identical",
+      "evidence_artifacts": [
+        "build/task284-provider-appleclang.doctor.json",
+        "build/task284-provider-appleclang.c",
+        "build/task284-provider-appleclang executable",
+        "VM and native outputs",
+        "command log"
+      ],
+      "future_assets": [
+        "activated Task 284 provider case manifest for graph, receiver, and borrowed-return behavior"
+      ]
+    },
+    {
+      "id": "provider-clang",
+      "owner": "Task 284 AOT provider slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake --build build --target xray",
+        "build/xray toolchain doctor --target native --provider clang --cc clang --json > build/task284-provider-clang.doctor.json",
+        "build/xray run tests/aot/basic/inferred_move_transfer.xr > build/task284-provider-clang.vm.out",
+        "build/xray build --native -c --toolchain clang --cc clang --target native -o build/task284-provider-clang.c tests/aot/basic/inferred_move_transfer.xr",
+        "build/xray build --native --toolchain clang --cc clang --target native -o build/task284-provider-clang tests/aot/basic/inferred_move_transfer.xr",
+        "build/task284-provider-clang > build/task284-provider-clang.native.out",
+        "cmake -E compare_files build/task284-provider-clang.vm.out build/task284-provider-clang.native.out"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build",
+      "required_host_provider": "non-Apple LLVM Clang host",
+      "skip_policy": "no skip or fallback; provider substitution is forbidden",
+      "pass_criteria": "doctor reports llvm-clang ready with fallbackUsed false, generated C passes W1-W4, and VM and native outputs are byte-identical",
+      "evidence_artifacts": [
+        "build/task284-provider-clang.doctor.json",
+        "build/task284-provider-clang.c",
+        "build/task284-provider-clang executable",
+        "VM and native outputs",
+        "command log"
+      ],
+      "future_assets": [
+        "activated Task 284 provider case manifest"
+      ]
+    },
+    {
+      "id": "provider-gcc",
+      "owner": "Task 284 AOT provider slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake --build build --target xray",
+        "build/xray toolchain doctor --target native --provider gcc --cc gcc --json > build/task284-provider-gcc.doctor.json",
+        "build/xray run tests/aot/basic/inferred_move_transfer.xr > build/task284-provider-gcc.vm.out",
+        "build/xray build --native -c --toolchain gcc --cc gcc --target native -o build/task284-provider-gcc.c tests/aot/basic/inferred_move_transfer.xr",
+        "build/xray build --native --toolchain gcc --cc gcc --target native -o build/task284-provider-gcc tests/aot/basic/inferred_move_transfer.xr",
+        "build/task284-provider-gcc > build/task284-provider-gcc.native.out",
+        "cmake -E compare_files build/task284-provider-gcc.vm.out build/task284-provider-gcc.native.out"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build",
+      "required_host_provider": "supported GCC host",
+      "skip_policy": "no skip or fallback; provider substitution is forbidden",
+      "pass_criteria": "doctor reports gcc ready with fallbackUsed false, generated C passes W1-W4, and VM and native outputs are byte-identical",
+      "evidence_artifacts": [
+        "build/task284-provider-gcc.doctor.json",
+        "build/task284-provider-gcc.c",
+        "build/task284-provider-gcc executable",
+        "VM and native outputs",
+        "command log"
+      ],
+      "future_assets": [
+        "activated Task 284 provider case manifest"
+      ]
+    },
+    {
+      "id": "provider-msvc",
+      "owner": "Task 284 AOT provider slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake --build build --target xray",
+        "build/xray.exe toolchain doctor --target x86_64-windows-msvc --provider msvc --json > build/task284-provider-msvc.doctor.json",
+        "build/xray.exe run tests/aot/basic/inferred_move_transfer.xr > build/task284-provider-msvc.vm.out",
+        "build/xray.exe build --native -c --toolchain msvc --target x86_64-windows-msvc -o build/task284-provider-msvc.c tests/aot/basic/inferred_move_transfer.xr",
+        "build/xray.exe build --native --toolchain msvc --target x86_64-windows-msvc -o build/task284-provider-msvc.exe tests/aot/basic/inferred_move_transfer.xr",
+        "build/task284-provider-msvc.exe > build/task284-provider-msvc.native.out",
+        "cmake -E compare_files build/task284-provider-msvc.vm.out build/task284-provider-msvc.native.out"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build inside a ready MSVC developer environment",
+      "required_host_provider": "Windows x86_64 MSVC with cl.exe on PATH",
+      "skip_policy": "no skip; installed ready MSVC may not fall through to Clang or Zig",
+      "pass_criteria": "doctor reports msvc ready with fallbackUsed false, real generated C compiles under the warning contract, and VM and native outputs are byte-identical",
+      "evidence_artifacts": [
+        "build/task284-provider-msvc.doctor.json",
+        "build/task284-provider-msvc.c",
+        "build/task284-provider-msvc.exe",
+        "VM and native outputs",
+        "command log"
+      ],
+      "future_assets": [
+        "activated Task 284 provider case manifest; synthetic probe alone is insufficient"
+      ]
+    },
+    {
+      "id": "provider-zig",
+      "owner": "Task 284 AOT provider slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake --build build --target xray",
+        "build/xray toolchain doctor --target native --provider zig --zig zig --json > build/task284-provider-zig.doctor.json",
+        "build/xray run tests/aot/basic/inferred_move_transfer.xr > build/task284-provider-zig.vm.out",
+        "build/xray build --native -c --toolchain zig --zig zig --target native -o build/task284-provider-zig.c tests/aot/basic/inferred_move_transfer.xr",
+        "build/xray build --native --toolchain zig --zig zig --target native -o build/task284-provider-zig tests/aot/basic/inferred_move_transfer.xr",
+        "build/task284-provider-zig > build/task284-provider-zig.native.out",
+        "cmake -E compare_files build/task284-provider-zig.vm.out build/task284-provider-zig.native.out"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build",
+      "required_host_provider": "Zig 0.16.x supported host",
+      "skip_policy": "no skip or fallback; provider substitution is forbidden",
+      "pass_criteria": "doctor reports zig ready with fallbackUsed false, generated C passes W1-W4, and VM and native outputs are byte-identical",
+      "evidence_artifacts": [
+        "build/task284-provider-zig.doctor.json",
+        "build/task284-provider-zig.c",
+        "build/task284-provider-zig executable",
+        "VM and native outputs",
+        "command log"
+      ],
+      "future_assets": [
+        "activated Task 284 provider case manifest"
+      ]
+    },
+    {
+      "id": "source-corpus-positive-negative",
+      "owner": "Task 284 frontend source corpus",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "python3 tests/fixtures/task284_ownership_negative/check_staging.py --self-test",
+        "cmake --build build --target xray",
+        "ctest --test-dir build --output-on-failure -R '^(compile_error_tests|regression_corpus)$' -O build/task284-source-corpus.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build",
+      "required_host_provider": "any supported host; positive native rows also flow to the VM-AOT and provider gates",
+      "skip_policy": "no expected-runtime fallback, misplaced case, baseline growth, nondeterministic addition, or corpus shrink",
+      "pass_criteria": "every READ, REF, MOVE, view, graph, domain, borrowed-return, and receiver rule maps to a discoverable case; diagnostics and spans are exact",
+      "evidence_artifacts": [
+        "staging checker output",
+        "build/task284-source-corpus.log",
+        "machine-readable case-to-rule manifest"
+      ],
+      "future_assets": [
+        "staged fixtures migrated into compile-error ownership and positive regression and differential corpora"
+      ]
+    },
+    {
+      "id": "parser-formatter-type-tooling-identity",
+      "owner": "Task 284 frontend schema and tooling slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake --build build",
+        "ctest --test-dir build --output-on-failure -R '^(test_parser|test_parser_type_scope|test_fmt_roundtrip|test_formatter_comments|test_formatter_strings|test_xa_program_semantic_closure|test_program_semantic_closure|test_api_inventory_param_modes|test_api_inventory_diff|test_param_mode_tooling_display|api_inventory_docs_coverage|test_lsp_document|test_lsp_protocol_transcript|test_mcp_knowledge_generation|test_mcp_protocol_transcript|spec_snippets_en|spec_snippets_cn|param_mode_convergence|language_surface_convergence)$' -O build/task284-parser-type-tooling.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build with default LSP and MCP enabled",
+      "required_host_provider": "any supported host; no native provider required",
+      "skip_policy": "every named CTest must be present; disabled LSP or MCP does not qualify",
+      "pass_criteria": "parse and reject behavior, canonical order, from elision, function-type identity, formatter roundtrip, LSP signatures, API fingerprints, and EN-CN snippets are exact with no compatibility parser",
+      "evidence_artifacts": [
+        "build/task284-parser-type-tooling.log",
+        "roundtrip, API inventory, diff, and fingerprint snapshots"
+      ],
+      "future_assets": [
+        "activated receiver and from-origin parser, formatter, type identity, LSP, MCP, API, and specification cases"
+      ]
+    },
+    {
+      "id": "legacy-oracle-differential",
+      "owner": "Task 284 migration oracle evidence",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "cmake --build build --target xray",
+        "ctest --test-dir build --output-on-failure -R '^(backend_diff|backend_diff_optimized|backend_diff_deterministic)$' -O build/task284-legacy-oracle-differential.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release build and the same W0 provider profile for pre-cut and post-cut observations",
+      "required_host_provider": "same ready native provider used by the W0 observations",
+      "skip_policy": "no generic allowlist; every intentional change names a rule, baseline bugs need independent retirement, and not-applicable is only deleted syntax",
+      "pass_criteria": "an exhaustive manifest classifies each observation exactly once and every unchanged row preserves bytes and exit status",
+      "evidence_artifacts": [
+        "build/task284-legacy-oracle-differential.log",
+        "versioned legacy-oracle manifest",
+        "immutable pre-cut observations and hashes",
+        "post-cut outputs"
+      ],
+      "future_assets": [
+        "four-class legacy-oracle manifest and fail-closed checker"
+      ]
+    },
+    {
+      "id": "ownership-performance-manifest",
+      "owner": "Task 284 performance evidence",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "python3 tests/target-machine/phase0/run_baseline.py --root . --build-dir build --output-dir build/task284-w0-performance --scope performance --repeat 5 --require-qualifying",
+        "ctest --test-dir build --output-on-failure -R '^semantic_performance_evidence$' -O build/task284-performance-substrate.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "clean exact tree on the same machine, target, provider, Ninja Release profile, and fastpaths-off setting as W0, using a new output directory",
+      "required_host_provider": "approved W0 native provider",
+      "skip_policy": "no corpus or sample reduction, counter disable, fewer iterations, stale baseline, or single-run closure",
+      "pass_criteria": "all ownership counters and eight benchmarks record identity, warmup, iterations, median, P95, noise, and approved budgets; last-use and body-inferred authority counters are zero",
+      "evidence_artifacts": [
+        "build/task284-w0-performance",
+        "build/task284-performance-substrate.log",
+        "versioned Task 284 benchmark and budget JSON"
+      ],
+      "future_assets": [
+        "Task 284 ownership-analysis counters",
+        "approved W0 budget",
+        "eight-case performance manifest and checker"
+      ]
+    },
+    {
+      "id": "ownership-residue-zero",
+      "owner": "Task 284 retirement and residue slice",
+      "entrypoint_state": "NEEDS_ACTIVATED_CASE",
+      "commands": [
+        "python3 tests/fixtures/task284_ownership_negative/check_staging.py --require-clean --self-test",
+        "ctest --test-dir build --output-on-failure -R '^(param_mode_convergence|language_surface_convergence|semantic_owner_inventory|semantic_owner_inventory_self_test|meta_ownership_inventory|contract_freeze|contract_freeze_injection)$' -O build/task284-residue-zero.log"
+      ],
+      "cwd": "repository-root",
+      "environment": "matching independent Ninja Release final retirement tree",
+      "required_host_provider": "any supported host; no native provider required",
+      "skip_policy": "no ignored path, nonzero ceiling, compatibility-text exemption, dual reader, dual writer, fallback, or tombstone omission",
+      "pass_criteria": "every inventory deletion row reaches its exact zero, replacement, or retained bound, and old syntax, inference owners, graph retag, secondary cache, runtime fallback, and completion residue are absent",
+      "evidence_artifacts": [
+        "build/task284-residue-zero.log",
+        "machine-readable final zero inventory with source, tree, and hash"
+      ],
+      "future_assets": [
+        "production Task 284 residue checker and inventory",
+        "completion rows for the public cut"
+      ]
+    }
+  ],
+  "delivery_state": "NOT_READY"
+}

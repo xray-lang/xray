@@ -1,0 +1,7 @@
+fn expose(data: Array<i64>) -> Array<i64> {
+    return data
+}
+
+fn main() {}
+
+main()

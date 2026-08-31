@@ -1,0 +1,15 @@
+{
+  "schema": "ownership-semantic-plan-mutation/1",
+  "expected_reason": "OWN-E-UNKNOWN-EDGE",
+  "source_precondition": "A verified transferable root has a complete typed edge row before the mutation",
+  "mutations": [
+    "Change the edge kind to unknown",
+    "Clear the typed-contract completeness bit",
+    "Recompute the enclosing artifact checksum"
+  ],
+  "required_verifier_checks": [
+    "Reject incomplete edge provenance",
+    "Report the unknown edge witness",
+    "Do not execute either VM or AOT"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema": "ownership-semantic-plan-mutation/1",
+  "expected_reason": "OWN-E-DOMAIN-EDGE",
+  "source_precondition": "A verified transferable root has one internal-owned edge before the mutation",
+  "mutations": [
+    "Change the edge kind to plain-strong",
+    "Change the target domain identity to a distinct execution domain",
+    "Recompute the enclosing artifact checksum"
+  ],
+  "required_verifier_checks": [
+    "Reject the cross-domain plain-strong edge",
+    "Report the first edge witness",
+    "Do not execute either VM or AOT"
+  ]
+}

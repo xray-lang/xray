@@ -1,0 +1,374 @@
+{
+  "schema": "ownership-negative-oracle-staging/1",
+  "activation": "not-runnable-before-public-contract-cut",
+  "forbidden_activation_shortcuts": [
+    "expected-parser-error",
+    "expected-runtime-gap",
+    "skip",
+    "allowlist",
+    "fallback"
+  ],
+  "diagnostic_code_reservation": {
+    "state": "UNRESERVED_UNTIL_SHARED_LOCKS",
+    "registry": "contracts/target-machine/diagnostic-codes.toml",
+    "registry_sha256": "c939590da4fe46af9f42774997c322b6c968e2c1b5621541f540ee40ec4f28b7",
+    "required_locks": ["LOCK-SCHEMA", "LOCK-BUILD-GEN"],
+    "reservation_rule": "allocate one non-conflicting numeric E code for every task-local reason in one locked batch",
+    "projection_rule": "update the registry, generated projections, reason-to-code mapping, and contract anchors atomically"
+  },
+  "diagnostic_evidence": [
+    {
+      "case": "receiver-read-write",
+      "rejected_action": "write through a READ receiver",
+      "first_witness": "first write through this",
+      "related_declaration_or_scope": "method receiver declaration"
+    },
+    {
+      "case": "receiver-move-plain-lvalue",
+      "rejected_action": "consume a MOVE receiver through a continuing lvalue",
+      "first_witness": "plain-lvalue method call",
+      "related_declaration_or_scope": "MOVE receiver declaration and caller binding"
+    },
+    {
+      "case": "borrow-origin-ambiguous",
+      "rejected_action": "elide a borrowed-return origin with multiple candidates",
+      "first_witness": "second eligible signature origin",
+      "related_declaration_or_scope": "borrowed return signature"
+    },
+    {
+      "case": "borrow-origin-invalid",
+      "rejected_action": "bind a borrowed return to an unknown origin",
+      "first_witness": "unresolved origin name",
+      "related_declaration_or_scope": "borrowed return signature"
+    },
+    {
+      "case": "read-escape",
+      "rejected_action": "store a READ mutable input into an escaping field",
+      "first_witness": "field assignment that retains the input",
+      "related_declaration_or_scope": "READ parameter and destination field"
+    },
+    {
+      "case": "read-return",
+      "rejected_action": "return a READ mutable input as an ordinary owning alias",
+      "first_witness": "ordinary return statement",
+      "related_declaration_or_scope": "READ parameter and return declaration"
+    },
+    {
+      "case": "read-capture",
+      "rejected_action": "retain a READ mutable input in a stored or returned closure",
+      "first_witness": "closure escape boundary",
+      "related_declaration_or_scope": "READ parameter and capture scope"
+    },
+    {
+      "case": "read-cross-execution",
+      "rejected_action": "capture a READ mutable input in an ordinary go closure",
+      "first_witness": "go closure cross-execution boundary",
+      "related_declaration_or_scope": "READ parameter and spawned closure"
+    },
+    {
+      "case": "read-foreign-unknown",
+      "rejected_action": "accept a READ mutable-root foreign edge with UNKNOWN kind and incomplete provenance",
+      "first_witness": "first foreign edge with UNKNOWN kind",
+      "related_declaration_or_scope": "SemanticPlan foreign call edge"
+    },
+    {
+      "case": "read-unknown-target",
+      "rejected_action": "pass a READ mutable input through an indirect target set with unknown suspend effect",
+      "first_witness": "first missing or inconsistent non-suspending effect",
+      "related_declaration_or_scope": "function-type parameter and indirect call"
+    },
+    {
+      "case": "read-suspend",
+      "rejected_action": "hold a READ mutable input across suspension",
+      "first_witness": "first suspension boundary",
+      "related_declaration_or_scope": "READ parameter and enclosing function"
+    },
+    {
+      "case": "ref-escape",
+      "rejected_action": "return a REF input",
+      "first_witness": "return statement that escapes the exclusive loan",
+      "related_declaration_or_scope": "REF parameter and call-bound loan"
+    },
+    {
+      "case": "ref-suspend",
+      "rejected_action": "hold a REF loan across suspension",
+      "first_witness": "first suspension boundary",
+      "related_declaration_or_scope": "REF parameter and call-bound loan"
+    },
+    {
+      "case": "external-alias-after-scope",
+      "rejected_action": "move a domain after an external strong alias existed",
+      "first_witness": "first ordinary alias creation",
+      "related_declaration_or_scope": "root ownership domain and alias scope"
+    },
+    {
+      "case": "view-after-owner-invalidation",
+      "rejected_action": "use a view after owner invalidation",
+      "first_witness": "owner mutation that first invalidated the view",
+      "related_declaration_or_scope": "view version and owner root"
+    },
+    {
+      "case": "view-active-conflict",
+      "rejected_action": "combine an active view and overlapping REF owner action in one call",
+      "first_witness": "overlapping actual argument",
+      "related_declaration_or_scope": "call expression and call-bound loans"
+    },
+    {
+      "case": "view-escaped",
+      "rejected_action": "invalidate an owner while a derived view is escaped",
+      "first_witness": "view store into an escaping field",
+      "related_declaration_or_scope": "view origin set and owner root"
+    },
+    {
+      "case": "view-mutable-return",
+      "rejected_action": "return a writable borrowed Slice",
+      "first_witness": "mutable borrowed return type",
+      "related_declaration_or_scope": "borrowed return declaration"
+    },
+    {
+      "case": "domain-edge",
+      "rejected_action": "accept a cross-domain plain strong edge as transferable",
+      "first_witness": "first cross-domain edge row",
+      "related_declaration_or_scope": "ownership domain plan"
+    },
+    {
+      "case": "unknown-domain-edge",
+      "rejected_action": "accept an incomplete ownership edge",
+      "first_witness": "first edge with unknown kind or provenance",
+      "related_declaration_or_scope": "ownership domain plan"
+    }
+  ],
+  "cases": [
+    {
+      "id": "receiver-read-write",
+      "oracle_kind": "source",
+      "fixture": "receiver_read_write.xr",
+      "sha256": "bfe0832a49d11663b82048c8353180aef74da5ad4f6a648b9d56bbcdd77cf6f1",
+      "baseline": "accepted-by-body-inferred-mutates-receiver",
+      "activation_reason": "OWN-E-RECEIVER-READ-WRITE",
+      "diagnostic_site": "write through this",
+      "help": "declare the method with ref",
+      "required_locks": ["LOCK-FRONTEND"]
+    },
+    {
+      "id": "receiver-move-plain-lvalue",
+      "oracle_kind": "source",
+      "fixture": "receiver_move_plain_lvalue.xr",
+      "sha256": "cc069bf9fde1b301ee7bce65a8cdb0c26e1ad1737fa8575e5769b6c2cc9e89fa",
+      "baseline": "new-receiver-prefix-not-owned-by-parser",
+      "activation_reason": "OWN-E-RECEIVER-MOVE",
+      "diagnostic_site": "plain lvalue receiver call",
+      "help": "write (move value).finish()",
+      "required_locks": ["LOCK-FRONTEND"]
+    },
+    {
+      "id": "borrow-origin-ambiguous",
+      "oracle_kind": "source",
+      "fixture": "borrow_origin_ambiguous.xr",
+      "sha256": "d5a33d60c7d41e1e0fbc1a31117d19c51a73e6734ef70db652d43081ca566ca5",
+      "baseline": "body-derived-origin-selects-one-scalar-source",
+      "activation_reason": "OWN-E-VIEW-ORIGIN-AMBIGUOUS",
+      "diagnostic_site": "return declaration with two eligible inputs and no origin set",
+      "help": "declare from a | b",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "borrow-origin-invalid",
+      "oracle_kind": "source",
+      "fixture": "borrow_origin_invalid.xr",
+      "sha256": "0432334f4d2383338cbd089c0978ba888e36f4100737c9fb2de3274347f1f713",
+      "baseline": "borrow-origin-syntax-not-owned-by-parser",
+      "activation_reason": "OWN-E-VIEW-ORIGIN-INVALID",
+      "diagnostic_site": "unknown origin name in the return declaration",
+      "help": "name an eligible READ input or return an owned copy",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "read-escape",
+      "oracle_kind": "source",
+      "fixture": "read_escape.xr",
+      "sha256": "ad3da40171848dbadfcc61ee49d772125a3f96babc2e94fe28ab233ca0805e87",
+      "baseline": "accepted-by-read-local-alias-retain-summary",
+      "activation_reason": "OWN-E-READ-ESCAPE",
+      "diagnostic_site": "store of a READ mutable input into an escaping field",
+      "help": "use move, copy, or a call-bound read",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "read-return",
+      "oracle_kind": "source",
+      "fixture": "read_return.xr",
+      "sha256": "f92fc94a92306a2436469fde1c6ff1f0c1477f6675b3c450046939d67ebff87b",
+      "baseline": "accepted-by-read-ordinary-alias-return",
+      "activation_reason": "OWN-E-READ-ESCAPE",
+      "diagnostic_site": "ordinary owning return of a READ mutable input",
+      "help": "return an owned copy, use MOVE, or declare a const borrowed view origin",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "read-capture",
+      "oracle_kind": "source",
+      "fixture": "read_capture.xr",
+      "sha256": "30a286b296e3073ef7c5c3eca86c1f1ec89b0290c8efde678228d3cb0cd8450d",
+      "baseline": "read-mutable-capture-can-outlive-the-call",
+      "activation_reason": "OWN-E-READ-ESCAPE",
+      "diagnostic_site": "stored or returned closure capture of a READ mutable input",
+      "help": "capture an owned copy or keep the closure call-bound",
+      "required_locks": ["LOCK-SCHEMA"]
+    },
+    {
+      "id": "read-cross-execution",
+      "oracle_kind": "source",
+      "fixture": "read_cross_execution.xr",
+      "sha256": "f00871360458c0b4e21308228032e793ced5b1c3fcb0541accfdbe796ff6ffdc",
+      "baseline": "ordinary-go-closure-capture-uses-separate-legacy-authority",
+      "activation_reason": "OWN-E-READ-ESCAPE",
+      "diagnostic_site": "ordinary go closure capture of a READ mutable input",
+      "help": "pass an explicit copy or MOVE argument, or capture typed const or sync data",
+      "required_locks": ["LOCK-SCHEMA"]
+    },
+    {
+      "id": "read-foreign-unknown",
+      "oracle_kind": "semantic-plan-mutation",
+      "fixture": "read_foreign_unknown.mutation.json",
+      "sha256": "b09660ac36858c73bb411e2206585047f8ea79937ebf577c0d7f4612137d6c03",
+      "baseline": "foreign-read-edge-completeness-row-not-yet-published",
+      "activation_reason": "OWN-E-UNKNOWN-EDGE",
+      "diagnostic_site": "first READ mutable-root foreign edge with UNKNOWN kind and incomplete provenance",
+      "help": "provide a complete typed foreign retention contract or pass an owned copy",
+      "required_locks": ["LOCK-SCHEMA"]
+    },
+    {
+      "id": "read-unknown-target",
+      "oracle_kind": "source",
+      "fixture": "read_unknown_target.xr",
+      "sha256": "333d2fdbba008e84d3259c6f775c795a2ea7606ed95b845e31761cc2acb8932d",
+      "baseline": "indirect-target-effect-is-not-a-complete-read-proof",
+      "activation_reason": "OWN-E-READ-SUSPEND",
+      "diagnostic_site": "indirect call whose target set lacks one complete non-suspending effect",
+      "help": "use a function type with a complete non-suspending effect contract or pass an owned copy",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "read-suspend",
+      "oracle_kind": "source",
+      "fixture": "read_suspend.xr",
+      "sha256": "e4b8fadd1026f42d7183aac70749e0a6783055b6c22aaeae4ca238a8142c16c9",
+      "baseline": "suspend-effect-and-read-capability-are-separate-authorities",
+      "activation_reason": "OWN-E-READ-SUSPEND",
+      "diagnostic_site": "first suspend boundary crossed by a READ mutable input",
+      "help": "use const, copy, move, or a synchronous helper",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "ref-escape",
+      "oracle_kind": "source",
+      "fixture": "ref_escape.xr",
+      "sha256": "0d4a4a643667aaae4e0fde3d4d952b6d219b39aeb94aea3a888bf0cb60324c15",
+      "baseline": "legacy-ref-return-escape-diagnostic",
+      "activation_reason": "OWN-E-REF-ESCAPE",
+      "diagnostic_site": "return of a REF input",
+      "help": "finish mutation within the call",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "ref-suspend",
+      "oracle_kind": "source",
+      "fixture": "ref_suspend.xr",
+      "sha256": "66079eee7654b99786887762a338ca0b2d112d203440c2a859cfd04ed039f990",
+      "baseline": "general-ref-no-suspend-contract-not-frozen",
+      "activation_reason": "OWN-E-REF-SUSPEND",
+      "diagnostic_site": "first suspend boundary crossed by a REF input",
+      "help": "transfer ownership or use a non-suspending helper",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "external-alias-after-scope",
+      "oracle_kind": "source",
+      "fixture": "external_alias_after_scope.xr",
+      "sha256": "a51654da5e778a2e58370b5753155bfaf939a55728fcf2fa0e55726d949d3072",
+      "baseline": "accepted-by-recoverable-local-alias",
+      "activation_reason": "OWN-E-EXTERNAL-ALIAS",
+      "diagnostic_site": "move with the first external alias witness",
+      "help": "copy the root or construct one owned domain",
+      "required_locks": ["LOCK-SCHEMA"]
+    },
+    {
+      "id": "view-after-owner-invalidation",
+      "oracle_kind": "source",
+      "fixture": "view_after_owner_invalidation.xr",
+      "sha256": "831d391efefb2a06dc3c7ff9d76df89c92f42c633a8f16b5583228b0cd009f9d",
+      "baseline": "old-checker-rejects-owner-action-instead-of-later-view-use",
+      "activation_reason": "OWN-E-VIEW-INVALIDATED",
+      "diagnostic_site": "first view use after owner invalidation",
+      "help": "recreate the view after the invalidating action",
+      "required_locks": ["LOCK-SCHEMA"]
+    },
+    {
+      "id": "view-active-conflict",
+      "oracle_kind": "source",
+      "fixture": "view_active_conflict.xr",
+      "sha256": "d5544b27ca5d9dab7a0b274e51f9d66889e587ef009ff6e8729c835d9ab9adb4",
+      "baseline": "legacy-active-loan-checker-may-report-at-owner-argument",
+      "activation_reason": "OWN-E-VIEW-ACTIVE-CONFLICT",
+      "diagnostic_site": "call with overlapping owner REF and live view actuals",
+      "help": "finish the view read before the owner mutation",
+      "required_locks": ["LOCK-SCHEMA"]
+    },
+    {
+      "id": "view-escaped",
+      "oracle_kind": "source",
+      "fixture": "view_escaped.xr",
+      "sha256": "a730cddcf4bc466d74ff39eb24557f1dcb2fdd1b9266feb405beebe6ccd03496",
+      "baseline": "body-summary-retains-the-view-without-a-canonical-escaped-state",
+      "activation_reason": "OWN-E-VIEW-ESCAPED",
+      "diagnostic_site": "owner invalidation after the view escapes to a field",
+      "help": "keep the owner stable or avoid escaping the view",
+      "required_locks": ["LOCK-SCHEMA"]
+    },
+    {
+      "id": "view-mutable-return",
+      "oracle_kind": "source",
+      "fixture": "view_mutable_return.xr",
+      "sha256": "0d8013c86b2d99a50ca2ff8bc06d8237a320dc9cc1bd78999eb05544585bd9bf",
+      "baseline": "borrow-origin-and-writable-view-return-syntax-not-owned-by-parser",
+      "activation_reason": "OWN-E-VIEW-MUTABLE",
+      "diagnostic_site": "writable borrowed Slice return declaration",
+      "help": "return const Slice<u8> or an owned copy",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "domain-edge",
+      "oracle_kind": "semantic-plan-mutation",
+      "fixture": "domain_edge.mutation.json",
+      "sha256": "6af7508e525cefc04da64dc64abac255257599e20184e7d45e1cb1943836812b",
+      "baseline": "ownership-domain-edge-row-not-yet-published",
+      "activation_reason": "OWN-E-DOMAIN-EDGE",
+      "diagnostic_site": "first cross-domain plain-strong edge in the verified plan",
+      "help": "use owned adoption, an ID, weak storage, or one execution domain",
+      "required_locks": ["LOCK-SCHEMA"]
+    },
+    {
+      "id": "unknown-domain-edge",
+      "oracle_kind": "semantic-plan-mutation",
+      "fixture": "unknown_domain_edge.mutation.json",
+      "sha256": "c1040dbf137f3507ce8adc6a7df7ace98a9e8ebb40ed571539c3398eca9613e6",
+      "baseline": "ownership-domain-edge-completeness-row-not-yet-published",
+      "activation_reason": "OWN-E-UNKNOWN-EDGE",
+      "diagnostic_site": "first incomplete edge in the verified plan",
+      "help": "provide a complete typed contract",
+      "required_locks": ["LOCK-SCHEMA"]
+    }
+  ],
+  "existing_harnesses": [
+    "tests/compile_errors/run_compile_error_tests.py",
+    "tests/unit/frontend/test_xa_program_semantic_closure.c",
+    "tests/unit/plan/test_semantic_plan.c",
+    "tests/unit/plan/test_target_plan.c",
+    "tests/unit/ir/test_xi_program_semantic.c",
+    "tests/unit/ir/test_xi_source_move_verify.c",
+    "tests/unit/runtime/test_ownership_audit.c",
+    "tests/unit/runtime/test_runtime_target_plan_load_archive.c",
+    "tests/unit/aot/test_xr_aot_refinement.c"
+  ]
+}

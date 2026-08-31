@@ -1,0 +1,7 @@
+fn expose(data: Array<u8>) -> Slice<u8> from data {
+    return data[:]
+}
+
+fn main() {}
+
+main()

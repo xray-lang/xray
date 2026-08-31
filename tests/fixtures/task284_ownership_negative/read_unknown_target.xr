@@ -1,0 +1,7 @@
+fn invoke(target: fn(Array<i64>), data: Array<i64>) {
+    target(data)
+}
+
+fn main() {}
+
+main()

@@ -1,0 +1,10 @@
+fn launch(data: Array<i64>) {
+    var task = go fn() -> i64 {
+        return len(data)
+    }()
+    print(await task)
+}
+
+fn main() {}
+
+main()

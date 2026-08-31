@@ -1,0 +1,572 @@
+{
+  "schema": "ownership-atomic-cut-staging/1",
+  "activation": "staging-only-before-i1-r4",
+  "authority": "non-authoritative dependency and deletion ledger for one integration-train activation batch",
+  "train_base": {
+    "commit": "eabe56cc986cf2147d02254ae1b1acaa1418663f",
+    "tree": "45f708658f0945bf3f588be332859d3ecde58782"
+  },
+  "activation_batch": {
+    "atomic": true,
+    "independently_activatable_nodes": false,
+    "checkpoint": "I1/R4 clean",
+    "required_locks": [
+      "LOCK-FRONTEND",
+      "LOCK-SCHEMA",
+      "LOCK-RUNTIME",
+      "LOCK-BUILD-GEN",
+      "LOCK-RESIDUE"
+    ],
+    "required_outcomes": [
+      "only the new parser and source spelling remain",
+      "stdlib tests examples ports and tooling consumers migrate in the same batch",
+      "function type PSC SemanticPlan TargetPlan Xi VM AOT and runtime consume one typed ownership fact chain",
+      "cache schema artifact identity contracts generated projections and completion residue update together",
+      "every covered old owner is deleted in the same batch after positive and negative evidence passes"
+    ],
+    "forbidden_shortcuts": [
+      "compatibility parser",
+      "body-inferred receiver",
+      "body-inferred borrowed origin",
+      "last-use source legality",
+      "dual summary",
+      "runtime fallback",
+      "schema alias",
+      "migration flag",
+      "skip",
+      "allowlist",
+      "disabled verifier"
+    ]
+  },
+  "preparation_order": [
+    "source-contract",
+    "strict-call-contract",
+    "domain-contract",
+    "view-contract",
+    "signature-validation",
+    "plan-and-xi-contract",
+    "execution-contract",
+    "retirement-contract"
+  ],
+  "nodes": [
+    {
+      "id": "source-contract",
+      "task_phase": "P1",
+      "owned_fact": "receiver modes and BorrowOriginSet are declaration-owned source and type identity",
+      "prerequisites": [],
+      "required_locks": [
+        "LOCK-FRONTEND",
+        "LOCK-SCHEMA",
+        "LOCK-BUILD-GEN"
+      ],
+      "protected_surfaces": [
+        "parser and public AST",
+        "function type and PSC",
+        "formatter LSP MCP and API projection",
+        "source corpus migration"
+      ],
+      "positive_gates": [
+        "receiver parser and formatter KATs",
+        "BorrowOriginSet normalization and roundtrip",
+        "interface import and function-value identity"
+      ],
+      "negative_reasons": [
+        "OWN-E-RECEIVER-READ-WRITE",
+        "OWN-E-RECEIVER-MOVE",
+        "OWN-E-VIEW-ORIGIN-AMBIGUOUS",
+        "OWN-E-VIEW-ORIGIN-INVALID",
+        "OWN-E-VIEW-MUTABLE"
+      ],
+      "prepares_replacement_for_rows": [],
+      "deletes_inventory_rows": [],
+      "required_activation_gate_ids": []
+    },
+    {
+      "id": "strict-call-contract",
+      "task_phase": "P2",
+      "owned_fact": "declared READ REF MOVE modes bound maximum call capability without body expansion",
+      "prerequisites": [
+        "source-contract"
+      ],
+      "required_locks": [
+        "LOCK-FRONTEND",
+        "LOCK-SCHEMA"
+      ],
+      "protected_surfaces": [
+        "call checker",
+        "effect summary",
+        "call-bound loan validation"
+      ],
+      "positive_gates": [
+        "READ non-retaining calls",
+        "REF exclusive place mutation",
+        "MOVE whole-binding transfer"
+      ],
+      "negative_reasons": [
+        "OWN-E-READ-ESCAPE",
+        "OWN-E-READ-SUSPEND",
+        "OWN-E-REF-ESCAPE",
+        "OWN-E-REF-SUSPEND"
+      ],
+      "prepares_replacement_for_rows": [
+        "read-retain-return-alias",
+        "read-ref-suspend-authority"
+      ],
+      "deletes_inventory_rows": [],
+      "required_activation_gate_ids": []
+    },
+    {
+      "id": "domain-contract",
+      "task_phase": "P3",
+      "owned_fact": "a monotone domain transfer lattice and typed ownership edges decide transfer",
+      "prerequisites": [
+        "strict-call-contract"
+      ],
+      "required_locks": [
+        "LOCK-SCHEMA",
+        "LOCK-RUNTIME",
+        "LOCK-BUILD-GEN"
+      ],
+      "protected_surfaces": [
+        "ownership domain solver",
+        "storage plan",
+        "typed native and foreign edge registry"
+      ],
+      "positive_gates": [
+        "candidate domain transfer",
+        "owned DAG adoption",
+        "owned cycle teardown"
+      ],
+      "negative_reasons": [
+        "OWN-E-EXTERNAL-ALIAS",
+        "OWN-E-DOMAIN-EDGE",
+        "OWN-E-UNKNOWN-EDGE"
+      ],
+      "prepares_replacement_for_rows": [
+        "recoverable-root-alias",
+        "typed-domain-edge-authority"
+      ],
+      "deletes_inventory_rows": [],
+      "required_activation_gate_ids": []
+    },
+    {
+      "id": "view-contract",
+      "task_phase": "P4",
+      "owned_fact": "forward view validity and typed owner effects decide source legality",
+      "prerequisites": [
+        "domain-contract"
+      ],
+      "required_locks": [
+        "LOCK-SCHEMA",
+        "LOCK-RUNTIME",
+        "LOCK-BUILD-GEN"
+      ],
+      "protected_surfaces": [
+        "view facts and owner reverse index",
+        "CFG forward joins",
+        "call-bound loan scopes",
+        "closure capture facts and escape destinations",
+        "cleanup reachability facts and drop boundaries"
+      ],
+      "positive_gates": [
+        "owner action invalidates intersecting local views",
+        "branch and loop forward join",
+        "view rebind creates a new version",
+        "immediate retained adopted and cross-execution captures have one typed classification",
+        "cleanup reachability blocks owner actions until its typed lifetime scope expires"
+      ],
+      "negative_reasons": [
+        "OWN-E-READ-ESCAPE",
+        "OWN-E-UNKNOWN-EDGE",
+        "OWN-E-VIEW-INVALIDATED",
+        "OWN-E-VIEW-ACTIVE-CONFLICT",
+        "OWN-E-VIEW-ESCAPED"
+      ],
+      "prepares_replacement_for_rows": [
+        "source-view-last-use",
+        "closure-capture-authority"
+      ],
+      "deletes_inventory_rows": [],
+      "required_activation_gate_ids": []
+    },
+    {
+      "id": "signature-validation",
+      "task_phase": "P5",
+      "owned_fact": "method bodies and return paths validate but never create receiver or origin authority",
+      "prerequisites": [
+        "source-contract",
+        "strict-call-contract",
+        "view-contract"
+      ],
+      "required_locks": [
+        "LOCK-FRONTEND",
+        "LOCK-SCHEMA"
+      ],
+      "protected_surfaces": [
+        "method and override validation",
+        "borrowed return path verification",
+        "import and dynamic target matching"
+      ],
+      "positive_gates": [
+        "READ REF MOVE receiver body validation",
+        "every return provenance belongs to its declared origin set",
+        "dynamic target sets have identical normalized contracts"
+      ],
+      "negative_reasons": [
+        "OWN-E-RECEIVER-READ-WRITE",
+        "OWN-E-VIEW-ORIGIN-INVALID"
+      ],
+      "prepares_replacement_for_rows": [
+        "body-inferred-receiver",
+        "body-inferred-borrow-origin"
+      ],
+      "deletes_inventory_rows": [],
+      "required_activation_gate_ids": []
+    },
+    {
+      "id": "plan-and-xi-contract",
+      "task_phase": "P6",
+      "owned_fact": "SemanticPlan publishes complete ownership facts and Xi consumes them without source inference",
+      "prerequisites": [
+        "signature-validation",
+        "domain-contract",
+        "view-contract"
+      ],
+      "required_locks": [
+        "LOCK-SCHEMA",
+        "LOCK-BUILD-GEN"
+      ],
+      "protected_surfaces": [
+        "SemanticPlan builder verifier and codec",
+        "TargetPlan builder verifier and codec",
+        "Xi lowering source-move verifier and ARC"
+      ],
+      "positive_gates": [
+        "SemanticPlan build check serialize load replay",
+        "TargetPlan representation-only selection",
+        "Xi source move and ARC path balance"
+      ],
+      "negative_reasons": [
+        "OWN-E-DOMAIN-EDGE",
+        "OWN-E-UNKNOWN-EDGE",
+        "OWN-E-VIEW-INVALIDATED"
+      ],
+      "prepares_replacement_for_rows": [
+        "name-driven-ownership-permission"
+      ],
+      "deletes_inventory_rows": [],
+      "required_activation_gate_ids": []
+    },
+    {
+      "id": "execution-contract",
+      "task_phase": "P7",
+      "owned_fact": "VM and AOT execute the same verified O(1) domain handoff and exactly-once drop plan",
+      "prerequisites": [
+        "plan-and-xi-contract"
+      ],
+      "required_locks": [
+        "LOCK-SCHEMA",
+        "LOCK-RUNTIME",
+        "LOCK-BUILD-GEN"
+      ],
+      "protected_surfaces": [
+        "VM plan execution",
+        "AOT generated C",
+        "portable runtime headers",
+        "artifact identity"
+      ],
+      "positive_gates": [
+        "VM AOT ownership differential",
+        "DAG cycle error and cancel teardown",
+        "supported generated-C provider matrix"
+      ],
+      "negative_reasons": [
+        "OWN-E-DOMAIN-EDGE",
+        "OWN-E-UNKNOWN-EDGE"
+      ],
+      "prepares_replacement_for_rows": [
+        "move-boundary-graph-retag"
+      ],
+      "deletes_inventory_rows": [],
+      "required_activation_gate_ids": []
+    },
+    {
+      "id": "retirement-contract",
+      "task_phase": "P8",
+      "owned_fact": "all covered legacy authorities and compatibility residue are absent after the typed owner is proven",
+      "prerequisites": [
+        "source-contract",
+        "strict-call-contract",
+        "domain-contract",
+        "view-contract",
+        "signature-validation",
+        "plan-and-xi-contract",
+        "execution-contract"
+      ],
+      "required_locks": [
+        "LOCK-FRONTEND",
+        "LOCK-SCHEMA",
+        "LOCK-RUNTIME",
+        "LOCK-BUILD-GEN",
+        "LOCK-RESIDUE"
+      ],
+      "protected_surfaces": [
+        "legacy symbol and text inventory",
+        "contract anchors and digests",
+        "cache and artifact version",
+        "completion baseline"
+      ],
+      "positive_gates": [
+        "all inventory residue reaches its declared zero replacement or bound",
+        "contract freeze and hostile artifact checks",
+        "schema-3 live refusal census has exact row-local diagnostic bindings and no evidence debt or ratchet drift",
+        "full sanitizer differential and provider gates"
+      ],
+      "negative_reasons": [
+        "OWN-E-READ-ESCAPE",
+        "OWN-E-READ-SUSPEND",
+        "OWN-E-REF-ESCAPE",
+        "OWN-E-REF-SUSPEND",
+        "OWN-E-EXTERNAL-ALIAS",
+        "OWN-E-VIEW-INVALIDATED",
+        "OWN-E-VIEW-ACTIVE-CONFLICT",
+        "OWN-E-VIEW-ESCAPED",
+        "OWN-E-DOMAIN-EDGE",
+        "OWN-E-UNKNOWN-EDGE",
+        "OWN-E-RECEIVER-READ-WRITE",
+        "OWN-E-RECEIVER-MOVE",
+        "OWN-E-VIEW-ORIGIN-AMBIGUOUS",
+        "OWN-E-VIEW-ORIGIN-INVALID",
+        "OWN-E-VIEW-MUTABLE"
+      ],
+      "prepares_replacement_for_rows": [],
+      "deletes_inventory_rows": [
+        "recoverable-root-alias",
+        "source-view-last-use",
+        "closure-capture-authority",
+        "body-inferred-receiver",
+        "body-inferred-borrow-origin",
+        "read-retain-return-alias",
+        "read-ref-suspend-authority",
+        "typed-domain-edge-authority",
+        "move-boundary-graph-retag",
+        "name-driven-ownership-permission"
+      ],
+      "required_activation_gate_ids": [
+        "matching-default-release-binary",
+        "semantic-plan-build-check-replay",
+        "semantic-and-target-plan-hostile-input",
+        "vm-aot-same-plan-differential",
+        "o1-handoff-no-graph-walk",
+        "handoff-cleanup-drop-once",
+        "meta-ownership-inventory",
+        "generated-c-w1-w4",
+        "contract-freeze-and-hostile-artifact",
+        "live-refusal-schema3-row-binding",
+        "asan-focused",
+        "aot-ubsan-generated-output",
+        "lsan-strict",
+        "tsan-focused-if-applicable",
+        "provider-appleclang",
+        "provider-clang",
+        "provider-gcc",
+        "provider-msvc",
+        "provider-zig",
+        "source-corpus-positive-negative",
+        "parser-formatter-type-tooling-identity",
+        "legacy-oracle-differential",
+        "ownership-performance-manifest",
+        "ownership-residue-zero"
+      ]
+    }
+  ],
+  "activation_gates": [
+    {
+      "id": "matching-default-release-binary",
+      "required_stage": "before activation",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "stdlib/sync/sync.xr XR_SEM_0019 blocks the current train binary"
+    },
+    {
+      "id": "semantic-plan-build-check-replay",
+      "required_stage": "plan-and-xi-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "typed ownership rows are not publicly activated"
+    },
+    {
+      "id": "semantic-and-target-plan-hostile-input",
+      "required_stage": "plan-and-xi-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "typed ownership codecs and loaders are not publicly activated"
+    },
+    {
+      "id": "vm-aot-same-plan-differential",
+      "required_stage": "execution-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "VM and AOT typed ownership consumers do not exist"
+    },
+    {
+      "id": "o1-handoff-no-graph-walk",
+      "required_stage": "execution-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "visited_node_count=0 and no-copy code shape require the activated runtime path"
+    },
+    {
+      "id": "handoff-cleanup-drop-once",
+      "required_stage": "execution-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "channel close full timeout cancel task-failure and drop-once paths are not activated"
+    },
+    {
+      "id": "meta-ownership-inventory",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "must rerun against the activated final tree"
+    },
+    {
+      "id": "generated-c-w1-w4",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "generated ownership paths are not activated"
+    },
+    {
+      "id": "contract-freeze-and-hostile-artifact",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "schema cache artifact and contract identities are not activated"
+    },
+    {
+      "id": "live-refusal-schema3-row-binding",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires clean current source and an exact Ninja Release VM-fastpaths-off matching binary and provider, schema 3 exclusively, exactly one registered diagnostic on every source-emitted raw-log row, zero evidence debt, and zero refusal-ratchet drift"
+    },
+    {
+      "id": "asan-focused",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires the independent asan_focused compiler ASan and UBSan build of the activated tree"
+    },
+    {
+      "id": "aot-ubsan-generated-output",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires aot_ubsan to instrument and execute real generated native output"
+    },
+    {
+      "id": "lsan-strict",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires the independent lsan_strict supported-host leak build of the activated tree"
+    },
+    {
+      "id": "tsan-focused-if-applicable",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires the independent tsan_focused build when the activated runtime path is supported"
+    },
+    {
+      "id": "provider-appleclang",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires real generated C on an AppleClang host"
+    },
+    {
+      "id": "provider-clang",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires real generated C on a Clang host"
+    },
+    {
+      "id": "provider-gcc",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires real generated C on a GCC host"
+    },
+    {
+      "id": "provider-msvc",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires real generated C on an MSVC Windows host"
+    },
+    {
+      "id": "provider-zig",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "requires real generated C on a Zig provider host"
+    },
+    {
+      "id": "source-corpus-positive-negative",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "staged source fixtures are not activated in the positive and compile-error corpora"
+    },
+    {
+      "id": "parser-formatter-type-tooling-identity",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "receiver and borrowed-origin syntax type identity formatter LSP MCP and API projections are not activated"
+    },
+    {
+      "id": "legacy-oracle-differential",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "the exhaustive pre-cut to post-cut observation classification manifest does not exist"
+    },
+    {
+      "id": "ownership-performance-manifest",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "Task 284 ownership counters benchmark manifest and approved W0 budgets are not activated"
+    },
+    {
+      "id": "ownership-residue-zero",
+      "required_stage": "retirement-contract",
+      "status": "UNRUN",
+      "evidence": [],
+      "blocking_reason": "production residue scanner and completion rows cannot qualify until the atomic public cut"
+    }
+  ],
+  "external_dependencies": [
+    {
+      "id": "i1-r4-checkpoint",
+      "owner": "integration train 01a0510c-59b4-7471-9945-a396121e3019",
+      "status": "WAITING"
+    },
+    {
+      "id": "docs-sync",
+      "owner": "docs task 01a0510d-17d5-7130-ac01-c45bd1c5dca8",
+      "status": "WAITING"
+    },
+    {
+      "id": "ports-downstream",
+      "owner": "integration-train coordinated downstream lane",
+      "status": "WAITING"
+    }
+  ],
+  "delivery_state": "NOT_READY",
+  "remaining_external_boundary": "I1/R4 clean checkpoint, explicit lock grants, matching default binary, downstream coordination, and every activation gate still marked UNRUN"
+}

@@ -1,0 +1,9 @@
+fn capture(data: Array<i64>) -> fn() -> i64 {
+    return fn() -> i64 {
+        return len(data)
+    }
+}
+
+fn main() {}
+
+main()

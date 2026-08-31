@@ -1,0 +1,13 @@
+class ViewStore {
+    saved: Slice<u8>?
+}
+
+fn main() {
+    var data: Array<u8> = [1, 2, 3]
+    var view: Slice<u8> = data[:]
+    var store = ViewStore()
+    store.saved = view
+    data.push(4)
+}
+
+main()

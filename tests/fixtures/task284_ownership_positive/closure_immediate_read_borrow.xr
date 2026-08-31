@@ -1,0 +1,16 @@
+fn call_now(callback: fn() -> i64) -> i64 {
+    return callback()
+}
+
+fn observe(data: Array<i64>) -> i64 {
+    return call_now(fn() -> i64 {
+        return len(data)
+    })
+}
+
+fn main() {
+    var values = [1, 2, 3]
+    print(observe(values))
+}
+
+main()
