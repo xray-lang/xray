@@ -9,7 +9,7 @@ an empty successful program. The production builder emits a complete group
 only for either a verified, capture-free signed-`i64` function whose declared
 parameters are all exact signed `i64`, whose blocks are all returns, plain
 jumps, or two-way branches, and whose operations are entirely in the supported
-family, or the exact source-class tagged `Array.push` call family described
+family, or the exact managed tagged `Array.push` call family described
 below. Every other function emits zero rows; no partial group or fallback is
 allowed.
 
@@ -186,13 +186,14 @@ signed-`i64` register and memory representations. It also proves single
 assignment, canonical arity and unused fields, and that a computation row is
 never the last row of a group. Unknown or unsupported instructions fail closed.
 
-The managed executable family is deliberately one exact operation: a
-source-class `Array<T>.push(T)` Target call whose receiver is `BORROW`, whose
-element is `CONSUME`, whose storage is `TAGGED`/`DYN_VALUE`, and whose result is
-the Unit-valued void side effect. Its complete instruction group is two
+The managed executable family is deliberately one exact operation: an
+`Array<T>.push(T)` Target call for the exact String, frozen source-class, or
+compiler-owned Array element roster. Its receiver is `BORROW`, its element is
+`CONSUME`, its storage is `TAGGED`/`DYN_VALUE`, and its result is the
+Unit-valued void side effect. Its complete instruction group is two
 required parameter rows, `ARRAY_PUSH_TAGGED`, and `RETURN_UNIT`. Per-operand
 ownership, the memory-write/may-error effects, the exact Target call row and
-argument rows, source-class element type, selector identity, slot identities,
+argument rows, managed element type, selector identity, slot identities,
 and dense row shape are independently rederived by the Target verifier. The
 builder and verifier consume SemanticPlan/TargetPlan authority directly; the
 VM never reads an AOT CEmission recipe and never derives an executable answer
@@ -766,12 +767,14 @@ Evidence:
   error, termination, step-budget, and call-depth outcomes. The generated
   contract KAT covers every current opcode and refuses unknown providers,
   unknown opcodes, and complete-contract mismatches.
-- `test_target_plan` proves the production source-class tagged `Array.push`
-  group, exact DYN representation and per-operand ownership, both generated
-  providers, the mandatory runtime-kernel capability, and success ownership
-  transfer. A missing kernel is refused before the frame can acquire the
-  element; the runtime-only VM archive therefore contains no hidden object
-  implementation or unresolved hosted-runtime symbol. The test mutates
+- `test_target_plan` proves the production managed tagged `Array.push` group
+  for frozen source-class and nested Array elements, exact DYN representation
+  and per-operand ownership, both generated providers, the mandatory
+  runtime-kernel capability, and success ownership transfer. The nested case
+  also refuses an instance carrier before an Array element can enter the
+  frame. A missing kernel is refused before the frame can acquire the element;
+  the runtime-only VM archive therefore contains no hidden object implementation
+  or unresolved hosted-runtime symbol. The test mutates
   parameter ownership, operand slots, call identity, Target call
   ownership/storage/type relations, and instruction shape independently.
   Invalid receivers, slices, and typed storage mismatches prove fail-closed
@@ -870,18 +873,18 @@ Evidence:
   wrong shared slots, and the direct edge and requires fail-closed rejection
   with no per-module or legacy ABI fallback.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 2eea159120925f7710d1ca4d986f9bad12fd3e4b86878ab605370c16270af44e
+anchor-sha256: src/plan/target/xr_target_plan.h 65fe85fc22f27830d244c06027a73bc60a43ce7d3023117ac20f9d8b3e7cdcd6
 anchor-sha256: src/plan/target/xr_target_plan.c 81051eadeaacfba20da1ba84f994504d1927e825217a13ca517c675b16d22201
 anchor-sha256: src/plan/target/xr_target_plan_internal.h e4e69c596140608354c8100b2c60ec1f57d218105f30ed13f758b1503d4f8938
 anchor-sha256: src/plan/target/xr_target_builder.h 2281c6768da662fae0fbe52c5601ad78b63df1d4cc8bf4eabb8d8b7ff24ef282
-anchor-sha256: src/plan/target/xr_target_builder.c bb3cec0051bdc56c47da81e7e9b42b77a51e681c98ffeef8c6851bdc4fd4ec4d
+anchor-sha256: src/plan/target/xr_target_builder.c 72307097342b0de16e63eb1b367a16fd3205545cba8ad2624f6b28fc04be63c7
 anchor-sha256: src/plan/target/xr_target_call_abi_shape.h 158cf1b96a4668f648d4798d4db89d59215a3553c6ad47b15c24c073a22aecda
-anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c 176e904160cc3e2b370609917a65b56ae55cb961343f18d686124730ab3d951a
+anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1221700922d2a310bfad444a7c4988303ef6a5a8aa955e9f6290d120ce2d7c4c
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c 44c10027c2b1f96ccdf83df6ac5615e1c8f6c1daa28ad038bb84472034b1f018
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction.h 5caceef008f17a2f871efecd54ab37c311a41abbc6539b2b81eef6feb1aee8a0
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction.c a846c95862c5339f70028337cbaaf85172368339c48caf14b503f9409181df3a
 anchor-sha256: src/plan/target/xr_i64_overflow_target_instruction_verify.c ed37eeab5dd84ead0a90baa5d541c04c8eb2076b0d4b6ff88ba2bd42126b5996
-anchor-sha256: src/plan/target/xr_target_verify.c 96523f454803e5a68205dd14947a68fe3a3c2812aaa1cd1f0c6e8a3c58c14aac
+anchor-sha256: src/plan/target/xr_target_verify.c 34b4fa0c27d5486ad0f7aea946a404a991e4bcbfc585f64442d4e918fb161743
 anchor-sha256: src/plan/format/xr_xtp_schema.h 9a98661028b7b74bd2a9f4a8a855ac7352daec86b895b32015f0e0477db60c8f
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
@@ -895,7 +898,7 @@ anchor-sha256: src/plan/format/xr_xtp_text.c 794c85faec54254597eb2cc989b3d0a761e
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 97413cd1fd368e8a61f9ae14c75c321b3b956b8313da7519bae361af4c24a894
 anchor-sha256: src/vm/xr_typed_dispatch.h 21a7caa8e2c64986e14b8efdea1d72c4251ebfbcf3ee89645a421f5e036fdb12
-anchor-sha256: src/vm/xr_typed_dispatch.c 11e5044c5aa87c1a2edeca23b76480a974e7899dad75d3c6ad61ff59c463927a
+anchor-sha256: src/vm/xr_typed_dispatch.c 99b8d25dee8ee4a531e2185bef218882a997f3cdf38fbf8e3646689c45c7411b
 anchor-sha256: src/vm/xr_vm_decoded_cache.h 55ac6ffaab71ac0e77a3db5e10ad326057d0052f4ae3b9722029c8ea06c49cf0
 anchor-sha256: src/vm/xr_vm_decoded_cache.c f1f420b39d78f39e372b3378425809fb6c7049bad84aa02f84df5e542cfd83de
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
@@ -931,7 +934,7 @@ anchor-sha256: src/runtime/object/xarray.c a1b82a9df6dbfa060f3a3ac5b5a5dee200d51
 anchor-sha256: src/vm/xvm_dispatch_collection.inc.c 522f67fa27199b54d2c20942ff344e0b1a657635e28a4e45084737d603a635eb
 anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86fabdfa079523ca4fd504bd5badb491ee
 anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
-anchor-sha256: tests/unit/plan/test_target_plan.c 7a7bab4eba2449f904eb875c48ab7e35cde9315a310bd0948728bb97750a85b7
+anchor-sha256: tests/unit/plan/test_target_plan.c bb8b8661f542781f0e640b39999396caffff5b5fa5f06ae43f130dd0f1faa727
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c 1c09d9175acb0870f42515071a88cdf6beb1f28becdb179fd9b3435945bed680

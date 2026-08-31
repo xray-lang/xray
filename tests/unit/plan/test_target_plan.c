@@ -280,6 +280,13 @@ static XrType stub_target_string_array = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_exact_string},
 };
+static XrType stub_target_string_array_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 184,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_target_string_array},
+};
 static XrFunctionParam stub_array_hof_unary_params[] = {
     {.type = &stub_int, .mode = XR_PARAM_READ},
 };
@@ -3569,6 +3576,53 @@ static XrSemanticPlan *build_source_class_array_push_semantic(void) {
     return plan;
 }
 
+static XrSemanticPlan *build_nested_array_push_semantic(void) {
+    XiFunc *function = xi_func_new("target_nested_array_push", &stub_unit);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    function->nparams = function->min_params = 2;
+    function->params = (XiValue **) xr_calloc(2, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = xi_param(function, entry, 0, &stub_target_string_array_array);
+    function->params[1] = xi_param(function, entry, 1, &stub_target_string_array);
+    REQUIRE(function->params[0] != NULL && function->params[1] != NULL);
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 2;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->param_own[1] = XI_OWN_OWNED;
+    function->arc_borrow_sig->valid = true;
+
+    XiValue *push = xi_value_new(function, entry, XI_CALL_METHOD, &stub_unit, 2);
+    REQUIRE(push != NULL);
+    push->args[0] = function->params[0];
+    push->args[1] = function->params[1];
+    push->aux = "push";
+    push->aux_int = (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
+    xi_block_set_return(entry, push);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *module =
+        xi_module_new("pkg/target_nested_array_push.xr", "target_nested_array_push", function);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(module, "memory-module-v1:id=27:target-nested-array-push-v1"));
+    function->module = module;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "nested Array.push semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    function->module = NULL;
+    xi_func_free(function);
+    module->init = NULL;
+    xi_module_free(module);
+    return plan;
+}
+
 static XrSemanticPlan *build_source_class_array_fill_semantic(void) {
     XiFunc *function = xi_func_new("target_source_class_array_fill", &stub_unit);
     REQUIRE(function != NULL);
@@ -3722,6 +3776,54 @@ static void test_source_class_array_push_managed_execution(const XrTargetPlan *p
                 XR_IS_INT(non_instance_arguments[1]) && XR_TO_INT(non_instance_arguments[1]) == 9 &&
                 element_mismatch.length == 0);
         dispose_inplace_array(&element_mismatch);
+    }
+}
+
+static void test_nested_array_push_managed_execution(const XrTargetPlan *plan) {
+    REQUIRE(plan != NULL);
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
+        XrArray inner = {0};
+        XrArray outer = {0};
+        xr_obj_header_init_type(&inner.hdr, XR_TARRAY);
+        xr_obj_header_init_type(&outer.hdr, XR_TARRAY);
+        xr_array_init_inplace(&inner, 1, XR_ELEM_ANY);
+        xr_array_init_inplace(&outer, 1, XR_ELEM_ANY);
+        XrValue element = xr_value_from_array(&inner);
+        XrValue arguments[2] = {xr_value_from_array(&outer), element};
+        XrValue receiver = arguments[0];
+        XrTypedDispatchValueRequest request = {
+            .verified_plan = plan,
+            .required_plan_fingerprint = &fingerprint,
+            .arguments = arguments,
+            .array_push = xr_array_push_owned_checked,
+            .provider = providers[i],
+            .function = 0,
+            .argument_count = 2,
+        };
+        XrObjHeader wrong_instance = {0};
+        xr_obj_header_init_type(&wrong_instance, XR_TINSTANCE);
+        XrValue hostile_arguments[2] = {
+            receiver,
+            xr_value_from_instance((struct XrInstance *) (void *) &wrong_instance),
+        };
+        request.arguments = hostile_arguments;
+        REQUIRE(xr_typed_dispatch_execute_values(&request) ==
+                    XR_TYPED_DISPATCH_ARRAY_PUSH_TYPE_MISMATCH &&
+                outer.length == 0 && !XR_IS_NULL(hostile_arguments[1]));
+        request.arguments = arguments;
+        REQUIRE(xr_typed_dispatch_execute_values(&request) == XR_TYPED_DISPATCH_OK &&
+                memcmp(&arguments[0], &receiver, sizeof(receiver)) == 0 && XR_IS_NULL(arguments[1]) &&
+                outer.length == 1 && outer.contains_refs == 1 &&
+                memcmp(&((XrValue *) outer.data)[0], &element, sizeof(element)) == 0);
+        XrValue returned = xr_array_pop(&outer);
+        REQUIRE(memcmp(&returned, &element, sizeof(element)) == 0);
+        dispose_inplace_array(&outer);
+        dispose_inplace_array(&inner);
     }
 }
 
@@ -7399,6 +7501,125 @@ static void test_source_class_array_push_authority(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void verify_nested_array_push_emission(const XrTargetPlan *plan,
+                                              const XrSemanticOperationRecord *operation,
+                                              const XrSemanticOperandRecord *receiver,
+                                              const XrSemanticOperandRecord *element,
+                                              XrFingerprint profile_fingerprint) {
+    char error[512] = {0};
+    XrCEmissionPlan *emission = NULL;
+    bool built = xr_c_emission_plan_build(plan, xr_target_plan_semantic_plan(plan),
+                                          profile_fingerprint, &emission, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "nested Array.push CEmissionPlan failed: %s\n", error);
+    REQUIRE(built);
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, operation->result_value, &view, error,
+                                          sizeof(error)) &&
+            view.recipe_rule_id == XR_C_EMISSION_RULE_C_EMISSION_ARRAY_PUSH_TAGGED_V1 &&
+            view.materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED &&
+            view.rep == XR_C_VALUE_REP_VOID &&
+            view.recipe_operand_value == receiver->value &&
+            view.recipe_argument_value == element->value &&
+            view.recipe_discriminant == XR_TARGET_ARRAY_STORAGE_TAGGED && view.recipe_symbol &&
+            strcmp(view.recipe_symbol, "xrt_array_push") == 0 && view.c_type &&
+            strcmp(view.c_type, "void") == 0);
+    XrCValueEmissionView *mutable_view = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == operation->result_value)
+            mutable_view = &emission->values[i];
+    REQUIRE(mutable_view != NULL);
+    const char *saved_symbol = mutable_view->recipe_symbol;
+    mutable_view->recipe_symbol = "xrt_array_set";
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                       profile_fingerprint, error, sizeof(error)));
+    mutable_view->recipe_symbol = saved_symbol;
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, xr_target_plan_semantic_plan(plan),
+                                      profile_fingerprint, error, sizeof(error)));
+    xr_c_emission_plan_free(emission);
+}
+
+static void test_nested_array_push_authority(void) {
+    XrSemanticPlan *semantic = build_nested_array_push_semantic();
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    XrSemanticOperationRecord *operation = NULL;
+    for (uint32_t i = 0; i < semantic->operation_count; i++) {
+        XrSemanticOperationRecord *candidate = &semantic->operations[i];
+        const char *selector =
+            candidate->metadata_count == 1 && candidate->metadata_begin < semantic->metadata_count
+                ? semantic->metadata[candidate->metadata_begin]
+                : NULL;
+        if (candidate->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR && selector &&
+            strcmp(selector, "push") == 0) {
+            REQUIRE(operation == NULL);
+            operation = candidate;
+        }
+    }
+    REQUIRE(operation != NULL && operation->operand_count == 2);
+    XrSemanticOperandRecord *receiver = &semantic->operands[operation->operand_begin];
+    XrSemanticOperandRecord *element = receiver + 1;
+    XrSemanticTypeRecord *receiver_type = &semantic->types[receiver->type];
+    REQUIRE(receiver_type->child_count == 1 &&
+            receiver_type->child_begin < semantic->type_child_count);
+    uint32_t element_type_index = semantic->type_children[receiver_type->child_begin];
+    XrSemanticTypeRecord *element_type = &semantic->types[element_type_index];
+    const XrArrayMemberShape *shape = xr_array_member_shape("push", operation->operand_count);
+    REQUIRE(xr_semantic_array_type_row_is_exact(receiver_type) &&
+            xr_semantic_array_type_row_is_exact(element_type) &&
+            xr_semantic_array_member_owned_reference_type_is_exact(semantic, element_type) &&
+            xr_semantic_array_member_reference_contract_is_exact(
+                semantic, shape, operation, element_type_index, element_type) &&
+            receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+            element->ownership_action == XR_SEM_OPERAND_CONSUME);
+    XrSemanticOperationRecord fake_fill = *operation;
+    fake_fill.operand_count = 4;
+    fake_fill.semantic_immediate = (int64_t) XI_METHOD_SYMBOL_FILL << 1;
+    REQUIRE(!xr_semantic_array_member_reference_contract_is_exact(
+        semantic, xr_array_member_shape("fill", 4), &fake_fill, element_type_index, element_type));
+    uint16_t saved_kind = element_type->kind;
+    element_type->kind = XR_KIND_MAP;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    element_type->kind = saved_kind;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "nested Array.push TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && plan->calls_count == 1 && plan->call_arguments_count == 2);
+    XrTargetCallRecord *call = &plan->calls[0];
+    XrTargetCallArgumentRecord *arguments = &plan->call_arguments[call->argument_begin];
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(plan, 0, &instruction_count);
+    REQUIRE(call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
+            call->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+            arguments[0].ownership == XR_TARGET_CALL_BORROW &&
+            arguments[1].ownership == XR_TARGET_CALL_CONSUME &&
+            arguments[1].array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+            instruction_count == 4 && instructions[2].opcode == XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED &&
+            xr_target_plan_function_execution_family_mask(plan, 0) ==
+                XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED);
+    uint8_t saved_storage = call->array_element_storage;
+    call->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->array_element_storage = saved_storage;
+    uint8_t saved_ownership = arguments[1].ownership;
+    arguments[1].ownership = XR_TARGET_CALL_READ;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    arguments[1].ownership = saved_ownership;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    test_nested_array_push_managed_execution(plan);
+    verify_nested_array_push_emission(plan, operation, receiver, element,
+                                      xr_target_profile_fingerprint(profile));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_source_class_array_fill_authority(void) {
     XrSemanticPlan *semantic = build_source_class_array_fill_semantic();
     char error[512] = {0};
@@ -9410,6 +9631,11 @@ int main(int argc, char **argv) {
         puts("Source-class Array.push authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "nested-array-push-authority") == 0) {
+        test_nested_array_push_authority();
+        puts("Nested Array.push authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "source-class-array-fill-authority") == 0) {
         test_source_class_array_fill_authority();
         puts("Source-class Array.fill authority tests passed");
@@ -9428,6 +9654,7 @@ int main(int argc, char **argv) {
     test_shared_const_i64_array_layout_authority();
     test_array_reserve_call_authority();
     test_source_class_array_push_authority();
+    test_nested_array_push_authority();
     test_source_class_array_fill_authority();
     test_stringbuilder_constructor_call_authority();
     test_stringbuilder_append_rune_call_authority();

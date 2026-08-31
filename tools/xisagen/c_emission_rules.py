@@ -48,8 +48,8 @@ class Rule:
     element_access: str
     reference_action: str
     reference_drop: str
-    element_source_class: bool
-    applies_element_source_class: bool
+    element_managed_reference: bool
+    applies_element_managed_reference: bool
     applies_storage: str
     call_convention: str
     target_kind: str
@@ -73,7 +73,7 @@ class Rule:
 RULE_KEYWORDS = {
     ":stable-id", ":domain", ":member", ":opcode", ":intrinsic", ":operand-count",
     ":result-kind", ":element-access", ":reference-action", ":reference-drop",
-    ":element-source-class", ":applies-element-source-class", ":applies-storage",
+    ":element-managed-reference", ":applies-element-managed-reference", ":applies-storage",
     ":call-convention", ":target-kind", ":layout-kind",
     ":storage", ":receiver-ownership", ":element-ownership", ":receiver-storage",
     ":element-storage", ":caller-register-kind", ":caller-memory-kind", ":recipe",
@@ -249,9 +249,9 @@ def parse(text: str, path: str = "<input>") -> tuple[list[RuleDomain], list[Rule
             element_access=_c_token(form, ":element-access", path),
             reference_action=_c_token(form, ":reference-action", path),
             reference_drop=_c_token(form, ":reference-drop", path),
-            element_source_class=_boolean(form, ":element-source-class", path),
-            applies_element_source_class=_boolean(
-                form, ":applies-element-source-class", path),
+            element_managed_reference=_boolean(form, ":element-managed-reference", path),
+            applies_element_managed_reference=_boolean(
+                form, ":applies-element-managed-reference", path),
             applies_storage=_c_token(form, ":applies-storage", path),
             call_convention=_c_token(form, ":call-convention", path),
             target_kind=_c_token(form, ":target-kind", path),
@@ -308,7 +308,7 @@ def _ident(rule: Rule) -> str:
 
 
 def _clauses(rule: Rule) -> list[str]:
-    source_class = "true" if rule.element_source_class else "false"
+    managed_reference = "true" if rule.element_managed_reference else "false"
     return [
         f"facts->opcode == {rule.opcode}",
         f"facts->intrinsic == {rule.intrinsic}",
@@ -317,7 +317,7 @@ def _clauses(rule: Rule) -> list[str]:
         f"facts->element_access == {rule.element_access}",
         f"facts->reference_action == {rule.reference_action}",
         f"facts->reference_drop == {rule.reference_drop}",
-        f"facts->element_source_class == {source_class}",
+        f"facts->element_managed_reference == {managed_reference}",
         f"facts->call_convention == {rule.call_convention}",
         f"facts->target_kind == {rule.target_kind}",
         f"facts->layout_kind == {rule.layout_kind}",
@@ -338,9 +338,9 @@ def _clauses(rule: Rule) -> list[str]:
 
 
 def _applicability_clauses(rule: Rule) -> list[str]:
-    source_class = "true" if rule.applies_element_source_class else "false"
+    managed_reference = "true" if rule.applies_element_managed_reference else "false"
     return [
-        f"facts->element_source_class == {source_class}",
+        f"facts->element_managed_reference == {managed_reference}",
         f"facts->call_storage == {rule.applies_storage}",
         f"facts->layout_storage == {rule.applies_storage}",
         f"facts->argument_storage[0] == {rule.applies_storage}",
@@ -484,8 +484,8 @@ def self_test() -> None:
       :element-access XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE
       :reference-action XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE
       :reference-drop XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY
-      :element-source-class yes
-      :applies-element-source-class yes
+      :element-managed-reference yes
+      :applies-element-managed-reference yes
       :applies-storage XR_TARGET_ARRAY_STORAGE_TAGGED
       :call-convention XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR
       :target-kind XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR
@@ -497,7 +497,7 @@ def self_test() -> None:
       :caller-memory-kind XR_MACHINE_REP_DYN_VALUE
       :recipe XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED
       :recipe-rep XR_C_VALUE_REP_VOID :recipe-symbol "xrt_array_push"
-      :diagnostic "XR_EXEC_5003:test" :coverage source-class-array-push
+      :diagnostic "XR_EXEC_5003:test" :coverage managed-array-push
       :max-builder-lines 56 :max-verifier-lines 72)
     """
     outputs = generate(source)
@@ -510,12 +510,12 @@ def self_test() -> None:
         source.replace(":members (XI_METHOD_SYMBOL_PUSH)",
                        ":members (XI_METHOD_SYMBOL_PUSH XI_METHOD_SYMBOL_POP)"),
         source + source[source.index("(define-c-emission-rule"):],
-        source.replace(":element-source-class yes", ":element-source-class maybe"),
+        source.replace(":element-managed-reference yes", ":element-managed-reference maybe"),
         source.replace(":applies-storage XR_TARGET_ARRAY_STORAGE_TAGGED",
                        ":applies-storage tagged"),
         source.replace(":recipe XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED",
                        ":recipe arbitrary-c-expression"),
-        source.replace(":coverage source-class-array-push", ":coverage \"not-a-key\""),
+        source.replace(":coverage managed-array-push", ":coverage \"not-a-key\""),
     )
     for mutation in mutations:
         try:

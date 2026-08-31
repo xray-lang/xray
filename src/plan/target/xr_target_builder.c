@@ -1597,9 +1597,9 @@ static bool semantic_array_member_scalar_is_exact(const XrSemanticPlan *plan,
 }
 
 /* The tagged-store lane is deliberately narrower than the scalar member
- * family. It is exactly the shape whose frozen lifecycle consumes one local
- * source-class instance into Array storage and releases it when erased or when
- * the container is destroyed. */
+ * family. It is exactly the shape whose frozen lifecycle consumes one managed
+ * reference into Array storage and releases it when erased or when the
+ * container is destroyed. */
 static bool semantic_array_member_tagged_store_is_exact(const XrSemanticPlan *plan,
                                                         const XrSemanticOperationRecord *operation,
                                                         uint32_t *semantic_operand,
@@ -1909,10 +1909,11 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
  * is not its question and `Array<String>` is as carryable as `Array<i64>`. A
  * carrier that hands the callee a pointer into the caller's cell does reach
  * them: the callee may index and rewrite elements, so it needs an exact element
- * storage identity. Scalars state their direct storage. A source-class element
- * states tagged storage because its nominal class identity and the Array
- * member-store lifecycle are both frozen by SemanticPlan; other reference-
- * capable elements remain outside this boundary.
+ * storage identity. Scalars state their direct storage. An exact managed
+ * reference gives a value carrier tagged storage because its identity and the
+ * Array member-store lifecycle are both frozen by SemanticPlan. The stronger
+ * ref boundary remains source-class-only; other reference-capable elements do
+ * not gain mutable element access from this layout fact.
  *
  * `indexes_elements` and `admits_instance` state which questions the carrier is
  * allowed to ask. Keeping them explicit prevents value carriers from inheriting
@@ -1949,11 +1950,12 @@ static bool semantic_direct_local_tagged_boundary_type_is_exact(const XrSemantic
     if (!xr_target_array_storage_from_type(element_type, &element)) {
         bool source_class_element = xr_semantic_class_instance_type_source_class(
                                         plan, element_type) != XR_SEMANTIC_INDEX_NONE;
+        bool managed_reference_element =
+            xr_semantic_array_member_owned_reference_type_is_exact(plan, element_type);
         if (indexes_elements && !source_class_element)
             return false;
-        element = xr_semantic_tagged_string_type_is_exact(element_type) || source_class_element
-                      ? XR_TARGET_ARRAY_STORAGE_TAGGED
-                      : XR_TARGET_ARRAY_STORAGE_NONE;
+        element = managed_reference_element ? XR_TARGET_ARRAY_STORAGE_TAGGED
+                                            : XR_TARGET_ARRAY_STORAGE_NONE;
     }
     if (storage)
         *storage = element;

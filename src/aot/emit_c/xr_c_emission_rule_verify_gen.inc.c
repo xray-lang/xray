@@ -15,7 +15,7 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_verify(
                 facts->argument_storage[0] == XR_TARGET_ARRAY_STORAGE_TAGGED ||
                 facts->layout_storage == XR_TARGET_ARRAY_STORAGE_TAGGED ||
                 facts->call_storage == XR_TARGET_ARRAY_STORAGE_TAGGED ||
-                facts->element_source_class == true;
+                facts->element_managed_reference == true;
             if (!applicable)
                 return XR_C_EMISSION_RULE_NOT_APPLICABLE;
             bool clauses =
@@ -35,7 +35,7 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_verify(
                 facts->layout_kind == XR_TARGET_LAYOUT_DYNAMIC &&
                 facts->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
                 facts->call_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
-                facts->element_source_class == true &&
+                facts->element_managed_reference == true &&
                 facts->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY &&
                 facts->reference_action == XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE &&
                 facts->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE &&

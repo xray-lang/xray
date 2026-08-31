@@ -13,9 +13,22 @@
 
 #include "xr_target_plan.h"
 
+typedef enum XrTargetManagedTaggedCarrier {
+    XR_TARGET_MANAGED_TAGGED_CARRIER_INVALID = 0,
+    XR_TARGET_MANAGED_TAGGED_CARRIER_STRING,
+    XR_TARGET_MANAGED_TAGGED_CARRIER_SOURCE_CLASS,
+    XR_TARGET_MANAGED_TAGGED_CARRIER_ARRAY,
+} XrTargetManagedTaggedCarrier;
+
 XR_FUNC bool xr_target_instruction_program_verify(const XrTargetPlan *plan,
                                                    char *error,
                                                    size_t error_size);
+
+/* Return the exact runtime tag admitted by one independently verified managed
+ * Array.push group. The executor consumes this closed TargetPlan judgement; it
+ * does not re-infer a language type from a selector or accept any tagged value. */
+XR_FUNC XrTargetManagedTaggedCarrier
+xr_target_instruction_managed_array_push_carrier(const XrTargetPlan *plan, uint32_t function);
 
 /*
  * The one control-flow judgement for a function's row group, owned here and

@@ -8,7 +8,7 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_build(
     switch (facts->member) {
         case XI_METHOD_SYMBOL_PUSH:
             if (!(
-                facts->element_source_class == true ||
+                facts->element_managed_reference == true ||
                 facts->call_storage == XR_TARGET_ARRAY_STORAGE_TAGGED ||
                 facts->layout_storage == XR_TARGET_ARRAY_STORAGE_TAGGED ||
                 facts->argument_storage[0] == XR_TARGET_ARRAY_STORAGE_TAGGED ||
@@ -22,7 +22,7 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_build(
                 facts->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE &&
                 facts->reference_action == XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE &&
                 facts->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY &&
-                facts->element_source_class == true &&
+                facts->element_managed_reference == true &&
                 facts->call_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
                 facts->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
                 facts->layout_kind == XR_TARGET_LAYOUT_DYNAMIC &&

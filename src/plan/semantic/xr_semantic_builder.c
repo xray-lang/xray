@@ -4386,9 +4386,9 @@ static bool semantic_array_fill_scalar_exact(const XrSemanticBuildContext *ctx,
            fill->ownership_action == XR_SEM_OPERAND_CONSUME;
 }
 
-/* Reference-capable storage authority is narrower than the shape table: only
- * the exact source-class push and range-fill method identities may consume an
- * element into tagged Array storage. */
+/* Reference-capable storage authority is narrower than the shape table: exact
+ * managed push identities and the narrower String/source-class range-fill
+ * identities may consume an element into tagged Array storage. */
 
 static bool semantic_array_member_reference_contract_exact(
     const XrSemanticBuildContext *ctx, const XrArrayMemberShape *shape,

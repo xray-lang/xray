@@ -41,7 +41,7 @@ scalar width, floating-point value, Rune, unit-enum ordinal, trivial aggregate,
 and trivial raw pointer. It also accepts an exact immutable String literal as
 a no-lifecycle prerequisite carrier, one exact owned dynamic String whose
 coroutine root and release lifecycle is complete, and the two exact short-lived
-DYN_VALUE parameters of the managed source-class tagged `Array.push` family.
+DYN_VALUE parameters of the closed managed tagged `Array.push` family.
 The push receiver is borrowed transport and never enters the lifecycle ledger;
 its element is an owned carrier governed by the executable `CONSUME` operand.
 Every other rooted, owned, borrowed, View, object-reference, code-reference,
@@ -358,10 +358,10 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 2eea159120925f7710d1ca4d986f9bad12fd3e4b86878ab605370c16270af44e
+anchor-sha256: src/plan/target/xr_target_plan.h 65fe85fc22f27830d244c06027a73bc60a43ce7d3023117ac20f9d8b3e7cdcd6
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
-anchor-sha256: src/vm/xr_typed_dispatch.c 11e5044c5aa87c1a2edeca23b76480a974e7899dad75d3c6ad61ff59c463927a
+anchor-sha256: src/vm/xr_typed_dispatch.c 99b8d25dee8ee4a531e2185bef218882a997f3cdf38fbf8e3646689c45c7411b
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 26ce3e68c82fae8c1f035ea4daff3da8bd909146ca359d7e7b56983bed68b8a3
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041

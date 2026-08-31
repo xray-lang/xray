@@ -1230,7 +1230,7 @@ static bool suspend_row_is_exact(const XrTargetPlan *plan, const XrTargetInstruc
 /* Re-derive the one managed mutation group without using builder state.  The
  * executable row is authority only when its call index, parameter slots,
  * semantic push shape, and BORROW/CONSUME boundary all describe the same
- * source-class Array.push site. */
+ * exact tagged Array.push site. */
 static bool tagged_array_push_group_is_exact(const XrTargetPlan *plan,
                                              const XrTargetInstructionRecord *rows,
                                              uint32_t row_count, uint32_t function_index) {
@@ -1322,8 +1322,9 @@ static bool tagged_array_push_group_is_exact(const XrTargetPlan *plan,
     uint32_t element_type_index = children[receiver_type->child_begin];
     const XrSemanticTypeRecord *element_type = xr_semantic_plan_type(semantic, element_type_index);
     if (!element_type ||
-        xr_semantic_class_instance_type_source_class(semantic, element_type) ==
-            XR_SEMANTIC_INDEX_NONE ||
+        !xr_semantic_array_member_owned_reference_type_is_exact(semantic, element_type) ||
+        !xr_semantic_array_member_reference_contract_is_exact(
+            semantic, shape, operation, element_type_index, element_type) ||
         receiver_operand->role != XR_SEM_OPERAND_RECEIVER || receiver_operand->parameter != -1 ||
         receiver_operand->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
         receiver_operand->ownership_action != XR_SEM_OPERAND_BORROW ||
@@ -1387,6 +1388,43 @@ static bool tagged_array_push_group_is_exact(const XrTargetPlan *plan,
             return false;
     }
     return true;
+}
+
+XrTargetManagedTaggedCarrier
+xr_target_instruction_managed_array_push_carrier(const XrTargetPlan *plan, uint32_t function) {
+    uint32_t row_count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_function_instructions(plan, function, &row_count);
+    if (!tagged_array_push_group_is_exact(plan, rows, row_count, function))
+        return XR_TARGET_MANAGED_TAGGED_CARRIER_INVALID;
+    uint32_t call_count = 0, operand_count = 0, child_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    uint32_t call_index = (uint32_t) rows[2].immediate_bits;
+    const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
+    const XrSemanticOperationRecord *operation =
+        call ? xr_semantic_plan_operation(semantic, call->semantic_operation) : NULL;
+    const XrSemanticOperandRecord *receiver =
+        operation && operands && operation->operand_begin < operand_count
+            ? &operands[operation->operand_begin]
+            : NULL;
+    const XrSemanticTypeRecord *receiver_type =
+        receiver ? xr_semantic_plan_type(semantic, receiver->type) : NULL;
+    if (!receiver_type || receiver_type->child_begin >= child_count)
+        return XR_TARGET_MANAGED_TAGGED_CARRIER_INVALID;
+    const XrSemanticTypeRecord *element_type =
+        xr_semantic_plan_type(semantic, children[receiver_type->child_begin]);
+    if (xr_semantic_tagged_string_type_is_exact(element_type))
+        return XR_TARGET_MANAGED_TAGGED_CARRIER_STRING;
+    if (xr_semantic_class_instance_type_source_class(semantic, element_type) !=
+        XR_SEMANTIC_INDEX_NONE)
+        return XR_TARGET_MANAGED_TAGGED_CARRIER_SOURCE_CLASS;
+    if (xr_semantic_array_type_row_is_exact(element_type))
+        return XR_TARGET_MANAGED_TAGGED_CARRIER_ARRAY;
+    return XR_TARGET_MANAGED_TAGGED_CARRIER_INVALID;
 }
 
 static bool instruction_semantic_operand_value(const XrSemanticPlan *semantic,

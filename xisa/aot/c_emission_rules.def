@@ -17,8 +17,8 @@
   :element-access XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE
   :reference-action XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE
   :reference-drop XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY
-  :element-source-class yes
-  :applies-element-source-class yes
+  :element-managed-reference yes
+  :applies-element-managed-reference yes
   :applies-storage XR_TARGET_ARRAY_STORAGE_TAGGED
   :call-convention XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR
   :target-kind XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR
@@ -34,6 +34,6 @@
   :recipe-rep XR_C_VALUE_REP_VOID
   :recipe-symbol "xrt_array_push"
   :diagnostic "XR_EXEC_5003:Array.push tagged C emission rule mismatch"
-  :coverage source-class-array-push
+  :coverage managed-array-push
   :max-builder-lines 56
   :max-verifier-lines 72)

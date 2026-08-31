@@ -117,17 +117,21 @@ entry and every remaining argument is an exact signed 64-bit bound. Each shape
 now freezes element access, reference
 action, and drop lifecycle instead of publishing a permission bit. `reverse`,
 `sort`, and `join` preserve references already in the container. The reference-
-capable storing forms are exact `Array<source-class>.push(value)` and exact
-`Array<source-class>.fill(value, start, end)`. Both consume the source-class
-element into tagged storage, whose canonical Array lifecycle releases it when
-erased or when the container is destroyed. TargetPlan binds two ordered rows
-for `push` and four for range `fill`: the dynamic receiver is borrowed, the
-exact owned source-class element is consumed with `TAGGED` call storage, and
-the two fill bounds are consumed trivial i64 values with no array storage.
+capable storing forms are exact `Array<T>.push(value)` for the closed exact
+String, frozen source-class, and compiler-owned Array roster, plus exact
+`Array<source-class>.fill(value, start, end)`. Push moves one ownership root
+into one tagged slot; range fill remains narrower because it duplicates one
+input across several slots. The canonical Array lifecycle releases every
+stored root when erased or when the container is destroyed. TargetPlan binds
+two ordered rows for `push` and four for range `fill`: the dynamic receiver is
+borrowed, the exact owned managed element is consumed with `TAGGED` call
+storage, and the two fill bounds are consumed trivial i64 values with no array
+storage.
 Its independent verifier reconstructs selector plus numeric method identity,
 lifecycle, source-class identity, every ordered semantic operand, stable
 argument identity, ownership, storage, and caller representation. Shorter
-source-class `fill` forms, `unshift`, `indexOf`, and `contains` remain
+source-class `fill` forms, every Array-element `fill`, `unshift`, `indexOf`,
+and `contains` remain
 unavailable for reference-capable elements, as do every unknown shape and every
 operand count outside the frozen range.
 `Array.reserve` is the closed stable-identity member of this container family:
@@ -563,7 +567,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c e33606ab608e06c87d
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 2d9942441ea7d257274d9664bf565b15a10930d9dba5e865365f94b7a2801335
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 7b98102e75841d5e42b6fe023aae3de541365683e6e3429bcfc62ba6fc93912f
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 82e14aa7ee4ae5ad18dcd9101016aee6869e8abe24110d979ae470fac715df45
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h e9a9b280a48f25d148fd4e686977ebf365f6ae8d0bcc367d9dea99917898306a
@@ -579,7 +583,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 5201
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d479ea0483a8a77237bd77dd0f2c0aadc866de482012d6dda7cae
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 6ab9f65a8ee2a89075f865156a63bd67dcda4c18d1c5446baf69984b8a29c8bd
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 404517a45084ad79e7aa65b3ca336cddf06ee0695fc06e8929f13f657595cd1f
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 532959558cb72938709198f481ac42d53ec074ca0602b5d4c4512568db908f1a
 anchor-sha256: src/stdlib/xstdlib_metadata.h 6554aa814f46c2a31a40512ed1d8c665e900810d12809f9e195d9d359dc318c3
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 9a633fb5ccc4cbd1eab6c6b9fef01c928ce8edf85d57d1f7fc1895563f3f65ff

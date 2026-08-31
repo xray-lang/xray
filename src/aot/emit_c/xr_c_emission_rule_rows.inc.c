@@ -86,9 +86,9 @@ static XrCEmissionRuleMatch xr_c_emission_rule_locate(
         receiver_type->child_begin < child_count)
         element_type =
             xr_semantic_plan_type(semantic, children[receiver_type->child_begin]);
-    facts->element_source_class =
-        element_type && xr_semantic_class_instance_type_source_class(semantic, element_type) !=
-                            XR_SEMANTIC_INDEX_NONE;
+    facts->element_managed_reference =
+        element_type &&
+        xr_semantic_array_member_owned_reference_type_is_exact(semantic, element_type);
 
     uint32_t layout_count = 0;
     const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(target_plan, &layout_count);

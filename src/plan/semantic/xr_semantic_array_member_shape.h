@@ -28,6 +28,7 @@
 
 #include <stddef.h>
 #include "xr_semantic_plan.h"
+#include "xr_semantic_array_type_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_string_shape.h"
 #include "../../ir/xi_ops_gen.h"
@@ -183,15 +184,17 @@ static inline bool xr_semantic_array_member_argument_is_exact(
 }
 
 /* Reference elements use the runtime's tagged XrValue lane. Its closed
- * ownership roster is the same one already used by container copy: an exact
- * String or a frozen source-class instance. Keeping this judgement beside the
+ * ownership roster is an exact String, a frozen source-class instance, or an
+ * exact compiler-owned Array. Each is one ownership root whose release is
+ * already defined by the runtime value tag. Keeping this judgement beside the
  * selector lifecycle table prevents four plan layers from narrowing the same
  * language fact independently. */
 static inline bool
 xr_semantic_array_member_owned_reference_type_is_exact(const XrSemanticPlan *plan,
                                                        const XrSemanticTypeRecord *type) {
     return xr_semantic_tagged_string_type_is_exact(type) ||
-           xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE;
+           xr_semantic_class_instance_type_source_class(plan, type) != XR_SEMANTIC_INDEX_NONE ||
+           xr_semantic_array_type_row_is_exact(type);
 }
 
 static inline bool xr_semantic_array_member_reference_contract_is_exact(
@@ -210,14 +213,19 @@ static inline bool xr_semantic_array_member_reference_contract_is_exact(
     if (shape->reference_action != XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE ||
         shape->element_access != XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE ||
         shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
-        shape->element_operand == 0 || shape->element_operand >= operation->operand_count ||
-        !xr_semantic_array_member_owned_reference_type_is_exact(plan, element_type))
+        shape->element_operand == 0 || shape->element_operand >= operation->operand_count)
         return false;
     bool exact_push = strcmp(shape->selector, "push") == 0 && operation->operand_count == 2 &&
                       operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
     bool exact_fill = strcmp(shape->selector, "fill") == 0 && operation->operand_count == 4 &&
                       operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
-    if (!exact_push && !exact_fill)
+    /* Filling a range duplicates one input into several slots. The current
+     * source-class/String path owns the retain contract for that operation;
+     * an Array value is admitted only by push, which moves the one ownership
+     * root into exactly one new slot. */
+    if ((!exact_push && !exact_fill) ||
+        (xr_semantic_array_type_row_is_exact(element_type) && !exact_push) ||
+        !xr_semantic_array_member_owned_reference_type_is_exact(plan, element_type))
         return false;
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);

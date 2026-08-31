@@ -1386,11 +1386,12 @@ static bool semantic_direct_local_tagged_boundary_type_is_exact_verify(
     if (!xr_target_array_storage_from_type(element_type, &element)) {
         bool source_class_element = xr_semantic_class_instance_type_source_class(
                                         semantic, element_type) != XR_SEMANTIC_INDEX_NONE;
+        bool managed_reference_element =
+            xr_semantic_array_member_owned_reference_type_is_exact(semantic, element_type);
         if (indexes_elements && !source_class_element)
             return false;
-        element = xr_semantic_tagged_string_type_is_exact(element_type) || source_class_element
-                      ? XR_TARGET_ARRAY_STORAGE_TAGGED
-                      : XR_TARGET_ARRAY_STORAGE_NONE;
+        element = managed_reference_element ? XR_TARGET_ARRAY_STORAGE_TAGGED
+                                            : XR_TARGET_ARRAY_STORAGE_NONE;
     }
     if (storage)
         *storage = element;

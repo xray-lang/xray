@@ -2032,7 +2032,7 @@ static bool verify_json_namespace_value(const XrSemanticPlan *plan,
  * carries the element, and what the result is. The element clause is checked
  * against the receiver's own element entry rather than a spelled type. The
  * verifier independently reconstructs the row's reference action and drop
- * lifecycle, including the exact consumed source-class element of tagged
+ * lifecycle, including the exact consumed managed element of tagged
  * `Array.push`. */
 
 static bool verify_array_reserve(const XrSemanticPlan *plan,
@@ -2411,8 +2411,8 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
 }
 
 /* Rebuild the sealed reference-storage family without trusting the builder:
- * only exact source-class push and range-fill identities may consume an
- * element into tagged Array storage. */
+ * exact managed push identities and the narrower String/source-class
+ * range-fill identities may consume an element into tagged Array storage. */
 
 static bool verify_array_member_reference_contract(const XrSemanticPlan *plan,
                                                    const XrArrayMemberShape *shape,

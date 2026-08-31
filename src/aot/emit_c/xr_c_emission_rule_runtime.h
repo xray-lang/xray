@@ -41,7 +41,7 @@ typedef struct XrCEmissionRuleFacts {
     uint8_t element_access;
     uint8_t reference_action;
     uint8_t reference_drop;
-    uint8_t element_source_class;
+    uint8_t element_managed_reference;
     uint8_t call_convention;
     uint8_t target_kind;
     uint8_t layout_kind;

@@ -2326,12 +2326,20 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_values(const XrTypedDispatchValu
             XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED ||
         !function_has_zero_lifecycle(plan, request->function))
         return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
-    /* The public XrValue edge is untrusted.  TargetPlan proves the exact
-     * source-class type statically; the runtime carrier must still be an
-     * instance rather than an arbitrary tagged value before ownership moves. */
+    /* The public XrValue edge is untrusted. TargetPlan freezes one exact
+     * managed carrier class; the runtime tag must match it before ownership
+     * moves into the frame. */
     if (!XR_IS_ARRAY(request->arguments[0]))
         return XR_TYPED_DISPATCH_ARRAY_PUSH_INVALID_RECEIVER;
-    if (!XR_IS_INSTANCE(request->arguments[1]))
+    XrTargetManagedTaggedCarrier carrier =
+        xr_target_instruction_managed_array_push_carrier(plan, request->function);
+    bool carrier_matches =
+        (carrier == XR_TARGET_MANAGED_TAGGED_CARRIER_STRING &&
+         XR_IS_STRING(request->arguments[1])) ||
+        (carrier == XR_TARGET_MANAGED_TAGGED_CARRIER_SOURCE_CLASS &&
+         XR_IS_INSTANCE(request->arguments[1])) ||
+        (carrier == XR_TARGET_MANAGED_TAGGED_CARRIER_ARRAY && XR_IS_ARRAY(request->arguments[1]));
+    if (!carrier_matches)
         return XR_TYPED_DISPATCH_ARRAY_PUSH_TYPE_MISMATCH;
 
     XrValue original_element = request->arguments[1];
