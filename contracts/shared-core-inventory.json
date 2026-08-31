@@ -1015,6 +1015,7 @@
       "test_callers": [
         "tests/aot/provider/freestanding_numeric_core.c",
         "tests/unit/aot/test_xrt_type_identity_freestanding.c",
+        "tests/unit/ir/test_xi_cgen.c",
         "tests/unit/ir/test_xi_lowering_gen.c",
         "tests/unit/stdlib/test_numeric_core.c"
       ]

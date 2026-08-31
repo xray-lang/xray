@@ -2737,6 +2737,37 @@ static bool sr_def_rep_enum_op(const XiValue *value, XrRep *out) {
     }
 }
 
+/* Enum-to-integer XI_CONVERT is native only when every fact that makes the
+ * ordinal witness exact is still present.  Representation selection runs
+ * after verification in the normal pipeline, but keeping this predicate here
+ * makes the optimizer fail closed for direct callers and post-verify edits. */
+static bool sr_enum_ordinal_shape(const XiValue *value) {
+    return value && value->op == XI_CONVERT && value->nargs == 1 && value->args &&
+           value->args[0] && value->args[0]->type && value->type &&
+           value->args[0]->type->kind == XR_KIND_ENUM &&
+           value->type->kind == XR_KIND_INT;
+}
+
+static bool sr_enum_ordinal_owner_or_shape(const XiValue *value) {
+    return value && (value->conversion.kind == XR_CONVERSION_ENUM_ORDINAL ||
+                     sr_enum_ordinal_shape(value));
+}
+
+static bool sr_enum_ordinal_native_exact(const XiValue *value) {
+    if (!sr_enum_ordinal_shape(value))
+        return false;
+    const XrType *source = value->args[0]->type;
+    const XrType *target = value->type;
+    return !source->is_nullable && source->scalar_rep == XR_SCALAR_REP_NONE &&
+           !target->is_nullable && xr_conversion_scalar_rep_is_integer(target->scalar_rep) &&
+           value->conversion.kind == XR_CONVERSION_ENUM_ORDINAL &&
+           value->conversion.source_scalar_rep == XR_SCALAR_REP_NONE &&
+           value->conversion.target_scalar_rep == target->scalar_rep &&
+           !value->conversion.is_implicit && !value->conversion.is_compile_time &&
+           value->xa_intrinsic_id == XA_INTRINSIC_NONE &&
+           (value->flags & XI_FLAG_MAY_THROW) == 0;
+}
+
 static bool sr_op_has_arith_native_result(uint16_t op) {
     switch (op) {
         case XI_ADD:
@@ -2947,6 +2978,8 @@ static bool sr_number_parse_error_equality_is_exact(const XiValue *value) {
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
     if (!v || !v->type)
         return XR_REP_TAGGED;
+    if (v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL && v->op != XI_CONVERT)
+        return XR_REP_TAGGED;
     XrRep memory_rep = XR_REP_TAGGED;
     if (sr_def_rep_memory_op(v, &memory_rep))
         return memory_rep;
@@ -3085,6 +3118,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             return XR_REP_TAGGED;
         }
         case XI_CONVERT: {
+            if (sr_enum_ordinal_owner_or_shape(v))
+                return sr_enum_ordinal_native_exact(v) ? XR_REP_I64 : XR_REP_TAGGED;
             if (sr_convert_can_return_null(v))
                 return XR_REP_TAGGED;
             return sr_type_scalar_rep(v->type);
@@ -3355,6 +3390,15 @@ static bool sr_use_rep_value_op(const XiValue *user, uint16_t arg_idx, const XiR
                 arg_idx == 0 && user->args[0] ? sr_def_rep(user->args[0], policy) : XR_REP_TAGGED;
             return true;
         case XI_CONVERT:
+            if (sr_enum_ordinal_owner_or_shape(user)) {
+                if (!sr_enum_ordinal_native_exact(user)) {
+                    *out = XR_REP_TAGGED;
+                    return true;
+                }
+                *out = arg_idx == 0 && user->args[0] ? sr_def_rep(user->args[0], policy)
+                                                     : XR_REP_TAGGED;
+                return true;
+            }
             if (arg_idx == 0 && user->nargs >= 1 && user->args[0] &&
                 !sr_convert_can_return_null(user)) {
                 *out = sr_type_scalar_rep(user->args[0]->type);
@@ -3383,6 +3427,8 @@ static bool sr_use_rep_value_op(const XiValue *user, uint16_t arg_idx, const XiR
 }
 
 static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy *policy) {
+    if (user && user->conversion.kind == XR_CONVERSION_ENUM_ORDINAL && user->op != XI_CONVERT)
+        return XR_REP_TAGGED;
     XrRep mem_rep = XR_REP_TAGGED;
     if (sr_use_rep_memory_op(user, arg_idx, policy, &mem_rep))
         return mem_rep;

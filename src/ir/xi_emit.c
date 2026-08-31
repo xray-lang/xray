@@ -735,6 +735,11 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
+    if (v && v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL && v->op != XI_CONVERT) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
     /* Skip comparison that was absorbed into the block terminator */
     if (v == ctx->fused_cmp)
         return;

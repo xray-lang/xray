@@ -260,6 +260,17 @@ vmcase(OP_TOINT) {
         R(a) = xr_int((xr_Integer) parsed.value);
         vmbreak;
     }
+    if (xr_conversion_bytecode_is_enum_ordinal(conversion)) {
+        uint8_t target_rep = xr_conversion_bytecode_target_rep(conversion);
+        XrEnumAggregateValue *aggregate = xr_value_to_enum_aggregate(val);
+        if (!xr_conversion_scalar_rep_is_integer(target_rep) || !aggregate)
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             "enum ordinal conversion requires an enum aggregate and integer target");
+        R(a) = xr_int(xr_numeric_int_convert_i64((int64_t) aggregate->member_index,
+                                                  XR_NATIVE_I64, target_rep,
+                                                  xr_conversion_bytecode_pointer_bits(conversion)));
+        vmbreak;
+    }
     if (xr_conversion_bytecode_is_numeric(conversion)) {
         uint8_t source_rep = xr_conversion_bytecode_source_rep(conversion);
         uint8_t target_rep = xr_conversion_bytecode_target_rep(conversion);
@@ -278,6 +289,8 @@ vmcase(OP_TOINT) {
         }
         vmbreak;
     }
+    if (conversion != 0)
+        VM_RUNTIME_ERROR(XR_ERR_INTERNAL, "OP_TOINT received an unrecognized conversion mode");
     if (XR_IS_INT(val)) {
         R(a) = val;
     } else if (XR_IS_FLOAT(val)) {
@@ -343,6 +356,8 @@ vmcase(OP_TOFLOAT) {
         }
         vmbreak;
     }
+    if (conversion != 0)
+        VM_RUNTIME_ERROR(XR_ERR_INTERNAL, "OP_TOFLOAT received an unrecognized conversion mode");
     if (XR_IS_FLOAT(val)) {
         R(a) = val;
     } else if (XR_IS_INT(val)) {

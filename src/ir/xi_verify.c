@@ -523,6 +523,12 @@ static void verify_phi(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, cons
         return;
     }
 
+    if (phi->value.conversion.kind != XR_CONVERSION_NONE) {
+        verr(ctx, "func '%s': phi v%u in b%u carries conversion metadata", f->name,
+             phi->value.id, blk->id);
+        return;
+    }
+
     /* Phi type must be non-NULL */
     if (!phi->value.type) {
         verr(ctx, "func '%s': phi v%u in b%u has NULL type", f->name, phi->value.id, blk->id);
@@ -955,6 +961,13 @@ static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiB
 static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
                                        const XiValue *v) {
     XrConversionKind kind = v->conversion.kind;
+    if (v->op == XI_AS && (v->aux_int & 1) == 0 && v->nargs == 1 && v->args[0] &&
+        v->args[0]->type && v->type && v->args[0]->type->kind == XR_KIND_ENUM &&
+        !v->args[0]->type->is_nullable && v->type->kind == XR_KIND_INT &&
+        !v->type->is_nullable) {
+        verr(ctx, "func '%s': v%u unsafe enum-to-int XI_AS is forbidden", f->name, v->id);
+        return false;
+    }
     if (v->op == XI_AS) {
         if (kind != XR_CONVERSION_DYNAMIC_CHECKED && kind != XR_CONVERSION_DYNAMIC_NULLABLE) {
             verr(ctx,
@@ -967,6 +980,33 @@ static bool verify_conversion_contract(VerifyCtx *ctx, const XiFunc *f, const Xi
         if (safe != (kind == XR_CONVERSION_DYNAMIC_NULLABLE)) {
             verr(ctx, "func '%s': v%u XI_AS in b%u has inconsistent checkedness evidence", f->name,
                  v->id, blk->id);
+            return false;
+        }
+        return true;
+    }
+
+    bool enum_integer_shape =
+        v->op == XI_CONVERT && v->nargs == 1 && v->args[0] && v->args[0]->type && v->type &&
+        v->args[0]->type->kind == XR_KIND_ENUM && XR_TYPE_IS_INT(v->type);
+    if (enum_integer_shape && kind != XR_CONVERSION_ENUM_ORDINAL) {
+        verr(ctx,
+             "func '%s': v%u enum-to-int XI_CONVERT in b%u lacks enum-ordinal evidence",
+             f->name, v->id, blk->id);
+        return false;
+    }
+    if (kind == XR_CONVERSION_ENUM_ORDINAL) {
+        if (v->op != XI_CONVERT || v->nargs != 1 || !v->args[0] || !v->args[0]->type ||
+            !v->type || v->args[0]->type->kind != XR_KIND_ENUM || v->args[0]->type->is_nullable ||
+            v->args[0]->type->scalar_rep != XR_SCALAR_REP_NONE ||
+            !XR_TYPE_IS_INT(v->type) || v->type->is_nullable ||
+            !xr_conversion_scalar_rep_is_integer(v->type->scalar_rep) ||
+            v->conversion.source_scalar_rep != XR_SCALAR_REP_NONE ||
+            v->conversion.target_scalar_rep != v->type->scalar_rep || v->conversion.is_implicit ||
+            v->conversion.is_compile_time || v->xa_intrinsic_id != XA_INTRINSIC_NONE ||
+            (v->flags & XI_FLAG_MAY_THROW) != 0) {
+            verr(ctx,
+                 "func '%s': v%u %s in b%u has an invalid enum-ordinal conversion witness",
+                 f->name, v->id, xi_op_name(v->op), blk->id);
             return false;
         }
         return true;

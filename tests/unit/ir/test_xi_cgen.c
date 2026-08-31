@@ -16,6 +16,7 @@
 #include "../../../src/aot/xaot_struct_name.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan_internal.h"
 #include "../../../src/aot/refine/xr_aot_scalar_value.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_own.h"
@@ -72,6 +73,7 @@ static const char *g_native_target_leaf_c_output = NULL;
 typedef struct TestAotPlan {
     XaotBundle bundle;
     XgGlobalEvidence evidence;
+    XiModule **module_list;
     const XrCEmissionPlan **emission_plans;
     uint32_t nemission_plans;
     bool initialized;
@@ -885,6 +887,10 @@ static void test_aot_plan_free(TestAotPlan *plan) {
     }
     if (plan && plan->initialized)
         xaot_bundle_free(&plan->bundle);
+    if (plan && plan->module_list) {
+        xr_free(plan->module_list);
+        plan->module_list = NULL;
+    }
     if (plan && plan->evidence_initialized)
         xg_global_evidence_free(&plan->evidence);
 }
@@ -3725,6 +3731,515 @@ TEST(cgen_dynamic_conversion_inlines_null_literal_without_forward_ref) {
     printf("  Generated immediate dynamic conversion %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
+}
+
+static XiValue *find_enum_conversion_in_func(XiFunc *func) {
+    if (!func)
+        return NULL;
+    XiValue *found = NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *block = func->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!value || value->op != XI_CONVERT)
+                continue;
+            if (found)
+                return NULL;
+            found = value;
+        }
+    }
+    return found;
+}
+
+static XiFunc *make_manual_enum_ordinal_cgen_function(const char *name, XrType *enum_type,
+                                                      XrType *result_type, bool shared_source) {
+    XiFunc *func = xi_func_new(name, result_type);
+    TEST_REQUIRE(func != NULL, "manual enum ordinal CGen function allocated");
+    XiBlock *entry = xi_block_new(func);
+    TEST_REQUIRE(entry != NULL, "manual enum ordinal CGen entry allocated");
+    entry->sealed = true;
+    XiValue *source = NULL;
+    if (shared_source) {
+        func->nshared = 1;
+        XiValue *ns = xi_value_new(func, entry, XI_GET_SHARED, enum_type, 0);
+        source = xi_value_new(func, entry, XI_LOAD_FIELD, enum_type, 1);
+        TEST_REQUIRE(ns && source, "manual compact enum source allocated");
+        ns->aux_int = 0;
+        source->args[0] = ns;
+        source->aux = (void *) "Ready";
+    } else {
+        func->nparams = 1;
+        func->min_params = 1;
+        func->params = (XiValue **) xr_calloc(1, sizeof(*func->params));
+        TEST_REQUIRE(func->params != NULL, "manual boxed enum parameter table allocated");
+        source = xi_param(func, entry, 0, enum_type);
+        TEST_REQUIRE(source != NULL, "manual boxed enum source allocated");
+        func->params[0] = source;
+    }
+    XiValue *convert = xi_value_new(func, entry, XI_CONVERT, result_type, 1);
+    TEST_REQUIRE(convert != NULL, "manual enum conversion allocated");
+    convert->args[0] = source;
+    convert->conversion = (XrConversionWitness) {
+        .kind = XR_CONVERSION_ENUM_ORDINAL,
+        .source_scalar_rep = XR_SCALAR_REP_NONE,
+        .target_scalar_rep = result_type->scalar_rep,
+        .is_implicit = false,
+    };
+    xi_block_set_return(entry, convert);
+    return func;
+}
+
+static char *generate_manual_enum_cgen(XiFunc *func, const XiEnumData *enum_data,
+                                       TestAotPlan *plan, XiCgenCtx **ctx_out,
+                                       TestCEmissionRegistry *registry_out, XiModule **module_out) {
+    XiModule *module = xi_module_new("enum_ordinal.xr", func->name, func);
+    TEST_REQUIRE(module != NULL, "manual enum ordinal module allocated");
+    TEST_REQUIRE(xi_module_set_identity(module, "memory-module-v1:id=18:xi-cgen-fixture-v1"),
+                 "manual enum ordinal module identity installed");
+    if (enum_data) {
+        module->nslots = 1;
+        module->slot_enums = (XiEnumData **) xr_calloc(1, sizeof(*module->slot_enums));
+        TEST_REQUIRE(module->slot_enums != NULL, "manual enum slot table allocated");
+        module->slot_enums[0] = (XiEnumData *) enum_data;
+    }
+    /* Backend preparation must see the finalized identity and enum slots so
+     * semantic and representation planning share one module authority. */
+    func->module = module;
+    TEST_REQUIRE(test_prepare_backend_ir(func), "manual enum ordinal reached Backend");
+    XiModule *modules[] = {module};
+    test_aot_plan_prepare(plan, modules, 1, 0);
+    plan->module_list = (XiModule **) xr_calloc(1, sizeof(*plan->module_list));
+    TEST_REQUIRE(plan->module_list != NULL, "manual enum ordinal module list allocated");
+    plan->module_list[0] = module;
+    plan->bundle.modules = plan->module_list;
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL && xi_cgen_ctx_set_aot_bundle(ctx, &plan->bundle),
+                 "manual enum ordinal installed frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(registry_out, ctx, &plan->bundle),
+                 "manual enum ordinal installed frozen C plans");
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *stream = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(stream != NULL, "manual enum ordinal output stream opened");
+    xi_cgen_program(ctx, stream, module);
+    TEST_REQUIRE(xr_close_memstream(stream, &code, &code_size) == 0,
+                 "manual enum ordinal output stream closed");
+    *ctx_out = ctx;
+    *module_out = module;
+    return code;
+}
+
+TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) {
+    static const char *compact_names[] = {"Idle", "Ready"};
+    XiEnumMemberData compact_members[] = {
+        {.name = "Idle", .ordinal = 0, .payload_count = 0},
+        {.name = "Ready", .ordinal = 1, .payload_count = 0},
+    };
+    XrEnumLayout *compact_layout = xr_enum_layout_new("test.cgen.enum", "CgenOrdinalCompact",
+                                                      compact_names, XR_COUNTOF(compact_names));
+    TEST_REQUIRE(compact_layout && compact_layout->is_zero_payload,
+                 "compact enum layout created");
+    XiEnumData compact_data = {
+        .name = "CgenOrdinalCompact", .member_count = XR_COUNTOF(compact_members),
+        .max_payload = 0, .layout_id = compact_layout->layout_id, .members = compact_members};
+    XrType compact_type = {.kind = XR_KIND_ENUM, .id = compact_layout->layout_id,
+                           .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true,
+                           .enum_type = {.enum_name = "CgenOrdinalCompact",
+                                         .layout_id = compact_layout->layout_id,
+                                         .layout = compact_layout}};
+    XrType u8_type = {.kind = XR_KIND_INT, .id = 988, .scalar_rep = XR_NATIVE_U8, .frozen = true};
+    XiFunc *compact = make_manual_enum_ordinal_cgen_function("enum_ordinal_compact", &compact_type,
+                                                              &u8_type, true);
+    TestAotPlan compact_plan;
+    TestCEmissionRegistry compact_registry = {0};
+    XiCgenCtx *compact_ctx = NULL;
+    XiModule *compact_module = NULL;
+    char *compact_code = generate_manual_enum_cgen(compact, &compact_data, &compact_plan,
+                                                   &compact_ctx, &compact_registry, &compact_module);
+    TEST_REQUIRE(compact_code && !xi_cgen_has_error(compact_ctx), "compact enum CGen succeeds");
+    const char *compact_body = find_static_function_definition(compact_code, "enum_ordinal_compact");
+    const char *compact_end = compact_body ? strstr(compact_body, "\n}\n") : NULL;
+    TEST_REQUIRE(compact_body && compact_end &&
+                     contains_between(compact_body, compact_end, "xr_numeric_int_convert_i64(") &&
+                     !contains_between(compact_body, compact_end, "xrt_enum_box_ordinal("),
+                 "compact enum uses direct frozen I64 storage");
+    xr_free(compact_code);
+    xi_cgen_ctx_free(compact_ctx);
+    test_c_emission_registry_free(&compact_registry);
+    test_aot_plan_free(&compact_plan);
+    compact_module->init = NULL;
+    compact->module = NULL;
+    xi_module_free(compact_module);
+    xi_func_free(compact);
+
+    static const char *boxed_names[] = {"Payload", "Ready"};
+    XiEnumMemberData boxed_members[] = {
+        {.name = "Payload", .ordinal = 0, .payload_count = 1},
+        {.name = "Ready", .ordinal = 1, .payload_count = 0},
+    };
+    XrEnumLayout *boxed_layout = xr_enum_layout_new("test.cgen.enum", "CgenOrdinalBoxed",
+                                                    boxed_names, XR_COUNTOF(boxed_names));
+    const int boxed_payload_counts[] = {1, 0};
+    TEST_REQUIRE(boxed_layout &&
+                     xr_enum_layout_set_payload_counts(boxed_layout, boxed_payload_counts,
+                                                        XR_COUNTOF(boxed_payload_counts)),
+                 "boxed enum payload layout populated");
+    XrType boxed_type = {.kind = XR_KIND_ENUM, .id = boxed_layout->layout_id,
+                         .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true,
+                         .enum_type = {.enum_name = "CgenOrdinalBoxed",
+                                       .layout_id = boxed_layout->layout_id,
+                                       .layout = boxed_layout}};
+    XrType i64_type = {.kind = XR_KIND_INT, .id = 989, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiEnumData boxed_data = {
+        .name = "CgenOrdinalBoxed", .member_count = XR_COUNTOF(boxed_members),
+        .is_adt = true, .max_payload = 1, .layout_id = boxed_layout->layout_id,
+        .members = boxed_members};
+    XiFunc *boxed = make_manual_enum_ordinal_cgen_function("enum_ordinal_boxed", &boxed_type,
+                                                            &i64_type, false);
+    TestAotPlan boxed_plan;
+    TestCEmissionRegistry boxed_registry = {0};
+    XiCgenCtx *boxed_ctx = NULL;
+    XiModule *boxed_module = NULL;
+    char *boxed_code = generate_manual_enum_cgen(boxed, &boxed_data, &boxed_plan, &boxed_ctx,
+                                                 &boxed_registry, &boxed_module);
+    TEST_REQUIRE(boxed_code && !xi_cgen_has_error(boxed_ctx), "boxed enum CGen succeeds");
+    const char *boxed_body = find_static_function_definition(boxed_code, "enum_ordinal_boxed");
+    const char *boxed_end = boxed_body ? strstr(boxed_body, "\n}\n") : NULL;
+    TEST_REQUIRE(boxed_body && boxed_end &&
+                     contains_between(boxed_body, boxed_end, "xr_numeric_int_convert_i64(") &&
+                     contains_between(boxed_body, boxed_end, "xrt_enum_box_ordinal("),
+                 "payload enum uses direct frozen TAGGED storage");
+
+    XiValue *forged = find_enum_conversion_in_func(boxed);
+    TEST_REQUIRE(forged != NULL, "CGen forged mutation selects the single enum conversion");
+
+    uint32_t source_semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char source_semantic_error[256] = {0};
+    TEST_REQUIRE(xr_aot_scalar_semantic_value_id(
+                     xaot_bundle_program_target_plan(&boxed_plan.bundle), boxed,
+                     forged->args[0], &source_semantic_function, &source_semantic_value,
+                     source_semantic_error, sizeof(source_semantic_error)),
+                 source_semantic_error[0] ? source_semantic_error
+                                          : "CGen source semantic value identity resolved");
+    (void) source_semantic_function;
+
+    XiCgenCtx *source_rep_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry source_rep_registry = {0};
+    TEST_REQUIRE(source_rep_ctx &&
+                     xi_cgen_ctx_set_aot_bundle(source_rep_ctx, &boxed_plan.bundle),
+                 "CGen source-representation mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&source_rep_registry, source_rep_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen source-representation mutation installs valid frozen C plans");
+    XrCEmissionPlan *source_rep_plan =
+        (XrCEmissionPlan *) source_rep_registry.plans[0];
+    XrCValueEmissionView *source_rep_row = NULL;
+    for (uint32_t row = 0; row < source_rep_plan->value_count; row++) {
+        if (source_rep_plan->values[row].semantic_value == source_semantic_value) {
+            source_rep_row = &source_rep_plan->values[row];
+            break;
+        }
+    }
+    TEST_REQUIRE(source_rep_row != NULL,
+                 "CGen source-representation mutation resolves the frozen source row");
+    uint8_t saved_source_rep = source_rep_row->rep;
+    source_rep_row->rep = XR_C_VALUE_REP_F64;
+    char *source_rep_code = NULL;
+    size_t source_rep_size = 0;
+    FILE *source_rep_stream = xr_open_memstream(&source_rep_code, &source_rep_size);
+    TEST_REQUIRE(source_rep_stream != NULL, "CGen source-representation mutation stream opened");
+    xi_cgen_program(source_rep_ctx, source_rep_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(source_rep_stream, &source_rep_code, &source_rep_size) == 0,
+                 "CGen source-representation mutation stream closed");
+    TEST_REQUIRE(source_rep_code && xi_cgen_has_error(source_rep_ctx),
+                 "CGen rejects a frozen enum source representation outside I64/TAGGED");
+    source_rep_row->rep = saved_source_rep;
+    xr_free(source_rep_code);
+    xi_cgen_ctx_free(source_rep_ctx);
+    test_c_emission_registry_free(&source_rep_registry);
+
+    XiCgenCtx *target_rep_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry target_rep_registry = {0};
+    TEST_REQUIRE(target_rep_ctx &&
+                     xi_cgen_ctx_set_aot_bundle(target_rep_ctx, &boxed_plan.bundle),
+                 "CGen target-representation mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&target_rep_registry, target_rep_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen target-representation mutation reuses frozen C plans");
+    uint8_t saved_target_rep = i64_type.scalar_rep;
+    uint8_t saved_witness_target_rep = forged->conversion.target_scalar_rep;
+    i64_type.scalar_rep = XR_SCALAR_REP_NONE;
+    forged->conversion.target_scalar_rep = XR_SCALAR_REP_NONE;
+    char *target_rep_code = NULL;
+    size_t target_rep_size = 0;
+    FILE *target_rep_stream = xr_open_memstream(&target_rep_code, &target_rep_size);
+    TEST_REQUIRE(target_rep_stream != NULL, "CGen target-representation mutation stream opened");
+    xi_cgen_program(target_rep_ctx, target_rep_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(target_rep_stream, &target_rep_code, &target_rep_size) == 0,
+                 "CGen target-representation mutation stream closed");
+    TEST_REQUIRE(target_rep_code && xi_cgen_has_error(target_rep_ctx),
+                 "CGen rejects enum conversion with forged NONE target representation");
+    forged->conversion.target_scalar_rep = saved_witness_target_rep;
+    i64_type.scalar_rep = saved_target_rep;
+    xr_free(target_rep_code);
+    xi_cgen_ctx_free(target_rep_ctx);
+    test_c_emission_registry_free(&target_rep_registry);
+
+    XiCgenCtx *forged_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry forged_registry = {0};
+    TEST_REQUIRE(forged_ctx && xi_cgen_ctx_set_aot_bundle(forged_ctx, &boxed_plan.bundle),
+                 "CGen forged mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&forged_registry, forged_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen forged mutation reuses frozen C plans");
+    forged->conversion.kind = XR_CONVERSION_NONE;
+    char *forged_code = NULL;
+    size_t forged_size = 0;
+    FILE *forged_stream = xr_open_memstream(&forged_code, &forged_size);
+    TEST_REQUIRE(forged_stream != NULL, "CGen forged mutation stream opened");
+    xi_cgen_program(forged_ctx, forged_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(forged_stream, &forged_code, &forged_size) == 0,
+                 "CGen forged mutation stream closed");
+    TEST_REQUIRE(forged_code && xi_cgen_has_error(forged_ctx),
+                 "CGen rejects enum conversion with forged witness kind after the frozen plan");
+    forged->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    xr_free(forged_code);
+    xi_cgen_ctx_free(forged_ctx);
+    test_c_emission_registry_free(&forged_registry);
+
+    XiCgenCtx *arity_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry arity_registry = {0};
+    TEST_REQUIRE(arity_ctx && xi_cgen_ctx_set_aot_bundle(arity_ctx, &boxed_plan.bundle),
+                 "CGen arity mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&arity_registry, arity_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen arity mutation reuses frozen C plans");
+    forged->nargs = 0;
+    char *arity_code = NULL;
+    size_t arity_size = 0;
+    FILE *arity_stream = xr_open_memstream(&arity_code, &arity_size);
+    TEST_REQUIRE(arity_stream != NULL, "CGen arity mutation stream opened");
+    xi_cgen_program(arity_ctx, arity_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(arity_stream, &arity_code, &arity_size) == 0,
+                 "CGen arity mutation stream closed");
+    TEST_REQUIRE(arity_code && xi_cgen_has_error(arity_ctx),
+                 "CGen rejects enum conversion with missing operand before plan lookup");
+    forged->nargs = 1;
+    xr_free(boxed_code);
+    xr_free(arity_code);
+    xi_cgen_ctx_free(arity_ctx);
+    test_c_emission_registry_free(&arity_registry);
+
+    XiCgenCtx *as_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry as_registry = {0};
+    TEST_REQUIRE(as_ctx && xi_cgen_ctx_set_aot_bundle(as_ctx, &boxed_plan.bundle),
+                 "CGen XI_AS mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&as_registry, as_ctx, &boxed_plan.bundle),
+                 "CGen XI_AS mutation reuses frozen C plans");
+    forged->op = XI_AS;
+    forged->conversion.kind = XR_CONVERSION_DYNAMIC_CHECKED;
+    forged->aux_int = (8 << 1);
+    char *as_code = NULL;
+    size_t as_size = 0;
+    FILE *as_stream = xr_open_memstream(&as_code, &as_size);
+    TEST_REQUIRE(as_stream != NULL, "CGen XI_AS mutation stream opened");
+    xi_cgen_program(as_ctx, as_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(as_stream, &as_code, &as_size) == 0,
+                 "CGen XI_AS mutation stream closed");
+    TEST_REQUIRE(as_code && xi_cgen_has_error(as_ctx),
+                 "CGen rejects unsafe enum-to-int XI_AS after the frozen plan");
+    forged->op = XI_CONVERT;
+    forged->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    forged->aux_int = 0;
+    xr_free(as_code);
+    xi_cgen_ctx_free(as_ctx);
+    test_c_emission_registry_free(&as_registry);
+
+    XiCgenCtx *mixed_as_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry mixed_as_registry = {0};
+    TEST_REQUIRE(mixed_as_ctx &&
+                     xi_cgen_ctx_set_aot_bundle(mixed_as_ctx, &boxed_plan.bundle),
+                 "CGen mixed XI_AS mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&mixed_as_registry, mixed_as_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen mixed XI_AS mutation reuses frozen C plans");
+    XrType *saved_as_source_type = forged->args[0]->type;
+    forged->args[0]->type = &i64_type;
+    forged->op = XI_AS;
+    forged->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    forged->aux_int = (8 << 1);
+    char *mixed_as_code = NULL;
+    size_t mixed_as_size = 0;
+    FILE *mixed_as_stream = xr_open_memstream(&mixed_as_code, &mixed_as_size);
+    TEST_REQUIRE(mixed_as_stream != NULL, "CGen mixed XI_AS mutation stream opened");
+    xi_cgen_program(mixed_as_ctx, mixed_as_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(mixed_as_stream, &mixed_as_code, &mixed_as_size) == 0,
+                 "CGen mixed XI_AS mutation stream closed");
+    TEST_REQUIRE(mixed_as_code && xi_cgen_has_error(mixed_as_ctx),
+                 "CGen rejects mixed enum witness through unsafe XI_AS");
+    forged->args[0]->type = saved_as_source_type;
+    forged->op = XI_CONVERT;
+    forged->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    forged->aux_int = 0;
+    xr_free(mixed_as_code);
+    xi_cgen_ctx_free(mixed_as_ctx);
+    test_c_emission_registry_free(&mixed_as_registry);
+
+    XiCgenCtx *arity_as_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry arity_as_registry = {0};
+    TEST_REQUIRE(arity_as_ctx &&
+                     xi_cgen_ctx_set_aot_bundle(arity_as_ctx, &boxed_plan.bundle),
+                 "CGen XI_AS arity mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&arity_as_registry, arity_as_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen XI_AS arity mutation reuses frozen C plans");
+    forged->op = XI_AS;
+    forged->nargs = 0;
+    forged->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    char *arity_as_code = NULL;
+    size_t arity_as_size = 0;
+    FILE *arity_as_stream = xr_open_memstream(&arity_as_code, &arity_as_size);
+    TEST_REQUIRE(arity_as_stream != NULL, "CGen XI_AS arity mutation stream opened");
+    xi_cgen_program(arity_as_ctx, arity_as_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(arity_as_stream, &arity_as_code, &arity_as_size) == 0,
+                 "CGen XI_AS arity mutation stream closed");
+    TEST_REQUIRE(arity_as_code && xi_cgen_has_error(arity_as_ctx),
+                 "CGen rejects enum witness through XI_AS with no operands");
+    forged->nargs = 1;
+    forged->op = XI_CONVERT;
+    forged->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    xr_free(arity_as_code);
+    xi_cgen_ctx_free(arity_as_ctx);
+    test_c_emission_registry_free(&arity_as_registry);
+
+    XiCgenCtx *neg_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry neg_registry = {0};
+    TEST_REQUIRE(neg_ctx &&
+                     xi_cgen_ctx_set_aot_bundle(neg_ctx, &boxed_plan.bundle),
+                 "CGen XI_NEG mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&neg_registry, neg_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen XI_NEG mutation reuses frozen C plans");
+    XiOp saved_neg_op = forged->op;
+    forged->op = XI_NEG;
+    char *neg_code = NULL;
+    size_t neg_size = 0;
+    FILE *neg_stream = xr_open_memstream(&neg_code, &neg_size);
+    TEST_REQUIRE(neg_stream != NULL, "CGen XI_NEG mutation stream opened");
+    xi_cgen_program(neg_ctx, neg_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(neg_stream, &neg_code, &neg_size) == 0,
+                 "CGen XI_NEG mutation stream closed");
+    TEST_REQUIRE(neg_code && xi_cgen_has_error(neg_ctx),
+                 "CGen rejects enum witness dispatched through XI_NEG");
+    forged->op = saved_neg_op;
+    xr_free(neg_code);
+    xi_cgen_ctx_free(neg_ctx);
+    test_c_emission_registry_free(&neg_registry);
+
+    XiCgenCtx *recv_status_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry recv_status_registry = {0};
+    TEST_REQUIRE(recv_status_ctx &&
+                     xi_cgen_ctx_set_aot_bundle(recv_status_ctx, &boxed_plan.bundle),
+                 "CGen channel-status mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&recv_status_registry, recv_status_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen channel-status mutation reuses frozen C plans");
+    XiOp saved_recv_status_op = forged->op;
+    forged->op = XI_CHAN_RECV_STATUS;
+    char *recv_status_code = NULL;
+    size_t recv_status_size = 0;
+    FILE *recv_status_stream = xr_open_memstream(&recv_status_code, &recv_status_size);
+    TEST_REQUIRE(recv_status_stream != NULL, "CGen channel-status mutation stream opened");
+    xi_cgen_program(recv_status_ctx, recv_status_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(recv_status_stream, &recv_status_code, &recv_status_size) == 0,
+                 "CGen channel-status mutation stream closed");
+    TEST_REQUIRE(recv_status_code && xi_cgen_has_error(recv_status_ctx),
+                 "CGen rejects enum witness dispatched through channel status");
+    forged->op = saved_recv_status_op;
+    xr_free(recv_status_code);
+    xi_cgen_ctx_free(recv_status_ctx);
+    test_c_emission_registry_free(&recv_status_registry);
+
+    XiCgenCtx *elided_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry elided_registry = {0};
+    TEST_REQUIRE(elided_ctx && xi_cgen_ctx_set_aot_bundle(elided_ctx, &boxed_plan.bundle),
+                 "CGen elided-value mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&elided_registry, elided_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen elided-value mutation reuses frozen C plans");
+    XiOp saved_elided_op = forged->op;
+    forged->op = XI_CONST;
+    char *elided_code = NULL;
+    size_t elided_size = 0;
+    FILE *elided_stream = xr_open_memstream(&elided_code, &elided_size);
+    TEST_REQUIRE(elided_stream != NULL, "CGen elided-value mutation stream opened");
+    xi_cgen_program(elided_ctx, elided_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(elided_stream, &elided_code, &elided_size) == 0,
+                 "CGen elided-value mutation stream closed");
+    TEST_REQUIRE(elided_code && xi_cgen_has_error(elided_ctx),
+                 "CGen rejects enum witness before constant-immediate elision");
+    forged->op = saved_elided_op;
+    xr_free(elided_code);
+    xi_cgen_ctx_free(elided_ctx);
+    test_c_emission_registry_free(&elided_registry);
+
+    XiCgenCtx *parse_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry parse_registry = {0};
+    TEST_REQUIRE(parse_ctx && xi_cgen_ctx_set_aot_bundle(parse_ctx, &boxed_plan.bundle),
+                 "CGen intrinsic mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&parse_registry, parse_ctx, &boxed_plan.bundle),
+                 "CGen intrinsic mutation reuses frozen C plans");
+    forged->xa_intrinsic_id = XA_INTRINSIC_I64_PARSE;
+    char *parse_code = NULL;
+    size_t parse_size = 0;
+    FILE *parse_stream = xr_open_memstream(&parse_code, &parse_size);
+    TEST_REQUIRE(parse_stream != NULL, "CGen intrinsic mutation stream opened");
+    xi_cgen_program(parse_ctx, parse_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(parse_stream, &parse_code, &parse_size) == 0,
+                 "CGen intrinsic mutation stream closed");
+    TEST_REQUIRE(parse_code && xi_cgen_has_error(parse_ctx),
+                 "CGen rejects enum conversion with forged parse intrinsic");
+    forged->xa_intrinsic_id = XA_INTRINSIC_NONE;
+    xr_free(parse_code);
+    xi_cgen_ctx_free(parse_ctx);
+    test_c_emission_registry_free(&parse_registry);
+
+    XiCgenCtx *mixed_parse_ctx = xi_cgen_ctx_new();
+    TestCEmissionRegistry mixed_parse_registry = {0};
+    TEST_REQUIRE(mixed_parse_ctx &&
+                     xi_cgen_ctx_set_aot_bundle(mixed_parse_ctx, &boxed_plan.bundle),
+                 "CGen mixed intrinsic mutation reuses frozen TargetPlan");
+    TEST_REQUIRE(test_c_emission_registry_install(&mixed_parse_registry, mixed_parse_ctx,
+                                                  &boxed_plan.bundle),
+                 "CGen mixed intrinsic mutation reuses frozen C plans");
+    XrType *saved_forged_source_type = forged->args[0]->type;
+    forged->args[0]->type = &i64_type;
+    forged->xa_intrinsic_id = XA_INTRINSIC_I64_PARSE;
+    char *mixed_parse_code = NULL;
+    size_t mixed_parse_size = 0;
+    FILE *mixed_parse_stream = xr_open_memstream(&mixed_parse_code, &mixed_parse_size);
+    TEST_REQUIRE(mixed_parse_stream != NULL, "CGen mixed intrinsic mutation stream opened");
+    xi_cgen_program(mixed_parse_ctx, mixed_parse_stream, boxed_module);
+    TEST_REQUIRE(xr_close_memstream(mixed_parse_stream, &mixed_parse_code, &mixed_parse_size) == 0,
+                 "CGen mixed intrinsic mutation stream closed");
+    TEST_REQUIRE(mixed_parse_code && xi_cgen_has_error(mixed_parse_ctx),
+                 "CGen rejects mixed enum witness with forged parse intrinsic");
+    forged->xa_intrinsic_id = XA_INTRINSIC_NONE;
+    forged->args[0]->type = saved_forged_source_type;
+    xr_free(mixed_parse_code);
+    xi_cgen_ctx_free(mixed_parse_ctx);
+    test_c_emission_registry_free(&mixed_parse_registry);
+
+    xi_cgen_ctx_free(boxed_ctx);
+    test_c_emission_registry_free(&boxed_registry);
+    test_aot_plan_free(&boxed_plan);
+    boxed_module->init = NULL;
+    boxed->module = NULL;
+    xi_module_free(boxed_module);
+    xi_func_free(boxed);
+    xr_enum_layout_free(compact_layout);
+    xr_enum_layout_free(boxed_layout);
 }
 
 TEST(cgen_immediate_scalar_constant_inlines_into_place_store) {
@@ -14992,6 +15507,7 @@ int main(int argc, char **argv) {
     run_cgen_shared_store_uses_portable_owned_value_helper();
     run_cgen_immediate_scalar_constant_inlines_into_as_cast();
     run_cgen_dynamic_conversion_inlines_null_literal_without_forward_ref();
+    run_cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations();
     run_cgen_immediate_scalar_constant_inlines_into_place_store();
     run_cgen_native_signed_i64_constant_emits_immediate_without_local();
     run_cgen_runtime_string_slice_constant_emits_immediate_without_local();

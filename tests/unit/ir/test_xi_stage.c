@@ -65,6 +65,9 @@ static XrType stub_map = {.kind = XR_KIND_MAP,
 static XrType stub_set = {
     .kind = XR_KIND_SET, .id = 6, .frozen = true, .container = {.element_type = &stub_int}};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 7, .frozen = true};
+static XrType stub_i64 = {.kind = XR_KIND_INT, .id = 11, .frozen = true, .scalar_rep = XR_NATIVE_I64};
+static XrType stub_enum = {
+    .kind = XR_KIND_ENUM, .id = 12, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE};
 static XrType stub_function = {
     .kind = XR_KIND_FUNCTION, .id = 8, .frozen = true, .function = {.return_type = &stub_int}};
 static XrType stub_string_builder = {
@@ -306,6 +309,119 @@ static void test_verify_with_stage(void) {
     /* Stage should still be RAW (verify doesn't change it) */
     assert(f->stage == XI_STAGE_RAW);
 
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
+static void test_verify_rejects_forged_enum_ordinal_conversion(void) {
+    printf("--- test_verify_rejects_forged_enum_ordinal_conversion ---\n");
+
+    XiFunc *f = xi_func_new("verify_enum_ordinal", &stub_i64);
+    assert(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    assert(entry != NULL);
+    XiValue *source = xi_param(f, entry, 0, &stub_enum);
+    XiValue *convert = xi_value_new(f, entry, XI_CONVERT, &stub_i64, 1);
+    assert(source != NULL && convert != NULL);
+    convert->args[0] = source;
+    convert->conversion = (XrConversionWitness) {
+        .kind = XR_CONVERSION_ENUM_ORDINAL,
+        .source_scalar_rep = XR_SCALAR_REP_NONE,
+        .target_scalar_rep = XR_NATIVE_I64,
+        .is_implicit = false,
+    };
+    xi_block_set_return(entry, convert);
+
+    char error[256] = {0};
+    assert(xi_verify(f, error, sizeof(error)));
+
+    convert->xa_intrinsic_id = XA_INTRINSIC_I64_PARSE;
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->xa_intrinsic_id = XA_INTRINSIC_NONE;
+
+    convert->conversion.is_implicit = true;
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->conversion.is_implicit = false;
+    convert->conversion.target_scalar_rep = XR_NATIVE_U64;
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->conversion.target_scalar_rep = XR_NATIVE_I64;
+
+    convert->op = XI_AS;
+    convert->conversion.kind = XR_CONVERSION_DYNAMIC_CHECKED;
+    convert->aux_int = (8 << 1);
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->op = XI_CONVERT;
+    convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    convert->aux_int = 0;
+
+    convert->conversion.source_scalar_rep = XR_NATIVE_I64;
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->conversion.source_scalar_rep = XR_SCALAR_REP_NONE;
+
+    source->type = &stub_int;
+    assert(!xi_verify(f, error, sizeof(error)));
+    source->type = &stub_enum;
+
+    stub_enum.is_nullable = true;
+    assert(!xi_verify(f, error, sizeof(error)));
+    stub_enum.is_nullable = false;
+
+    stub_enum.scalar_rep = XR_NATIVE_I64;
+    assert(!xi_verify(f, error, sizeof(error)));
+    stub_enum.scalar_rep = XR_SCALAR_REP_NONE;
+
+    convert->type = &stub_bool;
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->type = &stub_i64;
+
+    convert->conversion.kind = XR_CONVERSION_NONE;
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    convert->conversion.is_compile_time = true;
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->conversion.is_compile_time = false;
+    convert->flags |= XI_FLAG_MAY_THROW;
+    assert(!xi_verify(f, error, sizeof(error)));
+    convert->flags &= ~XI_FLAG_MAY_THROW;
+    stub_i64.is_nullable = true;
+    assert(!xi_verify(f, error, sizeof(error)));
+    stub_i64.is_nullable = false;
+
+    stub_i64.scalar_rep = XR_SCALAR_REP_NONE;
+    convert->conversion.target_scalar_rep = XR_SCALAR_REP_NONE;
+    assert(!xi_verify(f, error, sizeof(error)));
+    stub_i64.scalar_rep = XR_NATIVE_I64;
+    convert->conversion.target_scalar_rep = XR_NATIVE_I64;
+
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
+static void test_verify_rejects_phi_conversion_metadata(void) {
+    printf("--- test_verify_rejects_phi_conversion_metadata ---\n");
+    XiFunc *f = xi_func_new("verify_phi_conversion", &stub_int);
+    assert(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    XiBlock *left = xi_block_new(f);
+    XiBlock *right = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+    assert(entry && left && right && merge);
+    left->sealed = right->sealed = merge->sealed = true;
+    xi_block_set_if(entry, xi_const_bool(f, entry, true, &stub_bool), left, right);
+    xi_block_set_jump(left, merge);
+    xi_block_set_jump(right, merge);
+    XiValue *lv = xi_const_int(f, left, 1, &stub_int);
+    XiValue *rv = xi_const_int(f, right, 2, &stub_int);
+    XiPhi *phi = xi_phi_new(f, merge, &stub_int, 2);
+    assert(phi != NULL);
+    phi->value.args[0] = lv;
+    phi->value.args[1] = rv;
+    xi_block_set_return(merge, &phi->value);
+    char error[256] = {0};
+    assert(xi_verify(f, error, sizeof(error)));
+    phi->value.conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
+    assert(!xi_verify(f, error, sizeof(error)));
+    phi->value.conversion.kind = XR_CONVERSION_NONE;
     xi_func_free(f);
     printf("  PASS\n");
 }
@@ -1256,6 +1372,8 @@ int main(void) {
     test_stage_after_lowering();
     test_pass_desc_fields();
     test_verify_with_stage();
+    test_verify_rejects_forged_enum_ordinal_conversion();
+    test_verify_rejects_phi_conversion_metadata();
     test_backend_lower_preserves_print();
     test_backend_lower_preserves_json_field_ops();
     test_backend_lower_preserves_collection_ops();

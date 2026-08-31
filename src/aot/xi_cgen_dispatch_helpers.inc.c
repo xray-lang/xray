@@ -6785,7 +6785,22 @@ static void xicgen_str_concat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                       const char *prefix) {
     (void) prefix;
-    XR_DCHECK(v->nargs >= 1, "xicgen_as: need arg");
+    if (!v || v->nargs < 1 || !v->args[0]) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    bool enum_integer_shape = v->args[0] && v->args[0]->type && v->type &&
+                              v->args[0]->type->kind == XR_KIND_ENUM &&
+                              !v->args[0]->type->is_nullable &&
+                              v->type->kind == XR_KIND_INT && !v->type->is_nullable;
+    if (((v->aux_int & 1) == 0 && enum_integer_shape) ||
+        v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
 
     if (cg_number_parse_error_catch_narrow_is_exact(ctx, f, v)) {
         if (cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
@@ -14798,6 +14813,20 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                            const char *prefix) {
     (void) f;
     (void) prefix;
+    if (!v || v->nargs < 1 || !v->args[0] || !v->args[0]->type || !v->type) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    bool enum_integer_shape = v->args[0]->type->kind == XR_KIND_ENUM && XR_TYPE_IS_INT(v->type);
+    if ((enum_integer_shape || v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) &&
+        (v->op != XI_CONVERT || v->nargs != 1 ||
+         v->conversion.kind != XR_CONVERSION_ENUM_ORDINAL ||
+         v->xa_intrinsic_id != XA_INTRINSIC_NONE)) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE ||
         v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ||
         v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE ||
@@ -14817,6 +14846,39 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     }
     XrRep dst_rep = cg_value_plan_storage_rep(ctx, v);
     XrRep src_rep = cg_value_plan_storage_rep(ctx, v->args[0]);
+    if (v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) {
+        if (!v->args[0] || !v->args[0]->type || v->args[0]->type->kind != XR_KIND_ENUM ||
+            v->args[0]->type->is_nullable ||
+            v->args[0]->type->scalar_rep != XR_SCALAR_REP_NONE ||
+            !v->type || v->type->is_nullable || !XR_TYPE_IS_INT(v->type) ||
+            !xr_conversion_scalar_rep_is_integer(v->type->scalar_rep) ||
+            v->conversion.source_scalar_rep != XR_SCALAR_REP_NONE ||
+            v->conversion.target_scalar_rep != v->type->scalar_rep || v->conversion.is_implicit ||
+            v->conversion.is_compile_time || v->xa_intrinsic_id != XA_INTRINSIC_NONE ||
+            (v->flags & XI_FLAG_MAY_THROW) != 0) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        if (src_rep != XR_REP_I64 && src_rep != XR_REP_TAGGED) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, dst_rep);
+        fprintf(out, "xr_numeric_int_convert_i64(");
+        if (src_rep == XR_REP_I64) {
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        } else {
+            fprintf(out, "XR_TO_INT(xrt_enum_box_ordinal(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, "))");
+        }
+        fprintf(out, ", %u, %u, (uint8_t)(sizeof(void *) * 8u))",
+                (unsigned) XR_NATIVE_I64, (unsigned) v->conversion.target_scalar_rep);
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
     if (xr_conversion_kind_is_numeric(v->conversion.kind)) {
         uint8_t source_scalar = v->conversion.source_scalar_rep;
         uint8_t target_scalar = v->conversion.target_scalar_rep;
