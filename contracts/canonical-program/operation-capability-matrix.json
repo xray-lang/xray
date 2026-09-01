@@ -41,6 +41,16 @@
     ],
     "note": "All 15 walking-skeleton operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
+  "aot_stage": {
+    "status": "COMPLETE",
+    "owner_task": 300,
+    "input_authority": "XrValidatedProgram",
+    "execution_authority": "XrInstance",
+    "private_realization": "XrBackendIR",
+    "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
+    "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
+    "note": "All 15 walking-skeleton operations lower through an independently verified BackendIR into portable C11. The pure native fixture links no VM, compiler, program loader, or AOT toolchain."
+  },
   "operations": [
     {
       "id": "core.constant.i64",

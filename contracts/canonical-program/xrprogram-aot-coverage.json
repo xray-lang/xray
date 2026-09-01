@@ -1,0 +1,166 @@
+{
+  "schema": "xray-program-aot-coverage/1",
+  "task": 300,
+  "input_authority": "XrValidatedProgram",
+  "execution_authority": "XrInstance",
+  "private_realization": "XrBackendIR",
+  "backend": "xray-c11-aot@1",
+  "operation_count": 15,
+  "operations": [
+    {
+      "stable_id": 1,
+      "spelling": "core.constant.i64",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 2,
+      "spelling": "core.constant.bool",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 16,
+      "spelling": "core.add.i64",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 17,
+      "spelling": "core.sub.i64",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 18,
+      "spelling": "core.mul.i64",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 19,
+      "spelling": "core.div.i64",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 24,
+      "spelling": "core.compare.i64",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 32,
+      "spelling": "core.block.argument",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 33,
+      "spelling": "core.branch",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 34,
+      "spelling": "core.conditional_branch",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 35,
+      "spelling": "core.return",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 36,
+      "spelling": "core.call.sealed_direct",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 48,
+      "spelling": "core.trap",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 49,
+      "spelling": "core.error.publish",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 64,
+      "spelling": "core.target.pointer_width",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    }
+  ],
+  "pass_contract": {
+    "ordinary": "pre-post-invariant-plus-preservation-set",
+    "high_risk": "directed-translation-witness-required",
+    "implemented_high_risk_passes": []
+  },
+  "generated_c": {
+    "dialect": "portable-c11",
+    "always_on_output_verifier": "XiCgenVerifyOutput-W1-W4",
+    "real_provider_evidence": [
+      "clang",
+      "zig-cc",
+      "clang-cl-frontend"
+    ],
+    "foreign_profile": "explicit-profile-literal"
+  },
+  "native_artifact_identity": [
+    "ExecutionId",
+    "BackendId",
+    "ToolchainId",
+    "OptimizationPolicyId",
+    "native-bytes"
+  ],
+  "pure_aot": {
+    "program_loader": false,
+    "vm": false,
+    "compiler": false,
+    "aot_toolchain": false,
+    "runtime_dependency": "libc-only-for-active-scalar-skeleton"
+  },
+  "inactive_contracts": [
+    "full-language-operation-families",
+    "high-risk-optimizations",
+    "public-native-loader-ABI",
+    "published-package-format"
+  ]
+}

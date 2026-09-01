@@ -7,21 +7,21 @@ Unknown feature IDs, operation IDs, type rules, and arithmetic kinds fail closed
 
 | Stable ID | Operation | Class | Type rule | Effects | Profile | Materialization | Consumer state |
 |---:|---|---|---|---|---|---|---|
-| 1 | `core.constant.i64` | constant | `(-) -> i64` | - | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 2 | `core.constant.bool` | constant | `(-) -> bool` | - | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 16 | `core.add.i64` | arithmetic | `(i64, i64) -> i64` | trap | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 17 | `core.sub.i64` | arithmetic | `(i64, i64) -> i64` | trap | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 18 | `core.mul.i64` | arithmetic | `(i64, i64) -> i64` | trap | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 19 | `core.div.i64` | arithmetic | `(i64, i64) -> i64` | trap | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 24 | `core.compare.i64` | comparison | `(i64, i64) -> bool` | - | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 32 | `core.block.argument` | control | `(T...) -> void` | - | none | control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 33 | `core.branch` | control | `(T...) -> void` | - | none | control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 34 | `core.conditional_branch` | control | `(bool, T..., T...) -> void` | - | none | control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 35 | `core.return` | control | `(R?) -> void` | - | none | control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 36 | `core.call.sealed_direct` | call | `(P...) -> R?` | call | none | call | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 48 | `core.trap` | termination | `(-) -> void` | trap | none | trap | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 49 | `core.error.publish` | termination | `(error) -> void` | error | none | error | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
-| 64 | `core.target.pointer_width` | target-query | `(-) -> u32` | target-query, trap | pointer_width | profile-query | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=NOT_YET_ACTIVE |
+| 1 | `core.constant.i64` | constant | `(-) -> i64` | - | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 2 | `core.constant.bool` | constant | `(-) -> bool` | - | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 16 | `core.add.i64` | arithmetic | `(i64, i64) -> i64` | trap | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 17 | `core.sub.i64` | arithmetic | `(i64, i64) -> i64` | trap | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 18 | `core.mul.i64` | arithmetic | `(i64, i64) -> i64` | trap | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 19 | `core.div.i64` | arithmetic | `(i64, i64) -> i64` | trap | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 24 | `core.compare.i64` | comparison | `(i64, i64) -> bool` | - | none | value | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 32 | `core.block.argument` | control | `(T...) -> void` | - | none | control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 33 | `core.branch` | control | `(T...) -> void` | - | none | control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 34 | `core.conditional_branch` | control | `(bool, T..., T...) -> void` | - | none | control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 35 | `core.return` | control | `(R?) -> void` | - | none | control | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 36 | `core.call.sealed_direct` | call | `(P...) -> R?` | call | none | call | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 48 | `core.trap` | termination | `(-) -> void` | trap | none | trap | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 49 | `core.error.publish` | termination | `(error) -> void` | error | none | error | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
+| 64 | `core.target.pointer_width` | target-query | `(-) -> u32` | target-query, trap | pointer_width | profile-query | spec_oracle=COMPLETE, decoder=COMPLETE, verifier=COMPLETE, evaluator=COMPLETE, vm=COMPLETE, aot=COMPLETE |
 
 ## Normative arithmetic rules
 

@@ -569,6 +569,96 @@ add_test(NAME test_xr_program_vm_runtime
     COMMAND $<TARGET_FILE:test_xr_program_vm_runtime>)
 set_tests_properties(test_xr_program_vm_runtime PROPERTIES
     LABELS "unit;vm;canonical-program;runtime-only;embedder;task-299")
+
+add_xray_unit_test(test_xr_program_aot
+    aot/test_xr_program_aot.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_dependencies(test_xr_program_aot xray_program_aot_compiler)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_aot PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_aot PRIVATE -Wall -Wextra -Werror)
+endif()
+set_tests_properties(test_xr_program_aot PROPERTIES
+    LABELS "unit;aot;canonical-program;backendir;translation-validation;task-300")
+
+set(XR_PROGRAM_AOT_FIXTURE_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/task-300)
+set(XR_PROGRAM_AOT_GENERATED_C
+    ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_generated.c)
+add_custom_command(
+    OUTPUT ${XR_PROGRAM_AOT_GENERATED_C}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${XR_PROGRAM_AOT_FIXTURE_DIR}
+    COMMAND $<TARGET_FILE:test_xr_program_aot> ${XR_PROGRAM_AOT_GENERATED_C}
+    DEPENDS test_xr_program_aot
+    COMMENT "Generating canonical XrProgram portable C fixture"
+    VERBATIM)
+set_source_files_properties(${XR_PROGRAM_AOT_GENERATED_C} PROPERTIES GENERATED TRUE)
+add_executable(test_xr_program_aot_native ${XR_PROGRAM_AOT_GENERATED_C})
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_aot_native PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_aot_native PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xr_program_aot_native
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+        --executable $<TARGET_FILE:test_xr_program_aot_native>
+        --expected-exit 42)
+set_tests_properties(test_xr_program_aot_native PROPERTIES
+    LABELS "unit;aot;canonical-program;generated-c;native;pure-aot;task-300")
+add_test(NAME test_xr_program_aot_real_artifact
+    COMMAND $<TARGET_FILE:test_xr_program_aot>
+        --seal $<TARGET_FILE:test_xr_program_aot_native>)
+set_tests_properties(test_xr_program_aot_real_artifact PROPERTIES
+    LABELS "unit;aot;canonical-program;native-artifact;identity;task-300")
+
+function(add_xr_program_aot_native_case case_name mode expected_exit)
+    set(case_source
+        ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_${case_name}.c)
+    add_custom_command(
+        OUTPUT ${case_source}
+        COMMAND $<TARGET_FILE:test_xr_program_aot> ${case_source} ${mode}
+        DEPENDS test_xr_program_aot
+        COMMENT "Generating ${case_name} canonical XrProgram C fixture"
+        VERBATIM)
+    set_source_files_properties(${case_source} PROPERTIES GENERATED TRUE)
+    add_executable(test_xr_program_aot_${case_name} ${case_source})
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+            OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+                AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+        target_compile_options(test_xr_program_aot_${case_name} PRIVATE /W4 /WX)
+    else()
+        target_compile_options(test_xr_program_aot_${case_name} PRIVATE
+            -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME test_xr_program_aot_${case_name}
+        COMMAND ${XRAY_PYTHON}
+            ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_native.py
+            --executable $<TARGET_FILE:test_xr_program_aot_${case_name}>
+            --expected-exit ${expected_exit})
+    set_tests_properties(test_xr_program_aot_${case_name} PROPERTIES
+        LABELS "unit;aot;canonical-program;generated-c;native;arithmetic;task-300")
+endfunction()
+
+add_xr_program_aot_native_case(checked_overflow checked-overflow 211)
+add_xr_program_aot_native_case(wrapping_overflow wrapping-overflow 0)
+add_xr_program_aot_native_case(division_zero division-zero 212)
+
+add_test(NAME test_xr_program_aot_providers
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_providers.py
+        --source ${XR_PROGRAM_AOT_GENERATED_C}
+        --output-dir ${XR_PROGRAM_AOT_FIXTURE_DIR}/providers
+        --expected-exit 42)
+set_tests_properties(test_xr_program_aot_providers PROPERTIES
+    LABELS "aot;canonical-program;generated-c;providers;portable-c11;task-300"
+    TIMEOUT 120)
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_test(NAME test_target_native_target_leaf_authority

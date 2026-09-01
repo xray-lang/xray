@@ -751,7 +751,7 @@
     {
       "task_id": 300,
       "role": "W6 AOT BackendIR and generated C",
-      "status": "READY",
+      "status": "COMPLETE",
       "work_package": "W6",
       "prerequisites": [
         297,
@@ -786,7 +786,7 @@
     {
       "task_id": 301,
       "role": "W7 operation vertical cutover coordination",
-      "status": "BLOCKED_ON_299_300",
+      "status": "READY",
       "work_package": "W7",
       "prerequisites": [
         299,

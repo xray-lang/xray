@@ -23,7 +23,7 @@ instance = "one-live-execution"
 program = "ProgramId = hash(format-major, CoreSpecId, canonical-program-bytes)"
 profile = "ProfileId = hash(profile-schema-major, canonical-profile-bytes)"
 execution = "ExecutionId = hash(ProgramId, ProfileId, BoundaryAbiId, RuntimeKernelId)"
-native = "NativeArtifactId = hash(ExecutionId, backend-id, backend-version, target-triple, codegen-options)"
+native = "NativeArtifactId = hash(ExecutionId, BackendId, ToolchainId, OptimizationPolicyId, native bytes)"
 
 [compatibility]
 pre_293 = "none"

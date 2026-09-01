@@ -314,6 +314,7 @@ set(PROGRAMGEN ${CMAKE_SOURCE_DIR}/tools/programgen/programgen.py)
 set(PROGRAMSEMCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_semantics.py)
 set(EXECUTIONCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_execution_contracts.py)
 set(PROGRAMVMCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_vm_contracts.py)
+set(PROGRAMAOTCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_contracts.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -644,6 +645,22 @@ add_custom_target(check-xr-program-vm-contracts
             ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm_runtime.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-vm-coverage.json
     COMMENT "Checking typed XrProgram VM coverage and runtime isolation"
+    VERBATIM
+)
+
+add_custom_target(check-xr-program-aot-contracts
+    COMMAND ${XRAY_PYTHON} ${PROGRAMAOTCONTRACTCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${PROGRAMAOTCONTRACTCHECK}
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir.h
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_verify.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_native_artifact.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/aot/test_xr_program_aot.c
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-aot-coverage.json
+    COMMENT "Checking XrProgram AOT lowering and native artifact contracts"
     VERBATIM
 )
 
@@ -1237,7 +1254,8 @@ file(GLOB ANALYSIS_SRC CONFIGURE_DEPENDS "src/analysis/*.c")
 file(GLOB AOT_SRC CONFIGURE_DEPENDS "src/aot/*.c")
 file(GLOB AOT_REFINE_SRC CONFIGURE_DEPENDS "src/aot/refine/*.c")
 file(GLOB AOT_EMIT_C_SRC CONFIGURE_DEPENDS "src/aot/emit_c/*.c")
-list(APPEND AOT_SRC ${AOT_REFINE_SRC} ${AOT_EMIT_C_SRC})
+file(GLOB AOT_PROGRAM_SRC CONFIGURE_DEPENDS "src/aot/program/*.c")
+list(APPEND AOT_SRC ${AOT_REFINE_SRC} ${AOT_EMIT_C_SRC} ${AOT_PROGRAM_SRC})
 list(REMOVE_ITEM AOT_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xrt_gen_iter.c"
     "src/aot/xrt_gen_iter.c")
@@ -1534,7 +1552,8 @@ add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
 add_dependencies(xray_core_objs
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics
-    check-xr-execution-contracts check-xr-program-vm-contracts)
+    check-xr-execution-contracts check-xr-program-vm-contracts
+    check-xr-program-aot-contracts)
 
 # Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
 # table.
@@ -1548,7 +1567,8 @@ add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics
-    check-xr-execution-contracts check-xr-program-vm-contracts)
+    check-xr-execution-contracts check-xr-program-vm-contracts
+    check-xr-program-aot-contracts)
 
 # The installed compiler product is the exact backend authority surface, not
 # the CLI's xray_core development aggregate.  Keep source/Xi inputs opaque at
@@ -1585,6 +1605,7 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/plan/target/xr_target_instruction_verify.c
     src/plan/target/xr_target_plan.c
     src/plan/target/xr_target_profile.c
+    src/plan/target/xr_target_profile_verify.c
     src/plan/target/xr_target_verify.c
     src/aot/emit_c/xr_c_emission_plan.c
     src/aot/emit_c/xr_c_scalar_ref_projection.c
@@ -1686,6 +1707,32 @@ if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
 else()
     target_compile_options(xray_program_vm_runtime PRIVATE -Wall -Wextra -Werror)
 endif()
+
+# The canonical-program AOT compiler is a private build product. This narrow
+# target keeps its warning contract independent from the legacy Xi/TargetPlan
+# backend while unresolved verifier/runtime services remain link-time inputs.
+set(XRAY_PROGRAM_AOT_COMPILER_SOURCES
+    src/aot/program/xr_backend_ir.c
+    src/aot/program/xr_backend_ir_verify.c
+    src/aot/program/xr_backend_ir_emit_c.c
+    src/aot/program/xr_native_artifact.c
+)
+add_library(xray_program_aot_compiler STATIC
+    ${XRAY_PROGRAM_AOT_COMPILER_SOURCES})
+add_dependencies(xray_program_aot_compiler
+    gen-core-spec gen-xr-program-schema check-xr-program-semantics
+    check-xr-execution-contracts check-xr-program-aot-contracts)
+target_include_directories(xray_program_aot_compiler PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(xray_program_aot_compiler PRIVATE /W4 /WX)
+else()
+    target_compile_options(xray_program_aot_compiler PRIVATE -Wall -Wextra -Werror)
+endif()
 if(WIN32)
     target_link_libraries(xray_program_vm_runtime PUBLIC synchronization)
 else()
@@ -1724,6 +1771,7 @@ set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
     src/plan/target/xr_target_entry_abi.c
     src/plan/target/xr_target_instruction_verify.c
     src/plan/target/xr_target_profile.c
+    src/plan/target/xr_target_profile_verify.c
     src/plan/target/xr_target_verify.c
     src/plan/target/xr_xtp_materialize.c
 )
@@ -4840,6 +4888,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(xr_program_vm_contracts_self_test PROPERTIES
         LABELS "meta;contracts;canonical-program;vm;runtime-only;mutation;task-299"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_aot_contracts
+        COMMAND ${XRAY_PYTHON} ${PROGRAMAOTCONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_aot_contracts PROPERTIES
+        LABELS "meta;contracts;canonical-program;aot;translation-validation;task-300"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_aot_contracts_self_test
+        COMMAND ${XRAY_PYTHON} ${PROGRAMAOTCONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_aot_contracts_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;aot;translation-validation;mutation;task-300"
         PROCESSORS 1
         TIMEOUT 30
     )

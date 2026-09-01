@@ -22,7 +22,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         2u,
@@ -41,7 +41,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         16u,
@@ -60,7 +60,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         17u,
@@ -79,7 +79,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         18u,
@@ -98,7 +98,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         19u,
@@ -117,7 +117,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         24u,
@@ -136,7 +136,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         32u,
@@ -155,7 +155,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         33u,
@@ -174,7 +174,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         34u,
@@ -193,7 +193,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         35u,
@@ -212,7 +212,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         36u,
@@ -231,7 +231,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         48u,
@@ -250,7 +250,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         49u,
@@ -269,7 +269,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
     {
         64u,
@@ -288,7 +288,7 @@ const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_COUNT] 
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
         XR_CORE_COVERAGE_COMPLETE,
-        XR_CORE_COVERAGE_NOT_YET_ACTIVE,
+        XR_CORE_COVERAGE_COMPLETE,
     },
 };
 

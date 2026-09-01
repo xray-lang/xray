@@ -843,6 +843,27 @@ CONTRACT_SPECS = (
             "tests/unit/vm/test_xr_program_vm_runtime.c",
         ),
     ),
+    ContractSpec(
+        "canonical-program-aot.md",
+        (
+            "CMakeLists.txt",
+            "tests/unit/CMakeLists.txt",
+            "xisa/core/registry.json",
+            "contracts/canonical-program/architecture-identity.toml",
+            "contracts/canonical-program/operation-capability-matrix.json",
+            "contracts/canonical-program/xrprogram-aot-coverage.json",
+            "src/aot/program/xr_backend_ir.h",
+            "src/aot/program/xr_backend_ir_internal.h",
+            "src/aot/program/xr_backend_ir.c",
+            "src/aot/program/xr_backend_ir_verify.c",
+            "src/aot/program/xr_backend_ir_emit_c.c",
+            "src/aot/program/xr_native_artifact.c",
+            "scripts/check_xr_program_aot_contracts.py",
+            "scripts/check_xr_program_aot_native.py",
+            "scripts/check_xr_program_aot_providers.py",
+            "tests/unit/aot/test_xr_program_aot.c",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")
