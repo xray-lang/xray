@@ -18,6 +18,7 @@ static void test_registry_identity_and_lookup(void) {
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
     CHECK(XR_CORE_SPEC_OPERATION_COUNT == 15u);
+    CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_REGISTRY_SHA256) == 64u);
 
     for (index = 0; index < XR_CORE_SPEC_OPERATION_COUNT; ++index) {
@@ -43,6 +44,9 @@ static void test_registry_identity_and_lookup(void) {
     CHECK(xr_core_spec_operation_by_id(UINT16_MAX) == NULL);
     CHECK(xr_core_spec_operation_by_spelling(NULL) == NULL);
     CHECK(xr_core_spec_operation_by_spelling("core.unknown") == NULL);
+    CHECK(xr_core_spec_feature_active(XR_CORE_FEATURE_CORE_BASE));
+    CHECK(!xr_core_spec_feature_active(0u));
+    CHECK(!xr_core_spec_feature_active(UINT16_MAX));
 }
 
 static void test_walking_skeleton_metadata(void) {

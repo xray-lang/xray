@@ -503,6 +503,7 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         "#ifndef XR_CORE_SPEC_GEN_H",
         "#define XR_CORE_SPEC_GEN_H",
         "",
+        "#include <stdbool.h>",
         "#include <stddef.h>",
         "#include <stdint.h>",
         "",
@@ -511,6 +512,7 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         f"#define XR_CORE_SPEC_REGISTRY_SHA256 {c_string(digest)}",
         "/* clang-format on */",
         f"#define XR_CORE_SPEC_OPERATION_COUNT {len(registry['operations'])}u",
+        f"#define XR_CORE_SPEC_FEATURE_COUNT {sum(1 for row in registry['features'] if row['status'] == 'ACTIVE')}u",
         "#define XR_CORE_SPEC_VARIADIC_ARITY UINT8_MAX",
         "",
         "typedef enum XrCoreTypeId {",
@@ -519,6 +521,14 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         lines.append(f"    XR_CORE_TYPE_{c_identifier(row['name'])} = {row['stable_id']},")
     lines.extend([
         "} XrCoreTypeId;",
+        "",
+        "typedef enum XrCoreFeatureId {",
+    ])
+    for row in registry["features"]:
+        if row["status"] == "ACTIVE":
+            lines.append(f"    XR_CORE_FEATURE_{c_identifier(row['name'])} = {row['stable_id']},")
+    lines.extend([
+        "} XrCoreFeatureId;",
         "",
         "typedef enum XrCoreOperationId {",
     ])
@@ -557,6 +567,7 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         "",
         "const XrCoreOperationSpec *xr_core_spec_operation_by_id(uint16_t stable_id);",
         "const XrCoreOperationSpec *xr_core_spec_operation_by_spelling(const char *spelling);",
+        "bool xr_core_spec_feature_active(uint16_t stable_id);",
         "",
         "#endif /* XR_CORE_SPEC_GEN_H */",
         "",
@@ -631,6 +642,19 @@ def generate_source(registry: dict[str, Any]) -> str:
         "            return &xr_core_operation_specs[index];",
         "    }",
         "    return NULL;",
+        "}",
+        "",
+        "bool xr_core_spec_feature_active(uint16_t stable_id) {",
+        "    switch (stable_id) {",
+    ])
+    for feature in registry["features"]:
+        if feature["status"] == "ACTIVE":
+            lines.append(f"        case {feature['stable_id']}u:")
+    lines.extend([
+        "            return true;",
+        "        default:",
+        "            return false;",
+        "    }",
         "}",
         "",
     ])

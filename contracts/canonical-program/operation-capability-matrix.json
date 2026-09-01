@@ -12,6 +12,14 @@
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
     "note": "Operation rows remain frozen rather than globally COMPLETE until W2-W7 consumers and old-owner deletion are complete."
   },
+  "program_format_stage": {
+    "status": "COMPLETE",
+    "owner_task": 296,
+    "schema": "xisa/program/schema.json",
+    "generated_coverage": "contracts/canonical-program/xrprogram-format-coverage.json",
+    "semantic_admission": "NOT_YET_ACTIVE_TASK_297",
+    "note": "W2 owns canonical bytes and bounded structural decode. Typed admission and executor coverage remain frozen for W3-W7."
+  },
   "operations": [
     {
       "id": "core.constant.i64",

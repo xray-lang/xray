@@ -64,7 +64,7 @@ cmake -S . -B build-fuzz -G Ninja \
   -DCMAKE_CXX_COMPILER=clang++
 
 # 构建 fuzzer
-cmake --build build-fuzz --target fuzz_lexer fuzz_parser fuzz_stdlib_data fuzz_xtp_decode
+cmake --build build-fuzz --target fuzz_lexer fuzz_parser fuzz_stdlib_data fuzz_xtp_decode fuzz_xr_program_decode
 ```
 
 ## 运行
@@ -115,6 +115,18 @@ cp ../../tests/regression/**/*.xr corpus/parser/ 2>/dev/null || true
 ```
 
 默认测试构建中的 `test_xtp_fuzz_entry` 会不依赖 libFuzzer 地逐项执行完整确定性 mutation matrix，适合快速回归；它不替代长时间 sanitizer fuzzing。
+
+### XrProgram Structural Decoder Fuzzer
+
+`fuzz_xr_program_decode`只调用296的bounded structural decoder；任何被接受的输入都必须可byte-identical
+re-encode并保持同一`ProgramId`。它不执行program，也不替代297的typed verifier/evaluator fuzz。
+
+```bash
+./build-fuzz/tests/fuzz/fuzz_xr_program_decode corpus/xr_program \
+  -max_len=1048576 -max_total_time=3600
+```
+
+默认测试构建中的`test_xr_program_fuzz_entry`会对0–512 byte确定性hostile输入执行同一入口。
 
 ## 常用选项
 

@@ -3,6 +3,7 @@
 #ifndef XR_CORE_SPEC_GEN_H
 #define XR_CORE_SPEC_GEN_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -11,6 +12,7 @@
 #define XR_CORE_SPEC_REGISTRY_SHA256 "fe99bb9affa94f448d8a282eb6a6d44e08ab5f6f60245175ab43d387e276e15e"
 /* clang-format on */
 #define XR_CORE_SPEC_OPERATION_COUNT 15u
+#define XR_CORE_SPEC_FEATURE_COUNT 1u
 #define XR_CORE_SPEC_VARIADIC_ARITY UINT8_MAX
 
 typedef enum XrCoreTypeId {
@@ -21,6 +23,10 @@ typedef enum XrCoreTypeId {
     XR_CORE_TYPE_ERROR = 4,
     XR_CORE_TYPE_TYPE_VARIABLE = 5,
 } XrCoreTypeId;
+
+typedef enum XrCoreFeatureId {
+    XR_CORE_FEATURE_CORE_BASE = 1,
+} XrCoreFeatureId;
 
 typedef enum XrCoreOperationId {
     XR_CORE_OP_CORE_CONSTANT_I64 = 1,
@@ -70,5 +76,6 @@ extern const XrCoreOperationSpec xr_core_operation_specs[XR_CORE_SPEC_OPERATION_
 
 const XrCoreOperationSpec *xr_core_spec_operation_by_id(uint16_t stable_id);
 const XrCoreOperationSpec *xr_core_spec_operation_by_spelling(const char *spelling);
+bool xr_core_spec_feature_active(uint16_t stable_id);
 
 #endif /* XR_CORE_SPEC_GEN_H */

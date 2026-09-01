@@ -310,6 +310,7 @@ configure_file(
 
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(CORESPECGEN ${CMAKE_SOURCE_DIR}/tools/corespecgen/corespecgen.py)
+set(PROGRAMGEN ${CMAKE_SOURCE_DIR}/tools/programgen/programgen.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -579,6 +580,21 @@ add_custom_target(gen-core-spec
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/core-spec-operations.md
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/core-spec-coverage.json
     COMMENT "corespecgen: verifying canonical CoreSpec projections"
+    VERBATIM
+)
+
+# XrProgram v1 has one checked-in wire schema and generated C constants. The
+# build verifies projections and never rewrites the source tree.
+add_custom_target(gen-xr-program-schema
+    COMMAND ${XRAY_PYTHON} ${PROGRAMGEN}
+            --root ${CMAKE_SOURCE_DIR}
+            --check
+    DEPENDS ${PROGRAMGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/program/schema.json
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_schema_gen.h
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-v1.md
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-coverage.json
+    COMMENT "programgen: verifying canonical XrProgram schema projections"
     VERBATIM
 )
 
@@ -1159,6 +1175,8 @@ file(GLOB TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/toolchain/*.c")
 file(GLOB VM_SRC CONFIGURE_DEPENDS "src/vm/*.c")
 file(GLOB VM_DEBUG_SRC CONFIGURE_DEPENDS "src/vm/debug/*.c")
 file(GLOB IR_SRC CONFIGURE_DEPENDS "src/ir/*.c")
+file(GLOB CORE_SPEC_SRC CONFIGURE_DEPENDS "src/core/*.c")
+file(GLOB PROGRAM_SRC CONFIGURE_DEPENDS "src/program/*.c")
 file(GLOB PLAN_SEMANTIC_SRC CONFIGURE_DEPENDS "src/plan/semantic/*.c")
 file(GLOB PLAN_OWNERSHIP_SRC CONFIGURE_DEPENDS "src/plan/ownership/*.c")
 file(GLOB PLAN_FORMAT_SRC CONFIGURE_DEPENDS "src/plan/format/*.c")
@@ -1386,7 +1404,7 @@ foreach(XRAY_SRC_LIST
         RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
         FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
         FRONTEND_ANALYZER_SRC FRONTEND_CANONICAL_SRC FRONTEND_FORMAT_SRC TOOLCHAIN_SRC
-        VM_SRC VM_DEBUG_SRC IR_SRC PLAN_SEMANTIC_SRC PLAN_OWNERSHIP_SRC PLAN_FORMAT_SRC PLAN_TARGET_SRC
+        VM_SRC VM_DEBUG_SRC IR_SRC CORE_SPEC_SRC PROGRAM_SRC PLAN_SEMANTIC_SRC PLAN_OWNERSHIP_SRC PLAN_FORMAT_SRC PLAN_TARGET_SRC
         MODULE_SRC ANALYSIS_SRC AOT_SRC API_SRC NEW_CLI_SRC APP_TOOLCHAIN_SRC
         STDLIB_CORE_SRC STDLIB_SRC)
     xray_exclude_include_fragments(${XRAY_SRC_LIST})
@@ -1419,6 +1437,8 @@ set(CORE_ALL_SOURCES
     ${VM_SRC}
     ${VM_DEBUG_SRC}
     ${IR_SRC}
+    ${CORE_SPEC_SRC}
+    ${PROGRAM_SRC}
     ${PLAN_SEMANTIC_SRC}
     ${PLAN_OWNERSHIP_SRC}
     ${PLAN_FORMAT_SRC}
@@ -1462,7 +1482,7 @@ endif()
 add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
 add_dependencies(xray_core_objs
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs)
+    gen-native-type-defs gen-core-spec gen-xr-program-schema)
 
 # Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
 # table.
@@ -1475,7 +1495,7 @@ add_dependencies(xray_stdlib_bootstrap_core
 add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_core_objs>)
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs)
+    gen-native-type-defs gen-core-spec gen-xr-program-schema)
 
 # The installed compiler product is the exact backend authority surface, not
 # the CLI's xray_core development aggregate.  Keep source/Xi inputs opaque at
@@ -4621,6 +4641,32 @@ if(BUILD_TESTS)
     )
     set_tests_properties(core_spec_registry_self_test PROPERTIES
         LABELS "meta;contracts;core-spec;mutation;task-295"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_schema
+        COMMAND ${XRAY_PYTHON} ${PROGRAMGEN}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --check
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_schema PROPERTIES
+        LABELS "meta;contracts;canonical-program;program-format;task-296"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_schema_self_test
+        COMMAND ${XRAY_PYTHON} ${PROGRAMGEN}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_schema_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;program-format;mutation;task-296"
         PROCESSORS 1
         TIMEOUT 30
     )

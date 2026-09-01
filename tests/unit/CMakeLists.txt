@@ -43,6 +43,39 @@ set_tests_properties(test_core_spec PROPERTIES
     LABELS "unit;core-spec;metadata;task-295"
 )
 
+add_library(xr_program_test_core STATIC
+    ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
+    ${CMAKE_SOURCE_DIR}/src/core/xr_core_spec_gen.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_core_ir.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_program_decode.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_program_encode.c
+)
+target_include_directories(xr_program_test_core PRIVATE ${XRAY_COMMON_INCLUDES})
+add_dependencies(xr_program_test_core gen-core-spec gen-xr-program-schema)
+
+add_executable(test_xr_program program/test_xr_program.c)
+target_include_directories(test_xr_program PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(test_xr_program PRIVATE xr_program_test_core)
+add_test(NAME test_xr_program COMMAND $<TARGET_FILE:test_xr_program>)
+set_tests_properties(test_xr_program PROPERTIES
+    LABELS "unit;canonical-program;program-format;task-296"
+)
+
+add_executable(test_xr_program_fuzz_entry ../fuzz/fuzz_xr_program_decode.c)
+target_compile_definitions(test_xr_program_fuzz_entry PRIVATE FUZZ_STANDALONE)
+target_include_directories(test_xr_program_fuzz_entry PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(test_xr_program_fuzz_entry PRIVATE xr_program_test_core)
+add_test(NAME test_xr_program_fuzz_entry COMMAND $<TARGET_FILE:test_xr_program_fuzz_entry>)
+set_tests_properties(test_xr_program_fuzz_entry PROPERTIES
+    LABELS "unit;fuzz;canonical-program;program-format;hostile-input;task-296"
+)
+
 add_xray_unit_test(test_xvalue value/test_xvalue.c)
 
 

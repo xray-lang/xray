@@ -1,0 +1,72 @@
+{
+  "schema": "xray-program-format-schema/1",
+  "format": {
+    "major": 1,
+    "minor": 0,
+    "magic_hex": "585250524f470d0a",
+    "program_id_domain": "xray-program-id-v1"
+  },
+  "encoding": {
+    "fixed_integers": "little-endian",
+    "variable_integers": "minimal-uleb128",
+    "signed_integers": "zigzag-then-minimal-uleb128",
+    "section_offsets": "relative-to-payload-start",
+    "section_order": "ascending-stable-id",
+    "unknown_section_policy": "reject-until-declared-optional"
+  },
+  "sections": [
+    {
+      "stable_id": 1,
+      "name": "types",
+      "required": true
+    },
+    {
+      "stable_id": 2,
+      "name": "constants",
+      "required": true
+    },
+    {
+      "stable_id": 3,
+      "name": "functions",
+      "required": true
+    },
+    {
+      "stable_id": 4,
+      "name": "code",
+      "required": true
+    },
+    {
+      "stable_id": 5,
+      "name": "imports",
+      "required": true
+    },
+    {
+      "stable_id": 6,
+      "name": "boundaries",
+      "required": true
+    },
+    {
+      "stable_id": 7,
+      "name": "semantic-metadata",
+      "required": true
+    },
+    {
+      "stable_id": 8,
+      "name": "debug-sidecar-binding",
+      "required": false
+    }
+  ],
+  "limits": {
+    "artifact_bytes": 67108864,
+    "sections": 8,
+    "features": 1024,
+    "types": 65536,
+    "constants": 1048576,
+    "functions": 1048576,
+    "blocks_per_function": 1048576,
+    "values_per_function": 16777216,
+    "operations": 16777216,
+    "operands_per_operation": 65536,
+    "successors_per_operation": 16
+  }
+}

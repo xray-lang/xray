@@ -311,3 +311,12 @@ const XrCoreOperationSpec *xr_core_spec_operation_by_spelling(const char *spelli
     }
     return NULL;
 }
+
+bool xr_core_spec_feature_active(uint16_t stable_id) {
+    switch (stable_id) {
+        case 1u:
+            return true;
+        default:
+            return false;
+    }
+}

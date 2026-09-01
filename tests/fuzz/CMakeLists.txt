@@ -98,6 +98,34 @@ target_link_libraries(fuzz_xtp_decode PRIVATE xray_core)
 target_compile_options(fuzz_xtp_decode PRIVATE ${FUZZ_COMPILE_OPTIONS})
 target_link_options(fuzz_xtp_decode PRIVATE ${FUZZ_LINK_OPTIONS})
 
+add_executable(fuzz_xr_program_decode
+    fuzz_xr_program_decode.c
+)
+
+target_include_directories(fuzz_xr_program_decode PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+)
+
+# The artifact decoder is a security boundary and must remain independently
+# fuzzable.  Linking xray_core here would pull in the compiler, VM, AOT, and the
+# generated stdlib image before a single hostile byte can be tested.
+add_library(xr_program_fuzz_core STATIC
+    ../../src/base/xsha256.c
+    ../../src/core/xr_core_spec_gen.c
+    ../../src/program/xr_core_ir.c
+    ../../src/program/xr_program_decode.c
+    ../../src/program/xr_program_encode.c
+)
+add_dependencies(xr_program_fuzz_core gen-core-spec gen-xr-program-schema)
+target_include_directories(xr_program_fuzz_core PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+)
+target_compile_options(xr_program_fuzz_core PRIVATE ${FUZZ_COMPILE_OPTIONS})
+
+target_link_libraries(fuzz_xr_program_decode PRIVATE xr_program_fuzz_core)
+target_compile_options(fuzz_xr_program_decode PRIVATE ${FUZZ_COMPILE_OPTIONS})
+target_link_options(fuzz_xr_program_decode PRIVATE ${FUZZ_LINK_OPTIONS})
+
 # ============================================================================
 # Standalone test versions (for debugging without libFuzzer)
 # ============================================================================
@@ -143,11 +171,13 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/lexer)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/parser)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/stdlib_data)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/xtp)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/xr_program)
 
 message(STATUS "  fuzz_lexer           - Lexer fuzzer")
 message(STATUS "  fuzz_parser          - Parser fuzzer")
 message(STATUS "  fuzz_stdlib_data     - Stdlib CSV/TOML/XML/YAML parser fuzzer")
 message(STATUS "  fuzz_xtp_decode      - Typed TargetPlan artifact fuzzer")
+message(STATUS "  fuzz_xr_program_decode - Canonical XrProgram structural decoder fuzzer")
 message(STATUS "  fuzz_lexer_standalone  - Lexer test (no libFuzzer)")
 message(STATUS "  fuzz_parser_standalone - Parser test (no libFuzzer)")
 message(STATUS "  fuzz_stdlib_data_standalone - Stdlib data parser test (no libFuzzer)")

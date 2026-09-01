@@ -612,7 +612,7 @@
     {
       "task_id": 296,
       "role": "W2 CoreIR and XrProgram writer",
-      "status": "READY",
+      "status": "COMPLETE",
       "work_package": "W2",
       "prerequisites": [
         295
@@ -645,7 +645,7 @@
     {
       "task_id": 297,
       "role": "W3 bounded verifier and reference evaluator",
-      "status": "BLOCKED_ON_296",
+      "status": "READY",
       "work_package": "W3",
       "prerequisites": [
         295,
