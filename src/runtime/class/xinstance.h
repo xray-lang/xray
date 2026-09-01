@@ -14,7 +14,7 @@
  *
  * MEMORY LAYOUT:
  *
- *   XrInstance (variable size)
+ *   XrObjectInstance (variable size)
  *   +------------------+
  *   | XrObjHeader hdr    |  8 bytes (type tag + flags + classObj)
  *   +------------------+
@@ -56,7 +56,7 @@
 #include "xclass.h"
 #include "../mem/xobj_header.h"
 
-struct XrInstance {
+struct XrObjectInstance {
     XrObjHeader hdr;
     struct XrClass *klass;
     XrValue fields[];  // Flexible array member
@@ -65,46 +65,46 @@ struct XrInstance {
 /* ========== Instance Operations ========== */
 
 // All fields initialized to null, constructor not called
-XR_FUNC XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls);
+XR_FUNC XrObjectInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls);
 
-XR_FUNC void xr_instance_init_inplace(XrInstance *inst, XrClass *cls);
+XR_FUNC void xr_instance_init_inplace(XrObjectInstance *inst, XrClass *cls);
 XR_FUNC size_t xr_instance_size(XrClass *cls);
-XR_FUNC void xr_instance_free(XrInstance *inst);
+XR_FUNC void xr_instance_free(XrObjectInstance *inst);
 
-XR_FUNC XrValue xr_instance_get_field(XrVMRuntime *X, XrInstance *inst, const char *name);
-XR_FUNC void xr_instance_set_field(XrVMRuntime *X, XrInstance *inst, const char *name,
+XR_FUNC XrValue xr_instance_get_field(XrVMRuntime *X, XrObjectInstance *inst, const char *name);
+XR_FUNC void xr_instance_set_field(XrVMRuntime *X, XrObjectInstance *inst, const char *name,
                                    XrValue value);
 
 // Fast path by index
-XR_FUNC XrValue xr_instance_get_field_by_index(XrInstance *inst, int index);
-XR_FUNC void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value);
+XR_FUNC XrValue xr_instance_get_field_by_index(XrObjectInstance *inst, int index);
+XR_FUNC void xr_instance_set_field_by_index(XrObjectInstance *inst, int index, XrValue value);
 /* Store one already type-checked Json-decoded value. Ordinary classes use the
  * tagged field slot; value structs additionally materialize their native body
  * while the tagged slot remains the ownership anchor for referenced values. */
-XR_FUNC bool xr_instance_set_decoded_field(XrInstance *inst, int index, XrValue value);
+XR_FUNC bool xr_instance_set_decoded_field(XrObjectInstance *inst, int index, XrValue value);
 
-XR_FUNC XrValue xr_instance_call_method(XrVMRuntime *X, XrInstance *inst, const char *name,
+XR_FUNC XrValue xr_instance_call_method(XrVMRuntime *X, XrObjectInstance *inst, const char *name,
                                         XrValue *args, int argc);
 
 // Shallow clone: allocate new instance, copy all field values
-XR_FUNC XrInstance *xr_instance_clone(XrVMRuntime *X, XrInstance *src);
+XR_FUNC XrObjectInstance *xr_instance_clone(XrVMRuntime *X, XrObjectInstance *src);
 
 /* ========== Debug ========== */
 
-XR_FUNC void xr_instance_print(XrInstance *inst);
-XR_FUNC bool xr_instance_is_a(XrInstance *inst, XrClass *cls);
+XR_FUNC void xr_instance_print(XrObjectInstance *inst);
+XR_FUNC bool xr_instance_is_a(XrObjectInstance *inst, XrClass *cls);
 
 /* ========== Inline Accessors ========== */
 
-static inline XrClass *xr_instance_get_class(XrInstance *inst) {
+static inline XrClass *xr_instance_get_class(XrObjectInstance *inst) {
     return inst->klass;
 }
 
-static inline XrValue xr_instance_get_field_fast(XrInstance *inst, int index) {
+static inline XrValue xr_instance_get_field_fast(XrObjectInstance *inst, int index) {
     return inst->fields[index];
 }
 
-static inline void xr_instance_set_field_fast(XrInstance *inst, int index, XrValue value) {
+static inline void xr_instance_set_field_fast(XrObjectInstance *inst, int index, XrValue value) {
     inst->fields[index] = value;
 }
 
@@ -114,7 +114,7 @@ static inline void xr_instance_set_field_fast(XrInstance *inst, int index, XrVal
 // Returns the offset past the flexible array member fields[].
 static inline size_t xr_instance_body_offset(XrClass *cls) {
     uint32_t field_count = xr_class_instance_field_count(cls);
-    size_t raw = sizeof(XrInstance) + sizeof(XrValue) * field_count;
+    size_t raw = sizeof(XrObjectInstance) + sizeof(XrValue) * field_count;
     XrNativeBodyDesc *desc = cls->native_body;
     if (desc && desc->body_align > 0) {
         size_t align = (size_t) desc->body_align;
@@ -124,7 +124,7 @@ static inline size_t xr_instance_body_offset(XrClass *cls) {
 }
 
 // Returns pointer to the native body region, or NULL if class has none.
-static inline void *xr_instance_native_body(XrInstance *inst) {
+static inline void *xr_instance_native_body(XrObjectInstance *inst) {
     XrClass *klass = inst->klass;
     if (!klass->native_body)
         return NULL;
@@ -140,22 +140,22 @@ static inline void *xr_instance_native_body(XrInstance *inst) {
 
 // Read a logical field from a dynamic-layout instance.
 // Handles both in-object and overflow cases transparently.
-XR_FUNC XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index);
+XR_FUNC XrValue xr_instance_get_dynamic_field(XrObjectInstance *inst, uint16_t index);
 
 /* Value-struct instances keep field data in the native body; the tagged slots
  * are only ownership anchors. Generic readers (JSON encoding, print/inspect)
  * must load through this entry so struct fields come back with their values.
  * The hook is installed by the VM (the only layer that can decode a layout
  * field back into a tagged value); without it the tagged slot is returned. */
-typedef bool (*XrInstanceStructFieldReadHook)(struct XrVMRuntime *X, XrInstance *inst, int index,
+typedef bool (*XrObjectInstanceStructFieldReadHook)(struct XrVMRuntime *X, XrObjectInstance *inst, int index,
                                               XrValue *out);
-XR_FUNC void xr_instance_set_struct_field_read_hook(XrInstanceStructFieldReadHook hook);
-XR_FUNC XrValue xr_instance_load_field(struct XrVMRuntime *X, XrInstance *inst, int index);
+XR_FUNC void xr_instance_set_struct_field_read_hook(XrObjectInstanceStructFieldReadHook hook);
+XR_FUNC XrValue xr_instance_load_field(struct XrVMRuntime *X, XrObjectInstance *inst, int index);
 
 // Write a logical field on a dynamic-layout instance.
 // Returns false if overflow allocation fails.
-XR_FUNC bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrValue value);
-XR_FUNC bool xr_instance_set_dynamic_field(struct XrVMRuntime *X, XrInstance *inst, uint16_t index,
+XR_FUNC bool xr_instance_set_dynamic_field_direct(XrObjectInstance *inst, uint16_t index, XrValue value);
+XR_FUNC bool xr_instance_set_dynamic_field(struct XrVMRuntime *X, XrObjectInstance *inst, uint16_t index,
                                            XrValue value);
 
 // Look up or create a class transition for the given field symbol.

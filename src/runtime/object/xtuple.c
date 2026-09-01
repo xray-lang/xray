@@ -159,7 +159,7 @@ void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value) {
 bool xr_value_is_tuple(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(v);
     return inst->klass != NULL && inst->klass->builtin_kind == XR_BK_TUPLE;
 }
 

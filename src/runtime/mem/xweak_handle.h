@@ -134,7 +134,7 @@ XrValue xr_weak_field_store(struct XrCoroHeap *heap, XrValue target);
  * which is what keeps the ordinary paths and their inline caches intact. */
 
 /* Reads a weak slot into *out and returns true; false if index is not weak. */
-static inline bool xr_weak_instance_field_load(XrInstance *inst, int index, XrValue *out) {
+static inline bool xr_weak_instance_field_load(XrObjectInstance *inst, int index, XrValue *out) {
     if (!inst || !inst->klass || !(inst->klass->flags & XR_CLASS_HAS_WEAK_FIELDS))
         return false;
     if (!xr_class_is_field_weak(inst->klass, index))
@@ -153,7 +153,7 @@ static inline bool xr_weak_instance_field_load(XrInstance *inst, int index, XrVa
  * reads the worker's TLS, which is empty while top-level script code runs. A
  * NULL heap made the handle allocation fail, the slot took null, and every
  * read of a perfectly live target came back null. */
-static inline bool xr_weak_instance_field_store(struct XrCoroHeap *heap, XrInstance *inst,
+static inline bool xr_weak_instance_field_store(struct XrCoroHeap *heap, XrObjectInstance *inst,
                                                 int index, XrValue val) {
     if (!inst || !inst->klass || !(inst->klass->flags & XR_CLASS_HAS_WEAK_FIELDS))
         return false;

@@ -591,7 +591,7 @@ class StaticChecker:
                         for pat in tls_patterns:
                             if re.search(pat, line):
                                 heap_types = ['XrValue', 'XrMap', 'XrArray', 'XrString',
-                                              'XrJson', 'XrInstance', 'XrClosure', 'XrClass']
+                                              'XrJson', 'XrObjectInstance', 'XrClosure', 'XrClass']
                                 for heap_type in heap_types:
                                     if heap_type in line:
                                         issues.append(

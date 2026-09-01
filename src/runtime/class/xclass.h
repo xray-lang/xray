@@ -34,7 +34,7 @@
 
 typedef struct XrClass XrClass;
 
-typedef struct XrInstance XrInstance;
+typedef struct XrObjectInstance XrObjectInstance;
 typedef struct XrArena XrArena;
 typedef struct XrCoroHeap XrCoroHeap;
 typedef struct XrCopyContext XrCopyContext;
@@ -53,7 +53,7 @@ typedef struct XrAccessorEntry {
 /*
  * Classes that wrap complex native state (e.g. Array buffer, Map hash
  * table, Regex NFA) attach a XrNativeBodyDesc to the XrClass. The
- * body occupies the bytes immediately after fields[] in XrInstance.
+ * body occupies the bytes immediately after fields[] in XrObjectInstance.
  * Classes without native state leave native_body == NULL.
  */
 
@@ -66,9 +66,9 @@ typedef struct XrNativeBodyDesc {
     uint32_t body_size;   // Byte size of native body (after fields[])
     uint16_t body_align;  // Alignment of body start; 0 = pointer alignment
     XrNativeBodyCopyPolicy copy_policy;
-    void (*init)(XrInstance *inst, void *body);
+    void (*init)(XrObjectInstance *inst, void *body);
     void (*destroy)(void *body);
-    bool (*deep_copy)(XrCopyContext *ctx, XrInstance *src, XrInstance *dst);
+    bool (*deep_copy)(XrCopyContext *ctx, XrObjectInstance *src, XrObjectInstance *dst);
 } XrNativeBodyDesc;
 
 /* ========== Field Access Kind ========== */
@@ -267,7 +267,7 @@ struct XrClass {
 
     /* === Native Body === */
     // Non-NULL when this class owns native C state stored after fields[]
-    // in each XrInstance. Subclasses inherit (pointer copy) but cannot
+    // in each XrObjectInstance. Subclasses inherit (pointer copy) but cannot
     // override. Set via xr_class_builder_set_native_body().
     XrNativeBodyDesc *native_body;
 

@@ -76,7 +76,7 @@ TEST(vm_current_ctx_returns_elided_root_ctx) {
 
     XrValue process_value = iso->vm.builtins[XR_GLOBAL_VAR_PROCESS];
     ASSERT_TRUE(XR_IS_INSTANCE(process_value));
-    XrInstance *process = xr_value_to_instance(process_value);
+    XrObjectInstance *process = xr_value_to_instance(process_value);
     ASSERT_NOT_NULL(process);
     XrValue process_file = xr_instance_get_field_fast(process, PROCESS_FIELD_FILE);
     ASSERT_TRUE(XR_IS_STRING(process_file));

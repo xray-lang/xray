@@ -80,7 +80,7 @@ static XrValue make_regex(XrVMRuntime *isolate, XrValue pattern, int64_t flags) 
     /* xr_instance_new takes XrVMRuntime*, not XrCoroutine*: passing a coro here
      * was type confusion that made a module-level regex.compile dereference
      * garbage during multi-module preload, before any coroutine runs. */
-    XrInstance *inst = xr_instance_new(isolate, core->regexClass);
+    XrObjectInstance *inst = xr_instance_new(isolate, core->regexClass);
     if (!inst)
         return xr_null();
     xr_rc_retain_value(pattern);
@@ -101,7 +101,7 @@ static XrValue regex_match_new(XrVMRuntime *isolate, XrValue *args, int argc) {
         return xr_null();
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core && core->regexMatchClass, "regex_match_new: regexMatchClass not registered");
-    XrInstance *inst = xr_instance_new(isolate, core->regexMatchClass);
+    XrObjectInstance *inst = xr_instance_new(isolate, core->regexMatchClass);
     if (!inst)
         return xr_null();
     xr_rc_retain_value(args[2]);

@@ -80,7 +80,7 @@ vmcase(OP_PRINT_GROUP_APPEND) {
 
     // Check if instance has toString method
     if (xr_value_is_instance(val)) {
-        XrInstance *inst = xr_value_to_instance(val);
+        XrObjectInstance *inst = xr_value_to_instance(val);
         XrClass *cls = xr_instance_get_class(inst);
         if (cls) {
             XrMethod *method = xr_class_lookup_method(cls, SYMBOL_TOSTRING);
@@ -190,7 +190,7 @@ vmcase(OP_TYPENAME) {
     const char *type_name = NULL;
     // For instances, return class name
     if (xr_value_is_instance(val)) {
-        XrInstance *inst = xr_value_to_instance(val);
+        XrObjectInstance *inst = xr_value_to_instance(val);
         XrClass *cls = xr_instance_get_class(inst);
         if (cls && cls->builtin_kind == XR_BK_STRUCT_OBJECT)
             type_name = TYPE_NAME_OBJECT;
@@ -491,12 +491,12 @@ vmcase(OP_COPY) {
     }
     // Fast path: flat-copyable struct (alloc + memcpy, no recursion)
     if (XR_IS_PTR(_src) && XR_HEAP_TYPE(_src) == XR_TINSTANCE) {
-        XrInstance *_inst = (XrInstance *) XR_TO_PTR(_src);
+        XrObjectInstance *_inst = (XrObjectInstance *) XR_TO_PTR(_src);
         XrClass *_cls = _inst->klass;
         if (storage_mode == XR_OBJ_STORAGE_NORMAL &&
             (_cls->flags & (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) ==
                 (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) {
-            XrInstance *_new = xr_instance_clone(isolate, _inst);
+            XrObjectInstance *_new = xr_instance_clone(isolate, _inst);
             if (_new) {
                 R(a) = XR_FROM_PTR(_new);
                 vmbreak;

@@ -18,21 +18,19 @@ _Static_assert(XR_TARGET_RUNTIME_PROFILE_HOSTED == 1,
                "hosted runtime profile encoding is canonical");
 _Static_assert(XR_TARGET_RUNTIME_PROFILE_FREESTANDING == 2,
                "freestanding runtime profile encoding is canonical");
-_Static_assert(XR_TARGET_PROVIDER_RANDOM == 4,
-               "random provider owns its canonical numeric slot");
+_Static_assert(XR_TARGET_PROVIDER_RANDOM == 4, "random provider owns its canonical numeric slot");
 _Static_assert(XR_TARGET_PROVIDER_SCHEDULER == 5,
                "scheduler provider follows random without remapping");
-_Static_assert(XR_TARGET_PROVIDER_FFI == 8,
-               "FFI provider encoding is canonical");
+_Static_assert(XR_TARGET_PROVIDER_FFI == 8, "FFI provider encoding is canonical");
 
 static int failures;
 
-#define CHECK(condition, message)                                                         \
-    do {                                                                                  \
-        if (!(condition)) {                                                               \
-            fprintf(stderr, "FAIL: %s\n", message);                                      \
-            failures++;                                                                   \
-        }                                                                                 \
+#define CHECK(condition, message)                                                                  \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            fprintf(stderr, "FAIL: %s\n", message);                                                \
+            failures++;                                                                            \
+        }                                                                                          \
     } while (0)
 
 static XrStableId make_id(uint8_t seed) {
@@ -61,9 +59,8 @@ static void print_fingerprint(const char *label, XrFingerprint fingerprint) {
     fputc('\n', stderr);
 }
 
-static XrRuntimePhysicalFieldAbi make_field(uint16_t role, uint16_t offset,
-                                            uint16_t width, uint16_t alignment,
-                                            uint8_t encoding) {
+static XrRuntimePhysicalFieldAbi make_field(uint16_t role, uint16_t offset, uint16_t width,
+                                            uint16_t alignment, uint8_t encoding) {
     XrRuntimePhysicalFieldAbi field = {
         .role = role,
         .offset = offset,
@@ -84,18 +81,17 @@ static XrRuntimeObjectHeaderAbi make_object_header_abi(void) {
         .target_endian = XR_RUNTIME_ENDIAN_LITTLE,
         .padding_policy = XR_RUNTIME_PADDING_MUST_BE_ZERO,
     };
-    abi.fields[0] = make_field(XR_RUNTIME_FIELD_HEADER_RC, 0, 4, 4,
-                               XR_RUNTIME_FIELD_SIGNED_TWOS_COMPLEMENT);
+    abi.fields[0] =
+        make_field(XR_RUNTIME_FIELD_HEADER_RC, 0, 4, 4, XR_RUNTIME_FIELD_SIGNED_TWOS_COMPLEMENT);
     abi.fields[0].atomicity = XR_RUNTIME_FIELD_DOMAIN_CONDITIONAL;
-    abi.fields[1] = make_field(XR_RUNTIME_FIELD_HEADER_OBJECT_KIND, 4, 2, 2,
-                               XR_RUNTIME_FIELD_UNSIGNED);
-    abi.fields[2] = make_field(XR_RUNTIME_FIELD_HEADER_FLAGS, 6, 2, 2,
-                               XR_RUNTIME_FIELD_BITSET);
-    abi.fields[3] = make_field(XR_RUNTIME_FIELD_HEADER_LAYOUT_ID, 8, 4, 4,
-                               XR_RUNTIME_FIELD_UNSIGNED);
+    abi.fields[1] =
+        make_field(XR_RUNTIME_FIELD_HEADER_OBJECT_KIND, 4, 2, 2, XR_RUNTIME_FIELD_UNSIGNED);
+    abi.fields[2] = make_field(XR_RUNTIME_FIELD_HEADER_FLAGS, 6, 2, 2, XR_RUNTIME_FIELD_BITSET);
+    abi.fields[3] =
+        make_field(XR_RUNTIME_FIELD_HEADER_LAYOUT_ID, 8, 4, 4, XR_RUNTIME_FIELD_UNSIGNED);
     abi.fields[3].index_semantics = XR_RUNTIME_INDEX_VERIFIED_TABLE;
-    abi.fields[4] = make_field(XR_RUNTIME_FIELD_HEADER_DOMAIN_ID, 12, 4, 4,
-                               XR_RUNTIME_FIELD_UNSIGNED);
+    abi.fields[4] =
+        make_field(XR_RUNTIME_FIELD_HEADER_DOMAIN_ID, 12, 4, 4, XR_RUNTIME_FIELD_UNSIGNED);
     abi.fields[4].index_semantics = XR_RUNTIME_INDEX_VERIFIED_TABLE;
 
     abi.rc = (XrRuntimeRcAbi) {
@@ -155,12 +151,9 @@ static XrRuntimeDynamicValueAbi make_dynamic_value_abi(void) {
         .reserved_zero_mask = UINT16_MAX & ~UINT64_C(3),
         .tag_count = 3,
     };
-    abi.fields[0] = make_field(XR_RUNTIME_FIELD_DYN_TAG, 0, 2, 2,
-                               XR_RUNTIME_FIELD_UNSIGNED);
-    abi.fields[1] = make_field(XR_RUNTIME_FIELD_DYN_FLAGS, 2, 2, 2,
-                               XR_RUNTIME_FIELD_BITSET);
-    abi.fields[2] = make_field(XR_RUNTIME_FIELD_DYN_PAYLOAD, 8, 8, 8,
-                               XR_RUNTIME_FIELD_OPAQUE_BITS);
+    abi.fields[0] = make_field(XR_RUNTIME_FIELD_DYN_TAG, 0, 2, 2, XR_RUNTIME_FIELD_UNSIGNED);
+    abi.fields[1] = make_field(XR_RUNTIME_FIELD_DYN_FLAGS, 2, 2, 2, XR_RUNTIME_FIELD_BITSET);
+    abi.fields[2] = make_field(XR_RUNTIME_FIELD_DYN_PAYLOAD, 8, 8, 8, XR_RUNTIME_FIELD_OPAQUE_BITS);
     for (size_t i = 0; i < abi.tag_count; i++) {
         abi.tags[i].stable_id = make_id((uint8_t) (20 + i));
         abi.tags[i].encoding = i;
@@ -174,9 +167,9 @@ static XrRuntimeDynamicValueAbi make_dynamic_value_abi(void) {
     return abi;
 }
 
-static XrRuntimeEnumNamespaceAbi make_enum_namespace(uint16_t role, uint8_t width,
-                                                     uint64_t invalid, size_t count,
-                                                     uint8_t seed, uint64_t first_value) {
+static XrRuntimeEnumNamespaceAbi make_enum_namespace(uint16_t role, uint8_t width, uint64_t invalid,
+                                                     size_t count, uint8_t seed,
+                                                     uint64_t first_value) {
     XrRuntimeEnumNamespaceAbi space = {
         .invalid_encoding = invalid,
         .role = role,
@@ -191,8 +184,8 @@ static XrRuntimeEnumNamespaceAbi make_enum_namespace(uint16_t role, uint8_t widt
     return space;
 }
 
-static XrRuntimeEnumNamespaceAbi make_bitmask_namespace(uint16_t role, uint8_t width,
-                                                        size_t count, uint8_t seed) {
+static XrRuntimeEnumNamespaceAbi make_bitmask_namespace(uint16_t role, uint8_t width, size_t count,
+                                                        uint8_t seed) {
     XrRuntimeEnumNamespaceAbi space = {
         .role = role,
         .entry_count = (uint16_t) count,
@@ -221,8 +214,7 @@ static XrRuntimeEnumNamespaceAbi make_sentinel_namespace(uint16_t role, uint8_t 
 }
 
 static void init_record(XrRuntimeRecordAbi *record, uint16_t kind, uint16_t size,
-                        uint16_t alignment, uint16_t field_count,
-                        uint16_t namespace_count) {
+                        uint16_t alignment, uint16_t field_count, uint16_t namespace_count) {
     *record = (XrRuntimeRecordAbi) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .record_kind = kind,
@@ -233,12 +225,11 @@ static void init_record(XrRuntimeRecordAbi *record, uint16_t kind, uint16_t size
     };
 }
 
-#define SET_RECORD_FIELD(record, index, struct_type, member, member_type, field_role,        \
-                         field_encoding)                                                     \
-    (record).fields[index] =                                                                 \
-        make_field(field_role, (uint16_t) offsetof(struct_type, member),                     \
-                   (uint16_t) sizeof(((struct_type *) 0)->member),                            \
-                   (uint16_t) _Alignof(member_type), field_encoding)
+#define SET_RECORD_FIELD(record, index, struct_type, member, member_type, field_role,              \
+                         field_encoding)                                                           \
+    (record).fields[index] = make_field(field_role, (uint16_t) offsetof(struct_type, member),      \
+                                        (uint16_t) sizeof(((struct_type *) 0)->member),            \
+                                        (uint16_t) _Alignof(member_type), field_encoding)
 
 static XrRuntimeRecordAbi make_domain_record(void) {
     XrRuntimeRecordAbi record;
@@ -253,12 +244,12 @@ static XrRuntimeRecordAbi make_domain_record(void) {
                      XR_RUNTIME_FIELD_DOMAIN_SEMANTIC, XR_RUNTIME_FIELD_UNSIGNED);
     SET_RECORD_FIELD(record, 3, XrRuntimeDomainIdentity, materialization, uint8_t,
                      XR_RUNTIME_FIELD_DOMAIN_MATERIALIZATION, XR_RUNTIME_FIELD_UNSIGNED);
-    record.namespaces[0] = make_enum_namespace(
-        XR_RUNTIME_NAMESPACE_SEMANTIC_DOMAIN, 1, XR_STORAGE_DOMAIN_UNKNOWN,
-        XR_STORAGE_FOREIGN, 30, XR_STORAGE_EXEC_LOCAL);
-    record.namespaces[1] = make_enum_namespace(
-        XR_RUNTIME_NAMESPACE_MATERIALIZATION, 1, XR_MATERIALIZE_INVALID,
-        XR_MATERIALIZE_EXTERNAL, 40, XR_MATERIALIZE_INLINE);
+    record.namespaces[0] =
+        make_enum_namespace(XR_RUNTIME_NAMESPACE_SEMANTIC_DOMAIN, 1, XR_STORAGE_DOMAIN_UNKNOWN,
+                            XR_STORAGE_FOREIGN, 30, XR_STORAGE_EXEC_LOCAL);
+    record.namespaces[1] =
+        make_enum_namespace(XR_RUNTIME_NAMESPACE_MATERIALIZATION, 1, XR_MATERIALIZE_INVALID,
+                            XR_MATERIALIZE_EXTERNAL, 40, XR_MATERIALIZE_INLINE);
     return record;
 }
 
@@ -291,11 +282,11 @@ static XrRuntimeRecordAbi make_extent_record(void) {
                      XR_RUNTIME_FIELD_EXTENT_KIND, XR_RUNTIME_FIELD_UNSIGNED);
     SET_RECORD_FIELD(record, 11, XrRuntimeExtentDescriptor, fingerprint, XrFingerprint,
                      XR_RUNTIME_FIELD_EXTENT_FINGERPRINT, XR_RUNTIME_FIELD_FINGERPRINT);
-    record.namespaces[0] = make_enum_namespace(XR_RUNTIME_NAMESPACE_EXTENT_KIND, 1,
-                                               UINT8_MAX, XR_RUNTIME_EXTENT_KIND_COUNT, 50,
-                                               XR_RUNTIME_EXTENT_FIXED);
-    record.namespaces[1] = make_sentinel_namespace(
-        XR_RUNTIME_NAMESPACE_EXTENT_OPERAND, 2, XR_RUNTIME_EXTENT_OPERAND_NONE);
+    record.namespaces[0] =
+        make_enum_namespace(XR_RUNTIME_NAMESPACE_EXTENT_KIND, 1, UINT8_MAX,
+                            XR_RUNTIME_EXTENT_KIND_COUNT, 50, XR_RUNTIME_EXTENT_FIXED);
+    record.namespaces[1] = make_sentinel_namespace(XR_RUNTIME_NAMESPACE_EXTENT_OPERAND, 2,
+                                                   XR_RUNTIME_EXTENT_OPERAND_NONE);
     return record;
 }
 
@@ -322,36 +313,30 @@ static XrRuntimeRecordAbi make_layout_record(void) {
                      XR_RUNTIME_FIELD_LAYOUT_CLONE_ID, XR_RUNTIME_FIELD_STABLE_ID);
     SET_RECORD_FIELD(record, 8, XrRuntimeLayoutDescriptor, eq_hash_id, XrStableId,
                      XR_RUNTIME_FIELD_LAYOUT_EQ_HASH_ID, XR_RUNTIME_FIELD_STABLE_ID);
-    SET_RECORD_FIELD(record, 9, XrRuntimeLayoutDescriptor, extent_fingerprint,
-                     XrFingerprint, XR_RUNTIME_FIELD_LAYOUT_EXTENT_FINGERPRINT,
-                     XR_RUNTIME_FIELD_FINGERPRINT);
+    SET_RECORD_FIELD(record, 9, XrRuntimeLayoutDescriptor, extent_fingerprint, XrFingerprint,
+                     XR_RUNTIME_FIELD_LAYOUT_EXTENT_FINGERPRINT, XR_RUNTIME_FIELD_FINGERPRINT);
     SET_RECORD_FIELD(record, 10, XrRuntimeLayoutDescriptor, fixed_prefix_size, uint64_t,
                      XR_RUNTIME_FIELD_LAYOUT_FIXED_PREFIX_SIZE, XR_RUNTIME_FIELD_UNSIGNED);
     SET_RECORD_FIELD(record, 11, XrRuntimeLayoutDescriptor, alignment, uint32_t,
                      XR_RUNTIME_FIELD_LAYOUT_ALIGNMENT, XR_RUNTIME_FIELD_UNSIGNED);
-    SET_RECORD_FIELD(record, 12, XrRuntimeLayoutDescriptor, allowed_semantic_domains,
-                     uint32_t, XR_RUNTIME_FIELD_LAYOUT_SEMANTIC_DOMAINS,
-                     XR_RUNTIME_FIELD_BITSET);
-    SET_RECORD_FIELD(record, 13, XrRuntimeLayoutDescriptor, allowed_materializations,
-                     uint32_t, XR_RUNTIME_FIELD_LAYOUT_MATERIALIZATIONS,
-                     XR_RUNTIME_FIELD_BITSET);
+    SET_RECORD_FIELD(record, 12, XrRuntimeLayoutDescriptor, allowed_semantic_domains, uint32_t,
+                     XR_RUNTIME_FIELD_LAYOUT_SEMANTIC_DOMAINS, XR_RUNTIME_FIELD_BITSET);
+    SET_RECORD_FIELD(record, 13, XrRuntimeLayoutDescriptor, allowed_materializations, uint32_t,
+                     XR_RUNTIME_FIELD_LAYOUT_MATERIALIZATIONS, XR_RUNTIME_FIELD_BITSET);
     SET_RECORD_FIELD(record, 14, XrRuntimeLayoutDescriptor, flags, uint32_t,
                      XR_RUNTIME_FIELD_LAYOUT_FLAGS, XR_RUNTIME_FIELD_BITSET);
     SET_RECORD_FIELD(record, 15, XrRuntimeLayoutDescriptor, fingerprint, XrFingerprint,
                      XR_RUNTIME_FIELD_LAYOUT_FINGERPRINT, XR_RUNTIME_FIELD_FINGERPRINT);
-    record.namespaces[0] = make_bitmask_namespace(
-        XR_RUNTIME_NAMESPACE_LAYOUT_FLAGS, 4, 4, 60);
+    record.namespaces[0] = make_bitmask_namespace(XR_RUNTIME_NAMESPACE_LAYOUT_FLAGS, 4, 4, 60);
     return record;
 }
 
 static XrRuntimeRecordAbi make_limits_record(void) {
     XrRuntimeRecordAbi record;
-    init_record(&record, XR_RUNTIME_RECORD_EXTENT_LIMITS,
-                (uint16_t) sizeof(XrRuntimeExtentLimits),
+    init_record(&record, XR_RUNTIME_RECORD_EXTENT_LIMITS, (uint16_t) sizeof(XrRuntimeExtentLimits),
                 (uint16_t) _Alignof(XrRuntimeExtentLimits), 2, 0);
     SET_RECORD_FIELD(record, 0, XrRuntimeExtentLimits, max_allocation_bytes, uint64_t,
-                     XR_RUNTIME_FIELD_LIMIT_MAX_ALLOCATION_BYTES,
-                     XR_RUNTIME_FIELD_UNSIGNED);
+                     XR_RUNTIME_FIELD_LIMIT_MAX_ALLOCATION_BYTES, XR_RUNTIME_FIELD_UNSIGNED);
     SET_RECORD_FIELD(record, 1, XrRuntimeExtentLimits, max_alignment, uint32_t,
                      XR_RUNTIME_FIELD_LIMIT_MAX_ALIGNMENT, XR_RUNTIME_FIELD_UNSIGNED);
     return record;
@@ -364,9 +349,8 @@ static XrRuntimeRecordAbi make_evaluated_record(void) {
                 (uint16_t) _Alignof(XrRuntimeEvaluatedExtent), 7, 0);
     SET_RECORD_FIELD(record, 0, XrRuntimeEvaluatedExtent, extent_id, XrStableId,
                      XR_RUNTIME_FIELD_EVALUATED_EXTENT_ID, XR_RUNTIME_FIELD_STABLE_ID);
-    SET_RECORD_FIELD(record, 1, XrRuntimeEvaluatedExtent, extent_fingerprint,
-                     XrFingerprint, XR_RUNTIME_FIELD_EVALUATED_EXTENT_FINGERPRINT,
-                     XR_RUNTIME_FIELD_FINGERPRINT);
+    SET_RECORD_FIELD(record, 1, XrRuntimeEvaluatedExtent, extent_fingerprint, XrFingerprint,
+                     XR_RUNTIME_FIELD_EVALUATED_EXTENT_FINGERPRINT, XR_RUNTIME_FIELD_FINGERPRINT);
     SET_RECORD_FIELD(record, 2, XrRuntimeEvaluatedExtent, bytes, uint64_t,
                      XR_RUNTIME_FIELD_EVALUATED_BYTES, XR_RUNTIME_FIELD_UNSIGNED);
     SET_RECORD_FIELD(record, 3, XrRuntimeEvaluatedExtent, operand, uint64_t,
@@ -405,9 +389,9 @@ static XrRuntimeExtentProviderCallbackAbi make_callback_abi(void) {
         .error_normalization = XR_RUNTIME_PROVIDER_ERROR_NON_OK_TO_REJECTED,
     };
     callback.contract_id = make_id(70);
-    callback.status_namespace = make_enum_namespace(
-        XR_RUNTIME_NAMESPACE_STATUS, 1, UINT8_MAX, XR_RUNTIME_ABI_STATUS_COUNT, 80,
-        XR_RUNTIME_ABI_OK);
+    callback.status_namespace =
+        make_enum_namespace(XR_RUNTIME_NAMESPACE_STATUS, 1, UINT8_MAX, XR_RUNTIME_ABI_STATUS_COUNT,
+                            80, XR_RUNTIME_ABI_OK);
     return callback;
 }
 
@@ -438,8 +422,8 @@ static XrRuntimeAbiContract make_runtime_abi(void) {
 }
 
 static XrTargetProviderCallSlotAbi make_call_slot(uint8_t value_kind, uint8_t width,
-                                                  uint8_t alignment,
-                                                  uint8_t ownership, uint8_t flags) {
+                                                  uint8_t alignment, uint8_t ownership,
+                                                  uint8_t flags) {
     XrTargetProviderCallSlotAbi slot = {
         .value_kind = value_kind,
         .width = width,
@@ -450,9 +434,9 @@ static XrTargetProviderCallSlotAbi make_call_slot(uint8_t value_kind, uint8_t wi
     return slot;
 }
 
-static XrTargetProviderCallAbiContract make_call_abi(
-    XrTargetProviderCallSlotAbi result,
-    const XrTargetProviderCallSlotAbi *parameters, uint16_t parameter_count) {
+static XrTargetProviderCallAbiContract make_call_abi(XrTargetProviderCallSlotAbi result,
+                                                     const XrTargetProviderCallSlotAbi *parameters,
+                                                     uint16_t parameter_count) {
     XrTargetProviderCallAbiContract abi = {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .parameter_count = parameter_count,
@@ -467,9 +451,10 @@ static XrTargetProviderCallAbiContract make_call_abi(
     return abi;
 }
 
-static XrTargetProviderOperationContract make_operation(
-    uint8_t id_seed, XrTargetProviderCallAbiContract call_abi, uint32_t effects,
-    uint32_t lifetime, uint32_t failures) {
+static XrTargetProviderOperationContract make_operation(uint8_t id_seed,
+                                                        XrTargetProviderCallAbiContract call_abi,
+                                                        uint32_t effects, uint32_t lifetime,
+                                                        uint32_t failures) {
     XrTargetProviderOperationContract operation = {
         .stable_id = {{0}},
         .call_abi = call_abi,
@@ -483,15 +468,13 @@ static XrTargetProviderOperationContract make_operation(
 
 static void make_providers(XrTargetProviderContract providers[2]) {
     XrTargetProviderCallSlotAbi void_result = make_call_slot(
-        XR_TARGET_PROVIDER_CALL_VALUE_VOID, 0, 0,
-        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
-    XrTargetProviderCallSlotAbi usize_slot = make_call_slot(
-        XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 8, 8,
-        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+        XR_TARGET_PROVIDER_CALL_VALUE_VOID, 0, 0, XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi usize_slot =
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 8, 8,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
     XrTargetProviderCallSlotAbi allocated_result = make_call_slot(
         XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, 8, 8,
-        XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED,
-        XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE);
+        XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED, XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE);
     XrTargetProviderCallSlotAbi allocate_parameters[2] = {usize_slot, usize_slot};
     XrTargetProviderCallSlotAbi free_parameters[3] = {
         make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, 8, 8,
@@ -523,13 +506,11 @@ static void make_providers(XrTargetProviderContract providers[2]) {
     providers[0].contract_id = make_id(200);
     providers[0].operations[0] = make_operation(
         10, make_call_abi(allocated_result, allocate_parameters, 2),
-        XR_TARGET_PROVIDER_EFFECT_ALLOCATES,
-        XR_TARGET_PROVIDER_LIFETIME_RETURNS_OWNED,
+        XR_TARGET_PROVIDER_EFFECT_ALLOCATES, XR_TARGET_PROVIDER_LIFETIME_RETURNS_OWNED,
         XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS);
-    providers[0].operations[1] = make_operation(
-        11, make_call_abi(void_result, free_parameters, 3),
-        XR_TARGET_PROVIDER_EFFECT_DEALLOCATES,
-        XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED, 0);
+    providers[0].operations[1] = make_operation(11, make_call_abi(void_result, free_parameters, 3),
+                                                XR_TARGET_PROVIDER_EFFECT_DEALLOCATES,
+                                                XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED, 0);
 
     providers[1] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
@@ -543,22 +524,19 @@ static void make_providers(XrTargetProviderContract providers[2]) {
     };
     providers[1].contract_id = make_id(201);
     providers[1].operations[0] = make_operation(
-        20, make_call_abi(void_result, panic_parameters, 2),
-        XR_TARGET_PROVIDER_EFFECT_PANICS, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
-        XR_TARGET_PROVIDER_FAILURE_NO_RETURN);
+        20, make_call_abi(void_result, panic_parameters, 2), XR_TARGET_PROVIDER_EFFECT_PANICS,
+        XR_TARGET_PROVIDER_LIFETIME_BORROWS, XR_TARGET_PROVIDER_FAILURE_NO_RETURN);
 }
 
 static void test_object_header_known_answer_and_mutation(void) {
     XrRuntimeObjectHeaderAbi abi = make_object_header_abi();
     XrFingerprint fingerprint;
-    CHECK(xr_runtime_object_header_abi_fingerprint(&abi, &fingerprint) ==
-              XR_RUNTIME_ABI_OK,
+    CHECK(xr_runtime_object_header_abi_fingerprint(&abi, &fingerprint) == XR_RUNTIME_ABI_OK,
           "canonical object-header ABI fingerprints");
     static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
-        0x17, 0x84, 0x08, 0xb9, 0x94, 0x34, 0xc6, 0xc9,
-        0x74, 0x43, 0x78, 0x7a, 0xb9, 0x1c, 0xe5, 0x2d,
-        0x5f, 0xe5, 0x8a, 0xf7, 0xf8, 0x81, 0x70, 0x75,
-        0xa4, 0xc8, 0xcd, 0x6b, 0x1f, 0xd2, 0x4c, 0x18,
+        0x17, 0x84, 0x08, 0xb9, 0x94, 0x34, 0xc6, 0xc9, 0x74, 0x43, 0x78,
+        0x7a, 0xb9, 0x1c, 0xe5, 0x2d, 0x5f, 0xe5, 0x8a, 0xf7, 0xf8, 0x81,
+        0x70, 0x75, 0xa4, 0xc8, 0xcd, 0x6b, 0x1f, 0xd2, 0x4c, 0x18,
     };
     if (memcmp(fingerprint.bytes, expected, sizeof(expected)) != 0)
         print_fingerprint("object-header fingerprint", fingerprint);
@@ -568,8 +546,7 @@ static void test_object_header_known_answer_and_mutation(void) {
     XrRuntimeObjectHeaderAbi mutated = abi;
     mutated.object_kinds.entries[2].encoding = 4;
     XrFingerprint changed;
-    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
-                  XR_RUNTIME_ABI_OK &&
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_OK &&
               !fingerprint_equal(fingerprint, changed),
           "valid object-kind registry mutation changes the fingerprint");
 
@@ -594,8 +571,7 @@ static void test_object_header_known_answer_and_mutation(void) {
               XR_RUNTIME_ABI_INVALID_ORDER,
           "object-kind stable IDs are strictly ordered");
     mutated = abi;
-    mutated.object_kinds.entries[1].encoding =
-        mutated.object_kinds.entries[0].encoding;
+    mutated.object_kinds.entries[1].encoding = mutated.object_kinds.entries[0].encoding;
     CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
               XR_RUNTIME_ABI_INVALID_ORDER,
           "object-kind numeric encodings are unique");
@@ -673,10 +649,9 @@ static void test_runtime_known_answer_and_mutation(void) {
     CHECK(xr_runtime_abi_contract_fingerprint(&abi, &fingerprint) == XR_RUNTIME_ABI_OK,
           "whole runtime ABI fingerprints");
     static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
-        0x8d, 0x92, 0xd1, 0x65, 0xa3, 0xb3, 0x5f, 0x34,
-        0xaf, 0x94, 0xf5, 0xa4, 0xf7, 0xff, 0xd3, 0xb9,
-        0xf1, 0x79, 0x67, 0x99, 0xb2, 0x0d, 0x0e, 0xac,
-        0xe5, 0x87, 0x39, 0x33, 0x98, 0x72, 0xf1, 0x98,
+        0x8d, 0x92, 0xd1, 0x65, 0xa3, 0xb3, 0x5f, 0x34, 0xaf, 0x94, 0xf5,
+        0xa4, 0xf7, 0xff, 0xd3, 0xb9, 0xf1, 0x79, 0x67, 0x99, 0xb2, 0x0d,
+        0x0e, 0xac, 0xe5, 0x87, 0x39, 0x33, 0x98, 0x72, 0xf1, 0x98,
     };
     if (memcmp(fingerprint.bytes, expected, sizeof(expected)) != 0)
         print_fingerprint("runtime ABI fingerprint", fingerprint);
@@ -700,92 +675,73 @@ static void test_runtime_known_answer_and_mutation(void) {
           "dynamic-value overlap fails without publishing a digest");
     mutated = abi;
     mutated.dynamic_value.tags[1].stable_id = make_id(19);
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_ORDER,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_ORDER,
           "dynamic tag registry is stable-ID sorted");
     mutated = abi;
     mutated.dynamic_value.tags[1].encoding = mutated.dynamic_value.tags[0].encoding;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_ORDER,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_ORDER,
           "dynamic tag encodings are unique");
     mutated = abi;
     mutated.dynamic_value.tags[0].allowed_flags = 1;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_POLICY,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_POLICY,
           "canonical null tag rejects nonzero flags");
     mutated = abi;
     mutated.dynamic_value.reserved_zero_mask ^= UINT64_C(4);
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_MASK,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_MASK,
           "dynamic flag masks cover the full namespace exactly");
     mutated = abi;
     mutated.dynamic_value.tag_count = XR_RUNTIME_ABI_MAX_DYNAMIC_TAGS + 1;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_BUDGET_EXCEEDED,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_BUDGET_EXCEEDED,
           "dynamic tag count obeys the hard budget");
     mutated = abi;
     mutated.dynamic_value.tags[3].stable_id = make_id(23);
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_POLICY,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_POLICY,
           "unused dynamic registry slots must be zero");
     mutated = abi;
     mutated.pointer_width = 16;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_SHAPE,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_SHAPE,
           "unsupported pointer width is rejected");
     mutated = abi;
     mutated.extent_descriptor.field_count = XR_RUNTIME_ABI_MAX_RECORD_FIELDS + 1;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_BUDGET_EXCEEDED,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_BUDGET_EXCEEDED,
           "runtime record field count obeys the hard budget");
     mutated = abi;
-    mutated.extent_descriptor.namespaces[0].entry_count =
-        XR_RUNTIME_ABI_MAX_ENUM_VALUES + 1;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_BUDGET_EXCEEDED,
+    mutated.extent_descriptor.namespaces[0].entry_count = XR_RUNTIME_ABI_MAX_ENUM_VALUES + 1;
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_BUDGET_EXCEEDED,
           "runtime enum namespace obeys the hard budget");
     mutated = abi;
-    mutated.domain_identity.namespaces[0].role =
-        XR_RUNTIME_NAMESPACE_MATERIALIZATION;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_SHAPE,
+    mutated.domain_identity.namespaces[0].role = XR_RUNTIME_NAMESPACE_MATERIALIZATION;
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_SHAPE,
           "runtime enum namespace order and role are exact");
     mutated = abi;
     mutated.layout_descriptor.namespaces[0].reserved_zero_mask ^= UINT64_C(16);
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_MASK,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_MASK,
           "record bitmask namespace requires an exact reserved mask");
     mutated = abi;
     uint16_t field_role = mutated.extent_descriptor.fields[0].role;
-    mutated.extent_descriptor.fields[0].role =
-        mutated.extent_descriptor.fields[1].role;
+    mutated.extent_descriptor.fields[0].role = mutated.extent_descriptor.fields[1].role;
     mutated.extent_descriptor.fields[1].role = field_role;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_ORDER,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_ORDER,
           "runtime record semantic field order is exact");
     mutated = abi;
-    mutated.extent_limits.fields[2] = make_field(
-        XR_RUNTIME_FIELD_LIMIT_MAX_ALIGNMENT, 12, 4, 4, XR_RUNTIME_FIELD_UNSIGNED);
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_POLICY,
+    mutated.extent_limits.fields[2] =
+        make_field(XR_RUNTIME_FIELD_LIMIT_MAX_ALIGNMENT, 12, 4, 4, XR_RUNTIME_FIELD_UNSIGNED);
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_POLICY,
           "unused runtime record field slots must be zero");
     mutated = abi;
     mutated.extent_provider_callback.status_namespace.entry_count--;
-    memset(&mutated.extent_provider_callback.status_namespace.entries[
-               mutated.extent_provider_callback.status_namespace.entry_count],
+    memset(&mutated.extent_provider_callback.status_namespace
+                .entries[mutated.extent_provider_callback.status_namespace.entry_count],
            0, sizeof(mutated.extent_provider_callback.status_namespace.entries[0]));
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_SHAPE,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_SHAPE,
           "provider callback status namespace must be complete");
     mutated = abi;
     mutated.extent_provider_callback.reserved32 = 1;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_POLICY,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_POLICY,
           "provider callback reserved words must be zero");
     mutated = abi;
     mutated.checked_arithmetic_policy = XR_RUNTIME_CHECKED_ARITHMETIC_INVALID;
-    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) ==
-              XR_RUNTIME_ABI_INVALID_POLICY,
+    CHECK(xr_runtime_abi_contract_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_INVALID_POLICY,
           "unknown checked-arithmetic policy is rejected");
 }
 
@@ -794,14 +750,12 @@ static void test_provider_call_abi_known_answer_and_mutation(void) {
     make_providers(providers);
     XrTargetProviderCallAbiContract abi = providers[0].operations[0].call_abi;
     XrFingerprint fingerprint;
-    CHECK(xr_target_provider_call_abi_fingerprint(&abi, &fingerprint) ==
-              XR_RUNTIME_ABI_OK,
+    CHECK(xr_target_provider_call_abi_fingerprint(&abi, &fingerprint) == XR_RUNTIME_ABI_OK,
           "structured provider call ABI fingerprints");
     static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
-        0x9f, 0x49, 0xf6, 0x68, 0x04, 0xb1, 0x62, 0x8e,
-        0xfb, 0xd5, 0x5a, 0x4b, 0xcb, 0x68, 0x6b, 0xb9,
-        0x26, 0x8a, 0x33, 0xe3, 0x7e, 0xe7, 0xc1, 0xc8,
-        0x94, 0x7c, 0x25, 0xac, 0x28, 0xd3, 0x40, 0x70,
+        0x9f, 0x49, 0xf6, 0x68, 0x04, 0xb1, 0x62, 0x8e, 0xfb, 0xd5, 0x5a,
+        0x4b, 0xcb, 0x68, 0x6b, 0xb9, 0x26, 0x8a, 0x33, 0xe3, 0x7e, 0xe7,
+        0xc1, 0xc8, 0x94, 0x7c, 0x25, 0xac, 0x28, 0xd3, 0x40, 0x70,
     };
     if (memcmp(fingerprint.bytes, expected, sizeof(expected)) != 0)
         print_fingerprint("provider call ABI fingerprint", fingerprint);
@@ -811,8 +765,7 @@ static void test_provider_call_abi_known_answer_and_mutation(void) {
     XrTargetProviderCallAbiContract mutated = abi;
     mutated.parameters[0].value_kind = XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER;
     XrFingerprint changed;
-    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
-                  XR_RUNTIME_ABI_OK &&
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) == XR_RUNTIME_ABI_OK &&
               !fingerprint_equal(fingerprint, changed),
           "valid structured call ABI mutation changes its fingerprint");
 
@@ -835,8 +788,7 @@ static void test_provider_call_abi_known_answer_and_mutation(void) {
               XR_RUNTIME_ABI_INVALID_POLICY,
           "unused call ABI parameter slots must be zero");
     mutated = abi;
-    mutated.parameters[0].ownership =
-        XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED;
+    mutated.parameters[0].ownership = XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED;
     CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
               XR_RUNTIME_ABI_INVALID_SHAPE,
           "parameter ownership direction is fail closed");
@@ -860,6 +812,28 @@ static void test_provider_call_abi_known_answer_and_mutation(void) {
 static void test_provider_set_known_answer_and_mutation(void) {
     XrTargetProviderContract providers[2];
     make_providers(providers);
+    XrFingerprint provider_fingerprint;
+    CHECK(xr_target_provider_contract_fingerprint(&providers[0], &provider_fingerprint) ==
+              XR_RUNTIME_ABI_OK,
+          "individual provider contract fingerprints");
+    static const uint8_t expected_provider[XR_FINGERPRINT_BYTES] = {
+        0xe7, 0x9e, 0xa3, 0x4c, 0xf8, 0x0a, 0x02, 0x64, 0xdf, 0x11, 0x62,
+        0x80, 0xbc, 0x13, 0x54, 0x8e, 0x00, 0xb6, 0xf5, 0xe4, 0x61, 0xe8,
+        0xcf, 0x00, 0x47, 0x77, 0x5a, 0x90, 0xdc, 0x08, 0xe5, 0xb8,
+    };
+    if (memcmp(provider_fingerprint.bytes, expected_provider, sizeof(expected_provider)) != 0)
+        print_fingerprint("provider contract fingerprint", provider_fingerprint);
+    CHECK(memcmp(provider_fingerprint.bytes, expected_provider, sizeof(expected_provider)) == 0,
+          "provider contract fingerprint matches the frozen known answer");
+    XrTargetProviderContract provider_mutation = providers[0];
+    provider_mutation.operations[0].call_abi.parameters[0].value_kind =
+        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER;
+    XrFingerprint provider_changed;
+    CHECK(xr_target_provider_contract_fingerprint(&provider_mutation, &provider_changed) ==
+                  XR_RUNTIME_ABI_OK &&
+              !fingerprint_equal(provider_fingerprint, provider_changed),
+          "exact provider ABI mutation changes the contract fingerprint");
+
     uint64_t provider_mask = 0;
     XrFingerprint fingerprint;
     CHECK(xr_target_provider_set_fingerprint(providers, 2, &provider_mask, &fingerprint) ==
@@ -870,10 +844,9 @@ static void test_provider_set_known_answer_and_mutation(void) {
     CHECK(provider_mask == expected_mask,
           "provider mask is derived exactly from verified provider kinds");
     static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
-        0x31, 0x42, 0xfb, 0xdb, 0x71, 0x05, 0xd9, 0xda,
-        0x10, 0x29, 0xf2, 0x5f, 0x02, 0xcb, 0xd4, 0xc7,
-        0x1c, 0x79, 0xa3, 0xce, 0x2f, 0x0c, 0x9e, 0x87,
-        0x0e, 0xba, 0xff, 0x90, 0xf7, 0x55, 0x81, 0x2f,
+        0x31, 0x42, 0xfb, 0xdb, 0x71, 0x05, 0xd9, 0xda, 0x10, 0x29, 0xf2,
+        0x5f, 0x02, 0xcb, 0xd4, 0xc7, 0x1c, 0x79, 0xa3, 0xce, 0x2f, 0x0c,
+        0x9e, 0x87, 0x0e, 0xba, 0xff, 0x90, 0xf7, 0x55, 0x81, 0x2f,
     };
     if (memcmp(fingerprint.bytes, expected, sizeof(expected)) != 0)
         print_fingerprint("provider-set fingerprint", fingerprint);
@@ -889,8 +862,7 @@ static void test_provider_set_known_answer_and_mutation(void) {
     uint64_t freestanding_mask = 0;
     XrFingerprint freestanding_fingerprint;
     CHECK(xr_target_provider_set_fingerprint(freestanding, 2, &freestanding_mask,
-                                             &freestanding_fingerprint) ==
-                  XR_RUNTIME_ABI_OK &&
+                                             &freestanding_fingerprint) == XR_RUNTIME_ABI_OK &&
               freestanding_mask == expected_mask &&
               !fingerprint_equal(fingerprint, freestanding_fingerprint),
           "freestanding mandatory providers form a distinct valid contract");
@@ -921,9 +893,9 @@ static void test_provider_set_known_answer_and_mutation(void) {
     CHECK(xr_target_provider_set_fingerprint(&providers[1], 1, &changed_mask, &changed) ==
               XR_RUNTIME_ABI_INVALID_PROVIDER_SET,
           "missing mandatory allocator provider is rejected");
-    CHECK(xr_target_provider_set_fingerprint(
-              providers, XR_RUNTIME_ABI_MAX_PROVIDERS + 1, &changed_mask, &changed) ==
-              XR_RUNTIME_ABI_BUDGET_EXCEEDED,
+    CHECK(xr_target_provider_set_fingerprint(providers, XR_RUNTIME_ABI_MAX_PROVIDERS + 1,
+                                             &changed_mask,
+                                             &changed) == XR_RUNTIME_ABI_BUDGET_EXCEEDED,
           "provider set count obeys the hard budget before reading entries");
 
     memcpy(mutated, providers, sizeof(mutated));
@@ -937,8 +909,7 @@ static void test_provider_set_known_answer_and_mutation(void) {
               XR_RUNTIME_ABI_INVALID_ORDER,
           "provider operations are stable-ID sorted");
     memcpy(mutated, providers, sizeof(mutated));
-    memset(&mutated[0].operations[0].call_abi, 0,
-           sizeof(mutated[0].operations[0].call_abi));
+    memset(&mutated[0].operations[0].call_abi, 0, sizeof(mutated[0].operations[0].call_abi));
     CHECK(xr_target_provider_set_fingerprint(mutated, 2, &changed_mask, &changed) ==
               XR_RUNTIME_ABI_INVALID_SCHEMA,
           "missing structured operation call ABI is rejected");

@@ -53,14 +53,14 @@ typedef struct XrCompilerSession XrCompilerSession;
 /* ========== Runtime Objects ========== */
 
 typedef struct XrClass XrClass;
-typedef struct XrInstance XrInstance;
+typedef struct XrObjectInstance XrObjectInstance;
 typedef struct XrClosure XrClosure;
 typedef struct XrArray XrArray;
 typedef struct XrMap XrMap;
 typedef struct XrSet XrSet;
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrChannel XrChannel;
-// Json uses XrInstance storage; the XrObjectInstance runtime handle is defined with
+// Json uses XrObjectInstance storage; the XrObjectInstance runtime handle is defined with
 // the object API rather than as a separate struct declaration here.
 typedef struct XrBigInt XrBigInt;
 typedef struct XrIterator XrIterator;

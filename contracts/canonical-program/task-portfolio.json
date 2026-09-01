@@ -680,7 +680,7 @@
     {
       "task_id": 298,
       "role": "W4 target profile, boundary ABI, runtime kernel, and provider contract",
-      "status": "READY",
+      "status": "COMPLETE",
       "work_package": "W4",
       "prerequisites": [
         295,
@@ -716,7 +716,7 @@
     {
       "task_id": 299,
       "role": "W5 universal typed-program VM",
-      "status": "BLOCKED_ON_298",
+      "status": "READY",
       "work_package": "W5",
       "prerequisites": [
         297,
@@ -751,7 +751,7 @@
     {
       "task_id": 300,
       "role": "W6 AOT BackendIR and generated C",
-      "status": "BLOCKED_ON_298",
+      "status": "READY",
       "work_package": "W6",
       "prerequisites": [
         297,

@@ -112,7 +112,7 @@ TEST(array_push_owned_checked_status_and_atomicity) {
     XrArray *ref_arr = xr_array_new(main_coro);
     ASSERT_NOT_NULL(ref_arr);
     XrValue reference =
-        xr_value_from_instance((struct XrInstance *) (void *) &instance);
+        xr_value_from_instance((struct XrObjectInstance *) (void *) &instance);
     ASSERT_EQ_INT(xr_array_push_owned_checked(xr_value_from_array(ref_arr), reference),
                   XR_ARRAY_PUSH_OK);
     ASSERT_TRUE(ref_arr->contains_refs);

@@ -38,14 +38,14 @@ static XrClass *range_class(XrVMRuntime *X) {
 bool xr_value_is_range(XrVMRuntime *X, XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(v);
     return xr_class_instanceof(inst->klass, range_class(X));
 }
 
 XrRange *xr_value_get_range_body(XrVMRuntime *X, XrValue v) {
     if (!xr_value_is_range(X, v))
         return NULL;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(v);
     return (XrRange *) xr_instance_native_body(inst);
 }
 
@@ -54,7 +54,7 @@ XrRange *xr_value_get_range_body(XrVMRuntime *X, XrValue v) {
 XrValue xr_range_from_core(XrVMRuntime *X, XrRangeCore core) {
     XR_DCHECK(X != NULL, "xr_range_from_core: NULL isolate");
     XR_DCHECK(core.step != 0, "xr_range_from_core: step must not be zero");
-    XrInstance *inst = xr_instance_new(X, range_class(X));
+    XrObjectInstance *inst = xr_instance_new(X, range_class(X));
     if (!inst)
         return xr_null();
     XrRange *body = (XrRange *) xr_instance_native_body(inst);
@@ -172,7 +172,7 @@ static XrValue m_range_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, i
     (void) argc;
     if (!xr_value_is_range(iso, self))
         return xr_null();
-    XrIterator *iter = xr_iterator_new_from_range(NULL, (XrInstance *) XR_TO_PTR(self));
+    XrIterator *iter = xr_iterator_new_from_range(NULL, (XrObjectInstance *) XR_TO_PTR(self));
     return xr_value_from_iterator(iter);
 }
 
@@ -187,7 +187,7 @@ static XrValue m_range_count(XrVMRuntime *iso, XrValue self, XrValue *args, int 
 
 /* ========== Native Body Descriptor ========== */
 
-static void range_body_init(XrInstance *inst, void *body) {
+static void range_body_init(XrObjectInstance *inst, void *body) {
     (void) inst;
     XrRange *r = (XrRange *) body;
     r->start = 0;

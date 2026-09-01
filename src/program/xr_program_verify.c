@@ -141,12 +141,20 @@ static void free_function(XrValidatedFunction *function) {
 void xr_validated_program_free(XrValidatedProgram *program) {
     if (!program)
         return;
+    if (atomic_fetch_sub_explicit(&program->references, 1u, memory_order_acq_rel) != 1u)
+        return;
     for (uint32_t function = 0; function < program->function_count; ++function)
         free_function(&program->functions[function]);
     xr_free(program->functions);
     xr_free(program->constants);
     xr_free(program->bytes);
     xr_free(program);
+}
+
+XrValidatedProgram *xr_validated_program_retain(XrValidatedProgram *program) {
+    if (program)
+        atomic_fetch_add_explicit(&program->references, 1u, memory_order_relaxed);
+    return program;
 }
 
 static bool parse_constants(VerifyContext *context, const XrProgramView *view) {
@@ -951,6 +959,7 @@ XrProgramVerifyStatus xr_program_validate(const uint8_t *bytes, size_t size,
             *diagnostic_out = context.diagnostic;
         return XR_PROGRAM_VERIFY_OUT_OF_MEMORY;
     }
+    atomic_init(&context.program->references, 1u);
     context.program->bytes = xr_malloc(size);
     if (!context.program->bytes) {
         reject(&context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, no_location());

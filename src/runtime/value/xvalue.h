@@ -176,7 +176,7 @@ XR_FUNC bool xr_value_is_enum_ctor(XrValue v);
  * from xrange.h which walks the class super-chain. */
 #define XR_IS_MODULE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TMODULE)
 /* Iterator is no longer a dedicated GC type; check builtin_kind.
- * Implementation in xvalue.c keeps the XrInstance layout out of this
+ * Implementation in xvalue.c keeps the XrObjectInstance layout out of this
  * header (consumers don't need to include xclass.h / xinstance.h). */
 XR_FUNC bool xr_value_is_iterator(XrValue v);
 #define XR_IS_ITERATOR(v) xr_value_is_iterator(v)
@@ -392,7 +392,7 @@ XR_FUNC uint32_t xr_value_str_len(const XrValue *v);
 #define XR_TO_MAP(v) ((struct XrMap *) (v).ptr)
 #define XR_TO_SET(v) ((struct XrSet *) (v).ptr)
 #define XR_TO_CLASS(v) ((struct XrClass *) (v).ptr)
-#define XR_TO_INSTANCE(v) ((struct XrInstance *) (v).ptr)
+#define XR_TO_INSTANCE(v) ((struct XrObjectInstance *) (v).ptr)
 #define XR_TO_MODULE(v) ((struct XrModule *) (v).ptr)
 #define XR_TO_CORO(v) ((struct XrCoroutine *) (v).ptr)
 #define XR_TO_TASK(v) ((struct XrTask *) (v).ptr)
@@ -473,15 +473,15 @@ XR_FUNC bool xr_value_is_set(XrValue v);
 XR_FUNC struct XrSet *xr_value_to_set(XrValue v);
 
 struct XrClass;
-struct XrInstance;
+struct XrObjectInstance;
 
 XR_FUNC XrValue xr_value_from_class(struct XrClass *cls);
 XR_FUNC bool xr_value_is_class(XrValue v);
 XR_FUNC struct XrClass *xr_value_to_class(XrValue v);
 
-XR_FUNC XrValue xr_value_from_instance(struct XrInstance *inst);
+XR_FUNC XrValue xr_value_from_instance(struct XrObjectInstance *inst);
 XR_FUNC bool xr_value_is_instance(XrValue v);
-XR_FUNC struct XrInstance *xr_value_to_instance(XrValue v);
+XR_FUNC struct XrObjectInstance *xr_value_to_instance(XrValue v);
 
 struct XrModule;
 XR_FUNC XrValue xr_value_from_module(struct XrModule *module);
@@ -543,7 +543,7 @@ XR_STATIC_ASSERT(sizeof(double) == 8, "double must be 8 bytes");
         struct XrMap *: xr_value_from_map,                                                         \
         struct XrSet *: xr_value_from_set,                                                         \
         struct XrClass *: xr_value_from_class,                                                     \
-        struct XrInstance *: xr_value_from_instance,                                               \
+        struct XrObjectInstance *: xr_value_from_instance,                                               \
         struct XrClosure *: xr_value_from_closure,                                                 \
         struct XrCFunction *: xr_value_from_cfunction,                                             \
         struct XrModule *: xr_value_from_module)(x)

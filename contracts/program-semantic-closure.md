@@ -354,7 +354,7 @@ require the independently verified program authority frozen above.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 0d5aa42612bea7d0145d889d98d059120ba06f19f51901784ff4cf8823d7704a
+anchor-sha256: CMakeLists.txt 0140e0d4e771cb65600913d5220cbeeec983a212b8194e1446d14e8866fcca04
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 9eeade35f1bf2115b5c6c1b0d76453e9848f11a9916489085701f1c8319e42e1
@@ -399,7 +399,7 @@ anchor-sha256: src/ir/xi_module.h 2ee8794e21ef18162b5c045e795a62a952762829c19af7
 anchor-sha256: src/ir/xi_lower.h 297d6165a47ac164a12df522091e970093fcc2ce35153378d5fd717019a8da72
 anchor-sha256: src/ir/xi_lower.c 5c83d887833b6197c71328aa2f126d4a18bd8dfc318f73cdc9e745fd2b4408e7
 anchor-sha256: src/ir/xi_lower_expr.c 255f4e9d373d03f25a13afe05ce2ec69e0d2da60452e61b4a5d547a464cd63ab
-anchor-sha256: src/ir/xi_lower_stmt.c 49fafd4fe4f39ec34bb8b763d4cfe96d30efe3d8c71d881abbf693f054490a93
+anchor-sha256: src/ir/xi_lower_stmt.c f3d4a4eb2f59158d3ed33c1067642e861b60df2bfd09d69ec6b28089af043a72
 anchor-sha256: src/ir/xi_pipeline.c ed4fe49062c642e21111ce78360ae3816e0105baf59badc938ef35a2cb247fd4
 anchor-sha256: src/ir/xi_program_semantic.h 090db1d96c7fe1d2102c24293669ea1bee060a390fa8bfcb9cc63985a8c4955e
 anchor-sha256: src/ir/xi_program_semantic.c f177072125ef54d70f200c816cd974708b19debd7eab932d9a7975f42966749b
@@ -417,7 +417,7 @@ anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 618cd82e5acd711031f2d0bd1529582f7e157528a0589155a3379466a6cba1c8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 97053c4f88d4360850febc92149fbad9dc2ad8b5bb69d24f203cc80b8818d683
-anchor-sha256: tests/unit/CMakeLists.txt 6d7846d8fb6f24fc54123ac8d1229fec2af22677075eb8176d1dd95c579f4bb0
+anchor-sha256: tests/unit/CMakeLists.txt c2d3a58e4033c6fa81199cda1cadb294fccd52217e73b6d6ada58504ef6f3787
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
 anchor-sha256: src/aot/xaot_bundle.c 16a2e899a2c11b3c64dee5ed2fbc48d43ca967e8eba1487ffe6c9666004f55e1

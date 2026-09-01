@@ -391,7 +391,7 @@ static void pkg_http_read_response(XrVMRuntime *iso, XrValue result, XrValue err
         out->error = xr_strdup("http request produced no response");
         return;
     }
-    XrInstance *response = xr_value_to_instance(result);
+    XrObjectInstance *response = xr_value_to_instance(result);
     XrValue status_v = xr_instance_get_field(iso, response, "status");
     out->status = XR_IS_INT(status_v) ? (int) XR_TO_INT(status_v) : 0;
 

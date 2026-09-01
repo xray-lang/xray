@@ -229,7 +229,7 @@ int xr_struct_layout_field_index(XrVMRuntime *isolate, const XrAggregateLayout *
     return -1;
 }
 
-static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, XrInstance *inst);
+static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, XrObjectInstance *inst);
 
 static bool xr_struct_write_array_bytes(uint8_t *fp, const XrAggregateFieldLayout *field,
                                         XrValue src) {
@@ -464,7 +464,7 @@ XR_FUNC bool xr_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
     }
 }
 
-static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, XrInstance *inst) {
+static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, XrObjectInstance *inst) {
     if (!dst || !inst || !inst->klass || !inst->klass->struct_layout)
         return false;
 
@@ -491,7 +491,7 @@ static bool xr_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, X
     return true;
 }
 
-static uint8_t *xr_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *inst,
+static uint8_t *xr_instance_struct_field_ptr(XrVMRuntime *isolate, XrObjectInstance *inst,
                                              int field_index,
                                              XrAggregateFieldLayout **field_out) {
     if (field_out)
@@ -516,14 +516,14 @@ static uint8_t *xr_instance_struct_field_ptr(XrVMRuntime *isolate, XrInstance *i
     return payload + field->offset;
 }
 
-XR_FUNC bool xr_instance_struct_get_field(XrVMRuntime *isolate, XrInstance *inst,
+XR_FUNC bool xr_instance_struct_get_field(XrVMRuntime *isolate, XrObjectInstance *inst,
                                           int field_index, XrValue *out) {
     XrAggregateFieldLayout *field = NULL;
     uint8_t *fp = xr_instance_struct_field_ptr(isolate, inst, field_index, &field);
     return xr_struct_read_field_value(isolate, fp, field, out);
 }
 
-XR_FUNC bool xr_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *inst,
+XR_FUNC bool xr_instance_struct_set_field(XrVMRuntime *isolate, XrObjectInstance *inst,
                                           int field_index, XrValue value) {
     XrAggregateFieldLayout *field = NULL;
     uint8_t *fp = xr_instance_struct_field_ptr(isolate, inst, field_index, &field);
@@ -543,7 +543,7 @@ static XrValue xr_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValu
         !cls->native_body)
         return xr_null();
 
-    XrInstance *inst = xr_instance_new(isolate, cls);
+    XrObjectInstance *inst = xr_instance_new(isolate, cls);
     if (!inst)
         return xr_null();
     uint8_t *src = xr_struct_ref_payload(isolate, ref, NULL);

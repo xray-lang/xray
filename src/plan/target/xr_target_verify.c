@@ -716,6 +716,32 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
         !profile_machine_features_are_consistent(machine))
         return report(error, error_size, "XR_TARGET_1000",
                       "target machine identity or feature facts are inconsistent");
+    XrTargetSemanticsId target_semantics_id;
+    XrBoundaryAbi boundary_abi;
+    XrRuntimeKernelContract runtime_kernel;
+    xr_target_profile_compute_partitions(facts, &target_semantics_id, &boundary_abi,
+                                         &runtime_kernel);
+    if (!xr_fingerprint_equal(target_semantics_id, profile->target_semantics_id) ||
+        memcmp(&boundary_abi, &profile->boundary_abi, sizeof(boundary_abi)) != 0 ||
+        memcmp(&runtime_kernel, &profile->runtime_kernel, sizeof(runtime_kernel)) != 0)
+        return report(error, error_size, "XR_TARGET_1000",
+                      "target profile partition identity changed after freeze");
+    if (profile->provider_contracts_materialized) {
+        uint64_t provider_mask = 0;
+        XrFingerprint provider_set_id;
+        if (!profile->providers || profile->provider_count == 0 ||
+            profile->provider_count > XR_RUNTIME_ABI_MAX_PROVIDERS ||
+            xr_target_provider_set_fingerprint(profile->providers, profile->provider_count,
+                                               &provider_mask,
+                                               &provider_set_id) != XR_RUNTIME_ABI_OK ||
+            provider_mask != facts->provider_mask ||
+            !xr_fingerprint_equal(provider_set_id, facts->provider_set_fingerprint))
+            return report(error, error_size, "XR_TARGET_1000",
+                          "materialized provider contracts do not match profile identity");
+    } else if (profile->providers || profile->provider_count != 0) {
+        return report(error, error_size, "XR_TARGET_1000",
+                      "target profile has partial provider materialization");
+    }
     XrFingerprint actual;
     xr_target_profile_compute_fingerprint(facts, &actual);
     if (!xr_fingerprint_equal(actual, profile->fingerprint))
@@ -2801,7 +2827,8 @@ static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *typ
                            (unsigned) XR_SCALAR_REP_NONE);
     return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
            type->kind == XR_KIND_INSTANCE && type->builtin_type == XR_TID_STRINGBUILDER &&
-           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->child_count == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            type->canonical_key && strcmp(type->canonical_key, expected_type_key) == 0;
@@ -3672,8 +3699,7 @@ static bool verifier_source_namespace_operation_is_exact(const XrSemanticPlan *s
            operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
            operation->return_parameter == -1 && operation->return_complete == 1 &&
            type->kind == XR_KIND_UNKNOWN && type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            ((opcode == XI_IMPORT_REF && operation->operand_count == 0 &&
              operation->semantic_immediate >= -1 && operation->semantic_immediate <= UINT16_MAX &&

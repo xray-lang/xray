@@ -105,7 +105,7 @@ static bool isolate_materialize_script_info(XrVMRuntime *isolate, const char *sc
         xr_array_push(args_array, xr_string_value(arg_str));
     }
 
-    XrInstance *process = xr_instance_new(isolate, isolate->core->processClass);
+    XrObjectInstance *process = xr_instance_new(isolate, isolate->core->processClass);
     if (!process)
         return false;
     xr_instance_set_field_fast(process, PROCESS_FIELD_FILE,

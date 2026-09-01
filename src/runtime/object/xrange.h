@@ -13,9 +13,9 @@
  *   No elements are materialized until iteration or toArray().
  *
  * MEMORY LAYOUT (unified class model):
- *   XrInstance header + 0 fields + native body:
+ *   XrObjectInstance header + 0 fields + native body:
  *   ┌─────────────────────┐
- *   │ XrInstance base     │
+ *   │ XrObjectInstance base     │
  *   ├─────────────────────┤
  *   │ start   (8B)        │ inclusive start
  *   │ end     (8B)        │ stored end bound
@@ -35,7 +35,7 @@
 
 struct XrCoroutine;
 struct XrVMRuntime;
-struct XrInstance;
+struct XrObjectInstance;
 
 /* ========== Range Native Body ========== */
 

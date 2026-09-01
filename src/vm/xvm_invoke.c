@@ -817,7 +817,7 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrVMRuntime *isolate, XrVMContext *vm_c
     const char *method_name_chars = xr_symbol_get_name_in_table(_st, method_symbol);
 
     if (strcmp(method_name_chars, XR_KEYWORD_CONSTRUCTOR) == 0) {
-        XrInstance *inst = xr_instance_new(isolate, cls);
+        XrObjectInstance *inst = xr_instance_new(isolate, cls);
         XrValue inst_val = xr_value_from_instance(inst);
 
         // Find constructor via inline cache (per-ctx, lazily ensured by hot dispatcher)
@@ -952,7 +952,7 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrVMRuntime *isolate, XrVMContext *vm_ct
         VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "super can only be called on class instance");
     }
 
-    XrInstance *inst_obj = xr_value_to_instance(this_val);
+    XrObjectInstance *inst_obj = xr_value_to_instance(this_val);
     XrClass *inst_class = inst_obj->klass;
 
     XrClass *current_method_class;

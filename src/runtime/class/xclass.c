@@ -324,7 +324,7 @@ XrClass *xr_value_get_class(XrVMRuntime *X, XrValue value) {
 
     /* Instance: class pointer stored in the object header. */
     if (type == XR_TINSTANCE) {
-        XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+        XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(value);
         return inst->klass;
     }
 
@@ -426,7 +426,7 @@ bool xr_instance_of(void *obj, const XrClass *target) {
         return false;
     }
 
-    XrInstance *inst = (XrInstance *) obj;
+    XrObjectInstance *inst = (XrObjectInstance *) obj;
     XrClass *obj_class = inst->klass;
 
     if (obj_class == NULL) {

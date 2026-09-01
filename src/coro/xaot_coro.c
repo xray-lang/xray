@@ -1082,7 +1082,7 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
     int field_index = xr_process_field_index(field);
     if (field_index < 0)
         return XR_NULL_VAL;
-    return xr_instance_get_field_by_index((XrInstance *) process.ptr, field_index);
+    return xr_instance_get_field_by_index((XrObjectInstance *) process.ptr, field_index);
 }
 
 static XrEnumCtor *aot_enum_ctor_from_value(XrValue value) {

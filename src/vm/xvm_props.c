@@ -255,7 +255,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 /* ========== Dispatch: OP_SETPROP Instance Setter ========== */
 
 XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMContext *vm_ctx,
-                                                    XrInstance *inst, XrValue obj, int prop_symbol,
+                                                    XrObjectInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue value, XrValue *base, int c,
                                                     XrBcCallFrame *frame, XrInstruction *pc) {
     (void) c;
@@ -924,7 +924,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 /* ========== Dispatch: OP_GETPROP Instance Getter ========== */
 
 XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrVMRuntime *isolate, XrVMContext *vm_ctx,
-                                                    XrInstance *inst, XrValue obj, int prop_symbol,
+                                                    XrObjectInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue *base, int a, XrBcCallFrame *frame,
                                                     XrInstruction *pc) {
     XrMethod *getter = xr_class_lookup_getter(inst->klass, prop_symbol);
@@ -1101,7 +1101,7 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_
         /* Generated hosted classes publish a static primitive `call` that
          * constructs the AOT instance and returns its VM proxy. Module-member
          * invocation must use the same class-call rule as direct OP_CALL;
-         * allocating an ordinary VM XrInstance here would split identity and
+         * allocating an ordinary VM XrObjectInstance here would split identity and
          * bypass the fragment constructor. */
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         int call_symbol = xr_symbol_lookup_in_table(sym_table, "call");
@@ -1125,13 +1125,13 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_
         }
 
         // Create instance (allocation based on storage mode context)
-        XrInstance *instance;
+        XrObjectInstance *instance;
         uint8_t storage_mode =
             atomic_exchange_explicit(&isolate->current_storage_mode, 0, memory_order_relaxed);
 
         if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
             size_t size = xr_instance_size(klass);
-            instance = (XrInstance *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
+            instance = (XrObjectInstance *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
                                                                size, XR_TINSTANCE, storage_mode);
             if (instance) {
                 xr_instance_init_inplace(instance, klass);

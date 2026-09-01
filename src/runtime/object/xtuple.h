@@ -33,10 +33,10 @@ struct XrVMRuntime;
 
 /* ========== Object Layout ==========
  *
- * Tuples are regular XrInstance values backed by a per-arity XrClass
+ * Tuples are regular XrObjectInstance values backed by a per-arity XrClass
  * (core->tupleClassesSmall[arity] for arities < XR_TUPLE_CLASS_PREALLOC,
  * lazily-built classes for larger arities). The struct mirrors the
- * XrInstance layout exactly so that casts in either direction read the
+ * XrObjectInstance layout exactly so that casts in either direction read the
  * same bytes:
  *
  *   gc header  (16)
@@ -100,7 +100,7 @@ XR_FUNC void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value);
 
 /* ========== Type Check ========== */
 
-/* True iff `v` is an XrInstance whose class has builtin_kind == XR_BK_TUPLE.
+/* True iff `v` is an XrObjectInstance whose class has builtin_kind == XR_BK_TUPLE.
  * This replaces the legacy XR_IS_TUPLE macro that depended on a
  * dedicated XR_TTUPLE GC tag. */
 XR_FUNC bool xr_value_is_tuple(XrValue v);

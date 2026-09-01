@@ -538,6 +538,8 @@ XR_FUNC XrRuntimeAbiStatus xr_runtime_abi_contract_fingerprint(
     const XrRuntimeAbiContract *abi, XrFingerprint *out);
 XR_FUNC XrRuntimeAbiStatus xr_target_provider_call_abi_fingerprint(
     const XrTargetProviderCallAbiContract *abi, XrFingerprint *out);
+XR_FUNC XrRuntimeAbiStatus xr_target_provider_contract_fingerprint(
+    const XrTargetProviderContract *provider, XrFingerprint *out);
 XR_FUNC XrRuntimeAbiStatus xr_target_provider_set_fingerprint(
     const XrTargetProviderContract *providers, size_t provider_count,
     uint64_t *out_provider_mask, XrFingerprint *out);

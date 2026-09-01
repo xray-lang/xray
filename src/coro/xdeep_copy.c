@@ -744,7 +744,7 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 }
 
 XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
-    XrInstance *inst = (XrInstance *) obj;
+    XrObjectInstance *inst = (XrObjectInstance *) obj;
     if (!inst || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, inst);
@@ -770,7 +770,7 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     }
     uint32_t field_count = xr_class_instance_field_count(cls);
 
-    XrInstance *new_inst = (XrInstance *) copy_ctx_alloc(ctx, xr_instance_size(cls), XR_TINSTANCE);
+    XrObjectInstance *new_inst = (XrObjectInstance *) copy_ctx_alloc(ctx, xr_instance_size(cls), XR_TINSTANCE);
     if (!new_inst)
         return XR_NULL_VAL;
     xr_instance_init_inplace(new_inst, cls);

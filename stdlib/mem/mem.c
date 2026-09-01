@@ -97,14 +97,14 @@ typedef struct XrMemBufferBody {
 int64_t xr_mem_buffer_length(XrValue value) {
     if (!XR_IS_INSTANCE(value))
         return -1;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(value);
     if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_BUFFER)
         return -1;
     XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);
     return buf ? buf->length : 0;
 }
 
-static void mem_buffer_body_init(XrInstance *inst, void *body) {
+static void mem_buffer_body_init(XrObjectInstance *inst, void *body) {
     (void) inst;
     XrMemBufferBody *buf = (XrMemBufferBody *) body;
     memset(buf, 0, sizeof(*buf));
@@ -141,7 +141,7 @@ static XrClass *mem_buffer_class(XrVMRuntime *isolate) {
 static XrMemBufferBody *mem_buffer_body(XrVMRuntime *isolate, XrValue value) {
     if (!XR_IS_INSTANCE(value))
         return NULL;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(value);
     XrClass *klass = mem_buffer_class(isolate);
     if (!klass || !xr_class_instanceof(inst->klass, klass))
         return NULL;
@@ -197,7 +197,7 @@ bool xr_mem_buffer_materialize(XrValue value, void *dst, size_t size, size_t ali
                                const XrAggregateLayout *layout) {
     if (!XR_IS_INSTANCE(value) || !dst || size == 0 || align == 0)
         return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(value);
     if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_BUFFER)
         return false;
     XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);
@@ -223,7 +223,7 @@ bool xr_mem_buffer_materialize(XrValue value, void *dst, size_t size, size_t ali
 static XrValue mem_buffer_new(XrVMRuntime *isolate, int64_t length, bool zeroed, size_t align) {
     if (length < 0)
         length = 0;
-    XrInstance *inst = xr_instance_new(isolate, mem_buffer_class(isolate));
+    XrObjectInstance *inst = xr_instance_new(isolate, mem_buffer_class(isolate));
     XR_CHECK(inst != NULL, "mem.Buffer allocation failed");
     XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);
     XR_CHECK(buf != NULL, "mem.Buffer native body missing");
@@ -242,7 +242,7 @@ static XrValue mem_buffer_new(XrVMRuntime *isolate, int64_t length, bool zeroed,
 bool xr_mem_buffer_bytes(XrValue value, const uint8_t **data, size_t *length) {
     if (!data || !length || !XR_IS_INSTANCE(value))
         return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(value);
     if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_BUFFER)
         return false;
     XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);

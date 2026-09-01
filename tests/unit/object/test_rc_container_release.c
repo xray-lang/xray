@@ -150,7 +150,7 @@ TEST(dynamic_instance_destroy_releases_overflow_fields) {
     XrClass *c1 = xr_class_transition_get_or_create(X, root, 1, "a");
     XrClass *c2 = xr_class_transition_get_or_create(X, c1, 2, "b");
     XrClass *c3 = xr_class_transition_get_or_create(X, c2, 3, "c");
-    XrInstance *inst = xr_instance_new(X, c3);
+    XrObjectInstance *inst = xr_instance_new(X, c3);
     XrArray *a = xr_array_new(main_coro);
     XrArray *b = xr_array_new(main_coro);
     XrArray *c = xr_array_new(main_coro);

@@ -141,14 +141,14 @@ static XrTlsContext *get_tls_client_ctx(void) {
 static inline bool is_conn_handle(XrValue v) {
     if (!XR_IS_PTR(v) || XR_HEAP_TYPE(v) != XR_TINSTANCE)
         return false;
-    XrInstance *inst = (XrInstance *) XR_VALUE_GCPTR(v);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_VALUE_GCPTR(v);
     return inst->klass && inst->klass->builtin_kind == XR_BK_NETCONN;
 }
 
 static inline bool is_listener_handle(XrValue v) {
     if (!XR_IS_PTR(v) || XR_HEAP_TYPE(v) != XR_TINSTANCE)
         return false;
-    XrInstance *inst = (XrInstance *) XR_VALUE_GCPTR(v);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_VALUE_GCPTR(v);
     return inst->klass && inst->klass->builtin_kind == XR_BK_NETLISTENER;
 }
 

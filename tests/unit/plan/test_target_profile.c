@@ -179,11 +179,38 @@ static void test_runtime_profile_is_independent_of_os_environment(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_partition_and_provider_materialization_mutations_fail_closed(void) {
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    profile->target_semantics_id.bytes[0] ^= 1u;
+    REQUIRE(!xr_target_profile_verify(profile, NULL, 0));
+    profile->target_semantics_id.bytes[0] ^= 1u;
+    REQUIRE(xr_target_profile_verify(profile, NULL, 0));
+
+    profile->boundary_abi.pointer_size ^= 1u;
+    REQUIRE(!xr_target_profile_verify(profile, NULL, 0));
+    profile->boundary_abi.pointer_size ^= 1u;
+    REQUIRE(xr_target_profile_verify(profile, NULL, 0));
+
+    profile->runtime_kernel.panic_policy = XR_RUNTIME_KERNEL_POLICY_INVALID;
+    REQUIRE(!xr_target_profile_verify(profile, NULL, 0));
+    profile->runtime_kernel.panic_policy = XR_RUNTIME_KERNEL_POLICY_CONTRACTUAL;
+    REQUIRE(xr_target_profile_verify(profile, NULL, 0));
+
+    profile->providers[0].operations[0].stable_id.bytes[0] ^= 1u;
+    REQUIRE(!xr_target_profile_verify(profile, NULL, 0));
+    profile->providers[0].operations[0].stable_id.bytes[0] ^= 1u;
+    REQUIRE(xr_target_profile_verify(profile, NULL, 0));
+    xr_target_profile_free(profile);
+}
+
 int main(void) {
     test_structured_build_kat_and_exact_gate();
     test_machine_provider_and_runtime_mutations_change_exact_identity();
     test_object_and_provider_mismatches_fail_atomically();
     test_runtime_profile_is_independent_of_os_environment();
+    test_partition_and_provider_materialization_mutations_fail_closed();
     puts("production TargetProfile tests passed");
     return 0;
 }

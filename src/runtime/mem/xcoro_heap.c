@@ -634,7 +634,7 @@ static void rc_destroy_one(XrCoroHeap *heap, XrObjHeader *obj) {
  * The stack is held on the side rather than threaded through the objects.
  * A deferred object has only dropped to RC == 0 — its destructor has not run
  * yet, so its whole payload is still live. Borrowing the first word past the
- * header as a next-link overwrote XrArray::data / XrInstance::klass (both sit
+ * header as a next-link overwrote XrArray::data / XrObjectInstance::klass (both sit
  * at exactly header+1), and the deferred destructor then dereferenced the list
  * link as if it were that field.
  *
@@ -690,7 +690,7 @@ XR_FUNC void xr_coro_heap_destroy_obj(XrCoroHeap *heap, XrObjHeader *obj) {
 
     /* A hosted-fragment object owns its generated destructor and allocation
      * prefix.  Its canonical header is sufficient for VM RC, but treating the
-     * payload as a VM XrArray/XrInstance at the last drop would dispatch the
+     * payload as a VM XrArray/XrObjectInstance at the last drop would dispatch the
      * wrong destructor and recycle foreign storage. */
     if ((obj->extra & XR_OBJ_AOT_NATIVE) != 0 &&
         xr_runtime_core_release_aot_native_value(coro_heap_core(heap), obj))

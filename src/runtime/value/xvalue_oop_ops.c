@@ -22,4 +22,4 @@
     }
 
 DEFINE_VALUE_OPS_WITH_TYPE(class, XR_TCLASS, struct XrClass)
-DEFINE_VALUE_OPS_WITH_TYPE(instance, XR_TINSTANCE, struct XrInstance)
+DEFINE_VALUE_OPS_WITH_TYPE(instance, XR_TINSTANCE, struct XrObjectInstance)

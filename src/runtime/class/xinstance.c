@@ -33,7 +33,7 @@
 /* ========== Instance Operations ========== */
 
 // Access control handled by compiler/interpreter
-XrValue xr_instance_get_field(XrVMRuntime *X, XrInstance *inst, const char *name) {
+XrValue xr_instance_get_field(XrVMRuntime *X, XrObjectInstance *inst, const char *name) {
     if (!X || !inst || !name)
         return xr_null();
 
@@ -58,7 +58,7 @@ XrValue xr_instance_get_field(XrVMRuntime *X, XrInstance *inst, const char *name
     return inst->fields[index];
 }
 
-void xr_instance_set_field(XrVMRuntime *X, XrInstance *inst, const char *name, XrValue value) {
+void xr_instance_set_field(XrVMRuntime *X, XrObjectInstance *inst, const char *name, XrValue value) {
     if (!X || !inst || !name)
         return;
 
@@ -84,7 +84,7 @@ void xr_instance_set_field(XrVMRuntime *X, XrInstance *inst, const char *name, X
     inst->fields[index] = value;
 }
 
-XrValue xr_instance_call_method(XrVMRuntime *X, XrInstance *inst, const char *name, XrValue *args,
+XrValue xr_instance_call_method(XrVMRuntime *X, XrObjectInstance *inst, const char *name, XrValue *args,
                                 int argc) {
     if (!X || !inst || !name)
         return xr_null();
@@ -143,7 +143,7 @@ XrValue xr_instance_call_method(XrVMRuntime *X, XrInstance *inst, const char *na
 
 /* ========== Debug ========== */
 
-void xr_instance_print(XrInstance *inst) {
+void xr_instance_print(XrObjectInstance *inst) {
     if (!inst) {
         printf("null instance\n");
         return;
@@ -189,7 +189,7 @@ void xr_instance_print(XrInstance *inst) {
     printf("}\n");
 }
 
-bool xr_instance_is_a(XrInstance *inst, XrClass *cls) {
+bool xr_instance_is_a(XrObjectInstance *inst, XrClass *cls) {
     if (!inst || !cls)
         return false;
     return xr_class_instanceof(xr_instance_get_class(inst), cls);

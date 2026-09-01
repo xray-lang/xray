@@ -187,7 +187,7 @@ typedef struct XrCoroHeap {
     // The queue is a side stack, not a list threaded through the objects: a
     // deferred object has only reached rc==0, its destructor has NOT run yet,
     // so every payload word it holds is still live (XrArray::data,
-    // XrInstance::klass, ...) and cannot be borrowed as a link field.
+    // XrObjectInstance::klass, ...) and cannot be borrowed as a link field.
     uint16_t destroy_depth;        // current recursion depth of rc_destroy
     uint16_t _pad_drop[3];         // alignment
     XrObjHeader **deferred_drops;  // LIFO stack of objects awaiting destroy

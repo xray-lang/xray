@@ -69,7 +69,7 @@ static bool vm_deep_describe(void *adapter, XrValue value, XrDeepEqualityNode *o
         default:
             return true;
     }
-    XrInstance *instance = xr_value_to_instance(value);
+    XrObjectInstance *instance = xr_value_to_instance(value);
     XrClass *klass = instance ? instance->klass : NULL;
     if (!klass)
         return false;
@@ -124,7 +124,7 @@ static bool vm_deep_sequence_element(void *adapter, XrValue sequence, uint32_t i
         *out = xr_array_get_element(array, (int) index);
         return true;
     }
-    XrInstance *instance = xr_value_to_instance(sequence);
+    XrObjectInstance *instance = xr_value_to_instance(sequence);
     if (!instance || !instance->klass)
         return false;
     if (instance->klass->builtin_kind == XR_BK_ADT_ENUM) {

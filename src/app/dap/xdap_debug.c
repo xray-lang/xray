@@ -319,7 +319,7 @@ char *xr_value_to_debug_string(XrVMRuntime *isolate, XrValue val) {
                 snprintf(buf, sizeof(buf), "<enum ctor> @%p", (void *) hdr);
                 break;
             case XR_TINSTANCE: {
-                XrInstance *inst = (XrInstance *) hdr;
+                XrObjectInstance *inst = (XrObjectInstance *) hdr;
                 if (inst->klass && inst->klass->builtin_kind == XR_BK_STRINGBUILDER) {
                     XrStringBuilder *sb = (XrStringBuilder *) hdr;
                     size_t len = xr_stringbuilder_length(sb);

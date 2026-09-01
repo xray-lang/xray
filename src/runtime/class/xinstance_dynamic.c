@@ -14,7 +14,7 @@
 #include "../../base/xmalloc.h"
 #include "../mem/xalloc_unified.h"
 
-XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index) {
+XrValue xr_instance_get_dynamic_field(XrObjectInstance *inst, uint16_t index) {
     XR_DCHECK(inst != NULL, "get_dynamic_field: NULL inst");
     XrClass *klass = inst->klass;
     XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "get_dynamic_field: not dynamic");
@@ -31,7 +31,7 @@ XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index) {
     return overflow[overflow_idx];
 }
 
-bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrValue value) {
+bool xr_instance_set_dynamic_field_direct(XrObjectInstance *inst, uint16_t index, XrValue value) {
     XR_DCHECK(inst != NULL, "set_dynamic_field: NULL inst");
     XrClass *klass = inst->klass;
     XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "set_dynamic_field: not dynamic");
@@ -78,7 +78,7 @@ bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrVa
     return true;
 }
 
-bool xr_instance_set_dynamic_field(XrVMRuntime *X, XrInstance *inst, uint16_t index,
+bool xr_instance_set_dynamic_field(XrVMRuntime *X, XrObjectInstance *inst, uint16_t index,
                                    XrValue value) {
     XR_DCHECK(X != NULL, "set_dynamic_field: NULL isolate");
     (void) X;

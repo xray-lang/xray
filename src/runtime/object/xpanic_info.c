@@ -5,12 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xexception.c - Exception runtime API on top of XrInstance
+ * xexception.c - Exception runtime API on top of XrObjectInstance
  *
  * Exception is a regular class registered into core->panicInfoClass
  * (built by xr_register_panic_info_class below; called from
  * xr_core_init). All field access here is direct indexing into
- * XrInstance.fields[] using the PANIC_INFO_FIELD_* indices fixed in
+ * XrObjectInstance.fields[] using the PANIC_INFO_FIELD_* indices fixed in
  * xclass_system.h.
  */
 
@@ -35,10 +35,10 @@
 
 /* ========== Local helpers ========== */
 
-static XrInstance *exception_instance(XrVMRuntime *X, XrValue v) {
+static XrObjectInstance *exception_instance(XrVMRuntime *X, XrValue v) {
     if (!xr_value_is_panic_info(X, v))
         return NULL;
-    return (XrInstance *) XR_TO_PTR(v);
+    return (XrObjectInstance *) XR_TO_PTR(v);
 }
 
 static XrClass *exception_class(XrVMRuntime *X) {
@@ -55,12 +55,12 @@ static bool exception_requires_shared_publication(XrVMRuntime *X) {
     return coro && (coro->task || coro->exec_ctx.executor);
 }
 
-static XrInstance *exception_new_instance(XrVMRuntime *X, XrClass *cls, bool shared) {
+static XrObjectInstance *exception_new_instance(XrVMRuntime *X, XrClass *cls, bool shared) {
     if (!shared)
         return xr_instance_new(X, cls);
     XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
-    XrInstance *inst =
-        heap ? (XrInstance *) xr_sysheap_alloc_shared(heap, xr_instance_size(cls), XR_TINSTANCE)
+    XrObjectInstance *inst =
+        heap ? (XrObjectInstance *) xr_sysheap_alloc_shared(heap, xr_instance_size(cls), XR_TINSTANCE)
              : NULL;
     if (inst)
         xr_instance_init_inplace(inst, cls);
@@ -81,7 +81,7 @@ bool xr_value_is_panic_info(XrVMRuntime *X, XrValue v) {
     XR_DCHECK(X != NULL, "xr_value_is_panic_info: NULL isolate");
     if (!XR_IS_INSTANCE(v))
         return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(v);
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     if (!core || !core->panicInfoClass)
         return false;
@@ -94,7 +94,7 @@ XrValue xr_panic_info_new(XrVMRuntime *X, XrErrorCode code, const char *message)
     XR_DCHECK(X != NULL, "exception_new: NULL isolate");
     XrClass *cls = exception_class(X);
     bool shared = exception_requires_shared_publication(X);
-    XrInstance *inst = exception_new_instance(X, cls, shared);
+    XrObjectInstance *inst = exception_new_instance(X, cls, shared);
     if (!inst)
         return xr_null();
 
@@ -133,7 +133,7 @@ XrValue xr_panic_info_from_error(XrVMRuntime *X, XrError *error) {
 
     XrClass *cls = exception_class(X);
     bool shared = exception_requires_shared_publication(X);
-    XrInstance *inst = exception_new_instance(X, cls, shared);
+    XrObjectInstance *inst = exception_new_instance(X, cls, shared);
     if (!inst)
         return xr_null();
 
@@ -163,7 +163,7 @@ XrValue xr_panic_info_from_value(XrVMRuntime *X, XrValue value) {
     }
 
     XrValue exc = xr_panic_info_new(X, XR_ERR_RUNTIME, "Value thrown as exception");
-    XrInstance *inst = exception_instance(X, exc);
+    XrObjectInstance *inst = exception_instance(X, exc);
     if (inst) {
         inst->fields[PANIC_INFO_FIELD_DATA] = value;
     }
@@ -173,7 +173,7 @@ XrValue xr_panic_info_from_value(XrVMRuntime *X, XrValue value) {
 /* ========== Field Accessors ========== */
 
 XrErrorCode xr_panic_info_get_code(XrVMRuntime *X, XrValue exception) {
-    XrInstance *inst = exception_instance(X, exception);
+    XrObjectInstance *inst = exception_instance(X, exception);
     if (!inst)
         return XR_ERR_UNKNOWN;
     XrValue v = inst->fields[PANIC_INFO_FIELD_CODE];
@@ -181,7 +181,7 @@ XrErrorCode xr_panic_info_get_code(XrVMRuntime *X, XrValue exception) {
 }
 
 const char *xr_panic_info_get_message(XrVMRuntime *X, XrValue exception) {
-    XrInstance *inst = exception_instance(X, exception);
+    XrObjectInstance *inst = exception_instance(X, exception);
     if (!inst)
         return "Not an exception";
     XrValue v = inst->fields[PANIC_INFO_FIELD_MESSAGE];
@@ -192,7 +192,7 @@ const char *xr_panic_info_get_message(XrVMRuntime *X, XrValue exception) {
 }
 
 XrValue xr_panic_info_get_stacktrace(XrVMRuntime *X, XrValue exception) {
-    XrInstance *inst = exception_instance(X, exception);
+    XrObjectInstance *inst = exception_instance(X, exception);
     if (!inst)
         return xr_null();
     XrValue v = inst->fields[PANIC_INFO_FIELD_STACK];
@@ -208,7 +208,7 @@ XrValue xr_panic_info_get_stacktrace(XrVMRuntime *X, XrValue exception) {
 }
 
 XrValue xr_panic_info_get_data(XrVMRuntime *X, XrValue exception) {
-    XrInstance *inst = exception_instance(X, exception);
+    XrObjectInstance *inst = exception_instance(X, exception);
     if (!inst)
         return xr_null();
     return inst->fields[PANIC_INFO_FIELD_DATA];
@@ -218,7 +218,7 @@ XrValue xr_panic_info_get_data(XrVMRuntime *X, XrValue exception) {
 
 void xr_panic_info_add_frame(XrVMRuntime *X, XrValue exception, const char *funcName, int line) {
     XR_DCHECK(funcName != NULL, "exception_add_frame: NULL funcName");
-    XrInstance *inst = exception_instance(X, exception);
+    XrObjectInstance *inst = exception_instance(X, exception);
     if (!inst)
         return;
 
@@ -245,7 +245,7 @@ void xr_panic_info_add_frame(XrVMRuntime *X, XrValue exception, const char *func
  *
  * These run from vm_invoke_class / vm_superinvoke as XMETHOD_PRIMITIVE
  * entries on core->panicInfoClass. They receive the pre-allocated
- * XrInstance via `self` (either Exception or a subclass — Exception
+ * XrObjectInstance via `self` (either Exception or a subclass — Exception
  * fields occupy indices 0..4 regardless), write parent fields by index,
  * and return the same value back so the caller's base[a] points at it.
  */
@@ -256,7 +256,7 @@ static XrValue exception_primitive_constructor(XrVMRuntime *X, XrValue self, XrV
     if (!XR_IS_INSTANCE(self))
         return xr_null();
 
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(self);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(self);
 
     // message: string = ""
     XrString *msg_str = NULL;
@@ -319,7 +319,7 @@ static XrValue exception_primitive_to_string(XrVMRuntime *X, XrValue self, XrVal
     if (!XR_IS_INSTANCE(self))
         return xr_null();
 
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(self);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(self);
     const char *class_name = inst->klass && inst->klass->name ? inst->klass->name : "PanicInfo";
     const char *message = "";
     XrValue msg_val = inst->fields[PANIC_INFO_FIELD_MESSAGE];
@@ -397,7 +397,7 @@ void xr_register_panic_info_class(XrVMRuntime *X) {
 // opt-in tail, shown under XRAY_BACKTRACE and absent from the cross-backend
 // contract because the AOT native path carries no unwind state.
 void xr_panic_info_print_trace(XrVMRuntime *X, XrValue exception, FILE *stream) {
-    XrInstance *inst = exception_instance(X, exception);
+    XrObjectInstance *inst = exception_instance(X, exception);
     if (!inst)
         return;
 

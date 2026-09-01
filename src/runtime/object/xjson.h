@@ -40,8 +40,8 @@ struct XrCoroutine;
 
 /* ========== Runtime Handle ========== */
 
-// Exact structural objects share the XrInstance storage layout.
-typedef XrInstance XrObjectInstance;
+// Exact structural objects share the XrObjectInstance storage layout.
+typedef XrObjectInstance XrObjectInstance;
 
 /* ========== Creation API ========== */
 
@@ -101,7 +101,7 @@ static inline bool xr_value_is_json(XrValue v) {
 static inline bool xr_value_is_struct_object(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(v);
     return inst->klass && inst->klass->builtin_kind == XR_BK_STRUCT_OBJECT;
 }
 
@@ -416,8 +416,8 @@ static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X,
         decoded_values[fi] = decoded;
     }
 
-    XrInstance *result = (cls->flags & XR_CLASS_DYNAMIC_LAYOUT)
-                             ? (XrInstance *) xr_object_instance_new_with_class(coro, cls)
+    XrObjectInstance *result = (cls->flags & XR_CLASS_DYNAMIC_LAYOUT)
+                             ? (XrObjectInstance *) xr_object_instance_new_with_class(coro, cls)
                              : xr_instance_new(X, cls);
     if (!result) {
         xr_json_decode_release_partial(decoded_values, field_count);

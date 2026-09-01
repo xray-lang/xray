@@ -529,7 +529,7 @@ vmcase(OP_ARRAY_GET) {
     }
     if (!XR_IS_ARRAY(obj_val)) {
         if (xr_value_is_instance(obj_val)) {
-            XrInstance *_inst = xr_value_to_instance(obj_val);
+            XrObjectInstance *_inst = xr_value_to_instance(obj_val);
             XrClass *_cls = xr_instance_get_class(_inst);
             if (XCLASS_HAS_OP(_cls, XR_OP_INDEX_FLAG)) {
                 XrMethod *_m = xr_class_lookup_method(_cls, SYMBOL_OP_INDEX);
@@ -654,7 +654,7 @@ vmcase(OP_ARRAY_GETC) {
     }
     // Operator overload: operator[]
     if (xr_value_is_instance(obj_val)) {
-        XrInstance *_inst = xr_value_to_instance(obj_val);
+        XrObjectInstance *_inst = xr_value_to_instance(obj_val);
         XrClass *_cls = xr_instance_get_class(_inst);
         if (XCLASS_HAS_OP(_cls, XR_OP_INDEX_FLAG)) {
             XrMethod *_m = xr_class_lookup_method(_cls, SYMBOL_OP_INDEX);
@@ -769,7 +769,7 @@ vmcase(OP_ARRAY_SET) {
         vmbreak;
     }
     if (xr_value_is_instance(obj_val)) {
-        XrInstance *_inst = xr_value_to_instance(obj_val);
+        XrObjectInstance *_inst = xr_value_to_instance(obj_val);
         XrClass *_cls = xr_instance_get_class(_inst);
         if (XCLASS_HAS_OP(_cls, XR_OP_INDEX_SET_FLAG)) {
             XrMethod *_m = xr_class_lookup_method(_cls, SYMBOL_OP_INDEX_SET);
@@ -881,7 +881,7 @@ vmcase(OP_ARRAY_SETC) {
         vmbreak;
     }
     if (xr_value_is_instance(obj_val)) {
-        XrInstance *_inst = xr_value_to_instance(obj_val);
+        XrObjectInstance *_inst = xr_value_to_instance(obj_val);
         XrClass *_cls = xr_instance_get_class(_inst);
         if (XCLASS_HAS_OP(_cls, XR_OP_INDEX_SET_FLAG)) {
             XrMethod *_m = xr_class_lookup_method(_cls, SYMBOL_OP_INDEX_SET);
@@ -2260,7 +2260,7 @@ vmcase(OP_INDEX_GET) {
     }
     // Operator overload
     if (xr_value_is_instance(obj_val)) {
-        XrInstance *_inst = xr_value_to_instance(obj_val);
+        XrObjectInstance *_inst = xr_value_to_instance(obj_val);
         XrClass *_cls = xr_instance_get_class(_inst);
         if (XCLASS_HAS_OP(_cls, XR_OP_INDEX_FLAG)) {
             XrMethod *_m = xr_class_lookup_method(_cls, SYMBOL_OP_INDEX);
@@ -2398,7 +2398,7 @@ vmcase(OP_INDEX_SET) {
     }
     // Operator overload
     if (xr_value_is_instance(obj_val)) {
-        XrInstance *_inst = xr_value_to_instance(obj_val);
+        XrObjectInstance *_inst = xr_value_to_instance(obj_val);
         XrClass *_cls = xr_instance_get_class(_inst);
         if (XCLASS_HAS_OP(_cls, XR_OP_INDEX_SET_FLAG)) {
             XrMethod *_m = xr_class_lookup_method(_cls, SYMBOL_OP_INDEX_SET);

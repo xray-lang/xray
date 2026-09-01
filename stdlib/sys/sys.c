@@ -70,7 +70,7 @@ static void sys_once_call_body(void) {
         (void) xr_vm_call_closure(g_sys_once_isolate, g_sys_once_body, NULL, 0);
 }
 
-static void sys_mutex_body_init(XrInstance *instance, void *body_ptr) {
+static void sys_mutex_body_init(XrObjectInstance *instance, void *body_ptr) {
     (void) instance;
     XrSysMutexBody *body = (XrSysMutexBody *) body_ptr;
     xr_mutex_init(&body->mutex);
@@ -94,7 +94,7 @@ static XrNativeBodyDesc g_sys_mutex_body_desc = {
     .deep_copy = NULL,
 };
 
-static void sys_rwlock_body_init(XrInstance *instance, void *body_ptr) {
+static void sys_rwlock_body_init(XrObjectInstance *instance, void *body_ptr) {
     (void) instance;
     XrSysRwLockBody *body = (XrSysRwLockBody *) body_ptr;
     xr_rwlock_init(&body->rwlock);
@@ -118,7 +118,7 @@ static XrNativeBodyDesc g_sys_rwlock_body_desc = {
     .deep_copy = NULL,
 };
 
-static void sys_condvar_body_init(XrInstance *instance, void *body_ptr) {
+static void sys_condvar_body_init(XrObjectInstance *instance, void *body_ptr) {
     (void) instance;
     XrSysCondvarBody *body = (XrSysCondvarBody *) body_ptr;
     xr_cond_init(&body->cond);
@@ -142,7 +142,7 @@ static XrNativeBodyDesc g_sys_condvar_body_desc = {
     .deep_copy = NULL,
 };
 
-static void sys_barrier_body_init(XrInstance *instance, void *body_ptr) {
+static void sys_barrier_body_init(XrObjectInstance *instance, void *body_ptr) {
     (void) instance;
     XrSysBarrierBody *body = (XrSysBarrierBody *) body_ptr;
     xr_mutex_init(&body->mutex);
@@ -171,7 +171,7 @@ static XrNativeBodyDesc g_sys_barrier_body_desc = {
     .deep_copy = NULL,
 };
 
-static void sys_once_body_init(XrInstance *instance, void *body_ptr) {
+static void sys_once_body_init(XrObjectInstance *instance, void *body_ptr) {
     (void) instance;
     XrSysOnceBody *body = (XrSysOnceBody *) body_ptr;
     xr_once_t init = XR_ONCE_INITIALIZER;
@@ -224,13 +224,13 @@ static XrClass *sys_once_class(XrVMRuntime *isolate) {
     return core ? core->sysOnceClass : NULL;
 }
 
-static XrInstance *sys_shared_instance_new(XrVMRuntime *isolate, XrClass *klass) {
+static XrObjectInstance *sys_shared_instance_new(XrVMRuntime *isolate, XrClass *klass) {
     XrSystemHeap *heap = xr_isolate_get_sys_heap(isolate);
     if (!heap)
         return xr_instance_new(isolate, klass);
 
-    XrInstance *instance =
-        (XrInstance *) xr_sysheap_alloc_shared(heap, xr_instance_size(klass), XR_TINSTANCE);
+    XrObjectInstance *instance =
+        (XrObjectInstance *) xr_sysheap_alloc_shared(heap, xr_instance_size(klass), XR_TINSTANCE);
     if (!instance)
         return NULL;
 
@@ -250,7 +250,7 @@ static XrInstance *sys_shared_instance_new(XrVMRuntime *isolate, XrClass *klass)
 static XrSysMutexBody *sys_mutex_body(XrVMRuntime *isolate, XrValue self) {
     if (!XR_IS_INSTANCE(self))
         return NULL;
-    XrInstance *instance = (XrInstance *) XR_TO_PTR(self);
+    XrObjectInstance *instance = (XrObjectInstance *) XR_TO_PTR(self);
     XrClass *klass = sys_mutex_class(isolate);
     if (!klass || !xr_class_instanceof(instance->klass, klass))
         return NULL;
@@ -260,7 +260,7 @@ static XrSysMutexBody *sys_mutex_body(XrVMRuntime *isolate, XrValue self) {
 static XrSysRwLockBody *sys_rwlock_body(XrVMRuntime *isolate, XrValue self) {
     if (!XR_IS_INSTANCE(self))
         return NULL;
-    XrInstance *instance = (XrInstance *) XR_TO_PTR(self);
+    XrObjectInstance *instance = (XrObjectInstance *) XR_TO_PTR(self);
     XrClass *klass = sys_rwlock_class(isolate);
     if (!klass || !xr_class_instanceof(instance->klass, klass))
         return NULL;
@@ -270,7 +270,7 @@ static XrSysRwLockBody *sys_rwlock_body(XrVMRuntime *isolate, XrValue self) {
 static XrSysCondvarBody *sys_condvar_body(XrVMRuntime *isolate, XrValue self) {
     if (!XR_IS_INSTANCE(self))
         return NULL;
-    XrInstance *instance = (XrInstance *) XR_TO_PTR(self);
+    XrObjectInstance *instance = (XrObjectInstance *) XR_TO_PTR(self);
     XrClass *klass = sys_condvar_class(isolate);
     if (!klass || !xr_class_instanceof(instance->klass, klass))
         return NULL;
@@ -280,7 +280,7 @@ static XrSysCondvarBody *sys_condvar_body(XrVMRuntime *isolate, XrValue self) {
 static XrSysBarrierBody *sys_barrier_body(XrVMRuntime *isolate, XrValue self) {
     if (!XR_IS_INSTANCE(self))
         return NULL;
-    XrInstance *instance = (XrInstance *) XR_TO_PTR(self);
+    XrObjectInstance *instance = (XrObjectInstance *) XR_TO_PTR(self);
     XrClass *klass = sys_barrier_class(isolate);
     if (!klass || !xr_class_instanceof(instance->klass, klass))
         return NULL;
@@ -290,7 +290,7 @@ static XrSysBarrierBody *sys_barrier_body(XrVMRuntime *isolate, XrValue self) {
 static XrSysOnceBody *sys_once_body(XrVMRuntime *isolate, XrValue self) {
     if (!XR_IS_INSTANCE(self))
         return NULL;
-    XrInstance *instance = (XrInstance *) XR_TO_PTR(self);
+    XrObjectInstance *instance = (XrObjectInstance *) XR_TO_PTR(self);
     XrClass *klass = sys_once_class(isolate);
     if (!klass || !xr_class_instanceof(instance->klass, klass))
         return NULL;
@@ -350,7 +350,7 @@ static XrValue sys_mutex_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    XrInstance *instance = sys_shared_instance_new(isolate, sys_mutex_class(isolate));
+    XrObjectInstance *instance = sys_shared_instance_new(isolate, sys_mutex_class(isolate));
     if (!instance) {
         XrValue exc =
             xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsMutex allocation failed");
@@ -364,7 +364,7 @@ static XrValue sys_rwlock_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    XrInstance *instance = sys_shared_instance_new(isolate, sys_rwlock_class(isolate));
+    XrObjectInstance *instance = sys_shared_instance_new(isolate, sys_rwlock_class(isolate));
     if (!instance) {
         XrValue exc =
             xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsRwLock allocation failed");
@@ -378,7 +378,7 @@ static XrValue sys_condvar_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    XrInstance *instance = sys_shared_instance_new(isolate, sys_condvar_class(isolate));
+    XrObjectInstance *instance = sys_shared_instance_new(isolate, sys_condvar_class(isolate));
     if (!instance) {
         XrValue exc =
             xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsCondvar allocation failed");
@@ -393,7 +393,7 @@ static XrValue sys_barrier_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!XR_IS_INT(args[0]) || XR_TO_INT(args[0]) <= 0)
         return sys_barrier_invalid_parties(isolate);
 
-    XrInstance *instance = sys_shared_instance_new(isolate, sys_barrier_class(isolate));
+    XrObjectInstance *instance = sys_shared_instance_new(isolate, sys_barrier_class(isolate));
     if (!instance) {
         XrValue exc =
             xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsBarrier allocation failed");
@@ -410,7 +410,7 @@ static XrValue sys_barrier_new(XrVMRuntime *isolate, XrValue *args, int argc) {
 static XrValue sys_once_new(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    XrInstance *instance = sys_shared_instance_new(isolate, sys_once_class(isolate));
+    XrObjectInstance *instance = sys_shared_instance_new(isolate, sys_once_class(isolate));
     if (!instance) {
         XrValue exc =
             xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "sys.OsOnce allocation failed");

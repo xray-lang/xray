@@ -31,7 +31,7 @@
 static XrClosure *hook_instance_method(XrValue v, int symbol) {
     if (symbol < 0 || !XR_IS_PTR(v) || v.heap_type != XR_TINSTANCE || !v.ptr)
         return NULL;
-    XrInstance *inst = (XrInstance *) v.ptr;
+    XrObjectInstance *inst = (XrObjectInstance *) v.ptr;
     XrClass *cls = inst->klass;
     if (!cls)
         return NULL;
@@ -80,7 +80,7 @@ static int vm_instance_eq_hook(XrValue a, XrValue b) {
  * to a tagged value for generic readers (JSON encoding, print/inspect). A
  * nested struct field decodes to a raw aggregate ref into the body, which no
  * generic reader understands — materialize it into a boxed instance. */
-static bool vm_instance_struct_field_read_hook(XrVMRuntime *X, XrInstance *inst, int index,
+static bool vm_instance_struct_field_read_hook(XrVMRuntime *X, XrObjectInstance *inst, int index,
                                                XrValue *out) {
     XrVMRuntime *iso = X ? X : xr_exec_context_vm_owner();
     if (!xr_instance_struct_get_field(iso, inst, index, out))

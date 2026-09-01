@@ -22,7 +22,7 @@
 
 #include <string.h>
 
-XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls) {
+XrObjectInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls) {
     XR_DCHECK(cls != NULL, "Class must not be NULL");
     XR_DCHECK(X != NULL, "Runtime must not be NULL");
 
@@ -31,8 +31,8 @@ XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls) {
     size_t size = xr_instance_size(cls);
     XrAllocationContext *alloc = xr_alloc_context_current();
     XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
-    XrInstance *inst = alloc && alloc->core == core
-                           ? (XrInstance *) xr_alloc_context_new_object(alloc, size, XR_TINSTANCE)
+    XrObjectInstance *inst = alloc && alloc->core == core
+                           ? (XrObjectInstance *) xr_alloc_context_new_object(alloc, size, XR_TINSTANCE)
                            : NULL;
 
     if (!inst) {
@@ -49,7 +49,7 @@ XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls) {
     return inst;
 }
 
-void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
+void xr_instance_init_inplace(XrObjectInstance *inst, XrClass *cls) {
     if (!inst || !cls)
         return;
 
@@ -84,14 +84,14 @@ void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
     }
 }
 
-XrValue xr_instance_get_field_by_index(XrInstance *inst, int index) {
+XrValue xr_instance_get_field_by_index(XrObjectInstance *inst, int index) {
     XR_DCHECK(inst != NULL, "Instance must not be NULL");
     XrClass *klass = xr_instance_get_class(inst);
     XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
     return inst->fields[index];
 }
 
-void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value) {
+void xr_instance_set_field_by_index(XrObjectInstance *inst, int index, XrValue value) {
     XR_DCHECK(inst != NULL, "Instance must not be NULL");
     XrClass *klass = xr_instance_get_class(inst);
     XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
@@ -179,7 +179,7 @@ static bool xr_instance_write_decoded_native_field(uint8_t *dst,
         case XR_NATIVE_NESTED_AGGREGATE: {
             if (!XR_IS_INSTANCE(value))
                 return false;
-            XrInstance *nested = XR_TO_INSTANCE(value);
+            XrObjectInstance *nested = XR_TO_INSTANCE(value);
             void *body = nested && nested->klass ? xr_instance_native_body(nested) : NULL;
             if (!body || !nested->klass->struct_layout ||
                 nested->klass->struct_layout->total_size != field->size)
@@ -197,13 +197,13 @@ static bool xr_instance_write_decoded_native_field(uint8_t *dst,
 
 /* Installed by the VM; NULL in backends that never materialize struct
  * instances with native bodies. */
-static XrInstanceStructFieldReadHook g_struct_field_read_hook;
+static XrObjectInstanceStructFieldReadHook g_struct_field_read_hook;
 
-void xr_instance_set_struct_field_read_hook(XrInstanceStructFieldReadHook hook) {
+void xr_instance_set_struct_field_read_hook(XrObjectInstanceStructFieldReadHook hook) {
     g_struct_field_read_hook = hook;
 }
 
-XrValue xr_instance_load_field(struct XrVMRuntime *X, XrInstance *inst, int index) {
+XrValue xr_instance_load_field(struct XrVMRuntime *X, XrObjectInstance *inst, int index) {
     if (inst && inst->klass && inst->klass->struct_layout && g_struct_field_read_hook) {
         XrValue out;
         if (g_struct_field_read_hook(X, inst, index, &out))
@@ -212,7 +212,7 @@ XrValue xr_instance_load_field(struct XrVMRuntime *X, XrInstance *inst, int inde
     return xr_instance_get_field_fast(inst, index);
 }
 
-bool xr_instance_set_decoded_field(XrInstance *inst, int index, XrValue value) {
+bool xr_instance_set_decoded_field(XrObjectInstance *inst, int index, XrValue value) {
     if (!inst || !inst->klass || index < 0 || index >= xr_class_instance_field_count(inst->klass))
         return false;
     XrAggregateLayout *layout = inst->klass->struct_layout;
@@ -241,7 +241,7 @@ size_t xr_instance_size(XrClass *cls) {
         slot_count = xr_class_instance_field_count(cls);
     }
 
-    size_t size = sizeof(XrInstance) + sizeof(XrValue) * slot_count;
+    size_t size = sizeof(XrObjectInstance) + sizeof(XrValue) * slot_count;
     XrNativeBodyDesc *desc = cls->native_body;
     if (desc) {
         size_t align = desc->body_align ? (size_t) desc->body_align : sizeof(void *);
@@ -251,11 +251,11 @@ size_t xr_instance_size(XrClass *cls) {
     return size;
 }
 
-void xr_instance_free(XrInstance *inst) {
+void xr_instance_free(XrObjectInstance *inst) {
     (void) inst;
 }
 
-XrInstance *xr_instance_clone(XrVMRuntime *X, XrInstance *src) {
+XrObjectInstance *xr_instance_clone(XrVMRuntime *X, XrObjectInstance *src) {
     XR_DCHECK(src != NULL, "instance_clone: NULL src");
     XrClass *cls = src->klass;
     XR_DCHECK(cls != NULL, "instance_clone: NULL klass");
@@ -264,8 +264,8 @@ XrInstance *xr_instance_clone(XrVMRuntime *X, XrInstance *src) {
     size_t size = xr_instance_size(cls);
     XrAllocationContext *alloc = xr_alloc_context_current();
     XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
-    XrInstance *dst = alloc && alloc->core == core
-                          ? (XrInstance *) xr_alloc_context_new_object(alloc, size, XR_TINSTANCE)
+    XrObjectInstance *dst = alloc && alloc->core == core
+                          ? (XrObjectInstance *) xr_alloc_context_new_object(alloc, size, XR_TINSTANCE)
                           : NULL;
     if (!dst)
         return NULL;

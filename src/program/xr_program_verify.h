@@ -74,6 +74,7 @@ XR_FUNC XrProgramVerifyStatus xr_program_validate(const uint8_t *bytes, size_t s
                                                   const XrProgramVerifyBudget *budget,
                                                   XrValidatedProgram **program_out,
                                                   XrProgramDiagnostic *diagnostic_out);
+XR_FUNC XrValidatedProgram *xr_validated_program_retain(XrValidatedProgram *program);
 XR_FUNC void xr_validated_program_free(XrValidatedProgram *program);
 XR_FUNC XrProgramId xr_validated_program_id(const XrValidatedProgram *program);
 XR_FUNC uint32_t xr_validated_program_function_count(const XrValidatedProgram *program);

@@ -29,16 +29,24 @@ typedef struct XrTargetProfileDraft {
 struct XrTargetProfile {
     atomic_uint_least32_t references;
     bool frozen;
+    bool provider_contracts_materialized;
     XrTargetProfileDraft facts;
     XrFingerprint fingerprint;
+    XrTargetSemanticsId target_semantics_id;
+    XrBoundaryAbi boundary_abi;
+    XrRuntimeKernelContract runtime_kernel;
+    XrTargetProviderContract *providers;
+    size_t provider_count;
 };
 
 XR_FUNC void xr_target_profile_compute_fingerprint(const XrTargetProfileDraft *facts,
                                                    XrFingerprint *out);
-XR_FUNC bool xr_target_profile_freeze(const XrTargetProfileDraft *draft,
-                                      XrTargetProfile **out, char *error,
-                                      size_t error_size);
-XR_FUNC const XrTargetProfileDraft *xr_target_profile_facts(
-    const XrTargetProfile *profile);
+XR_FUNC void xr_target_profile_compute_partitions(const XrTargetProfileDraft *facts,
+                                                  XrTargetSemanticsId *target_semantics_id,
+                                                  XrBoundaryAbi *boundary_abi,
+                                                  XrRuntimeKernelContract *runtime_kernel);
+XR_FUNC bool xr_target_profile_freeze(const XrTargetProfileDraft *draft, XrTargetProfile **out,
+                                      char *error, size_t error_size);
+XR_FUNC const XrTargetProfileDraft *xr_target_profile_facts(const XrTargetProfile *profile);
 
 #endif  // XR_TARGET_PROFILE_INTERNAL_H

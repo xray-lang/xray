@@ -105,7 +105,7 @@ static XrTypeIdentityCoreKind xr_value_type_identity_kind(XrValue v) {
         if (gctype < sizeof(gctype_to_type_identity) / sizeof(gctype_to_type_identity[0])) {
             XrTypeIdentityCoreKind kind = gctype_to_type_identity[gctype];
             if (kind == XR_TYPE_IDENTITY_CORE_INSTANCE) {
-                XrInstance *inst = (XrInstance *) v.ptr;
+                XrObjectInstance *inst = (XrObjectInstance *) v.ptr;
                 if (inst->klass) {
                     switch (inst->klass->builtin_kind) {
                         case XR_BK_STRUCT_OBJECT:

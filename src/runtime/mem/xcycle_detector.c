@@ -237,7 +237,7 @@ static bool detector_object_is_candidate(const XrObjHeader *obj) {
         return false;
     switch (obj->type) {
         case XR_TINSTANCE: {
-            const XrClass *cls = ((const XrInstance *) obj)->klass;
+            const XrClass *cls = ((const XrObjectInstance *) obj)->klass;
             return cls && (cls->flags & XR_CLASS_CYCLE_CANDIDATE);
         }
         case XR_TCELL:
@@ -375,7 +375,7 @@ static void detector_scan_black_visitor(XrObjHeader *child, uint32_t slot, void 
 static const char *detector_type_name(const XrObjHeader *obj) {
     switch (obj->type) {
         case XR_TINSTANCE: {
-            const XrClass *cls = ((const XrInstance *) obj)->klass;
+            const XrClass *cls = ((const XrObjectInstance *) obj)->klass;
             if (!cls)
                 return "instance";
             /* The snapshot taken at class construction, when the name was
@@ -626,14 +626,14 @@ static const char *cycle_edge_field(const CycleEdgeCtx *c, const CycleEdge *e) {
     XrObjHeader *from = c->members[e->from]->obj;
     if (from->type != XR_TINSTANCE || e->slot == XR_OBJ_GRAPH_SLOT_NONE)
         return NULL;
-    return xr_cycle_detector_field_name(((const XrInstance *) from)->klass, e->slot);
+    return xr_cycle_detector_field_name(((const XrObjectInstance *) from)->klass, e->slot);
 }
 
 /* Class name when the object is an instance of a registered class, else the
  * runtime shape — either way something the reader can match to source. */
 static const char *cycle_obj_name(const XrObjHeader *o) {
     if (o->type == XR_TINSTANCE) {
-        const char *n = xr_cycle_detector_class_name(((const XrInstance *) o)->klass);
+        const char *n = xr_cycle_detector_class_name(((const XrObjectInstance *) o)->klass);
         if (n)
             return n;
     }

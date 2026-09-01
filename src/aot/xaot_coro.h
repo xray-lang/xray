@@ -274,7 +274,7 @@ static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
         return value;
     /* AOT-native objects already use the canonical header-at-value-pointer
      * object ABI.  They must not enter the VM-layout ADT/enum probes below:
-     * those probes interpret an XR_TINSTANCE payload as XrInstance metadata,
+     * those probes interpret an XR_TINSTANCE payload as XrObjectInstance metadata,
      * while a native class carries its generated fields immediately after the
      * shared XrObjHeader. */
     if (value.ptr && (((const XrObjHeader *) value.ptr)->extra & XR_OBJ_AOT_NATIVE) != 0)

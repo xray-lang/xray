@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xpanic_info.h - Exception API on top of the unified XrInstance class
+ * xpanic_info.h - Exception API on top of the unified XrObjectInstance class
  *
  * KEY CONCEPT:
  *   Exception is a regular Xray class registered into core->panicInfoClass
@@ -31,7 +31,7 @@
 
 /* ========== Type Check ==========
  *
- * Walks XrInstance->klass through xr_class_instanceof against
+ * Walks XrObjectInstance->klass through xr_class_instanceof against
  * core->panicInfoClass. Returns false for non-instances and for
  * instances whose class chain doesn't reach Exception.
  */

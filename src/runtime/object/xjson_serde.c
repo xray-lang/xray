@@ -1042,8 +1042,8 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
 
     XrValue result = xr_null();
     if (ok) {
-        XrInstance *object = (target->flags & XR_CLASS_DYNAMIC_LAYOUT)
-                                 ? (XrInstance *) xr_object_instance_new_with_class(coro, target)
+        XrObjectInstance *object = (target->flags & XR_CLASS_DYNAMIC_LAYOUT)
+                                 ? (XrObjectInstance *) xr_object_instance_new_with_class(coro, target)
                                  : xr_instance_new(p->X, target);
         if (!object) {
             direct_typed_error(p, error, path, "available memory", "out_of_memory");
@@ -1491,7 +1491,7 @@ static void stringify_json(JsonWriter *w, XrObjectInstance *json) {
 }
 
 // Stringify Instance (Struct/Class instance)
-static void stringify_instance(JsonWriter *w, XrInstance *inst) {
+static void stringify_instance(JsonWriter *w, XrObjectInstance *inst) {
     XrClass *cls = xr_instance_get_class(inst);
     if (!cls) {
         writer_str(w, "null");
@@ -1646,7 +1646,7 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             writer_str(w, "null");
     } else if (xr_value_is_instance(val)) {
         // Struct or Class instance
-        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
+        XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(val);
         if (stringify_enter(w, inst)) {
             stringify_instance(w, inst);
             stringify_leave(w);
@@ -1682,7 +1682,7 @@ static void encode_array(JsonEncoder *e, XrArray *arr, XrValue *out) {
     *out = e->has_error ? xr_null() : xr_value_from_array(copy);
 }
 
-static void encode_object_fields(JsonEncoder *e, XrInstance *inst, bool dynamic_fields,
+static void encode_object_fields(JsonEncoder *e, XrObjectInstance *inst, bool dynamic_fields,
                                  XrValue *out) {
     XrMap *object = xr_map_new(NULL);
     if (!object) {
@@ -1808,7 +1808,7 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
     if (XR_IS_ARRAY(val)) {
         encode_array(e, XR_TO_ARRAY(val), out);
     } else if (xr_value_is_struct_object(val)) {
-        encode_object_fields(e, (XrInstance *) XR_TO_PTR(val), true, out);
+        encode_object_fields(e, (XrObjectInstance *) XR_TO_PTR(val), true, out);
     } else if (XR_IS_MAP(val)) {
         encode_map(e, XR_TO_MAP(val), out);
     } else if (XR_IS_SET(val)) {
@@ -1820,7 +1820,7 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
             name = "";
         *out = xr_string_value(xr_string_intern(e->isolate, name, strlen(name), 0));
     } else if (xr_value_is_instance(val)) {
-        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
+        XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(val);
         XrClass *cls = xr_instance_get_class(inst);
         if (!cls || (cls->flags & XR_CLASS_DERIVE_JSON) == 0) {
             char msg[160];

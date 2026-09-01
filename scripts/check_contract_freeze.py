@@ -804,6 +804,27 @@ CONTRACT_SPECS = (
             "tests/unit/runtime/test_typed_lifecycle_audit.c",
         ),
     ),
+    ContractSpec(
+        "canonical-program-execution-binding.md",
+        (
+            "src/plan/target/xr_target_profile.h",
+            "src/plan/target/xr_target_profile.c",
+            "src/plan/target/xr_target_verify.c",
+            "src/execution/xr_execution.h",
+            "src/execution/xr_execution.c",
+            "src/program/xr_program_verify.h",
+            "src/program/xr_program_verify.c",
+            "src/program/xr_validated_program_internal.h",
+            "src/runtime/abi/xr_runtime_contract.h",
+            "src/runtime/abi/xr_runtime_contract.c",
+            "src/runtime/class/xinstance.h",
+            "tests/unit/plan/test_target_profile.c",
+            "tests/unit/execution/test_xr_execution.c",
+            "tests/unit/runtime/test_runtime_abi_contract.c",
+            "scripts/check_xr_execution_contracts.py",
+            "contracts/canonical-program/execution-binding-coverage.json",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")

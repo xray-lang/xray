@@ -513,6 +513,10 @@ add_test(NAME test_semantic_type_admission COMMAND $<TARGET_FILE:test_semantic_t
 set(XR_TARGET_PROFILE_TEST_FIXTURE plan/target_profile_test_fixture.c)
 add_xray_unit_test(test_target_profile plan/test_target_profile.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_xr_execution execution/test_xr_execution.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+set_tests_properties(test_xr_execution PROPERTIES
+    LABELS "unit;execution;target-machine;provider;generation;task-298")
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_test(NAME test_target_native_target_leaf_authority

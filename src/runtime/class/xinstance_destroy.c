@@ -18,7 +18,7 @@
 void xr_obj_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     if (!obj)
         return;
-    XrInstance *inst = (XrInstance *) obj;
+    XrObjectInstance *inst = (XrObjectInstance *) obj;
     XrClass *klass = inst->klass;
     if (!klass)
         return;

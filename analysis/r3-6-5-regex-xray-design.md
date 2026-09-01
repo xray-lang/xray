@@ -28,7 +28,7 @@ lower 成 `XI_REGEX_COMPILE`，结果类型写死为 `l->type_regex`
 1. `XrNativeBodyDesc`（`src/runtime/class/xclass.h:65-72`）**没有 GC trace 回调**，
    只有 `init` / `destroy` / `deep_copy`。所以 native body 里存 `XrValue` 会被 GC 漏扫。
    → **native body 不能装 Xray 对象**，`RegexBody { XrRegex *regex; }` 这条路不能改造成装 Xray 值。
-2. 但 `XrInstance.fields[]` 是**正常的 GC 可见字段**，而且 `.xr` 能**读也能写**。
+2. 但 `XrObjectInstance.fields[]` 是**正常的 GC 可见字段**，而且 `.xr` 能**读也能写**。
    probe（本 lane 实测）：
    ```xray
    var m = regex.find(regex.compile("a(b)c"), "xabcy")

@@ -33,7 +33,7 @@ XrStringBuilder *xr_stringbuilder_new(struct XrCoroutine *coro) {
     XrClass *cls = xr_isolate_get_core_classes(X)->stringBuilderClass;
     XR_DCHECK(cls != NULL, "stringbuilder_new: NULL stringBuilderClass");
 
-    // Allocate as XR_TINSTANCE; sizeof matches XrInstance(0 fields) + body
+    // Allocate as XR_TINSTANCE; sizeof matches XrObjectInstance(0 fields) + body
     XrStringBuilder *sb = (XrStringBuilder *) xr_alloc(coro, sizeof(XrStringBuilder), XR_TINSTANCE);
     if (!sb) {
         xr_log_warning("stringbuilder", "memory allocation failed");
@@ -153,7 +153,7 @@ XrValue xr_stringbuilder_value(XrStringBuilder *sb) {
 bool xr_is_stringbuilder(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(v);
     return inst->klass && inst->klass->builtin_kind == XR_BK_STRINGBUILDER;
 }
 
@@ -176,7 +176,7 @@ static void stringbuilder_body_destroy(void *body) {
 }
 
 // Explicit copy hook: allocate an independent buffer and copy content.
-static bool stringbuilder_body_deep_copy(XrCopyContext *ctx, XrInstance *src, XrInstance *dst) {
+static bool stringbuilder_body_deep_copy(XrCopyContext *ctx, XrObjectInstance *src, XrObjectInstance *dst) {
     (void) ctx;
     XrStringBuilder *src_sb = (XrStringBuilder *) src;
     XrStringBuilder *dst_sb = (XrStringBuilder *) dst;

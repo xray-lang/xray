@@ -101,7 +101,7 @@ typedef struct XrStdlibHostedProxyBody {
     const char *type_name;
 } XrStdlibHostedProxyBody;
 
-static void stdlib_hosted_proxy_body_init(XrInstance *instance, void *raw_body) {
+static void stdlib_hosted_proxy_body_init(XrObjectInstance *instance, void *raw_body) {
     (void) instance;
     XrStdlibHostedProxyBody *body = (XrStdlibHostedProxyBody *) raw_body;
     body->native_value = xr_null();
@@ -117,8 +117,8 @@ static void stdlib_hosted_proxy_body_destroy(void *raw_body) {
     }
 }
 
-static bool stdlib_hosted_proxy_body_deep_copy(XrCopyContext *ctx, XrInstance *src,
-                                               XrInstance *dst) {
+static bool stdlib_hosted_proxy_body_deep_copy(XrCopyContext *ctx, XrObjectInstance *src,
+                                               XrObjectInstance *dst) {
     (void) ctx;
     XrStdlibHostedProxyBody *src_body = (XrStdlibHostedProxyBody *) xr_instance_native_body(src);
     XrStdlibHostedProxyBody *dst_body = (XrStdlibHostedProxyBody *) xr_instance_native_body(dst);
@@ -158,7 +158,7 @@ static bool stdlib_host_object_view(void *host, XrValue value, XrHostedFragmentO
     (void) host;
     if (!out || !xr_value_is_instance(value))
         return false;
-    XrInstance *instance = xr_value_to_instance(value);
+    XrObjectInstance *instance = xr_value_to_instance(value);
     if (!instance || !instance->klass ||
         instance->klass->native_body != &g_stdlib_hosted_proxy_body_desc)
         return false;
@@ -195,7 +195,7 @@ static XrValue stdlib_host_object_new(void *host, const char *nominal_owner, con
     XrClass *proxy_class = xr_value_to_class(class_value);
     if (!proxy_class || proxy_class->native_body != &g_stdlib_hosted_proxy_body_desc)
         return xr_null();
-    XrInstance *instance = xr_instance_new(isolate, proxy_class);
+    XrObjectInstance *instance = xr_instance_new(isolate, proxy_class);
     if (!instance)
         return xr_null();
     XrStdlibHostedProxyBody *body = (XrStdlibHostedProxyBody *) xr_instance_native_body(instance);

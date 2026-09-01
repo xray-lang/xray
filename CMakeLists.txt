@@ -312,6 +312,7 @@ set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(CORESPECGEN ${CMAKE_SOURCE_DIR}/tools/corespecgen/corespecgen.py)
 set(PROGRAMGEN ${CMAKE_SOURCE_DIR}/tools/programgen/programgen.py)
 set(PROGRAMSEMCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_semantics.py)
+set(EXECUTIONCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_execution_contracts.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -615,6 +616,19 @@ add_custom_target(check-xr-program-semantics
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-verifier-v1.md
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-semantic-coverage.json
     COMMENT "Checking XrProgram semantic admission and evaluator coverage"
+    VERBATIM
+)
+
+add_custom_target(check-xr-execution-contracts
+    COMMAND ${XRAY_PYTHON} ${EXECUTIONCONTRACTCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${EXECUTIONCONTRACTCHECK}
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/execution-binding-coverage.json
+            ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_profile.h
+            ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_profile.c
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.h
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.c
+    COMMENT "Checking exact target-profile and execution-binding contracts"
     VERBATIM
 )
 
@@ -1197,6 +1211,7 @@ file(GLOB VM_DEBUG_SRC CONFIGURE_DEPENDS "src/vm/debug/*.c")
 file(GLOB IR_SRC CONFIGURE_DEPENDS "src/ir/*.c")
 file(GLOB CORE_SPEC_SRC CONFIGURE_DEPENDS "src/core/*.c")
 file(GLOB PROGRAM_SRC CONFIGURE_DEPENDS "src/program/*.c")
+file(GLOB EXECUTION_SRC CONFIGURE_DEPENDS "src/execution/*.c")
 file(GLOB PLAN_SEMANTIC_SRC CONFIGURE_DEPENDS "src/plan/semantic/*.c")
 file(GLOB PLAN_OWNERSHIP_SRC CONFIGURE_DEPENDS "src/plan/ownership/*.c")
 file(GLOB PLAN_FORMAT_SRC CONFIGURE_DEPENDS "src/plan/format/*.c")
@@ -1424,7 +1439,7 @@ foreach(XRAY_SRC_LIST
         RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
         FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
         FRONTEND_ANALYZER_SRC FRONTEND_CANONICAL_SRC FRONTEND_FORMAT_SRC TOOLCHAIN_SRC
-        VM_SRC VM_DEBUG_SRC IR_SRC CORE_SPEC_SRC PROGRAM_SRC PLAN_SEMANTIC_SRC PLAN_OWNERSHIP_SRC PLAN_FORMAT_SRC PLAN_TARGET_SRC
+        VM_SRC VM_DEBUG_SRC IR_SRC CORE_SPEC_SRC PROGRAM_SRC EXECUTION_SRC PLAN_SEMANTIC_SRC PLAN_OWNERSHIP_SRC PLAN_FORMAT_SRC PLAN_TARGET_SRC
         MODULE_SRC ANALYSIS_SRC AOT_SRC API_SRC NEW_CLI_SRC APP_TOOLCHAIN_SRC
         STDLIB_CORE_SRC STDLIB_SRC)
     xray_exclude_include_fragments(${XRAY_SRC_LIST})
@@ -1459,6 +1474,7 @@ set(CORE_ALL_SOURCES
     ${IR_SRC}
     ${CORE_SPEC_SRC}
     ${PROGRAM_SRC}
+    ${EXECUTION_SRC}
     ${PLAN_SEMANTIC_SRC}
     ${PLAN_OWNERSHIP_SRC}
     ${PLAN_FORMAT_SRC}
@@ -1502,7 +1518,8 @@ endif()
 add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
 add_dependencies(xray_core_objs
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics)
+    gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics
+    check-xr-execution-contracts)
 
 # Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
 # table.
@@ -1515,7 +1532,8 @@ add_dependencies(xray_stdlib_bootstrap_core
 add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_core_objs>)
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics)
+    gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics
+    check-xr-execution-contracts)
 
 # The installed compiler product is the exact backend authority surface, not
 # the CLI's xray_core development aggregate.  Keep source/Xi inputs opaque at
@@ -4712,6 +4730,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(xr_program_semantic_coverage_self_test PROPERTIES
         LABELS "meta;contracts;canonical-program;semantic-admission;mutation;task-297"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_execution_contracts
+        COMMAND ${XRAY_PYTHON} ${EXECUTIONCONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_execution_contracts PROPERTIES
+        LABELS "meta;contracts;canonical-program;execution;target-machine;task-298"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_execution_contracts_self_test
+        COMMAND ${XRAY_PYTHON} ${EXECUTIONCONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_execution_contracts_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;execution;mutation;task-298"
         PROCESSORS 1
         TIMEOUT 30
     )

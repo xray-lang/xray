@@ -37,7 +37,7 @@ typedef struct XrEnumCtor {
 } XrEnumCtor;
 
 /* Runtime ADT enum value. It shares only the object header + klass prefix with
- * XrInstance; tag and payload are enum-owned inline storage, not generic
+ * XrObjectInstance; tag and payload are enum-owned inline storage, not generic
  * instance fields. */
 typedef struct XrEnumAggregateValue {
     XrObjHeader hdr;
@@ -127,7 +127,7 @@ xr_enum_zero_payload_value(struct XrRuntimeCore *core, XrEnumType *enum_type,
 
 /* Construct an enum aggregate value. Logical field 0 is the tag; logical
  * fields 1..N are payloads. Runtime storage is XrEnumAggregateValue, not
- * generic XrInstance fields. */
+ * generic XrObjectInstance fields. */
 struct XrAllocationContext;
 XR_FUNC size_t xr_enum_aggregate_size(uint32_t payload_count);
 XR_FUNC void xr_enum_aggregate_init_inplace(XrEnumAggregateValue *value, XrEnumType *enum_type,

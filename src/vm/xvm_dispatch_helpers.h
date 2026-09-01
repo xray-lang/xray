@@ -387,7 +387,7 @@ static inline XrClass *invoke_resolve_class(XrVMRuntime *isolate, XrValue receiv
     XrObjType type = XR_OBJ_GET_TYPE(gc);
 
     if (type == XR_TINSTANCE) {
-        XrInstance *inst = (XrInstance *) gc;
+        XrObjectInstance *inst = (XrObjectInstance *) gc;
         return inst->klass;
     }
     if (type == XR_TCLASS)
@@ -458,7 +458,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                                                   XrValue *base, int a, XrBcCallFrame *frame,
                                                   XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMContext *vm_ctx,
-                                                    XrInstance *inst, XrValue obj, int prop_symbol,
+                                                    XrObjectInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue value, XrValue *base, int c,
                                                     XrBcCallFrame *frame, XrInstruction *pc);
 XR_FUNC int vm_collect_all_coros(XrVMRuntime *isolate, VmCoroEntry *out, int max_out);
@@ -469,7 +469,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                                                   int a, int b, XrBcCallFrame *frame,
                                                   XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrVMRuntime *isolate, XrVMContext *vm_ctx,
-                                                    XrInstance *inst, XrValue obj, int prop_symbol,
+                                                    XrObjectInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue *base, int a, XrBcCallFrame *frame,
                                                     XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_ctx,

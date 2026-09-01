@@ -528,7 +528,7 @@ vmcase(OP_INVOKE_DIRECT) {
                              "direct invoke receiver is not an instance in %s at pc %d line %d", fn,
                              pc_idx, line);
         }
-        XrInstance *inst_obj = xr_value_to_instance(receiver);
+        XrObjectInstance *inst_obj = xr_value_to_instance(receiver);
         cls = xr_instance_get_class(inst_obj);
     }
     if (XR_UNLIKELY(cls == NULL || method_idx < 0 || method_idx >= cls->method_count)) {

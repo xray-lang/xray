@@ -166,7 +166,7 @@ static XrValue eval_member_access(XrEvalContext *ctx, XrValue obj, const char *n
     if (XR_IS_PTR(obj)) {
         XrObjHeader *hdr = XR_TO_PTR(obj);
         if (hdr->type == XR_TINSTANCE) {
-            XrInstance *inst = (XrInstance *) hdr;
+            XrObjectInstance *inst = (XrObjectInstance *) hdr;
             return xr_instance_get_field(ctx->isolate, inst, name);
         }
 

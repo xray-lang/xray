@@ -64,7 +64,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
     XR_DCHECK(obj != NULL, "xr_obj_graph_visit_children: NULL obj");
     switch (obj->type) {
         case XR_TINSTANCE: {
-            XrInstance *inst = (XrInstance *) obj;
+            XrObjectInstance *inst = (XrObjectInstance *) obj;
             XrClass *klass = inst->klass;
             if (!klass)
                 break;

@@ -1387,7 +1387,7 @@ static struct XrType *tuple_elem_type(XiLower *l, struct XrType *subject_type, i
 /* Variant-ordinal test for an ADT-enum value: read logical ADT field 0 (the
  * tag) and compare it against the pattern variant's static ordinal. Logical
  * ADT fields are lowered through enum aggregate helpers in the VM/AOT backend,
- * so this numbering is an IR convention, not a runtime XrInstance layout. */
+ * so this numbering is an IR convention, not a runtime XrObjectInstance layout. */
 static XiValue *lower_adt_variant_tag_test(XiLower *l, XiValue *subject, AstNode *variant) {
     int member_index = stmt_adt_member_index(l, subject->type, variant);
     struct XrType *tag_type = member_index >= 0 ? l->type_int : l->type_any;

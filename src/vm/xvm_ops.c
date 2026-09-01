@@ -432,8 +432,8 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
         return set_deep_equal(ctx, xr_value_to_set(a), xr_value_to_set(b));
     // Instance field-by-field comparison for value types (structs)
     if (xr_value_is_instance(a) && xr_value_is_instance(b)) {
-        XrInstance *ia = xr_value_to_instance(a);
-        XrInstance *ib = xr_value_to_instance(b);
+        XrObjectInstance *ia = xr_value_to_instance(a);
+        XrObjectInstance *ib = xr_value_to_instance(b);
         if (ia->klass && ib->klass && ia->klass->builtin_kind == XR_BK_ADT_ENUM &&
             ib->klass->builtin_kind == XR_BK_ADT_ENUM) {
             XrEnumAggregateValue *ea = xr_value_to_enum_aggregate(a);

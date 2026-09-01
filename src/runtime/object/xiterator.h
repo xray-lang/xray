@@ -11,7 +11,7 @@
  *   Supports Map/Set/Json/Array/String/Range iteration with key-value pairs.
  *
  * MEMORY LAYOUT (unified class model):
- *   XrInstance header + 0 fields + native body:
+ *   XrObjectInstance header + 0 fields + native body:
  *     XrObjHeader hdr          (16B, type = XR_TINSTANCE)
  *     XrClass *klass         (8B,  iteratorClass)
  *     XrIteratorType type    (4B)  ─┐
@@ -33,7 +33,7 @@
 
 struct XrMap;
 struct XrSet;
-struct XrInstance;
+struct XrObjectInstance;
 struct XrArray;
 struct XrString;
 
@@ -70,7 +70,7 @@ struct XrClass;
  * compiler always invokes `coll.entriesIterator()` and pulls pairs one by
  * one with hasNext()/next().
  *
- * Layout matches XrInstance (hdr + klass + 0 fields) plus a 40-byte native
+ * Layout matches XrObjectInstance (hdr + klass + 0 fields) plus a 40-byte native
  * body holding the iteration state. The runtime instance pointer IS the
  * XrIterator pointer; native_body offset lands directly on `type`.
  */
@@ -85,11 +85,11 @@ typedef struct XrIterator {
     union {
         struct XrMap *map;         // Map iterator
         struct XrSet *set;         // Set iterator
-        struct XrInstance *json;   // Json iterator over dynamic-layout instance storage
+        struct XrObjectInstance *json;   // Json iterator over dynamic-layout instance storage
         struct XrArray *array;     // Array iterator
         struct XrString *string;   // String iterator
         struct XrCoroutine *gen;   // Generator: owned, pull-driven producer coroutine
-        struct XrInstance *range;  // Range: instance whose native body is the XrRange bounds
+        struct XrObjectInstance *range;  // Range: instance whose native body is the XrRange bounds
     } source;                      // source object (union, selected by type)
     /* Cursor. Every collection source is bounded by a 32-bit entry count, so
      * they share the narrow pair. A Range is the one source whose element
@@ -121,11 +121,11 @@ XR_FUNC XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct Xr
 
 // Create iterator from Json (lazy, converts SymbolId keys to strings).
 // Default mode is PAIRS — yields (string_key, value) tuples.
-XR_FUNC XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrInstance *json,
+XR_FUNC XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrObjectInstance *json,
                                               struct XrVMRuntime *isolate);
 
 // Same source, KEYS mode — yields each key string.
-XR_FUNC XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, struct XrInstance *json,
+XR_FUNC XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, struct XrObjectInstance *json,
                                                struct XrVMRuntime *isolate);
 
 // Create iterator from Array (lazy, yields [index, element] pairs)
@@ -139,7 +139,7 @@ XR_FUNC XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct
 // Create iterator from Range (lazy, yields each element of the sequence).
 // `range` is the Range instance; the iterator borrows its native body bounds
 // and computes element i as start + i * step, exactly like Range.toArray().
-XR_FUNC XrIterator *xr_iterator_new_from_range(struct XrCoroutine *coro, struct XrInstance *range);
+XR_FUNC XrIterator *xr_iterator_new_from_range(struct XrCoroutine *coro, struct XrObjectInstance *range);
 
 // Create iterator over a generator coroutine. `owner` is the consuming
 // coroutine (heap for the iterator allocation and yielded-value promotion);

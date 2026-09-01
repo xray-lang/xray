@@ -142,7 +142,7 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
  * reference to that instance and derives each element from `range_cursor`, so
  * the produced sequence matches Range.toArray() and the static
  * `for (i in a..b)` lowering element for element. */
-XrIterator *xr_iterator_new_from_range(struct XrCoroutine *coro, struct XrInstance *range) {
+XrIterator *xr_iterator_new_from_range(struct XrCoroutine *coro, struct XrObjectInstance *range) {
     XR_DCHECK(range != NULL, "iterator_new_from_range: NULL range");
     XrIterator *iter = iterator_alloc(coro);
     if (!iter)

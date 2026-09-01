@@ -135,7 +135,7 @@ vmcase(OP_MAP_SETKS) {
     // OP_MAP_SETKS: batch set fields
     int a = GETARG_A(i);
     int count = GETARG_B(i);
-    XrInstance *inst_obj = xr_value_to_instance(R(a));
+    XrObjectInstance *inst_obj = xr_value_to_instance(R(a));
     for (int j = 0; j < count; j++) {
         XrValue val = R(a + 1 + j);
         if (inst_obj->klass && inst_obj->klass->struct_layout) {
@@ -166,7 +166,7 @@ vmcase(OP_GETFIELD) {
         R(a) = xr_enum_aggregate_field_get(enum_agg, field_idx);
         vmbreak;
     }
-    XrInstance *inst_obj = xr_value_to_instance(inst_val);
+    XrObjectInstance *inst_obj = xr_value_to_instance(inst_val);
     if (xr_weak_instance_field_load(inst_obj, field_idx, &R(a)))
         vmbreak;
     if (inst_obj->klass && inst_obj->klass->struct_layout) {
@@ -186,7 +186,7 @@ vmcase(OP_SETFIELD) {
     int c = GETARG_C(i);
 
     XrValue inst_val = R(a);
-    XrInstance *inst_obj = xr_value_to_instance(inst_val);
+    XrObjectInstance *inst_obj = xr_value_to_instance(inst_val);
     XrValue val = R(c);
     if (xr_weak_instance_field_store(vm_weak_heap(vm_ctx), inst_obj, field_idx, val))
         vmbreak;
@@ -218,7 +218,7 @@ vmcase(OP_GETFIELD_IC) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "field access requires instance object");
     }
 
-    XrInstance *inst_obj = xr_value_to_instance(inst_val);
+    XrObjectInstance *inst_obj = xr_value_to_instance(inst_val);
     XrClass *cls = inst_obj->klass;
 
     // Lazily ensure the per-ctx IC table for this proto.
@@ -658,8 +658,8 @@ vmcase(OP_GETPROP) {
     }
 
 getprop_instance:;
-    // XrObjectInstance shares XrInstance layout; direct cast works.
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(obj);
+    // XrObjectInstance shares XrObjectInstance layout; direct cast works.
+    XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(obj);
 
     /* Every path below resolves the property through the instance class: the
      * dynamic-layout probe, the getter dispatch, and the inline caches all
@@ -838,8 +838,8 @@ vmcase(OP_SETPROP) {
         // XR_DISP_FALLTHROUGH: fall through to instance path
     }
 
-    // XrObjectInstance shares XrInstance layout — direct cast works
-    XrInstance *inst_s = (XrInstance *) XR_TO_PTR(obj);
+    // XrObjectInstance shares XrObjectInstance layout — direct cast works
+    XrObjectInstance *inst_s = (XrObjectInstance *) XR_TO_PTR(obj);
 
     /* Same reasoning as OP_GETPROP: a weak slot holds a handle. */
     if (inst_s->klass && (inst_s->klass->flags & XR_CLASS_HAS_WEAK_FIELDS)) {

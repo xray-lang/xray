@@ -61,7 +61,7 @@
       "proposed_class": "runtime_leaf",
       "evidence": "sys.c:349 sys_mutex_new allocates an OsMutex instance through sys_shared_instance_new on the isolate's shared heap and throws XR_ERR_OUT_OF_MEMORY on failure. No syscall: it is an object-representation primitive for a runtime synchronisation object whose lock/unlock live in the generated class bindings.",
       "abi": "none directly — the runtime shared heap and the platform mutex embedded in the instance",
-      "ownership": "allocates a shared-heap XrInstance; script owns it under RC and the native body destructor releases the mutex",
+      "ownership": "allocates a shared-heap XrObjectInstance; script owns it under RC and the native body destructor releases the mutex",
       "effect": "not yieldable; construction cannot block",
       "provider": "runtime",
       "migratable_body": "",

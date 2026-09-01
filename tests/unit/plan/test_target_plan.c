@@ -3774,7 +3774,7 @@ static void test_source_class_array_push_managed_execution(const XrTargetPlan *p
     for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
         XrObjHeader instance = {0};
         xr_obj_header_init_type(&instance, XR_TINSTANCE);
-        XrValue element = xr_value_from_instance((struct XrInstance *) (void *) &instance);
+        XrValue element = xr_value_from_instance((struct XrObjectInstance *) (void *) &instance);
 
         XrArray success = {0};
         xr_obj_header_init_type(&success.hdr, XR_TARRAY);
@@ -3877,7 +3877,7 @@ static void test_nested_array_push_managed_execution(const XrTargetPlan *plan) {
         xr_obj_header_init_type(&wrong_instance, XR_TINSTANCE);
         XrValue hostile_arguments[2] = {
             receiver,
-            xr_value_from_instance((struct XrInstance *) (void *) &wrong_instance),
+            xr_value_from_instance((struct XrObjectInstance *) (void *) &wrong_instance),
         };
         request.arguments = hostile_arguments;
         REQUIRE(xr_typed_dispatch_execute_values(&request) ==

@@ -1,0 +1,73 @@
+{
+  "schema": "xray-execution-binding-coverage/1",
+  "profile_schema_version": 4,
+  "execution_binding_schema_version": 1,
+  "profile_partitions": [
+    {
+      "name": "target-semantics",
+      "identity": "XrTargetSemanticsId",
+      "status": "COMPLETE"
+    },
+    {
+      "name": "boundary-abi",
+      "identity": "XrBoundaryAbiId",
+      "status": "WALKING_SKELETON"
+    },
+    {
+      "name": "runtime-kernel",
+      "identity": "XrRuntimeKernelId",
+      "status": "WALKING_SKELETON"
+    },
+    {
+      "name": "provider-contract-set",
+      "identity": "XrProviderContractSetId",
+      "status": "COMPLETE"
+    }
+  ],
+  "boundary_value_types": [
+    "void",
+    "bool",
+    "i64",
+    "u32",
+    "error"
+  ],
+  "provider_admission": [
+    "stable-contract-id",
+    "exact-contract-fingerprint",
+    "ordered-operation-id",
+    "non-null-operation-entry",
+    "thread-safety",
+    "reentrancy",
+    "callback-safety"
+  ],
+  "generation_states": [
+    "ACTIVE",
+    "DRAINING",
+    "RETIRED"
+  ],
+  "generation_transitions": [
+    "ACTIVE->DRAINING",
+    "DRAINING+pins=0->RETIRED",
+    "RETIRED(g)->ACTIVE(g+1)"
+  ],
+  "foreign_profile_matrix": [
+    "explicit-target-machine-facts",
+    "explicit-runtime-abi",
+    "exact-provider-contract-fingerprint",
+    "no-host-sizeof-or-preprocessor-probe"
+  ],
+  "inactive_boundary_contracts": [
+    "aggregate-carriers",
+    "borrow-move-share-drop-transfer",
+    "root-and-cleanup-tables",
+    "coroutine-continuation-state",
+    "VM-boundary-adapter",
+    "AOT-boundary-adapter",
+    "FFI-and-hybrid-adapter"
+  ],
+  "forbidden_shared_representation": [
+    "VM-slot-layout",
+    "native-register-layout",
+    "common-local-physical-plan"
+  ]
+}

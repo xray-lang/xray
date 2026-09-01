@@ -103,14 +103,14 @@ op_call_entry:;
             }
 
             // Create instance (allocation based on storage mode context)
-            XrInstance *instance;
+            XrObjectInstance *instance;
             uint8_t storage_mode =
                 atomic_exchange_explicit(&isolate->current_storage_mode, 0, memory_order_relaxed);
 
             if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
                 // System storage: allocate on system heap
                 size_t size = xr_instance_size(klass);
-                instance = (XrInstance *) xr_sysheap_alloc_storage(
+                instance = (XrObjectInstance *) xr_sysheap_alloc_storage(
                     xr_isolate_get_sys_heap(isolate), size, XR_TINSTANCE, storage_mode);
                 if (instance) {
                     xr_instance_init_inplace(instance, klass);

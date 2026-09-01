@@ -85,7 +85,7 @@ static inline const char *xrs_path_arg(XrValue v, size_t *out_len) {
         *out_len = 0;
     if (!XR_IS_INSTANCE(v))
         return NULL;
-    XrInstance *inst = XR_TO_INSTANCE(v);
+    XrObjectInstance *inst = XR_TO_INSTANCE(v);
     if (!inst || !inst->klass || strcmp(xr_class_display_name(inst->klass), "Path") != 0)
         return NULL;
     if (xr_class_instance_field_count(inst->klass) < 1 || !inst->klass->fields ||

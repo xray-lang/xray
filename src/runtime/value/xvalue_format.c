@@ -64,7 +64,7 @@ static bool class_is_named_datetime(XrClass *cls) {
  * atomicity anyway, because it only ever appends to the caller's buffer — a
  * failure here loses the buffer instead of publishing part of a line. Writing
  * the rendered text out from here would be the one way to break that. */
-static bool format_datetime_method(XrVMRuntime *isolate, XrStrBuf *sb, XrInstance *inst,
+static bool format_datetime_method(XrVMRuntime *isolate, XrStrBuf *sb, XrObjectInstance *inst,
                                    const char *method) {
     if (!isolate || !sb || !inst || !method)
         return false;
@@ -201,7 +201,7 @@ static void format_json(XrVMRuntime *isolate, XrStrBuf *sb, XrObjectInstance *js
     xr_strbuf_append_cstr(sb, "}", 1);
 }
 
-static void format_inspect_instance(XrVMRuntime *isolate, XrStrBuf *sb, XrInstance *inst,
+static void format_inspect_instance(XrVMRuntime *isolate, XrStrBuf *sb, XrObjectInstance *inst,
                                     XrClass *cls, int depth) {
     const char *class_name = xr_class_display_name(cls);
     xr_strbuf_append_cstr(sb, class_name, strlen(class_name));
@@ -322,7 +322,7 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
             break;
         }
         case XR_TINSTANCE: {
-            XrInstance *inst = xr_value_to_instance(val);
+            XrObjectInstance *inst = xr_value_to_instance(val);
             XrClass *cls = xr_instance_get_class(inst);
             /* BigInt: decimal string representation */
             if (cls && cls->builtin_kind == XR_BK_BIGINT) {
@@ -507,7 +507,7 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
             XrBoundMethod *bm = (XrBoundMethod *) gc;
             xr_strbuf_append_cstr(sb, "<bound_method", 13);
             if (xr_value_is_instance(bm->receiver)) {
-                XrInstance *inst = xr_value_to_instance(bm->receiver);
+                XrObjectInstance *inst = xr_value_to_instance(bm->receiver);
                 XrClass *cls = xr_instance_get_class(inst);
                 if (cls && cls->name) {
                     xr_strbuf_append_cstr(sb, " ", 1);

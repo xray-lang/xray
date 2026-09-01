@@ -235,7 +235,7 @@ static int get_json_children(XrVMRuntime *isolate, XrObjectInstance *json, XdapV
     return count;
 }
 
-static int get_instance_children(XrVMRuntime *isolate, XrInstance *inst, XdapVarInfo **out_vars) {
+static int get_instance_children(XrVMRuntime *isolate, XrObjectInstance *inst, XdapVarInfo **out_vars) {
     if (!inst || !inst->klass) {
         *out_vars = NULL;
         return 0;
@@ -343,7 +343,7 @@ int xr_debug_get_var_children(XrVMRuntime *isolate, int ref_id, XdapVarInfo **ou
             if (XR_IS_PTR(ref->value)) {
                 XrObjHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TINSTANCE) {
-                    XrInstance *_inst = (XrInstance *) hdr;
+                    XrObjectInstance *_inst = (XrObjectInstance *) hdr;
                     if (_inst->klass && _inst->klass->builtin_kind == XR_BK_STRUCT_OBJECT)
                         return get_json_children(isolate, (XrObjectInstance *) hdr, out_vars);
                 }
@@ -354,7 +354,7 @@ int xr_debug_get_var_children(XrVMRuntime *isolate, int ref_id, XdapVarInfo **ou
             if (XR_IS_PTR(ref->value)) {
                 XrObjHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TINSTANCE) {
-                    return get_instance_children(isolate, (XrInstance *) hdr, out_vars);
+                    return get_instance_children(isolate, (XrObjectInstance *) hdr, out_vars);
                 }
             }
             break;
@@ -566,7 +566,7 @@ char *xr_debug_set_variable(XrVMRuntime *isolate, int var_ref, const char *name,
 
     // Instance field
     if (ref->type == XDAP_REF_INSTANCE && XR_IS_PTR(ref->value)) {
-        XrInstance *inst = (XrInstance *) XR_TO_PTR(ref->value);
+        XrObjectInstance *inst = (XrObjectInstance *) XR_TO_PTR(ref->value);
         xr_instance_set_field(isolate, inst, name, new_val);
         return xr_value_to_debug_string(isolate, new_val);
     }

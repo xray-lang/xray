@@ -21,6 +21,7 @@ typedef enum XrRuntimeContractRecordKind {
     XR_RUNTIME_CONTRACT_WHOLE_RUNTIME = 5,
     XR_RUNTIME_CONTRACT_PROVIDER_CALL_ABI = 6,
     XR_RUNTIME_CONTRACT_PROVIDER_SET = 7,
+    XR_RUNTIME_CONTRACT_PROVIDER = 8,
 } XrRuntimeContractRecordKind;
 
 static bool bytes_are_zero(const uint8_t *bytes, size_t count) {
@@ -1445,6 +1446,20 @@ static void hash_provider(XrSHA256Context *ctx, const XrTargetProviderContract *
     hash_u16(ctx, provider->operation_count);
     for (size_t i = 0; i < provider->operation_count; i++)
         hash_provider_operation(ctx, &provider->operations[i]);
+}
+
+XrRuntimeAbiStatus xr_target_provider_contract_fingerprint(const XrTargetProviderContract *provider,
+                                                           XrFingerprint *out) {
+    if (!provider || !out)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    XrRuntimeAbiStatus status = verify_provider(provider, provider->runtime_profile);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    XrSHA256Context context;
+    hash_begin(&context, XR_RUNTIME_CONTRACT_PROVIDER);
+    hash_provider(&context, provider);
+    xr_sha256_final(&context, out->bytes);
+    return XR_RUNTIME_ABI_OK;
 }
 
 XrRuntimeAbiStatus xr_target_provider_set_fingerprint(const XrTargetProviderContract *providers,

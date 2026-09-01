@@ -249,7 +249,7 @@ TEST(field_inobject_get_set) {
     XrClass *c1 = xr_class_transition_get_or_create(X, root, s_a, "a");
     XrClass *c2 = xr_class_transition_get_or_create(X, c1, s_b, "b");
 
-    XrInstance *inst = xr_instance_new(X, c2);
+    XrObjectInstance *inst = xr_instance_new(X, c2);
     ASSERT_NOT_NULL(inst);
 
     ASSERT_TRUE(xr_instance_set_dynamic_field(X, inst, 0, XR_FROM_INT(42)));
@@ -276,7 +276,7 @@ TEST(field_overflow_growth) {
     }
     ASSERT_EQ_INT(cls->field_count, 10);
 
-    XrInstance *inst = xr_instance_new(X, cls);
+    XrObjectInstance *inst = xr_instance_new(X, cls);
     ASSERT_NOT_NULL(inst);
 
     // Set and verify all 10 fields (3 in-object + 7 overflow)
@@ -296,7 +296,7 @@ TEST(field_missing_overflow_reads_null) {
     int s_a = sym("a");
     XrClass *c1 = xr_class_transition_get_or_create(X, root, s_a, "a");
 
-    XrInstance *inst = xr_instance_new(X, c1);
+    XrObjectInstance *inst = xr_instance_new(X, c1);
     ASSERT_NOT_NULL(inst);
 
     // Field 0 (in-object) defaults to null

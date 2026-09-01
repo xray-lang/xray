@@ -52,7 +52,7 @@ static XrValue m_path_to_string(XrVMRuntime *X, XrValue self, XrValue *args, int
     (void) argc;
     if (!XR_IS_INSTANCE(self))
         return xr_null();
-    XrInstance *inst = XR_TO_INSTANCE(self);
+    XrObjectInstance *inst = XR_TO_INSTANCE(self);
     if (!inst || xr_class_instance_field_count(inst->klass) < 1)
         return xr_null();
     XrValue raw = inst->fields[0];

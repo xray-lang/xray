@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xjson.c - Exact structural object backed by sealed XrInstance layouts
+ * xjson.c - Exact structural object backed by sealed XrObjectInstance layouts
  *
  * Shape classes are interned through the structural-object root. JSON object
  * values are stored separately as XrMap.

@@ -58,7 +58,7 @@ static uint32_t xr_hash_value_depth(XrValue val, uint32_t depth) {
                 return xr_hash_string(XR_TO_STRING(val));
             }
             if (val.heap_type == XR_TINSTANCE && val.ptr) {
-                XrInstance *instance = (XrInstance *) val.ptr;
+                XrObjectInstance *instance = (XrObjectInstance *) val.ptr;
                 XrClass *cls = instance->klass;
                 /* ADT enum aggregates key by content -- nominal identity, member
                  * index, then payloads -- so content-equal enum values land in
@@ -167,8 +167,8 @@ static bool value_eq_core(XrValue a, XrValue b, bool key_equivalence) {
     // Heap objects: pointer (reference) equality
     if (XR_IS_PTR(a) && XR_IS_PTR(b)) {
         if (a.heap_type == XR_TINSTANCE && b.heap_type == XR_TINSTANCE && a.ptr && b.ptr) {
-            XrInstance *ia = (XrInstance *) a.ptr;
-            XrInstance *ib = (XrInstance *) b.ptr;
+            XrObjectInstance *ia = (XrObjectInstance *) a.ptr;
+            XrObjectInstance *ib = (XrObjectInstance *) b.ptr;
             /* ADT enum aggregates compare by content: nominal identity, member
              * index, then payloads. Mirrors the hash branch above so a payload
              * enum behaves the same as a container key and under `==`. */

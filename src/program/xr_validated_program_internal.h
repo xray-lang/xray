@@ -3,6 +3,8 @@
 
 #include "xr_program_verify.h"
 
+#include <stdatomic.h>
+
 typedef struct XrValidatedConstant {
     uint16_t type_id;
     XrCoreIrConstantKind kind;
@@ -55,6 +57,7 @@ typedef struct XrValidatedFunction {
 } XrValidatedFunction;
 
 struct XrValidatedProgram {
+    atomic_uint_least32_t references;
     uint8_t *bytes;
     size_t size;
     XrProgramId id;
