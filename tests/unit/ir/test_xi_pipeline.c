@@ -24,6 +24,7 @@
 #include "../../../src/program/xr_program_xi_projection_gen.h"
 #include "../../../src/program/xr_program_verify.h"
 #include "../../../src/program/xr_reference_evaluator.h"
+#include "../../../src/program/xr_validated_program_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_profile.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../src/vm/xr_program_vm.h"
@@ -1159,6 +1160,22 @@ static void require_program_input_tree(const XiFunc *function) {
         require_program_input_tree(function->children[child_index]);
 }
 
+static bool validated_program_has_operation(const XrValidatedProgram *program,
+                                            uint16_t operation_id) {
+    for (uint32_t function_index = 0; function_index < program->function_count; ++function_index) {
+        const XrValidatedFunction *function = &program->functions[function_index];
+        for (uint32_t block_index = 0; block_index < function->block_count; ++block_index) {
+            const XrValidatedBlock *block = &function->blocks[block_index];
+            for (uint32_t instruction_index = 0; instruction_index < block->instruction_count;
+                 ++instruction_index) {
+                if (block->instructions[instruction_index].operation_id == operation_id)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
 TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrCompilerSession *original_session = xr_compiler_session_current_for_isolate(g_iso);
     XrCompilerSessionConfig session_config = {0};
@@ -1185,7 +1202,23 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  if (value < 0) { return 0 - value }\n"
                                          "  return sum_to(value)\n"
                                          "}\n"
-                                         "fn root() -> i64 { return choose(10) }\n";
+                                         "fn scalar_matrix(left: i64, right: i64) -> i64 {\n"
+                                         "  var value: i64 = (left * right) / right\n"
+                                         "  if (left == right) { value = value + 100 }\n"
+                                         "  if (left != right) { value = value + 1 }\n"
+                                         "  if (left <= right) { value = value + 2 }\n"
+                                         "  if (left > right) { value = value + 4 }\n"
+                                         "  if (left >= right) { value = value + 8 }\n"
+                                         "  return value\n"
+                                         "}\n"
+                                         "fn choose_bool(flag: bool) -> i64 {\n"
+                                         "  if (flag) { return 1 }\n"
+                                         "  return 2\n"
+                                         "}\n"
+                                         "fn root() -> i64 {\n"
+                                         "  return choose(10) + scalar_matrix(10, 2) + "
+                                         "choose_bool(true) + choose_bool(false)\n"
+                                         "}\n";
     PIPELINE_TEST_REQUIRE(
         xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
 
@@ -1253,11 +1286,25 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
                                               &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
+    static const uint16_t required_source_operations[] = {
+        XR_CORE_OP_CORE_CONSTANT_I64, XR_CORE_OP_CORE_CONSTANT_BOOL,
+        XR_CORE_OP_CORE_ADD_I64,      XR_CORE_OP_CORE_SUB_I64,
+        XR_CORE_OP_CORE_MUL_I64,      XR_CORE_OP_CORE_DIV_I64,
+        XR_CORE_OP_CORE_COMPARE_I64,  XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+        XR_CORE_OP_CORE_BRANCH,       XR_CORE_OP_CORE_CONDITIONAL_BRANCH,
+        XR_CORE_OP_CORE_RETURN,       XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+    };
+    for (size_t index = 0;
+         index < sizeof(required_source_operations) / sizeof(required_source_operations[0]);
+         ++index) {
+        PIPELINE_TEST_REQUIRE(
+            validated_program_has_operation(validated, required_source_operations[index]));
+    }
     XrReferenceOutcome reference = xr_reference_evaluate(
         validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 45);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 71);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);

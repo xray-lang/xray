@@ -121,6 +121,39 @@ def validate(root: Path) -> None:
     require(matrix_ids == registry_ids,
             f"operation matrix differs from CoreSpec: missing={sorted(registry_ids - matrix_ids)} "
             f"extra={sorted(matrix_ids - registry_ids)}")
+    require(matrix.get("precut_route_policy") == {
+        "state_during_w7": "single frozen current product; canonical implementation remains off-product",
+        "canonical_dependency_on_precut_route": "forbidden",
+        "physical_deletion_owner": 302,
+        "cutover": "one atomic product-reachability change with no fallback or hidden executor",
+    }, "operation matrix pre-cut route policy drifted")
+    wave_one = {
+        "core.constant.i64",
+        "core.constant.bool",
+        "core.add.i64",
+        "core.sub.i64",
+        "core.mul.i64",
+        "core.div.i64",
+        "core.compare.i64",
+        "core.block.argument",
+        "core.branch",
+        "core.conditional_branch",
+        "core.return",
+        "core.call.sealed_direct",
+    }
+    rows = {row["id"]: row for row in matrix["operations"]}
+    for operation in wave_one:
+        require(rows[operation]["status"] == "COMPLETE_W7_WAVE1",
+                f"Wave 1 operation is not complete: {operation}")
+        evidence = rows[operation].get("evidence")
+        require(isinstance(evidence, list) and evidence,
+                f"Wave 1 operation has no evidence: {operation}")
+        for relative in evidence:
+            require(isinstance(relative, str) and (root / relative).is_file(),
+                    f"Wave 1 operation has missing evidence: {operation}: {relative}")
+    for operation in registry_ids - wave_one:
+        require(rows[operation]["status"] == "FROZEN_WALKING_SKELETON",
+                f"later-wave operation activated early: {operation}")
 
 
 def self_test(root: Path) -> None:
@@ -143,6 +176,19 @@ def self_test(root: Path) -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / relative, destination)
         validate(target)
+        matrix = target / "contracts/canonical-program/operation-capability-matrix.json"
+        original_matrix = matrix.read_text(encoding="utf-8")
+        matrix_value = json.loads(original_matrix)
+        matrix_value["operations"][0]["status"] = "FROZEN_WALKING_SKELETON"
+        matrix.write_text(json.dumps(matrix_value, ensure_ascii=False, indent=2) + "\n",
+                          encoding="utf-8")
+        try:
+            validate(target)
+        except ContractError:
+            pass
+        else:
+            raise ContractError("incomplete Wave 1 operation was accepted")
+        matrix.write_text(original_matrix, encoding="utf-8")
         producer = target / "src/program/xr_program_from_xi.c"
         producer.write_text(producer.read_text(encoding="utf-8") + "\n/* XrTargetPlan injected */\n",
                             encoding="utf-8")

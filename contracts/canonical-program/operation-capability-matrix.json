@@ -2,7 +2,13 @@
   "schema": "xray-canonical-program-operation-capability/1",
   "architecture_task": 293,
   "freeze_task": 294,
-  "completion_rule": "An operation becomes COMPLETE only when its CoreSpec law, program encoding, bounded verification, reference evaluation, VM, AOT, source producer, differential evidence, and old-owner deletion are all complete in one vertical slice.",
+  "completion_rule": "An operation becomes COMPLETE only when its CoreSpec law, program encoding, bounded verification, reference evaluation, VM, AOT, source producer, differential evidence, and deletion of every legacy semantic dependency from the canonical pipeline are complete in one vertical slice.",
+  "precut_route_policy": {
+    "state_during_w7": "single frozen current product; canonical implementation remains off-product",
+    "canonical_dependency_on_precut_route": "forbidden",
+    "physical_deletion_owner": 302,
+    "cutover": "one atomic product-reachability change with no fallback or hidden executor"
+  },
   "core_spec_stage": {
     "status": "COMPLETE",
     "owner_task": 295,
@@ -10,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows remain frozen rather than globally COMPLETE until W2-W7 consumers and old-owner deletion are complete."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; trap, error publication, and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -60,9 +66,12 @@
       "vm_implementation": "typed i64 slot or private specialization derived from the verified operation",
       "aot_lowering": "XrBackendIR i64 constant, then exact-width generated C literal",
       "source_producer": "integer literal and canonical constant folding",
-      "old_owner_deletion": "delete duplicate VM constant decoding and AOT literal semantic inference in W7-scalar",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical source/VM/AOT depend on CoreSpec and typed program records only; frozen pre-cut implementation is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.constant.bool",
@@ -72,9 +81,12 @@
       "vm_implementation": "typed bool slot derived from the verified operation",
       "aot_lowering": "BackendIR canonical bool constant and portable C bool materialization",
       "source_producer": "typed bool literals and canonical constant folding",
-      "old_owner_deletion": "delete duplicate VM truthiness decoding and AOT bool inference in W7-scalar",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical source/VM/AOT depend on CoreSpec and typed program records only; frozen pre-cut implementation is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.add.i64",
@@ -84,9 +96,12 @@
       "vm_implementation": "typed i64 add handler generated from the operation registry",
       "aot_lowering": "BackendIR add plus overflow/trap recipe selected from the same mode",
       "source_producer": "typed binary plus and compound lowering",
-      "old_owner_deletion": "delete VM opcode semantic switch and CGen add/overflow rediscovery in W7-scalar",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical source projection is generated and canonical VM/AOT independently consume the explicit overflow mode; frozen pre-cut route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_xi_projection_gen.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.sub.i64",
@@ -96,9 +111,12 @@
       "vm_implementation": "typed i64 subtract handler generated from the operation registry",
       "aot_lowering": "BackendIR subtract plus overflow/trap recipe selected from the same mode",
       "source_producer": "typed binary minus and compound lowering",
-      "old_owner_deletion": "delete VM opcode semantic switch and CGen subtract/overflow rediscovery in W7-scalar",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical source projection is generated and canonical VM/AOT independently consume the explicit overflow mode; frozen pre-cut route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_xi_projection_gen.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.mul.i64",
@@ -108,9 +126,12 @@
       "vm_implementation": "typed i64 multiply handler generated from the operation registry",
       "aot_lowering": "BackendIR multiply plus overflow/trap recipe selected from the same mode",
       "source_producer": "typed binary multiply and compound lowering",
-      "old_owner_deletion": "delete VM opcode semantic switch and CGen multiply/overflow rediscovery in W7-scalar",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical source projection is generated and canonical VM/AOT independently consume the explicit overflow mode; frozen pre-cut route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_xi_projection_gen.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.div.i64",
@@ -120,9 +141,12 @@
       "vm_implementation": "typed i64 division handler with explicit exceptional cases",
       "aot_lowering": "BackendIR guarded division that never delegates undefined behavior to C",
       "source_producer": "typed integer division expressions",
-      "old_owner_deletion": "delete VM and AOT division-edge rediscovery in W7-scalar",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical source projection fixes the division mode and canonical VM/AOT implement both named traps independently; frozen pre-cut route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_xi_projection_gen.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.compare.i64",
@@ -132,9 +156,12 @@
       "vm_implementation": "typed compare handler keyed by the frozen predicate",
       "aot_lowering": "BackendIR signed compare with canonical bool materialization",
       "source_producer": "typed equality and ordering expressions",
-      "old_owner_deletion": "delete VM/AOT predicate spelling and signedness inference in W7-scalar",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical source projection fixes the signed predicate and canonical VM/AOT consume it without source spelling or old compare routes; frozen pre-cut route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_xi_projection_gen.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.block.argument",
@@ -144,9 +171,12 @@
       "vm_implementation": "verified predecessor transfer into typed frame locations",
       "aot_lowering": "BackendIR block parameters or validated phi-equivalent edge assignments",
       "source_producer": "structured-control and SSA construction",
-      "old_owner_deletion": "delete backend phi/block-argument reconstruction in W7-control",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical producer closes every cross-block SSA value into typed block arguments before either executor; frozen pre-cut reconstruction is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.branch",
@@ -156,9 +186,12 @@
       "vm_implementation": "set destination block and transfer verified arguments",
       "aot_lowering": "BackendIR branch with validated edge assignments",
       "source_producer": "structured-control and canonical CFG lowering",
-      "old_owner_deletion": "delete VM jump and AOT edge semantic reconstruction in W7-control",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical producer writes the exact target and edge operands consumed by both executors; frozen pre-cut jump route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.conditional_branch",
@@ -168,9 +201,12 @@
       "vm_implementation": "read canonical bool and perform one verified edge transfer",
       "aot_lowering": "BackendIR conditional branch with validated edge assignments",
       "source_producer": "if, loop, match, and short-circuit canonical CFG lowering",
-      "old_owner_deletion": "delete backend truthiness and edge reconstruction in W7-control",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical producer requires a canonical bool and writes both exact edges; frozen pre-cut truthiness/edge route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.return",
@@ -180,9 +216,12 @@
       "vm_implementation": "transfer the verified result and unwind the typed frame",
       "aot_lowering": "BackendIR return plus profile-selected ABI projection",
       "source_producer": "explicit and implicit return canonicalization",
-      "old_owner_deletion": "delete VM/AOT return-shape and cleanup rediscovery in W7-call",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical producer writes the exact typed return and canonical VM/AOT consume it without body-shape inference; frozen pre-cut return route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.call.sealed_direct",
@@ -192,9 +231,13 @@
       "vm_implementation": "create typed frame from verified signature or private direct-call specialization",
       "aot_lowering": "BackendIR direct call and BoundaryABI projection without source or TargetPlan inference",
       "source_producer": "resolved direct calls after whole-program linking",
-      "old_owner_deletion": "delete SemanticPlan/TargetPlan call-shape families and AOT adapter inference in W7-call",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical producer resolves an exact linked function identity and canonical VM/AOT consume the verified signature/effects without plan or name fallback; frozen pre-cut call route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE1",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
     },
     {
       "id": "core.trap",
