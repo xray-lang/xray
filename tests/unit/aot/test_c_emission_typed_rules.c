@@ -20,7 +20,7 @@ static XrCEmissionRuleFacts exact_push_facts(void) {
         .element_access = XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE,
         .reference_action = XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE,
         .reference_drop = XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY,
-        .element_source_class = true,
+        .element_managed_reference = true,
         .call_convention = XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR,
         .target_kind = XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR,
         .layout_kind = XR_TARGET_LAYOUT_DYNAMIC,
@@ -95,7 +95,7 @@ static void test_clause_mutations(void) {
     facts.reference_drop = XR_ARRAY_MEMBER_REFERENCE_DROP_NONE;
     require_fact_mutation_rejected(facts);
     facts = exact_push_facts();
-    facts.element_source_class = false;
+    facts.element_managed_reference = false;
     require_fact_mutation_rejected(facts);
     facts = exact_push_facts();
     facts.call_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL;
@@ -147,7 +147,7 @@ static void test_closed_domain(void) {
 
 static void test_scalar_push_is_outside_tagged_domain(void) {
     XrCEmissionRuleFacts facts = exact_push_facts();
-    facts.element_source_class = false;
+    facts.element_managed_reference = false;
     facts.call_storage = XR_TARGET_ARRAY_STORAGE_U8;
     facts.layout_storage = XR_TARGET_ARRAY_STORAGE_U8;
     facts.argument_storage[1] = XR_TARGET_ARRAY_STORAGE_U8;
