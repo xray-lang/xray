@@ -9,6 +9,7 @@
  */
 
 #include "xr_program_from_xi.h"
+#include "xr_program_xi_projection_gen.h"
 
 #include "../base/xmalloc.h"
 #include "../core/xr_core_spec_gen.h"
@@ -300,26 +301,10 @@ static bool value_operand_key(const XrXiFunctionStorage *function, const XrXiBlo
         *key_out = argument->key;
         return true;
     }
-    switch (value->op) {
-        case XI_PARAM:
-        case XI_PHI:
-        case XI_CONST:
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        case XI_CALL:
-            *key_out = value_key(function, value);
-            return true;
-        default:
-            return false;
-    }
+    if (!xr_program_xi_value_is_materialized(value->op))
+        return false;
+    *key_out = value_key(function, value);
+    return true;
 }
 
 static XrProgramBuildStatus add_constant(XrXiModuleStorage *module, const XiValue *value,
@@ -432,7 +417,8 @@ static XrProgramBuildStatus set_operands(XrCoreIrInstructionInput *instruction,
 static XrProgramBuildStatus
 translate_call(const XrXiBuildContext *context, const XrXiModuleStorage *module,
                XrXiFunctionStorage *function, const XiValue *value, const XrXiBlockStorage *block,
-               XrCoreIrInstructionInput *instruction, char *diagnostic, size_t diagnostic_size) {
+               const XrProgramXiProjection *projection, XrCoreIrInstructionInput *instruction,
+               char *diagnostic, size_t diagnostic_size) {
     (void) module;
     const XiFunc *callee = resolved_direct_callee(function->xi, value);
     const XrXiFunctionStorage *callee_storage = find_xi_function(context, callee, NULL, NULL);
@@ -444,7 +430,7 @@ translate_call(const XrXiBuildContext *context, const XrXiModuleStorage *module,
     if (!map_type(value->type, &result_type))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi call v%u result type is not active in CoreSpec", value->id);
-    instruction->operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT;
+    instruction->operation_id = projection->core_operation_id;
     instruction->result_type_id = result_type;
     if (result_type != XR_CORE_TYPE_VOID)
         instruction->result = value_key(function, value);
@@ -461,66 +447,65 @@ translate_value(const XrXiBuildContext *context, XrXiModuleStorage *module,
                 XrCoreIrInstructionInput *instruction, char *diagnostic, size_t diagnostic_size) {
     memset(instruction, 0, sizeof(*instruction));
     uint16_t result_type = XR_CORE_TYPE_VOID;
-    switch (value->op) {
-        case XI_CONST: {
+    if (!map_type(value->type, &result_type))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi value v%u result type is not active in CoreSpec", value->id);
+    XrProgramXiProjection projection;
+    if (!xr_program_xi_projection(value->op, result_type, &projection))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi operation %u at v%u has no active CoreSpec projection", value->op,
+                    value->id);
+
+    switch (projection.kind) {
+        case XR_PROGRAM_XI_PROJECTION_CONSTANT: {
             XrCoreIrKey constant;
             XrProgramBuildStatus status =
                 add_constant(module, value, &constant, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
-            if (!map_type(value->type, &result_type))
-                return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
-            instruction->operation_id = result_type == XR_CORE_TYPE_I64
-                                            ? XR_CORE_OP_CORE_CONSTANT_I64
-                                            : XR_CORE_OP_CORE_CONSTANT_BOOL;
+            instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = result_type;
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT;
             instruction->immediate.key = constant;
             return XR_PROGRAM_BUILD_OK;
         }
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-            if (value->nargs != 2u || !map_type(value->type, &result_type) ||
-                result_type != XR_CORE_TYPE_I64)
+        case XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC:
+            if (value->nargs != 2u || result_type != XR_CORE_TYPE_I64)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi arithmetic v%u is not exact i64 binary arithmetic", value->id);
-            instruction->operation_id = value->op == XI_ADD   ? XR_CORE_OP_CORE_ADD_I64
-                                        : value->op == XI_SUB ? XR_CORE_OP_CORE_SUB_I64
-                                        : value->op == XI_MUL ? XR_CORE_OP_CORE_MUL_I64
-                                                              : XR_CORE_OP_CORE_DIV_I64;
+            instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = XR_CORE_TYPE_I64;
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
-            instruction->immediate.u32 = value->op == XI_DIV ? 0u : 1u;
+            instruction->immediate.u32 = projection.immediate_u32;
             function->local_effect_mask |= UINT32_C(1);
             return set_operands(instruction, function, block, value->args, value->nargs, diagnostic,
                                 diagnostic_size);
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-            if (value->nargs != 2u || !map_type(value->type, &result_type) ||
-                result_type != XR_CORE_TYPE_BOOL)
+        case XR_PROGRAM_XI_PROJECTION_COMPARE: {
+            uint16_t left_type = XR_CORE_TYPE_VOID;
+            uint16_t right_type = XR_CORE_TYPE_VOID;
+            if (value->nargs != 2u || result_type != XR_CORE_TYPE_BOOL ||
+                !map_type(value->args[0]->type, &left_type) ||
+                !map_type(value->args[1]->type, &right_type) || left_type != XR_CORE_TYPE_I64 ||
+                right_type != XR_CORE_TYPE_I64)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi comparison v%u is not an exact i64 comparison", value->id);
-            instruction->operation_id = XR_CORE_OP_CORE_COMPARE_I64;
+            instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = XR_CORE_TYPE_BOOL;
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
-            instruction->immediate.u32 = (uint32_t) value->op - (uint32_t) XI_EQ;
+            instruction->immediate.u32 = projection.immediate_u32;
             return set_operands(instruction, function, block, value->args, value->nargs, diagnostic,
                                 diagnostic_size);
-        case XI_CALL:
-            return translate_call(context, module, function, value, block, instruction, diagnostic,
-                                  diagnostic_size);
+        }
+        case XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL:
+            return translate_call(context, module, function, value, block, &projection, instruction,
+                                  diagnostic, diagnostic_size);
         default:
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi operation %u at v%u is not active in CoreSpec", value->op, value->id);
+                        "Xi operation %u at v%u has an invalid CoreSpec projection", value->op,
+                        value->id);
     }
 }
 

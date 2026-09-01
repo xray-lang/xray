@@ -28,7 +28,7 @@ foreign ILP32 profiles, direct calls, branch arguments, target queries, traps, t
 resource limits, and generation invalidation. Full-language operation families, public embedding
 ABI, adaptive quickening, and any persistent private-code cache remain inactive for later tasks.
 
-anchor-sha256: CMakeLists.txt 73aa2f8be216844cd131f64371ed63fdc4d5159c0d96517c3f9b7899da723370
+anchor-sha256: CMakeLists.txt 6ebe5ae5542fa71e0d2366e11b7d863aa9cb311500caa2f079449fab92d19f59
 anchor-sha256: xisa/core/registry.json c77e3511ccbec192559b75e2d3e1ca45f482a85801e4657900f51ec8924a68bb
 anchor-sha256: src/vm/xr_program_vm.h 787d8c95b3b4af0c679622f53e821724c596029c9f3d024e496cae53bcb22d9e
 anchor-sha256: src/vm/xr_program_vm.c 3e4c1ad3ca23b17fef439834739b034043c83388d05dd298915a9c1b320c9eb7

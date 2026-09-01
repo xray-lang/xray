@@ -14,7 +14,12 @@ from typing import Any
 
 
 SCHEMA_PATH = Path("xisa/program/schema.json")
+SOURCE_PROJECTION_PATH = Path("xisa/program/xi-source-projection.json")
+CORE_REGISTRY_PATH = Path("xisa/core/registry.json")
+XI_REGISTRY_PATH = Path("xisa/xi/ops.def")
 HEADER_PATH = Path("src/program/xr_program_schema_gen.h")
+SOURCE_PROJECTION_HEADER_PATH = Path("src/program/xr_program_xi_projection_gen.h")
+SOURCE_PROJECTION_SOURCE_PATH = Path("src/program/xr_program_xi_projection_gen.c")
 SPEC_PATH = Path("contracts/canonical-program/xrprogram-format-v1.md")
 COVERAGE_PATH = Path("contracts/canonical-program/xrprogram-format-coverage.json")
 TOP_KEYS = {"schema", "format", "encoding", "sections", "limits"}
@@ -39,6 +44,42 @@ LIMIT_KEYS = {
     "operations",
     "operands_per_operation",
     "successors_per_operation",
+}
+SOURCE_PROJECTION_KEYS = {
+    "schema",
+    "source_stage",
+    "migration_policy",
+    "value_mappings",
+    "structural_mappings",
+}
+SOURCE_POLICY = {
+    "semantic_authority": "CoreSpec",
+    "unlisted_xi_operation": "reject",
+    "new_pipeline_legacy_dependencies": [],
+    "old_product_route": "frozen-not-consumed",
+    "physical_route_deletion": "atomic-task-302",
+    "compatibility_bridge": "forbidden",
+}
+VALUE_MAPPING_KEYS = {
+    "xi_operation",
+    "result_type",
+    "projection_kind",
+    "core_operation",
+    "immediate_u32",
+}
+PROJECTION_KINDS = {
+    "constant": "XR_PROGRAM_XI_PROJECTION_CONSTANT",
+    "binary-arithmetic": "XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC",
+    "compare": "XR_PROGRAM_XI_PROJECTION_COMPARE",
+    "sealed-direct-call": "XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL",
+}
+CORE_TYPE_NAMES = {
+    "any": "XR_PROGRAM_XI_ANY_RESULT_TYPE",
+    "void": "XR_CORE_TYPE_VOID",
+    "bool": "XR_CORE_TYPE_BOOL",
+    "i64": "XR_CORE_TYPE_I64",
+    "u32": "XR_CORE_TYPE_U32",
+    "error": "XR_CORE_TYPE_ERROR",
 }
 
 
@@ -71,6 +112,17 @@ def read_schema(path: Path) -> dict[str, Any]:
         raise ProgramSchemaError(f"invalid JSON in {path}: {exc}") from exc
     require(isinstance(value, dict), "program schema must be an object")
     require(raw == canonical_json(value), "program schema must be canonical two-space JSON")
+    return value
+
+
+def read_json(path: Path, label: str) -> dict[str, Any]:
+    raw = path.read_text(encoding="utf-8", errors="strict")
+    try:
+        value = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
+    except (json.JSONDecodeError, ProgramSchemaError) as exc:
+        raise ProgramSchemaError(f"invalid JSON in {path}: {exc}") from exc
+    require(isinstance(value, dict), f"{label} must be an object")
+    require(raw == canonical_json(value), f"{label} must be canonical two-space JSON")
     return value
 
 
@@ -129,6 +181,181 @@ def validate(schema: dict[str, Any]) -> None:
                 f"resource limit {name} is invalid")
     require(limits["sections"] == len(sections), "section limit must equal declared section count")
     require(limits["successors_per_operation"] <= 32, "successor bound must remain small")
+
+
+def validate_source_projection(projection: dict[str, Any], core: dict[str, Any],
+                               xi_source: str) -> None:
+    require(set(projection) == SOURCE_PROJECTION_KEYS,
+            "Xi source projection top-level fields drifted")
+    require(projection["schema"] == "xray-program-xi-source-projection/1",
+            "Xi source projection schema drifted")
+    require(projection["source_stage"] == "XI_STAGE_OPTIMIZED",
+            "source projection must consume target-neutral optimized Xi")
+    require(projection["migration_policy"] == SOURCE_POLICY,
+            "Xi source projection migration policy drifted")
+
+    core_operations = {
+        row["spelling"]: row for row in core.get("operations", [])
+        if isinstance(row, dict) and isinstance(row.get("spelling"), str)
+    }
+    core_types = {
+        row["name"] for row in core.get("types", [])
+        if isinstance(row, dict) and isinstance(row.get("name"), str)
+    }
+    xi_operations = set(re.findall(r"\(define-xi-op\s+(xi\.[a-z0-9.-]+)", xi_source))
+    require(core_operations, "CoreSpec has no operations")
+    require(xi_operations, "Xi registry has no operations")
+
+    rows = projection["value_mappings"]
+    require(isinstance(rows, list) and rows, "Xi source projection has no value mappings")
+    identities: set[tuple[str, str]] = set()
+    for row in rows:
+        require(isinstance(row, dict) and set(row) == VALUE_MAPPING_KEYS,
+                "Xi source projection value mapping fields drifted")
+        identity = (row["xi_operation"], row["result_type"])
+        require(identity not in identities, f"duplicate Xi source projection {identity}")
+        identities.add(identity)
+        require(row["xi_operation"] in xi_operations,
+                f"unknown Xi operation {row['xi_operation']}")
+        require(row["result_type"] == "any" or row["result_type"] in core_types,
+                f"unknown projection result type {row['result_type']}")
+        require(row["projection_kind"] in PROJECTION_KINDS,
+                f"unknown projection kind {row['projection_kind']}")
+        require(row["core_operation"] in core_operations,
+                f"unknown CoreSpec operation {row['core_operation']}")
+        require(isinstance(row["immediate_u32"], int)
+                and 0 <= row["immediate_u32"] <= 0xffffffff,
+                f"invalid immediate for {identity}")
+
+    structural = projection["structural_mappings"]
+    require(isinstance(structural, list) and structural,
+            "Xi source projection has no structural mappings")
+    sources: set[str] = set()
+    for row in structural:
+        require(isinstance(row, dict) and set(row) == {"source", "core_operation"},
+                "structural projection fields drifted")
+        require(isinstance(row["source"], str) and row["source"] not in sources,
+                "structural projection source is empty or duplicated")
+        sources.add(row["source"])
+        require(row["core_operation"] in core_operations,
+                f"unknown structural CoreSpec operation {row['core_operation']}")
+    require(sources == {
+        "block-argument", "unconditional-edge", "conditional-edge", "function-return"
+    }, "structural projection set drifted")
+
+
+def xi_c_identifier(name: str) -> str:
+    return "XI_" + c_identifier(name.removeprefix("xi."))
+
+
+def core_c_identifier(name: str) -> str:
+    return "XR_CORE_OP_" + c_identifier(name)
+
+
+def generate_source_projection_header() -> str:
+    return "\n".join([
+        "/* AUTO-GENERATED by programgen - DO NOT EDIT */",
+        "/* Source: xisa/program/xi-source-projection.json */",
+        "#ifndef XR_PROGRAM_XI_PROJECTION_GEN_H",
+        "#define XR_PROGRAM_XI_PROJECTION_GEN_H",
+        "",
+        '#include "core/xr_core_spec_gen.h"',
+        "#include <stdbool.h>",
+        "#include <stdint.h>",
+        "",
+        "#define XR_PROGRAM_XI_ANY_RESULT_TYPE UINT16_MAX",
+        "",
+        "typedef enum XrProgramXiProjectionKind {",
+        "    XR_PROGRAM_XI_PROJECTION_CONSTANT = 1,",
+        "    XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC = 2,",
+        "    XR_PROGRAM_XI_PROJECTION_COMPARE = 3,",
+        "    XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL = 4,",
+        "} XrProgramXiProjectionKind;",
+        "",
+        "typedef struct XrProgramXiProjection {",
+        "    uint16_t core_operation_id;",
+        "    uint16_t result_type_id;",
+        "    uint32_t immediate_u32;",
+        "    XrProgramXiProjectionKind kind;",
+        "} XrProgramXiProjection;",
+        "",
+        "bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,",
+        "                              XrProgramXiProjection *projection_out);",
+        "bool xr_program_xi_value_is_materialized(uint16_t xi_operation);",
+        "",
+        "#endif /* XR_PROGRAM_XI_PROJECTION_GEN_H */",
+        "",
+    ])
+
+
+def generate_source_projection_source(projection: dict[str, Any],
+                                      core: dict[str, Any]) -> str:
+    core_ids = {row["spelling"]: row["stable_id"] for row in core["operations"]}
+    lines = [
+        "/* AUTO-GENERATED by programgen - DO NOT EDIT */",
+        "/* Source: xisa/program/xi-source-projection.json */",
+        '#include "program/xr_program_xi_projection_gen.h"',
+        '#include "core/xr_core_spec_gen.h"',
+        '#include "ir/xi.h"',
+        "",
+        "typedef struct XrProgramXiProjectionRow {",
+        "    uint16_t xi_operation;",
+        "    uint16_t result_type_id;",
+        "    uint16_t core_operation_id;",
+        "    uint32_t immediate_u32;",
+        "    XrProgramXiProjectionKind kind;",
+        "} XrProgramXiProjectionRow;",
+        "",
+        "static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {",
+    ]
+    for row in projection["value_mappings"]:
+        core_name = row["core_operation"]
+        require(core_ids[core_name] <= 65535, f"CoreSpec id too wide for {core_name}")
+        lines.extend([
+            "    {",
+            f"        {xi_c_identifier(row['xi_operation'])},",
+            f"        {CORE_TYPE_NAMES[row['result_type']]},",
+            f"        {core_c_identifier(core_name)},",
+            f"        UINT32_C({row['immediate_u32']}),",
+            f"        {PROJECTION_KINDS[row['projection_kind']]},",
+            "    },",
+        ])
+    lines.extend([
+        "};",
+        "",
+        "bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,",
+        "                              XrProgramXiProjection *projection_out) {",
+        "    if (!projection_out)",
+        "        return false;",
+        "    for (uint32_t index = 0;",
+        "         index < sizeof(xr_program_xi_projection_rows) / sizeof(xr_program_xi_projection_rows[0]);",
+        "         ++index) {",
+        "        const XrProgramXiProjectionRow *row = &xr_program_xi_projection_rows[index];",
+        "        if (row->xi_operation != xi_operation ||",
+        "            (row->result_type_id != XR_PROGRAM_XI_ANY_RESULT_TYPE &&",
+        "             row->result_type_id != result_type_id))",
+        "            continue;",
+        "        projection_out->core_operation_id = row->core_operation_id;",
+        "        projection_out->result_type_id = result_type_id;",
+        "        projection_out->immediate_u32 = row->immediate_u32;",
+        "        projection_out->kind = row->kind;",
+        "        return true;",
+        "    }",
+        "    return false;",
+        "}",
+        "",
+        "bool xr_program_xi_value_is_materialized(uint16_t xi_operation) {",
+        "    for (uint32_t index = 0;",
+        "         index < sizeof(xr_program_xi_projection_rows) / sizeof(xr_program_xi_projection_rows[0]);",
+        "         ++index) {",
+        "        if (xr_program_xi_projection_rows[index].xi_operation == xi_operation)",
+        "            return true;",
+        "    }",
+        "    return xi_operation == XI_PARAM || xi_operation == XI_PHI;",
+        "}",
+        "",
+    ])
+    return "\n".join(lines)
 
 
 def generate_header(schema: dict[str, Any], digest: str) -> str:
@@ -216,18 +443,26 @@ def generate_coverage(schema: dict[str, Any], digest: str) -> str:
     return canonical_json(value)
 
 
-def outputs(schema: dict[str, Any]) -> dict[Path, str]:
+def outputs(schema: dict[str, Any], projection: dict[str, Any], core: dict[str, Any],
+            xi_source: str) -> dict[Path, str]:
     validate(schema)
+    validate_source_projection(projection, core, xi_source)
     digest = hashlib.sha256(canonical_json(schema).encode("utf-8")).hexdigest()
     return {
         HEADER_PATH: generate_header(schema, digest),
+        SOURCE_PROJECTION_HEADER_PATH: generate_source_projection_header(),
+        SOURCE_PROJECTION_SOURCE_PATH: generate_source_projection_source(projection, core),
         SPEC_PATH: generate_spec(schema, digest),
         COVERAGE_PATH: generate_coverage(schema, digest),
     }
 
 
-def self_test(schema: dict[str, Any]) -> None:
-    require(outputs(schema) == outputs(copy.deepcopy(schema)), "program schema generation is nondeterministic")
+def self_test(schema: dict[str, Any], projection: dict[str, Any], core: dict[str, Any],
+              xi_source: str) -> None:
+    require(outputs(schema, projection, core, xi_source)
+            == outputs(copy.deepcopy(schema), copy.deepcopy(projection),
+                       copy.deepcopy(core), xi_source),
+            "program schema generation is nondeterministic")
     mutations: list[tuple[str, dict[str, Any]]] = []
     mutation = copy.deepcopy(schema)
     mutation["sections"][1]["stable_id"] = mutation["sections"][0]["stable_id"]
@@ -243,10 +478,17 @@ def self_test(schema: dict[str, Any]) -> None:
     mutations.append(("unbounded successor policy", mutation))
     for label, value in mutations:
         try:
-            outputs(value)
+            outputs(value, projection, core, xi_source)
         except ProgramSchemaError:
             continue
         raise ProgramSchemaError(f"self-test mutation was accepted: {label}")
+    mutation = copy.deepcopy(projection)
+    mutation["value_mappings"][0]["core_operation"] = "core.missing"
+    try:
+        outputs(schema, mutation, core, xi_source)
+    except ProgramSchemaError:
+        return
+    raise ProgramSchemaError("self-test mutation was accepted: unknown CoreSpec projection")
 
 
 def main() -> int:
@@ -260,7 +502,10 @@ def main() -> int:
     root = args.root.resolve()
     try:
         schema = read_schema(root / SCHEMA_PATH)
-        generated = outputs(schema)
+        projection = read_json(root / SOURCE_PROJECTION_PATH, "Xi source projection")
+        core = read_json(root / CORE_REGISTRY_PATH, "CoreSpec registry")
+        xi_source = (root / XI_REGISTRY_PATH).read_text(encoding="utf-8", errors="strict")
+        generated = outputs(schema, projection, core, xi_source)
         if args.generate:
             for relative, content in generated.items():
                 path = root / relative
@@ -276,7 +521,7 @@ def main() -> int:
                         f"generated output is stale: {relative}; run programgen.py --generate")
             print(f"XrProgram schema: PASS (sha256={hashlib.sha256(canonical_json(schema).encode()).hexdigest()})")
         else:
-            self_test(schema)
+            self_test(schema, projection, core, xi_source)
             print("XrProgram schema self-test: PASS")
     except (OSError, UnicodeError, ProgramSchemaError) as exc:
         print(f"programgen: {exc}", file=sys.stderr)

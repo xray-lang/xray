@@ -30,6 +30,9 @@ def validate(root: Path) -> None:
     pipeline_header = read(root, "src/ir/xi_pipeline.h")
     pipeline = read(root, "src/ir/xi_pipeline.c")
     test = read(root, "tests/unit/ir/test_xi_pipeline.c")
+    projection = json.loads(read(root, "xisa/program/xi-source-projection.json"))
+    projection_header = read(root, "src/program/xr_program_xi_projection_gen.h")
+    projection_source = read(root, "src/program/xr_program_xi_projection_gen.c")
 
     for token in ("module_roots", "entry_function", "semantic_profile_fingerprint"):
         require(token in header, f"source producer input lacks {token}")
@@ -39,10 +42,57 @@ def validate(root: Path) -> None:
         "resolved_direct_callee",
         "close_block_arguments",
         "validate_input_value_identities",
+        "xr_program_xi_projection",
+        "xr_program_xi_value_is_materialized",
     ):
         require(token in producer, f"source producer lacks {token}")
     for token in ("program_semantic_closure", "psc_", "semantic_function"):
         require(token not in producer, f"source producer regained legacy authority: {token}")
+    for token in (
+        "case XI_ADD", "case XI_SUB", "case XI_MUL", "case XI_DIV",
+        "case XI_EQ", "case XI_NE", "case XI_LT", "case XI_LE", "case XI_GT", "case XI_GE",
+        "XR_CORE_OP_CORE_ADD_I64", "XR_CORE_OP_CORE_SUB_I64",
+        "XR_CORE_OP_CORE_MUL_I64", "XR_CORE_OP_CORE_DIV_I64",
+        "XR_CORE_OP_CORE_COMPARE_I64", "XR_CORE_OP_CORE_CALL_SEALED_DIRECT",
+    ):
+        require(token not in producer, f"source producer regained handwritten operation mapping: {token}")
+
+    require(projection.get("schema") == "xray-program-xi-source-projection/1",
+            "source projection schema drifted")
+    require(projection.get("source_stage") == "XI_STAGE_OPTIMIZED",
+            "source projection stage drifted")
+    require(projection.get("migration_policy") == {
+        "semantic_authority": "CoreSpec",
+        "unlisted_xi_operation": "reject",
+        "new_pipeline_legacy_dependencies": [],
+        "old_product_route": "frozen-not-consumed",
+        "physical_route_deletion": "atomic-task-302",
+        "compatibility_bridge": "forbidden",
+    }, "source projection migration policy drifted")
+    for token in (
+        "XrProgramXiProjection", "xr_program_xi_projection",
+        "XR_PROGRAM_XI_ANY_RESULT_TYPE",
+    ):
+        require(token in projection_header or token in projection_source,
+                f"generated source projection lacks {token}")
+
+    new_pipeline_files = [
+        *(root / "src/program").glob("*.c"),
+        *(root / "src/program").glob("*.h"),
+        root / "src/vm/xr_program_vm.c",
+        *(root / "src/aot/program").glob("*.c"),
+        *(root / "src/aot/program").glob("*.h"),
+        *(root / "src/execution").glob("*.c"),
+        *(root / "src/execution").glob("*.h"),
+    ]
+    for path in new_pipeline_files:
+        text = path.read_text(encoding="utf-8", errors="strict")
+        for token in (
+            "XrSemanticPlan", "XrTargetPlan", "XrProto", "XChunk",
+            "xr_semantic_plan", "xr_target_plan", "program_semantic_closure",
+        ):
+            require(token not in text,
+                    f"new canonical pipeline depends on frozen legacy route: {path}: {token}")
 
     require("XI_PIPE_XR_PROGRAM_INPUT" in pipeline_header,
             "pipeline lacks canonical-program input mode")
@@ -83,6 +133,10 @@ def self_test(root: Path) -> None:
             "src/ir/xi_pipeline.c",
             "tests/unit/ir/test_xi_pipeline.c",
             "xisa/core/registry.json",
+            "xisa/program/xi-source-projection.json",
+            "src/program/xr_program_xi_projection_gen.h",
+            "src/program/xr_program_xi_projection_gen.c",
+            "src/vm/xr_program_vm.c",
             "contracts/canonical-program/operation-capability-matrix.json",
         ):
             destination = target / relative
@@ -90,7 +144,7 @@ def self_test(root: Path) -> None:
             shutil.copy2(root / relative, destination)
         validate(target)
         producer = target / "src/program/xr_program_from_xi.c"
-        producer.write_text(producer.read_text(encoding="utf-8") + "\n/* psc_injected */\n",
+        producer.write_text(producer.read_text(encoding="utf-8") + "\n/* XrTargetPlan injected */\n",
                             encoding="utf-8")
         try:
             validate(target)

@@ -1,0 +1,123 @@
+{
+  "schema": "xray-program-xi-source-projection/1",
+  "source_stage": "XI_STAGE_OPTIMIZED",
+  "migration_policy": {
+    "semantic_authority": "CoreSpec",
+    "unlisted_xi_operation": "reject",
+    "new_pipeline_legacy_dependencies": [],
+    "old_product_route": "frozen-not-consumed",
+    "physical_route_deletion": "atomic-task-302",
+    "compatibility_bridge": "forbidden"
+  },
+  "value_mappings": [
+    {
+      "xi_operation": "xi.const",
+      "result_type": "i64",
+      "projection_kind": "constant",
+      "core_operation": "core.constant.i64",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.const",
+      "result_type": "bool",
+      "projection_kind": "constant",
+      "core_operation": "core.constant.bool",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.add",
+      "result_type": "i64",
+      "projection_kind": "binary-arithmetic",
+      "core_operation": "core.add.i64",
+      "immediate_u32": 1
+    },
+    {
+      "xi_operation": "xi.sub",
+      "result_type": "i64",
+      "projection_kind": "binary-arithmetic",
+      "core_operation": "core.sub.i64",
+      "immediate_u32": 1
+    },
+    {
+      "xi_operation": "xi.mul",
+      "result_type": "i64",
+      "projection_kind": "binary-arithmetic",
+      "core_operation": "core.mul.i64",
+      "immediate_u32": 1
+    },
+    {
+      "xi_operation": "xi.div",
+      "result_type": "i64",
+      "projection_kind": "binary-arithmetic",
+      "core_operation": "core.div.i64",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.eq",
+      "result_type": "bool",
+      "projection_kind": "compare",
+      "core_operation": "core.compare.i64",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.ne",
+      "result_type": "bool",
+      "projection_kind": "compare",
+      "core_operation": "core.compare.i64",
+      "immediate_u32": 1
+    },
+    {
+      "xi_operation": "xi.lt",
+      "result_type": "bool",
+      "projection_kind": "compare",
+      "core_operation": "core.compare.i64",
+      "immediate_u32": 2
+    },
+    {
+      "xi_operation": "xi.le",
+      "result_type": "bool",
+      "projection_kind": "compare",
+      "core_operation": "core.compare.i64",
+      "immediate_u32": 3
+    },
+    {
+      "xi_operation": "xi.gt",
+      "result_type": "bool",
+      "projection_kind": "compare",
+      "core_operation": "core.compare.i64",
+      "immediate_u32": 4
+    },
+    {
+      "xi_operation": "xi.ge",
+      "result_type": "bool",
+      "projection_kind": "compare",
+      "core_operation": "core.compare.i64",
+      "immediate_u32": 5
+    },
+    {
+      "xi_operation": "xi.call",
+      "result_type": "any",
+      "projection_kind": "sealed-direct-call",
+      "core_operation": "core.call.sealed_direct",
+      "immediate_u32": 0
+    }
+  ],
+  "structural_mappings": [
+    {
+      "source": "block-argument",
+      "core_operation": "core.block.argument"
+    },
+    {
+      "source": "unconditional-edge",
+      "core_operation": "core.branch"
+    },
+    {
+      "source": "conditional-edge",
+      "core_operation": "core.conditional_branch"
+    },
+    {
+      "source": "function-return",
+      "core_operation": "core.return"
+    }
+  ]
+}

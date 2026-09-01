@@ -596,7 +596,12 @@ add_custom_target(gen-xr-program-schema
             --check
     DEPENDS ${PROGRAMGEN}
             ${CMAKE_SOURCE_DIR}/xisa/program/schema.json
+            ${CMAKE_SOURCE_DIR}/xisa/program/xi-source-projection.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_schema_gen.h
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.h
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-v1.md
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-coverage.json
     COMMENT "programgen: verifying canonical XrProgram schema projections"
@@ -670,8 +675,11 @@ add_custom_target(check-xr-program-source-contracts
             --root ${CMAKE_SOURCE_DIR}
     DEPENDS ${PROGRAMSOURCECONTRACTCHECK}
             ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/xisa/program/xi-source-projection.json
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.h
             ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.c
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.h
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_xi_projection_gen.c
             ${CMAKE_SOURCE_DIR}/src/ir/xi_pipeline.h
             ${CMAKE_SOURCE_DIR}/src/ir/xi_pipeline.c
             ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_pipeline.c

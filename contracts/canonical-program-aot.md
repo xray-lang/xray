@@ -29,7 +29,7 @@ the generated-C behavioral fixture; checked overflow, wrapping overflow, and div
 compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
-anchor-sha256: CMakeLists.txt 73aa2f8be216844cd131f64371ed63fdc4d5159c0d96517c3f9b7899da723370
+anchor-sha256: CMakeLists.txt 6ebe5ae5542fa71e0d2366e11b7d863aa9cb311500caa2f079449fab92d19f59
 anchor-sha256: tests/unit/CMakeLists.txt 220175a3ed455c54b598fdf4373d4bd22f5590fb86bf17f404da7578aeae23f0
 anchor-sha256: xisa/core/registry.json c77e3511ccbec192559b75e2d3e1ca45f482a85801e4657900f51ec8924a68bb
 anchor-sha256: contracts/canonical-program/architecture-identity.toml e5a3d23489bd9f2669d9d65b6a5ff963584a9bf8a7929d341019abedb0e00d7f

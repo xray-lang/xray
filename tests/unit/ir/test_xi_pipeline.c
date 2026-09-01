@@ -21,6 +21,7 @@
 #include "../../../src/module/xmodule_resolver.h"
 #include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/program/xr_program_from_xi.h"
+#include "../../../src/program/xr_program_xi_projection_gen.h"
 #include "../../../src/program/xr_program_verify.h"
 #include "../../../src/program/xr_reference_evaluator.h"
 #include "../../../src/runtime/abi/xr_runtime_target_profile.h"
@@ -1097,6 +1098,59 @@ TEST(e2e_status_str) {
     assert(strcmp(xi_pipeline_stage_str(XI_PIPE_STAGE_OPTIMIZE), "optimize") == 0);
 }
 
+TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
+    static const struct {
+        uint16_t xi_operation;
+        uint16_t result_type;
+        uint16_t core_operation;
+        uint32_t immediate;
+        XrProgramXiProjectionKind kind;
+    } rows[] = {
+        {XI_CONST, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_CONSTANT_I64, 0u,
+         XR_PROGRAM_XI_PROJECTION_CONSTANT},
+        {XI_CONST, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_CONSTANT_BOOL, 0u,
+         XR_PROGRAM_XI_PROJECTION_CONSTANT},
+        {XI_ADD, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_ADD_I64, 1u,
+         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC},
+        {XI_SUB, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_SUB_I64, 1u,
+         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC},
+        {XI_MUL, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_MUL_I64, 1u,
+         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC},
+        {XI_DIV, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_DIV_I64, 0u,
+         XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC},
+        {XI_EQ, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_COMPARE_I64, 0u,
+         XR_PROGRAM_XI_PROJECTION_COMPARE},
+        {XI_NE, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_COMPARE_I64, 1u,
+         XR_PROGRAM_XI_PROJECTION_COMPARE},
+        {XI_LT, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_COMPARE_I64, 2u,
+         XR_PROGRAM_XI_PROJECTION_COMPARE},
+        {XI_LE, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_COMPARE_I64, 3u,
+         XR_PROGRAM_XI_PROJECTION_COMPARE},
+        {XI_GT, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_COMPARE_I64, 4u,
+         XR_PROGRAM_XI_PROJECTION_COMPARE},
+        {XI_GE, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_COMPARE_I64, 5u,
+         XR_PROGRAM_XI_PROJECTION_COMPARE},
+        {XI_CALL, XR_CORE_TYPE_VOID, XR_CORE_OP_CORE_CALL_SEALED_DIRECT, 0u,
+         XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL},
+    };
+    for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
+        XrProgramXiProjection projection = {0};
+        PIPELINE_TEST_REQUIRE(xr_program_xi_projection(rows[index].xi_operation,
+                                                       rows[index].result_type, &projection));
+        PIPELINE_TEST_REQUIRE(projection.core_operation_id == rows[index].core_operation);
+        PIPELINE_TEST_REQUIRE(projection.result_type_id == rows[index].result_type);
+        PIPELINE_TEST_REQUIRE(projection.immediate_u32 == rows[index].immediate);
+        PIPELINE_TEST_REQUIRE(projection.kind == rows[index].kind);
+        PIPELINE_TEST_REQUIRE(xr_program_xi_value_is_materialized(rows[index].xi_operation));
+    }
+
+    XrProgramXiProjection rejected = {0};
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_ADD, XR_CORE_TYPE_BOOL, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_MOD, XR_CORE_TYPE_I64, &rejected));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_ADD, XR_CORE_TYPE_I64, NULL));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_value_is_materialized(XI_MOD));
+}
+
 static void require_program_input_tree(const XiFunc *function) {
     PIPELINE_TEST_REQUIRE(function != NULL);
     PIPELINE_TEST_REQUIRE(function->stage == XI_STAGE_OPTIMIZED);
@@ -1179,10 +1233,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(producer_status == XR_PROGRAM_BUILD_OK);
 
     XrProgramArtifact repeated_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&producer_input, &repeated_artifact,
-                                                   producer_diagnostic,
-                                                   sizeof(producer_diagnostic)) ==
-                          XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(
+        xr_program_write_from_xi(&producer_input, &repeated_artifact, producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
     PIPELINE_TEST_REQUIRE(repeated_artifact.size == artifact.size);
     PIPELINE_TEST_REQUIRE(memcmp(repeated_artifact.bytes, artifact.bytes, artifact.size) == 0);
     xr_program_artifact_free(&repeated_artifact);
@@ -1190,9 +1243,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrProgramFromXiInput invalid_entry_input = producer_input;
     invalid_entry_input.entry_function = result.ir;
     XrProgramArtifact invalid_entry_artifact = {0};
-    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
-                              &invalid_entry_input, &invalid_entry_artifact, producer_diagnostic,
-                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(
+        xr_program_write_from_xi(&invalid_entry_input, &invalid_entry_artifact, producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
     PIPELINE_TEST_REQUIRE(invalid_entry_artifact.bytes == NULL);
 
     XrValidatedProgram *validated = NULL;
@@ -1518,6 +1571,7 @@ int main(void) {
     /* API */
     run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
+    run_e2e_program_xi_projection_is_exact_and_fail_closed();
     run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();
     run_e2e_time_sleep_uses_dedicated_vm_suspend();
     run_e2e_generic_this_method_call_uses_frozen_member_identity();
