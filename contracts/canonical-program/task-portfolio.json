@@ -578,7 +578,7 @@
     {
       "task_id": 295,
       "role": "W1 CoreSpec registry",
-      "status": "READY",
+      "status": "COMPLETE",
       "work_package": "W1",
       "prerequisites": [
         294
@@ -612,7 +612,7 @@
     {
       "task_id": 296,
       "role": "W2 CoreIR and XrProgram writer",
-      "status": "BLOCKED_ON_295",
+      "status": "READY",
       "work_package": "W2",
       "prerequisites": [
         295

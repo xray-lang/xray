@@ -309,6 +309,7 @@ configure_file(
 # dependent build. The build edge is read-only and never regenerates sources.
 
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
+set(CORESPECGEN ${CMAKE_SOURCE_DIR}/tools/corespecgen/corespecgen.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -559,6 +560,26 @@ add_custom_target(gen-stdlib-metadata DEPENDS
 
 add_custom_target(gen-native-type-defs DEPENDS
     ${CMAKE_SOURCE_DIR}/src/frontend/analyzer/xnative_type_defs.inc.c
+)
+
+# CoreSpec is the target-neutral semantic registry introduced by Task 295.
+# Checked-in projections make reviews explicit; this build edge only verifies
+# that the registry, KAT oracle, C metadata, readable table, and coverage
+# inventory are an exact deterministic set.
+add_custom_target(gen-core-spec
+    COMMAND ${XRAY_PYTHON} ${CORESPECGEN}
+            --root ${CMAKE_SOURCE_DIR}
+            --check
+    DEPENDS ${CORESPECGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/core/schema.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/kats.json
+            ${CMAKE_SOURCE_DIR}/src/core/xr_core_spec_gen.h
+            ${CMAKE_SOURCE_DIR}/src/core/xr_core_spec_gen.c
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/core-spec-operations.md
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/core-spec-coverage.json
+    COMMENT "corespecgen: verifying canonical CoreSpec projections"
+    VERBATIM
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
@@ -4574,6 +4595,32 @@ if(BUILD_TESTS)
     )
     set_tests_properties(canonical_program_contracts_self_test PROPERTIES
         LABELS "meta;contracts;freeze;canonical-program;task-294"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME core_spec_registry
+        COMMAND ${XRAY_PYTHON} ${CORESPECGEN}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --check
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(core_spec_registry PROPERTIES
+        LABELS "meta;contracts;core-spec;task-295"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME core_spec_registry_self_test
+        COMMAND ${XRAY_PYTHON} ${CORESPECGEN}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(core_spec_registry_self_test PROPERTIES
+        LABELS "meta;contracts;core-spec;mutation;task-295"
         PROCESSORS 1
         TIMEOUT 30
     )

@@ -3,6 +3,15 @@
   "architecture_task": 293,
   "freeze_task": 294,
   "completion_rule": "An operation becomes COMPLETE only when its CoreSpec law, program encoding, bounded verification, reference evaluation, VM, AOT, source producer, differential evidence, and old-owner deletion are all complete in one vertical slice.",
+  "core_spec_stage": {
+    "status": "COMPLETE",
+    "owner_task": 295,
+    "registry": "xisa/core/registry.json",
+    "schema": "xisa/core/schema.json",
+    "normative_kats": "xisa/core/kats.json",
+    "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
+    "note": "Operation rows remain frozen rather than globally COMPLETE until W2-W7 consumers and old-owner deletion are complete."
+  },
   "operations": [
     {
       "id": "core.constant.i64",

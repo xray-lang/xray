@@ -1,0 +1,690 @@
+{
+  "schema": "xray-core-spec-kat/1",
+  "cases": [
+    {
+      "id": "constant-i64-min",
+      "operation": "core.constant.i64",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": "-9223372036854775808"
+      },
+      "expect": {
+        "value": "-9223372036854775808"
+      }
+    },
+    {
+      "id": "constant-i64-max",
+      "operation": "core.constant.i64",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": "9223372036854775807"
+      },
+      "expect": {
+        "value": "9223372036854775807"
+      }
+    },
+    {
+      "id": "constant-bool-false",
+      "operation": "core.constant.bool",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": false
+      },
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "constant-bool-true",
+      "operation": "core.constant.bool",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "value": true
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "add-checked-basic",
+      "operation": "core.add.i64",
+      "kind": "scalar",
+      "arguments": [
+        "1",
+        "2"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "value": "3"
+      }
+    },
+    {
+      "id": "add-checked-positive-overflow",
+      "operation": "core.add.i64",
+      "kind": "scalar",
+      "arguments": [
+        "9223372036854775807",
+        "1"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "trap": "integer-overflow"
+      }
+    },
+    {
+      "id": "add-checked-negative-overflow",
+      "operation": "core.add.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-9223372036854775808",
+        "-1"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "trap": "integer-overflow"
+      }
+    },
+    {
+      "id": "add-wrapping-positive",
+      "operation": "core.add.i64",
+      "kind": "scalar",
+      "arguments": [
+        "9223372036854775807",
+        "1"
+      ],
+      "immediates": {
+        "overflow_mode": "wrapping"
+      },
+      "expect": {
+        "value": "-9223372036854775808"
+      }
+    },
+    {
+      "id": "add-wrapping-negative",
+      "operation": "core.add.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-9223372036854775808",
+        "-1"
+      ],
+      "immediates": {
+        "overflow_mode": "wrapping"
+      },
+      "expect": {
+        "value": "9223372036854775807"
+      }
+    },
+    {
+      "id": "sub-checked-basic",
+      "operation": "core.sub.i64",
+      "kind": "scalar",
+      "arguments": [
+        "4",
+        "3"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "value": "1"
+      }
+    },
+    {
+      "id": "sub-checked-negative-overflow",
+      "operation": "core.sub.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-9223372036854775808",
+        "1"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "trap": "integer-overflow"
+      }
+    },
+    {
+      "id": "sub-checked-positive-overflow",
+      "operation": "core.sub.i64",
+      "kind": "scalar",
+      "arguments": [
+        "9223372036854775807",
+        "-1"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "trap": "integer-overflow"
+      }
+    },
+    {
+      "id": "sub-wrapping-negative",
+      "operation": "core.sub.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-9223372036854775808",
+        "1"
+      ],
+      "immediates": {
+        "overflow_mode": "wrapping"
+      },
+      "expect": {
+        "value": "9223372036854775807"
+      }
+    },
+    {
+      "id": "mul-checked-basic",
+      "operation": "core.mul.i64",
+      "kind": "scalar",
+      "arguments": [
+        "7",
+        "-6"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "value": "-42"
+      }
+    },
+    {
+      "id": "mul-checked-positive-overflow",
+      "operation": "core.mul.i64",
+      "kind": "scalar",
+      "arguments": [
+        "9223372036854775807",
+        "2"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "trap": "integer-overflow"
+      }
+    },
+    {
+      "id": "mul-checked-minimum-overflow",
+      "operation": "core.mul.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-9223372036854775808",
+        "-1"
+      ],
+      "immediates": {
+        "overflow_mode": "checked"
+      },
+      "expect": {
+        "trap": "integer-overflow"
+      }
+    },
+    {
+      "id": "mul-wrapping-positive",
+      "operation": "core.mul.i64",
+      "kind": "scalar",
+      "arguments": [
+        "9223372036854775807",
+        "2"
+      ],
+      "immediates": {
+        "overflow_mode": "wrapping"
+      },
+      "expect": {
+        "value": "-2"
+      }
+    },
+    {
+      "id": "div-positive",
+      "operation": "core.div.i64",
+      "kind": "scalar",
+      "arguments": [
+        "7",
+        "3"
+      ],
+      "immediates": {
+        "division_mode": "trunc-toward-zero"
+      },
+      "expect": {
+        "value": "2"
+      }
+    },
+    {
+      "id": "div-negative-dividend",
+      "operation": "core.div.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-7",
+        "3"
+      ],
+      "immediates": {
+        "division_mode": "trunc-toward-zero"
+      },
+      "expect": {
+        "value": "-2"
+      }
+    },
+    {
+      "id": "div-negative-divisor",
+      "operation": "core.div.i64",
+      "kind": "scalar",
+      "arguments": [
+        "7",
+        "-3"
+      ],
+      "immediates": {
+        "division_mode": "trunc-toward-zero"
+      },
+      "expect": {
+        "value": "-2"
+      }
+    },
+    {
+      "id": "div-double-negative",
+      "operation": "core.div.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-7",
+        "-3"
+      ],
+      "immediates": {
+        "division_mode": "trunc-toward-zero"
+      },
+      "expect": {
+        "value": "2"
+      }
+    },
+    {
+      "id": "div-zero",
+      "operation": "core.div.i64",
+      "kind": "scalar",
+      "arguments": [
+        "7",
+        "0"
+      ],
+      "immediates": {
+        "division_mode": "trunc-toward-zero"
+      },
+      "expect": {
+        "trap": "integer-division-by-zero"
+      }
+    },
+    {
+      "id": "div-minimum-over-minus-one",
+      "operation": "core.div.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-9223372036854775808",
+        "-1"
+      ],
+      "immediates": {
+        "division_mode": "trunc-toward-zero"
+      },
+      "expect": {
+        "trap": "integer-division-overflow"
+      }
+    },
+    {
+      "id": "compare-eq",
+      "operation": "core.compare.i64",
+      "kind": "scalar",
+      "arguments": [
+        "5",
+        "5"
+      ],
+      "immediates": {
+        "predicate": "eq"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-ne",
+      "operation": "core.compare.i64",
+      "kind": "scalar",
+      "arguments": [
+        "5",
+        "6"
+      ],
+      "immediates": {
+        "predicate": "ne"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-lt-signed",
+      "operation": "core.compare.i64",
+      "kind": "scalar",
+      "arguments": [
+        "-1",
+        "0"
+      ],
+      "immediates": {
+        "predicate": "lt"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-le",
+      "operation": "core.compare.i64",
+      "kind": "scalar",
+      "arguments": [
+        "5",
+        "5"
+      ],
+      "immediates": {
+        "predicate": "le"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-gt",
+      "operation": "core.compare.i64",
+      "kind": "scalar",
+      "arguments": [
+        "7",
+        "6"
+      ],
+      "immediates": {
+        "predicate": "gt"
+      },
+      "expect": {
+        "value": true
+      }
+    },
+    {
+      "id": "compare-ge-false",
+      "operation": "core.compare.i64",
+      "kind": "scalar",
+      "arguments": [
+        "5",
+        "6"
+      ],
+      "immediates": {
+        "predicate": "ge"
+      },
+      "expect": {
+        "value": false
+      }
+    },
+    {
+      "id": "block-arguments-valid",
+      "operation": "core.block.argument",
+      "kind": "contract",
+      "actual": {
+        "edge_types": [
+          "i64",
+          "bool"
+        ],
+        "parameter_types": [
+          "i64",
+          "bool"
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "block-arguments-type-mismatch",
+      "operation": "core.block.argument",
+      "kind": "contract",
+      "actual": {
+        "edge_types": [
+          "bool"
+        ],
+        "parameter_types": [
+          "i64"
+        ]
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "branch-valid",
+      "operation": "core.branch",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [
+          "i64"
+        ],
+        "target_parameter_types": [
+          "i64"
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "branch-arity-mismatch",
+      "operation": "core.branch",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [
+          "i64",
+          "bool"
+        ],
+        "target_parameter_types": [
+          "i64"
+        ]
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "conditional-branch-valid",
+      "operation": "core.conditional_branch",
+      "kind": "contract",
+      "actual": {
+        "condition_type": "bool",
+        "true_argument_types": [
+          "i64"
+        ],
+        "true_parameter_types": [
+          "i64"
+        ],
+        "false_argument_types": [
+          "bool"
+        ],
+        "false_parameter_types": [
+          "bool"
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "conditional-branch-condition-mismatch",
+      "operation": "core.conditional_branch",
+      "kind": "contract",
+      "actual": {
+        "condition_type": "i64",
+        "true_argument_types": [],
+        "true_parameter_types": [],
+        "false_argument_types": [],
+        "false_parameter_types": []
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "return-i64-valid",
+      "operation": "core.return",
+      "kind": "contract",
+      "actual": {
+        "value_types": [
+          "i64"
+        ],
+        "function_result_type": "i64"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "return-void-valid",
+      "operation": "core.return",
+      "kind": "contract",
+      "actual": {
+        "value_types": [],
+        "function_result_type": "void"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "return-type-mismatch",
+      "operation": "core.return",
+      "kind": "contract",
+      "actual": {
+        "value_types": [
+          "bool"
+        ],
+        "function_result_type": "i64"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "sealed-call-valid",
+      "operation": "core.call.sealed_direct",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [
+          "i64",
+          "bool"
+        ],
+        "parameter_types": [
+          "i64",
+          "bool"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callee_sealed": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "sealed-call-open-callee",
+      "operation": "core.call.sealed_direct",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [],
+        "parameter_types": [],
+        "actual_result_type": "void",
+        "declared_result_type": "void",
+        "callee_sealed": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "sealed-call-argument-mismatch",
+      "operation": "core.call.sealed_direct",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [
+          "bool"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callee_sealed": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "explicit-trap",
+      "operation": "core.trap",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {
+        "trap": "explicit-trap"
+      },
+      "expect": {
+        "trap": "explicit-trap"
+      }
+    },
+    {
+      "id": "error-publish-valid",
+      "operation": "core.error.publish",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "error"
+        ]
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "error-publish-type-mismatch",
+      "operation": "core.error.publish",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "i64"
+        ]
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "target-pointer-width-64",
+      "operation": "core.target.pointer_width",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {
+        "pointer_width": 64
+      },
+      "expect": {
+        "value": "64"
+      }
+    },
+    {
+      "id": "target-pointer-width-missing",
+      "operation": "core.target.pointer_width",
+      "kind": "scalar",
+      "arguments": [],
+      "immediates": {},
+      "profile": {},
+      "expect": {
+        "trap": "profile-unavailable"
+      }
+    }
+  ]
+}

@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xray-lang.local/schema/core-spec-v1.json",
+  "title": "Xray CoreSpec Registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "epoch",
+    "feature_policy",
+    "types",
+    "effects",
+    "capabilities",
+    "traps",
+    "features",
+    "retired_operation_ids",
+    "operations"
+  ],
+  "properties": {
+    "schema": {
+      "const": "xray-core-spec/1"
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "feature_policy": {
+      "const": "fail-closed"
+    },
+    "types": {
+      "$ref": "#/$defs/namedRegistry"
+    },
+    "effects": {
+      "$ref": "#/$defs/namedRegistry"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/namedRegistry"
+    },
+    "traps": {
+      "$ref": "#/$defs/namedRegistry"
+    },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stable_id",
+          "name",
+          "epoch",
+          "status"
+        ],
+        "properties": {
+          "stable_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9.-]*$"
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "RETIRED"
+            ]
+          }
+        }
+      }
+    },
+    "retired_operation_ids": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stable_id",
+          "spelling",
+          "reason"
+        ],
+        "properties": {
+          "stable_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "spelling": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/operation"
+      }
+    }
+  },
+  "$defs": {
+    "namedRegistry": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stable_id",
+          "name",
+          "description"
+        ],
+        "properties": {
+          "stable_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spec_oracle",
+        "decoder",
+        "verifier",
+        "evaluator",
+        "vm",
+        "aot"
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stable_id",
+        "spelling",
+        "class",
+        "feature",
+        "epoch",
+        "type_rule",
+        "evaluation_order",
+        "successors",
+        "arithmetic",
+        "effects",
+        "capability_requirements",
+        "ownership",
+        "profile_dependency",
+        "materialization",
+        "determinism",
+        "kat_validator",
+        "coverage"
+      ],
+      "properties": {
+        "stable_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "spelling": {
+          "type": "string",
+          "pattern": "^core\\.[a-z0-9_.-]+$"
+        },
+        "class": {
+          "type": "string"
+        },
+        "feature": {
+          "type": "string"
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "type_rule": {
+          "type": "object"
+        },
+        "evaluation_order": {
+          "enum": [
+            "none",
+            "left-to-right"
+          ]
+        },
+        "successors": {
+          "type": "object"
+        },
+        "arithmetic": {
+          "type": "object"
+        },
+        "effects": {
+          "type": "array"
+        },
+        "capability_requirements": {
+          "type": "array"
+        },
+        "ownership": {
+          "type": "object"
+        },
+        "profile_dependency": {
+          "type": "string"
+        },
+        "materialization": {
+          "type": "string"
+        },
+        "determinism": {
+          "type": "object"
+        },
+        "kat_validator": {
+          "type": "string"
+        },
+        "coverage": {
+          "$ref": "#/$defs/coverage"
+        }
+      }
+    }
+  }
+}

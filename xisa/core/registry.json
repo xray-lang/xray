@@ -1,0 +1,1196 @@
+{
+  "schema": "xray-core-spec/1",
+  "epoch": 1,
+  "feature_policy": "fail-closed",
+  "types": [
+    {
+      "stable_id": 0,
+      "name": "void",
+      "description": "No produced value."
+    },
+    {
+      "stable_id": 1,
+      "name": "bool",
+      "description": "Canonical logical false or true; never host truthiness."
+    },
+    {
+      "stable_id": 2,
+      "name": "i64",
+      "description": "Exactly 64-bit two's-complement signed integer semantics."
+    },
+    {
+      "stable_id": 3,
+      "name": "u32",
+      "description": "Exactly 32-bit unsigned integer semantics."
+    },
+    {
+      "stable_id": 4,
+      "name": "error",
+      "description": "Typed language error payload independent of a backend return convention."
+    },
+    {
+      "stable_id": 5,
+      "name": "type-variable",
+      "description": "Registry meta-type resolved by a verified function or block signature."
+    }
+  ],
+  "effects": [
+    {
+      "stable_id": 1,
+      "name": "trap",
+      "description": "Deterministic terminal language trap."
+    },
+    {
+      "stable_id": 2,
+      "name": "error",
+      "description": "Typed error successor publication."
+    },
+    {
+      "stable_id": 3,
+      "name": "call",
+      "description": "Invoke a sealed in-program function with its declared effects."
+    },
+    {
+      "stable_id": 4,
+      "name": "target-query",
+      "description": "Read one immutable value from the bound XrTargetProfile."
+    }
+  ],
+  "capabilities": [
+    {
+      "stable_id": 1,
+      "name": "profile.pointer-width",
+      "description": "The bound target profile publishes an exact 32- or 64-bit pointer width."
+    }
+  ],
+  "traps": [
+    {
+      "stable_id": 1,
+      "name": "integer-overflow",
+      "description": "A checked signed integer result is outside [-2^63, 2^63-1]."
+    },
+    {
+      "stable_id": 2,
+      "name": "integer-division-by-zero",
+      "description": "The divisor is zero."
+    },
+    {
+      "stable_id": 3,
+      "name": "integer-division-overflow",
+      "description": "i64 minimum divided by -1 has no i64 result."
+    },
+    {
+      "stable_id": 4,
+      "name": "explicit-trap",
+      "description": "The program explicitly publishes a deterministic trap."
+    },
+    {
+      "stable_id": 5,
+      "name": "profile-unavailable",
+      "description": "The required immutable target-profile field is absent or invalid."
+    }
+  ],
+  "features": [
+    {
+      "stable_id": 1,
+      "name": "core.base",
+      "epoch": 1,
+      "status": "ACTIVE"
+    }
+  ],
+  "retired_operation_ids": [
+    {
+      "stable_id": 15,
+      "spelling": "core.reserved.pre293",
+      "reason": "Permanent tombstone proving active IDs cannot reuse retired values."
+    }
+  ],
+  "operations": [
+    {
+      "stable_id": 1,
+      "spelling": "core.constant.i64",
+      "class": "constant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "i64",
+        "immediates": {
+          "value": "i64-decimal"
+        }
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "signed-integer-constant",
+        "width": 64,
+        "range": "[-2^63,2^63-1]"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one exact result"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 2,
+      "spelling": "core.constant.bool",
+      "class": "constant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "bool",
+        "immediates": {
+          "value": "bool"
+        }
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one exact result"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 16,
+      "spelling": "core.add.i64",
+      "class": "arithmetic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64",
+          "i64"
+        ],
+        "result": "i64",
+        "immediates": {
+          "overflow_mode": [
+            "checked",
+            "wrapping"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "signed-integer",
+        "width": 64,
+        "operation": "add",
+        "overflow_modes": [
+          "checked",
+          "wrapping"
+        ],
+        "checked_trap": "integer-overflow",
+        "wrapping": "modulo-two-to-64"
+      },
+      "effects": [
+        "trap"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "result or the named checked-overflow trap"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 17,
+      "spelling": "core.sub.i64",
+      "class": "arithmetic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64",
+          "i64"
+        ],
+        "result": "i64",
+        "immediates": {
+          "overflow_mode": [
+            "checked",
+            "wrapping"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "signed-integer",
+        "width": 64,
+        "operation": "sub",
+        "overflow_modes": [
+          "checked",
+          "wrapping"
+        ],
+        "checked_trap": "integer-overflow",
+        "wrapping": "modulo-two-to-64"
+      },
+      "effects": [
+        "trap"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "result or the named checked-overflow trap"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 18,
+      "spelling": "core.mul.i64",
+      "class": "arithmetic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64",
+          "i64"
+        ],
+        "result": "i64",
+        "immediates": {
+          "overflow_mode": [
+            "checked",
+            "wrapping"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "signed-integer",
+        "width": 64,
+        "operation": "mul",
+        "overflow_modes": [
+          "checked",
+          "wrapping"
+        ],
+        "checked_trap": "integer-overflow",
+        "wrapping": "modulo-two-to-64"
+      },
+      "effects": [
+        "trap"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "result or the named checked-overflow trap"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 19,
+      "spelling": "core.div.i64",
+      "class": "arithmetic",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64",
+          "i64"
+        ],
+        "result": "i64",
+        "immediates": {
+          "division_mode": [
+            "trunc-toward-zero"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "signed-integer-division",
+        "width": 64,
+        "rounding": "trunc-toward-zero",
+        "zero_trap": "integer-division-by-zero",
+        "minimum_over_minus_one_trap": "integer-division-overflow"
+      },
+      "effects": [
+        "trap"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one quotient or one named division trap"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 24,
+      "spelling": "core.compare.i64",
+      "class": "comparison",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "i64",
+          "i64"
+        ],
+        "result": "bool",
+        "immediates": {
+          "predicate": [
+            "eq",
+            "ne",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "signed-integer-compare",
+        "width": 64
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one canonical bool"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 32,
+      "spelling": "core.block.argument",
+      "class": "control",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T..."
+        ],
+        "result": "void",
+        "immediates": {
+          "parameter_types": "type-list"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "from-predecessor-edge..."
+        ],
+        "result": "block-parameters"
+      },
+      "profile_dependency": "none",
+      "materialization": "control",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "exact predecessor-edge transfer"
+      },
+      "kat_validator": "block-arguments",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 33,
+      "spelling": "core.branch",
+      "class": "control",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T..."
+        ],
+        "result": "void",
+        "immediates": {
+          "target_parameter_types": "type-list"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "edge-transfer..."
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "none",
+      "materialization": "control",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one target edge"
+      },
+      "kat_validator": "branch",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 34,
+      "spelling": "core.conditional_branch",
+      "class": "control",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "bool",
+          "T...",
+          "T..."
+        ],
+        "result": "void",
+        "immediates": {
+          "true_parameter_types": "type-list",
+          "false_parameter_types": "type-list"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-condition",
+          "edge-transfer..."
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "none",
+      "materialization": "control",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one edge selected by canonical bool"
+      },
+      "kat_validator": "conditional-branch",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 35,
+      "spelling": "core.return",
+      "class": "control",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "R?"
+        ],
+        "result": "void",
+        "immediates": {
+          "function_result_type": "type-or-void"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": false,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "return-transfer?"
+        ],
+        "result": "function-result"
+      },
+      "profile_dependency": "none",
+      "materialization": "control",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one function result"
+      },
+      "kat_validator": "return",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 36,
+      "spelling": "core.call.sealed_direct",
+      "class": "call",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "P..."
+        ],
+        "result": "R?",
+        "immediates": {
+          "parameter_types": "type-list",
+          "result_type": "type-or-void",
+          "callee_id": "program-function-id"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": true,
+        "panic": true,
+        "cancel": true,
+        "suspend": true
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "parameter-mode..."
+        ],
+        "result": "declared-result-mode"
+      },
+      "profile_dependency": "none",
+      "materialization": "call",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "callee-declared trace under the same CoreSpec"
+      },
+      "kat_validator": "sealed-call",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 48,
+      "spelling": "core.trap",
+      "class": "termination",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "void",
+        "immediates": {
+          "trap": [
+            "explicit-trap"
+          ]
+        }
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": false,
+        "error": false,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "trap"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "none"
+      },
+      "profile_dependency": "none",
+      "materialization": "trap",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one named terminal trap"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 49,
+      "spelling": "core.error.publish",
+      "class": "termination",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "error"
+        ],
+        "result": "void",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": false,
+        "error": true,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "error"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "error-transfer"
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "none",
+      "materialization": "error",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one typed error successor"
+      },
+      "kat_validator": "fixed-contract",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 64,
+      "spelling": "core.target.pointer_width",
+      "class": "target-query",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "u32",
+        "immediates": {}
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "target-query",
+        "trap"
+      ],
+      "capability_requirements": [
+        "profile.pointer-width"
+      ],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "pointer_width",
+      "materialization": "profile-query",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one value from the immutable bound profile or profile-unavailable"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    }
+  ]
+}

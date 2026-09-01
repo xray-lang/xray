@@ -30,6 +30,19 @@ endmacro()
 # value/ — Value system
 # ============================================================================
 
+# Task 295 CoreSpec metadata is intentionally independent of xray_core and both
+# executors. This target compiles only the generated registry projection.
+add_executable(test_core_spec
+    core/test_core_spec.c
+    ${CMAKE_SOURCE_DIR}/src/core/xr_core_spec_gen.c
+)
+target_include_directories(test_core_spec PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(test_core_spec gen-core-spec)
+add_test(NAME test_core_spec COMMAND $<TARGET_FILE:test_core_spec>)
+set_tests_properties(test_core_spec PROPERTIES
+    LABELS "unit;core-spec;metadata;task-295"
+)
+
 add_xray_unit_test(test_xvalue value/test_xvalue.c)
 
 

@@ -1,0 +1,547 @@
+{
+  "schema": "xray-core-spec-coverage/1",
+  "registry_sha256": "fe99bb9affa94f448d8a282eb6a6d44e08ab5f6f60245175ab43d387e276e15e",
+  "epoch": 1,
+  "operation_count": 15,
+  "normative_kat_count": 46,
+  "operations": [
+    {
+      "stable_id": 1,
+      "spelling": "core.constant.i64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 2,
+      "spelling": "core.constant.bool",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 16,
+      "spelling": "core.add.i64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 17,
+      "spelling": "core.sub.i64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 18,
+      "spelling": "core.mul.i64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 19,
+      "spelling": "core.div.i64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 24,
+      "spelling": "core.compare.i64",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 32,
+      "spelling": "core.block.argument",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 33,
+      "spelling": "core.branch",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 34,
+      "spelling": "core.conditional_branch",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 35,
+      "spelling": "core.return",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 36,
+      "spelling": "core.call.sealed_direct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 48,
+      "spelling": "core.trap",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 49,
+      "spelling": "core.error.publish",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 64,
+      "spelling": "core.target.pointer_width",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 297
+        },
+        "vm": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 299
+        },
+        "aot": {
+          "status": "NOT_YET_ACTIVE",
+          "task": 300
+        }
+      }
+    }
+  ],
+  "missing_rows": {
+    "spec_oracle": [],
+    "decoder": [
+      "core.constant.i64",
+      "core.constant.bool",
+      "core.add.i64",
+      "core.sub.i64",
+      "core.mul.i64",
+      "core.div.i64",
+      "core.compare.i64",
+      "core.block.argument",
+      "core.branch",
+      "core.conditional_branch",
+      "core.return",
+      "core.call.sealed_direct",
+      "core.trap",
+      "core.error.publish",
+      "core.target.pointer_width"
+    ],
+    "verifier": [
+      "core.constant.i64",
+      "core.constant.bool",
+      "core.add.i64",
+      "core.sub.i64",
+      "core.mul.i64",
+      "core.div.i64",
+      "core.compare.i64",
+      "core.block.argument",
+      "core.branch",
+      "core.conditional_branch",
+      "core.return",
+      "core.call.sealed_direct",
+      "core.trap",
+      "core.error.publish",
+      "core.target.pointer_width"
+    ],
+    "evaluator": [
+      "core.constant.i64",
+      "core.constant.bool",
+      "core.add.i64",
+      "core.sub.i64",
+      "core.mul.i64",
+      "core.div.i64",
+      "core.compare.i64",
+      "core.block.argument",
+      "core.branch",
+      "core.conditional_branch",
+      "core.return",
+      "core.call.sealed_direct",
+      "core.trap",
+      "core.error.publish",
+      "core.target.pointer_width"
+    ],
+    "vm": [
+      "core.constant.i64",
+      "core.constant.bool",
+      "core.add.i64",
+      "core.sub.i64",
+      "core.mul.i64",
+      "core.div.i64",
+      "core.compare.i64",
+      "core.block.argument",
+      "core.branch",
+      "core.conditional_branch",
+      "core.return",
+      "core.call.sealed_direct",
+      "core.trap",
+      "core.error.publish",
+      "core.target.pointer_width"
+    ],
+    "aot": [
+      "core.constant.i64",
+      "core.constant.bool",
+      "core.add.i64",
+      "core.sub.i64",
+      "core.mul.i64",
+      "core.div.i64",
+      "core.compare.i64",
+      "core.block.argument",
+      "core.branch",
+      "core.conditional_branch",
+      "core.return",
+      "core.call.sealed_direct",
+      "core.trap",
+      "core.error.publish",
+      "core.target.pointer_width"
+    ]
+  }
+}
