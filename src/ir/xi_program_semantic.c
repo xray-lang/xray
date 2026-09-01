@@ -904,7 +904,7 @@ bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure
         XrI64OverflowDecisionRow *rows =
             (XrI64OverflowDecisionRow *) xr_calloc(overflow_decisions->row_count, sizeof(*rows));
         XrTargetProfile *retained_profile =
-            xr_target_profile_retain((XrTargetProfile *) target_profile);
+            xr_target_profile_retain(target_profile);
         if (!owned || !rows || !retained_profile) {
             xr_free(rows);
             xr_free(owned);
@@ -926,7 +926,7 @@ bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure
     if (!owned)
         return scalar_fail(error, error_size, "Xi scalar decision ownership allocation failed");
     XrTargetProfile *retained_profile =
-        xr_target_profile_retain((XrTargetProfile *) target_profile);
+        xr_target_profile_retain(target_profile);
     if (!retained_profile) {
         xr_free(owned);
         return scalar_fail(error, error_size, "Xi scalar target profile retention failed");

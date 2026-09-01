@@ -716,7 +716,7 @@
     {
       "task_id": 299,
       "role": "W5 universal typed-program VM",
-      "status": "READY",
+      "status": "COMPLETE",
       "work_package": "W5",
       "prerequisites": [
         297,

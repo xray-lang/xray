@@ -1,0 +1,173 @@
+{
+  "schema": "xray-program-vm-coverage/1",
+  "task": 299,
+  "vm_build_id": "xray-program-vm-v1",
+  "input_authority": "XrValidatedProgram",
+  "execution_authority": "XrInstance",
+  "distribution_format": "XrProgram",
+  "public_bytecode_format": null,
+  "private_views": [
+    "baseline-validated-graph",
+    "fixed-instruction-rows"
+  ],
+  "persistent_private_code": false,
+  "quickening": "DISABLED_UNTIL_MEASURED",
+  "private_qualification": [
+    "ExecutionId",
+    "generation",
+    "vm-build-id",
+    "decode-policy",
+    "quickening-policy"
+  ],
+  "operation_count": 15,
+  "operations": [
+    {
+      "stable_id": 1,
+      "spelling": "core.constant.i64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 2,
+      "spelling": "core.constant.bool",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 16,
+      "spelling": "core.add.i64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 17,
+      "spelling": "core.sub.i64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 18,
+      "spelling": "core.mul.i64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 19,
+      "spelling": "core.div.i64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 24,
+      "spelling": "core.compare.i64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 32,
+      "spelling": "core.block.argument",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 33,
+      "spelling": "core.branch",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 34,
+      "spelling": "core.conditional_branch",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 35,
+      "spelling": "core.return",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 36,
+      "spelling": "core.call.sealed_direct",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 48,
+      "spelling": "core.trap",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 49,
+      "spelling": "core.error.publish",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 64,
+      "spelling": "core.target.pointer_width",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    }
+  ],
+  "profile_matrix": [
+    "lp64-x86_64-windows",
+    "ilp32-wasm32-wasi"
+  ],
+  "lifecycle_matrix": [
+    "active-execute",
+    "retired-code-refused",
+    "successor-generation-refused"
+  ],
+  "runtime_product": {
+    "target": "xray_program_vm_runtime",
+    "source_count": 16,
+    "forbidden_closures": [
+      "frontend",
+      "CoreIR-writer",
+      "reference-evaluator",
+      "TargetPlan",
+      "legacy-Proto-VM",
+      "AOT"
+    ],
+    "embedder_test": "tests/unit/vm/test_xr_program_vm_runtime.c"
+  },
+  "inactive_contracts": [
+    "persistent-private-code-cache",
+    "adaptive-quickening",
+    "full-language-operation-families",
+    "public-embedding-ABI"
+  ]
+}

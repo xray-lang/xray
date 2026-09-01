@@ -26,7 +26,20 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 15 active walking-skeleton operations have bounded verification and independent reference evaluation. Inactive ownership, coroutine, import, boundary, VM, and AOT surfaces fail closed until their owning slices activate them."
+    "note": "All 15 active walking-skeleton operations have bounded verification and independent reference evaluation. Inactive ownership, coroutine, import, boundary, and AOT surfaces fail closed until their owning slices activate them."
+  },
+  "vm_stage": {
+    "status": "COMPLETE",
+    "owner_task": 299,
+    "input_authority": "XrValidatedProgram",
+    "execution_authority": "XrInstance",
+    "generated_coverage": "contracts/canonical-program/xrprogram-vm-coverage.json",
+    "runtime_product": "xray_program_vm_runtime",
+    "private_views": [
+      "baseline-validated-graph",
+      "fixed-instruction-rows"
+    ],
+    "note": "All 15 walking-skeleton operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "operations": [
     {

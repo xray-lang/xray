@@ -54,7 +54,6 @@ EXPECTED_COVERAGE = {
         "borrow-move-share-drop-transfer",
         "root-and-cleanup-tables",
         "coroutine-continuation-state",
-        "VM-boundary-adapter",
         "AOT-boundary-adapter",
         "FFI-and-hybrid-adapter",
     ],

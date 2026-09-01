@@ -151,10 +151,11 @@ void xr_validated_program_free(XrValidatedProgram *program) {
     xr_free(program);
 }
 
-XrValidatedProgram *xr_validated_program_retain(XrValidatedProgram *program) {
-    if (program)
-        atomic_fetch_add_explicit(&program->references, 1u, memory_order_relaxed);
-    return program;
+XrValidatedProgram *xr_validated_program_retain(const XrValidatedProgram *program) {
+    XrValidatedProgram *retained = (XrValidatedProgram *) program;
+    if (retained)
+        atomic_fetch_add_explicit(&retained->references, 1u, memory_order_relaxed);
+    return retained;
 }
 
 static bool parse_constants(VerifyContext *context, const XrProgramView *view) {

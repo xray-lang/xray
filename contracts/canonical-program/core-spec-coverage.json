@@ -26,7 +26,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -56,7 +56,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -86,7 +86,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -116,7 +116,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -146,7 +146,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -176,7 +176,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -206,7 +206,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -236,7 +236,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -266,7 +266,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -296,7 +296,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -326,7 +326,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -356,7 +356,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -386,7 +386,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -416,7 +416,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -446,7 +446,7 @@
           "task": 297
         },
         "vm": {
-          "status": "NOT_YET_ACTIVE",
+          "status": "COMPLETE",
           "task": 299
         },
         "aot": {
@@ -461,23 +461,7 @@
     "decoder": [],
     "verifier": [],
     "evaluator": [],
-    "vm": [
-      "core.constant.i64",
-      "core.constant.bool",
-      "core.add.i64",
-      "core.sub.i64",
-      "core.mul.i64",
-      "core.div.i64",
-      "core.compare.i64",
-      "core.block.argument",
-      "core.branch",
-      "core.conditional_branch",
-      "core.return",
-      "core.call.sealed_direct",
-      "core.trap",
-      "core.error.publish",
-      "core.target.pointer_width"
-    ],
+    "vm": [],
     "aot": [
       "core.constant.i64",
       "core.constant.bool",

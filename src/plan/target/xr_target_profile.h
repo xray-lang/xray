@@ -128,7 +128,7 @@ XR_FUNC bool xr_target_profile_build(const XrTargetProfileBuildInput *input, XrT
 XR_FUNC bool xr_target_profile_require_exact(const XrTargetProfile *expected,
                                              const XrTargetProfile *actual, char *error,
                                              size_t error_size);
-XR_FUNC XrTargetProfile *xr_target_profile_retain(XrTargetProfile *profile);
+XR_FUNC XrTargetProfile *xr_target_profile_retain(const XrTargetProfile *profile);
 XR_FUNC void xr_target_profile_free(XrTargetProfile *profile);
 XR_FUNC bool xr_target_profile_is_frozen(const XrTargetProfile *profile);
 XR_FUNC bool xr_target_profile_verify(const XrTargetProfile *profile, char *error,

@@ -47,8 +47,10 @@ add_library(xr_program_test_core STATIC
     ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
     ${CMAKE_SOURCE_DIR}/src/core/xr_core_spec_gen.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_core_ir.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_program_diagnostic.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_program_decode.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_program_encode.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_program_identity.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_reference_evaluator.c
 )
@@ -517,6 +519,56 @@ add_xray_unit_test(test_xr_execution execution/test_xr_execution.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 set_tests_properties(test_xr_execution PROPERTIES
     LABELS "unit;execution;target-machine;provider;generation;task-298")
+add_xray_unit_test(test_xr_program_vm vm/test_xr_program_vm.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+set_tests_properties(test_xr_program_vm PROPERTIES
+    LABELS "unit;vm;canonical-program;differential;target-machine;generation;task-299")
+
+add_executable(xr_program_vm_fixture_writer
+    program/xr_program_vm_fixture_writer.c)
+target_include_directories(xr_program_vm_fixture_writer PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(xr_program_vm_fixture_writer PRIVATE xr_program_test_core)
+set(XR_PROGRAM_VM_FIXTURE_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/task-299)
+set(XR_PROGRAM_VM_FIXTURE_HEADER
+    ${XR_PROGRAM_VM_FIXTURE_DIR}/xr_program_vm_embedded_fixture.h)
+add_custom_command(
+    OUTPUT ${XR_PROGRAM_VM_FIXTURE_HEADER}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${XR_PROGRAM_VM_FIXTURE_DIR}
+    COMMAND $<TARGET_FILE:xr_program_vm_fixture_writer>
+            ${XR_PROGRAM_VM_FIXTURE_HEADER}
+    DEPENDS xr_program_vm_fixture_writer
+    COMMENT "Generating runtime-only XrProgram embedding fixture"
+    VERBATIM)
+add_executable(test_xr_program_vm_runtime
+    vm/test_xr_program_vm_runtime.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE}
+    ${XR_PROGRAM_VM_FIXTURE_HEADER})
+target_compile_definitions(test_xr_program_vm_runtime PRIVATE
+    XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+target_include_directories(test_xr_program_vm_runtime PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${XR_PROGRAM_VM_FIXTURE_DIR})
+target_link_libraries(test_xr_program_vm_runtime PRIVATE
+    xray_program_vm_runtime)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(xr_program_vm_fixture_writer PRIVATE /W4 /WX)
+    target_compile_options(test_xr_program_vm PRIVATE /W4 /WX)
+    target_compile_options(test_xr_program_vm_runtime PRIVATE /W4 /WX)
+else()
+    target_compile_options(xr_program_vm_fixture_writer PRIVATE -Wall -Wextra -Werror)
+    target_compile_options(test_xr_program_vm PRIVATE -Wall -Wextra -Werror)
+    target_compile_options(test_xr_program_vm_runtime PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xr_program_vm_runtime
+    COMMAND $<TARGET_FILE:test_xr_program_vm_runtime>)
+set_tests_properties(test_xr_program_vm_runtime PROPERTIES
+    LABELS "unit;vm;canonical-program;runtime-only;embedder;task-299")
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_test(NAME test_target_native_target_leaf_authority

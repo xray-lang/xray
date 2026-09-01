@@ -393,10 +393,11 @@ bool xr_target_profile_require_exact(const XrTargetProfile *expected, const XrTa
     return true;
 }
 
-XrTargetProfile *xr_target_profile_retain(XrTargetProfile *profile) {
-    if (profile)
-        atomic_fetch_add_explicit(&profile->references, 1, memory_order_relaxed);
-    return profile;
+XrTargetProfile *xr_target_profile_retain(const XrTargetProfile *profile) {
+    XrTargetProfile *retained = (XrTargetProfile *) profile;
+    if (retained)
+        atomic_fetch_add_explicit(&retained->references, 1, memory_order_relaxed);
+    return retained;
 }
 
 void xr_target_profile_free(XrTargetProfile *profile) {

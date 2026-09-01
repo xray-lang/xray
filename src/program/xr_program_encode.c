@@ -11,7 +11,6 @@
 #include "xr_program_internal.h"
 
 #include "../base/xmalloc.h"
-#include "../base/xsha256.h"
 #include "../core/xr_core_spec_gen.h"
 #include "xr_program_schema_gen.h"
 
@@ -383,24 +382,6 @@ static bool parse_hex_digest(const char *hex, uint8_t digest[XR_PROGRAM_DIGEST_S
         digest[index] = (uint8_t) ((high << 4u) | low);
     }
     return hex[(size_t) XR_PROGRAM_DIGEST_SIZE * 2u] == '\0';
-}
-
-void xr_program_compute_id(const uint8_t *bytes, size_t size, XrProgramId *id_out) {
-    static const uint8_t domain[] = XR_PROGRAM_ID_DOMAIN;
-    XrSHA256Context context;
-    if (!id_out)
-        return;
-    memset(id_out, 0, sizeof(*id_out));
-    if (!bytes && size != 0)
-        return;
-    xr_sha256_init(&context);
-    xr_sha256_update(&context, domain, sizeof(domain));
-    xr_sha256_update(&context, bytes, size);
-    xr_sha256_final(&context, id_out->bytes);
-}
-
-bool xr_program_id_equal(XrProgramId left, XrProgramId right) {
-    return memcmp(left.bytes, right.bytes, XR_PROGRAM_DIGEST_SIZE) == 0;
 }
 
 void xr_program_id_hex(XrProgramId id, char output[XR_PROGRAM_DIGEST_SIZE * 2u + 1u]) {

@@ -313,6 +313,7 @@ set(CORESPECGEN ${CMAKE_SOURCE_DIR}/tools/corespecgen/corespecgen.py)
 set(PROGRAMGEN ${CMAKE_SOURCE_DIR}/tools/programgen/programgen.py)
 set(PROGRAMSEMCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_semantics.py)
 set(EXECUTIONCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_execution_contracts.py)
+set(PROGRAMVMCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_vm_contracts.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -629,6 +630,20 @@ add_custom_target(check-xr-execution-contracts
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.c
     COMMENT "Checking exact target-profile and execution-binding contracts"
+    VERBATIM
+)
+
+add_custom_target(check-xr-program-vm-contracts
+    COMMAND ${XRAY_PYTHON} ${PROGRAMVMCONTRACTCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${PROGRAMVMCONTRACTCHECK}
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.h
+            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm_runtime.c
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-vm-coverage.json
+    COMMENT "Checking typed XrProgram VM coverage and runtime isolation"
     VERBATIM
 )
 
@@ -1519,7 +1534,7 @@ add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
 add_dependencies(xray_core_objs
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics
-    check-xr-execution-contracts)
+    check-xr-execution-contracts check-xr-program-vm-contracts)
 
 # Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
 # table.
@@ -1533,7 +1548,7 @@ add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics
-    check-xr-execution-contracts)
+    check-xr-execution-contracts check-xr-program-vm-contracts)
 
 # The installed compiler product is the exact backend authority surface, not
 # the CLI's xray_core development aggregate.  Keep source/Xi inputs opaque at
@@ -1633,6 +1648,49 @@ list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/(xcoro_monitor|xthre
 
 add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
 add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+
+# Canonical XrProgram execution is a self-contained embeddable product. It owns
+# only format admission, immutable target binding, generation lifecycle, and
+# the private typed VM view. Source/frontend builders, the reference evaluator,
+# the legacy Proto VM, TargetPlan, and AOT are deliberately absent.
+set(XRAY_PROGRAM_VM_RUNTIME_SOURCES
+    src/base/xsha256.c
+    src/base/xtarget_data_layout.c
+    src/core/xr_core_spec_gen.c
+    src/plan/semantic/xr_semantic_ids.c
+    src/runtime/abi/xr_runtime_contract.c
+    src/runtime/abi/xr_runtime_descriptor.c
+    src/runtime/abi/xr_runtime_object_header.c
+    src/runtime/abi/xr_runtime_string_object.c
+    src/plan/target/xr_target_profile.c
+    src/plan/target/xr_target_profile_verify.c
+    src/program/xr_program_diagnostic.c
+    src/program/xr_program_identity.c
+    src/program/xr_program_decode.c
+    src/program/xr_program_verify.c
+    src/execution/xr_execution.c
+    src/vm/xr_program_vm.c
+)
+add_library(xray_program_vm_runtime STATIC ${XRAY_PROGRAM_VM_RUNTIME_SOURCES})
+add_dependencies(xray_program_vm_runtime
+    gen-core-spec gen-xr-program-schema check-xr-program-semantics
+    check-xr-execution-contracts check-xr-program-vm-contracts)
+target_include_directories(xray_program_vm_runtime PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(xray_program_vm_runtime PRIVATE /W4 /WX)
+else()
+    target_compile_options(xray_program_vm_runtime PRIVATE -Wall -Wextra -Werror)
+endif()
+if(WIN32)
+    target_link_libraries(xray_program_vm_runtime PUBLIC synchronization)
+else()
+    target_link_libraries(xray_program_vm_runtime PUBLIC pthread)
+endif()
 
 # Runtime loading owns a deliberately narrow verifier closure. Encoders and
 # compiler-side builders stay in xray_core. The installed execution archive
@@ -4755,6 +4813,33 @@ if(BUILD_TESTS)
     )
     set_tests_properties(xr_execution_contracts_self_test PROPERTIES
         LABELS "meta;contracts;canonical-program;execution;mutation;task-298"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_vm_contracts
+        COMMAND ${XRAY_PYTHON} ${PROGRAMVMCONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --archive $<TARGET_FILE:xray_program_vm_runtime>
+                --executable $<TARGET_FILE:test_xr_program_vm_runtime>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_vm_contracts PROPERTIES
+        LABELS "meta;contracts;canonical-program;vm;runtime-only;task-299"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_vm_contracts_self_test
+        COMMAND ${XRAY_PYTHON} ${PROGRAMVMCONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_vm_contracts_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;vm;runtime-only;mutation;task-299"
         PROCESSORS 1
         TIMEOUT 30
     )

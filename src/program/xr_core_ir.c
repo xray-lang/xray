@@ -15,7 +15,6 @@
 #include "../core/xr_core_spec_gen.h"
 #include "xr_program_schema_gen.h"
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,16 +36,6 @@ static int function_compare(const void *left, const void *right) {
 static int block_compare(const void *left, const void *right) {
     return key_compare_value(((const XrCoreIrBlock *) left)->key,
                              ((const XrCoreIrBlock *) right)->key);
-}
-
-void xr_program_set_diagnostic(char *diagnostic, size_t diagnostic_size, const char *format, ...) {
-    va_list arguments;
-    if (!diagnostic || diagnostic_size == 0)
-        return;
-    va_start(arguments, format);
-    vsnprintf(diagnostic, diagnostic_size, format, arguments);
-    va_end(arguments);
-    diagnostic[diagnostic_size - 1] = '\0';
 }
 
 XrCoreIrKey xr_core_ir_key(const void *semantic_bytes, size_t semantic_size) {

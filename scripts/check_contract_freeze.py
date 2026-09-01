@@ -809,6 +809,7 @@ CONTRACT_SPECS = (
         (
             "src/plan/target/xr_target_profile.h",
             "src/plan/target/xr_target_profile.c",
+            "src/plan/target/xr_target_profile_verify.c",
             "src/plan/target/xr_target_verify.c",
             "src/execution/xr_execution.h",
             "src/execution/xr_execution.c",
@@ -823,6 +824,23 @@ CONTRACT_SPECS = (
             "tests/unit/runtime/test_runtime_abi_contract.c",
             "scripts/check_xr_execution_contracts.py",
             "contracts/canonical-program/execution-binding-coverage.json",
+        ),
+    ),
+    ContractSpec(
+        "canonical-program-vm.md",
+        (
+            "CMakeLists.txt",
+            "xisa/core/registry.json",
+            "src/vm/xr_program_vm.h",
+            "src/vm/xr_program_vm.c",
+            "src/program/xr_program_verify.h",
+            "src/program/xr_program_verify.c",
+            "src/execution/xr_execution.h",
+            "src/execution/xr_execution.c",
+            "scripts/check_xr_program_vm_contracts.py",
+            "contracts/canonical-program/xrprogram-vm-coverage.json",
+            "tests/unit/vm/test_xr_program_vm.c",
+            "tests/unit/vm/test_xr_program_vm_runtime.c",
         ),
     ),
 )

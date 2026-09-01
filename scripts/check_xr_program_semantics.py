@@ -97,7 +97,6 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
             "ownership obligations beyond copy scalars",
             "coroutine state and cleanup",
             "imports and materialized boundaries",
-            "VM consumer",
             "AOT consumer",
         ],
     }

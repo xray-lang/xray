@@ -149,7 +149,6 @@
     "ownership obligations beyond copy scalars",
     "coroutine state and cleanup",
     "imports and materialized boundaries",
-    "VM consumer",
     "AOT consumer"
   ]
 }
