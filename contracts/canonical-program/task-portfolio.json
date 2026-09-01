@@ -1,0 +1,891 @@
+{
+  "schema": "xray-canonical-program-task-portfolio/1",
+  "architecture_task": 293,
+  "predecessor_classification": [
+    {
+      "task_id": 269,
+      "classification": "historical_tombstone",
+      "implementation_route": "W0 baseline and retired evidence only"
+    },
+    {
+      "task_id": 270,
+      "classification": "historical_tombstone",
+      "implementation_route": "W0 refusal evidence and W9 differential policy"
+    },
+    {
+      "task_id": 271,
+      "classification": "historical_tombstone",
+      "implementation_route": "W2 identity and W3 hostile artifact fixtures"
+    },
+    {
+      "task_id": 272,
+      "classification": "historical_tombstone",
+      "implementation_route": "W4 runtime and provider contracts"
+    },
+    {
+      "task_id": 273,
+      "classification": "historical_tombstone",
+      "implementation_route": "W2 and W6 content-addressed caches"
+    },
+    {
+      "task_id": 274,
+      "classification": "historical_tombstone",
+      "implementation_route": "W5 and W8 lifecycle tests"
+    },
+    {
+      "task_id": 275,
+      "classification": "domain_contract",
+      "implementation_route": "W7 coroutine operation slice"
+    },
+    {
+      "task_id": 276,
+      "classification": "historical_tombstone",
+      "implementation_route": "W6 lowering evidence only"
+    },
+    {
+      "task_id": 277,
+      "classification": "historical_tombstone",
+      "implementation_route": "W6 lowering evidence only"
+    },
+    {
+      "task_id": 278,
+      "classification": "historical_tombstone",
+      "implementation_route": "W6 and W9 performance evidence only"
+    },
+    {
+      "task_id": 279,
+      "classification": "historical_tombstone",
+      "implementation_route": "W4 provider and W6 refinement evidence only"
+    },
+    {
+      "task_id": 280,
+      "classification": "historical_tombstone",
+      "implementation_route": "W9 qualification evidence only"
+    },
+    {
+      "task_id": 281,
+      "classification": "domain_contract",
+      "implementation_route": "W7 aggregate and ownership slices"
+    },
+    {
+      "task_id": 282,
+      "classification": "historical_tombstone",
+      "implementation_route": "W2 linker and W7 graph evidence only"
+    },
+    {
+      "task_id": 283,
+      "classification": "domain_contract",
+      "implementation_route": "W4 BoundaryABI and W7 call slice"
+    },
+    {
+      "task_id": 284,
+      "classification": "domain_contract",
+      "implementation_route": "W1 ownership law and W7 ownership slice"
+    },
+    {
+      "task_id": 285,
+      "classification": "domain_contract",
+      "implementation_route": "W7 aggregate and pattern slices"
+    },
+    {
+      "task_id": 286,
+      "classification": "historical_tombstone",
+      "implementation_route": "W0 fact extraction and W7 old-owner deletion"
+    },
+    {
+      "task_id": 287,
+      "classification": "domain_contract",
+      "implementation_route": "W1 surface registry and W7 operation slices"
+    },
+    {
+      "task_id": 288,
+      "classification": "domain_contract",
+      "implementation_route": "W7 regex and provider slice"
+    },
+    {
+      "task_id": 289,
+      "classification": "domain_contract",
+      "implementation_route": "W1 scalar registry and W7 scalar slice"
+    },
+    {
+      "task_id": 290,
+      "classification": "independent_port",
+      "implementation_route": "guest port independent; host integration in W4 and W8"
+    },
+    {
+      "task_id": 291,
+      "classification": "domain_contract",
+      "implementation_route": "W7 interface and existential slice"
+    },
+    {
+      "task_id": 292,
+      "classification": "domain_contract",
+      "implementation_route": "W1 capability registry and W7/W8 provider slices"
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": 275,
+      "role": "coroutine semantic contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        296,
+        298
+      ],
+      "earliest_activation": "W7 coroutine vertical slice",
+      "contract_inputs": [
+        "shared stackless coroutine lifecycle and suspension semantics"
+      ],
+      "owned_outputs": [
+        "CoreSpec coroutine operations",
+        "program suspension state",
+        "runtime-kernel coroutine ABI"
+      ],
+      "non_goals": [
+        "no independent VM/AOT coroutine semantics",
+        "no legacy CoroLowered authority after cutover"
+      ],
+      "deletion_wave": "W7-coroutine",
+      "required_gates": [
+        "coroutine lifecycle projection",
+        "VM/AOT differential",
+        "sanitizer"
+      ],
+      "exit_evidence": [
+        "operation matrix coroutine rows are green and legacy coroutine semantic owners are zero"
+      ],
+      "downstream_handoff": "301"
+    },
+    {
+      "task_id": 281,
+      "role": "value representation domain contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        296,
+        298
+      ],
+      "earliest_activation": "W7 aggregate and ownership slices",
+      "contract_inputs": [
+        "struct value identity, copy, move, and layout-independent semantics"
+      ],
+      "owned_outputs": [
+        "CoreSpec value categories",
+        "XrProgram aggregate operations",
+        "profile layout policy"
+      ],
+      "non_goals": [
+        "no AOT C representation in target-neutral program",
+        "no VM boxed-value semantic fork"
+      ],
+      "deletion_wave": "W7-aggregate",
+      "required_gates": [
+        "aggregate roundtrip",
+        "copy/move/drop differential",
+        "ABI profile matrix"
+      ],
+      "exit_evidence": [
+        "struct representation behavior is derived from one program contract"
+      ],
+      "downstream_handoff": "301"
+    },
+    {
+      "task_id": 283,
+      "role": "call boundary representation contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        296,
+        298
+      ],
+      "earliest_activation": "W4 boundary ABI and W7 call slices",
+      "contract_inputs": [
+        "call roles, parameter modes, ownership transfer, and result convention"
+      ],
+      "owned_outputs": [
+        "BoundaryABI call schema",
+        "CoreSpec call effects",
+        "program call records"
+      ],
+      "non_goals": [
+        "no per-scenario TargetPlan call shape",
+        "no backend signature inference"
+      ],
+      "deletion_wave": "W7-call",
+      "required_gates": [
+        "call ABI verifier",
+        "hostile call records",
+        "VM/AOT call differential"
+      ],
+      "exit_evidence": [
+        "all call consumers read one verified call contract"
+      ],
+      "downstream_handoff": "298,301"
+    },
+    {
+      "task_id": 284,
+      "role": "structured affine ownership language contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        296
+      ],
+      "earliest_activation": "W1 ownership schema, then W7 ownership slice",
+      "contract_inputs": [
+        "affine ownership syntax and transfer decisions"
+      ],
+      "owned_outputs": [
+        "CoreSpec ownership lattice",
+        "program move/copy/drop effects",
+        "negative diagnostics"
+      ],
+      "non_goals": [
+        "no backend ownership re-analysis",
+        "no legacy syntax compatibility"
+      ],
+      "deletion_wave": "W7-ownership",
+      "required_gates": [
+        "ownership verifier",
+        "negative corpus",
+        "ASan/TSan"
+      ],
+      "exit_evidence": [
+        "ownership disposition is explicit and consumed identically by VM and AOT"
+      ],
+      "downstream_handoff": "295,301"
+    },
+    {
+      "task_id": 285,
+      "role": "named record and enum surface contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        296
+      ],
+      "earliest_activation": "W7 aggregate and pattern slices",
+      "contract_inputs": [
+        "named record, enum variant, and selective pattern semantics"
+      ],
+      "owned_outputs": [
+        "aggregate identity",
+        "variant construction/projection operations",
+        "pattern control flow"
+      ],
+      "non_goals": [
+        "no duplicate anonymous shape semantics",
+        "no backend tag inference"
+      ],
+      "deletion_wave": "W7-aggregate",
+      "required_gates": [
+        "roundtrip",
+        "pattern differential",
+        "hostile variant records"
+      ],
+      "exit_evidence": [
+        "record and variant semantics are encoded atomically in XrProgram"
+      ],
+      "downstream_handoff": "301"
+    },
+    {
+      "task_id": 286,
+      "role": "pre-293 semantic-plan and TargetPlan proposal",
+      "status": "HISTORICAL_TOMBSTONE",
+      "work_package": "HISTORICAL",
+      "prerequisites": [],
+      "earliest_activation": "never; evidence extraction only",
+      "contract_inputs": [
+        "historical failure modes and exact semantic facts"
+      ],
+      "owned_outputs": [
+        "negative fixtures",
+        "legacy-owner census"
+      ],
+      "non_goals": [
+        "no new SemanticPlan, TargetPlan, XSM, or XTP implementation"
+      ],
+      "deletion_wave": "W7-covered-owner then W8-terminal-delete",
+      "required_gates": [
+        "forbidden residue ratchet",
+        "retired evidence ledger"
+      ],
+      "exit_evidence": [
+        "all useful facts migrated and every old owner deleted or retired"
+      ],
+      "downstream_handoff": "294,301,302"
+    },
+    {
+      "task_id": 287,
+      "role": "language surface orthogonality contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295
+      ],
+      "earliest_activation": "W1 CoreSpec spelling freeze",
+      "contract_inputs": [
+        "orthogonal language surface and removed redundant syntax"
+      ],
+      "owned_outputs": [
+        "one syntax-to-operation mapping",
+        "surface residue gates"
+      ],
+      "non_goals": [
+        "no compatibility aliases",
+        "no syntax-specific backend path"
+      ],
+      "deletion_wave": "W7-corresponding-operation",
+      "required_gates": [
+        "surface convergence",
+        "operation registry completeness"
+      ],
+      "exit_evidence": [
+        "each retained syntax lowers to an explicit CoreSpec operation family"
+      ],
+      "downstream_handoff": "295,301"
+    },
+    {
+      "task_id": 288,
+      "role": "compile-time regex domain contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        296,
+        298
+      ],
+      "earliest_activation": "W7 regex/provider slice",
+      "contract_inputs": [
+        "regex literal validation, plan identity, and runtime boundary"
+      ],
+      "owned_outputs": [
+        "regex plan constant encoding",
+        "provider capability",
+        "VM/AOT parity cases"
+      ],
+      "non_goals": [
+        "no backend regex parser",
+        "no private AOT regex semantics"
+      ],
+      "deletion_wave": "W7-regex",
+      "required_gates": [
+        "regex KAT",
+        "artifact hostile input",
+        "provider matrix"
+      ],
+      "exit_evidence": [
+        "one verified regex plan drives both backends"
+      ],
+      "downstream_handoff": "301"
+    },
+    {
+      "task_id": 289,
+      "role": "exact scalar and intrinsic surface contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        296
+      ],
+      "earliest_activation": "W1 scalar registry and W7 numeric slices",
+      "contract_inputs": [
+        "exact scalar spelling and canonical intrinsic identity"
+      ],
+      "owned_outputs": [
+        "CoreSpec scalar types",
+        "integer operation semantics",
+        "intrinsic IDs"
+      ],
+      "non_goals": [
+        "no host-width semantics",
+        "no backend intrinsic-name matching"
+      ],
+      "deletion_wave": "W7-scalar",
+      "required_gates": [
+        "scalar matrix",
+        "overflow/NaN contract",
+        "VM/AOT differential"
+      ],
+      "exit_evidence": [
+        "scalar behavior and intrinsic identity are registry-derived"
+      ],
+      "downstream_handoff": "295,301"
+    },
+    {
+      "task_id": 290,
+      "role": "Wasm3 guest port",
+      "status": "INDEPENDENT_HOST_INTEGRATION_BLOCKED",
+      "work_package": "INDEPENDENT",
+      "prerequisites": [],
+      "earliest_activation": "guest runtime may proceed now; Xray host integration waits for W4/W8",
+      "contract_inputs": [
+        "safe Wasm MVP guest behavior"
+      ],
+      "owned_outputs": [
+        "guest port qualification",
+        "future provider adapter"
+      ],
+      "non_goals": [
+        "no second Xray program format",
+        "no pre-BoundaryABI host bridge"
+      ],
+      "deletion_wave": "none",
+      "required_gates": [
+        "guest port matrix",
+        "BoundaryABI provider tests after 302"
+      ],
+      "exit_evidence": [
+        "port is independently qualified and host adapter consumes frozen provider contracts"
+      ],
+      "downstream_handoff": "298,302"
+    },
+    {
+      "task_id": 291,
+      "role": "interface and existential semantic contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        296,
+        298
+      ],
+      "earliest_activation": "W7 interface vertical slice",
+      "contract_inputs": [
+        "interface constraints, existential values, enum implementation"
+      ],
+      "owned_outputs": [
+        "interface identity",
+        "witness/dispatch operations",
+        "boundary representation"
+      ],
+      "non_goals": [
+        "no AOT-only devirtualization semantics",
+        "no VM-only dynamic lookup semantics"
+      ],
+      "deletion_wave": "W7-interface",
+      "required_gates": [
+        "interface verifier",
+        "dispatch differential",
+        "cross-module identity"
+      ],
+      "exit_evidence": [
+        "VM and AOT consume the same witness and dispatch records"
+      ],
+      "downstream_handoff": "301"
+    },
+    {
+      "task_id": 292,
+      "role": "language capability and stdlib self-hosting contract",
+      "status": "RETAIN_CONTRACT",
+      "work_package": "DOMAIN",
+      "prerequisites": [
+        295,
+        298
+      ],
+      "earliest_activation": "W1 capability registry and W7/W8 provider slices",
+      "contract_inputs": [
+        "capability orthogonality and stdlib self-hosting gaps"
+      ],
+      "owned_outputs": [
+        "capability IDs",
+        "provider requirements",
+        "stdlib migration inventory"
+      ],
+      "non_goals": [
+        "no hidden backend capability",
+        "no implicit host fallback"
+      ],
+      "deletion_wave": "W7-capability and W8-product",
+      "required_gates": [
+        "capability matrix",
+        "provider readiness",
+        "stdlib VM/AOT differential"
+      ],
+      "exit_evidence": [
+        "all required capabilities are explicit and profile/provider checked"
+      ],
+      "downstream_handoff": "295,298,301,302"
+    },
+    {
+      "task_id": 293,
+      "role": "canonical architecture constitution",
+      "status": "DESIGN_FROZEN",
+      "work_package": "HISTORICAL",
+      "prerequisites": [],
+      "earliest_activation": "already frozen",
+      "contract_inputs": [
+        "VM/AOT semantic unity goal",
+        "clean-slate product policy"
+      ],
+      "owned_outputs": [
+        "XrProgram architecture",
+        "W0-W9 dependency graph",
+        "terminal-zero rules"
+      ],
+      "non_goals": [
+        "no implementation in the architecture document"
+      ],
+      "deletion_wave": "none",
+      "required_gates": [
+        "child task coverage",
+        "architecture identity freeze"
+      ],
+      "exit_evidence": [
+        "294-303 provide one executable path for every architecture obligation"
+      ],
+      "downstream_handoff": "294"
+    },
+    {
+      "task_id": 294,
+      "role": "W0 contract freeze and baseline",
+      "status": "COMPLETE",
+      "work_package": "W0",
+      "prerequisites": [
+        293
+      ],
+      "earliest_activation": "immediate",
+      "contract_inputs": [
+        "293",
+        "269-292 historical and domain evidence",
+        "matching-source baseline"
+      ],
+      "owned_outputs": [
+        "seven canonical-program contracts",
+        "residue ratchet",
+        "reproducible red baseline"
+      ],
+      "non_goals": [
+        "no product path",
+        "no XrProgram writer or executor"
+      ],
+      "deletion_wave": "none",
+      "required_gates": [
+        "canonical_program_contracts",
+        "canonical_program_contracts_self_test",
+        "contract_freeze",
+        "meta_ownership_inventory"
+      ],
+      "exit_evidence": [
+        "contract checker passes and every observed baseline failure has a W1-W9 owner"
+      ],
+      "downstream_handoff": "295"
+    },
+    {
+      "task_id": 295,
+      "role": "W1 CoreSpec registry",
+      "status": "READY",
+      "work_package": "W1",
+      "prerequisites": [
+        294
+      ],
+      "earliest_activation": "after W0 contracts pass",
+      "contract_inputs": [
+        "architecture identity",
+        "operation capability matrix",
+        "domain contracts"
+      ],
+      "owned_outputs": [
+        "CoreSpec registry",
+        "generated schemas",
+        "semantic laws"
+      ],
+      "non_goals": [
+        "no executor",
+        "no backend implementation"
+      ],
+      "deletion_wave": "W7 per covered operation",
+      "required_gates": [
+        "registry generator determinism",
+        "schema mutation tests",
+        "operation-law tests"
+      ],
+      "exit_evidence": [
+        "walking-skeleton operations and type/effect/ownership laws have one generated source"
+      ],
+      "downstream_handoff": "296,297,298"
+    },
+    {
+      "task_id": 296,
+      "role": "W2 CoreIR and XrProgram writer",
+      "status": "BLOCKED_ON_295",
+      "work_package": "W2",
+      "prerequisites": [
+        295
+      ],
+      "earliest_activation": "after CoreSpec schema freezes",
+      "contract_inputs": [
+        "CoreSpec generated schema",
+        "program identity"
+      ],
+      "owned_outputs": [
+        "CoreIR",
+        "whole-program linker",
+        "XrProgram writer and reader roundtrip"
+      ],
+      "non_goals": [
+        "no target storage",
+        "no backend-private code in public format"
+      ],
+      "deletion_wave": "W8 legacy artifact routes",
+      "required_gates": [
+        "deterministic bytes",
+        "roundtrip",
+        "cross-module identity"
+      ],
+      "exit_evidence": [
+        "walking skeleton produces stable whole-program XrProgram bytes"
+      ],
+      "downstream_handoff": "297,298,299,300"
+    },
+    {
+      "task_id": 297,
+      "role": "W3 bounded verifier and reference evaluator",
+      "status": "BLOCKED_ON_296",
+      "work_package": "W3",
+      "prerequisites": [
+        295,
+        296
+      ],
+      "earliest_activation": "after program encoding exists",
+      "contract_inputs": [
+        "CoreSpec laws",
+        "XrProgram schema"
+      ],
+      "owned_outputs": [
+        "bounded decoder",
+        "structural and semantic verifier",
+        "reference evaluator"
+      ],
+      "non_goals": [
+        "no production VM optimization",
+        "no AOT lowering"
+      ],
+      "deletion_wave": "W8 old readers",
+      "required_gates": [
+        "hostile input",
+        "mutation",
+        "evaluator law suite",
+        "fuzz"
+      ],
+      "exit_evidence": [
+        "invalid programs fail closed and valid walking-skeleton programs evaluate deterministically"
+      ],
+      "downstream_handoff": "299,300,301"
+    },
+    {
+      "task_id": 298,
+      "role": "W4 target profile, boundary ABI, runtime kernel, and provider contract",
+      "status": "BLOCKED_ON_295_296",
+      "work_package": "W4",
+      "prerequisites": [
+        295,
+        296
+      ],
+      "earliest_activation": "after type/effect and program identity freeze",
+      "contract_inputs": [
+        "CoreSpec capability/effect laws",
+        "ProgramId"
+      ],
+      "owned_outputs": [
+        "XrTargetProfile",
+        "BoundaryABI",
+        "RuntimeKernelId",
+        "provider readiness"
+      ],
+      "non_goals": [
+        "no target decisions in XrProgram",
+        "no implicit provider fallback"
+      ],
+      "deletion_wave": "W8 old runtime ABI and provider routes",
+      "required_gates": [
+        "profile determinism",
+        "boundary conformance",
+        "provider refusal matrix"
+      ],
+      "exit_evidence": [
+        "ExecutionId fully binds program, profile, boundary ABI, and runtime kernel"
+      ],
+      "downstream_handoff": "299,300"
+    },
+    {
+      "task_id": 299,
+      "role": "W5 universal typed-program VM",
+      "status": "BLOCKED_ON_297_298",
+      "work_package": "W5",
+      "prerequisites": [
+        297,
+        298
+      ],
+      "earliest_activation": "after verifier and execution profile freeze",
+      "contract_inputs": [
+        "verified XrProgram",
+        "XrTargetProfile",
+        "BoundaryABI"
+      ],
+      "owned_outputs": [
+        "VM executor",
+        "private XrVmCode cache",
+        "embed instance path"
+      ],
+      "non_goals": [
+        "no public second bytecode",
+        "no semantic inference in VM"
+      ],
+      "deletion_wave": "W8 old VM loader/opcode/embed product route",
+      "required_gates": [
+        "evaluator differential",
+        "embed tests",
+        "private-cache invalidation"
+      ],
+      "exit_evidence": [
+        "VM consumes only verified program semantics and private cache is disposable"
+      ],
+      "downstream_handoff": "301,302"
+    },
+    {
+      "task_id": 300,
+      "role": "W6 AOT BackendIR and generated C",
+      "status": "BLOCKED_ON_297_298",
+      "work_package": "W6",
+      "prerequisites": [
+        297,
+        298
+      ],
+      "earliest_activation": "after verifier and execution profile freeze",
+      "contract_inputs": [
+        "verified XrProgram",
+        "XrTargetProfile",
+        "BoundaryABI"
+      ],
+      "owned_outputs": [
+        "XrBackendIR",
+        "AOT lowering",
+        "generated C and native artifact identity"
+      ],
+      "non_goals": [
+        "no source/AST semantic fallback",
+        "no TargetPlan continuation"
+      ],
+      "deletion_wave": "W7/W8 old AOT semantic owners",
+      "required_gates": [
+        "translation validation",
+        "generated-C verifier",
+        "cross-target compile"
+      ],
+      "exit_evidence": [
+        "AOT consumes the same verified operations and emits target-qualified artifacts"
+      ],
+      "downstream_handoff": "301,302"
+    },
+    {
+      "task_id": 301,
+      "role": "W7 operation vertical cutover coordination",
+      "status": "BLOCKED_ON_299_300",
+      "work_package": "W7",
+      "prerequisites": [
+        299,
+        300
+      ],
+      "earliest_activation": "after both backends execute the walking skeleton",
+      "contract_inputs": [
+        "operation matrix",
+        "reference evaluator",
+        "VM and AOT consumers"
+      ],
+      "owned_outputs": [
+        "atomic operation-family migrations",
+        "covered old-owner deletion",
+        "differential evidence"
+      ],
+      "non_goals": [
+        "no scenario-only completion claim",
+        "no permanent dual producer"
+      ],
+      "deletion_wave": "per operation family in the same slice",
+      "required_gates": [
+        "operation law",
+        "VM/AOT/evaluator differential",
+        "residue non-increase"
+      ],
+      "exit_evidence": [
+        "every operation row is green end-to-end and its old owner is deleted"
+      ],
+      "downstream_handoff": "302"
+    },
+    {
+      "task_id": 302,
+      "role": "W8 atomic product cutover",
+      "status": "BLOCKED_ON_301",
+      "work_package": "W8",
+      "prerequisites": [
+        301
+      ],
+      "earliest_activation": "after all required product operations are vertically green",
+      "contract_inputs": [
+        "qualified XrProgram",
+        "VM",
+        "AOT",
+        "artifact and ABI identity"
+      ],
+      "owned_outputs": [
+        "public API/CLI/embed/package route",
+        "XrProgram v1 reader",
+        "legacy product deletion"
+      ],
+      "non_goals": [
+        "no compatibility reader",
+        "no alias or dual executor"
+      ],
+      "deletion_wave": "W8 atomic hard cut",
+      "required_gates": [
+        "source/VM/AOT/hybrid/package/install/embed matrix",
+        "terminal public residue"
+      ],
+      "exit_evidence": [
+        "all shipping routes use canonical program architecture and old routes are absent"
+      ],
+      "downstream_handoff": "303"
+    },
+    {
+      "task_id": 303,
+      "role": "W9 qualification and terminal zero",
+      "status": "BLOCKED_ON_302",
+      "work_package": "W9",
+      "prerequisites": [
+        302
+      ],
+      "earliest_activation": "after product hard cut",
+      "contract_inputs": [
+        "final product tree",
+        "compatibility matrix",
+        "all operation evidence"
+      ],
+      "owned_outputs": [
+        "qualification report",
+        "performance evidence",
+        "terminal-zero proof"
+      ],
+      "non_goals": [
+        "no allowlist that hides architecture residue",
+        "no local-only production claim"
+      ],
+      "deletion_wave": "W9 terminal zero",
+      "required_gates": [
+        "full CTest",
+        "ASan/UBSan/TSan",
+        "cross-target",
+        "VM/AOT differential",
+        "performance"
+      ],
+      "exit_evidence": [
+        "all required gates are green, residue is zero, and docs match implemented facts"
+      ],
+      "downstream_handoff": "release readiness"
+    }
+  ]
+}

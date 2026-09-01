@@ -1,0 +1,51 @@
+schema = "xray-canonical-program-identity/1"
+architecture_task = 293
+freeze_task = 294
+frozen_on = "2026-09-02"
+
+[public]
+program = "XrProgram"
+profile = "XrTargetProfile"
+instance = "XrInstance"
+
+[private]
+vm_execution_view = "XrVmCode"
+aot_execution_view = "XrBackendIR"
+native_artifact = "XrNativeArtifact"
+
+[grain]
+source = "source-module"
+program = "whole-linked-program"
+profile = "target-and-runtime-policy"
+instance = "one-live-execution"
+
+[identity]
+program = "ProgramId = hash(format-major, CoreSpecId, canonical-program-bytes)"
+profile = "ProfileId = hash(profile-schema-major, canonical-profile-bytes)"
+execution = "ExecutionId = hash(ProgramId, ProfileId, BoundaryAbiId, RuntimeKernelId)"
+native = "NativeArtifactId = hash(ExecutionId, backend-id, backend-version, target-triple, codegen-options)"
+
+[compatibility]
+pre_293 = "none"
+program_v1 = "starts only after task 302 freezes and publishes the public reader"
+private_vm_code = "none; cache may be discarded and rebuilt"
+native_artifact = "exact identity match; rebuild on any mismatch"
+
+[forbidden_aliases]
+names = ["XrActivation", "XrExecutableModule", "XrSemanticImage"]
+
+[distribution]
+source = "source or package metadata; source modules are not XrProgram"
+vm = "validated XrProgram plus XrTargetProfile/provider configuration"
+hybrid = "validated XrProgram plus optional matching XrNativeArtifact"
+pure_aot = "native artifact; XrProgram may be a provenance/debug sidecar but is not a runtime dependency"
+remote_aot = "XrProgram is the canonical build input and the output is target-qualified native code"
+
+[non_goals]
+items = [
+  "No pre-293 reader, alias, shim, runtime translator, dual executor, or migration flag.",
+  "No public Module name for the linked executable program.",
+  "No target-specific storage layout, C type, register allocation, or instruction selection in XrProgram.",
+  "No mandatory XrProgram loader in a pure-AOT deployment.",
+  "No second semantic owner in VM, AOT, runtime providers, or generated C.",
+]

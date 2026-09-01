@@ -1,0 +1,265 @@
+{
+  "schema": "xray-canonical-program-baseline/1",
+  "captured_at": "2026-09-02T00:19:36+08:00",
+  "source": {
+    "worktree": "/Users/xuxinglei/workspace/xray-lang/worktrees/293-baseline-70d0",
+    "integration_worktree": "/Users/xuxinglei/workspace/xray-lang/worktrees/293-canonical-program",
+    "branch": "detached baseline for rewrite/293-canonical-program",
+    "commit": "70d0adef17ac8c971ae83d389408578454d623bd",
+    "tree": "37c9abbb9f2a20245f97767dea06420e23e4e340",
+    "dirty": false,
+    "parent_serial_commit": "63898201c70e07a9c21759411043657e0e6946ed",
+    "baseline_repair": {
+      "commit": "70d0adef17ac8c971ae83d389408578454d623bd",
+      "scope": "test-only rename from removed element_source_class to element_managed_reference",
+      "reason": "the committed serial baseline otherwise failed to compile one typed-emission unit test against the current production structure"
+    }
+  },
+  "documentation": {
+    "repository": "/Users/xuxinglei/workspace/xray-lang/xray-docs",
+    "branch": "docs/269-292-contract-freeze",
+    "commit": "95da0f0",
+    "scope": "293 architecture plus executable tasks 294-303"
+  },
+  "environment": {
+    "os": "macOS 26.5 build 25F71",
+    "kernel": "Darwin 25.5.0 arm64",
+    "host_arch": "arm64",
+    "target": "arm64-apple-darwin25.5.0",
+    "provider": "hosted native toolchain",
+    "c_compiler": "Apple clang 21.0.0 (clang-2100.1.1.101)",
+    "cmake": "4.3.1",
+    "ninja": "1.13.2",
+    "python": "/opt/homebrew/bin/python3.14",
+    "libffi": "3.4-rc1",
+    "openssl": "3.6.3"
+  },
+  "compiler": {
+    "version_command": "build/xray --version",
+    "version_output": "xray v0.9.2 (VM+AOT, TLS, arm64-darwin)",
+    "version_json_command": "build/xray --version --json",
+    "version_json": {
+      "schema": 1,
+      "product": "xray-lang",
+      "version": "0.9.2",
+      "commit": "70d0adef17ac8c971ae83d389408578454d623bd",
+      "dirty": false,
+      "target": "macos-arm64",
+      "buildProfile": "Release",
+      "features": [
+        "vm",
+        "aot",
+        "tls"
+      ]
+    },
+    "binary_sha256": "d73f18206be2f0fd57dfaa2d58877646d9bc5eeebcdcb25700db8e1a1c1ae068"
+  },
+  "build": {
+    "preset": "default",
+    "generator": "Ninja",
+    "build_type": "Release",
+    "default_fastpaths_probe": {
+      "configure": "cmake --preset default",
+      "build": "cmake --build --preset default -j4",
+      "status": "FAIL_RECORDED",
+      "diagnostic": "XR_TARGET_1003 call argument lacks exact caller/callee storage; XR_TARGET_1000 program TargetPlan build did not produce verified authority",
+      "owner_task": 301
+    },
+    "supported_bootstrap": {
+      "configure": "cmake --preset default -DXRAY_STDLIB_VM_FASTPATHS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+      "build": "cmake --build --preset default -j4",
+      "status": "PASS",
+      "rationale": "the existing architecture defines fastpaths-off as the supported unified-target-machine bootstrap shape"
+    }
+  },
+  "tests": {
+    "full_non_sanitizer": {
+      "command": "ctest --test-dir build -LE sanitizer --output-on-failure -j4",
+      "status": "FAIL_RECORDED",
+      "total": 513,
+      "passed": 435,
+      "failed": 76,
+      "skipped": 2,
+      "wall_seconds": 1184.94,
+      "result_boundary": "a reproducible pre-293 red baseline; no allowlist was added"
+    },
+    "backend_differential": {
+      "test": "backend_diff",
+      "status": "FAIL_RECORDED",
+      "passed": 136,
+      "behavior_mismatches": 0,
+      "refused": 543,
+      "skipped": 1,
+      "interpretation": "most cases were not comparable because legacy TargetPlan/AOT admission failed before AOT execution"
+    },
+    "backend_differential_optimized": {
+      "test": "backend_diff_optimized",
+      "status": "PASS"
+    },
+    "contract_freeze": {
+      "tests": [
+        "contract_freeze",
+        "contract_freeze_injection"
+      ],
+      "status": "PASS"
+    },
+    "meta_ownership": {
+      "test": "meta_ownership_inventory",
+      "status": "PASS"
+    },
+    "generated_c_wellformedness": {
+      "status": "FAIL_CLOSED_AS_DESIGNED",
+      "evidence": "struct_literal_over_32 was stopped at W4_FORWARD_REF before the C toolchain"
+    },
+    "asan_focused": {
+      "command": "ctest --test-dir build -R '^asan_focused$' --output-on-failure -j1",
+      "status": "FAIL_RECORDED",
+      "total": 304,
+      "passed": 293,
+      "failed": 11,
+      "wall_seconds": 553.36,
+      "failed_tests": [
+        "test_stdlib_boundary_manifest",
+        "test_analyzer",
+        "test_vm_parallel_isolate",
+        "test_xi_emit",
+        "test_xi_compare",
+        "test_xtp_format",
+        "test_dynamic_entry_runtime",
+        "test_typed_opaque_boundary",
+        "test_xr_aot_scalar_plan",
+        "test_xr_aot_refinement",
+        "test_xaot_driver"
+      ],
+      "result_boundary": "the sanitizer build and 304-test unit lane ran; failures reproduce existing contract, ownership, reader, and AOT authority defects rather than a sanitizer-only crash allowlist"
+    },
+    "tsan_focused": {
+      "command": "ctest --test-dir build -R '^tsan_focused$' --output-on-failure -j1",
+      "status": "PASS",
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "wall_seconds": 572.34,
+      "result_boundary": "the existing focused scheduler, ownership, decoded-cache, XTP-resource, runtime-generation, and runtime-program TSan lane completed on macOS arm64"
+    }
+  },
+  "corpora": {
+    "source_identity": "git tree 37c9abbb9f2a20245f97767dea06420e23e4e340",
+    "backend_diff": "tests/diff/cases plus tests/diff/run_backend_diff.py at the baseline tree",
+    "aot_filetests": "tests/aot filetest manifest at the baseline tree",
+    "regression": "tests/regression at the baseline tree",
+    "performance": "existing CTest benchmark-labelled assets at the baseline tree",
+    "refusal_policy": "refusal is a distinct result and never counts as semantic equality"
+  },
+  "known_failure_clusters": [
+    {
+      "id": "legacy-target-plan-admission",
+      "owner_task": 301,
+      "symptoms": [
+        "XR_TARGET_1000",
+        "XR_TARGET_1001",
+        "XR_TARGET_1002",
+        "XR_TARGET_1003",
+        "XR_TARGET_1006"
+      ],
+      "root_boundary": "scenario-shaped TargetPlan cannot prove exact storage, call, aggregate, or target authority for broad source programs",
+      "reproduce": "ctest --test-dir build -R '^(backend_diff|aot_manifest_sweep|aot_cross_smoke|concurrency_litmus)$' --output-on-failure -j1"
+    },
+    {
+      "id": "aot-representation-refinement",
+      "owner_task": 300,
+      "symptoms": [
+        "XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE",
+        "XR_AOT_REFINEMENT_REPRESENTATION",
+        "XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE"
+      ],
+      "root_boundary": "AOT still builds a second representation authority after semantic lowering",
+      "reproduce": "ctest --test-dir build -R '^(test_xr_aot_refinement|test_xr_aot_scalar_plan|aot_manifest_sweep)$' --output-on-failure -j1"
+    },
+    {
+      "id": "ownership-and-coroutine-publication",
+      "owner_task": 301,
+      "symptoms": [
+        "XR_OWN_3002",
+        "XR_OWN_3005",
+        "coroutine lowering failed closed before publishing CoroLowered"
+      ],
+      "root_boundary": "ownership disposition and coroutine state are not yet one verified operation contract",
+      "reproduce": "ctest --test-dir build -R '^(test_vm_parallel_isolate|parallel_vm_lanes|regression_corpus)$' --output-on-failure -j1"
+    },
+    {
+      "id": "product-and-contract-inventory-drift",
+      "owner_task": 302,
+      "symptoms": [
+        "legacy_product_residue_inventory",
+        "target_machine_inventory",
+        "format_debt_ratchet",
+        "subprocess_text_boundaries"
+      ],
+      "root_boundary": "pre-293 product routes and governance inventories have continued to change without one terminal owner",
+      "reproduce": "ctest --test-dir build -R '^(legacy_product_residue_inventory|target_machine_inventory|format_debt_ratchet|subprocess_text_boundaries)$' --output-on-failure -j1"
+    },
+    {
+      "id": "fixture-and-source-identity-drift",
+      "owner_task": 296,
+      "symptoms": [
+        "source_graph_authority_cli",
+        "bytecode_build_multimodule",
+        "compile_error_tests",
+        "regression_corpus"
+      ],
+      "root_boundary": "legacy module/package identities and fixtures do not yet derive from ProgramId and canonical linked-program identity",
+      "reproduce": "ctest --test-dir build -R '^(source_graph_authority_cli|bytecode_build_multimodule|compile_error_tests|regression_corpus)$' --output-on-failure -j1"
+    },
+    {
+      "id": "hostile-reader-and-runtime-safety",
+      "owner_task": 297,
+      "symptoms": [
+        "test_xtp_format abort",
+        "test_xi_compare segfault",
+        "narrowing_conformance segfault",
+        "http_static_route_full_parse fatal"
+      ],
+      "root_boundary": "old readers and execution helpers are not a bounded XrProgram decoder/verifier boundary",
+      "reproduce": "ctest --test-dir build -R '^(test_xtp_format|test_xi_compare|narrowing_conformance|http_static_route_full_parse)$' --output-on-failure -j1"
+    },
+    {
+      "id": "cross-target-profile-authority",
+      "owner_task": 298,
+      "symptoms": [
+        "cross-target runtime ABI authority is unavailable",
+        "no provider reached READY"
+      ],
+      "root_boundary": "target profile, runtime ABI, and provider readiness are not bound by one ExecutionId",
+      "reproduce": "ctest --test-dir build -R '^aot_cross_smoke$' --output-on-failure -j1"
+    },
+    {
+      "id": "shipping-route-qualification",
+      "owner_task": 303,
+      "symptoms": [
+        "aot_filetests 532 failing",
+        "aot_standalone_suite 177 failing",
+        "aot_isolate_symbol_gate failures"
+      ],
+      "root_boundary": "the old architecture has no green product-wide qualification point",
+      "reproduce": "ctest --test-dir build -R '^(aot_filetests|aot_standalone_suite|aot_isolate_symbol_gate)$' --output-on-failure -j1"
+    }
+  ],
+  "preserved_parallel_work": {
+    "worktree": "/Users/xuxinglei/workspace/xray-lang/worktrees/269-292-serial",
+    "branch": "converge/269-292-serial",
+    "commit": "63898201c70e07a9c21759411043657e0e6946ed",
+    "dirty_files": [
+      "src/plan/semantic/xr_semantic_array_index_shape.h",
+      "src/plan/semantic/xr_semantic_class_array_index_shape.h",
+      "src/plan/semantic/xr_semantic_class_shape.h",
+      "src/plan/semantic/xr_semantic_enum_field_shape.h",
+      "src/plan/semantic/xr_semantic_field_shape.h",
+      "src/plan/semantic/xr_semantic_string_field_shape.h",
+      "src/plan/target/xr_target_builder.c",
+      "src/plan/target/xr_target_verify.c",
+      "tests/unit/plan/test_target_plan.c"
+    ],
+    "classification": "preserve in place; extract atomic field/index/borrow/type facts into CoreSpec, do not merge the scenario-shaped TargetPlan implementation"
+  }
+}

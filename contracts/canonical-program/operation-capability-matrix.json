@@ -1,0 +1,222 @@
+{
+  "schema": "xray-canonical-program-operation-capability/1",
+  "architecture_task": 293,
+  "freeze_task": 294,
+  "completion_rule": "An operation becomes COMPLETE only when its CoreSpec law, program encoding, bounded verification, reference evaluation, VM, AOT, source producer, differential evidence, and old-owner deletion are all complete in one vertical slice.",
+  "operations": [
+    {
+      "id": "core.constant.i64",
+      "core_spec_contract": "exact signed 64-bit bit-pattern constant; no host-width interpretation",
+      "program_encoding": "typed result value plus canonical signed LEB128 payload",
+      "decoder_verifier_evaluator": "bounded LEB128 decode, result-type check, direct constant evaluation",
+      "vm_implementation": "typed i64 slot or private specialization derived from the verified operation",
+      "aot_lowering": "XrBackendIR i64 constant, then exact-width generated C literal",
+      "source_producer": "integer literal and canonical constant folding",
+      "old_owner_deletion": "delete duplicate VM constant decoding and AOT literal semantic inference in W7-scalar",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.add.i64",
+      "core_spec_contract": "two i64 operands, explicit overflow mode, deterministic i64 result or named trap",
+      "program_encoding": "operation id, two SSA value ids, result id, overflow-mode enum",
+      "decoder_verifier_evaluator": "operand dominance/type checks and mathematical reference result/trap",
+      "vm_implementation": "typed i64 add handler generated from the operation registry",
+      "aot_lowering": "BackendIR add plus overflow/trap recipe selected from the same mode",
+      "source_producer": "typed binary plus and compound lowering",
+      "old_owner_deletion": "delete VM opcode semantic switch and CGen add/overflow rediscovery in W7-scalar",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.sub.i64",
+      "core_spec_contract": "two i64 operands, explicit overflow mode, deterministic i64 result or named trap",
+      "program_encoding": "operation id, two SSA value ids, result id, overflow-mode enum",
+      "decoder_verifier_evaluator": "operand dominance/type checks and mathematical reference result/trap",
+      "vm_implementation": "typed i64 subtract handler generated from the operation registry",
+      "aot_lowering": "BackendIR subtract plus overflow/trap recipe selected from the same mode",
+      "source_producer": "typed binary minus and compound lowering",
+      "old_owner_deletion": "delete VM opcode semantic switch and CGen subtract/overflow rediscovery in W7-scalar",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.mul.i64",
+      "core_spec_contract": "two i64 operands, explicit overflow mode, deterministic i64 result or named trap",
+      "program_encoding": "operation id, two SSA value ids, result id, overflow-mode enum",
+      "decoder_verifier_evaluator": "operand dominance/type checks and mathematical reference result/trap",
+      "vm_implementation": "typed i64 multiply handler generated from the operation registry",
+      "aot_lowering": "BackendIR multiply plus overflow/trap recipe selected from the same mode",
+      "source_producer": "typed binary multiply and compound lowering",
+      "old_owner_deletion": "delete VM opcode semantic switch and CGen multiply/overflow rediscovery in W7-scalar",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.compare.i64",
+      "core_spec_contract": "explicit signed predicate over two i64 values yields canonical bool",
+      "program_encoding": "operation id, predicate enum, two operand ids, bool result id",
+      "decoder_verifier_evaluator": "predicate range and operand/result type checks with direct evaluation",
+      "vm_implementation": "typed compare handler keyed by the frozen predicate",
+      "aot_lowering": "BackendIR signed compare with canonical bool materialization",
+      "source_producer": "typed equality and ordering expressions",
+      "old_owner_deletion": "delete VM/AOT predicate spelling and signedness inference in W7-scalar",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.block.argument",
+      "core_spec_contract": "block parameter has one type and receives exactly one matching value from every predecessor",
+      "program_encoding": "block-local parameter table with stable value ids and types",
+      "decoder_verifier_evaluator": "bounded table checks, unique ids, predecessor arity/type equality, SSA dominance",
+      "vm_implementation": "verified predecessor transfer into typed frame locations",
+      "aot_lowering": "BackendIR block parameters or validated phi-equivalent edge assignments",
+      "source_producer": "structured-control and SSA construction",
+      "old_owner_deletion": "delete backend phi/block-argument reconstruction in W7-control",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.branch",
+      "core_spec_contract": "unconditional transfer to an in-function block with exact block arguments",
+      "program_encoding": "target block id followed by bounded argument value-id vector",
+      "decoder_verifier_evaluator": "target range, argument arity/type, ownership edge, and terminator checks",
+      "vm_implementation": "set destination block and transfer verified arguments",
+      "aot_lowering": "BackendIR branch with validated edge assignments",
+      "source_producer": "structured-control and canonical CFG lowering",
+      "old_owner_deletion": "delete VM jump and AOT edge semantic reconstruction in W7-control",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.conditional_branch",
+      "core_spec_contract": "canonical bool selects one of two in-function targets, each with exact arguments",
+      "program_encoding": "bool condition id plus true/false block ids and bounded argument vectors",
+      "decoder_verifier_evaluator": "condition type, both target/argument edges, ownership, and terminator checks",
+      "vm_implementation": "read canonical bool and perform one verified edge transfer",
+      "aot_lowering": "BackendIR conditional branch with validated edge assignments",
+      "source_producer": "if, loop, match, and short-circuit canonical CFG lowering",
+      "old_owner_deletion": "delete backend truthiness and edge reconstruction in W7-control",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.return",
+      "core_spec_contract": "function exits once with zero or one value matching the declared result and ownership mode",
+      "program_encoding": "optional result value id and explicit ownership disposition",
+      "decoder_verifier_evaluator": "terminator placement, result type, ownership, and cleanup-postdomination checks",
+      "vm_implementation": "transfer the verified result and unwind the typed frame",
+      "aot_lowering": "BackendIR return plus profile-selected ABI projection",
+      "source_producer": "explicit and implicit return canonicalization",
+      "old_owner_deletion": "delete VM/AOT return-shape and cleanup rediscovery in W7-call",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.call.sealed_direct",
+      "core_spec_contract": "closed-world function identity, exact parameter/result types, effects, ownership transfer, and evaluation order",
+      "program_encoding": "stable callee function id, ordered argument ids, optional result id, effect and transfer records",
+      "decoder_verifier_evaluator": "callee range/signature, call-edge effects, argument modes, ownership, and recursion-budget checks",
+      "vm_implementation": "create typed frame from verified signature or private direct-call specialization",
+      "aot_lowering": "BackendIR direct call and BoundaryABI projection without source or TargetPlan inference",
+      "source_producer": "resolved direct calls after whole-program linking",
+      "old_owner_deletion": "delete SemanticPlan/TargetPlan call-shape families and AOT adapter inference in W7-call",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    }
+  ],
+  "capability_groups": [
+    {
+      "id": "aggregate",
+      "owner_tasks": [
+        281,
+        285,
+        301
+      ],
+      "planned_operations": [
+        "construct",
+        "project",
+        "update",
+        "variant.construct",
+        "variant.project",
+        "pattern.test"
+      ],
+      "status": "PLANNED_AFTER_WALKING_SKELETON"
+    },
+    {
+      "id": "coroutine",
+      "owner_tasks": [
+        275,
+        301
+      ],
+      "planned_operations": [
+        "create",
+        "suspend",
+        "resume",
+        "await",
+        "cancel",
+        "complete"
+      ],
+      "status": "PLANNED_AFTER_OWNERSHIP_AND_CALL"
+    },
+    {
+      "id": "ffi",
+      "owner_tasks": [
+        283,
+        298,
+        301
+      ],
+      "planned_operations": [
+        "import.call",
+        "export.call",
+        "marshal",
+        "error.map"
+      ],
+      "status": "PLANNED_AFTER_BOUNDARY_ABI"
+    },
+    {
+      "id": "interface",
+      "owner_tasks": [
+        291,
+        301
+      ],
+      "planned_operations": [
+        "existential.pack",
+        "existential.unpack",
+        "witness.lookup",
+        "dispatch"
+      ],
+      "status": "PLANNED_AFTER_AGGREGATE_AND_CALL"
+    },
+    {
+      "id": "ownership",
+      "owner_tasks": [
+        284,
+        301
+      ],
+      "planned_operations": [
+        "borrow.begin",
+        "borrow.end",
+        "copy",
+        "move",
+        "drop"
+      ],
+      "status": "PLANNED_AFTER_WALKING_SKELETON"
+    },
+    {
+      "id": "provider",
+      "owner_tasks": [
+        290,
+        292,
+        298,
+        301
+      ],
+      "planned_operations": [
+        "capability.require",
+        "provider.call",
+        "provider.refuse"
+      ],
+      "status": "PLANNED_AFTER_TARGET_PROFILE"
+    }
+  ]
+}

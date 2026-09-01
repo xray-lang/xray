@@ -1,0 +1,160 @@
+{
+  "schema": "xray-canonical-program-forbidden-residue/1",
+  "captured_source_commit": "70d0adef17ac8c971ae83d389408578454d623bd",
+  "scan_semantics": "Count non-overlapping regex matches in UTF-8 C/header/inc files under the named roots. Counts may only shrink. Zero aliases must remain zero.",
+  "entries": [
+    {
+      "id": "forbidden-public-xr-executable-module",
+      "pattern": "XrExecutableModule",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 0,
+      "ceiling": 0,
+      "policy": "must_remain_zero",
+      "deletion_task": 294
+    },
+    {
+      "id": "forbidden-public-xr-activation",
+      "pattern": "XrActivation",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 0,
+      "ceiling": 0,
+      "policy": "must_remain_zero",
+      "deletion_task": 294
+    },
+    {
+      "id": "forbidden-semantic-image",
+      "pattern": "XrSemanticImage",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 0,
+      "ceiling": 0,
+      "policy": "must_remain_zero",
+      "deletion_task": 294
+    },
+    {
+      "id": "legacy-target-plan-token",
+      "pattern": "XrTargetPlan",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 775,
+      "ceiling": 775,
+      "policy": "non_increase_until_delete",
+      "deletion_task": 302
+    },
+    {
+      "id": "legacy-semantic-plan-token",
+      "pattern": "XrSemanticPlan",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 1214,
+      "ceiling": 1214,
+      "policy": "non_increase_until_delete",
+      "deletion_task": 301
+    },
+    {
+      "id": "legacy-xrproto-token",
+      "pattern": "XrProto",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 301,
+      "ceiling": 301,
+      "policy": "non_increase_until_delete",
+      "deletion_task": 302
+    },
+    {
+      "id": "legacy-xsm-family",
+      "pattern": "(?:xr_xsm|XR_XSM|XSM)",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 840,
+      "ceiling": 840,
+      "policy": "non_increase_until_delete",
+      "deletion_task": 302
+    },
+    {
+      "id": "legacy-xtp-family",
+      "pattern": "(?:xr_xtp|XR_XTP|XTP)",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 987,
+      "ceiling": 987,
+      "policy": "non_increase_until_delete",
+      "deletion_task": 302
+    },
+    {
+      "id": "legacy-xrc-extension",
+      "pattern": "\\.xrc",
+      "roots": [
+        "src",
+        "include"
+      ],
+      "file_suffixes": [
+        ".c",
+        ".h",
+        ".inc"
+      ],
+      "baseline_count": 1,
+      "ceiling": 1,
+      "policy": "non_increase_until_delete",
+      "deletion_task": 302
+    }
+  ]
+}

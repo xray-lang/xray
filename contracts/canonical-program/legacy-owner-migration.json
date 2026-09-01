@@ -1,0 +1,342 @@
+{
+  "schema": "xray-canonical-program-legacy-owner-migration/1",
+  "architecture_task": 293,
+  "rule": "Preserve semantic facts and negative evidence, never preserve a pre-293 product schema, reader, alias, fallback, or second semantic owner.",
+  "owners": [
+    {
+      "id": "typed-program-and-program-semantic-closure",
+      "current_owner": "XaTypedProgram and XrProgramSemanticClosure build a linked semantic graph beside executable IR",
+      "semantic_value_to_keep": "stable source/module/type/function/call identity and closed-world graph facts",
+      "new_owner": "W2 whole-program linker and XrProgram identity tables",
+      "activation_wave": "W2",
+      "deletion_owner": "Task 301 graph/call slices",
+      "disposition": "migrate facts then delete parallel closure authority",
+      "evidence": [
+        "src/frontend/analyzer/xa_typed_program.h",
+        "src/plan/semantic/xr_program_semantic_closure.h",
+        "src/ir/xi_program_semantic_plan.c"
+      ]
+    },
+    {
+      "id": "semantic-plan",
+      "current_owner": "XrSemanticPlan plus scenario-shaped semantic headers",
+      "semantic_value_to_keep": "type, effect, ownership, operation, call, field, index, cleanup, and coroutine facts that are language semantics",
+      "new_owner": "W1 CoreSpec laws and W2 XrProgram operation/type/effect records",
+      "activation_wave": "W1-W7 per operation family",
+      "deletion_owner": "Task 301",
+      "disposition": "extract atomic facts and delete the plan and scenario families in the same covered slice",
+      "evidence": [
+        "src/plan/semantic/xr_semantic_plan.h",
+        "src/plan/semantic/xr_semantic_builder.c",
+        "src/plan/semantic/xr_semantic_verify.c"
+      ]
+    },
+    {
+      "id": "target-plan",
+      "current_owner": "XrTargetPlan combines target-neutral semantics with storage, call, representation, and provider decisions",
+      "semantic_value_to_keep": "only target-independent facts not already owned by CoreSpec/XrProgram, plus negative fixtures",
+      "new_owner": "W2 XrProgram for semantics; W4 XrTargetProfile/BoundaryABI for target policy; W6 XrBackendIR for AOT decisions",
+      "activation_wave": "W4-W7 per operation family",
+      "deletion_owner": "Task 301, terminal route deletion in Task 302",
+      "disposition": "split by concern and delete without compatibility facade",
+      "evidence": [
+        "src/plan/target/xr_target_plan.h",
+        "src/plan/target/xr_target_builder.c",
+        "src/plan/target/xr_target_verify.c"
+      ]
+    },
+    {
+      "id": "xsm-artifact",
+      "current_owner": "XSM serializes SemanticPlan/module summaries and participates in cache identity",
+      "semantic_value_to_keep": "hostile decoder fixtures and any source-independent type/effect identity facts",
+      "new_owner": "W2 XrProgram sections and W3 bounded decoder",
+      "activation_wave": "W2-W3",
+      "deletion_owner": "Task 302",
+      "disposition": "retire format, reader, writer, cache key, and product route",
+      "evidence": [
+        "src/plan/format/xr_xsm_schema.h",
+        "src/plan/format/xr_xsm_encode.c",
+        "src/plan/format/xr_xsm_decode.c",
+        "src/aot/xaot_module_summary.c"
+      ]
+    },
+    {
+      "id": "xtp-artifact",
+      "current_owner": "XTP serializes TargetPlan and exposes a runtime load route",
+      "semantic_value_to_keep": "bounded parsing attacks, resource limits, and corruption fixtures",
+      "new_owner": "W2 XrProgram public format and W3 verifier",
+      "activation_wave": "W2-W3",
+      "deletion_owner": "Task 302",
+      "disposition": "retire all XTP readers, writers, text dumps, runtime loaders, and public headers",
+      "evidence": [
+        "src/plan/format/xr_xtp_schema.h",
+        "src/plan/format/xr_xtp_decode.c",
+        "src/plan/format/xr_xtp_encode.c",
+        "src/runtime/xr_target_plan_load.c",
+        "include/xray_target_plan_load.h"
+      ]
+    },
+    {
+      "id": "legacy-runtime-xrprogram",
+      "current_owner": "runtime XrProgram wraps a loaded target artifact and direct-i64 execution helper",
+      "semantic_value_to_keep": "lifetime, concurrent unload, and instance safety tests",
+      "new_owner": "W2 canonical XrProgram object and W5/W8 XrInstance APIs",
+      "activation_wave": "W8 atomic API cut",
+      "deletion_owner": "Task 302",
+      "disposition": "delete the legacy meaning before the public name is assigned to the canonical program",
+      "evidence": [
+        "include/xray_runtime_api.h",
+        "src/runtime/xr_runtime_api.c"
+      ]
+    },
+    {
+      "id": "xrc-bytecode-container",
+      "current_owner": ".xrc is the legacy VM bytecode/build artifact route",
+      "semantic_value_to_keep": "module graph, corruption, deterministic serialization, and embed test intent",
+      "new_owner": "W2 public XrProgram and W5 private XrVmCode cache",
+      "activation_wave": "W8 atomic CLI/package cut",
+      "deletion_owner": "Task 302",
+      "disposition": "delete extension, reader, writer, CLI route, and package assumptions",
+      "evidence": [
+        "src/module/xbytecode_compile.c",
+        "src/app/cli/xcmd_build.c",
+        "tests"
+      ]
+    },
+    {
+      "id": "xrproto-and-chunk",
+      "current_owner": "XrProto/XChunk encode VM-oriented executable instructions and constants",
+      "semantic_value_to_keep": "function body/control-flow/constant intent and decoder attack corpus",
+      "new_owner": "W2 target-neutral typed operations; W5 disposable private VM lowering",
+      "activation_wave": "W2-W5 then W8 deletion",
+      "deletion_owner": "Task 299 for execution, Task 302 for public artifacts",
+      "disposition": "do not evolve as the new public format; replace and delete",
+      "evidence": [
+        "src/module/xproto_codec.h",
+        "src/module/xproto_codec.c",
+        "src/runtime/value/xchunk.h",
+        "src/runtime/value/xchunk.c"
+      ]
+    },
+    {
+      "id": "vm-opcode-dispatch",
+      "current_owner": "VM opcode tables and dispatch helpers contain behavior and representation choices",
+      "semantic_value_to_keep": "proven execution algorithms and performance fixtures",
+      "new_owner": "W1 generated operation contracts and W5 VM handlers/private specializations",
+      "activation_wave": "W5-W7 per operation family",
+      "deletion_owner": "Task 299 and Task 301",
+      "disposition": "regenerate or rewrite handlers as consumers; delete semantic switches and old public bytecode opcodes",
+      "evidence": [
+        "src/vm",
+        "src/runtime/value/xchunk.h",
+        "xisa"
+      ]
+    },
+    {
+      "id": "vm-loader-and-embed-api",
+      "current_owner": "legacy bytecode loader, isolate, scripting, and embedded-bytecode entrypoints",
+      "semantic_value_to_keep": "host embedding lifecycle, isolation, cancellation, diagnostics, and concurrency tests",
+      "new_owner": "W3 XrProgram loader/verifier and W5/W8 XrInstance embed API",
+      "activation_wave": "W5 then W8 hard cut",
+      "deletion_owner": "Task 302",
+      "disposition": "replace atomically; no old loader shim",
+      "evidence": [
+        "src/api/xisolate.c",
+        "src/api/xisolate_scripting.c",
+        "src/runtime/xisolate_api.c",
+        "tests/diff/run_backend_diff.py"
+      ]
+    },
+    {
+      "id": "aot-semantic-fallbacks",
+      "current_owner": "AOT analyzer/name/tag/body-shape and emission helpers inspect source/IR/runtime structures for semantic answers",
+      "semantic_value_to_keep": "lowering algorithms, diagnostics, and generated-C safety checks",
+      "new_owner": "W6 XrProgram-to-XrBackendIR lowering with translation validation",
+      "activation_wave": "W6-W7 per operation family",
+      "deletion_owner": "Task 300 and Task 301",
+      "disposition": "delete every fallback after the corresponding operation record is consumed",
+      "evidence": [
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/emit_c/xr_c_emission_plan.c",
+        "src/aot/refine/xr_aot_representation_refinement.c"
+      ]
+    },
+    {
+      "id": "aot-module-summary-cache",
+      "current_owner": "Xaot module summaries publish XSM-derived semantic authority and cache keys",
+      "semantic_value_to_keep": "deterministic content-addressed build and cancellation behavior",
+      "new_owner": "ProgramId-based W2 input cache and NativeArtifactId-based W6 output cache",
+      "activation_wave": "W2 and W6",
+      "deletion_owner": "Task 300",
+      "disposition": "replace cache identity and delete XSM publication",
+      "evidence": [
+        "src/aot/xaot_module_summary.c",
+        "src/cache"
+      ]
+    },
+    {
+      "id": "aot-generated-c-verifier",
+      "current_owner": "generated-C W1-W4 verifier rejects malformed C before toolchain execution",
+      "semantic_value_to_keep": "all wellformedness checks, ICE diagnostics, and malformed-output fixtures",
+      "new_owner": "W6 generated-C terminal verifier",
+      "activation_wave": "W6",
+      "deletion_owner": "none; retained defense",
+      "disposition": "retain and re-anchor to XrBackendIR translation validation",
+      "evidence": [
+        "src/aot/xi_cgen_verify_output.h",
+        "src/aot/xi_cgen_verify_output.c",
+        "tests/unit/aot/test_cgen_verify_output.c"
+      ]
+    },
+    {
+      "id": "runtime-target-profile-and-abi",
+      "current_owner": "runtime target authority/profile/contracts and AOT provider ABI form overlapping target facts",
+      "semantic_value_to_keep": "object layout invariants, calling convention, runtime capabilities, provider readiness, and refusal diagnostics",
+      "new_owner": "W4 XrTargetProfile, BoundaryABI, RuntimeKernelId, and provider contracts",
+      "activation_wave": "W4",
+      "deletion_owner": "Task 298, product route cleanup in Task 302",
+      "disposition": "consolidate into immutable identities and delete duplicate authorities",
+      "evidence": [
+        "src/runtime/abi",
+        "src/aot/xrt_provider_abi.h",
+        "src/plan/target/xr_target_profile.h"
+      ]
+    },
+    {
+      "id": "runtime-generation-and-debug",
+      "current_owner": "generation, debug, source map, and diagnostics bind to legacy module/proto/target identities",
+      "semantic_value_to_keep": "stable source locations, debugger lifecycle, and diagnostic provenance",
+      "new_owner": "W2 ProgramId/source table, W5 VM debug view, W6 native debug metadata",
+      "activation_wave": "W5-W8",
+      "deletion_owner": "Task 302",
+      "disposition": "rebind to canonical identities and delete legacy keys",
+      "evidence": [
+        "src/app/dap",
+        "src/debug",
+        "src/module/xproto_codec.c"
+      ]
+    },
+    {
+      "id": "installer-package-and-cli-routes",
+      "current_owner": "CLI build/run, cache, installer, and package routes choose source, .xrc, XTP, or native inputs independently",
+      "semantic_value_to_keep": "source builds, cross compilation, reproducible packaging, and install-time AOT workflows",
+      "new_owner": "W8 atomic source/XrProgram/native product matrix",
+      "activation_wave": "W8",
+      "deletion_owner": "Task 302",
+      "disposition": "hard cut all routes together; no compatibility reader or migration flag",
+      "evidence": [
+        "src/app/cli",
+        "src/app/toolchain",
+        "src/package",
+        "tests/aot"
+      ]
+    },
+    {
+      "id": "old-shape-wip",
+      "current_owner": "uncommitted field/index/string/class/enum exact-shape work in converge/269-292-serial",
+      "semantic_value_to_keep": "field identity, container owner, borrow mode, index/result type, and rejection cases",
+      "new_owner": "W1 atomic CoreSpec field/index laws and W7 aggregate operations",
+      "activation_wave": "W1 then W7-aggregate",
+      "deletion_owner": "historical worktree owner; never merge old TargetPlan implementation",
+      "disposition": "preserve in place as evidence, extract facts, then retire",
+      "evidence": [
+        "src/plan/semantic/xr_semantic_field_shape.h",
+        "src/plan/semantic/xr_semantic_array_index_shape.h",
+        "tests/unit/plan/test_target_plan.c"
+      ]
+    }
+  ],
+  "target_machine_contract_files": [
+    {
+      "path": "contracts/target-machine/aot-plan-destination-inventory.json",
+      "disposition": "migrate",
+      "owner_task": 300,
+      "destination": "XrBackendIR migration and forbidden-fallback inventory"
+    },
+    {
+      "path": "contracts/target-machine/baseline-manifest.json",
+      "disposition": "retire",
+      "owner_task": 294,
+      "destination": "canonical-program/baseline-manifest.json plus retired evidence"
+    },
+    {
+      "path": "contracts/target-machine/completion-governance.json",
+      "disposition": "migrate",
+      "owner_task": 303,
+      "destination": "W9 qualification and terminal-zero governance"
+    },
+    {
+      "path": "contracts/target-machine/completion-items.json",
+      "disposition": "migrate",
+      "owner_task": 301,
+      "destination": "operation-capability-matrix rows and per-operation deletion evidence"
+    },
+    {
+      "path": "contracts/target-machine/diagnostic-codes.toml",
+      "disposition": "migrate",
+      "owner_task": 297,
+      "destination": "XrProgram decode/verify/profile/backend diagnostic registry"
+    },
+    {
+      "path": "contracts/target-machine/id-and-fingerprint-policy.toml",
+      "disposition": "migrate",
+      "owner_task": 296,
+      "destination": "ProgramId/ProfileId/ExecutionId/NativeArtifactId contract"
+    },
+    {
+      "path": "contracts/target-machine/legacy-product-residue.json",
+      "disposition": "migrate",
+      "owner_task": 302,
+      "destination": "canonical-program/forbidden-residue.json with terminal-zero policy"
+    },
+    {
+      "path": "contracts/target-machine/legacy-vm-inventory.json",
+      "disposition": "migrate",
+      "owner_task": 299,
+      "destination": "W5 VM consumer and W8 old loader/opcode deletion inventory"
+    },
+    {
+      "path": "contracts/target-machine/migration-source-classification.json",
+      "disposition": "migrate",
+      "owner_task": 301,
+      "destination": "legacy owner migration and operation slice evidence"
+    },
+    {
+      "path": "contracts/target-machine/object-extent-inventory.json",
+      "disposition": "migrate",
+      "owner_task": 298,
+      "destination": "BoundaryABI and runtime-kernel object extent contract"
+    },
+    {
+      "path": "contracts/target-machine/retired-evidence.tsv",
+      "disposition": "migrate",
+      "owner_task": 294,
+      "destination": "canonical-program/retired-evidence.tsv"
+    },
+    {
+      "path": "contracts/target-machine/runtime-string-object-contract.toml",
+      "disposition": "migrate",
+      "owner_task": 298,
+      "destination": "BoundaryABI/runtime-kernel string object contract"
+    },
+    {
+      "path": "contracts/target-machine/semantic-authority-manifest.json",
+      "disposition": "migrate",
+      "owner_task": 295,
+      "destination": "CoreSpec owner registry and generated operation schema"
+    },
+    {
+      "path": "contracts/target-machine/semantic-owner-inventory.json",
+      "disposition": "migrate",
+      "owner_task": 301,
+      "destination": "per-operation old-owner deletion evidence"
+    },
+    {
+      "path": "contracts/target-machine/validation-matrix.json",
+      "disposition": "migrate",
+      "owner_task": 303,
+      "destination": "W9 VM/AOT/profile/cross-target qualification matrix"
+    }
+  ]
+}

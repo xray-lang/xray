@@ -4546,6 +4546,38 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Task 294 freezes the one-program architecture before any W1-W9 product
+    # implementation starts. The ordinary gate validates all seven governance
+    # assets and enforces the legacy-residue ratchet; the mutation gate proves
+    # that missing tasks, duplicate operations, empty patterns, and unstable
+    # JSON are rejected rather than silently accepted.
+    add_test(
+        NAME canonical_program_contracts
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_canonical_program_contracts.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(canonical_program_contracts PROPERTIES
+        LABELS "meta;contracts;freeze;canonical-program;task-294"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME canonical_program_contracts_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_canonical_program_contracts.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(canonical_program_contracts_self_test PROPERTIES
+        LABELS "meta;contracts;freeze;canonical-program;task-294"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
     add_test(
         NAME semantic_owner_inventory
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_owners.py
