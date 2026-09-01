@@ -9,6 +9,8 @@
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_emit.h"
 #include "../../../src/ir/xi_program_semantic.h"
+#include "../../../src/aot/program/xr_backend_ir.h"
+#include "../../../src/execution/xr_execution.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/frontend/parser/xparse.h"
@@ -18,8 +20,12 @@
 #include "../../../src/module/xmodule_identity.h"
 #include "../../../src/module/xmodule_resolver.h"
 #include "../../../src/plan/target/xr_target_profile.h"
+#include "../../../src/program/xr_program_from_xi.h"
+#include "../../../src/program/xr_program_verify.h"
+#include "../../../src/program/xr_reference_evaluator.h"
 #include "../../../src/runtime/abi/xr_runtime_target_profile.h"
 #include "../../../src/toolchain/xcompiler_session.h"
+#include "../../../src/vm/xr_program_vm.h"
 #include "../../../include/xray_vm.h"
 
 #include <stdio.h>
@@ -51,6 +57,44 @@
 static XrVMRuntime *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
+
+typedef struct XiProgramProviderBindings {
+    XrProviderBinding providers[XR_RUNTIME_ABI_MAX_PROVIDERS];
+    XrProviderOperationBinding operations[XR_RUNTIME_ABI_MAX_PROVIDERS]
+                                         [XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS];
+    size_t count;
+} XiProgramProviderBindings;
+
+static void xi_program_provider_entry(void) {
+}
+
+static void xi_program_build_provider_bindings(const XrTargetProfile *profile,
+                                               XiProgramProviderBindings *bindings) {
+    memset(bindings, 0, sizeof(*bindings));
+    bindings->count = xr_target_profile_provider_count(profile);
+    PIPELINE_TEST_REQUIRE(bindings->count > 0u);
+    PIPELINE_TEST_REQUIRE(bindings->count <= XR_RUNTIME_ABI_MAX_PROVIDERS);
+    for (size_t provider_index = 0; provider_index < bindings->count; ++provider_index) {
+        const XrTargetProviderContract *contract =
+            xr_target_profile_provider(profile, provider_index);
+        PIPELINE_TEST_REQUIRE(contract != NULL);
+        XrProviderBinding *provider = &bindings->providers[provider_index];
+        provider->contract_id = contract->contract_id;
+        PIPELINE_TEST_REQUIRE(xr_target_provider_contract_fingerprint(
+                                  contract, &provider->contract_fingerprint) == XR_RUNTIME_ABI_OK);
+        provider->behavior_flags = XR_PROVIDER_BEHAVIOR_FLAGS_ALL;
+        provider->operations = bindings->operations[provider_index];
+        provider->operation_count = contract->operation_count;
+        PIPELINE_TEST_REQUIRE(provider->operation_count <= XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS);
+        for (uint16_t operation_index = 0; operation_index < contract->operation_count;
+             ++operation_index) {
+            XrProviderOperationBinding *operation =
+                &bindings->operations[provider_index][operation_index];
+            operation->operation_id = contract->operations[operation_index].stable_id;
+            operation->entry = xi_program_provider_entry;
+        }
+    }
+}
 
 static void setup(void) {
     if (!g_iso) {
@@ -142,11 +186,9 @@ typedef struct XiPipelineScalarFixture {
     XaAnalyzer *analyzer;
 } XiPipelineScalarFixture;
 
-static bool xi_pipeline_scalar_fixture_analyze(XiPipelineScalarFixture *fixture,
-                                               XrCompilerSession *session,
-                                               const char *namespace_id) {
-    static const char source[] = "fn add1(value: i64) -> i64 { return value + 1 }\n"
-                                 "fn root() -> i64 { return add1(41) }\n";
+static bool xi_pipeline_fixture_analyze_source(XiPipelineScalarFixture *fixture,
+                                               XrCompilerSession *session, const char *namespace_id,
+                                               const char *source) {
     memset(fixture, 0, sizeof(*fixture));
     XrModuleResolverConfig resolver_config = {0};
     fixture->resolver = xr_module_resolver_new(&resolver_config);
@@ -186,6 +228,14 @@ static bool xi_pipeline_scalar_fixture_analyze(XiPipelineScalarFixture *fixture,
         return false;
     fixture->spec->status = XR_MODSPEC_ANALYZED;
     return true;
+}
+
+static bool xi_pipeline_scalar_fixture_analyze(XiPipelineScalarFixture *fixture,
+                                               XrCompilerSession *session,
+                                               const char *namespace_id) {
+    static const char source[] = "fn add1(value: i64) -> i64 { return value + 1 }\n"
+                                 "fn root() -> i64 { return add1(41) }\n";
+    return xi_pipeline_fixture_analyze_source(fixture, session, namespace_id, source);
 }
 
 static void xi_pipeline_scalar_fixture_cleanup(XiPipelineScalarFixture *fixture) {
@@ -1047,6 +1097,175 @@ TEST(e2e_status_str) {
     assert(strcmp(xi_pipeline_stage_str(XI_PIPE_STAGE_OPTIMIZE), "optimize") == 0);
 }
 
+static void require_program_input_tree(const XiFunc *function) {
+    PIPELINE_TEST_REQUIRE(function != NULL);
+    PIPELINE_TEST_REQUIRE(function->stage == XI_STAGE_OPTIMIZED);
+    PIPELINE_TEST_REQUIRE(function->semantic_plan == NULL);
+    for (uint16_t child_index = 0; child_index < function->nchildren; child_index++)
+        require_program_input_tree(function->children[child_index]);
+}
+
+TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
+    XrCompilerSession *original_session = xr_compiler_session_current_for_isolate(g_iso);
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    PIPELINE_TEST_REQUIRE(session != NULL);
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_attach_isolate(g_iso, session) == original_session);
+    char error[512] = {0};
+    XrTargetProfile *profile = NULL;
+    PIPELINE_TEST_REQUIRE(
+        xr_runtime_target_profile_build_native_hosted(&profile, error, sizeof(error)));
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_set_target_profile(session, profile));
+
+    XiPipelineScalarFixture fixture = {0};
+    static const char program_source[] = "fn sum_to(limit: i64) -> i64 {\n"
+                                         "  var index: i64 = 0\n"
+                                         "  var total: i64 = 0\n"
+                                         "  while (index < limit) {\n"
+                                         "    total = total + index\n"
+                                         "    index = index + 1\n"
+                                         "  }\n"
+                                         "  return total\n"
+                                         "}\n"
+                                         "fn choose(value: i64) -> i64 {\n"
+                                         "  if (value < 0) { return 0 - value }\n"
+                                         "  return sum_to(value)\n"
+                                         "}\n"
+                                         "fn root() -> i64 { return choose(10) }\n";
+    PIPELINE_TEST_REQUIRE(
+        xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
+
+    XiPipelineConfig config = xi_pipeline_program_input_config();
+    config.source_file = "scalar-binding.xr";
+    config.module_name = "program_input";
+    config.module_identity = fixture.spec->canonical;
+
+    XiPipelineResult result =
+        xi_pipeline_compile_program(fixture.spec->ast, fixture.analyzer, g_iso, &config);
+    if (result.status != XI_PIPE_OK)
+        fprintf(stderr, "program input failed at %s: %s\n",
+                xi_pipeline_stage_str(result.error.stage), result.error.detail);
+    PIPELINE_TEST_REQUIRE(result.status == XI_PIPE_OK);
+    PIPELINE_TEST_REQUIRE(result.ir != NULL);
+    PIPELINE_TEST_REQUIRE(result.proto == NULL);
+    PIPELINE_TEST_REQUIRE(result.ir->module != NULL);
+    PIPELINE_TEST_REQUIRE(result.ir->module->program_semantic_closure == NULL);
+    PIPELINE_TEST_REQUIRE(result.ir->module->scalar_call_decision == NULL);
+    require_program_input_tree(result.ir);
+
+    XrCoreIrKey semantic_profile =
+        xr_core_ir_key("xi-program-input-profile", strlen("xi-program-input-profile"));
+    const XiFunc *module_roots[] = {result.ir};
+    const XiFunc *entry = NULL;
+    for (uint16_t function = 0; function < result.ir->module->nfuncs; ++function) {
+        const XiFunc *candidate = result.ir->module->functions[function];
+        if (candidate && candidate->name && strcmp(candidate->name, "root") == 0)
+            entry = candidate;
+    }
+    PIPELINE_TEST_REQUIRE(entry != NULL);
+    XrProgramFromXiInput producer_input = {
+        .module_roots = module_roots,
+        .module_count = 1u,
+        .entry_function = entry,
+        .semantic_profile_fingerprint = semantic_profile.bytes,
+    };
+    XrProgramArtifact artifact = {0};
+    char producer_diagnostic[512] = {0};
+    XrProgramBuildStatus producer_status = xr_program_write_from_xi(
+        &producer_input, &artifact, producer_diagnostic, sizeof(producer_diagnostic));
+    if (producer_status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "program producer failed: %s: %s\n",
+                xr_program_build_status_name(producer_status), producer_diagnostic);
+    PIPELINE_TEST_REQUIRE(producer_status == XR_PROGRAM_BUILD_OK);
+
+    XrProgramArtifact repeated_artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&producer_input, &repeated_artifact,
+                                                   producer_diagnostic,
+                                                   sizeof(producer_diagnostic)) ==
+                          XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(repeated_artifact.size == artifact.size);
+    PIPELINE_TEST_REQUIRE(memcmp(repeated_artifact.bytes, artifact.bytes, artifact.size) == 0);
+    xr_program_artifact_free(&repeated_artifact);
+
+    XrProgramFromXiInput invalid_entry_input = producer_input;
+    invalid_entry_input.entry_function = result.ir;
+    XrProgramArtifact invalid_entry_artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+                              &invalid_entry_input, &invalid_entry_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(invalid_entry_artifact.bytes == NULL);
+
+    XrValidatedProgram *validated = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
+                                              &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    PIPELINE_TEST_REQUIRE(validated != NULL);
+    XrReferenceOutcome reference = xr_reference_evaluate(
+        validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
+    PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+    PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 45);
+
+    XiProgramProviderBindings bindings;
+    xi_program_build_provider_bindings(profile, &bindings);
+    XrExecutionBindingInput execution_input = {
+        .schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
+        .program = validated,
+        .profile = profile,
+        .providers = bindings.providers,
+        .provider_count = bindings.count,
+        .generation = 1u,
+    };
+    XrExecutionDiagnostic execution_diagnostic;
+    XrInstance *instance = NULL;
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_create(&execution_input, &instance,
+                                                       &execution_diagnostic) == XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(instance != NULL);
+
+    XrVmCode *vm_code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    PIPELINE_TEST_REQUIRE(xr_vm_code_build(instance, NULL, &vm_code, &vm_diagnostic) ==
+                          XR_VM_CODE_OK);
+    XrVmOutcome vm = xr_vm_code_execute(vm_code, instance,
+                                        xr_validated_program_entry_function(validated), NULL, 0u);
+    PIPELINE_TEST_REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
+    PIPELINE_TEST_REQUIRE(vm.value.kind == XR_VM_VALUE_I64);
+    PIPELINE_TEST_REQUIRE(vm.value.as.i64 == reference.value.as.i64);
+    xr_vm_code_free(vm_code);
+
+    XrBackendIR *backend_ir = NULL;
+    XrBackendDiagnostic backend_diagnostic;
+    XrBackendOptions backend_options = xr_backend_default_options();
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_build(instance, &backend_options, &backend_ir,
+                                              &backend_diagnostic) == XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_verify(backend_ir, &backend_diagnostic));
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_translation_validate(backend_ir, &backend_diagnostic));
+    XrGeneratedC generated = {0};
+    PIPELINE_TEST_REQUIRE(xr_backend_ir_emit_c(backend_ir, true, &generated, &backend_diagnostic) ==
+                          XR_BACKEND_OK);
+    PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "int main(void)") != NULL);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "XrProto") == NULL);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "SemanticPlan") == NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(backend_ir);
+
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_begin_drain(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_retire(instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    PIPELINE_TEST_REQUIRE(xr_execution_instance_free(&instance, &execution_diagnostic) ==
+                          XR_EXECUTION_OK);
+    xr_validated_program_free(validated);
+    xr_program_artifact_free(&artifact);
+
+    xi_pipeline_result_free(&result);
+    xi_pipeline_scalar_fixture_cleanup(&fixture);
+    xr_target_profile_free(profile);
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_attach_isolate(g_iso, original_session) == session);
+    xr_compiler_session_delete(session);
+}
+
 TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
     XrProto *p = compile_source("import time\ntime.sleep(1)\nprint(7)", NULL);
     assert(p != NULL);
@@ -1299,6 +1518,7 @@ int main(void) {
     /* API */
     run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
+    run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();
     run_e2e_time_sleep_uses_dedicated_vm_suspend();
     run_e2e_generic_this_method_call_uses_frozen_member_identity();
 

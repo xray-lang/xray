@@ -65,6 +65,18 @@
       "evidence": []
     },
     {
+      "id": "core.constant.bool",
+      "core_spec_contract": "one canonical false or true value; no integer truthiness",
+      "program_encoding": "typed bool result plus canonical one-byte payload",
+      "decoder_verifier_evaluator": "payload range and result-type checks with direct bool evaluation",
+      "vm_implementation": "typed bool slot derived from the verified operation",
+      "aot_lowering": "BackendIR canonical bool constant and portable C bool materialization",
+      "source_producer": "typed bool literals and canonical constant folding",
+      "old_owner_deletion": "delete duplicate VM truthiness decoding and AOT bool inference in W7-scalar",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
       "id": "core.add.i64",
       "core_spec_contract": "two i64 operands, explicit overflow mode, deterministic i64 result or named trap",
       "program_encoding": "operation id, two SSA value ids, result id, overflow-mode enum",
@@ -97,6 +109,18 @@
       "aot_lowering": "BackendIR multiply plus overflow/trap recipe selected from the same mode",
       "source_producer": "typed binary multiply and compound lowering",
       "old_owner_deletion": "delete VM opcode semantic switch and CGen multiply/overflow rediscovery in W7-scalar",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.div.i64",
+      "core_spec_contract": "two i64 operands, truncation toward zero, and named zero or minimum-over-minus-one traps",
+      "program_encoding": "operation id, two SSA value ids, result id, and frozen division-mode enum",
+      "decoder_verifier_evaluator": "operand dominance/type and mode checks with exact quotient or named trap",
+      "vm_implementation": "typed i64 division handler with explicit exceptional cases",
+      "aot_lowering": "BackendIR guarded division that never delegates undefined behavior to C",
+      "source_producer": "typed integer division expressions",
+      "old_owner_deletion": "delete VM and AOT division-edge rediscovery in W7-scalar",
       "status": "FROZEN_WALKING_SKELETON",
       "evidence": []
     },
@@ -169,6 +193,42 @@
       "aot_lowering": "BackendIR direct call and BoundaryABI projection without source or TargetPlan inference",
       "source_producer": "resolved direct calls after whole-program linking",
       "old_owner_deletion": "delete SemanticPlan/TargetPlan call-shape families and AOT adapter inference in W7-call",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.trap",
+      "core_spec_contract": "one explicit deterministic terminal trap with no normal successor",
+      "program_encoding": "terminal operation plus stable trap id",
+      "decoder_verifier_evaluator": "trap-id, terminator placement, effect, and unreachable-successor checks",
+      "vm_implementation": "publish the exact typed VM trap outcome",
+      "aot_lowering": "BackendIR trap terminal and portable native trap outcome",
+      "source_producer": "compiler-internal explicit trap insertion after typed semantic lowering",
+      "old_owner_deletion": "delete VM panic opcode and CGen terminal-shape inference in W7-error",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.error.publish",
+      "core_spec_contract": "transfer one typed error payload to the function error successor and terminate the current path",
+      "program_encoding": "typed error operand and terminal operation id",
+      "decoder_verifier_evaluator": "error type, ownership transfer, effect, and terminal placement checks",
+      "vm_implementation": "publish one typed error outcome without backend return-code inference",
+      "aot_lowering": "BackendIR typed error terminal projected through the selected private ABI",
+      "source_producer": "typed error propagation after cleanup lowering",
+      "old_owner_deletion": "delete pending-error opcode and CGen error-channel inference in W7-error",
+      "status": "FROZEN_WALKING_SKELETON",
+      "evidence": []
+    },
+    {
+      "id": "core.target.pointer_width",
+      "core_spec_contract": "read the immutable bound profile pointer width as exact u32 or publish profile-unavailable",
+      "program_encoding": "u32 result plus profile.pointer-width capability requirement",
+      "decoder_verifier_evaluator": "result type, declared effect/capability, and bound-profile availability checks",
+      "vm_implementation": "read the pointer-width field from the verified execution binding",
+      "aot_lowering": "freeze the same profile value into BackendIR without host sizeof probes",
+      "source_producer": "compiler-owned target query inserted only for a typed profile-dependent language operation",
+      "old_owner_deletion": "delete host preprocessor and sizeof semantic inference in W7-profile",
       "status": "FROZEN_WALKING_SKELETON",
       "evidence": []
     }

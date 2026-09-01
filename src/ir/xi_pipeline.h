@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Orchestrates the full IR compilation pipeline in one call:
- *     AST -> xi_lower -> xi_verify -> xi_opt -> xi_emit -> XrProto
+ *     AST -> xi_lower -> xi_verify -> xi_opt -> canonical-program input
  *
  *   Provides both high-level convenience API and fine-grained control
  *   over individual passes via configuration flags.
@@ -85,47 +85,48 @@ typedef struct XiPipelineError {
 /* ========== Pipeline Mode ========== */
 
 typedef enum {
-    XI_PIPE_VM,    /* lower → verify → opt → bytecode emit */
-    XI_PIPE_AOT,   /* lower → verify → opt → select_rep → box_elim (no emit) */
-    XI_PIPE_CHECK, /* lower → verify only (no opt, no emit) */
+    XI_PIPE_VM,               /* legacy lower → verify → opt → bytecode emit */
+    XI_PIPE_AOT,              /* legacy lower → verify → opt → target representation */
+    XI_PIPE_CHECK,            /* lower → verify only (no opt, no emit) */
+    XI_PIPE_XR_PROGRAM_INPUT, /* stop at verified, target-neutral Optimized Xi */
 } XiPipelineMode;
 
 /* ========== Pipeline Configuration ========== */
 
 typedef struct XiPipelineConfig {
-    XiPipelineMode mode;     /* selects default pass sequence (can be overridden) */
-    bool run_optimize;       /* run optimization passes (default: true) */
-    XiOptLevel opt_level;    /* optimization aggressiveness (XI_OPT_LIGHT for VM,
-                              * XI_OPT_FULL for AOT) */
-    bool run_select_rep;     /* run SelectRepresentations pass (BOX/UNBOX insertion,
-                              * needed by the AOT backend for unboxed values;
-                              * default: false for VM, true for AOT) */
-    bool run_backend_lower;  /* lower high-level ops and verify the Backend transition
-                              * (default: false for VM, true for AOT) */
-    bool run_escape;         /* run escape analysis (populates XiValue.escape;
-                              * default: false for VM, true for AOT) */
-    bool run_arc;            /* run precise dup/drop insertion (xi_arc) consuming
-                              * ownership analysis. Independent of run_backend_lower
-                              * so the VM can get dup/drop WITHOUT stack_alloc_rewrite
-                              * (the VM emitter has no XI_STACK_ALLOC handler).
-                              * default: false for VM (until RC takeover), true for AOT. */
-    bool run_emit;           /* emit bytecode (default: true for VM, false for AOT) */
-    bool run_canonicalize;   /* canonicalize AST before lowering (default: true). AOT driver can
-                              * canonicalize all modules first, build global evidence from that
-                              * canonical AST, then run lowering with this disabled. */
-    bool dump_ir_before;     /* dump IR to stderr before optimization */
-    bool dump_ir_after;      /* dump IR to stderr after optimization */
-    uint64_t budget_ns;      /* optimization time budget in nanoseconds (0 = unlimited).
-                              * Both production pipelines leave this at 0: a wall-clock
-                              * cut makes the emitted artifact depend on machine load. */
-    bool repl_mode;          /* REPL incremental compilation: top-level bindings
-                              * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
-                              * instead of XI_GET/SET_SHARED (slot-indexed array).
-                              * Default: false (script-mode shared array path). */
-    const char *source_file; /* Source path propagated to emitted XrProto debug info. */
+    XiPipelineMode mode;         /* selects default pass sequence (can be overridden) */
+    bool run_optimize;           /* run optimization passes (default: true) */
+    XiOptLevel opt_level;        /* optimization aggressiveness (XI_OPT_LIGHT for VM,
+                                  * XI_OPT_FULL for AOT) */
+    bool run_select_rep;         /* run SelectRepresentations pass (BOX/UNBOX insertion,
+                                  * needed by the AOT backend for unboxed values;
+                                  * default: false for VM, true for AOT) */
+    bool run_backend_lower;      /* lower high-level ops and verify the Backend transition
+                                  * (default: false for VM, true for AOT) */
+    bool run_escape;             /* run escape analysis (populates XiValue.escape;
+                                  * default: false for VM, true for AOT) */
+    bool run_arc;                /* run precise dup/drop insertion (xi_arc) consuming
+                                  * ownership analysis. Independent of run_backend_lower
+                                  * so the VM can get dup/drop WITHOUT stack_alloc_rewrite
+                                  * (the VM emitter has no XI_STACK_ALLOC handler).
+                                  * default: false for VM (until RC takeover), true for AOT. */
+    bool run_emit;               /* emit bytecode (default: true for VM, false for AOT) */
+    bool run_canonicalize;       /* canonicalize AST before lowering (default: true). AOT driver can
+                                  * canonicalize all modules first, build global evidence from that
+                                  * canonical AST, then run lowering with this disabled. */
+    bool dump_ir_before;         /* dump IR to stderr before optimization */
+    bool dump_ir_after;          /* dump IR to stderr after optimization */
+    uint64_t budget_ns;          /* optimization time budget in nanoseconds (0 = unlimited).
+                                  * Both production pipelines leave this at 0: a wall-clock
+                                  * cut makes the emitted artifact depend on machine load. */
+    bool repl_mode;              /* REPL incremental compilation: top-level bindings
+                                  * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
+                                  * instead of XI_GET/SET_SHARED (slot-indexed array).
+                                  * Default: false (script-mode shared array path). */
+    const char *source_file;     /* Source path propagated to emitted XrProto debug info. */
     const char *module_identity; /* Durable identity; never a physical source path. */
-    const char *module_name; /* Stable C-safe module name installed before plan construction. */
-    XiRepPolicy rep_policy;  /* policy for representation boundary insertion */
+    const char *module_name;     /* Stable C-safe module name installed before plan construction. */
+    XiRepPolicy rep_policy;      /* policy for representation boundary insertion */
     XiOptDisableMask disabled_opt_passes;
     bool preserve_wide_vector_boundaries; /* keep target-specific wide SIMD behind call edges */
     const struct XgGlobalEvidence *global_evidence; /* optional lowering-time evidence seed */
@@ -164,6 +165,10 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void);
 
 /* AOT configuration: verify + optimize + select_rep, no bytecode emit. */
 XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void);
+
+/* Canonical-program producer input: verify + optimize + ownership lowering,
+ * then stop before SemanticPlan, representation selection, or bytecode emit. */
+XR_FUNC XiPipelineConfig xi_pipeline_program_input_config(void);
 
 /* Compile a function AST node through the full pipeline.
  * Returns pipeline result; caller must call xi_pipeline_result_free. */

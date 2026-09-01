@@ -315,6 +315,7 @@ set(PROGRAMSEMCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_semantics.py)
 set(EXECUTIONCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_execution_contracts.py)
 set(PROGRAMVMCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_vm_contracts.py)
 set(PROGRAMAOTCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_contracts.py)
+set(PROGRAMSOURCECONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_source_contracts.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -661,6 +662,21 @@ add_custom_target(check-xr-program-aot-contracts
             ${CMAKE_SOURCE_DIR}/tests/unit/aot/test_xr_program_aot.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-aot-coverage.json
     COMMENT "Checking XrProgram AOT lowering and native artifact contracts"
+    VERBATIM
+)
+
+add_custom_target(check-xr-program-source-contracts
+    COMMAND ${XRAY_PYTHON} ${PROGRAMSOURCECONTRACTCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${PROGRAMSOURCECONTRACTCHECK}
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.h
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.c
+            ${CMAKE_SOURCE_DIR}/src/ir/xi_pipeline.h
+            ${CMAKE_SOURCE_DIR}/src/ir/xi_pipeline.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_pipeline.c
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
+    COMMENT "Checking the source-to-XrProgram authority boundary"
     VERBATIM
 )
 
@@ -4913,6 +4929,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(xr_program_aot_contracts_self_test PROPERTIES
         LABELS "meta;contracts;canonical-program;aot;translation-validation;mutation;task-300"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_source_contracts
+        COMMAND ${XRAY_PYTHON} ${PROGRAMSOURCECONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_source_contracts PROPERTIES
+        LABELS "meta;contracts;canonical-program;source;task-301"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_source_contracts_self_test
+        COMMAND ${XRAY_PYTHON} ${PROGRAMSOURCECONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_source_contracts_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;source;mutation;task-301"
         PROCESSORS 1
         TIMEOUT 30
     )

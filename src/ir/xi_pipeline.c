@@ -619,6 +619,25 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     return cfg;
 }
 
+XR_FUNC XiPipelineConfig xi_pipeline_program_input_config(void) {
+    XiPipelineConfig cfg;
+    XiOptPipelinePolicy policy = xi_pass_session_pipeline_policy(XI_OPT_PIPELINE_VM);
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.mode = XI_PIPE_XR_PROGRAM_INPUT;
+    cfg.run_optimize = true;
+    cfg.opt_level = policy.level;
+    cfg.disabled_opt_passes = policy.disabled;
+    cfg.run_select_rep = false;
+    cfg.run_backend_lower = false;
+    cfg.run_escape = true;
+    cfg.run_arc = true;
+    cfg.run_emit = false;
+    cfg.run_canonicalize = true;
+    cfg.module_identity = NULL;
+    cfg.module_name = NULL;
+    return cfg;
+}
+
 /* ========== Internal Pipeline ========== */
 
 static XiFunc *xi_pipeline_release_stage_handle(void *program, XiStage stage) {
@@ -656,6 +675,16 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     const XiCoroResolver *coro_resolver_ptr = NULL;
     memset(&res, 0, sizeof(res));
     res.ir = ir;
+
+    if (cfg->mode == XI_PIPE_XR_PROGRAM_INPUT &&
+        (!cfg->run_optimize || !cfg->run_escape || !cfg->run_arc || cfg->run_select_rep ||
+         cfg->run_backend_lower || cfg->run_emit)) {
+        xi_pipeline_set_error(
+            &res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_NONE, XI_VERIFY_STRUCTURE, ir, NULL, NULL,
+            "canonical-program input requires optimize, escape, and ARC and forbids "
+            "representation selection, backend lowering, and bytecode emission");
+        return res;
+    }
 
     coro_resolver = xi_pipeline_coro_resolver(&coro_resolver_ctx);
     coro_resolver_ptr = &coro_resolver;
@@ -894,6 +923,14 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
                     : "post-optimization PSC/CallDecision to Xi verification failed");
             goto fail;
         }
+    }
+
+    if (cfg->mode == XI_PIPE_XR_PROGRAM_INPUT) {
+        ir = xi_pipeline_release_stage_handle(program, current_stage);
+        program = NULL;
+        res.ir = ir;
+        res.status = XI_PIPE_OK;
+        return res;
     }
 
     if (xi_env_is_enabled("XRAY_XI_SEMANTIC_DUMP")) {
