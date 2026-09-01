@@ -9,7 +9,7 @@
 
 #define XR_CORE_SPEC_EPOCH 1u
 /* clang-format off */
-#define XR_CORE_SPEC_REGISTRY_SHA256 "fe99bb9affa94f448d8a282eb6a6d44e08ab5f6f60245175ab43d387e276e15e"
+#define XR_CORE_SPEC_SEMANTIC_SHA256 "62af5e1327587f50e4cde43170a3f640aac7ddaa5c2432cc7e877aeb5bd750f6"
 /* clang-format on */
 #define XR_CORE_SPEC_OPERATION_COUNT 15u
 #define XR_CORE_SPEC_FEATURE_COUNT 1u

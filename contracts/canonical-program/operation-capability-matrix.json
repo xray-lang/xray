@@ -17,8 +17,16 @@
     "owner_task": 296,
     "schema": "xisa/program/schema.json",
     "generated_coverage": "contracts/canonical-program/xrprogram-format-coverage.json",
-    "semantic_admission": "NOT_YET_ACTIVE_TASK_297",
-    "note": "W2 owns canonical bytes and bounded structural decode. Typed admission and executor coverage remain frozen for W3-W7."
+    "semantic_admission": "COMPLETE_TASK_297",
+    "note": "W2 owns canonical bytes and bounded structural decode. W3 owns typed admission; executor coverage remains frozen for W5-W7."
+  },
+  "semantic_admission_stage": {
+    "status": "COMPLETE",
+    "owner_task": 297,
+    "validated_type": "XrValidatedProgram",
+    "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
+    "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
+    "note": "All 15 active walking-skeleton operations have bounded verification and independent reference evaluation. Inactive ownership, coroutine, import, boundary, VM, and AOT surfaces fail closed until their owning slices activate them."
   },
   "operations": [
     {

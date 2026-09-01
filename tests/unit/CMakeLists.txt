@@ -49,6 +49,8 @@ add_library(xr_program_test_core STATIC
     ${CMAKE_SOURCE_DIR}/src/program/xr_core_ir.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_program_decode.c
     ${CMAKE_SOURCE_DIR}/src/program/xr_program_encode.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c
+    ${CMAKE_SOURCE_DIR}/src/program/xr_reference_evaluator.c
 )
 target_include_directories(xr_program_test_core PRIVATE ${XRAY_COMMON_INCLUDES})
 add_dependencies(xr_program_test_core gen-core-spec gen-xr-program-schema)
@@ -62,6 +64,17 @@ target_link_libraries(test_xr_program PRIVATE xr_program_test_core)
 add_test(NAME test_xr_program COMMAND $<TARGET_FILE:test_xr_program>)
 set_tests_properties(test_xr_program PROPERTIES
     LABELS "unit;canonical-program;program-format;task-296"
+)
+
+add_executable(test_xr_program_verify program/test_xr_program_verify.c)
+target_include_directories(test_xr_program_verify PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(test_xr_program_verify PRIVATE xr_program_test_core)
+add_test(NAME test_xr_program_verify COMMAND $<TARGET_FILE:test_xr_program_verify>)
+set_tests_properties(test_xr_program_verify PROPERTIES
+    LABELS "unit;canonical-program;semantic-verifier;reference-evaluator;task-297"
 )
 
 add_executable(test_xr_program_fuzz_entry ../fuzz/fuzz_xr_program_decode.c)

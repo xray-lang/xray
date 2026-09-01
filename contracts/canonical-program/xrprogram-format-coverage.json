@@ -4,7 +4,7 @@
   "schema_sha256": "23465e5992450b0b949dbc23bf12f7168ed11fd7f3c242eae349a2933adbc413",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "structural_decoder": "COMPLETE",
-  "semantic_admission": "NOT_YET_ACTIVE_TASK_297",
+  "semantic_admission": "COMPLETE_TASK_297",
   "vm_consumer": "NOT_YET_ACTIVE_TASK_299",
   "aot_consumer": "NOT_YET_ACTIVE_TASK_300",
   "sections": [

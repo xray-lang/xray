@@ -19,6 +19,7 @@
 
 #define XR_PROGRAM_DIGEST_SIZE 32u
 #define XR_CORE_IR_KEY_SIZE 32u
+#define XR_PROGRAM_FUNCTION_ENTRY UINT32_C(1)
 
 typedef struct XrCoreIrKey {
     uint8_t bytes[XR_CORE_IR_KEY_SIZE];

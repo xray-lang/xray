@@ -19,7 +19,7 @@ static void test_registry_identity_and_lookup(void) {
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
     CHECK(XR_CORE_SPEC_OPERATION_COUNT == 15u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
-    CHECK(strlen(XR_CORE_SPEC_REGISTRY_SHA256) == 64u);
+    CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
     for (index = 0; index < XR_CORE_SPEC_OPERATION_COUNT; ++index) {
         const XrCoreOperationSpec *operation = &xr_core_operation_specs[index];
@@ -28,9 +28,9 @@ static void test_registry_identity_and_lookup(void) {
         CHECK(operation->operation_class != NULL);
         CHECK(operation->feature != NULL);
         CHECK(operation->spec_oracle_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->decoder_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
-        CHECK(operation->verifier_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
-        CHECK(operation->evaluator_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
+        CHECK(operation->decoder_status == XR_CORE_COVERAGE_COMPLETE);
+        CHECK(operation->verifier_status == XR_CORE_COVERAGE_COMPLETE);
+        CHECK(operation->evaluator_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(operation->vm_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
         CHECK(operation->aot_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
         CHECK(xr_core_spec_operation_by_id(operation->stable_id) == operation);

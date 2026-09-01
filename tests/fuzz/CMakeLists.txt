@@ -115,8 +115,11 @@ add_library(xr_program_fuzz_core STATIC
     ../../src/program/xr_core_ir.c
     ../../src/program/xr_program_decode.c
     ../../src/program/xr_program_encode.c
+    ../../src/program/xr_program_verify.c
+    ../../src/program/xr_reference_evaluator.c
 )
-add_dependencies(xr_program_fuzz_core gen-core-spec gen-xr-program-schema)
+add_dependencies(xr_program_fuzz_core
+    gen-core-spec gen-xr-program-schema check-xr-program-semantics)
 target_include_directories(xr_program_fuzz_core PRIVATE
     ${XRAY_COMMON_INCLUDES}
 )
@@ -177,7 +180,7 @@ message(STATUS "  fuzz_lexer           - Lexer fuzzer")
 message(STATUS "  fuzz_parser          - Parser fuzzer")
 message(STATUS "  fuzz_stdlib_data     - Stdlib CSV/TOML/XML/YAML parser fuzzer")
 message(STATUS "  fuzz_xtp_decode      - Typed TargetPlan artifact fuzzer")
-message(STATUS "  fuzz_xr_program_decode - Canonical XrProgram structural decoder fuzzer")
+message(STATUS "  fuzz_xr_program_decode - XrProgram decoder and semantic admission fuzzer")
 message(STATUS "  fuzz_lexer_standalone  - Lexer test (no libFuzzer)")
 message(STATUS "  fuzz_parser_standalone - Parser test (no libFuzzer)")
 message(STATUS "  fuzz_stdlib_data_standalone - Stdlib data parser test (no libFuzzer)")

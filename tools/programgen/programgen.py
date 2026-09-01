@@ -197,7 +197,7 @@ def generate_coverage(schema: dict[str, Any], digest: str) -> str:
         "schema_sha256": digest,
         "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
         "structural_decoder": "COMPLETE",
-        "semantic_admission": "NOT_YET_ACTIVE_TASK_297",
+        "semantic_admission": "COMPLETE_TASK_297",
         "vm_consumer": "NOT_YET_ACTIVE_TASK_299",
         "aot_consumer": "NOT_YET_ACTIVE_TASK_300",
         "sections": [

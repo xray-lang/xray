@@ -116,17 +116,20 @@ cp ../../tests/regression/**/*.xr corpus/parser/ 2>/dev/null || true
 
 默认测试构建中的 `test_xtp_fuzz_entry` 会不依赖 libFuzzer 地逐项执行完整确定性 mutation matrix，适合快速回归；它不替代长时间 sanitizer fuzzing。
 
-### XrProgram Structural Decoder Fuzzer
+### XrProgram Decoder and Semantic Admission Fuzzer
 
-`fuzz_xr_program_decode`只调用296的bounded structural decoder；任何被接受的输入都必须可byte-identical
-re-encode并保持同一`ProgramId`。它不执行program，也不替代297的typed verifier/evaluator fuzz。
+`fuzz_xr_program_decode`串联296的bounded structural decoder与297的bounded semantic admission；任何
+structurally accepted输入都必须可byte-identical re-encode并保持同一`ProgramId`，任何semantically
+accepted输入还必须保留同一canonical bytes并可由bounded reference evaluator安全处理。fuzzer不会调用
+生产VM或AOT，也不把随机输入命中率当作valid-program generator/evaluator law suite的替代品。
 
 ```bash
 ./build-fuzz/tests/fuzz/fuzz_xr_program_decode corpus/xr_program \
   -max_len=1048576 -max_total_time=3600
 ```
 
-默认测试构建中的`test_xr_program_fuzz_entry`会对0–512 byte确定性hostile输入执行同一入口。
+默认测试构建中的`test_xr_program_fuzz_entry`会对0–512 byte确定性hostile输入执行同一入口；
+`test_xr_program_verify`另行覆盖全部active operation、typed mutation、metamorphic program与资源阶梯。
 
 ## 常用选项
 

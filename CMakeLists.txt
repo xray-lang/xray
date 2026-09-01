@@ -311,6 +311,7 @@ configure_file(
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 set(CORESPECGEN ${CMAKE_SOURCE_DIR}/tools/corespecgen/corespecgen.py)
 set(PROGRAMGEN ${CMAKE_SOURCE_DIR}/tools/programgen/programgen.py)
+set(PROGRAMSEMCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_semantics.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -595,6 +596,25 @@ add_custom_target(gen-xr-program-schema
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-v1.md
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-format-coverage.json
     COMMENT "programgen: verifying canonical XrProgram schema projections"
+    VERBATIM
+)
+
+# Task 297 keeps semantic admission and the independent evaluator closed over
+# the canonical CoreSpec/XrProgram contracts. This gate is read-only.
+add_custom_target(check-xr-program-semantics
+    COMMAND ${XRAY_PYTHON} ${PROGRAMSEMCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${PROGRAMSEMCHECK}
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/xisa/program/schema.json
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.h
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c
+            ${CMAKE_SOURCE_DIR}/src/program/xr_reference_evaluator.h
+            ${CMAKE_SOURCE_DIR}/src/program/xr_reference_evaluator.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/program/test_xr_program_verify.c
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-verifier-v1.md
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/xrprogram-semantic-coverage.json
+    COMMENT "Checking XrProgram semantic admission and evaluator coverage"
     VERBATIM
 )
 
@@ -1482,7 +1502,7 @@ endif()
 add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
 add_dependencies(xray_core_objs
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-xr-program-schema)
+    gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics)
 
 # Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
 # table.
@@ -1495,7 +1515,7 @@ add_dependencies(xray_stdlib_bootstrap_core
 add_library(xray_core STATIC src/module/stdlib_embedded.c $<TARGET_OBJECTS:xray_core_objs>)
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
-    gen-native-type-defs gen-core-spec gen-xr-program-schema)
+    gen-native-type-defs gen-core-spec gen-xr-program-schema check-xr-program-semantics)
 
 # The installed compiler product is the exact backend authority surface, not
 # the CLI's xray_core development aggregate.  Keep source/Xi inputs opaque at
@@ -4667,6 +4687,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(xr_program_schema_self_test PROPERTIES
         LABELS "meta;contracts;canonical-program;program-format;mutation;task-296"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_semantic_coverage
+        COMMAND ${XRAY_PYTHON} ${PROGRAMSEMCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_semantic_coverage PROPERTIES
+        LABELS "meta;contracts;canonical-program;semantic-admission;task-297"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_semantic_coverage_self_test
+        COMMAND ${XRAY_PYTHON} ${PROGRAMSEMCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_semantic_coverage_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;semantic-admission;mutation;task-297"
         PROCESSORS 1
         TIMEOUT 30
     )

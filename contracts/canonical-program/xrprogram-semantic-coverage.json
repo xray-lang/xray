@@ -1,0 +1,155 @@
+{
+  "schema": "xray-program-semantic-coverage/1",
+  "verifier_version": 1,
+  "core_spec_semantic_sha256": "62af5e1327587f50e4cde43170a3f640aac7ddaa5c2432cc7e877aeb5bd750f6",
+  "program_schema_sha256": "23465e5992450b0b949dbc23bf12f7168ed11fd7f3c242eae349a2933adbc413",
+  "type_state": "XrValidatedProgram",
+  "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
+  "operation_count": 15,
+  "operations": [
+    {
+      "stable_id": 1,
+      "spelling": "core.constant.i64",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 2,
+      "spelling": "core.constant.bool",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 16,
+      "spelling": "core.add.i64",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 17,
+      "spelling": "core.sub.i64",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 18,
+      "spelling": "core.mul.i64",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 19,
+      "spelling": "core.div.i64",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 24,
+      "spelling": "core.compare.i64",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 32,
+      "spelling": "core.block.argument",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 33,
+      "spelling": "core.branch",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 34,
+      "spelling": "core.conditional_branch",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 35,
+      "spelling": "core.return",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 36,
+      "spelling": "core.call.sealed_direct",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 48,
+      "spelling": "core.trap",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 49,
+      "spelling": "core.error.publish",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 64,
+      "spelling": "core.target.pointer_width",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    }
+  ],
+  "negative_mutations": [
+    "core-spec-identity",
+    "effect-mask",
+    "operation-result-type",
+    "missing-terminator",
+    "resource-budget"
+  ],
+  "property_suites": {
+    "typed_random_programs": 32,
+    "alpha_renaming": 1,
+    "resource_ladder": [
+      16,
+      64,
+      256
+    ],
+    "standalone_hostile_lengths": 513
+  },
+  "inactive_contracts": [
+    "ownership obligations beyond copy scalars",
+    "coroutine state and cleanup",
+    "imports and materialized boundaries",
+    "VM consumer",
+    "AOT consumer"
+  ]
+}

@@ -645,7 +645,7 @@
     {
       "task_id": 297,
       "role": "W3 bounded verifier and reference evaluator",
-      "status": "READY",
+      "status": "COMPLETE",
       "work_package": "W3",
       "prerequisites": [
         295,
@@ -680,11 +680,12 @@
     {
       "task_id": 298,
       "role": "W4 target profile, boundary ABI, runtime kernel, and provider contract",
-      "status": "BLOCKED_ON_295_296",
+      "status": "READY",
       "work_package": "W4",
       "prerequisites": [
         295,
-        296
+        296,
+        297
       ],
       "earliest_activation": "after type/effect and program identity freeze",
       "contract_inputs": [
@@ -715,7 +716,7 @@
     {
       "task_id": 299,
       "role": "W5 universal typed-program VM",
-      "status": "BLOCKED_ON_297_298",
+      "status": "BLOCKED_ON_298",
       "work_package": "W5",
       "prerequisites": [
         297,
@@ -750,7 +751,7 @@
     {
       "task_id": 300,
       "role": "W6 AOT BackendIR and generated C",
-      "status": "BLOCKED_ON_297_298",
+      "status": "BLOCKED_ON_298",
       "work_package": "W6",
       "prerequisites": [
         297,

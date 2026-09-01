@@ -435,7 +435,7 @@ XrProgramBuildStatus xr_program_write(const XrCoreIrProgram *program,
     if (diagnostic && diagnostic_size != 0)
         diagnostic[0] = '\0';
     if (!program || !artifact_out ||
-        !parse_hex_digest(XR_CORE_SPEC_REGISTRY_SHA256, core_spec_fingerprint)) {
+        !parse_hex_digest(XR_CORE_SPEC_SEMANTIC_SHA256, core_spec_fingerprint)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size, "program writer input is invalid");
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
