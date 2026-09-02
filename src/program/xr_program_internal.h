@@ -22,6 +22,7 @@ typedef struct XrCoreIrInstruction {
     uint16_t operation_id;
     XrCoreIrKey result;
     uint16_t result_type_id;
+    XrCoreIrValueCategory result_category;
     XrCoreIrKey *operands;
     uint32_t operand_count;
     XrCoreIrImmediateKind immediate_kind;
@@ -52,6 +53,7 @@ typedef struct XrCoreIrBlock {
 typedef struct XrCoreIrFunction {
     XrCoreIrKey key;
     uint16_t *parameter_types;
+    XrParamMode *parameter_modes;
     uint32_t parameter_count;
     uint16_t result_type_id;
     uint32_t effect_mask;

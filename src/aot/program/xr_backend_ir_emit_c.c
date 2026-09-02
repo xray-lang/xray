@@ -616,6 +616,21 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     }
 }
 
+static bool uses_unrealized_place_contract(const XrBackendIR *ir) {
+    for (uint32_t function = 0; function < ir->function_count; ++function) {
+        const XrBackendFunction *row = &ir->functions[function];
+        for (uint32_t parameter = 0; parameter < row->parameter_count; ++parameter) {
+            if (row->parameter_modes[parameter] == XR_PARAM_REF)
+                return true;
+        }
+        for (uint32_t value = 0; value < row->value_count; ++value) {
+            if (row->value_categories[value] == XR_CORE_IR_PLACE)
+                return true;
+        }
+    }
+    return false;
+}
+
 XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main,
                                      XrGeneratedC *generated_out,
                                      XrBackendDiagnostic *diagnostic_out) {
@@ -627,6 +642,10 @@ XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main
         if (!diagnostic_out || diagnostic_out->status == XR_BACKEND_OK)
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
         return diagnostic_out ? diagnostic_out->status : XR_BACKEND_INVALID_INPUT;
+    }
+    if (uses_unrealized_place_contract(ir)) {
+        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_EMISSION_REJECTED, 0u, 0u, 0u, 0u);
+        return XR_BACKEND_EMISSION_REJECTED;
     }
     CBuffer buffer = {0};
     bool emitted = emit_prelude(&buffer, ir);

@@ -105,6 +105,213 @@ static void expect_semantic_reject(const XrProgramArtifact *artifact,
     CHECK(program == NULL);
 }
 
+static uint64_t test_take_uvar(const uint8_t *bytes, size_t size, size_t *offset) {
+    uint64_t value = 0u;
+    unsigned shift = 0u;
+    for (unsigned count = 0u; count < 10u && *offset < size; ++count) {
+        uint8_t byte = bytes[(*offset)++];
+        value |= (uint64_t) (byte & UINT8_C(0x7f)) << shift;
+        if ((byte & UINT8_C(0x80)) == 0u)
+            return value;
+        shift += 7u;
+    }
+    CHECK(false);
+    return UINT64_MAX;
+}
+
+static void test_skip_instruction(const uint8_t *bytes, size_t size, size_t *offset) {
+    (void) test_take_uvar(bytes, size, offset); /* operation */
+    (void) test_take_uvar(bytes, size, offset); /* result + 1 */
+    (void) test_take_uvar(bytes, size, offset); /* result type */
+    (void) test_take_uvar(bytes, size, offset); /* result category */
+    uint64_t operands = test_take_uvar(bytes, size, offset);
+    for (uint64_t operand = 0u; operand < operands; ++operand)
+        (void) test_take_uvar(bytes, size, offset);
+    uint64_t immediate = test_take_uvar(bytes, size, offset);
+    if (immediate != XR_CORE_IR_IMMEDIATE_NONE) {
+        (void) test_take_uvar(bytes, size, offset);
+        if (immediate == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD)
+            (void) test_take_uvar(bytes, size, offset);
+    }
+    uint64_t successors = test_take_uvar(bytes, size, offset);
+    for (uint64_t successor = 0u; successor < successors; ++successor)
+        (void) test_take_uvar(bytes, size, offset);
+}
+
+static XrProgramBuildStatus build_mode_artifact(XrParamMode mode, XrCoreIrValueCategory category,
+                                                bool branch_to_second_block,
+                                                XrProgramArtifact *artifact) {
+    XrCoreIrKey entry_key = key("mode:block:entry");
+    XrCoreIrKey second_key = key("mode:block:second");
+    XrCoreIrKey entry_argument = key("mode:value:entry");
+    XrCoreIrKey second_argument = key("mode:value:second");
+    XrCoreIrValueInput entry_arguments[] = {
+        {.key = entry_argument, .type_id = XR_CORE_TYPE_I64, .category = category},
+    };
+    XrCoreIrValueInput second_arguments[] = {
+        {.key = second_argument, .type_id = XR_CORE_TYPE_I64, .category = category},
+    };
+    XrCoreIrKey entry_argument_operand[] = {entry_argument};
+    XrCoreIrKey second_argument_operand[] = {second_argument};
+    XrCoreIrKey second_successor[] = {second_key};
+    XrCoreIrInstructionInput entry_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = entry_argument_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = branch_to_second_block ? XR_CORE_OP_CORE_BRANCH : XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = branch_to_second_block ? entry_argument_operand : NULL,
+         .operand_count = branch_to_second_block ? 1u : 0u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
+         .successors = branch_to_second_block ? second_successor : NULL,
+         .successor_count = branch_to_second_block ? 1u : 0u},
+    };
+    XrCoreIrInstructionInput second_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = second_argument_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput blocks[] = {
+        {.key = entry_key,
+         .arguments = entry_arguments,
+         .argument_count = 1u,
+         .instructions = entry_instructions,
+         .instruction_count = 2u},
+        {.key = second_key,
+         .arguments = second_arguments,
+         .argument_count = 1u,
+         .instructions = second_instructions,
+         .instruction_count = 2u},
+    };
+    uint16_t parameter_type = XR_CORE_TYPE_I64;
+    XrCoreIrFunctionInput function = {
+        .key = key("mode:function"),
+        .parameter_types = &parameter_type,
+        .parameter_modes = &mode,
+        .parameter_count = 1u,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .entry_block = entry_key,
+        .blocks = blocks,
+        .block_count = branch_to_second_block ? 2u : 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return write_one_function(NULL, 0u, &function, artifact);
+}
+
+static bool mode_fixture_offsets(const XrProgramArtifact *artifact, size_t *mode_offset,
+                                 size_t category_offsets[2], uint32_t *entry_block_out,
+                                 uint32_t *block_count_out) {
+    XrProgramView view;
+    char diagnostic[256] = {0};
+    if (xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, diagnostic,
+                                    sizeof(diagnostic)) != XR_PROGRAM_DECODE_OK)
+        return false;
+
+    const XrProgramSectionView *functions = &view.sections[XR_PROGRAM_SECTION_FUNCTIONS - 1u];
+    size_t cursor = (size_t) functions->offset;
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* function count */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* function id */
+    uint64_t parameter_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    if (parameter_count != 1u)
+        return false;
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* parameter type */
+    *mode_offset = cursor;
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* result type */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* effects */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* capabilities */
+    uint32_t entry_block = (uint32_t) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+
+    const XrProgramSectionView *code = &view.sections[XR_PROGRAM_SECTION_CODE - 1u];
+    cursor = (size_t) code->offset;
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* function count */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* function id */
+    uint32_t block_count = (uint32_t) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    if (block_count == 0u || block_count > 2u)
+        return false;
+    for (uint32_t block = 0u; block < block_count; ++block) {
+        uint32_t block_id = (uint32_t) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t argument_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (block_id >= 2u || argument_count != 1u)
+            return false;
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* value id */
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* type id */
+        category_offsets[block_id] = cursor;
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t instruction_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        for (uint64_t instruction = 0u; instruction < instruction_count; ++instruction)
+            test_skip_instruction(artifact->bytes, artifact->size, &cursor);
+    }
+    *entry_block_out = entry_block;
+    *block_count_out = block_count;
+    return true;
+}
+
+static void expect_mutated_verify(const XrProgramArtifact *artifact, size_t offset, uint8_t value,
+                                  XrProgramVerifyStatus expected_status,
+                                  XrProgramDiagnosticKind expected_diagnostic) {
+    uint8_t *bytes = malloc(artifact->size);
+    CHECK(bytes != NULL);
+    if (!bytes)
+        return;
+    memcpy(bytes, artifact->bytes, artifact->size);
+    bytes[offset] = value;
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic diagnostic;
+    XrProgramVerifyStatus status =
+        xr_program_validate(bytes, artifact->size, NULL, &program, &diagnostic);
+    CHECK(status == expected_status);
+    CHECK(diagnostic.kind == expected_diagnostic);
+    CHECK(program == NULL);
+    free(bytes);
+}
+
+static void test_parameter_modes_and_value_categories(void) {
+    XrProgramArtifact ref = {0};
+    CHECK(build_mode_artifact(XR_PARAM_REF, XR_CORE_IR_PLACE, true, &ref) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&ref);
+    xr_validated_program_free(program);
+
+    size_t mode_offset = 0u;
+    size_t category_offsets[2] = {0u, 0u};
+    uint32_t entry_block = 0u;
+    uint32_t block_count = 0u;
+    CHECK(mode_fixture_offsets(&ref, &mode_offset, category_offsets, &entry_block, &block_count));
+    CHECK(block_count == 2u);
+    expect_mutated_verify(&ref, mode_offset, XR_PARAM_MOVE, XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_TYPE);
+    expect_mutated_verify(&ref, mode_offset, UINT8_C(3), XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_STRUCTURAL);
+    uint32_t non_entry = entry_block == 0u ? 1u : 0u;
+    expect_mutated_verify(&ref, category_offsets[non_entry], XR_CORE_IR_VALUE,
+                          XR_PROGRAM_VERIFY_SEMANTIC_REJECTED,
+                          XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+
+    XrProgramArtifact read = {0};
+    CHECK(build_mode_artifact(XR_PARAM_READ, XR_CORE_IR_VALUE, false, &read) ==
+          XR_PROGRAM_BUILD_OK);
+    CHECK(mode_fixture_offsets(&read, &mode_offset, category_offsets, &entry_block, &block_count));
+    expect_mutated_verify(&read, category_offsets[entry_block], XR_CORE_IR_PLACE,
+                          XR_PROGRAM_VERIFY_SEMANTIC_REJECTED, XR_PROGRAM_DIAGNOSTIC_TYPE);
+    CHECK(!xr_program_id_equal(ref.id, read.id));
+
+    XrProgramArtifact invalid = {0};
+    CHECK(build_mode_artifact((XrParamMode) 3, XR_CORE_IR_VALUE, false, &invalid) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+    CHECK(build_mode_artifact(XR_PARAM_REF, XR_CORE_IR_VALUE, false, &invalid) ==
+          XR_PROGRAM_BUILD_INVALID_INPUT);
+
+    xr_program_artifact_free(&read);
+    xr_program_artifact_free(&ref);
+}
+
 static XrProgramArtifact build_aggregate_variant_artifact(bool wrong_variant,
                                                           bool reverse_type_inputs) {
     enum {
@@ -337,7 +544,10 @@ static XrProgramBuildStatus build_with_type_graph(const XrCoreIrTypeInput *types
 }
 
 static void test_dynamic_type_graph_rejection(void) {
-    enum { SELF_TYPE = 41, MISSING_TYPE = 99 };
+    enum {
+        SELF_TYPE = 41,
+        MISSING_TYPE = 99
+    };
     uint16_t self_field[] = {SELF_TYPE};
     XrCoreIrTypeInput recursive = {
         .key = key("type-graph:recursive"),
@@ -1193,6 +1403,7 @@ int main(void) {
     test_scalar_operations();
     test_control_and_profile();
     test_direct_call();
+    test_parameter_modes_and_value_categories();
     test_terminal_operations();
     test_negative_diagnostics_and_budget();
     test_evaluator_traps_and_budget();

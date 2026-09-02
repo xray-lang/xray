@@ -2,7 +2,7 @@
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
   "core_spec_semantic_sha256": "7e8a674da712108d8b99b21ce61d17597730677c9f53ed9f303aab6f5dac1773",
-  "program_schema_sha256": "4d58853a480565d27d6ca489944ecc6a39fbf7ab33817853a52ba35df573eaf3",
+  "program_schema_sha256": "99b2e2ddbb4e477622b01ceb6932fa042cc89452ab5bdc8fa9a069b2aafd4080",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "execution_budgets": [
@@ -199,7 +199,7 @@
     "standalone_hostile_lengths": 513
   },
   "inactive_contracts": [
-    "managed ownership and cleanup",
+    "managed owner operations and cleanup",
     "coroutine state and cleanup",
     "imports and materialized boundaries"
   ]

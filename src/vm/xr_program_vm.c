@@ -21,6 +21,7 @@
 typedef struct XrVmFixedInstruction {
     uint16_t operation_id;
     uint16_t result_type_id;
+    XrCoreIrValueCategory result_category;
     uint32_t result_id;
     const uint32_t *operands;
     uint32_t operand_count;
@@ -65,6 +66,7 @@ struct XrVmCode {
 typedef struct XrVmInstructionView {
     uint16_t operation_id;
     uint16_t result_type_id;
+    XrCoreIrValueCategory result_category;
     uint32_t result_id;
     const uint32_t *operands;
     uint32_t operand_count;
@@ -252,6 +254,7 @@ static XrVmInstructionView instruction_view(const XrVmCode *code, uint32_t funct
             &code->fixed_functions[function_id].blocks[block_id].instructions[instruction_id];
         view.operation_id = source->operation_id;
         view.result_type_id = source->result_type_id;
+        view.result_category = source->result_category;
         view.result_id = source->result_id;
         view.operands = source->operands;
         view.operand_count = source->operand_count;
@@ -264,6 +267,7 @@ static XrVmInstructionView instruction_view(const XrVmCode *code, uint32_t funct
             &code->program->functions[function_id].blocks[block_id].instructions[instruction_id];
         view.operation_id = source->operation_id;
         view.result_type_id = source->result_type_id;
+        view.result_category = source->result_category;
         view.result_id = source->result_id;
         view.operands = source->operands;
         view.operand_count = source->operand_count;
@@ -623,6 +627,7 @@ static bool fixed_view_build(XrVmCode *code) {
                 XrVmFixedInstruction *destination = &destination_block->instructions[instruction];
                 destination->operation_id = source->operation_id;
                 destination->result_type_id = source->result_type_id;
+                destination->result_category = source->result_category;
                 destination->result_id = source->result_id;
                 destination->operands = source->operands;
                 destination->operand_count = source->operand_count;
@@ -664,6 +669,21 @@ XrVmCodeOptions xr_vm_code_default_options(void) {
     return options;
 }
 
+static bool program_uses_unrealized_places(const XrValidatedProgram *program,
+                                           uint32_t *function_out) {
+    for (uint32_t function = 0; function < program->function_count; ++function) {
+        const XrValidatedFunction *row = &program->functions[function];
+        for (uint32_t value = 0; value < row->value_count; ++value) {
+            if (row->value_categories[value] == XR_CORE_IR_PLACE) {
+                if (function_out)
+                    *function_out = function;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *options,
                                 XrVmCode **code_out, XrVmCodeDiagnostic *diagnostic_out) {
     if (code_out)
@@ -698,6 +718,15 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
         return XR_VM_CODE_INSTANCE_UNAVAILABLE;
+    }
+    uint32_t unsupported_function = 0u;
+    if (program_uses_unrealized_places(program, &unsupported_function)) {
+        xr_execution_instance_unpin(instance);
+        if (diagnostic_out) {
+            diagnostic_out->status = XR_VM_CODE_UNSUPPORTED_PROGRAM;
+            diagnostic_out->function_id = unsupported_function;
+        }
+        return XR_VM_CODE_UNSUPPORTED_PROGRAM;
     }
     XrVmCode *code = xr_calloc(1u, sizeof(XrVmCode));
     if (!code) {
@@ -794,6 +823,8 @@ const char *xr_vm_code_status_name(XrVmCodeStatus status) {
             return "instance-unavailable";
         case XR_VM_CODE_POLICY_REJECTED:
             return "policy-rejected";
+        case XR_VM_CODE_UNSUPPORTED_PROGRAM:
+            return "unsupported-program";
         case XR_VM_CODE_OUT_OF_MEMORY:
             return "out-of-memory";
         default:

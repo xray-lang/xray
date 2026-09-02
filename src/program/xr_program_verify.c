@@ -152,10 +152,13 @@ static void free_function(XrValidatedFunction *function) {
         xr_free(row->instructions);
         xr_free(row->argument_ids);
         xr_free(row->argument_types);
+        xr_free(row->argument_categories);
     }
     xr_free(function->blocks);
     xr_free(function->parameter_types);
+    xr_free(function->parameter_modes);
     xr_free(function->value_types);
+    xr_free(function->value_categories);
     xr_free(function->value_blocks);
     xr_free(function->value_positions);
 }
@@ -418,18 +421,22 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         function->parameter_count = (uint32_t) parameter_count;
         if (parameter_count != 0) {
             function->parameter_types = xr_calloc((size_t) parameter_count, sizeof(uint16_t));
-            if (!function->parameter_types) {
+            function->parameter_modes = xr_calloc((size_t) parameter_count, sizeof(XrParamMode));
+            if (!function->parameter_types || !function->parameter_modes) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
                 return false;
             }
         }
         for (uint32_t parameter = 0; parameter < (uint32_t) parameter_count; ++parameter) {
             uint64_t type_id = take_uvar(&reader);
-            if (!type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID) {
+            uint64_t mode = take_uvar(&reader);
+            if (!type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID ||
+                mode > XR_PARAM_MOVE) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
                 return false;
             }
             function->parameter_types[parameter] = (uint16_t) type_id;
+            function->parameter_modes[parameter] = (XrParamMode) mode;
         }
         uint64_t result_type = take_uvar(&reader);
         uint64_t effect_mask = take_uvar(&reader);
@@ -458,12 +465,14 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         function->blocks = xr_calloc((size_t) block_count, sizeof(XrValidatedBlock));
         function->value_types =
             xr_calloc((size_t) (value_count ? value_count : 1u), sizeof(uint16_t));
+        function->value_categories =
+            xr_calloc((size_t) (value_count ? value_count : 1u), sizeof(XrCoreIrValueCategory));
         function->value_blocks =
             xr_calloc((size_t) (value_count ? value_count : 1u), sizeof(uint32_t));
         function->value_positions =
             xr_calloc((size_t) (value_count ? value_count : 1u), sizeof(uint32_t));
-        if (!function->blocks || !function->value_types || !function->value_blocks ||
-            !function->value_positions) {
+        if (!function->blocks || !function->value_types || !function->value_categories ||
+            !function->value_blocks || !function->value_positions) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
             return false;
         }
@@ -491,6 +500,7 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
     uint64_t operation_id = take_uvar(reader);
     uint64_t result_plus_one = take_uvar(reader);
     uint64_t result_type = take_uvar(reader);
+    uint64_t result_category = take_uvar(reader);
     uint64_t operand_count = take_uvar(reader);
     if (!reader->valid) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_STRUCTURAL, location);
@@ -500,7 +510,8 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY, location);
         return false;
     }
-    if (result_plus_one > UINT32_MAX || !type_is_runtime(context->program, result_type)) {
+    if (result_plus_one > UINT32_MAX || !type_is_runtime(context->program, result_type) ||
+        result_category > XR_CORE_IR_PLACE) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
         return false;
     }
@@ -518,6 +529,7 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
     instruction->result_id =
         result_plus_one == 0 ? XR_PROGRAM_LOCATION_NONE : (uint32_t) result_plus_one - 1u;
     instruction->result_type_id = (uint16_t) result_type;
+    instruction->result_category = (XrCoreIrValueCategory) result_category;
     instruction->operand_count = (uint32_t) operand_count;
     for (uint32_t operand = 0; operand < (uint32_t) operand_count; ++operand) {
         uint64_t value = take_uvar(reader);
@@ -675,7 +687,9 @@ static bool parse_code(VerifyContext *context, const XrProgramView *view) {
             block->argument_count = (uint32_t) argument_count;
             if (argument_count != 0) {
                 block->argument_types = xr_calloc((size_t) argument_count, sizeof(uint16_t));
-                if (!block->argument_types) {
+                block->argument_categories =
+                    xr_calloc((size_t) argument_count, sizeof(XrCoreIrValueCategory));
+                if (!block->argument_types || !block->argument_categories) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
                     return false;
                 }
@@ -683,15 +697,19 @@ static bool parse_code(VerifyContext *context, const XrProgramView *view) {
             for (uint32_t argument = 0; argument < (uint32_t) argument_count; ++argument) {
                 uint64_t value_id = take_uvar(&reader);
                 uint64_t type_id = take_uvar(&reader);
+                uint64_t category = take_uvar(&reader);
                 location.value_id = (uint32_t) value_id;
                 if (value_id != next_value || value_id >= function->value_count ||
-                    !type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID) {
+                    !type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID ||
+                    category > XR_CORE_IR_PLACE) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_DEFINITION, location);
                     return false;
                 }
                 block->argument_ids[argument] = next_value;
                 block->argument_types[argument] = (uint16_t) type_id;
+                block->argument_categories[argument] = (XrCoreIrValueCategory) category;
                 function->value_types[next_value] = (uint16_t) type_id;
+                function->value_categories[next_value] = (XrCoreIrValueCategory) category;
                 function->value_blocks[next_value] = block_id;
                 function->value_positions[next_value] = 0u;
                 ++next_value;
@@ -730,10 +748,12 @@ static bool parse_code(VerifyContext *context, const XrProgramView *view) {
                         return false;
                     }
                     function->value_types[next_value] = instruction->result_type_id;
+                    function->value_categories[next_value] = instruction->result_category;
                     function->value_blocks[next_value] = block_id;
                     function->value_positions[next_value] = instruction_id + 1u;
                     ++next_value;
-                } else if (instruction->result_type_id != XR_CORE_TYPE_VOID) {
+                } else if (instruction->result_type_id != XR_CORE_TYPE_VOID ||
+                           instruction->result_category != XR_CORE_IR_VALUE) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_DEFINITION, location);
                     return false;
                 }
@@ -794,6 +814,13 @@ static bool operand_type_is(const XrValidatedFunction *function,
            function->value_types[instruction->operands[operand]] == type_id;
 }
 
+static bool operand_category_is(const XrValidatedFunction *function,
+                                const XrValidatedInstruction *instruction, uint32_t operand,
+                                XrCoreIrValueCategory category) {
+    return operand < instruction->operand_count &&
+           function->value_categories[instruction->operands[operand]] == category;
+}
+
 static bool verify_successor_arguments(VerifyContext *context, const XrValidatedFunction *function,
                                        const XrValidatedInstruction *instruction,
                                        uint32_t successor_index, uint32_t operand_start,
@@ -811,7 +838,9 @@ static bool verify_successor_arguments(VerifyContext *context, const XrValidated
     }
     for (uint32_t index = 0; index < target->argument_count; ++index) {
         if (!operand_type_is(function, instruction, operand_start + index,
-                             target->argument_types[index])) {
+                             target->argument_types[index]) ||
+            !operand_category_is(function, instruction, operand_start + index,
+                                 target->argument_categories[index])) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
             return false;
         }
@@ -838,11 +867,24 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
     }
     *local_effects |= spec->effect_mask;
     *local_capabilities |= spec->capability_mask;
+    if (instruction->result_category != XR_CORE_IR_VALUE) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+        return false;
+    }
+    bool category_polymorphic = instruction->operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
+                                instruction->operation_id == XR_CORE_OP_CORE_BRANCH ||
+                                instruction->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
+                                instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT;
     for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
         location.value_id = instruction->operands[operand];
         if (!value_is_available(function, block_id, instruction_id,
                                 instruction->operands[operand])) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+            return false;
+        }
+        if (!category_polymorphic &&
+            !operand_category_is(function, instruction, operand, XR_CORE_IR_VALUE)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
             return false;
         }
     }
@@ -937,6 +979,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                     1u + function->blocks[instruction->successors[0]].argument_count +
                         function->blocks[instruction->successors[1]].argument_count ||
                 !operand_type_is(function, instruction, 0, XR_CORE_TYPE_BOOL) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE) ||
                 !verify_successor_arguments(context, function, instruction, 0, 1u, location) ||
                 !verify_successor_arguments(
                     context, function, instruction, 1,
@@ -975,7 +1018,11 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             for (uint32_t argument = 0; argument < callee->parameter_count; ++argument) {
                 if (!operand_type_is(function, instruction, argument,
-                                     callee->parameter_types[argument])) {
+                                     callee->parameter_types[argument]) ||
+                    !operand_category_is(function, instruction, argument,
+                                         callee->parameter_modes[argument] == XR_PARAM_REF
+                                             ? XR_CORE_IR_PLACE
+                                             : XR_CORE_IR_VALUE)) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                     return false;
                 }
@@ -1132,7 +1179,11 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
         return false;
     }
     for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
-        if (entry->argument_types[parameter] != function->parameter_types[parameter]) {
+        XrCoreIrValueCategory expected = function->parameter_modes[parameter] == XR_PARAM_REF
+                                             ? XR_CORE_IR_PLACE
+                                             : XR_CORE_IR_VALUE;
+        if (entry->argument_types[parameter] != function->parameter_types[parameter] ||
+            entry->argument_categories[parameter] != expected) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
             return false;
         }

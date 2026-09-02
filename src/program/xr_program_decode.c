@@ -266,7 +266,9 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
             break;
         }
         for (uint64_t parameter = 0; parameter < parameter_count; ++parameter) {
-            if (!encoded_type_id_is_valid(take_uvar(&section), dynamic_type_count))
+            uint64_t type_id = take_uvar(&section);
+            uint64_t mode = take_uvar(&section);
+            if (!encoded_type_id_is_valid(type_id, dynamic_type_count) || mode > XR_PARAM_MOVE)
                 section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;
         }
         uint64_t result_type = take_uvar(&section);
@@ -314,7 +316,10 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
             }
             for (uint64_t argument = 0; argument < argument_count; ++argument) {
                 (void) take_uvar(&section);
-                if (!encoded_type_id_is_valid(take_uvar(&section), dynamic_type_count))
+                uint64_t type_id = take_uvar(&section);
+                uint64_t category = take_uvar(&section);
+                if (!encoded_type_id_is_valid(type_id, dynamic_type_count) ||
+                    category > XR_CORE_IR_PLACE)
                     section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;
             }
             uint64_t instruction_count = take_uvar(&section);
@@ -329,10 +334,12 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 uint64_t operation_id = take_uvar(&section);
                 (void) take_uvar(&section); /* result id + 1 */
                 uint64_t result_type = take_uvar(&section);
+                uint64_t result_category = take_uvar(&section);
                 uint64_t operand_count = take_uvar(&section);
                 if (!xr_core_spec_operation_by_id((uint16_t) operation_id) ||
                     operation_id > UINT16_MAX ||
                     !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
+                    result_category > XR_CORE_IR_PLACE ||
                     operand_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                     !count_records(&section, operand_count)) {
                     section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;

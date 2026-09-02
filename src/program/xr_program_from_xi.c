@@ -31,6 +31,7 @@ typedef struct XrXiBlockArgumentStorage {
     const XiPhi *phi;
     XrCoreIrKey key;
     uint16_t type_id;
+    XrCoreIrValueCategory category;
 } XrXiBlockArgumentStorage;
 
 typedef struct XrXiBlockStorage {
@@ -46,6 +47,7 @@ typedef struct XrXiFunctionStorage {
     const XiFunc *xi;
     XrCoreIrKey key;
     uint16_t *parameter_types;
+    XrParamMode *parameter_modes;
     XrCoreIrBlockInput *blocks;
     XrXiBlockStorage *block_storage;
     uint32_t local_effect_mask;
@@ -815,6 +817,12 @@ static const XiValue *logical_value_identity(const XiValue *value) {
     return value;
 }
 
+static XrCoreIrValueCategory logical_value_category(const XiValue *value) {
+    value = logical_value_identity(value);
+    return value && value->op == XI_PARAM && value->param_mode == XR_PARAM_REF ? XR_CORE_IR_PLACE
+                                                                               : XR_CORE_IR_VALUE;
+}
+
 static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
                                                XrXiFunctionStorage *function,
                                                XrXiBlockStorage *block, const XiValue *source,
@@ -850,6 +858,7 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
                    ? value_key(function, source)
                    : imported_value_key(function, block->xi, source),
         .type_id = type_id,
+        .category = logical_value_category(source),
     };
     if (changed)
         *changed = true;
@@ -949,6 +958,7 @@ static void free_context(XrXiBuildContext *context) {
             xr_free(function->block_storage);
             xr_free(function->blocks);
             xr_free(function->parameter_types);
+            xr_free(function->parameter_modes);
         }
         xr_free(module->function_storage);
         xr_free(module->functions);
@@ -1363,6 +1373,7 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         for (uint32_t argument = 0; argument < block->argument_count; ++argument) {
             block->arguments[argument].key = block->argument_storage[argument].key;
             block->arguments[argument].type_id = block->argument_storage[argument].type_id;
+            block->arguments[argument].category = block->argument_storage[argument].category;
         }
     }
     return XR_PROGRAM_BUILD_OK;
@@ -1427,7 +1438,8 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
                     "Xi function %u result type is not active in CoreSpec", function_index);
     if (xi->nparams != 0) {
         storage->parameter_types = xr_calloc(xi->nparams, sizeof(*storage->parameter_types));
-        if (!storage->parameter_types)
+        storage->parameter_modes = xr_calloc(xi->nparams, sizeof(*storage->parameter_modes));
+        if (!storage->parameter_types || !storage->parameter_modes)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         for (uint16_t parameter = 0; parameter < xi->nparams; ++parameter) {
             if (!xi->params || !xi->params[parameter] || xi->params[parameter]->op != XI_PARAM ||
@@ -1438,8 +1450,14 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi function %u parameter %u is not a CoreSpec value", function_index,
                             parameter);
+            if (!xr_param_mode_is_valid((XrParamMode) xi->params[parameter]->param_mode))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi function %u parameter %u has an invalid mode", function_index,
+                            parameter);
+            storage->parameter_modes[parameter] = (XrParamMode) xi->params[parameter]->param_mode;
         }
         output->parameter_types = storage->parameter_types;
+        output->parameter_modes = storage->parameter_modes;
     }
     output->flags = xi == context->source->entry_function ? XR_PROGRAM_FUNCTION_ENTRY : 0u;
 

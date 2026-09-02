@@ -107,12 +107,15 @@ static void free_function(XrBackendFunction *function) {
             free_instruction(&row->instructions[instruction]);
         xr_free(row->instructions);
         xr_free(row->argument_types);
+        xr_free(row->argument_categories);
         xr_free(row->argument_ids);
     }
     xr_free(function->value_representations);
     xr_free(function->value_types);
+    xr_free(function->value_categories);
     xr_free(function->blocks);
     xr_free(function->parameter_types);
+    xr_free(function->parameter_modes);
     memset(function, 0, sizeof(*function));
 }
 
@@ -202,10 +205,36 @@ static bool copy_u16_array(const uint16_t *source, uint32_t count, uint16_t **de
     return true;
 }
 
+static bool copy_mode_array(const XrParamMode *source, uint32_t count, XrParamMode **destination) {
+    *destination = NULL;
+    if (count == 0u)
+        return true;
+    XrParamMode *copy = xr_malloc((size_t) count * sizeof(*copy));
+    if (!copy)
+        return false;
+    memcpy(copy, source, (size_t) count * sizeof(*copy));
+    *destination = copy;
+    return true;
+}
+
+static bool copy_category_array(const XrCoreIrValueCategory *source, uint32_t count,
+                                XrCoreIrValueCategory **destination) {
+    *destination = NULL;
+    if (count == 0u)
+        return true;
+    XrCoreIrValueCategory *copy = xr_malloc((size_t) count * sizeof(*copy));
+    if (!copy)
+        return false;
+    memcpy(copy, source, (size_t) count * sizeof(*copy));
+    *destination = copy;
+    return true;
+}
+
 static bool lower_instruction(const XrValidatedInstruction *source,
                               XrBackendInstruction *destination) {
     destination->operation_id = source->operation_id;
     destination->result_type_id = source->result_type_id;
+    destination->result_category = source->result_category;
     destination->result_id = source->result_id;
     destination->operand_count = source->operand_count;
     destination->immediate_kind = source->immediate_kind;
@@ -220,7 +249,9 @@ static bool lower_block(const XrValidatedBlock *source, XrBackendBlock *destinat
     destination->instruction_count = source->instruction_count;
     if (!copy_u32_array(source->argument_ids, source->argument_count, &destination->argument_ids) ||
         !copy_u16_array(source->argument_types, source->argument_count,
-                        &destination->argument_types))
+                        &destination->argument_types) ||
+        !copy_category_array(source->argument_categories, source->argument_count,
+                             &destination->argument_categories))
         return false;
     if (source->instruction_count == 0u)
         return true;
@@ -248,7 +279,11 @@ static bool lower_function(const XrValidatedFunction *source, XrBackendFunction 
     destination->flags = source->flags;
     if (!copy_u16_array(source->parameter_types, source->parameter_count,
                         &destination->parameter_types) ||
-        !copy_u16_array(source->value_types, source->value_count, &destination->value_types))
+        !copy_mode_array(source->parameter_modes, source->parameter_count,
+                         &destination->parameter_modes) ||
+        !copy_u16_array(source->value_types, source->value_count, &destination->value_types) ||
+        !copy_category_array(source->value_categories, source->value_count,
+                             &destination->value_categories))
         return false;
     if (source->value_count != 0u) {
         if ((size_t) source->value_count > SIZE_MAX / sizeof(*destination->value_representations))
@@ -334,8 +369,10 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
     for (uint32_t function = 0; function < ir->function_count; ++function) {
         const XrBackendFunction *fn = &ir->functions[function];
         hash_u32(&context, fn->parameter_count);
-        for (uint32_t parameter = 0; parameter < fn->parameter_count; ++parameter)
+        for (uint32_t parameter = 0; parameter < fn->parameter_count; ++parameter) {
             hash_u16(&context, fn->parameter_types[parameter]);
+            hash_u32(&context, (uint32_t) fn->parameter_modes[parameter]);
+        }
         hash_u16(&context, fn->result_type_id);
         hash_u32(&context, fn->effect_mask);
         hash_u32(&context, fn->capability_mask);
@@ -344,6 +381,7 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
         hash_u32(&context, fn->value_count);
         for (uint32_t value = 0; value < fn->value_count; ++value) {
             hash_u16(&context, fn->value_types[value]);
+            hash_u32(&context, (uint32_t) fn->value_categories[value]);
             hash_u16(&context, fn->value_representations[value]);
         }
         hash_u32(&context, fn->block_count);
@@ -353,12 +391,14 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
             for (uint32_t argument = 0; argument < row->argument_count; ++argument) {
                 hash_u32(&context, row->argument_ids[argument]);
                 hash_u16(&context, row->argument_types[argument]);
+                hash_u32(&context, (uint32_t) row->argument_categories[argument]);
             }
             hash_u32(&context, row->instruction_count);
             for (uint32_t instruction = 0; instruction < row->instruction_count; ++instruction) {
                 const XrBackendInstruction *op = &row->instructions[instruction];
                 hash_u16(&context, op->operation_id);
                 hash_u16(&context, op->result_type_id);
+                hash_u32(&context, (uint32_t) op->result_category);
                 hash_u32(&context, op->result_id);
                 hash_u32(&context, op->operand_count);
                 for (uint32_t operand = 0; operand < op->operand_count; ++operand)

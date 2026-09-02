@@ -22,7 +22,7 @@ SOURCE_PROJECTION_HEADER_PATH = Path("src/program/xr_program_xi_projection_gen.h
 SOURCE_PROJECTION_SOURCE_PATH = Path("src/program/xr_program_xi_projection_gen.c")
 SPEC_PATH = Path("contracts/canonical-program/xrprogram-format-v1.md")
 COVERAGE_PATH = Path("contracts/canonical-program/xrprogram-format-coverage.json")
-TOP_KEYS = {"schema", "format", "encoding", "type_system", "sections", "limits"}
+TOP_KEYS = {"schema", "format", "encoding", "type_system", "value_system", "sections", "limits"}
 FORMAT_KEYS = {"major", "minor", "magic_hex", "program_id_domain"}
 ENCODING_KEYS = {
     "fixed_integers",
@@ -54,6 +54,12 @@ TYPE_SYSTEM_KEYS = {
     "variant_shape",
     "recursive_value_shape",
     "physical_layout",
+}
+VALUE_SYSTEM_KEYS = {
+    "function_parameter_contract",
+    "parameter_modes",
+    "value_categories",
+    "place_physical_layout",
 }
 SOURCE_PROJECTION_KEYS = {
     "schema",
@@ -182,6 +188,16 @@ def validate(schema: dict[str, Any]) -> None:
         "recursive_value_shape": "reject",
         "physical_layout": "forbidden",
     }, "type-system semantic policy drifted")
+
+    value_system = schema["value_system"]
+    require(isinstance(value_system, dict) and set(value_system) == VALUE_SYSTEM_KEYS,
+            "value-system contract fields drifted")
+    require(value_system == {
+        "function_parameter_contract": "ordered-(TypeId,ParamMode)",
+        "parameter_modes": ["0:read", "1:ref", "2:move"],
+        "value_categories": ["0:value", "1:place"],
+        "place_physical_layout": "forbidden",
+    }, "value-system semantic policy drifted")
 
     sections = schema["sections"]
     require(isinstance(sections, list) and sections, "sections must be a non-empty array")
@@ -447,6 +463,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
     for section in schema["sections"]:
         lines.append(f"| {section['stable_id']} | `{section['name']}` | {'yes' if section['required'] else 'no'} |")
     type_system = schema["type_system"]
+    value_system = schema["value_system"]
     lines.extend([
         "",
         "## Logical type rows",
@@ -461,6 +478,15 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Physical layout: `{type_system['physical_layout']}`",
         "",
         "Offsets, alignment, register classes, VM slots, native C layout, and target ABI facts are not encodable in XrProgram. Executors derive private realizations after profile binding.",
+        "",
+        "## Function and value contracts",
+        "",
+        f"- Function parameters: `{value_system['function_parameter_contract']}`",
+        f"- Parameter modes: `{', '.join(value_system['parameter_modes'])}`",
+        f"- Value categories: `{', '.join(value_system['value_categories'])}`",
+        f"- Place physical layout: `{value_system['place_physical_layout']}`",
+        "",
+        "A `place` is a verifier-confined SSA capability with a pointee `TypeId`; it is not a language type and never enters the type table. `REF` entry arguments and call operands are places, while `READ` and `MOVE` use values.",
     ])
     lines.extend(["", "## Resource ceilings", ""])
     for name, value in schema["limits"].items():

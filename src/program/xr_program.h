@@ -12,6 +12,7 @@
 #define XR_PROGRAM_H
 
 #include "../base/xdefs.h"
+#include "../shared/xr_param_mode.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -87,15 +88,24 @@ typedef enum XrCoreIrImmediateKind {
     XR_CORE_IR_IMMEDIATE_VARIANT_FIELD,
 } XrCoreIrImmediateKind;
 
+/* A place is a verifier-confined SSA capability naming typed storage. It is
+ * never a language type and therefore never enters the XrProgram type table. */
+typedef enum XrCoreIrValueCategory {
+    XR_CORE_IR_VALUE = 0,
+    XR_CORE_IR_PLACE = 1,
+} XrCoreIrValueCategory;
+
 typedef struct XrCoreIrValueInput {
     XrCoreIrKey key;
     uint16_t type_id;
+    XrCoreIrValueCategory category;
 } XrCoreIrValueInput;
 
 typedef struct XrCoreIrInstructionInput {
     uint16_t operation_id;
     XrCoreIrKey result;
     uint16_t result_type_id;
+    XrCoreIrValueCategory result_category;
     const XrCoreIrKey *operands;
     uint32_t operand_count;
     XrCoreIrImmediateKind immediate_kind;
@@ -126,6 +136,7 @@ typedef struct XrCoreIrBlockInput {
 typedef struct XrCoreIrFunctionInput {
     XrCoreIrKey key;
     const uint16_t *parameter_types;
+    const XrParamMode *parameter_modes;
     uint32_t parameter_count;
     uint16_t result_type_id;
     uint32_t effect_mask;

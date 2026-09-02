@@ -306,8 +306,10 @@ static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, u
         (void) block_id(function, function->entry_block, &entry);
         buffer_put_uvar(buffer, id);
         buffer_put_uvar(buffer, function->parameter_count);
-        for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter)
+        for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
             buffer_put_uvar(buffer, function->parameter_types[parameter]);
+            buffer_put_uvar(buffer, function->parameter_modes[parameter]);
+        }
         buffer_put_uvar(buffer, function->result_type_id);
         buffer_put_uvar(buffer, function->effect_mask);
         buffer_put_uvar(buffer, function->capability_mask);
@@ -331,6 +333,7 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrInstruction *in
         buffer_put_uvar(buffer, (uint64_t) id + 1u);
     }
     buffer_put_uvar(buffer, instruction->result_type_id);
+    buffer_put_uvar(buffer, instruction->result_category);
     buffer_put_uvar(buffer, instruction->operand_count);
     for (uint32_t index = 0; index < instruction->operand_count; ++index) {
         (void) value_id(function, instruction->operands[index], &id);
@@ -395,6 +398,7 @@ static void encode_code(ByteBuffer *buffer, const FunctionRef *functions, uint32
                 (void) value_id(function, block->arguments[argument].key, &value);
                 buffer_put_uvar(buffer, value);
                 buffer_put_uvar(buffer, block->arguments[argument].type_id);
+                buffer_put_uvar(buffer, block->arguments[argument].category);
             }
             buffer_put_uvar(buffer, block->instruction_count);
             for (uint32_t instruction = 0; instruction < block->instruction_count; ++instruction)

@@ -33,6 +33,7 @@ typedef struct XrValidatedInstruction {
     uint16_t operation_id;
     uint32_t result_id;
     uint16_t result_type_id;
+    XrCoreIrValueCategory result_category;
     uint32_t *operands;
     uint32_t operand_count;
     XrCoreIrImmediateKind immediate_kind;
@@ -56,6 +57,7 @@ typedef struct XrValidatedInstruction {
 typedef struct XrValidatedBlock {
     uint32_t *argument_ids;
     uint16_t *argument_types;
+    XrCoreIrValueCategory *argument_categories;
     uint32_t argument_count;
     XrValidatedInstruction *instructions;
     uint32_t instruction_count;
@@ -63,6 +65,7 @@ typedef struct XrValidatedBlock {
 
 typedef struct XrValidatedFunction {
     uint16_t *parameter_types;
+    XrParamMode *parameter_modes;
     uint32_t parameter_count;
     uint16_t result_type_id;
     uint32_t effect_mask;
@@ -71,6 +74,7 @@ typedef struct XrValidatedFunction {
     XrValidatedBlock *blocks;
     uint32_t block_count;
     uint16_t *value_types;
+    XrCoreIrValueCategory *value_categories;
     uint32_t *value_blocks;
     uint32_t *value_positions;
     uint32_t value_count;

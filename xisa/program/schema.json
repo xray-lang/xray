@@ -33,6 +33,19 @@
     "recursive_value_shape": "reject",
     "physical_layout": "forbidden"
   },
+  "value_system": {
+    "function_parameter_contract": "ordered-(TypeId,ParamMode)",
+    "parameter_modes": [
+      "0:read",
+      "1:ref",
+      "2:move"
+    ],
+    "value_categories": [
+      "0:value",
+      "1:place"
+    ],
+    "place_physical_layout": "forbidden"
+  },
   "sections": [
     {
       "stable_id": 1,

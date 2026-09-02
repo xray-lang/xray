@@ -24,6 +24,17 @@ static bool array_u16_equal(const uint16_t *left, const uint16_t *right, uint32_
            (left && right && memcmp(left, right, (size_t) count * sizeof(*left)) == 0);
 }
 
+static bool array_mode_equal(const XrParamMode *left, const XrParamMode *right, uint32_t count) {
+    return count == 0u ||
+           (left && right && memcmp(left, right, (size_t) count * sizeof(*left)) == 0);
+}
+
+static bool array_category_equal(const XrCoreIrValueCategory *left,
+                                 const XrCoreIrValueCategory *right, uint32_t count) {
+    return count == 0u ||
+           (left && right && memcmp(left, right, (size_t) count * sizeof(*left)) == 0);
+}
+
 static bool fingerprint_is_zero(XrFingerprint fingerprint) {
     uint8_t combined = 0u;
     for (size_t index = 0; index < sizeof(fingerprint.bytes); ++index)
@@ -35,6 +46,12 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
                                     const XrBackendInstruction *instruction) {
     if (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
         instruction->result_id >= function->value_count)
+        return false;
+    if (instruction->result_category > XR_CORE_IR_PLACE ||
+        (instruction->result_id == XR_PROGRAM_LOCATION_NONE &&
+         instruction->result_category != XR_CORE_IR_VALUE) ||
+        (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
+         instruction->result_category != function->value_categories[instruction->result_id]))
         return false;
     for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
         if (!instruction->operands || instruction->operands[operand] >= function->value_count)
@@ -130,9 +147,11 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         const XrBackendFunction *function = &ir->functions[function_id];
         if (!function->blocks || function->block_count == 0u ||
             function->entry_block >= function->block_count ||
-            (function->parameter_count != 0u && !function->parameter_types) ||
+            (function->parameter_count != 0u &&
+             (!function->parameter_types || !function->parameter_modes)) ||
             (function->value_count != 0u &&
-             (!function->value_types || !function->value_representations))) {
+             (!function->value_types || !function->value_categories ||
+              !function->value_representations))) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                       function_id, 0u, 0u);
             return false;
@@ -140,15 +159,24 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         for (uint32_t value = 0; value < function->value_count; ++value) {
             uint8_t expected = 0u;
             if (!xr_backend_representation_for_type(function->value_types[value], &expected) ||
+                function->value_categories[value] > XR_CORE_IR_PLACE ||
                 expected != function->value_representations[value]) {
                 xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                           function_id, 0u, 0u);
                 return false;
             }
         }
+        for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
+            if (!xr_param_mode_is_valid(function->parameter_modes[parameter])) {
+                xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
+                                          function_id, function->entry_block, 0u);
+                return false;
+            }
+        }
         for (uint32_t block_id = 0; block_id < function->block_count; ++block_id) {
             const XrBackendBlock *block = &function->blocks[block_id];
-            if ((block->argument_count != 0u && (!block->argument_ids || !block->argument_types)) ||
+            if ((block->argument_count != 0u &&
+                 (!block->argument_ids || !block->argument_types || !block->argument_categories)) ||
                 (block->instruction_count != 0u && !block->instructions)) {
                 xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                           function_id, block_id, 0u);
@@ -157,7 +185,9 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
             for (uint32_t argument = 0; argument < block->argument_count; ++argument) {
                 if (block->argument_ids[argument] >= function->value_count ||
                     block->argument_types[argument] !=
-                        function->value_types[block->argument_ids[argument]]) {
+                        function->value_types[block->argument_ids[argument]] ||
+                    block->argument_categories[argument] !=
+                        function->value_categories[block->argument_ids[argument]]) {
                     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                               function_id, block_id, 0u);
                     return false;
@@ -172,6 +202,23 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                                               instruction_id);
                     return false;
                 }
+            }
+        }
+        const XrBackendBlock *entry = &function->blocks[function->entry_block];
+        if (entry->argument_count != function->parameter_count) {
+            xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
+                                      function_id, function->entry_block, 0u);
+            return false;
+        }
+        for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
+            XrCoreIrValueCategory expected = function->parameter_modes[parameter] == XR_PARAM_REF
+                                                 ? XR_CORE_IR_PLACE
+                                                 : XR_CORE_IR_VALUE;
+            if (entry->argument_types[parameter] != function->parameter_types[parameter] ||
+                entry->argument_categories[parameter] != expected) {
+                xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
+                                          function_id, function->entry_block, 0u);
+                return false;
             }
         }
     }
@@ -239,7 +286,11 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
             source->value_count != lowered->value_count || source->flags != lowered->flags ||
             !array_u16_equal(source->parameter_types, lowered->parameter_types,
                              source->parameter_count) ||
-            !array_u16_equal(source->value_types, lowered->value_types, source->value_count)) {
+            !array_mode_equal(source->parameter_modes, lowered->parameter_modes,
+                              source->parameter_count) ||
+            !array_u16_equal(source->value_types, lowered->value_types, source->value_count) ||
+            !array_category_equal(source->value_categories, lowered->value_categories,
+                                  source->value_count)) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_TRANSLATION_REJECTED, 0u,
                                       function_id, 0u, 0u);
             return false;
@@ -252,7 +303,10 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
                 !array_u32_equal(source_block->argument_ids, lowered_block->argument_ids,
                                  source_block->argument_count) ||
                 !array_u16_equal(source_block->argument_types, lowered_block->argument_types,
-                                 source_block->argument_count)) {
+                                 source_block->argument_count) ||
+                !array_category_equal(source_block->argument_categories,
+                                      lowered_block->argument_categories,
+                                      source_block->argument_count)) {
                 xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_TRANSLATION_REJECTED, 0u,
                                           function_id, block_id, 0u);
                 return false;
@@ -266,6 +320,7 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
                 if (source_instruction->operation_id != lowered_instruction->operation_id ||
                     source_instruction->result_id != lowered_instruction->result_id ||
                     source_instruction->result_type_id != lowered_instruction->result_type_id ||
+                    source_instruction->result_category != lowered_instruction->result_category ||
                     source_instruction->operand_count != lowered_instruction->operand_count ||
                     source_instruction->successor_count != lowered_instruction->successor_count ||
                     !array_u32_equal(source_instruction->operands, lowered_instruction->operands,

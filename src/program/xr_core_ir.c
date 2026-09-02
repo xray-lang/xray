@@ -79,6 +79,10 @@ static bool type_id_supported(const XrCoreIrProgram *program, uint16_t type_id) 
     return (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count;
 }
 
+static bool value_category_is_valid(XrCoreIrValueCategory category) {
+    return category == XR_CORE_IR_VALUE || category == XR_CORE_IR_PLACE;
+}
+
 static bool copy_bytes(void **destination, const void *source, size_t count, size_t item_size) {
     *destination = NULL;
     if (count == 0)
@@ -125,6 +129,7 @@ static void free_function(XrCoreIrFunction *function) {
         free_block(&function->blocks[index]);
     xr_free(function->blocks);
     xr_free(function->parameter_types);
+    xr_free(function->parameter_modes);
 }
 
 void xr_core_ir_program_free(XrCoreIrProgram *program) {
@@ -151,6 +156,7 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
     output->operation_id = input->operation_id;
     output->result = input->result;
     output->result_type_id = input->result_type_id;
+    output->result_category = input->result_category;
     output->operand_count = input->operand_count;
     output->immediate_kind = input->immediate_kind;
     output->successor_count = input->successor_count;
@@ -242,6 +248,20 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     if (!copy_bytes((void **) &output->parameter_types, input->parameter_types,
                     input->parameter_count, sizeof(uint16_t)))
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (input->parameter_count != 0u) {
+        output->parameter_modes = xr_calloc(input->parameter_count, sizeof(XrParamMode));
+        if (!output->parameter_modes) {
+            free_function(output);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t parameter = 0; parameter < input->parameter_count; ++parameter) {
+            output->parameter_modes[parameter] =
+                input->parameter_modes ? input->parameter_modes[parameter] : XR_PARAM_READ;
+        }
+    } else if (input->parameter_modes) {
+        free_function(output);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
     if (input->block_count == 0 || !input->blocks) {
         free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -593,9 +613,28 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
             }
             for (uint32_t index = 0; index < function->parameter_count; ++index) {
                 if (!type_id_supported(program, function->parameter_types[index]) ||
-                    function->parameter_types[index] == XR_CORE_TYPE_VOID) {
+                    function->parameter_types[index] == XR_CORE_TYPE_VOID ||
+                    !xr_param_mode_is_valid(function->parameter_modes[index])) {
                     xr_program_set_diagnostic(diagnostic, diagnostic_size,
-                                              "function parameter type is unsupported");
+                                              "function parameter contract is unsupported");
+                    return XR_PROGRAM_BUILD_INVALID_INPUT;
+                }
+            }
+            const XrCoreIrBlock *entry = find_block(function, function->entry_block);
+            if (!entry || entry->argument_count != function->parameter_count) {
+                xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                          "entry block does not match function signature");
+                return XR_PROGRAM_BUILD_INVALID_INPUT;
+            }
+            for (uint32_t index = 0; index < function->parameter_count; ++index) {
+                XrCoreIrValueCategory expected = function->parameter_modes[index] == XR_PARAM_REF
+                                                     ? XR_CORE_IR_PLACE
+                                                     : XR_CORE_IR_VALUE;
+                if (entry->arguments[index].type_id != function->parameter_types[index] ||
+                    entry->arguments[index].category != expected) {
+                    xr_program_set_diagnostic(
+                        diagnostic, diagnostic_size,
+                        "entry block value/place contract does not match function signature");
                     return XR_PROGRAM_BUILD_INVALID_INPUT;
                 }
             }
@@ -613,6 +652,7 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                     if (xr_core_ir_key_is_zero(block->arguments[index].key) ||
                         !type_id_supported(program, block->arguments[index].type_id) ||
                         block->arguments[index].type_id == XR_CORE_TYPE_VOID ||
+                        !value_category_is_valid(block->arguments[index].category) ||
                         !function_has_value(function, block->arguments[index].key)) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                   "block argument is invalid");
@@ -630,7 +670,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                     }
                     if (!xr_core_ir_key_is_zero(instruction->result)) {
                         if (!type_id_supported(program, instruction->result_type_id) ||
-                            instruction->result_type_id == XR_CORE_TYPE_VOID) {
+                            instruction->result_type_id == XR_CORE_TYPE_VOID ||
+                            !value_category_is_valid(instruction->result_category)) {
                             xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                       "instruction result type is unsupported");
                             return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -641,7 +682,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                             return XR_PROGRAM_BUILD_DUPLICATE_IDENTITY;
                         }
                         value_count++;
-                    } else if (instruction->result_type_id != XR_CORE_TYPE_VOID) {
+                    } else if (instruction->result_type_id != XR_CORE_TYPE_VOID ||
+                               instruction->result_category != XR_CORE_IR_VALUE) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                   "result-less instruction must use void type");
                         return XR_PROGRAM_BUILD_INVALID_INPUT;
