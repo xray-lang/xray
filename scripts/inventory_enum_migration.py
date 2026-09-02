@@ -1190,6 +1190,7 @@ def make_report_from_sources(
             path for path, tokens in token_sets.items()
             if any(token.kind == "error" for token in tokens)
         ),
+        "payload_declarations": [asdict(row) for row in declarations],
         "positional_or_mixed_declarations": [asdict(row) for row in positional],
         "qualified_uses": [asdict(row) for row in uses],
     }

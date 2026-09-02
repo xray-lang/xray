@@ -1,0 +1,14 @@
+path	role	action
+spec/source/sections/004-3-expressions.md	handwritten bilingual source	replace call-shaped enum construction examples
+spec/source/sections/006-5-declarations.md	handwritten bilingual source	define named record payload declarations and methods without fn
+spec/source/sections/007-6-patterns.md	handwritten bilingual source	define selective named variant patterns
+spec/source/sections/009-8-error-handling.md	handwritten bilingual source	migrate error construction and catch patterns
+spec/source/sections/020-appendix-a-ebnf.md	handwritten bilingual source	replace enum declaration construction and pattern grammar
+spec/source/cards/topics/enum.json	knowledge card source	bind the new declaration constructor and pattern fences
+spec/source/cards/topics/result.json	knowledge card source	migrate Result examples
+spec/source/cards/topics/channel.json	knowledge card source	migrate Recv examples
+spec/source/cards/topics/coroutine.json	knowledge card source	migrate TaskResult examples
+LANGUAGE_SPEC.md	generated projection	regenerate only
+LANGUAGE_SPEC_CN.md	generated projection	regenerate only
+docs/knowledge	generated projection	regenerate only
+src/app/mcp/xmcp_knowledge_generated.c	generated projection	regenerate only

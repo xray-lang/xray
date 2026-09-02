@@ -1,0 +1,11 @@
+contract	anchor_or_evidence	impact
+contracts/effect-semantics.md	src/frontend/analyzer/xanalyzer.c	add analyzer-owned enum construct and pattern plans
+contracts/effect-semantics.md	src/frontend/analyzer/xanalyzer.h	publish immutable enum plan lookup
+contracts/effect-semantics.md	src/frontend/analyzer/xanalyzer_visitor_call.c	delete call-shaped payload constructor authority
+contracts/effect-semantics.md	src/ir/xi.h	publish explicit variant source operations
+contracts/effect-semantics.md	src/plan/semantic/xr_semantic_enum_shape.h	bind non-empty ordered payload names
+contracts/rc-contract.md	src/ir/xi_lower_expr.c	consume construct ownership from the enum plan
+contracts/target-abi.md	src/ir/xi.h	project named source fields to declaration-ordered variant operands
+contracts/target-abi.md	src/plan/semantic/xr_semantic_enum_field_shape.h	bind canonical field name and ordinal
+contracts/canonical-program/operation-capability-matrix.json	variant construct/test/project source producer	advance only after source differential and old-owner deletion gates pass
+contracts/canonical-program/architecture-identity.toml	wave-2 status	record the active record-enum source authority
