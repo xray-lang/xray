@@ -7794,7 +7794,8 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
     if (cg_value_traces_to_inlined_struct(f, v) ||
         cg_value_traces_to_static_struct_whole_store(ctx, f, v) ||
         cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
-        cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
+        cg_value_is_elided_nested_struct_ref(ctx, f, v) ||
+        cg_value_is_elided_fixed_array_ref(f, v) ||
         cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_nested_fixed_array_field_ref(ctx, f, v) ||
@@ -9079,6 +9080,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
         case XI_BYTE_SLICE_STORE_F64:
             return user->nargs == 4 && arg_index >= 1 && arg_index <= 3;
         case XI_STORE_FIELD:
+        case XI_AGG_UPDATE:
         case XI_AGG_SET:
             /* Every field-store backend converts the stored value with the
              * literal-aware representation emitter. */
@@ -10184,7 +10186,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
-    if (cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
+    if (cg_value_is_elided_nested_struct_ref(ctx, f, v) ||
+        cg_value_is_elided_fixed_array_ref(f, v) ||
         cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v) ||
         cg_value_is_elided_static_struct_nested_fixed_array_field_ref(ctx, f, v) ||
@@ -10215,7 +10218,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         (cg_value_traces_to_inlined_struct(f, v->args[0]) ||
          cg_value_traces_to_static_struct_whole_store(ctx, f, v->args[0]) ||
          cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
-         cg_value_is_elided_nested_struct_ref(f, v->args[0]) ||
+         cg_value_is_elided_nested_struct_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_fixed_array_ref(f, v->args[0]) ||
          cg_value_is_elided_static_struct_nested_field_ref(ctx, f, v->args[0]) ||
          cg_value_is_elided_static_struct_fixed_array_field_ref(ctx, f, v->args[0]) ||

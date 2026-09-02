@@ -395,6 +395,24 @@ static XiValue *func_tree_find_op(XiFunc *f, uint16_t op) {
     return NULL;
 }
 
+static int func_tree_count_op(const XiFunc *f, uint16_t op) {
+    if (!f)
+        return 0;
+    int count = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i] && blk->values[i]->op == op)
+                count++;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        count += func_tree_count_op(f->children[i], op);
+    return count;
+}
+
 static XiValue *func_tree_find_method(XiFunc *f, const char *name) {
     if (!f || !name)
         return NULL;
@@ -2931,7 +2949,55 @@ TEST(struct_field_store_narrows_scalar_rep) {
     assert(narrow && narrow->type && narrow->type->kind == XR_KIND_INT &&
            narrow->type->scalar_rep == XR_NATIVE_U8 &&
            "NARROW_U8 result type should carry the target native width");
-    assert(func_tree_has_op(f, XI_AGG_SET) && "struct field writes should use AGG_SET");
+    XiFunc *run = func_tree_find_func_name(f, "run");
+    XiValue *update = run ? func_tree_find_op(run, XI_AGG_UPDATE) : NULL;
+    assert(update && "ordinary value-struct field writes should rebuild with AGG_UPDATE");
+    assert((update->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM)) == 0 &&
+           "AGG_UPDATE should be a pure SSA value operation");
+    assert(func_tree_count_op(run, XI_AGG_SET) == 1 &&
+           "AGG_SET should remain only for the literal's one-field construction");
+    xi_func_free(f);
+}
+
+TEST(nested_struct_field_store_rebuilds_leaf_to_root) {
+    XiFunc *f = lower_source("struct Inner {\n"
+                             "    value: i64\n"
+                             "}\n"
+                             "struct Outer {\n"
+                             "    inner: Inner\n"
+                             "}\n"
+                             "fn run(input: move Outer) -> i64 {\n"
+                             "    var local = input\n"
+                             "    local.inner.value = 9\n"
+                             "    return local.inner.value\n"
+                             "}\n");
+    assert(f != NULL);
+    XiFunc *run = func_tree_find_func_name(f, "run");
+    assert(run && func_tree_count_op(run, XI_AGG_UPDATE) == 2 &&
+           "a nested value update should rebuild the leaf aggregate and its parent");
+    assert(!func_tree_has_op(run, XI_AGG_SET) &&
+           "nested named value updates must remain pure until explicit root writeback");
+    xi_func_free(f);
+}
+
+TEST(struct_update_preserves_prior_value_snapshot) {
+    XiFunc *f = lower_source("struct Point {\n"
+                             "    x: i64\n"
+                             "    y: i64\n"
+                             "}\n"
+                             "fn run(input: move Point) -> i64 {\n"
+                             "    var point = input\n"
+                             "    var before = point\n"
+                             "    point.x = point.x + 2\n"
+                             "    return before.x + point.x\n"
+                             "}\n");
+    assert(f != NULL);
+    XiFunc *run = func_tree_find_func_name(f, "run");
+    XiValue *update = run ? func_tree_find_op(run, XI_AGG_UPDATE) : NULL;
+    assert(update && update->nargs == 2 && update->args[0] && update->args[1] &&
+           "the replacement must consume the prior aggregate as an explicit operand");
+    assert(!func_tree_has_op(run, XI_AGG_SET) &&
+           "snapshot-preserving assignment cannot mutate the prior aggregate carrier");
     xi_func_free(f);
 }
 
@@ -3600,6 +3666,8 @@ int main(void) {
     run_zero_arg_struct_with_methods_lowers_to_value_aggregate();
     run_unresolved_struct_literal_does_not_lower_to_json();
     run_struct_field_store_narrows_scalar_rep();
+    run_nested_struct_field_store_rebuilds_leaf_to_root();
+    run_struct_update_preserves_prior_value_snapshot();
     run_struct_method_receivers_use_call_bound_places();
     run_large_mutable_struct_local_reuses_stable_place();
     run_large_readonly_struct_local_stays_in_ssa();

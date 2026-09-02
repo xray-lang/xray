@@ -264,7 +264,8 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
-    bool promoted = (origin && origin->op == XI_AGG_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
+    bool promoted = (origin && (origin->op == XI_AGG_NEW || origin->op == XI_AGG_UPDATE) &&
+                     XI_EMIT_STRUCT_IS_PROMOTED(origin));
 
     XiEmitReg obj = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
@@ -294,6 +295,47 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 }
 
+/* Pure value update: copy the complete aggregate into fresh storage, then
+ * replace exactly one declaration-ordinal field in the copy. */
+XR_FUNC void xi_emit_struct_update(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!v || v->nargs != 2 || !v->args[0] || !v->args[1] || !v->aux || v->aux_int < 0 ||
+        v->aux_int >= ((XrAggregateLayout *) v->aux)->field_count) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XrAggregateLayout *layout = (XrAggregateLayout *) v->aux;
+    int64_t field_index = v->aux_int;
+    XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
+    bool promoted = origin && (origin->op == XI_AGG_NEW || origin->op == XI_AGG_UPDATE) &&
+                    XI_EMIT_STRUCT_IS_PROMOTED(origin);
+    XiEmitReg source = reg_of(ctx, v->args[0]);
+    XiEmitReg replacement = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint16_t field_arg = 0;
+    if (!xi_emit_index_to_arg(ctx, field_index, XI_EMIT_ERR_INTERNAL, &field_arg))
+        return;
+    if (promoted) {
+        uint16_t slot = 0;
+        if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_AGG_COPY, dst, source, slot));
+        emit_inst(ctx, CREATE_ABC(OP_AGG_SET, dst, field_arg, replacement));
+        v->aux_int |= XI_EMIT_STRUCT_PROMOTED_BIT;
+        return;
+    }
+    emit_inst(ctx, CREATE_ABC(OP_COPY, dst, source, 0));
+    const char *field_name = layout->field_names ? layout->field_names[field_index] : NULL;
+    XR_DCHECK(field_name != NULL, "XI_AGG_UPDATE: missing field name");
+    int symbol = add_symbol(ctx, field_name);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint16_t symbol_arg = 0;
+    if (!xi_emit_symbol_index_to_arg(ctx, symbol, &symbol_arg))
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_SETPROP, dst, symbol_arg, replacement));
+}
+
 /* Struct set: write field.
  * Stack-promoted → OP_AGG_SET (direct native field write).
  * Heap fallback  → OP_SETPROP   (property store by name). */
@@ -305,7 +347,8 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
-    bool promoted = (origin && origin->op == XI_AGG_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
+    bool promoted = (origin && (origin->op == XI_AGG_NEW || origin->op == XI_AGG_UPDATE) &&
+                     XI_EMIT_STRUCT_IS_PROMOTED(origin));
 
     XiEmitReg obj = reg_of(ctx, v->args[0]);
     XiEmitReg val = reg_of(ctx, v->args[1]);

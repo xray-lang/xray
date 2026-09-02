@@ -90,6 +90,7 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t partition = UINT32_MAX;
     char error[256] = {0};
+    char scalar_error[256] = {0};
 
     if (out_binding)
         *out_binding = NULL;
@@ -117,11 +118,46 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
         (xr_target_plan_find_function(target_plan, semantic, func->semantic_plan_function_index,
                                       &target_function) &&
          xr_aot_scalar_program_semantic_value_id(target_plan, partition, target_function, func,
-                                                 value, &semantic_function, &semantic_value, error,
-                                                 sizeof(error)));
+                                                 value, &semantic_function, &semantic_value,
+                                                 scalar_error, sizeof(scalar_error)));
     if (!scalar_identity) {
         if (xr_aot_rep_adapter_value_is_exact(target_plan, func, value, error, sizeof(error)))
             return true;
+        if (getenv("XRAY_AOT_REFINE_TRACE"))
+            fprintf(stderr,
+                    "[aot-prepare] value identity failure function=%s value=%u op=%u:%s "
+                    "backend-origin=%u reason=%s\n",
+                    func->name ? func->name : "<anonymous>", value->id, value->op,
+                    xi_generated_op_name(value->op), value->backend_origin,
+                    scalar_error[0] ? scalar_error
+                                    : (error[0] ? error : "no scalar or adapter identity"));
+        if (getenv("XRAY_AOT_REFINE_TRACE")) {
+            const XrSemanticFunctionRecord *semantic_row =
+                xr_semantic_plan_function(semantic, func->semantic_plan_function_index);
+            uint32_t expected_value =
+                semantic_row && semantic_row->value_begin <= UINT32_MAX - value->id
+                    ? semantic_row->value_begin + value->id
+                    : UINT32_MAX;
+            for (uint32_t operation_index = 0;
+                 operation_index < xr_semantic_plan_operation_count(semantic); ++operation_index) {
+                const XrSemanticOperationRecord *operation =
+                    xr_semantic_plan_operation(semantic, operation_index);
+                if (!operation || operation->function != func->semantic_plan_function_index ||
+                    operation->result_value != expected_value)
+                    continue;
+                const XrSemanticTypeRecord *semantic_type =
+                    xr_semantic_plan_type(semantic, operation->result_type);
+                fprintf(stderr,
+                        "[aot-prepare] frozen value=%u op=%u:%s type-kind=%u type-flags=%u "
+                        "live-kind=%u live-value=%u\n",
+                        operation->result_value, operation->opcode,
+                        xi_generated_op_name(operation->opcode),
+                        semantic_type ? semantic_type->kind : UINT32_MAX,
+                        semantic_type ? semantic_type->flags : UINT32_MAX,
+                        value->type ? value->type->kind : UINT32_MAX,
+                        value->type && value->type->is_value_type ? 1u : 0u);
+            }
+        }
         bundle->error_msg = "AOT value lacks exact TargetPlan semantic identity";
         return false;
     }

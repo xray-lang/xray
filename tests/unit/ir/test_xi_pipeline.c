@@ -1137,6 +1137,10 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT},
         {XI_TUPLE_GET, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_AGGREGATE_PROJECT, 0u,
          XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT},
+        {XI_AGG_GET, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_AGGREGATE_PROJECT, 0u,
+         XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT},
+        {XI_AGG_UPDATE, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_AGGREGATE_UPDATE, 0u,
+         XR_PROGRAM_XI_PROJECTION_AGGREGATE_UPDATE},
         {XI_VARIANT_CONSTRUCT, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
          0u, XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT},
         {XI_VARIANT_TEST, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_VARIANT_TEST, 0u,
@@ -1186,6 +1190,17 @@ static bool validated_program_has_operation(const XrValidatedProgram *program,
     return false;
 }
 
+static bool xi_function_has_operation(const XiFunc *function, uint16_t operation_id) {
+    for (uint32_t block = 0; function && block < function->nblocks; ++block) {
+        const XiBlock *row = function->blocks[block];
+        for (uint32_t value = 0; row && value < row->nvalues; ++value) {
+            if (row->values[value] && row->values[value]->op == operation_id)
+                return true;
+        }
+    }
+    return false;
+}
+
 TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XrCompilerSession *original_session = xr_compiler_session_current_for_isolate(g_iso);
     XrCompilerSessionConfig session_config = {0};
@@ -1199,7 +1214,11 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(xr_compiler_session_set_target_profile(session, profile));
 
     XiPipelineScalarFixture fixture = {0};
-    static const char program_source[] = "enum Packet { Data { code: i64, flag: bool }, Empty }\n"
+    static const char program_source[] = "struct Point {\n"
+                                         "  x: i64\n"
+                                         "  y: i64\n"
+                                         "}\n"
+                                         "enum Packet { Data { code: i64, flag: bool }, Empty }\n"
                                          "enum Nested<T> { Value { pair: (T, bool) }, Empty }\n"
                                          "fn sum_to(limit: i64) -> i64 {\n"
                                          "  var index: i64 = 0\n"
@@ -1244,6 +1263,11 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "fn accepts_nested(value: Nested<i64>) -> i64 {\n"
                                          "  return 1\n"
                                          "}\n"
+                                         "fn update_point(input: move Point) -> i64 {\n"
+                                         "  var point = input\n"
+                                         "  point.x = point.x + 2\n"
+                                         "  return point.x\n"
+                                         "}\n"
                                          "fn root() -> i64 {\n"
                                          "  return choose(10) + scalar_matrix(10, 2) + "
                                          "choose_bool(true) + choose_bool(false) + pair_value() + "
@@ -1275,15 +1299,22 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     const XiFunc *module_roots[] = {result.ir};
     const XiFunc *entry = NULL;
     XiFunc *packet_function = NULL;
+    XiFunc *update_function = NULL;
     for (uint16_t function = 0; function < result.ir->module->nfuncs; ++function) {
         XiFunc *candidate = result.ir->module->functions[function];
         if (candidate && candidate->name && strcmp(candidate->name, "root") == 0)
             entry = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "packet_value") == 0)
             packet_function = candidate;
+        if (candidate && candidate->name && strcmp(candidate->name, "update_point") == 0)
+            update_function = candidate;
     }
     PIPELINE_TEST_REQUIRE(entry != NULL);
     PIPELINE_TEST_REQUIRE(packet_function != NULL);
+    PIPELINE_TEST_REQUIRE(update_function != NULL);
+    PIPELINE_TEST_REQUIRE(xi_function_has_operation(update_function, XI_AGG_GET));
+    PIPELINE_TEST_REQUIRE(xi_function_has_operation(update_function, XI_AGG_UPDATE));
+    PIPELINE_TEST_REQUIRE(!xi_function_has_operation(update_function, XI_AGG_SET));
     XrProgramFromXiInput producer_input = {
         .module_roots = module_roots,
         .module_count = 1u,
@@ -1354,6 +1385,26 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(variant_construct != NULL);
     PIPELINE_TEST_REQUIRE(variant_project != NULL);
 
+    XiValue *aggregate_update = NULL;
+    for (uint32_t block = 0; block < update_function->nblocks; ++block) {
+        XiBlock *row = update_function->blocks[block];
+        for (uint32_t value = 0; row && value < row->nvalues; ++value) {
+            XiValue *operation = row->values[value];
+            if (operation->op == XI_AGG_UPDATE)
+                aggregate_update = operation;
+        }
+    }
+    PIPELINE_TEST_REQUIRE(aggregate_update != NULL);
+
+    int64_t saved_update_ordinal = aggregate_update->aux_int;
+    aggregate_update->aux_int = INT64_C(99);
+    XrProgramArtifact invalid_update_artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+                              &producer_input, &invalid_update_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
+    PIPELINE_TEST_REQUIRE(invalid_update_artifact.bytes == NULL);
+    aggregate_update->aux_int = saved_update_ordinal;
+
     int64_t saved_construct_ordinal = variant_construct->aux_int;
     variant_construct->aux_int = INT64_C(99);
     XrProgramArtifact invalid_variant_artifact = {0};
@@ -1396,8 +1447,13 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                               &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
     bool found_nested_generic_variant = false;
+    bool found_point_aggregate = false;
     for (uint32_t type_index = 0; type_index < validated->type_count; ++type_index) {
         const XrValidatedType *variant = &validated->types[type_index];
+        if (variant->kind == XR_CORE_IR_TYPE_AGGREGATE && variant->field_count == 2u &&
+            variant->field_types && variant->field_types[0] == XR_CORE_TYPE_I64 &&
+            variant->field_types[1] == XR_CORE_TYPE_I64)
+            found_point_aggregate = true;
         if (variant->kind != XR_CORE_IR_TYPE_VARIANT || variant->variant_count != 2u ||
             !variant->variants || variant->variants[0].payload_count != 1u ||
             !variant->variants[0].payload_types)
@@ -1418,6 +1474,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
             found_nested_generic_variant = true;
     }
     PIPELINE_TEST_REQUIRE(found_nested_generic_variant);
+    PIPELINE_TEST_REQUIRE(found_point_aggregate);
     static const uint16_t required_source_operations[] = {
         XR_CORE_OP_CORE_CONSTANT_I64,
         XR_CORE_OP_CORE_CONSTANT_BOOL,
@@ -1433,6 +1490,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
         XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
         XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+        XR_CORE_OP_CORE_AGGREGATE_UPDATE,
         XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
         XR_CORE_OP_CORE_VARIANT_TEST,
         XR_CORE_OP_CORE_VARIANT_PROJECT,

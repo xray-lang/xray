@@ -102,12 +102,88 @@ static bool leaf_program_binding(const XrSemanticPlan *semantic, uint32_t semant
         *out = binding;
     return true;
 }
-static bool leaf_product_program_family(const XrSemanticPlan *semantic) {
-    const XrSemanticProgramProvenance *provenance =
-        xr_semantic_plan_program_provenance(semantic);
+static bool leaf_product_program_family(const XrSemanticProgramProvenance *provenance) {
     return provenance &&
            provenance->program_family ==
                XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+}
+
+static bool named_struct_projection_hash_depth(
+    const XrSemanticPlan *semantic, const XrTargetMachineFacts *machine,
+    const XrTargetMachineRepRecord *machine_reps, uint32_t machine_rep_count,
+    const XrTargetLayoutRecord *layouts, uint32_t layout_count, const XrTargetFieldRecord *fields,
+    uint32_t field_count, const char *const *metadata, uint32_t metadata_count,
+    uint32_t layout_index, uint32_t *type_stack, uint32_t depth, uint64_t *hash_out) {
+    if (!semantic || !machine || !machine_reps || !layouts || !fields || !metadata || !type_stack ||
+        !hash_out || layout_index >= layout_count || depth >= 64u)
+        return false;
+    const XrTargetLayoutRecord *layout = &layouts[layout_index];
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, layout->semantic_type);
+    XrSemanticValueAggregateShape shape = {0};
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    if (!type || !children || layout->kind != XR_TARGET_LAYOUT_AGGREGATE ||
+        layout->field_count == 0 || layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin ||
+        !xr_semantic_value_aggregate_shape_for_type(semantic, layout->semantic_type, &shape) ||
+        shape.field_count != layout->field_count || shape.field_metadata_begin > metadata_count ||
+        shape.field_count > metadata_count - shape.field_metadata_begin ||
+        type->child_begin > child_count || type->child_count > child_count - type->child_begin ||
+        type->child_count != layout->field_count)
+        return false;
+    for (uint32_t i = 0; i < depth; ++i)
+        if (type_stack[i] == layout->semantic_type)
+            return false;
+    type_stack[depth] = layout->semantic_type;
+    const XrSemanticSourceClassRecord *declaration =
+        xr_semantic_plan_source_class(semantic, shape.source_class);
+    if (!declaration || !declaration->name || !declaration->name[0])
+        return false;
+
+    uint64_t hash = UINT64_C(1469598103934665603);
+    hash = hash_word(hash, machine->data_layout.stable_hash);
+    hash = hash_word(hash, 0); /* XR_AGG_LAYOUT_STRUCT */
+    hash = hash_word(hash, type->aggregate_align);
+    hash = hash_word(hash, layout->fixed_prefix_size);
+    hash = hash_word(hash, layout->align);
+    hash = hash_word(hash, layout->field_count);
+    hash = hash_string(hash, declaration->name);
+    for (uint16_t i = 0; i < layout->field_count; ++i) {
+        const XrTargetFieldRecord *field = &fields[layout->field_begin + i];
+        const XrTargetMachineRepRecord *field_rep =
+            field->memory_rep < machine_rep_count ? &machine_reps[field->memory_rep] : NULL;
+        const char *name = metadata[shape.field_metadata_begin + i];
+        uint8_t native_type = 0;
+        uint64_t nested_hash = 0;
+        bool nested = field_rep && field_rep->kind == XR_MACHINE_REP_AGGREGATE;
+        if (nested) {
+            native_type = XR_NATIVE_NESTED_AGGREGATE;
+            if (field_rep->detail >= layout_count ||
+                layouts[field_rep->detail].semantic_type != children[type->child_begin + i] ||
+                !named_struct_projection_hash_depth(
+                    semantic, machine, machine_reps, machine_rep_count, layouts, layout_count,
+                    fields, field_count, metadata, metadata_count, field_rep->detail, type_stack,
+                    depth + 1u, &nested_hash))
+                return false;
+        } else if (!field_rep || !scalar_native_type(field_rep->kind, &native_type)) {
+            return false;
+        }
+        if (field->layout != layout_index || field->semantic_field != i ||
+            field->semantic_name != shape.field_metadata_begin + i || !name || !name[0] ||
+            field->root_kind != XR_TARGET_ROOT_NONE || field->flags != 0 || field->reserved != 0)
+            return false;
+        hash = hash_string(hash, name);
+        hash = hash_word(hash, field->offset);
+        hash = hash_word(hash, native_type);
+        hash = hash_word(hash, field->size);
+        hash = hash_word(hash, 0); /* no fixed-array element kind */
+        hash = hash_word(hash, 0); /* no fixed-array element count */
+        hash = hash_word(hash, 0); /* no flexible tail */
+        if (nested)
+            hash = hash_word(hash, nested_hash);
+    }
+    *hash_out = hash ? hash : UINT64_C(1);
+    return true;
 }
 
 bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan, uint32_t semantic_type,
@@ -352,10 +428,13 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
         binding ? xr_target_plan_machine_rep(target_plan, binding->memory_rep) : NULL;
     uint32_t layout_count = 0;
     uint32_t field_count = 0;
+    uint32_t machine_rep_count = 0;
     const XrTargetLayoutRecord *layouts =
         xr_target_plan_layouts(target_plan, &layout_count);
     const XrTargetFieldRecord *fields =
         xr_target_plan_fields(target_plan, &field_count);
+    const XrTargetMachineRepRecord *machine_reps =
+        xr_target_plan_machine_reps(target_plan, &machine_rep_count);
     const XrSemanticPlan *semantic =
         xr_target_plan_semantic_plan(target_plan);
     const XrTargetProfile *profile = xr_target_plan_profile(target_plan);
@@ -363,15 +442,12 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
         xr_target_profile_machine_facts(profile);
     if (!target_plan || !binding || !out || !xr_target_plan_is_verified(target_plan) ||
         !xr_target_plan_fingerprint_is_intact(target_plan) || !register_rep || !memory_rep ||
-        !layouts || !fields || !semantic || !machine ||
+        !layouts || !fields || !machine_reps || !semantic || !machine ||
         register_rep->kind != XR_MACHINE_REP_AGGREGATE ||
         memory_rep->kind != XR_MACHINE_REP_AGGREGATE ||
-        register_rep->detail != memory_rep->detail ||
-        register_rep->detail >= layout_count)
+        register_rep->detail != memory_rep->detail || register_rep->detail >= layout_count)
         return false;
     const XrTargetLayoutRecord *layout = &layouts[register_rep->detail];
-    XrSemanticValueAggregateShape shape = {0};
-    const XrSemanticSourceClassRecord *declaration = NULL;
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(semantic, layout->semantic_type);
     uint32_t metadata_count = 0;
@@ -382,7 +458,7 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
         layout->field_begin > field_count ||
         layout->field_count > field_count - layout->field_begin)
         return false;
-    if (leaf_product_program_family(semantic))
+    if (leaf_product_program_family(xr_semantic_plan_program_provenance(semantic)))
         return false;
     if (leaf_program_binding(semantic, layout->semantic_type, NULL))
         return xr_c_leaf_aggregate_projection(target_plan, layout->semantic_type, out);
@@ -392,46 +468,13 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
     if (type->kind == XR_KIND_TUPLE)
         return tuple_projection(target_plan, binding, register_rep, layout, fields,
                                 field_count, type, machine, out);
-    if (!xr_semantic_value_aggregate_shape_for_type(
-            semantic, layout->semantic_type, &shape) ||
-        shape.field_count != layout->field_count ||
-        shape.field_metadata_begin > metadata_count ||
-        shape.field_count > metadata_count - shape.field_metadata_begin)
+    uint32_t type_stack[64] = {0};
+    uint64_t hash = 0;
+    if (!metadata ||
+        !named_struct_projection_hash_depth(
+            semantic, machine, machine_reps, machine_rep_count, layouts, layout_count, fields,
+            field_count, metadata, metadata_count, register_rep->detail, type_stack, 0u, &hash))
         return false;
-    declaration = xr_semantic_plan_source_class(semantic, shape.source_class);
-    if (!declaration || !declaration->name || !declaration->name[0] || !metadata)
-        return false;
-
-    uint64_t hash = UINT64_C(1469598103934665603);
-    hash = hash_word(hash, machine->data_layout.stable_hash);
-    hash = hash_word(hash, 0); /* XR_AGG_LAYOUT_STRUCT */
-    hash = hash_word(hash, type->aggregate_align);
-    hash = hash_word(hash, layout->fixed_prefix_size);
-    hash = hash_word(hash, layout->align);
-    hash = hash_word(hash, layout->field_count);
-    hash = hash_string(hash, declaration->name);
-    for (uint16_t i = 0; i < layout->field_count; i++) {
-        const XrTargetFieldRecord *field = &fields[layout->field_begin + i];
-        const XrTargetMachineRepRecord *field_rep =
-            xr_target_plan_machine_rep(target_plan, field->memory_rep);
-        uint8_t native_type = 0;
-        const char *name = metadata[shape.field_metadata_begin + i];
-        if (!field_rep || !scalar_native_type(field_rep->kind, &native_type) ||
-            field->layout != register_rep->detail || field->semantic_field != i ||
-            field->semantic_name != shape.field_metadata_begin + i ||
-            !name || !name[0] || field->root_kind != XR_TARGET_ROOT_NONE ||
-            field->flags != 0 || field->reserved != 0)
-            return false;
-        hash = hash_string(hash, name);
-        hash = hash_word(hash, field->offset);
-        hash = hash_word(hash, native_type);
-        hash = hash_word(hash, field->size);
-        hash = hash_word(hash, 0); /* no fixed-array element kind */
-        hash = hash_word(hash, 0); /* no fixed-array element count */
-        hash = hash_word(hash, 0); /* no flexible tail */
-    }
-    if (!hash)
-        hash = UINT64_C(1);
     int written = snprintf(out->c_type, sizeof(out->c_type),
                            "xrt_struct_abi_%016" PRIx64, hash);
     if (written <= 0 || (size_t) written >= sizeof(out->c_type)) {

@@ -1162,6 +1162,18 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.agg.update
+  :class pure
+  :arity 2
+  :result-ownership owned
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.agg.set
   :class memory-write
   :arity 2
@@ -2685,6 +2697,7 @@
     xi.place.store
     xi.agg.new
     xi.agg.get
+    xi.agg.update
     xi.agg.set
     xi.fixed.array.new
     xi.fixed.bytes.const

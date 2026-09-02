@@ -4354,9 +4354,9 @@ static bool oracle_aggregate_field_access_is_exact(const VerifyAuthority *ctx,
      * the Xi spelling differs, so both admit the same proof here. */
     bool field_read =
         operation && (operation->opcode == XI_AGG_GET || operation->opcode == XI_TUPLE_GET);
-    uint16_t expected_operands = field_read                                     ? 1u
-                                 : operation && operation->opcode == XI_AGG_SET ? 2u
-                                                                                : 0u;
+    bool field_write =
+        operation && (operation->opcode == XI_AGG_SET || operation->opcode == XI_AGG_UPDATE);
+    uint16_t expected_operands = field_read ? 1u : field_write ? 2u : 0u;
     if (!operation || expected_operands == 0 || operation->operand_count != expected_operands ||
         operation->operand_begin > operand_count ||
         operation->operand_count > operand_count - operation->operand_begin ||
@@ -4415,6 +4415,8 @@ static bool oracle_aggregate_field_access_is_exact(const VerifyAuthority *ctx,
     uint32_t field_type = children[receiver_type->child_begin + child_ordinal];
     if (field_read)
         return operation->result_type == field_type;
+    if (operation->opcode == XI_AGG_UPDATE && operation->result_type != receiver->type)
+        return false;
     const XrSemanticOperandRecord *stored = receiver + 1;
     return stored->role == XR_SEM_OPERAND_VALUE && stored->parameter == -1 && stored->flags == 0 &&
            stored->type == field_type && stored->value < ctx->value_count;
@@ -9991,6 +9993,17 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             if (oracle_value_aggregate_storage(ctx, source_value, out_storage, &ignored_kind))
                 return true;
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
+        case XI_AGG_UPDATE:
+            if (!oracle_aggregate_field_access_is_exact(ctx, operation_index))
+                return false;
+            if (operand_index == 0)
+                return oracle_value_aggregate_storage(ctx, source_value, out_storage,
+                                                      &ignored_kind);
+            if (operand_index != 1)
+                return false;
+            if (oracle_value_aggregate_storage(ctx, source_value, out_storage, &ignored_kind))
+                return true;
+            return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_EQ:
         case XI_NE:
             /* A comparison over machine scalars keeps their native storage. The
@@ -11432,9 +11445,30 @@ static bool verify_no_extra_materialized_adapters(const XiFunc *function,
                 if (getenv("XRAY_AOT_REFINE_TRACE"))
                     fprintf(stderr,
                             "[aot-refine] unmatched materialized value function=%s value=%u "
-                            "op=%u:%s backend-origin=%u\n",
+                            "op=%u:%s backend-origin=%u source=%u\n",
                             function->name ? function->name : "<anonymous>", value->id, value->op,
-                            xi_generated_op_name(value->op), value->backend_origin);
+                            xi_generated_op_name(value->op), value->backend_origin,
+                            value->nargs == 1u && value->args && value->args[0] ? value->args[0]->id
+                                                                                : UINT32_MAX);
+                if (getenv("XRAY_AOT_REFINE_TRACE")) {
+                    for (uint32_t user_block = 0; user_block < function->nblocks; ++user_block) {
+                        const XiBlock *candidate_block = function->blocks[user_block];
+                        for (uint32_t user_index = 0;
+                             candidate_block && user_index < candidate_block->nvalues;
+                             ++user_index) {
+                            const XiValue *candidate = candidate_block->values[user_index];
+                            for (uint16_t argument = 0; candidate && argument < candidate->nargs;
+                                 ++argument) {
+                                if (candidate->args[argument] == value)
+                                    fprintf(stderr,
+                                            "[aot-refine] unmatched adapter user value=%u "
+                                            "op=%u:%s operand=%u\n",
+                                            candidate->id, candidate->op,
+                                            xi_generated_op_name(candidate->op), argument);
+                            }
+                        }
+                    }
+                }
                 set_diag(diag, XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE, 0, value->id,
                          XR_SEMANTIC_INDEX_NONE);
                 return false;

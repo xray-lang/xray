@@ -1,0 +1,31 @@
+// anchor: canonical-aggregate-update-nested-snapshot
+// Named value-struct assignment is a pure rebuild.  Updating either a direct
+// field or a nested path must leave the earlier snapshot unchanged in VM and
+// native AOT execution.
+struct Point {
+    x: i64
+    y: i64
+}
+
+struct Box {
+    p: Point
+    z: i64
+}
+
+fn run() {
+    var before = Point{x: 10, y: 20}
+    var after = before
+    after.y = after.y + 5
+    print(before.x)
+    print(before.y)
+    print(after.x)
+    print(after.y)
+
+    var box_before = Box{p: before, z: 30}
+    var box_after = box_before
+    box_after.p.x = box_after.p.x + 7
+    print(box_before.p.x + box_before.p.y + box_before.z)
+    print(box_after.p.x + box_after.p.y + box_after.z)
+}
+
+run()

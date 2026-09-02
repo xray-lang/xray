@@ -522,10 +522,11 @@ typedef enum {
     XI_PTR_COPY_NONOVERLAP, /* args[0]=dst MutPtr<T>, args[1]=src Ptr<T>, args[2]=count */
 
     /* Struct native storage: typed field access with compile-time layout.
-     * args[0]=class_val for NEW; args[0]=struct for GET/SET.
-     * aux=XrAggregateLayout*; aux_int=field_index for GET/SET. */
+     * args[0]=class_val for NEW; args[0]=struct for GET/UPDATE/SET.
+     * aux=XrAggregateLayout*; aux_int=field_index for GET/UPDATE/SET. */
     XI_AGG_NEW,         /* allocate struct: args[0]=class, aux=XrAggregateLayout* */
     XI_AGG_GET,         /* read field: args[0]=struct, aux_int=field_idx, aux=XrAggregateLayout* */
+    XI_AGG_UPDATE,      /* pure copy-update: args[0]=struct, args[1]=replacement; result struct */
     XI_AGG_SET,         /* write field: args[0]=struct, args[1]=val, aux_int=field_idx,
                               aux=XrAggregateLayout* */
     XI_FIXED_ARRAY_NEW, /* allocate fixed array in frame storage: type=[T; N], aux_int=native */

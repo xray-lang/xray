@@ -14,6 +14,7 @@
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_program_semantic_plan.h"
+#include "../../runtime/class/xclass_info.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 
@@ -95,10 +96,14 @@ static bool semantic_type_is_exact(const XrSemanticTypeRecord *semantic, const X
      * category from which that conclusion was built; the exact fields and
      * layout are verified in the immutable plans. */
     if ((semantic->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0) {
-        if (type->kind != XR_KIND_INSTANCE || !type->is_value_type || semantic->child_count == 0 ||
+        bool live_value_aggregate =
+            type->kind == XR_KIND_INSTANCE &&
+            (type->is_value_type ||
+             (type->instance.class_ref && type->instance.class_ref->struct_layout));
+        if (!live_value_aggregate || semantic->child_count == 0 ||
             semantic->aggregate_extent != semantic->child_count)
             return false;
-        flags |= XR_SEM_TYPE_AGGREGATE_EXACT;
+        flags |= XR_SEM_TYPE_VALUE | XR_SEM_TYPE_AGGREGATE_EXACT;
     }
     return semantic->builtin_type == builtin_type && semantic->flags == flags;
 }

@@ -2765,13 +2765,13 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture below imports
-     * nothing. The record-enum cutover changed the frozen stdlib declaration
-     * metadata from 3463fe33e6b5b6f9cbed3fadd9e6da7ae2d1ee5667d4e2185f618b5135ad1673. */
-    if (strcmp(semantic_hex, "e9f8680dc4223e208a8a396edb9b1bb510f81d8a099f7839cf431a091cc70b93") !=
+     * nothing. Adding the pure xi.agg.update semantic owner changed the prior
+     * frozen digest e9f8680dc4223e208a8a396edb9b1bb510f81d8a099f7839cf431a091cc70b93. */
+    if (strcmp(semantic_hex, "41c1845ba21e097d334d9f9e5273e8de5ba35030edd17605c8c0f9ae9a174f99") !=
         0)
         fprintf(stderr, "  SemanticPlan KAT drift: actual=%s\n", semantic_hex);
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "e9f8680dc4223e208a8a396edb9b1bb510f81d8a099f7839cf431a091cc70b93") == 0,
+                        "41c1845ba21e097d334d9f9e5273e8de5ba35030edd17605c8c0f9ae9a174f99") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;

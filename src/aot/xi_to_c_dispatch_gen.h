@@ -147,6 +147,7 @@
     X(JSON_DECODE, "xi.json.decode", xicgen_json_decode) \
     X(AGG_NEW, "xi.agg.new", xicgen_struct_new) \
     X(AGG_GET, "xi.agg.get", xicgen_struct_get) \
+    X(AGG_UPDATE, "xi.agg.update", xicgen_struct_update) \
     X(AGG_SET, "xi.agg.set", xicgen_struct_set) \
     X(FIXED_ARRAY_NEW, "xi.fixed.array.new", xicgen_fixed_array_new) \
     X(FIXED_BYTES_CONST, "xi.fixed.bytes.const", xicgen_fixed_bytes_const) \

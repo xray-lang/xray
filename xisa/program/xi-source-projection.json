@@ -116,6 +116,20 @@
       "immediate_u32": 0
     },
     {
+      "xi_operation": "xi.agg.get",
+      "result_type": "any",
+      "projection_kind": "aggregate-project",
+      "core_operation": "core.aggregate.project",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.agg.update",
+      "result_type": "any",
+      "projection_kind": "aggregate-update",
+      "core_operation": "core.aggregate.update",
+      "immediate_u32": 0
+    },
+    {
       "xi_operation": "xi.variant.construct",
       "result_type": "any",
       "projection_kind": "variant-construct",

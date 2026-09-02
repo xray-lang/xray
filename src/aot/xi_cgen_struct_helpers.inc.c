@@ -491,7 +491,8 @@ static void cg_collect_struct_layouts_from_func(const XiFunc *f, const XrAggrega
             if (!v)
                 continue;
             cg_collect_struct_layout(cg_type_struct_layout(v->type), layouts, hashes, count);
-            if (v->op == XI_AGG_NEW || v->op == XI_AGG_GET || v->op == XI_AGG_SET)
+            if (v->op == XI_AGG_NEW || v->op == XI_AGG_GET || v->op == XI_AGG_UPDATE ||
+                v->op == XI_AGG_SET)
                 cg_collect_struct_layout((const XrAggregateLayout *) v->aux, layouts, hashes,
                                          count);
         }
@@ -2115,13 +2116,18 @@ static bool cg_heap_struct_shared_alias_safe_uses(const XiCgenCtx *ctx, const Xi
     return true;
 }
 
-static bool cg_value_is_elided_heap_struct_alias(const XiCgenCtx *ctx, const XiFunc *f,
+static bool cg_value_is_elided_heap_struct_alias(XiCgenCtx *ctx, const XiFunc *f,
                                                  const XiValue *v) {
     const XiValue *target = v;
     if (!v)
         return false;
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1)
         target = v->args[0];
+    /* Shared-slot provenance alone does not make a frozen named aggregate a
+     * heap alias.  Its C-emission row requires a real by-value load, including
+     * when subsequent users only project fields. */
+    if (cg_value_plan_is_struct_aggregate(ctx, target))
+        return false;
     int slot = -1;
     if (!cg_value_traces_to_heap_struct_shared(ctx, f, target, NULL, &slot))
         return false;
@@ -2423,6 +2429,14 @@ static void emit_struct_inline_field_set_expr(XiCgenCtx *ctx, FILE *out,
                                               int64_t idx, const XiValue *value) {
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+        if (cg_value_plan_is_struct_aggregate(ctx, value)) {
+            fprintf(out, "(");
+            emit_struct_field_ref(out, sl, origin, idx);
+            fprintf(out, " = ");
+            emit_vref(out, value);
+            fprintf(out, ")");
+            return;
+        }
         fprintf(out, "(memcpy(&");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", ");
@@ -2501,10 +2515,17 @@ static bool cg_nested_struct_ref_safe_uses(const XiFunc *f, const XiValue *targe
     return true;
 }
 
-static bool cg_value_is_elided_nested_struct_ref(const XiFunc *f, const XiValue *v) {
+static bool cg_value_is_elided_nested_struct_ref(XiCgenCtx *ctx, const XiFunc *f,
+                                                 const XiValue *v) {
     const XiValue *target = v;
     while (target && cg_is_identity_copy_or_move(target) && target->nargs >= 1)
         target = target->args[0];
+    /* A TargetPlan-owned named aggregate is a first-class C value.  The old
+     * nested-reference elision is only valid for heap-backed struct handles;
+     * eliding a value-ABI aggregate would leave its SSA users referring to an
+     * undeclared C temporary. */
+    if (cg_value_plan_is_struct_aggregate(ctx, target))
+        return false;
     return cg_value_is_nested_struct_field_ref(target) &&
            cg_nested_struct_ref_safe_uses(f, target, 0);
 }
@@ -2711,7 +2732,7 @@ static bool emit_struct_heap_nested_object_ptr_expr(XiCgenCtx *ctx, FILE *out, c
     const XiValue *target = object;
     while (target && cg_is_identity_copy_or_move(target) && target->nargs >= 1)
         target = target->args[0];
-    if (!cg_value_is_elided_nested_struct_ref(f, target))
+    if (!cg_value_is_elided_nested_struct_ref(ctx, f, target))
         return false;
     const XrAggregateLayout *parent = (const XrAggregateLayout *) target->aux;
     fprintf(out, "&");
@@ -2810,6 +2831,14 @@ static bool emit_struct_heap_field_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
         return false;
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+        if (cg_value_plan_is_struct_aggregate(ctx, value)) {
+            fprintf(out, "(");
+            emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+            fprintf(out, " = ");
+            emit_vref(out, value);
+            fprintf(out, ")");
+            return true;
+        }
         fprintf(out, "(memcpy(&");
         emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ", ");

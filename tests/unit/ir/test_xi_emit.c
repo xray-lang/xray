@@ -425,7 +425,7 @@ TEST(emit_uint64_cmp_uses_unsigned_opcode) {
 
 /* ========== Control Flow Tests ========== */
 
-TEST(emit_if_then_else) {
+TEST(emit_if_then_else_fuses_single_use_compare) {
     /* fn(cond) { if cond then return 1 else return 2 } */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *entry = f->entry;
@@ -451,11 +451,17 @@ TEST(emit_if_then_else) {
     XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
-    /* Should have: TEST, JMP, LOADI 1, RETURN1, LOADI 2, RETURN1 */
-    bool has_test = false, has_jmp = false;
+    /* A comparison consumed only by this branch is emitted directly in branch
+     * form: XI_GT swaps its operands and becomes OP_LT.  There must be no
+     * materialized OP_CMP_LT + OP_TEST pair. */
+    bool has_fused_lt = false, has_cmp = false, has_test = false, has_jmp = false;
     int ret_count = 0;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
+        if (op == OP_LT)
+            has_fused_lt = true;
+        if (op == OP_CMP_LT)
+            has_cmp = true;
         if (op == OP_TEST)
             has_test = true;
         if (op == OP_JMP)
@@ -463,7 +469,8 @@ TEST(emit_if_then_else) {
         if (op == OP_RETURN1)
             ret_count++;
     }
-    assert(has_test && "should emit TEST");
+    assert(has_fused_lt && "single-use XI_GT should emit fused OP_LT");
+    assert(!has_cmp && !has_test && "fused compare must not materialize CMP or TEST");
     assert(has_jmp && "should emit JMP");
     assert(ret_count == 2 && "should have 2 RETURN1 instructions");
 
@@ -757,10 +764,18 @@ TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
 
     /* Enum conversions must have exactly one operand; extra operands must not
      * be silently ignored by the emitter. */
+    XiValue **one_operand = convert->args;
+    XiValue **two_operands =
+        (XiValue **) xi_func_arena_alloc(f, 2u * (uint32_t) sizeof(XiValue *));
+    assert(two_operands != NULL);
+    two_operands[0] = source;
+    two_operands[1] = source;
+    convert->args = two_operands;
     convert->nargs = 2;
     proto = NULL;
     assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->nargs = 1;
+    convert->args = one_operand;
 
     convert->op = XI_AS;
     convert->conversion.kind = XR_CONVERSION_DYNAMIC_CHECKED;
@@ -1881,7 +1896,7 @@ int main(void) {
     run_emit_uint64_cmp_uses_unsigned_opcode();
 
     /* Control flow */
-    run_emit_if_then_else();
+    run_emit_if_then_else_fuses_single_use_compare();
     run_emit_reused_cmp_control_materializes_bool();
     run_emit_jump_fallthrough();
 

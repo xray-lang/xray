@@ -2536,6 +2536,124 @@ static XiValue *lower_member_set_target(XiValue *obj) {
     return obj;
 }
 
+static AstNode *lower_aggregate_update_root(AstNode *node) {
+    while (node) {
+        if (node->type == AST_GROUPING) {
+            node = node->as.grouping;
+            continue;
+        }
+        if (node->type == AST_MEMBER_ACCESS) {
+            node = node->as.member_access.object;
+            continue;
+        }
+        return node;
+    }
+    return NULL;
+}
+
+static bool lower_write_aggregate_binding(XiLower *l, AstNode *root, XiValue *updated,
+                                          uint32_t line) {
+    while (root && root->type == AST_GROUPING)
+        root = root->as.grouping;
+    const char *name = NULL;
+    uint32_t symbol_id = 0u;
+    if (root && root->type == AST_VARIABLE) {
+        name = root->as.variable.name;
+        symbol_id = root->as.variable.symbol_id;
+    } else if (root && root->type == AST_THIS_EXPR) {
+        name = "this";
+    } else {
+        return false;
+    }
+
+    int var_id = xi_lower_var_find(l, symbol_id, name);
+    if (var_id >= 0) {
+        if (l->vars[var_id].call_place) {
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_PLACE_STORE, l->type_unit, 2);
+            if (!store)
+                return false;
+            store->args[0] = l->vars[var_id].call_place;
+            store->args[1] = updated;
+            store->line = line;
+        }
+        xi_lower_braun_write(l, var_id, l->cur_block, updated);
+        lower_assignment_mark_child_capture(l, var_id, name, updated);
+        if (l->is_program && l->shared_map[var_id] >= 0) {
+            XiTopBinding binding = {
+                .slot = l->shared_map[var_id],
+                .name = l->vars[var_id].name,
+                .type = l->vars[var_id].type,
+            };
+            if (!xi_lower_emit_top_store(l, binding, updated))
+                return false;
+        }
+        return true;
+    }
+
+    XiTopBinding top = xi_lower_find_top_binding(l, symbol_id, name);
+    if (xi_top_binding_valid(top))
+        return xi_lower_emit_top_store(l, top, updated) != NULL;
+
+    struct XrType *upvalue_type = NULL;
+    int upvalue = xi_lower_resolve_upvalue(l, symbol_id, name, &upvalue_type);
+    if (upvalue < 0)
+        return false;
+    if (!upvalue_type || !xr_type_equals(upvalue_type, updated->type))
+        return false;
+    XR_DCHECK(upvalue < (int) l->func->ncaptures, "aggregate update upvalue index out of range");
+    propagate_needs_cell(l, upvalue);
+    XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL, l->type_unit, 1);
+    if (!store)
+        return false;
+    store->args[0] = updated;
+    store->aux_int = upvalue;
+    store->flags |= XI_FLAG_SIDE_EFFECT;
+    store->line = line;
+    return true;
+}
+
+static XiValue *lower_value_aggregate_update(XiLower *l, AstNode *node, AstNode *root,
+                                             XiValue *object, XiValue *replacement,
+                                             XrAggregateLayout *layout, int field_index) {
+    XiValue *updated = xi_value_new(l->func, l->cur_block, XI_AGG_UPDATE, object->type, 2);
+    if (!updated)
+        return NULL;
+    updated->args[0] = object;
+    updated->args[1] = replacement;
+    updated->aux = layout;
+    updated->aux_int = field_index;
+    updated->line = (uint32_t) node->line;
+
+    /* A nested value path is rebuilt from the leaf back to the named root.
+     * Every XI_AGG_GET already carries the exact declaration ordinal and
+     * layout selected by the analyzer, so no name lookup or backend shape
+     * inference is repeated here. */
+    XiValue *cursor = object;
+    while (cursor && cursor->op == XI_AGG_GET && cursor->nargs == 1u && cursor->args[0]) {
+        XiValue *parent = cursor->args[0];
+        XrAggregateLayout *parent_layout = (XrAggregateLayout *) cursor->aux;
+        if (!parent_layout || cursor->aux_int < 0 || cursor->aux_int >= parent_layout->field_count)
+            return NULL;
+        XiValue *parent_update =
+            xi_value_new(l->func, l->cur_block, XI_AGG_UPDATE, parent->type, 2);
+        if (!parent_update)
+            return NULL;
+        parent_update->args[0] = parent;
+        parent_update->args[1] = updated;
+        parent_update->aux = parent_layout;
+        parent_update->aux_int = cursor->aux_int;
+        parent_update->line = (uint32_t) node->line;
+        updated = parent_update;
+        cursor = parent;
+    }
+    if (!lower_write_aggregate_binding(l, root, updated, (uint32_t) node->line)) {
+        fprintf(stderr, "[LOWER] unsupported aggregate update root at line %d\n", node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    return replacement;
+}
+
 static bool lower_enum_descriptor_erases_to(const XiValue *value, const XrType *target) {
     if (!value || !target ||
         (!xr_type_is_enum_metadata(value->type) &&
@@ -2568,6 +2686,7 @@ static XiValue *lower_enum_descriptor_box_for_boundary(XiLower *l, XiValue *valu
 
 static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     MemberSetNode *ms = &node->as.member_set;
+    AstNode *aggregate_root = lower_aggregate_update_root(ms->object);
     XiValue *obj = xi_lower_expr(l, ms->object);
     XiValue *val = xi_lower_expr(l, ms->value);
     if (!obj || !val)
@@ -2606,22 +2725,29 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         }
     }
 
-    /* Struct with compile-time layout → XI_AGG_SET */
+    /* A value-struct field write is a pure aggregate rebuild followed by one
+     * explicit binding/place write. Construction-time initialization and
+     * alias-visible ref/out projection stores remain XI_AGG_SET and cannot be
+     * projected as core.aggregate.update. */
     XrAggregateLayout *slayout = xi_lower_value_struct_layout(l, obj);
     if (slayout) {
         int sidx = xi_lower_struct_field_index(slayout, ms->member);
         if (sidx >= 0) {
             val = xi_lower_narrow_for_native_field(l, node, val, slayout->fields[sidx].native_type);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_AGG_SET, result_type, 2);
-            if (!v)
+            if (aggregate_root &&
+                (aggregate_root->type == AST_VARIABLE || aggregate_root->type == AST_THIS_EXPR))
+                return lower_value_aggregate_update(l, node, aggregate_root, obj, val, slayout,
+                                                    sidx);
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_AGG_SET, result_type, 2);
+            if (!store)
                 return NULL;
-            v->args[0] = obj;
-            v->args[1] = val;
-            v->aux = (void *) slayout;
-            v->aux_int = sidx;
-            v->flags |= XI_FLAG_SIDE_EFFECT;
-            v->line = (uint32_t) node->line;
-            return v;
+            store->args[0] = obj;
+            store->args[1] = val;
+            store->aux = slayout;
+            store->aux_int = sidx;
+            store->flags |= XI_FLAG_SIDE_EFFECT;
+            store->line = (uint32_t) node->line;
+            return store;
         }
     }
 

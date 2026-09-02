@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project and all three named record-variant operations are COMPLETE_W7_WAVE2; aggregate update remains active Wave 2 work; trap, error publication, and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; trap, error publication, and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -314,13 +314,13 @@
       "decoder_verifier_evaluator": "aggregate kind, ordinal, replacement field type, and pure copy-update checks",
       "vm_implementation": "private carrier copy followed by one field replacement",
       "aot_lowering": "native struct copy followed by one direct field assignment",
-      "source_producer": "pending the clean value-record update surface; no tuple/name/shape fallback is admitted",
-      "old_owner_deletion": "canonical executors contain no old aggregate plan dependency; source activation remains fail closed",
-      "status": "IN_PROGRESS_W7_WAVE2",
+      "source_producer": "dedicated pure xi.agg.update consumes the prior named value aggregate plus one typed replacement and projects the analyzer-resolved declaration ordinal; nested paths rebuild leaf-to-root before an explicit SSA binding write",
+      "old_owner_deletion": "canonical identity erases physical value clones and ARC lifetime markers; xi.agg.set remains construction/place storage only and has no CoreSpec projection, so executors never depend on mutable aggregate storage, field names, layout, or old plans",
+      "status": "COMPLETE_W7_WAVE2",
       "evidence": [
-        "tests/unit/program/test_xr_program_verify.c",
-        "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/aot/test_xr_program_aot.c"
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
       ]
     },
     {

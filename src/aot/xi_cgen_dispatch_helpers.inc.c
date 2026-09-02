@@ -3900,9 +3900,18 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
      * has to be dereferenced instead of assigning the box. The rep-based
      * conversion below cannot express this: a struct aggregate's rep is
      * XAOT_REP_TAGGED, so it sees no conversion to make. */
+    XrCValueEmissionView shared_emission = {0};
+    bool shared_authoritative = false;
+    bool shared_named =
+        cg_value_emission_is_named_aggregate(ctx, v, &shared_emission, &shared_authoritative);
+    if (shared_authoritative && shared_named) {
+        fprintf(out, "(*(%s *)%s[%d].ptr)", shared_emission.c_type, ctx->shared_name,
+                (int) v->aux_int);
+        return;
+    }
     const XaotValuePlan *shared_plan = cg_value_plan_require_legacy(ctx, v);
-    if (shared_plan && cg_value_rep_is_struct_aggregate(shared_plan->rep) &&
-        shared_plan->rep.c_type) {
+    if (!shared_authoritative && shared_plan &&
+        cg_value_rep_is_struct_aggregate(shared_plan->rep) && shared_plan->rep.c_type) {
         fprintf(out, "(*(%s *)%s[%d].ptr)", shared_plan->rep.c_type, ctx->shared_name,
                 (int) v->aux_int);
         return;
@@ -13100,6 +13109,59 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                                        cg_value_plan_storage_rep(ctx, v),
                                        cg_value_plan_is_struct_aggregate(ctx, v), prefix);
     }
+}
+
+static void xicgen_struct_update(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const char *prefix) {
+    if (!v || v->nargs != 2 || !v->args[0] || !v->args[1] || !v->aux || v->aux_int < 0) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    const XrAggregateLayout *layout = (const XrAggregateLayout *) v->aux;
+    XrCValueEmissionView result_emission = {0};
+    XrCValueEmissionView source_emission = {0};
+    bool result_authoritative = false;
+    bool source_authoritative = false;
+    bool result_named =
+        cg_value_emission_is_named_aggregate(ctx, v, &result_emission, &result_authoritative);
+    bool source_named = cg_value_emission_is_named_aggregate(ctx, v->args[0], &source_emission,
+                                                             &source_authoritative);
+    if (!result_authoritative || !source_authoritative || !result_named || !source_named ||
+        !result_emission.c_type || !source_emission.c_type ||
+        strcmp(result_emission.c_type, source_emission.c_type) != 0 ||
+        v->aux_int >= layout->field_count || !layout->field_names) {
+        if (getenv("XRAY_AOT_REFINE_TRACE"))
+            fprintf(stderr,
+                    "[xi_cgen] aggregate update value=%u result-authority=%u result-rep=%u "
+                    "result-type=%s source-authority=%u source-rep=%u source-type=%s "
+                    "field=%lld count=%u\n",
+                    v->id, result_authoritative ? 1u : 0u, (unsigned) result_emission.rep,
+                    result_emission.c_type ? result_emission.c_type : "<none>",
+                    source_authoritative ? 1u : 0u, (unsigned) source_emission.rep,
+                    source_emission.c_type ? source_emission.c_type : "<none>",
+                    (long long) v->aux_int, (unsigned) layout->field_count);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "(%s){", result_emission.c_type);
+    for (uint16_t field = 0; field < layout->field_count; ++field) {
+        char field_name[128];
+        cg_struct_field_c_name(layout, field, field_name, sizeof(field_name));
+        fprintf(out, "%s.%s = ", field == 0 ? "" : ", ", field_name);
+        if ((int64_t) field == v->aux_int) {
+            const XrAggregateFieldLayout *field_layout = &layout->fields[field];
+            if (field_layout->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+                cg_value_plan_is_struct_aggregate(ctx, v->args[1]))
+                emit_vref(out, v->args[1]);
+            else
+                emit_struct_field_store_value(ctx, out, layout, field, v->args[1]);
+        } else {
+            emit_struct_field_lvalue(ctx, out, f, layout, field, v->args[0], prefix);
+        }
+    }
+    fprintf(out, "}");
 }
 
 static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

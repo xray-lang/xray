@@ -175,6 +175,7 @@
     X(JSON_DECODE, xi_emit_json_decode) \
     X(AGG_NEW, xi_emit_struct_new) \
     X(AGG_GET, xi_emit_struct_get) \
+    X(AGG_UPDATE, xi_emit_struct_update) \
     X(AGG_SET, xi_emit_struct_set) \
     X(FIXED_ARRAY_NEW, xi_emit_fixed_array_new) \
     X(FIXED_BYTES_CONST, xi_emit_fixed_bytes_const) \

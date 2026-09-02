@@ -1183,6 +1183,12 @@
   :vm-bytecode (driver xi_emit_struct_get)
   :aot-c (driver xicgen_struct_get))
 
+(lower xi.agg.update
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_struct_update)
+  :aot-c (driver xicgen_struct_update))
+
 (lower xi.agg.set
   :match ()
   :required-targets (vm-bytecode aot-c)

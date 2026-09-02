@@ -3316,6 +3316,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
         case XI_PTR_COPY_NONOVERLAP:
             *out = arg_idx <= 1 ? XR_REP_RAWPTR : (arg_idx == 2 ? XR_REP_I64 : XR_REP_TAGGED);
             return true;
+        case XI_AGG_UPDATE:
         case XI_AGG_SET:
             if (arg_idx == 1 && user->nargs >= 2 && user->args[1]) {
                 *out = sr_type_scalar_rep(user->args[1]->type);

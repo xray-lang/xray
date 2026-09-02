@@ -105,6 +105,9 @@ def validate(root: Path) -> None:
 
     for token in (
         "while (index < limit)",
+        "XI_AGG_UPDATE",
+        "invalid_update_artifact",
+        "XR_CORE_OP_CORE_AGGREGATE_UPDATE",
         "program_semantic_closure == NULL",
         "repeated_artifact.size == artifact.size",
         "XR_PROGRAM_BUILD_INVALID_INPUT",
@@ -113,6 +116,23 @@ def validate(root: Path) -> None:
         "xr_backend_ir_translation_validate",
     ):
         require(token in test, f"source producer evidence lacks {token}")
+
+    value_mappings = projection.get("value_mappings")
+    require(isinstance(value_mappings, list), "source projection value mappings are absent")
+    projection_rows = {
+        (row.get("xi_operation"), row.get("projection_kind"), row.get("core_operation"))
+        for row in value_mappings if isinstance(row, dict)
+    }
+    require(("xi.agg.get", "aggregate-project", "core.aggregate.project") in projection_rows,
+            "named aggregate projection is not exact")
+    require(("xi.agg.update", "aggregate-update", "core.aggregate.update") in projection_rows,
+            "pure aggregate update is not exact")
+    require(not any(row.get("xi_operation") == "xi.agg.set" for row in value_mappings
+                    if isinstance(row, dict)),
+            "mutating aggregate storage regained a CoreSpec projection")
+    for token in ("case XR_PROGRAM_XI_PROJECTION_AGGREGATE_UPDATE",
+                  "xi_type_has_logical_value_identity"):
+        require(token in producer, f"aggregate update producer closure lacks {token}")
 
     registry = json.loads(read(root, "xisa/core/registry.json"))
     matrix = json.loads(
@@ -146,12 +166,10 @@ def validate(root: Path) -> None:
     wave_two_complete = {
         "core.aggregate.construct",
         "core.aggregate.project",
+        "core.aggregate.update",
         "core.variant.construct",
         "core.variant.test",
         "core.variant.project",
-    }
-    wave_two_in_progress = {
-        "core.aggregate.update",
     }
     frozen = {
         "core.trap",
@@ -162,7 +180,6 @@ def validate(root: Path) -> None:
     expected_status = {
         **{operation: "COMPLETE_W7_WAVE1" for operation in wave_one},
         **{operation: "COMPLETE_W7_WAVE2" for operation in wave_two_complete},
-        **{operation: "IN_PROGRESS_W7_WAVE2" for operation in wave_two_in_progress},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,
