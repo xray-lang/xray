@@ -27,6 +27,7 @@ typedef struct XrBackendInstruction {
     uint16_t operation_id;
     uint16_t result_type_id;
     XrCoreIrValueCategory result_category;
+    XrCoreIrOwnershipDisposition result_ownership;
     uint32_t result_id;
     uint32_t *operands;
     uint32_t operand_count;
@@ -52,6 +53,7 @@ typedef struct XrBackendBlock {
     uint32_t *argument_ids;
     uint16_t *argument_types;
     XrCoreIrValueCategory *argument_categories;
+    XrCoreIrOwnershipDisposition *argument_ownerships;
     uint32_t argument_count;
     XrBackendInstruction *instructions;
     uint32_t instruction_count;
@@ -62,6 +64,7 @@ typedef struct XrBackendFunction {
     XrParamMode *parameter_modes;
     uint32_t parameter_count;
     uint16_t result_type_id;
+    XrCoreIrOwnershipDisposition result_ownership;
     uint32_t effect_mask;
     uint32_t capability_mask;
     uint32_t entry_block;
@@ -69,6 +72,7 @@ typedef struct XrBackendFunction {
     uint32_t block_count;
     uint16_t *value_types;
     XrCoreIrValueCategory *value_categories;
+    XrCoreIrOwnershipDisposition *value_ownerships;
     uint8_t *value_representations;
     uint32_t value_count;
     uint32_t flags;

@@ -500,6 +500,7 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return append_format(buffer, "        v%u = UINT32_C(%u);\n", instruction->result_id,
                                  ir->pointer_width);
+        case XR_CORE_OP_CORE_OWNER_COPY:
         case XR_CORE_OP_CORE_OWNER_MOVE:
             return append_format(buffer, "        v%u = v%u;\n", instruction->result_id,
                                  instruction->operands[0]);

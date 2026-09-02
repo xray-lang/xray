@@ -117,6 +117,95 @@ static XrValidatedProgram *validate_functions(const XrCoreIrConstantInput *const
     return validate_program(NULL, 0u, constants, constant_count, functions, function_count);
 }
 
+static XrValidatedProgram *build_affine_copy_program(void) {
+    enum {
+        AFFINE_TYPE = 64
+    };
+    uint16_t fields[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput type = {
+        .key = fixture_key("aot-affine:type"),
+        .local_id = AFFINE_TYPE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+        .field_types = fields,
+        .field_count = 1u,
+    };
+    XrCoreIrConstantInput constant = {
+        .key = fixture_key("aot-affine:constant"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 42,
+    };
+    XrCoreIrKey scalar = fixture_key("aot-affine:scalar");
+    XrCoreIrKey owner = fixture_key("aot-affine:owner");
+    XrCoreIrKey copied = fixture_key("aot-affine:copied");
+    XrCoreIrKey projected = fixture_key("aot-affine:projected");
+    XrCoreIrKey construct_operands[] = {scalar};
+    XrCoreIrKey owner_operand[] = {owner};
+    XrCoreIrKey copied_operand[] = {copied};
+    XrCoreIrKey returned[] = {projected};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = scalar,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = owner,
+         .result_type_id = AFFINE_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = construct_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+         .result = copied,
+         .result_type_id = AFFINE_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = owner_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = copied_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = copied_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = owner_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("aot-affine:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("aot-affine:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = 1u,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_program(&type, 1u, &constant, 1u, &function, 1u);
+}
+
 static XrValidatedProgram *build_full_program(void) {
     enum {
         AGGREGATE_TYPE = 101,
@@ -421,7 +510,9 @@ static XrValidatedProgram *build_full_program(void) {
          .instructions = merge_instructions,
          .instruction_count = sizeof(merge_instructions) / sizeof(merge_instructions[0])},
     };
-    XrCoreIrKey move_operand[] = {call_result};
+    XrCoreIrKey copied_result = fixture_key("aot:value:copied-result");
+    XrCoreIrKey copy_operand[] = {call_result};
+    XrCoreIrKey move_operand[] = {copied_result};
     XrCoreIrKey moved_operand[] = {moved_result};
     XrCoreIrKey place_operand[] = {local_place};
     XrCoreIrKey dropped_operand[] = {dropped_value};
@@ -432,6 +523,12 @@ static XrValidatedProgram *build_full_program(void) {
          .result_type_id = XR_CORE_TYPE_I64,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
          .immediate.key = helper_key},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+         .result = copied_result,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = copy_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_OWNER_MOVE,
          .result = moved_result,
          .result_type_id = XR_CORE_TYPE_I64,
@@ -763,6 +860,60 @@ static XrBackendIR *build_ir(XrInstance *instance, uint8_t optimization_policy) 
     return ir;
 }
 
+static void test_affine_copy_lowering(void) {
+    XrValidatedProgram *program = build_affine_copy_program();
+    XrReferenceOutcome reference = xr_reference_evaluate(
+        program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+    REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
+    REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
+    REQUIRE(reference.value.as.i64 == 42);
+
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestBindings bindings;
+    build_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+
+    XrVmCode *code = NULL;
+    XrVmCodeDiagnostic vm_diagnostic;
+    REQUIRE(xr_vm_code_build(instance, NULL, &code, &vm_diagnostic) == XR_VM_CODE_OK);
+    XrVmOutcome vm =
+        xr_vm_code_execute(code, instance, xr_validated_program_entry_function(program), NULL, 0u);
+    REQUIRE(vm.kind == XR_VM_OUTCOME_RETURN);
+    REQUIRE(vm.value.kind == XR_VM_VALUE_I64);
+    REQUIRE(vm.value.as.i64 == 42);
+    xr_vm_code_free(code);
+
+    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    REQUIRE(ir->instruction_count == 7u);
+    bool found_copy = false;
+    for (uint32_t function = 0; function < ir->function_count; ++function) {
+        for (uint32_t block = 0; block < ir->functions[function].block_count; ++block) {
+            const XrBackendBlock *row = &ir->functions[function].blocks[block];
+            for (uint32_t instruction = 0; instruction < row->instruction_count; ++instruction) {
+                const XrBackendInstruction *op = &row->instructions[instruction];
+                if (op->operation_id == XR_CORE_OP_CORE_OWNER_COPY) {
+                    REQUIRE(op->result_ownership == XR_CORE_IR_OWNER);
+                    found_copy = true;
+                }
+            }
+        }
+    }
+    REQUIRE(found_copy);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "struct XrAotType") != NULL);
+    REQUIRE(strstr(generated.bytes, " = v") != NULL);
+
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    retire_instance(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
 static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstance *instance) {
     XrReferenceProfile reference_profile = {.pointer_width = 64u};
     XrReferenceOutcome reference = xr_reference_evaluate(
@@ -787,7 +938,7 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstan
                                  xr_backend_ir_execution_id(portable)));
     REQUIRE(!xr_fingerprint_equal(xr_backend_ir_optimization_policy_id(none),
                                   xr_backend_ir_optimization_policy_id(portable)));
-    REQUIRE(xr_backend_ir_instruction_count(none) == 41u);
+    REQUIRE(xr_backend_ir_instruction_count(none) == 42u);
 
     XrGeneratedC generated_none = {0};
     XrGeneratedC generated_portable = {0};
@@ -963,6 +1114,7 @@ int main(int argc, char **argv) {
         write_generated_fixture(argv[1], instance);
     } else {
         test_reference_vm_aot_identity(program, instance);
+        test_affine_copy_lowering();
         test_foreign_profile_and_translation_mutation();
         puts("canonical XrProgram AOT tests passed");
     }

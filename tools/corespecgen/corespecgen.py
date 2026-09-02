@@ -317,7 +317,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
         require(operation["kat_validator"] in {
             "aggregate-construct", "aggregate-project", "aggregate-update",
             "block-arguments", "branch", "conditional-branch", "fixed-contract",
-            "owner-drop", "owner-move", "place-load", "place-local", "place-store",
+            "owner-copy", "owner-drop", "owner-move", "place-load", "place-local", "place-store",
             "return", "scalar-oracle", "sealed-call", "variant-construct",
             "variant-project", "variant-test",
         }, f"operation {spelling} has unknown KAT validator")
@@ -508,6 +508,18 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("result_type") == payloads[variant][field])
     if validator == "fixed-contract":
         return actual.get("operand_types") == ["error"]
+    if validator == "owner-copy":
+        ownership = actual.get("type_ownership")
+        operand_ownership = actual.get("operand_ownership")
+        result_ownership = actual.get("result_ownership")
+        return (actual.get("operand_type") == actual.get("result_type")
+                and actual.get("operand_category") == "value"
+                and actual.get("result_category") == "value"
+                and actual.get("copy_contract") in {"trivial", "explicit"}
+                and ownership in {"trivial", "affine"}
+                and operand_ownership in {"non-owner", "owner"}
+                and (ownership != "trivial" or operand_ownership == "non-owner")
+                and result_ownership == ("owner" if ownership == "affine" else "non-owner"))
     if validator == "owner-move":
         return (actual.get("operand_type") == actual.get("result_type")
                 and actual.get("operand_category") == "value"

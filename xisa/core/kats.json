@@ -915,6 +915,60 @@
       }
     },
     {
+      "id": "owner-copy-valid",
+      "operation": "core.owner.copy",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "OwnedRecord",
+        "result_type": "OwnedRecord",
+        "operand_category": "value",
+        "result_category": "value",
+        "copy_contract": "explicit",
+        "type_ownership": "affine",
+        "operand_ownership": "owner",
+        "result_ownership": "owner"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "owner-copy-forbidden",
+      "operation": "core.owner.copy",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "OwnedRecord",
+        "result_type": "OwnedRecord",
+        "operand_category": "value",
+        "result_category": "value",
+        "copy_contract": "forbidden",
+        "type_ownership": "affine",
+        "operand_ownership": "owner",
+        "result_ownership": "owner"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "owner-copy-trivial-valid",
+      "operation": "core.owner.copy",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "i64",
+        "result_type": "i64",
+        "operand_category": "value",
+        "result_category": "value",
+        "copy_contract": "trivial",
+        "type_ownership": "trivial",
+        "operand_ownership": "non-owner",
+        "result_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
       "id": "owner-move-valid",
       "operation": "core.owner.move",
       "kind": "contract",

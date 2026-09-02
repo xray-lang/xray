@@ -1133,6 +1133,8 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_COMPARE},
         {XI_CALL, XR_CORE_TYPE_VOID, XR_CORE_OP_CORE_CALL_SEALED_DIRECT, 0u,
          XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL},
+        {XI_CALL_BUILTIN, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_OWNER_COPY, 0u,
+         XR_PROGRAM_XI_PROJECTION_OWNER_COPY},
         {XI_TUPLE_NEW, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT, 0u,
          XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT},
         {XI_TUPLE_GET, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_AGGREGATE_PROJECT, 0u,
@@ -1250,7 +1252,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  if (left <= right) { value = value + 2 }\n"
                                          "  if (left > right) { value = value + 4 }\n"
                                          "  if (left >= right) { value = value + 8 }\n"
-                                         "  return value\n"
+                                         "  return copy(value)\n"
                                          "}\n"
                                          "fn choose_bool(flag: bool) -> i64 {\n"
                                          "  if (flag) { return 1 }\n"
@@ -1518,6 +1520,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
         XR_CORE_OP_CORE_VARIANT_TEST,
         XR_CORE_OP_CORE_VARIANT_PROJECT,
+        XR_CORE_OP_CORE_OWNER_COPY,
         XR_CORE_OP_CORE_PLACE_LOCAL,
         XR_CORE_OP_CORE_PLACE_LOAD,
         XR_CORE_OP_CORE_PLACE_STORE,

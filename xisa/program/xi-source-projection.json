@@ -151,6 +151,13 @@
       "immediate_u32": 0
     },
     {
+      "xi_operation": "xi.call.builtin",
+      "result_type": "any",
+      "projection_kind": "owner-copy",
+      "core_operation": "core.owner.copy",
+      "immediate_u32": 0
+    },
+    {
       "xi_operation": "xi.source.move",
       "result_type": "any",
       "projection_kind": "owner-move",

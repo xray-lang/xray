@@ -82,6 +82,95 @@ static XrValidatedProgram *validate_fixture(const XrCoreIrConstantInput *constan
     return validate_typed_fixture(NULL, 0u, constants, constant_count, functions, function_count);
 }
 
+static XrValidatedProgram *build_affine_copy_program(void) {
+    enum {
+        AFFINE_TYPE = 63
+    };
+    uint16_t fields[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput type = {
+        .key = fixture_key("vm-affine:type"),
+        .local_id = AFFINE_TYPE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+        .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+        .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+        .field_types = fields,
+        .field_count = 1u,
+    };
+    XrCoreIrConstantInput constant = {
+        .key = fixture_key("vm-affine:constant"),
+        .type_id = XR_CORE_TYPE_I64,
+        .kind = XR_CORE_IR_CONSTANT_I64,
+        .value.i64 = 42,
+    };
+    XrCoreIrKey scalar = fixture_key("vm-affine:scalar");
+    XrCoreIrKey owner = fixture_key("vm-affine:owner");
+    XrCoreIrKey copied = fixture_key("vm-affine:copied");
+    XrCoreIrKey projected = fixture_key("vm-affine:projected");
+    XrCoreIrKey construct_operands[] = {scalar};
+    XrCoreIrKey owner_operand[] = {owner};
+    XrCoreIrKey copied_operand[] = {copied};
+    XrCoreIrKey returned[] = {projected};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = scalar,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constant.key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = owner,
+         .result_type_id = AFFINE_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = construct_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+         .result = copied,
+         .result_type_id = AFFINE_TYPE,
+         .result_ownership = XR_CORE_IR_OWNER,
+         .operands = owner_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = copied_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = copied_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = owner_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("vm-affine:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("vm-affine:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = 1u,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_typed_fixture(&type, 1u, &constant, 1u, &function, 1u);
+}
+
 static XrValidatedProgram *build_aggregate_variant_program(bool wrong_variant) {
     enum {
         AGGREGATE_TYPE = 101,
@@ -248,13 +337,15 @@ static XrValidatedProgram *build_scalar_program(void) {
     XrCoreIrKey vmul = fixture_key("scalar:vmul");
     XrCoreIrKey vdiv = fixture_key("scalar:vdiv");
     XrCoreIrKey vcmp = fixture_key("scalar:vcmp");
+    XrCoreIrKey vcopy = fixture_key("scalar:vcopy");
     XrCoreIrKey vbool = fixture_key("scalar:vbool");
     XrCoreIrKey two[] = {v6, v2};
     XrCoreIrKey sub[] = {v8, v2};
     XrCoreIrKey mul[] = {vsub, v2};
     XrCoreIrKey div[] = {vmul, v2};
     XrCoreIrKey compare[] = {vdiv, v6};
-    XrCoreIrKey returned[] = {vcmp};
+    XrCoreIrKey copy[] = {vcmp};
+    XrCoreIrKey returned[] = {vcopy};
     XrCoreIrInstructionInput instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = v6,
@@ -306,6 +397,12 @@ static XrValidatedProgram *build_scalar_program(void) {
          .operand_count = 2,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
          .immediate.u32 = 0},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_COPY,
+         .result = vcopy,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = copy,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = returned,
@@ -974,6 +1071,9 @@ static void test_operation_semantics(void) {
     XrValidatedProgram *scalar = build_scalar_program();
     run_program(scalar, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_BOOL, 1u);
 
+    XrValidatedProgram *affine = build_affine_copy_program();
+    run_program(affine, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
+
     XrValidatedProgram *control = build_control_program();
     run_program(control, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U32, 64u);
     run_program(control, true, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_U32, 32u);
@@ -998,6 +1098,7 @@ static void test_operation_semantics(void) {
     xr_validated_program_free(local_ref);
     xr_validated_program_free(call);
     xr_validated_program_free(control);
+    xr_validated_program_free(affine);
     xr_validated_program_free(scalar);
     xr_validated_program_free(variant_trap);
     xr_validated_program_free(aggregate);

@@ -49,6 +49,8 @@ TYPE_SYSTEM_KEYS = {
     "builtin_rows",
     "dynamic_type_base",
     "dynamic_kinds",
+    "ownership_kinds",
+    "copy_contracts",
     "identity_order",
     "aggregate_shape",
     "variant_shape",
@@ -57,8 +59,11 @@ TYPE_SYSTEM_KEYS = {
 }
 VALUE_SYSTEM_KEYS = {
     "function_parameter_contract",
+    "function_result_contract",
     "parameter_modes",
     "value_categories",
+    "ownership_dispositions",
+    "value_definition_contract",
     "place_physical_layout",
 }
 SOURCE_PROJECTION_KEYS = {
@@ -94,6 +99,7 @@ PROJECTION_KINDS = {
     "variant-construct": "XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT",
     "variant-test": "XR_PROGRAM_XI_PROJECTION_VARIANT_TEST",
     "variant-project": "XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT",
+    "owner-copy": "XR_PROGRAM_XI_PROJECTION_OWNER_COPY",
     "owner-move": "XR_PROGRAM_XI_PROJECTION_OWNER_MOVE",
     "place-local": "XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL",
     "place-load": "XR_PROGRAM_XI_PROJECTION_PLACE_LOAD",
@@ -186,6 +192,8 @@ def validate(schema: dict[str, Any]) -> None:
         "builtin_rows": ["0:void", "1:bool", "2:i64", "3:u32", "4:error"],
         "dynamic_type_base": 16,
         "dynamic_kinds": ["aggregate", "variant"],
+        "ownership_kinds": ["0:trivial", "1:affine"],
+        "copy_contracts": ["0:trivial", "1:explicit", "2:forbidden"],
         "identity_order": "ascending-semantic-key",
         "aggregate_shape": "declaration-ordered-field-type-ids",
         "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
@@ -198,8 +206,11 @@ def validate(schema: dict[str, Any]) -> None:
             "value-system contract fields drifted")
     require(value_system == {
         "function_parameter_contract": "ordered-(TypeId,ParamMode)",
+        "function_result_contract": "ordered-(TypeId,OwnershipDisposition)",
         "parameter_modes": ["0:read", "1:ref", "2:move"],
         "value_categories": ["0:value", "1:place"],
+        "ownership_dispositions": ["0:non-owner", "1:owner"],
+        "value_definition_contract": "ordered-(TypeId,ValueCategory,OwnershipDisposition)",
         "place_physical_layout": "forbidden",
     }, "value-system semantic policy drifted")
 
@@ -326,10 +337,11 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT = 8,",
         "    XR_PROGRAM_XI_PROJECTION_VARIANT_TEST = 9,",
         "    XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT = 10,",
-        "    XR_PROGRAM_XI_PROJECTION_OWNER_MOVE = 11,",
-        "    XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL = 12,",
-        "    XR_PROGRAM_XI_PROJECTION_PLACE_LOAD = 13,",
-        "    XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 14,",
+        "    XR_PROGRAM_XI_PROJECTION_OWNER_COPY = 11,",
+        "    XR_PROGRAM_XI_PROJECTION_OWNER_MOVE = 12,",
+        "    XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL = 13,",
+        "    XR_PROGRAM_XI_PROJECTION_PLACE_LOAD = 14,",
+        "    XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 15,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef struct XrProgramXiProjection {",
@@ -480,6 +492,8 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         "",
         f"- Builtins: `{', '.join(type_system['builtin_rows'])}`",
         f"- Dynamic kinds: `{', '.join(type_system['dynamic_kinds'])}`",
+        f"- Ownership kinds: `{', '.join(type_system['ownership_kinds'])}`",
+        f"- Copy contracts: `{', '.join(type_system['copy_contracts'])}`",
         f"- Aggregate shape: `{type_system['aggregate_shape']}`",
         f"- Variant shape: `{type_system['variant_shape']}`",
         f"- Recursive value shape: `{type_system['recursive_value_shape']}`",
@@ -490,11 +504,14 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         "## Function and value contracts",
         "",
         f"- Function parameters: `{value_system['function_parameter_contract']}`",
+        f"- Function results: `{value_system['function_result_contract']}`",
         f"- Parameter modes: `{', '.join(value_system['parameter_modes'])}`",
         f"- Value categories: `{', '.join(value_system['value_categories'])}`",
+        f"- Ownership dispositions: `{', '.join(value_system['ownership_dispositions'])}`",
+        f"- Value definitions: `{value_system['value_definition_contract']}`",
         f"- Place physical layout: `{value_system['place_physical_layout']}`",
         "",
-        "A `place` is a verifier-confined SSA capability with a pointee `TypeId`; it is not a language type and never enters the type table. `REF` entry arguments and call operands are places, while `READ` and `MOVE` use values.",
+        "A `place` is a verifier-confined SSA capability with a pointee `TypeId`; it is not a language type and never enters the type table. `REF` entry arguments and call operands are places, while `READ` and `MOVE` use values. An `owner` disposition is an exactly-once logical token; physical retain/release and storage remain executor-private.",
     ])
     lines.extend(["", "## Resource ceilings", ""])
     for name, value in schema["limits"].items():

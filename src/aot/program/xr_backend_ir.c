@@ -39,6 +39,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_VARIANT_CONSTRUCT:
         case XR_CORE_OP_CORE_VARIANT_TEST:
         case XR_CORE_OP_CORE_VARIANT_PROJECT:
+        case XR_CORE_OP_CORE_OWNER_COPY:
         case XR_CORE_OP_CORE_OWNER_MOVE:
         case XR_CORE_OP_CORE_OWNER_DROP:
         case XR_CORE_OP_CORE_PLACE_LOCAL:
@@ -113,11 +114,13 @@ static void free_function(XrBackendFunction *function) {
         xr_free(row->instructions);
         xr_free(row->argument_types);
         xr_free(row->argument_categories);
+        xr_free(row->argument_ownerships);
         xr_free(row->argument_ids);
     }
     xr_free(function->value_representations);
     xr_free(function->value_types);
     xr_free(function->value_categories);
+    xr_free(function->value_ownerships);
     xr_free(function->blocks);
     xr_free(function->parameter_types);
     xr_free(function->parameter_modes);
@@ -235,11 +238,25 @@ static bool copy_category_array(const XrCoreIrValueCategory *source, uint32_t co
     return true;
 }
 
+static bool copy_ownership_array(const XrCoreIrOwnershipDisposition *source, uint32_t count,
+                                 XrCoreIrOwnershipDisposition **destination) {
+    *destination = NULL;
+    if (count == 0u)
+        return true;
+    XrCoreIrOwnershipDisposition *copy = xr_malloc((size_t) count * sizeof(*copy));
+    if (!copy)
+        return false;
+    memcpy(copy, source, (size_t) count * sizeof(*copy));
+    *destination = copy;
+    return true;
+}
+
 static bool lower_instruction(const XrValidatedInstruction *source,
                               XrBackendInstruction *destination) {
     destination->operation_id = source->operation_id;
     destination->result_type_id = source->result_type_id;
     destination->result_category = source->result_category;
+    destination->result_ownership = source->result_ownership;
     destination->result_id = source->result_id;
     destination->operand_count = source->operand_count;
     destination->immediate_kind = source->immediate_kind;
@@ -256,7 +273,9 @@ static bool lower_block(const XrValidatedBlock *source, XrBackendBlock *destinat
         !copy_u16_array(source->argument_types, source->argument_count,
                         &destination->argument_types) ||
         !copy_category_array(source->argument_categories, source->argument_count,
-                             &destination->argument_categories))
+                             &destination->argument_categories) ||
+        !copy_ownership_array(source->argument_ownerships, source->argument_count,
+                              &destination->argument_ownerships))
         return false;
     if (source->instruction_count == 0u)
         return true;
@@ -276,6 +295,7 @@ static bool lower_block(const XrValidatedBlock *source, XrBackendBlock *destinat
 static bool lower_function(const XrValidatedFunction *source, XrBackendFunction *destination) {
     destination->parameter_count = source->parameter_count;
     destination->result_type_id = source->result_type_id;
+    destination->result_ownership = source->result_ownership;
     destination->effect_mask = source->effect_mask;
     destination->capability_mask = source->capability_mask;
     destination->entry_block = source->entry_block;
@@ -288,7 +308,9 @@ static bool lower_function(const XrValidatedFunction *source, XrBackendFunction 
                          &destination->parameter_modes) ||
         !copy_u16_array(source->value_types, source->value_count, &destination->value_types) ||
         !copy_category_array(source->value_categories, source->value_count,
-                             &destination->value_categories))
+                             &destination->value_categories) ||
+        !copy_ownership_array(source->value_ownerships, source->value_count,
+                              &destination->value_ownerships))
         return false;
     if (source->value_count != 0u) {
         if ((size_t) source->value_count > SIZE_MAX / sizeof(*destination->value_representations))
@@ -379,6 +401,7 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
             hash_u32(&context, (uint32_t) fn->parameter_modes[parameter]);
         }
         hash_u16(&context, fn->result_type_id);
+        hash_u32(&context, (uint32_t) fn->result_ownership);
         hash_u32(&context, fn->effect_mask);
         hash_u32(&context, fn->capability_mask);
         hash_u32(&context, fn->entry_block);
@@ -387,6 +410,7 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
         for (uint32_t value = 0; value < fn->value_count; ++value) {
             hash_u16(&context, fn->value_types[value]);
             hash_u32(&context, (uint32_t) fn->value_categories[value]);
+            hash_u32(&context, (uint32_t) fn->value_ownerships[value]);
             hash_u16(&context, fn->value_representations[value]);
         }
         hash_u32(&context, fn->block_count);
@@ -397,6 +421,7 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
                 hash_u32(&context, row->argument_ids[argument]);
                 hash_u16(&context, row->argument_types[argument]);
                 hash_u32(&context, (uint32_t) row->argument_categories[argument]);
+                hash_u32(&context, (uint32_t) row->argument_ownerships[argument]);
             }
             hash_u32(&context, row->instruction_count);
             for (uint32_t instruction = 0; instruction < row->instruction_count; ++instruction) {
@@ -404,6 +429,7 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
                 hash_u16(&context, op->operation_id);
                 hash_u16(&context, op->result_type_id);
                 hash_u32(&context, (uint32_t) op->result_category);
+                hash_u32(&context, (uint32_t) op->result_ownership);
                 hash_u32(&context, op->result_id);
                 hash_u32(&context, op->operand_count);
                 for (uint32_t operand = 0; operand < op->operand_count; ++operand)

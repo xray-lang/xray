@@ -35,6 +35,12 @@ static bool array_category_equal(const XrCoreIrValueCategory *left,
            (left && right && memcmp(left, right, (size_t) count * sizeof(*left)) == 0);
 }
 
+static bool array_ownership_equal(const XrCoreIrOwnershipDisposition *left,
+                                  const XrCoreIrOwnershipDisposition *right, uint32_t count) {
+    return count == 0u ||
+           (left && right && memcmp(left, right, (size_t) count * sizeof(*left)) == 0);
+}
+
 static bool fingerprint_is_zero(XrFingerprint fingerprint) {
     uint8_t combined = 0u;
     for (size_t index = 0; index < sizeof(fingerprint.bytes); ++index)
@@ -48,10 +54,12 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         instruction->result_id >= function->value_count)
         return false;
     if (instruction->result_category > XR_CORE_IR_PLACE ||
+        instruction->result_ownership > XR_CORE_IR_OWNER ||
         (instruction->result_id == XR_PROGRAM_LOCATION_NONE &&
          instruction->result_category != XR_CORE_IR_VALUE) ||
         (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
-         instruction->result_category != function->value_categories[instruction->result_id]))
+         (instruction->result_category != function->value_categories[instruction->result_id] ||
+          instruction->result_ownership != function->value_ownerships[instruction->result_id])))
         return false;
     for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
         if (!instruction->operands || instruction->operands[operand] >= function->value_count)
@@ -84,6 +92,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
+        case XR_CORE_OP_CORE_OWNER_COPY:
         case XR_CORE_OP_CORE_OWNER_MOVE:
         case XR_CORE_OP_CORE_OWNER_DROP:
         case XR_CORE_OP_CORE_PLACE_LOCAL:
@@ -156,7 +165,7 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
              (!function->parameter_types || !function->parameter_modes)) ||
             (function->value_count != 0u &&
              (!function->value_types || !function->value_categories ||
-              !function->value_representations))) {
+              !function->value_ownerships || !function->value_representations))) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                       function_id, 0u, 0u);
             return false;
@@ -165,6 +174,7 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
             uint8_t expected = 0u;
             if (!xr_backend_representation_for_type(function->value_types[value], &expected) ||
                 function->value_categories[value] > XR_CORE_IR_PLACE ||
+                function->value_ownerships[value] > XR_CORE_IR_OWNER ||
                 expected != function->value_representations[value]) {
                 xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                           function_id, 0u, 0u);
@@ -181,7 +191,8 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
         for (uint32_t block_id = 0; block_id < function->block_count; ++block_id) {
             const XrBackendBlock *block = &function->blocks[block_id];
             if ((block->argument_count != 0u &&
-                 (!block->argument_ids || !block->argument_types || !block->argument_categories)) ||
+                 (!block->argument_ids || !block->argument_types || !block->argument_categories ||
+                  !block->argument_ownerships)) ||
                 (block->instruction_count != 0u && !block->instructions)) {
                 xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                           function_id, block_id, 0u);
@@ -192,7 +203,9 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
                     block->argument_types[argument] !=
                         function->value_types[block->argument_ids[argument]] ||
                     block->argument_categories[argument] !=
-                        function->value_categories[block->argument_ids[argument]]) {
+                        function->value_categories[block->argument_ids[argument]] ||
+                    block->argument_ownerships[argument] !=
+                        function->value_ownerships[block->argument_ids[argument]]) {
                     xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVARIANT_REJECTED, 0u,
                                               function_id, block_id, 0u);
                     return false;
@@ -284,6 +297,7 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
         const XrBackendFunction *lowered = &ir->functions[function_id];
         if (source->parameter_count != lowered->parameter_count ||
             source->result_type_id != lowered->result_type_id ||
+            source->result_ownership != lowered->result_ownership ||
             source->effect_mask != lowered->effect_mask ||
             source->capability_mask != lowered->capability_mask ||
             source->entry_block != lowered->entry_block ||
@@ -295,7 +309,9 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
                               source->parameter_count) ||
             !array_u16_equal(source->value_types, lowered->value_types, source->value_count) ||
             !array_category_equal(source->value_categories, lowered->value_categories,
-                                  source->value_count)) {
+                                  source->value_count) ||
+            !array_ownership_equal(source->value_ownerships, lowered->value_ownerships,
+                                   source->value_count)) {
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_TRANSLATION_REJECTED, 0u,
                                       function_id, 0u, 0u);
             return false;
@@ -311,7 +327,10 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
                                  source_block->argument_count) ||
                 !array_category_equal(source_block->argument_categories,
                                       lowered_block->argument_categories,
-                                      source_block->argument_count)) {
+                                      source_block->argument_count) ||
+                !array_ownership_equal(source_block->argument_ownerships,
+                                       lowered_block->argument_ownerships,
+                                       source_block->argument_count)) {
                 xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_TRANSLATION_REJECTED, 0u,
                                           function_id, block_id, 0u);
                 return false;
@@ -326,6 +345,7 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
                     source_instruction->result_id != lowered_instruction->result_id ||
                     source_instruction->result_type_id != lowered_instruction->result_type_id ||
                     source_instruction->result_category != lowered_instruction->result_category ||
+                    source_instruction->result_ownership != lowered_instruction->result_ownership ||
                     source_instruction->operand_count != lowered_instruction->operand_count ||
                     source_instruction->successor_count != lowered_instruction->successor_count ||
                     !array_u32_equal(source_instruction->operands, lowered_instruction->operands,

@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; trap, error publication, and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; trap, error publication, and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 26 registered operations have bounded verification and independent reference evaluation. Explicit owner copy, cleanup CFG, coroutine, import, and boundary surfaces fail closed until their owning slices activate them."
+    "note": "All 27 registered operations have bounded verification and independent reference evaluation. Explicit owner copy and the affine ownership-domain proof are active; sealed invoke, cleanup CFG, coroutine, import, and boundary surfaces fail closed until their owning slices activate them."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 21 registered operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 27 registered operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 21 registered operations lower through an independently verified BackendIR into portable C11. The pure native fixture links no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 27 registered operations lower through an independently verified BackendIR into portable C11. The pure native fixture links no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -371,6 +371,27 @@
         "src/frontend/analyzer/xa_enum_record_plan.c",
         "src/ir/xi_lower_misc.c",
         "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.owner.copy",
+      "core_spec_contract": "borrow one VALUE and produce one independent logical value plus ownership domain exactly when the TypeId copy contract permits it",
+      "program_encoding": "type rows carry TRIVIAL/AFFINE ownership and TRIVIAL/EXPLICIT/FORBIDDEN copy contracts; every SSA definition carries NON_OWNER/OWNER disposition",
+      "decoder_verifier_evaluator": "bounded metadata decode, exact copy capability, call-bound READ borrow coercion, affine exactly-once consume or per-edge transfer, and independent aggregate clone",
+      "vm_implementation": "private aggregate carriers clone recursively while scalar copies remain direct values; ownership legality is verifier-owned",
+      "aot_lowering": "direct typed native value copy from the same validated operation with no runtime ownership inference",
+      "source_producer": "source copy(value) lowers to xi.call.builtin aux=copy and projects exactly to core.owner.copy; unrelated builtins fail closed",
+      "old_owner_deletion": "canonical semantics never infer ownership from refcounts, Xi ARC flags, backend liveness, or representation-specific retain/release",
+      "status": "COMPLETE_W7_WAVE3_SLICE3",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/schema.json",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/test_xr_program_verify.c",
         "tests/unit/ir/test_xi_pipeline.c"
       ]
     },

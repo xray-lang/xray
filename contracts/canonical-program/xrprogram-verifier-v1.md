@@ -17,15 +17,22 @@ The v1 verifier is ordered and fail closed:
 4. canonical value definitions and block-local SSA use;
 5. block-parameter CFG, terminators, successor arity and reachability;
 6. per-operation result, operand, immediate and successor rules;
-7. declared effect and capability closure, including sealed direct callees;
-8. immutable validated type-state construction.
+7. monotone SSA ownership: every affine owner is consumed once or transferred once on every
+   successor edge, while READ calls create only call-bound non-consuming borrows;
+8. declared effect and capability closure, including sealed direct callees;
+9. immutable validated type-state construction.
 
 Values cannot flow implicitly between blocks. A successor receives all cross-block values through
 typed block arguments. This makes dominance local and keeps verification work linear in records,
 operands and edges. Dynamic aggregate and variant rows are declaration-ordered logical value shapes:
 their IDs are canonical semantic-key order, every referenced type must exist, and recursive-by-value
 cycles are rejected. No offset, alignment, slot, register class or target ABI fact is admitted.
-Current aggregate values have an explicit pure-copy contract; ownership/coroutine/import/boundary
+Every type has an explicit logical ownership class (`TRIVIAL` or `AFFINE`) and copy contract
+(`TRIVIAL`, `EXPLICIT` or `FORBIDDEN`). Every SSA definition carries `NON_OWNER` or `OWNER`.
+`core.owner.copy` admits only a permitted copy contract and creates an independent affine owner;
+move, drop, MOVE calls and affine returns consume owners. In this slice affine aggregate/variant
+payloads and local places are intentionally restricted to trivial child types, so nested managed
+storage cannot acquire hidden obligations. Sealed-invoke cleanup, coroutine, import and boundary
 rows remain inactive and must be rejected rather than treated as verified.
 
 Diagnostics have a stable kind plus section/function/block/instruction/value coordinates. They do
@@ -38,5 +45,6 @@ The reference evaluator consumes only `XrValidatedProgram`. It implements checke
 arithmetic without C signed overflow, explicit traps/errors, logical aggregate/variant values,
 block arguments, branches, calls and the pointer-width profile query. Aggregate update produces a
 fresh logical value, and variant projection publishes the named tag-mismatch trap before reading a
-payload. The evaluator does not include or call compiler planners, VM handlers, AOT lowering or
-generated-C helpers.
+payload. Explicit owner copy recursively clones logical aggregate carriers under the same bounded
+value-cell budget used for ordinary construction. The evaluator does not include or call compiler
+planners, VM handlers, AOT lowering or generated-C helpers.

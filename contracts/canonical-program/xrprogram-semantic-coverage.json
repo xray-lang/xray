@@ -1,8 +1,8 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "197b4e9132a18307be45c55b5f25565267b98ed49b63de14c8b8ab76ad02b46a",
-  "program_schema_sha256": "99b2e2ddbb4e477622b01ceb6932fa042cc89452ab5bdc8fa9a069b2aafd4080",
+  "core_spec_semantic_sha256": "76e5b9e206d874e678e547327a2f48c8e1c769b5f299fe0cda387b652bee47f4",
+  "program_schema_sha256": "725ba1c2d514dacdb7da853811635cd3354479d494e2ac3967ade8f84ede9d5f",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "execution_budgets": [
@@ -10,7 +10,7 @@
     "call-depth",
     "aggregate-value-cells"
   ],
-  "operation_count": 26,
+  "operation_count": 27,
   "operations": [
     {
       "stable_id": 1,
@@ -181,6 +181,14 @@
       "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     },
     {
+      "stable_id": 96,
+      "spelling": "core.owner.copy",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
       "stable_id": 97,
       "spelling": "core.owner.move",
       "decoder": "COMPLETE",
@@ -239,7 +247,7 @@
     "standalone_hostile_lengths": 513
   },
   "inactive_contracts": [
-    "managed owner operations and cleanup",
+    "sealed-invoke cleanup and nested managed storage",
     "coroutine state and cleanup",
     "imports and materialized boundaries"
   ]

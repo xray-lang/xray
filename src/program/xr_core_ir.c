@@ -83,6 +83,27 @@ static bool value_category_is_valid(XrCoreIrValueCategory category) {
     return category == XR_CORE_IR_VALUE || category == XR_CORE_IR_PLACE;
 }
 
+static bool ownership_disposition_is_valid(XrCoreIrOwnershipDisposition ownership) {
+    return ownership == XR_CORE_IR_NON_OWNER || ownership == XR_CORE_IR_OWNER;
+}
+
+static XrCoreIrTypeOwnership type_ownership(const XrCoreIrProgram *program, uint16_t type_id) {
+    if (!program || type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
+        return XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+    return program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].ownership;
+}
+
+static bool value_contract_is_valid(const XrCoreIrProgram *program, uint16_t type_id,
+                                    XrCoreIrValueCategory category,
+                                    XrCoreIrOwnershipDisposition ownership) {
+    if (!value_category_is_valid(category) || !ownership_disposition_is_valid(ownership))
+        return false;
+    if (category == XR_CORE_IR_PLACE)
+        return ownership == XR_CORE_IR_NON_OWNER;
+    return ownership != XR_CORE_IR_OWNER ||
+           type_ownership(program, type_id) == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+}
+
 static bool copy_bytes(void **destination, const void *source, size_t count, size_t item_size) {
     *destination = NULL;
     if (count == 0)
@@ -157,6 +178,7 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
     output->result = input->result;
     output->result_type_id = input->result_type_id;
     output->result_category = input->result_category;
+    output->result_ownership = input->result_ownership;
     output->operand_count = input->operand_count;
     output->immediate_kind = input->immediate_kind;
     output->successor_count = input->successor_count;
@@ -240,6 +262,7 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     output->key = input->key;
     output->parameter_count = input->parameter_count;
     output->result_type_id = input->result_type_id;
+    output->result_ownership = input->result_ownership;
     output->effect_mask = input->effect_mask;
     output->capability_mask = input->capability_mask;
     output->entry_block = input->entry_block;
@@ -314,6 +337,8 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
     output->key = input->key;
     output->type_id = input->local_id;
     output->kind = input->kind;
+    output->ownership = input->ownership;
+    output->copy_contract = input->copy_contract;
     output->field_count = input->field_count;
     output->variant_count = input->variant_count;
     if (!copy_bytes((void **) &output->field_types, input->field_types, input->field_count,
@@ -501,7 +526,13 @@ static bool validate_types(const XrCoreIrProgram *program) {
         const XrCoreIrType *type = &program->types[index];
         valid = !xr_core_ir_key_is_zero(type->key) &&
                 type->type_id == XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index &&
-                (index == 0 || !xr_core_ir_key_equal(program->types[index - 1u].key, type->key));
+                (index == 0 || !xr_core_ir_key_equal(program->types[index - 1u].key, type->key)) &&
+                type->ownership <= XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+                type->copy_contract <= XR_CORE_IR_COPY_FORBIDDEN &&
+                ((type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
+                  type->copy_contract == XR_CORE_IR_COPY_TRIVIAL) ||
+                 (type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+                  type->copy_contract != XR_CORE_IR_COPY_TRIVIAL));
         if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
             valid = valid && type->field_count != 0u && type->field_types &&
                     type->variant_count == 0u && !type->variants;
@@ -523,6 +554,20 @@ static bool validate_types(const XrCoreIrProgram *program) {
         }
         if (valid)
             valid = type_graph_visit(program, index, state);
+    }
+    for (uint32_t index = 0; valid && index < program->type_count; ++index) {
+        const XrCoreIrType *type = &program->types[index];
+        if (type->ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE)
+            continue;
+        for (uint32_t field = 0; valid && field < type->field_count; ++field)
+            valid = type_ownership(program, type->field_types[field]) ==
+                    XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+        for (uint32_t variant = 0; valid && variant < type->variant_count; ++variant) {
+            const XrCoreIrVariant *row = &type->variants[variant];
+            for (uint32_t field = 0; valid && field < row->payload_count; ++field)
+                valid = type_ownership(program, row->payload_types[field]) ==
+                        XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+        }
     }
     xr_free(state);
     return valid;
@@ -603,6 +648,14 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
             if (xr_core_ir_key_is_zero(function->key) ||
                 find_function(program, function->key) != function ||
                 !type_id_supported(program, function->result_type_id) ||
+                !ownership_disposition_is_valid(function->result_ownership) ||
+                (function->result_type_id == XR_CORE_TYPE_VOID &&
+                 function->result_ownership != XR_CORE_IR_NON_OWNER) ||
+                (function->result_type_id != XR_CORE_TYPE_VOID &&
+                 function->result_ownership != (type_ownership(program, function->result_type_id) ==
+                                                        XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
+                                                    ? XR_CORE_IR_OWNER
+                                                    : XR_CORE_IR_NON_OWNER)) ||
                 function->block_count == 0 ||
                 function->block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION ||
                 !find_block(function, function->entry_block)) {
@@ -630,8 +683,15 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                 XrCoreIrValueCategory expected = function->parameter_modes[index] == XR_PARAM_REF
                                                      ? XR_CORE_IR_PLACE
                                                      : XR_CORE_IR_VALUE;
+                XrCoreIrOwnershipDisposition expected_ownership =
+                    function->parameter_modes[index] == XR_PARAM_MOVE &&
+                            type_ownership(program, function->parameter_types[index]) ==
+                                XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
+                        ? XR_CORE_IR_OWNER
+                        : XR_CORE_IR_NON_OWNER;
                 if (entry->arguments[index].type_id != function->parameter_types[index] ||
-                    entry->arguments[index].category != expected) {
+                    entry->arguments[index].category != expected ||
+                    entry->arguments[index].ownership != expected_ownership) {
                     xr_program_set_diagnostic(
                         diagnostic, diagnostic_size,
                         "entry block value/place contract does not match function signature");
@@ -652,7 +712,9 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                     if (xr_core_ir_key_is_zero(block->arguments[index].key) ||
                         !type_id_supported(program, block->arguments[index].type_id) ||
                         block->arguments[index].type_id == XR_CORE_TYPE_VOID ||
-                        !value_category_is_valid(block->arguments[index].category) ||
+                        !value_contract_is_valid(program, block->arguments[index].type_id,
+                                                 block->arguments[index].category,
+                                                 block->arguments[index].ownership) ||
                         !function_has_value(function, block->arguments[index].key)) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                   "block argument is invalid");
@@ -671,7 +733,9 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                     if (!xr_core_ir_key_is_zero(instruction->result)) {
                         if (!type_id_supported(program, instruction->result_type_id) ||
                             instruction->result_type_id == XR_CORE_TYPE_VOID ||
-                            !value_category_is_valid(instruction->result_category)) {
+                            !value_contract_is_valid(program, instruction->result_type_id,
+                                                     instruction->result_category,
+                                                     instruction->result_ownership)) {
                             xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                       "instruction result type is unsupported");
                             return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -683,7 +747,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                         }
                         value_count++;
                     } else if (instruction->result_type_id != XR_CORE_TYPE_VOID ||
-                               instruction->result_category != XR_CORE_IR_VALUE) {
+                               instruction->result_category != XR_CORE_IR_VALUE ||
+                               instruction->result_ownership != XR_CORE_IR_NON_OWNER) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                   "result-less instruction must use void type");
                         return XR_PROGRAM_BUILD_INVALID_INPUT;

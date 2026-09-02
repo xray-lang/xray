@@ -241,11 +241,13 @@ static uint32_t function_value_count(const XrCoreIrFunction *function) {
 }
 
 static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
-    /* type-id, kind, value capability, copy contract, then logical shape */
+    /* type-id, kind, logical ownership, copy contract, then logical shape */
     static const uint8_t rows[][4] = {
-        {XR_CORE_TYPE_VOID, 0u, 0u, 0u},  {XR_CORE_TYPE_BOOL, 1u, 1u, 1u},
-        {XR_CORE_TYPE_I64, 2u, 1u, 1u},   {XR_CORE_TYPE_U32, 3u, 1u, 1u},
-        {XR_CORE_TYPE_ERROR, 4u, 1u, 1u},
+        {XR_CORE_TYPE_VOID, 0u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_FORBIDDEN},
+        {XR_CORE_TYPE_BOOL, 1u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_I64, 2u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_U32, 3u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_ERROR, 4u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
     };
     buffer_put_uvar(buffer, sizeof(rows) / sizeof(rows[0]) + program->type_count);
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
@@ -260,8 +262,8 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
         buffer_put_uvar(buffer, type->kind == XR_CORE_IR_TYPE_AGGREGATE
                                     ? XR_PROGRAM_TYPE_KIND_AGGREGATE
                                     : XR_PROGRAM_TYPE_KIND_VARIANT);
-        buffer_put_uvar(buffer, 1u);
-        buffer_put_uvar(buffer, 1u);
+        buffer_put_uvar(buffer, type->ownership);
+        buffer_put_uvar(buffer, type->copy_contract);
         buffer_put_bytes(buffer, type->key.bytes, sizeof(type->key.bytes));
         if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
             buffer_put_uvar(buffer, type->field_count);
@@ -311,6 +313,7 @@ static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, u
             buffer_put_uvar(buffer, function->parameter_modes[parameter]);
         }
         buffer_put_uvar(buffer, function->result_type_id);
+        buffer_put_uvar(buffer, function->result_ownership);
         buffer_put_uvar(buffer, function->effect_mask);
         buffer_put_uvar(buffer, function->capability_mask);
         buffer_put_uvar(buffer, entry);
@@ -334,6 +337,7 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrInstruction *in
     }
     buffer_put_uvar(buffer, instruction->result_type_id);
     buffer_put_uvar(buffer, instruction->result_category);
+    buffer_put_uvar(buffer, instruction->result_ownership);
     buffer_put_uvar(buffer, instruction->operand_count);
     for (uint32_t index = 0; index < instruction->operand_count; ++index) {
         (void) value_id(function, instruction->operands[index], &id);
@@ -399,6 +403,7 @@ static void encode_code(ByteBuffer *buffer, const FunctionRef *functions, uint32
                 buffer_put_uvar(buffer, value);
                 buffer_put_uvar(buffer, block->arguments[argument].type_id);
                 buffer_put_uvar(buffer, block->arguments[argument].category);
+                buffer_put_uvar(buffer, block->arguments[argument].ownership);
             }
             buffer_put_uvar(buffer, block->instruction_count);
             for (uint32_t instruction = 0; instruction < block->instruction_count; ++instruction)

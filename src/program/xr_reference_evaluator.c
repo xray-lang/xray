@@ -122,6 +122,41 @@ static XrReferenceAggregateValue *allocate_aggregate(EvalContext *context, uint1
     return aggregate;
 }
 
+static bool clone_reference_value(EvalContext *context, XrReferenceValue source, uint16_t type_id,
+                                  XrReferenceValue *output) {
+    const XrValidatedType *type = xr_validated_program_type(context->program, type_id);
+    if (!type) {
+        *output = source;
+        return true;
+    }
+    const XrReferenceAggregateValue *source_aggregate = source.as.aggregate;
+    if (!source_aggregate || source_aggregate->type_id != type_id)
+        return false;
+    XrReferenceAggregateValue *copy = allocate_aggregate(
+        context, type_id, source_aggregate->variant_ordinal, source_aggregate->field_count);
+    if (!copy)
+        return false;
+    for (uint32_t field = 0; field < source_aggregate->field_count; ++field) {
+        uint16_t field_type = XR_CORE_TYPE_VOID;
+        if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
+            if (field >= type->field_count)
+                return false;
+            field_type = type->field_types[field];
+        } else {
+            if (source_aggregate->variant_ordinal >= type->variant_count ||
+                field >= type->variants[source_aggregate->variant_ordinal].payload_count)
+                return false;
+            field_type = type->variants[source_aggregate->variant_ordinal].payload_types[field];
+        }
+        if (!clone_reference_value(context, source_aggregate->fields[field], field_type,
+                                   &copy->fields[field]))
+            return false;
+    }
+    output->kind = XR_REFERENCE_VALUE_AGGREGATE;
+    output->as.aggregate = copy;
+    return true;
+}
+
 static void free_aggregates(EvalContext *context) {
     for (uint32_t index = 0; index < context->aggregate_count; ++index) {
         xr_free(context->aggregates[index]->fields);
@@ -402,6 +437,13 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     }
                     produced.as.value.kind = XR_REFERENCE_VALUE_U32;
                     produced.as.value.as.u32 = context->profile.pointer_width;
+                    break;
+                case XR_CORE_OP_CORE_OWNER_COPY:
+                    if (!clone_reference_value(context, values[instruction->operands[0]].as.value,
+                                               instruction->result_type_id, &produced.as.value)) {
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
                     break;
                 case XR_CORE_OP_CORE_OWNER_MOVE:
                     produced.as.value = values[instruction->operands[0]].as.value;

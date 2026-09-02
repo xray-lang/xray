@@ -154,6 +154,13 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT,
     },
     {
+        XI_CALL_BUILTIN,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_OWNER_COPY,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_OWNER_COPY,
+    },
+    {
         XI_SOURCE_MOVE,
         XR_PROGRAM_XI_ANY_RESULT_TYPE,
         XR_CORE_OP_CORE_OWNER_MOVE,

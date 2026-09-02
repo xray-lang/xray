@@ -32,6 +32,7 @@ typedef struct XrXiBlockArgumentStorage {
     XrCoreIrKey key;
     uint16_t type_id;
     XrCoreIrValueCategory category;
+    XrCoreIrOwnershipDisposition ownership;
 } XrXiBlockArgumentStorage;
 
 typedef struct XrXiBlockStorage {
@@ -682,6 +683,21 @@ static bool map_type(XrXiBuildContext *context, const XrType *type, uint16_t *ty
     return map_type_recursive(context, type, type_id, NULL, 0u);
 }
 
+static XrCoreIrOwnershipDisposition logical_ownership_for_type(const XrXiBuildContext *context,
+                                                               uint16_t type_id) {
+    const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
+    return type && type->input.ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ? XR_CORE_IR_OWNER
+                                                                             : XR_CORE_IR_NON_OWNER;
+}
+
+static XrCoreIrCopyContract logical_copy_contract_for_type(const XrXiBuildContext *context,
+                                                           uint16_t type_id) {
+    if (type_id == XR_CORE_TYPE_VOID)
+        return XR_CORE_IR_COPY_FORBIDDEN;
+    const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
+    return type ? type->input.copy_contract : XR_CORE_IR_COPY_TRIVIAL;
+}
+
 static const XiModule *function_module(const XiFunc *function) {
     while (function && function->parent_func)
         function = function->parent_func;
@@ -865,6 +881,9 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
                    : imported_value_key(function, block->xi, source),
         .type_id = type_id,
         .category = logical_value_category(source),
+        .ownership = source->op == XI_PARAM && source->param_mode == XR_PARAM_MOVE
+                         ? logical_ownership_for_type(context, type_id)
+                         : XR_CORE_IR_NON_OWNER,
     };
     if (changed)
         *changed = true;
@@ -1025,6 +1044,7 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
                     "Xi call v%u result type is not active in CoreSpec", value->id);
     instruction->operation_id = projection->core_operation_id;
     instruction->result_type_id = result_type;
+    instruction->result_ownership = logical_ownership_for_type(context, result_type);
     if (result_type != XR_CORE_TYPE_VOID)
         instruction->result = value_key(function, value);
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
@@ -1218,6 +1238,25 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             return set_operands(instruction, function, block, value->args, 1u, diagnostic,
                                 diagnostic_size);
         }
+        case XR_PROGRAM_XI_PROJECTION_OWNER_COPY: {
+            uint16_t operand_type = XR_CORE_TYPE_VOID;
+            if (value->op != XI_CALL_BUILTIN || value->nargs != 1u || !value->aux ||
+                value->aux_kind != XI_AUX_KIND_NONE ||
+                strcmp((const char *) value->aux, "copy") != 0 ||
+                result_type == XR_CORE_TYPE_VOID ||
+                !map_type(context, value->args[0]->type, &operand_type) ||
+                operand_type != result_type ||
+                logical_copy_contract_for_type(context, result_type) == XR_CORE_IR_COPY_FORBIDDEN)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi copy v%u has no exact logical copy contract", value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = result_type;
+            instruction->result_ownership = logical_ownership_for_type(context, result_type);
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            return set_operands(instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
+        }
         case XR_PROGRAM_XI_PROJECTION_OWNER_MOVE: {
             uint16_t operand_type = XR_CORE_TYPE_VOID;
             if (value->nargs != 1u || result_type == XR_CORE_TYPE_VOID ||
@@ -1228,6 +1267,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = result_type;
+            instruction->result_ownership = logical_ownership_for_type(context, result_type);
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
             return set_operands(instruction, function, block, value->args, 1u, diagnostic,
                                 diagnostic_size);
@@ -1440,6 +1480,7 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             block->arguments[argument].key = block->argument_storage[argument].key;
             block->arguments[argument].type_id = block->argument_storage[argument].type_id;
             block->arguments[argument].category = block->argument_storage[argument].category;
+            block->arguments[argument].ownership = block->argument_storage[argument].ownership;
         }
     }
     return XR_PROGRAM_BUILD_OK;
@@ -1502,6 +1543,7 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
     if (!map_type(context, xi->return_type, &output->result_type_id))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi function %u result type is not active in CoreSpec", function_index);
+    output->result_ownership = logical_ownership_for_type(context, output->result_type_id);
     if (xi->nparams != 0) {
         storage->parameter_types = xr_calloc(xi->nparams, sizeof(*storage->parameter_types));
         storage->parameter_modes = xr_calloc(xi->nparams, sizeof(*storage->parameter_modes));

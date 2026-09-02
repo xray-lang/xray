@@ -30,7 +30,7 @@
     "value": "typed SSA value with explicit ownership disposition",
     "place": "verifier-confined SSA resource with pointee TypeId, origin and call-bound lifetime; not a language TypeId",
     "loan": "function signature plus exact call/invoke interval; not a runtime object",
-    "ownership_domain": "logical transfer and drop obligation; never reconstructed from refcount or backend liveness",
+    "ownership_domain": "monotone logical OWNER/NON_OWNER SSA fact with exactly-once consume or exactly-once transfer on every successor edge; never reconstructed from refcount or backend liveness",
     "cleanup": "explicit CFG edges and owner.drop obligations; no ambient cleanup stack in XrProgram",
     "error_channel": "explicit sealed invoke normal/error continuations and typed error block arguments; no implicit pending-error slot",
     "panic_channel": "separate typed panic continuation/publication; never encoded as a business error"
@@ -69,42 +69,42 @@
       "id": "core.owner.copy",
       "law": "produce one independent owner/domain according to the type copy capability",
       "source": "explicit copy(value)",
-      "status": "FROZEN_W7_WAVE3"
+      "status": "COMPLETE_W7_WAVE3_SLICE3"
     },
     {
       "stable_id": 97,
       "id": "core.owner.move",
       "law": "consume one owner and produce the same logical value under a new SSA owner exactly once",
       "source": "source move or compiler owner-forward",
-      "status": "FROZEN_W7_WAVE3"
+      "status": "COMPLETE_W7_WAVE3_SLICE2"
     },
     {
       "stable_id": 98,
       "id": "core.owner.drop",
       "law": "consume one owner and run its logical drop obligation exactly once",
       "source": "source drop or cleanup edge",
-      "status": "FROZEN_W7_WAVE3"
+      "status": "COMPLETE_W7_WAVE3_SLICE2"
     },
     {
       "stable_id": 104,
       "id": "core.place.local",
       "law": "create a non-escaping call-bound place for one addressable local binding",
       "source": "typed ref actual or ref parameter",
-      "status": "FROZEN_W7_WAVE3"
+      "status": "COMPLETE_W7_WAVE3_SLICE2"
     },
     {
       "stable_id": 105,
       "id": "core.place.load",
       "law": "read a value through one verified live place without transferring the place",
       "source": "typed call-bound place read",
-      "status": "FROZEN_W7_WAVE3"
+      "status": "COMPLETE_W7_WAVE3_SLICE2"
     },
     {
       "stable_id": 106,
       "id": "core.place.store",
       "law": "write one exact pointee-typed value through one verified exclusive live place",
       "source": "typed call-bound place write",
-      "status": "FROZEN_W7_WAVE3"
+      "status": "COMPLETE_W7_WAVE3_SLICE2"
     }
   ],
   "explicit_non_operations": {
@@ -122,7 +122,7 @@
     "xi.place.load": "core.place.load",
     "xi.place.store": "core.place.store",
     "xi.throw": "core.error.publish after explicit cleanup CFG",
-    "xi.copy:value-clone": "erased for Copy values or core.owner.copy for independent owner copy",
+    "xi.call.builtin[copy]": "core.owner.copy for an explicit source copy; unrelated builtins have no projection",
     "xi.retain": "no canonical projection",
     "xi.release": "no canonical projection unless source/cleanup owner.drop identity is explicit",
     "xi.err.set": "no canonical projection",

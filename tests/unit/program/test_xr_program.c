@@ -201,8 +201,8 @@ static void test_determinism_roundtrip_and_identity(void) {
 
     char id_hex[XR_PROGRAM_DIGEST_SIZE * 2u + 1u];
     xr_program_id_hex(first.id, id_hex);
-    CHECK(first.size == 214u);
-    CHECK(strcmp(id_hex, "db9f6701f76da2bd82157609855fb37c7e7dd704f57512d99e6cda1438987b0b") == 0);
+    CHECK(first.size == 222u);
+    CHECK(strcmp(id_hex, "42ba3fde5ac528be94742e0d75792315647649b27d33ccd0d9ec623cda64d5ca") == 0);
     printf("Task 296 walking-skeleton ProgramId: %s (%zu bytes)\n", id_hex, first.size);
 
     xr_program_artifact_free(&reencoded);

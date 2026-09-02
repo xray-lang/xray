@@ -95,7 +95,7 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
             "standalone_hostile_lengths": 513,
         },
         "inactive_contracts": [
-            "managed owner operations and cleanup",
+            "sealed-invoke cleanup and nested managed storage",
             "coroutine state and cleanup",
             "imports and materialized boundaries",
         ],

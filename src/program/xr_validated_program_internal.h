@@ -1,6 +1,7 @@
 #ifndef XR_VALIDATED_PROGRAM_INTERNAL_H
 #define XR_VALIDATED_PROGRAM_INTERNAL_H
 
+#include "../core/xr_core_spec_gen.h"
 #include "xr_program_verify.h"
 
 #include <stdatomic.h>
@@ -14,6 +15,8 @@ typedef struct XrValidatedType {
     XrCoreIrKey key;
     uint16_t type_id;
     XrCoreIrTypeKind kind;
+    XrCoreIrTypeOwnership ownership;
+    XrCoreIrCopyContract copy_contract;
     uint16_t *field_types;
     uint32_t field_count;
     XrValidatedVariant *variants;
@@ -34,6 +37,7 @@ typedef struct XrValidatedInstruction {
     uint32_t result_id;
     uint16_t result_type_id;
     XrCoreIrValueCategory result_category;
+    XrCoreIrOwnershipDisposition result_ownership;
     uint32_t *operands;
     uint32_t operand_count;
     XrCoreIrImmediateKind immediate_kind;
@@ -58,6 +62,7 @@ typedef struct XrValidatedBlock {
     uint32_t *argument_ids;
     uint16_t *argument_types;
     XrCoreIrValueCategory *argument_categories;
+    XrCoreIrOwnershipDisposition *argument_ownerships;
     uint32_t argument_count;
     XrValidatedInstruction *instructions;
     uint32_t instruction_count;
@@ -68,6 +73,7 @@ typedef struct XrValidatedFunction {
     XrParamMode *parameter_modes;
     uint32_t parameter_count;
     uint16_t result_type_id;
+    XrCoreIrOwnershipDisposition result_ownership;
     uint32_t effect_mask;
     uint32_t capability_mask;
     uint32_t entry_block;
@@ -75,6 +81,7 @@ typedef struct XrValidatedFunction {
     uint32_t block_count;
     uint16_t *value_types;
     XrCoreIrValueCategory *value_categories;
+    XrCoreIrOwnershipDisposition *value_ownerships;
     uint32_t *value_blocks;
     uint32_t *value_positions;
     uint32_t value_count;
@@ -107,6 +114,20 @@ static inline const XrValidatedType *xr_validated_program_type(const XrValidated
         return NULL;
     uint32_t index = (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
     return index < program->type_count ? &program->types[index] : NULL;
+}
+
+static inline XrCoreIrTypeOwnership
+xr_validated_program_type_ownership(const XrValidatedProgram *program, uint16_t type_id) {
+    const XrValidatedType *type = xr_validated_program_type(program, type_id);
+    return type ? type->ownership : XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+}
+
+static inline XrCoreIrCopyContract
+xr_validated_program_copy_contract(const XrValidatedProgram *program, uint16_t type_id) {
+    if (type_id == XR_CORE_TYPE_VOID)
+        return XR_CORE_IR_COPY_FORBIDDEN;
+    const XrValidatedType *type = xr_validated_program_type(program, type_id);
+    return type ? type->copy_contract : XR_CORE_IR_COPY_TRIVIAL;
 }
 
 #endif /* XR_VALIDATED_PROGRAM_INTERNAL_H */

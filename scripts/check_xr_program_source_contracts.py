@@ -114,6 +114,7 @@ def validate(root: Path) -> None:
         "program_semantic_closure == NULL",
         "repeated_artifact.size == artifact.size",
         "XR_PROGRAM_BUILD_INVALID_INPUT",
+        "XR_CORE_OP_CORE_OWNER_COPY",
         "xr_reference_evaluate",
         "xr_vm_code_execute",
         "xr_backend_ir_translation_validate",
@@ -130,10 +131,14 @@ def validate(root: Path) -> None:
             "named aggregate projection is not exact")
     require(("xi.agg.update", "aggregate-update", "core.aggregate.update") in projection_rows,
             "pure aggregate update is not exact")
+    require(("xi.call.builtin", "owner-copy", "core.owner.copy") in projection_rows,
+            "explicit source copy is not exact")
     require(not any(row.get("xi_operation") == "xi.agg.set" for row in value_mappings
                     if isinstance(row, dict)),
             "mutating aggregate storage regained a CoreSpec projection")
     for token in ("case XR_PROGRAM_XI_PROJECTION_AGGREGATE_UPDATE",
+                  "case XR_PROGRAM_XI_PROJECTION_OWNER_COPY",
+                  'strcmp((const char *) value->aux, "copy")',
                   "xi_type_has_logical_value_identity"):
         require(token in producer, f"aggregate update producer closure lacks {token}")
 
@@ -235,11 +240,15 @@ def validate(root: Path) -> None:
         "core.place.load",
         "core.place.store",
     }
+    wave_three_slice_three = {
+        "core.owner.copy",
+    }
     rows = {row["id"]: row for row in matrix["operations"]}
     expected_status = {
         **{operation: "COMPLETE_W7_WAVE1" for operation in wave_one},
         **{operation: "COMPLETE_W7_WAVE2" for operation in wave_two_complete},
         **{operation: "COMPLETE_W7_WAVE3_SLICE2" for operation in wave_three_slice_two},
+        **{operation: "COMPLETE_W7_WAVE3_SLICE3" for operation in wave_three_slice_three},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,
@@ -266,6 +275,7 @@ def self_test(root: Path) -> None:
             "src/program/xr_program_from_xi.h",
             "src/program/xr_program_from_xi.c",
             "src/program/xr_program_verify.c",
+            "src/program/xr_reference_evaluator.c",
             "src/ir/xi_pipeline.h",
             "src/ir/xi_pipeline.c",
             "tests/unit/ir/test_xi_pipeline.c",
@@ -273,12 +283,14 @@ def self_test(root: Path) -> None:
             "tests/unit/vm/test_xr_program_vm.c",
             "tests/unit/aot/test_xr_program_aot.c",
             "xisa/core/registry.json",
+            "xisa/program/schema.json",
             "xisa/program/xi-source-projection.json",
             "src/program/xr_program_xi_projection_gen.h",
             "src/program/xr_program_xi_projection_gen.c",
             "src/frontend/analyzer/xa_enum_record_plan.c",
             "src/ir/xi_lower_misc.c",
             "src/vm/xr_program_vm.c",
+            "src/aot/program/xr_backend_ir_emit_c.c",
             "contracts/canonical-program/operation-capability-matrix.json",
             "contracts/canonical-program/w7-wave3-contract-freeze.json",
         ):

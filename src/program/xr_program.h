@@ -42,6 +42,19 @@ typedef enum XrCoreIrTypeKind {
     XR_CORE_IR_TYPE_VARIANT = 2,
 } XrCoreIrTypeKind;
 
+/* Logical ownership is part of TypeId semantics, while physical retain,
+ * release, allocation, and layout remain executor-private. */
+typedef enum XrCoreIrTypeOwnership {
+    XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL = 0,
+    XR_CORE_IR_TYPE_OWNERSHIP_AFFINE = 1,
+} XrCoreIrTypeOwnership;
+
+typedef enum XrCoreIrCopyContract {
+    XR_CORE_IR_COPY_TRIVIAL = 0,
+    XR_CORE_IR_COPY_EXPLICIT = 1,
+    XR_CORE_IR_COPY_FORBIDDEN = 2,
+} XrCoreIrCopyContract;
+
 typedef struct XrCoreIrVariantInput {
     const uint16_t *payload_types;
     uint32_t payload_count;
@@ -55,6 +68,8 @@ typedef struct XrCoreIrTypeInput {
     XrCoreIrKey key;
     uint16_t local_id;
     XrCoreIrTypeKind kind;
+    XrCoreIrTypeOwnership ownership;
+    XrCoreIrCopyContract copy_contract;
     const uint16_t *field_types;
     uint32_t field_count;
     const XrCoreIrVariantInput *variants;
@@ -95,10 +110,19 @@ typedef enum XrCoreIrValueCategory {
     XR_CORE_IR_PLACE = 1,
 } XrCoreIrValueCategory;
 
+/* OWNER is an exactly-once logical token. NON_OWNER is either a trivial value
+ * or a call-bound borrow, as determined by TypeId and the surrounding
+ * signature. */
+typedef enum XrCoreIrOwnershipDisposition {
+    XR_CORE_IR_NON_OWNER = 0,
+    XR_CORE_IR_OWNER = 1,
+} XrCoreIrOwnershipDisposition;
+
 typedef struct XrCoreIrValueInput {
     XrCoreIrKey key;
     uint16_t type_id;
     XrCoreIrValueCategory category;
+    XrCoreIrOwnershipDisposition ownership;
 } XrCoreIrValueInput;
 
 typedef struct XrCoreIrInstructionInput {
@@ -106,6 +130,7 @@ typedef struct XrCoreIrInstructionInput {
     XrCoreIrKey result;
     uint16_t result_type_id;
     XrCoreIrValueCategory result_category;
+    XrCoreIrOwnershipDisposition result_ownership;
     const XrCoreIrKey *operands;
     uint32_t operand_count;
     XrCoreIrImmediateKind immediate_kind;
@@ -139,6 +164,7 @@ typedef struct XrCoreIrFunctionInput {
     const XrParamMode *parameter_modes;
     uint32_t parameter_count;
     uint16_t result_type_id;
+    XrCoreIrOwnershipDisposition result_ownership;
     uint32_t effect_mask;
     uint32_t capability_mask;
     XrCoreIrKey entry_block;

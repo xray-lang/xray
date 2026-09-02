@@ -12,6 +12,8 @@ typedef struct XrCoreIrType {
     XrCoreIrKey key;
     uint16_t type_id;
     XrCoreIrTypeKind kind;
+    XrCoreIrTypeOwnership ownership;
+    XrCoreIrCopyContract copy_contract;
     uint16_t *field_types;
     uint32_t field_count;
     XrCoreIrVariant *variants;
@@ -23,6 +25,7 @@ typedef struct XrCoreIrInstruction {
     XrCoreIrKey result;
     uint16_t result_type_id;
     XrCoreIrValueCategory result_category;
+    XrCoreIrOwnershipDisposition result_ownership;
     XrCoreIrKey *operands;
     uint32_t operand_count;
     XrCoreIrImmediateKind immediate_kind;
@@ -56,6 +59,7 @@ typedef struct XrCoreIrFunction {
     XrParamMode *parameter_modes;
     uint32_t parameter_count;
     uint16_t result_type_id;
+    XrCoreIrOwnershipDisposition result_ownership;
     uint32_t effect_mask;
     uint32_t capability_mask;
     XrCoreIrKey entry_block;

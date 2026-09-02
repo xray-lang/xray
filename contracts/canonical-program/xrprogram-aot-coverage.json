@@ -5,7 +5,7 @@
   "execution_authority": "XrInstance",
   "private_realization": "XrBackendIR",
   "backend": "xray-c11-aot@1",
-  "operation_count": 26,
+  "operation_count": 27,
   "operations": [
     {
       "stable_id": 1,
@@ -170,6 +170,14 @@
     {
       "stable_id": 85,
       "spelling": "core.variant.project",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 96,
+      "spelling": "core.owner.copy",
       "aot": "COMPLETE",
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",

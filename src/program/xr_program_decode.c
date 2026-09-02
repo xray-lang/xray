@@ -143,11 +143,11 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
     for (uint64_t id = 0; id < 5u && section.status == XR_PROGRAM_DECODE_OK; ++id) {
         uint64_t type_id = take_uvar(&section);
         uint64_t kind = take_uvar(&section);
-        uint64_t capabilities = take_uvar(&section);
+        uint64_t ownership = take_uvar(&section);
         uint64_t copy_contract = take_uvar(&section);
-        if (type_id != id || kind != id || capabilities > 1u || copy_contract > 1u ||
-            (id == XR_CORE_TYPE_VOID && (capabilities != 0u || copy_contract != 0u)) ||
-            (id != XR_CORE_TYPE_VOID && (capabilities != 1u || copy_contract != 1u)))
+        if (type_id != id || kind != id || ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
+            (id == XR_CORE_TYPE_VOID && copy_contract != XR_CORE_IR_COPY_FORBIDDEN) ||
+            (id != XR_CORE_TYPE_VOID && copy_contract != XR_CORE_IR_COPY_TRIVIAL))
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
     }
     uint64_t dynamic_count = count - 5u;
@@ -156,14 +156,17 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
          ++index) {
         uint64_t type_id = take_uvar(&section);
         uint64_t kind = take_uvar(&section);
-        uint64_t capabilities = take_uvar(&section);
+        uint64_t ownership = take_uvar(&section);
         uint64_t copy_contract = take_uvar(&section);
         uint8_t key[XR_CORE_IR_KEY_SIZE] = {0};
         take_bytes(&section, key, sizeof(key));
         uint64_t member_count = take_uvar(&section);
         if (type_id != XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index ||
             (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT) ||
-            capabilities != 1u || copy_contract != 1u || member_count == 0u ||
+            ownership > XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+            copy_contract > XR_CORE_IR_COPY_FORBIDDEN || member_count == 0u ||
+            ((ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL) !=
+             (copy_contract == XR_CORE_IR_COPY_TRIVIAL)) ||
             member_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
             !count_records(&section, member_count) ||
             (index != 0u && memcmp(previous_key, key, sizeof(key)) >= 0)) {
@@ -272,6 +275,7 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
                 section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;
         }
         uint64_t result_type = take_uvar(&section);
+        uint64_t result_ownership = take_uvar(&section);
         (void) take_uvar(&section); /* effect mask */
         (void) take_uvar(&section); /* capability mask */
         uint64_t entry_block = take_uvar(&section);
@@ -279,8 +283,9 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
         uint64_t value_count = take_uvar(&section);
         (void) take_uvar(&section); /* flags */
         if (encoded_id != id || !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
-            block_count == 0 || block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION ||
-            entry_block >= block_count || value_count > XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION)
+            result_ownership > XR_CORE_IR_OWNER || block_count == 0 ||
+            block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION || entry_block >= block_count ||
+            value_count > XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION)
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
     }
     *count_out = count;
@@ -318,8 +323,10 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 (void) take_uvar(&section);
                 uint64_t type_id = take_uvar(&section);
                 uint64_t category = take_uvar(&section);
+                uint64_t ownership = take_uvar(&section);
                 if (!encoded_type_id_is_valid(type_id, dynamic_type_count) ||
-                    category > XR_CORE_IR_PLACE)
+                    category > XR_CORE_IR_PLACE || ownership > XR_CORE_IR_OWNER ||
+                    (category == XR_CORE_IR_PLACE && ownership != XR_CORE_IR_NON_OWNER))
                     section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;
             }
             uint64_t instruction_count = take_uvar(&section);
@@ -335,11 +342,14 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 (void) take_uvar(&section); /* result id + 1 */
                 uint64_t result_type = take_uvar(&section);
                 uint64_t result_category = take_uvar(&section);
+                uint64_t result_ownership = take_uvar(&section);
                 uint64_t operand_count = take_uvar(&section);
                 if (!xr_core_spec_operation_by_id((uint16_t) operation_id) ||
                     operation_id > UINT16_MAX ||
                     !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
-                    result_category > XR_CORE_IR_PLACE ||
+                    result_category > XR_CORE_IR_PLACE || result_ownership > XR_CORE_IR_OWNER ||
+                    (result_category == XR_CORE_IR_PLACE &&
+                     result_ownership != XR_CORE_IR_NON_OWNER) ||
                     operand_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                     !count_records(&section, operand_count)) {
                     section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;

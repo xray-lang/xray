@@ -27,6 +27,15 @@
       "aggregate",
       "variant"
     ],
+    "ownership_kinds": [
+      "0:trivial",
+      "1:affine"
+    ],
+    "copy_contracts": [
+      "0:trivial",
+      "1:explicit",
+      "2:forbidden"
+    ],
     "identity_order": "ascending-semantic-key",
     "aggregate_shape": "declaration-ordered-field-type-ids",
     "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
@@ -35,6 +44,7 @@
   },
   "value_system": {
     "function_parameter_contract": "ordered-(TypeId,ParamMode)",
+    "function_result_contract": "ordered-(TypeId,OwnershipDisposition)",
     "parameter_modes": [
       "0:read",
       "1:ref",
@@ -44,6 +54,11 @@
       "0:value",
       "1:place"
     ],
+    "ownership_dispositions": [
+      "0:non-owner",
+      "1:owner"
+    ],
+    "value_definition_contract": "ordered-(TypeId,ValueCategory,OwnershipDisposition)",
     "place_physical_layout": "forbidden"
   },
   "sections": [
