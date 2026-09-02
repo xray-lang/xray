@@ -1,8 +1,8 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "eea587c4043bda7785ea10e8b72b65cdeb0e8408d25dbbfbaa122e03a8ccf788",
-  "program_schema_sha256": "24397cf0ce7ca2bf1f07a9dd0173d02564657b3905e812f6573ae378953f1b4d",
+  "core_spec_semantic_sha256": "dec566065e133facf691c7912269af5976d7a9bde4f7d4723b0fe3702872e7bb",
+  "program_schema_sha256": "ff17076bef9bbd229e47bc8acb0d02f65838d534706dd7cafcaeec4c75dc51b9",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "execution_budgets": [
@@ -10,7 +10,7 @@
     "call-depth",
     "aggregate-value-cells"
   ],
-  "operation_count": 28,
+  "operation_count": 29,
   "operations": [
     {
       "stable_id": 1,
@@ -127,6 +127,14 @@
     {
       "stable_id": 49,
       "spelling": "core.error.publish",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 50,
+      "spelling": "core.panic.publish",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",

@@ -20,7 +20,8 @@
       "1:bool",
       "2:i64",
       "3:u32",
-      "4:error"
+      "4:error",
+      "5:panic-info"
     ],
     "dynamic_type_base": 16,
     "dynamic_kinds": [
@@ -44,7 +45,7 @@
   },
   "value_system": {
     "function_parameter_contract": "ordered-(TypeId,ParamMode)",
-    "function_result_contract": "ordered-(TypeId,OwnershipDisposition,ErrorTypeId); ErrorTypeId=void is infallible",
+    "function_result_contract": "ordered-(TypeId,OwnershipDisposition,ErrorTypeId,PanicTypeId); ErrorTypeId=void is business-error-free; PanicTypeId=void is panic-free; PanicTypeId=panic-info otherwise",
     "parameter_modes": [
       "0:read",
       "1:ref",

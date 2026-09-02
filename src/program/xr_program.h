@@ -168,6 +168,9 @@ typedef struct XrCoreIrFunctionInput {
     /* VOID denotes an infallible function. A non-VOID TypeId is the exact
      * value transferred by core.error.publish and sealed-invoke's error edge. */
     uint16_t error_type_id;
+    /* VOID denotes panic-free. PANIC_INFO is transferred only by
+     * core.panic.publish or sealed-invoke's panic edge. */
+    uint16_t panic_type_id;
     uint32_t effect_mask;
     uint32_t capability_mask;
     XrCoreIrKey entry_block;

@@ -42,6 +42,7 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_I64,
     XR_VM_VALUE_U32,
     XR_VM_VALUE_ERROR,
+    XR_VM_VALUE_PANIC_INFO,
     XR_VM_VALUE_AGGREGATE,
 } XrVmValueKind;
 
@@ -52,6 +53,7 @@ typedef struct XrVmValue {
         int64_t i64;
         uint32_t u32;
         uint32_t error;
+        uint32_t panic_info;
         const void *aggregate;
     } as;
 } XrVmValue;
@@ -60,6 +62,7 @@ typedef enum XrVmOutcomeKind {
     XR_VM_OUTCOME_RETURN = 0,
     XR_VM_OUTCOME_TRAP,
     XR_VM_OUTCOME_ERROR,
+    XR_VM_OUTCOME_PANIC,
     XR_VM_OUTCOME_RESOURCE_LIMIT,
     XR_VM_OUTCOME_INVALID_INVOCATION,
     XR_VM_OUTCOME_STALE_CODE,
@@ -79,6 +82,7 @@ typedef struct XrVmOutcome {
     XrVmOutcomeKind kind;
     XrVmValue value;
     XrVmValue error_value;
+    XrVmValue panic_value;
     XrVmTrap trap;
     uint64_t steps;
     XrFingerprint logical_trace;

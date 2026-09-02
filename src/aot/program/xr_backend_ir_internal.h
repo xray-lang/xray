@@ -20,6 +20,7 @@ typedef enum XrBackendValueRepresentation {
     XR_BACKEND_VALUE_I64,
     XR_BACKEND_VALUE_U32,
     XR_BACKEND_VALUE_ERROR_U32,
+    XR_BACKEND_VALUE_PANIC_U32,
     XR_BACKEND_VALUE_AGGREGATE,
 } XrBackendValueRepresentation;
 
@@ -66,6 +67,7 @@ typedef struct XrBackendFunction {
     uint16_t result_type_id;
     XrCoreIrOwnershipDisposition result_ownership;
     uint16_t error_type_id;
+    uint16_t panic_type_id;
     uint32_t effect_mask;
     uint32_t capability_mask;
     uint32_t entry_block;

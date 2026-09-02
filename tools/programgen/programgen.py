@@ -112,6 +112,7 @@ CORE_TYPE_NAMES = {
     "i64": "XR_CORE_TYPE_I64",
     "u32": "XR_CORE_TYPE_U32",
     "error": "XR_CORE_TYPE_ERROR",
+    "panic-info": "XR_CORE_TYPE_PANIC_INFO",
 }
 
 
@@ -189,7 +190,7 @@ def validate(schema: dict[str, Any]) -> None:
     require(isinstance(type_system, dict) and set(type_system) == TYPE_SYSTEM_KEYS,
             "type-system contract fields drifted")
     require(type_system == {
-        "builtin_rows": ["0:void", "1:bool", "2:i64", "3:u32", "4:error"],
+        "builtin_rows": ["0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info"],
         "dynamic_type_base": 16,
         "dynamic_kinds": ["aggregate", "variant"],
         "ownership_kinds": ["0:trivial", "1:affine"],
@@ -206,7 +207,7 @@ def validate(schema: dict[str, Any]) -> None:
             "value-system contract fields drifted")
     require(value_system == {
         "function_parameter_contract": "ordered-(TypeId,ParamMode)",
-        "function_result_contract": "ordered-(TypeId,OwnershipDisposition,ErrorTypeId); ErrorTypeId=void is infallible",
+        "function_result_contract": "ordered-(TypeId,OwnershipDisposition,ErrorTypeId,PanicTypeId); ErrorTypeId=void is business-error-free; PanicTypeId=void is panic-free; PanicTypeId=panic-info otherwise",
         "parameter_modes": ["0:read", "1:ref", "2:move"],
         "value_categories": ["0:value", "1:place"],
         "ownership_dispositions": ["0:non-owner", "1:owner"],
@@ -307,6 +308,7 @@ def validate_source_projection(projection: dict[str, Any], core: dict[str, Any],
         "function-return",
         "resolved-fallible-call-plus-xi.err.check-cfg",
         "xi.err.return-after-explicit-cleanup-cfg",
+        "xi.throw-after-explicit-cleanup-cfg",
     }, "structural projection set drifted")
 
 
@@ -493,7 +495,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         "",
         "## Logical type rows",
         "",
-        "The type section starts with the five fixed builtin rows, followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
+        "The type section starts with the six fixed builtin rows, followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
         "",
         f"- Builtins: `{', '.join(type_system['builtin_rows'])}`",
         f"- Dynamic kinds: `{', '.join(type_system['dynamic_kinds'])}`",

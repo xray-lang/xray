@@ -217,6 +217,10 @@
     {
       "source": "xi.err.return-after-explicit-cleanup-cfg",
       "core_operation": "core.error.publish"
+    },
+    {
+      "source": "xi.throw-after-explicit-cleanup-cfg",
+      "core_operation": "core.panic.publish"
     }
   ]
 }

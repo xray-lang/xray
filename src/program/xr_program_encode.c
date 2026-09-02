@@ -248,6 +248,7 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
         {XR_CORE_TYPE_I64, 2u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
         {XR_CORE_TYPE_U32, 3u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
         {XR_CORE_TYPE_ERROR, 4u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_TRIVIAL},
+        {XR_CORE_TYPE_PANIC_INFO, 5u, XR_CORE_IR_TYPE_OWNERSHIP_AFFINE, XR_CORE_IR_COPY_FORBIDDEN},
     };
     buffer_put_uvar(buffer, sizeof(rows) / sizeof(rows[0]) + program->type_count);
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
@@ -315,6 +316,7 @@ static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, u
         buffer_put_uvar(buffer, function->result_type_id);
         buffer_put_uvar(buffer, function->result_ownership);
         buffer_put_uvar(buffer, function->error_type_id);
+        buffer_put_uvar(buffer, function->panic_type_id);
         buffer_put_uvar(buffer, function->effect_mask);
         buffer_put_uvar(buffer, function->capability_mask);
         buffer_put_uvar(buffer, entry);

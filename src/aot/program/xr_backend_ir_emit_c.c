@@ -94,6 +94,7 @@ static const char *type_c_name(uint16_t type_id, char storage[32]) {
             return "int64_t";
         case XR_CORE_TYPE_U32:
         case XR_CORE_TYPE_ERROR:
+        case XR_CORE_TYPE_PANIC_INFO:
             return "uint32_t";
         case XR_CORE_TYPE_VOID:
             return "void";
@@ -303,7 +304,8 @@ static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *fu
     bool aggregate_result =
         xr_validated_program_type(ir->program, function->result_type_id) != NULL;
     bool has_error = function->error_type_id != XR_CORE_TYPE_VOID;
-    if (function->parameter_count == 0u && !aggregate_result && !has_error) {
+    bool has_panic = function->panic_type_id != XR_CORE_TYPE_VOID;
+    if (function->parameter_count == 0u && !aggregate_result && !has_error && !has_panic) {
         if (!append_text(buffer, "void"))
             return false;
     } else {
@@ -331,6 +333,15 @@ static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *fu
         if (!name ||
             !append_format(buffer, "%s%s *out_error",
                            function->parameter_count || aggregate_result ? ", " : "", name))
+            return false;
+    }
+    if (has_panic) {
+        char storage[32];
+        const char *name = type_c_name(function->panic_type_id, storage);
+        if (!name ||
+            !append_format(buffer, "%s%s *out_panic",
+                           function->parameter_count || aggregate_result || has_error ? ", " : "",
+                           name))
             return false;
     }
     return append_text(buffer, prototype ? ");\n" : ") {\n");
@@ -463,14 +474,21 @@ static bool emit_invoke(CBuffer *buffer, const XrBackendIR *ir, const XrBackendF
     const XrBackendFunction *callee = &ir->functions[instruction->immediate.function_id];
     const XrBackendBlock *normal = &function->blocks[instruction->successors[0]];
     uint32_t normal_implicit = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
-    char error_storage[32];
-    const char *error_type = type_c_name(callee->error_type_id, error_storage);
-    const char *error_initializer =
-        callee->error_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ? "{0}" : "0";
-    if (!error_type ||
-        !append_format(buffer, "        %s invoke_error_%u = %s;\n", error_type, instruction_id,
-                       error_initializer) ||
-        !append_format(buffer, "        XrAotOutcome call_%u = xr_aot_fn_%u(", instruction_id,
+    bool has_error = callee->error_type_id != XR_CORE_TYPE_VOID;
+    bool has_panic = callee->panic_type_id != XR_CORE_TYPE_VOID;
+    if (has_error) {
+        char storage[32];
+        const char *type = type_c_name(callee->error_type_id, storage);
+        const char *initializer =
+            callee->error_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ? "{0}" : "0";
+        if (!type || !append_format(buffer, "        %s invoke_error_%u = %s;\n", type,
+                                    instruction_id, initializer))
+            return false;
+    }
+    if (has_panic &&
+        !append_format(buffer, "        uint32_t invoke_panic_%u = 0;\n", instruction_id))
+        return false;
+    if (!append_format(buffer, "        XrAotOutcome call_%u = xr_aot_fn_%u(", instruction_id,
                        instruction->immediate.function_id))
         return false;
     bool emitted = false;
@@ -484,7 +502,15 @@ static bool emit_invoke(CBuffer *buffer, const XrBackendIR *ir, const XrBackendF
             return false;
         emitted = true;
     }
-    if (!append_format(buffer, "%s&invoke_error_%u);\n", emitted ? ", " : "", instruction_id))
+    if (has_error) {
+        if (!append_format(buffer, "%s&invoke_error_%u", emitted ? ", " : "", instruction_id))
+            return false;
+        emitted = true;
+    }
+    if (has_panic &&
+        !append_format(buffer, "%s&invoke_panic_%u", emitted ? ", " : "", instruction_id))
+        return false;
+    if (!append_text(buffer, ");\n"))
         return false;
 
     char normal_expression[64];
@@ -503,13 +529,26 @@ static bool emit_invoke(CBuffer *buffer, const XrBackendIR *ir, const XrBackendF
         !emit_invoke_edge(buffer, function, instruction, 0u, normal_implicit,
                           callee->parameter_count, function_id, normal_value))
         return false;
-    uint32_t error_operand = callee->parameter_count + normal->argument_count - normal_implicit;
-    char error_expression[64];
-    snprintf(error_expression, sizeof(error_expression), "invoke_error_%u", instruction_id);
-    if (!append_format(buffer, "        if (call_%u.kind == 2) ", instruction_id) ||
-        !emit_invoke_edge(buffer, function, instruction, 1u, 1u, error_operand, function_id,
-                          error_expression))
-        return false;
+    uint32_t operand = callee->parameter_count + normal->argument_count - normal_implicit;
+    uint32_t successor = 1u;
+    if (has_error) {
+        char expression[64];
+        snprintf(expression, sizeof(expression), "invoke_error_%u", instruction_id);
+        if (!append_format(buffer, "        if (call_%u.kind == 2) ", instruction_id) ||
+            !emit_invoke_edge(buffer, function, instruction, successor, 1u, operand, function_id,
+                              expression))
+            return false;
+        operand += function->blocks[instruction->successors[successor]].argument_count - 1u;
+        ++successor;
+    }
+    if (has_panic) {
+        char expression[64];
+        snprintf(expression, sizeof(expression), "invoke_panic_%u", instruction_id);
+        if (!append_format(buffer, "        if (call_%u.kind == 3) ", instruction_id) ||
+            !emit_invoke_edge(buffer, function, instruction, successor, 1u, operand, function_id,
+                              expression))
+            return false;
+    }
     return append_format(buffer, "        return call_%u;\n", instruction_id);
 }
 
@@ -594,6 +633,11 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  "        *out_error = v%u;\n"
                                  "        return xr_aot_make(2, 0, 0);\n",
                                  instruction->operands[0]);
+        case XR_CORE_OP_CORE_PANIC_PUBLISH:
+            return append_format(buffer,
+                                 "        *out_panic = v%u;\n"
+                                 "        return xr_aot_make(3, 0, 0);\n",
+                                 instruction->operands[0]);
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return append_format(buffer, "        v%u = UINT32_C(%u);\n", instruction->result_id,
                                  ir->pointer_width);
@@ -674,6 +718,12 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
         if (!append_format(buffer, "    (void)p%u;\n", parameter))
             return false;
     }
+    if (function->error_type_id != XR_CORE_TYPE_VOID &&
+        !append_text(buffer, "    (void)out_error;\n"))
+        return false;
+    if (function->panic_type_id != XR_CORE_TYPE_VOID &&
+        !append_text(buffer, "    (void)out_panic;\n"))
+        return false;
     for (uint32_t value = 0; value < function->value_count; ++value) {
         char storage[32];
         const char *type = type_c_name(function->value_types[value], storage);
@@ -711,7 +761,7 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
                 return false;
         }
     }
-    return append_text(buffer, "    return xr_aot_make(3, 0, 0);\n}\n\n");
+    return append_text(buffer, "    return xr_aot_make(4, 0, 0);\n}\n\n");
 }
 
 static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
@@ -720,19 +770,30 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
         return false;
     if (!append_text(buffer, "int main(void) {\n"))
         return false;
+    bool emitted_argument = false;
     if (entry->error_type_id != XR_CORE_TYPE_VOID) {
         char storage[32];
         const char *type = type_c_name(entry->error_type_id, storage);
         const char *initializer =
             entry->error_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ? "{0}" : "0";
-        if (!type || !append_format(buffer, "    %s entry_error = %s;\n", type, initializer) ||
-            !append_format(buffer, "    XrAotOutcome result = xr_aot_fn_%u(&entry_error);\n",
-                           ir->entry_function))
+        if (!type || !append_format(buffer, "    %s entry_error = %s;\n", type, initializer))
             return false;
-    } else if (!append_format(buffer, "    XrAotOutcome result = xr_aot_fn_%u();\n",
-                              ir->entry_function)) {
-        return false;
     }
+    if (entry->panic_type_id != XR_CORE_TYPE_VOID &&
+        !append_text(buffer, "    uint32_t entry_panic = 0;\n"))
+        return false;
+    if (!append_format(buffer, "    XrAotOutcome result = xr_aot_fn_%u(", ir->entry_function))
+        return false;
+    if (entry->error_type_id != XR_CORE_TYPE_VOID) {
+        if (!append_text(buffer, "&entry_error"))
+            return false;
+        emitted_argument = true;
+    }
+    if (entry->panic_type_id != XR_CORE_TYPE_VOID &&
+        !append_format(buffer, "%s&entry_panic", emitted_argument ? ", " : ""))
+        return false;
+    if (!append_text(buffer, ");\n"))
+        return false;
     if (!append_text(buffer, "    if (result.kind != 0) return "
                              "(int)(200u + result.kind * 10u + result.trap);\n"))
         return false;

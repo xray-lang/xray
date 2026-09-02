@@ -61,6 +61,7 @@ typedef struct XrCoreIrFunction {
     uint16_t result_type_id;
     XrCoreIrOwnershipDisposition result_ownership;
     uint16_t error_type_id;
+    uint16_t panic_type_id;
     uint32_t effect_mask;
     uint32_t capability_mask;
     XrCoreIrKey entry_block;

@@ -147,6 +147,8 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
             return value.kind == XR_VM_VALUE_U32;
         case XR_CORE_TYPE_ERROR:
             return value.kind == XR_VM_VALUE_ERROR;
+        case XR_CORE_TYPE_PANIC_INFO:
+            return value.kind == XR_VM_VALUE_PANIC_INFO;
         default:
             return xr_validated_program_type(program, type_id) &&
                    value.kind == XR_VM_VALUE_AGGREGATE && value.as.aggregate &&
@@ -567,6 +569,18 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                             .as.value = nested.error_value,
                         };
                         implicit = 1u;
+                    } else if (nested.kind == XR_VM_OUTCOME_PANIC) {
+                        successor = 1u + (callee->error_type_id == XR_CORE_TYPE_VOID ? 0u : 1u);
+                        operand += function->blocks[instruction.successors[0]].argument_count -
+                                   (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u);
+                        if (callee->error_type_id != XR_CORE_TYPE_VOID)
+                            operand +=
+                                function->blocks[instruction.successors[1]].argument_count - 1u;
+                        scratch[0] = (XrVmRuntimeValue) {
+                            .category = XR_CORE_IR_VALUE,
+                            .as.value = nested.panic_value,
+                        };
+                        implicit = 1u;
                     } else {
                         result = nested;
                         goto done;
@@ -586,6 +600,10 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = vm_outcome(XR_VM_OUTCOME_ERROR, context);
                     result.error_value = values[instruction.operands[0]].as.value;
+                    goto done;
+                case XR_CORE_OP_CORE_PANIC_PUBLISH:
+                    result = vm_outcome(XR_VM_OUTCOME_PANIC, context);
+                    result.panic_value = values[instruction.operands[0]].as.value;
                     goto done;
                 case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
                     if (context->code->pointer_width != 32u &&
@@ -932,11 +950,16 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_ERROR && outcome.error_value.kind == XR_VM_VALUE_AGGREGATE)
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
+    if (outcome.kind == XR_VM_OUTCOME_PANIC && outcome.panic_value.kind != XR_VM_VALUE_PANIC_INFO)
+        outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     hash_u32(&context.trace, (uint32_t) outcome.kind);
     hash_u32(&context.trace, (uint32_t) outcome.trap);
     hash_u32(&context.trace, (uint32_t) outcome.error_value.kind);
     if (outcome.error_value.kind == XR_VM_VALUE_ERROR)
         hash_u32(&context.trace, outcome.error_value.as.error);
+    hash_u32(&context.trace, (uint32_t) outcome.panic_value.kind);
+    if (outcome.panic_value.kind == XR_VM_VALUE_PANIC_INFO)
+        hash_u32(&context.trace, outcome.panic_value.as.panic_info);
     xr_sha256_final(&context.trace, outcome.logical_trace.bytes);
     outcome.steps = context.steps;
     free_aggregates(&context);

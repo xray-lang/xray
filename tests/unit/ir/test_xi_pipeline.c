@@ -39,6 +39,8 @@
 #include <windows.h>
 #endif
 
+_Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
+
 /* ========== Test Infrastructure ========== */
 
 #define PIPELINE_TEST_REQUIRE(condition)                                                           \

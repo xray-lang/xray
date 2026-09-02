@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 28u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 29u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 

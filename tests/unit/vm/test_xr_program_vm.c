@@ -11,6 +11,7 @@
 #include "os/os_thread.h"
 #include "../plan/target_profile_test_fixture.h"
 #include "../program/xr_program_invoke_fixture.h"
+#include "../program/xr_program_panic_fixture.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -19,6 +20,7 @@
 #include <time.h>
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -955,6 +957,9 @@ static void compare_value(XrReferenceValue reference, XrVmValue vm) {
         case XR_REFERENCE_VALUE_ERROR:
             REQUIRE(reference.as.error == vm.as.error);
             break;
+        case XR_REFERENCE_VALUE_PANIC_INFO:
+            REQUIRE(reference.as.panic_info == vm.as.panic_info);
+            break;
         case XR_REFERENCE_VALUE_AGGREGATE:
             REQUIRE(reference.kind != XR_REFERENCE_VALUE_AGGREGATE);
             break;
@@ -969,6 +974,8 @@ static void compare_outcomes(XrReferenceOutcome reference, XrVmOutcome vm) {
     REQUIRE((unsigned) reference.trap == (unsigned) vm.trap);
     if (reference.kind == XR_REFERENCE_OUTCOME_ERROR)
         compare_value(reference.error_value, vm.error_value);
+    if (reference.kind == XR_REFERENCE_OUTCOME_PANIC)
+        compare_value(reference.panic_value, vm.panic_value);
     if (reference.kind == XR_REFERENCE_OUTCOME_RETURN)
         compare_value(reference.value, vm.value);
 }
@@ -1042,6 +1049,9 @@ static void run_program(XrValidatedProgram *program, bool ilp32,
     } else if (expected_kind == XR_VM_OUTCOME_ERROR) {
         REQUIRE(result.error_value.kind == XR_VM_VALUE_ERROR);
         REQUIRE(result.error_value.as.error == (uint32_t) expected_value);
+    } else if (expected_kind == XR_VM_OUTCOME_PANIC) {
+        REQUIRE(result.panic_value.kind == XR_VM_VALUE_PANIC_INFO);
+        REQUIRE(result.panic_value.as.panic_info == (uint32_t) expected_value);
     }
     retire_and_free(&instance);
     xr_target_profile_free(profile);
@@ -1072,6 +1082,35 @@ static void test_sealed_invoke_and_cleanup_cfg(void) {
     vm_arguments[0].as.boolean = false;
     run_program(program, false, reference_arguments, vm_arguments, 3u, XR_VM_OUTCOME_ERROR,
                 XR_VM_VALUE_VOID, 73u);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+}
+
+static void test_typed_panic_invoke_and_cleanup_cfg(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_panic_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    XrReferenceValue reference_arguments[] = {
+        {.kind = XR_REFERENCE_VALUE_BOOL, .as.boolean = true},
+        {.kind = XR_REFERENCE_VALUE_PANIC_INFO, .as.panic_info = 91u},
+        {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = 9},
+    };
+    XrVmValue vm_arguments[] = {
+        {.kind = XR_VM_VALUE_BOOL, .as.boolean = true},
+        {.kind = XR_VM_VALUE_PANIC_INFO, .as.panic_info = 91u},
+        {.kind = XR_VM_VALUE_I64, .as.i64 = 9},
+    };
+    run_program(program, false, reference_arguments, vm_arguments, 3u, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_I64, 42u);
+    reference_arguments[0].as.boolean = false;
+    vm_arguments[0].as.boolean = false;
+    run_program(program, false, reference_arguments, vm_arguments, 3u, XR_VM_OUTCOME_PANIC,
+                XR_VM_VALUE_VOID, 91u);
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
 }
@@ -1324,6 +1363,7 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
 int main(void) {
     test_operation_semantics();
     test_sealed_invoke_and_cleanup_cfg();
+    test_typed_panic_invoke_and_cleanup_cfg();
     test_arithmetic_edges();
     test_concurrent_execution_and_drain();
     test_policy_budget_generation_and_smoke_benchmark();

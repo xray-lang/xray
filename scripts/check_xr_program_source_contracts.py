@@ -53,6 +53,7 @@ def validate(root: Path) -> None:
         "map_function_error_type",
         "XR_CORE_OP_CORE_CALL_SEALED_INVOKE",
         "XR_CORE_OP_CORE_ERROR_PUBLISH",
+        "XR_CORE_OP_CORE_PANIC_PUBLISH",
     ):
         require(token in producer, f"source producer lacks {token}")
     for token in ("program_semantic_closure", "psc_", "semantic_function"):
@@ -149,6 +150,9 @@ def validate(root: Path) -> None:
     require(("xi.err.return-after-explicit-cleanup-cfg",
              "core.error.publish") in structural_rows,
             "typed error publication source projection is absent")
+    require(("xi.throw-after-explicit-cleanup-cfg",
+             "core.panic.publish") in structural_rows,
+            "typed panic publication source projection is absent")
     require(not any(row.get("xi_operation") == "xi.agg.set" for row in value_mappings
                     if isinstance(row, dict)),
             "mutating aggregate storage regained a CoreSpec projection")
@@ -258,10 +262,8 @@ def validate(root: Path) -> None:
     wave_three_slice_three = {
         "core.owner.copy",
     }
-    wave_three_slice_four = {
-        "core.call.sealed_invoke",
-        "core.error.publish",
-    }
+    wave_three_slice_four = {"core.error.publish"}
+    wave_three_slice_five = {"core.call.sealed_invoke", "core.panic.publish"}
     rows = {row["id"]: row for row in matrix["operations"]}
     expected_status = {
         **{operation: "COMPLETE_W7_WAVE1" for operation in wave_one},
@@ -269,6 +271,7 @@ def validate(root: Path) -> None:
         **{operation: "COMPLETE_W7_WAVE3_SLICE2" for operation in wave_three_slice_two},
         **{operation: "COMPLETE_W7_WAVE3_SLICE3" for operation in wave_three_slice_three},
         **{operation: "COMPLETE_W7_WAVE3_SLICE4" for operation in wave_three_slice_four},
+        **{operation: "COMPLETE_W7_WAVE3_SLICE5" for operation in wave_three_slice_five},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,
@@ -301,6 +304,7 @@ def self_test(root: Path) -> None:
             "tests/unit/ir/test_xi_pipeline.c",
             "tests/unit/program/test_xr_program_verify.c",
             "tests/unit/program/xr_program_invoke_fixture.h",
+            "tests/unit/program/xr_program_panic_fixture.h",
             "tests/unit/vm/test_xr_program_vm.c",
             "tests/unit/aot/test_xr_program_aot.c",
             "xisa/core/registry.json",

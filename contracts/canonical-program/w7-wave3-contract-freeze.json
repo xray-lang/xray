@@ -39,9 +39,9 @@
     {
       "stable_id": 37,
       "id": "core.call.sealed_invoke",
-      "law": "call one sealed function and transfer exactly once to either normal or typed-error continuation",
+      "law": "call one sealed function and transfer exactly once to normal, optional typed-error, or optional typed-panic continuation",
       "source": "fallible sealed direct call",
-      "status": "COMPLETE_W7_WAVE3_SLICE4"
+      "status": "COMPLETE_W7_WAVE3_SLICE5"
     },
     {
       "stable_id": 48,
@@ -61,8 +61,8 @@
       "stable_id": 50,
       "id": "core.panic.publish",
       "law": "consume one typed PanicInfo value and terminate through the panic continuation",
-      "source": "catchable runtime panic after cleanup",
-      "status": "FROZEN_W7_WAVE3"
+      "source": "uncaught xi.throw with typed PanicInfo after explicit cleanup CFG",
+      "status": "COMPLETE_W7_WAVE3_SLICE5"
     },
     {
       "stable_id": 96,
@@ -121,7 +121,7 @@
     "xi.local.addr": "core.place.local",
     "xi.place.load": "core.place.load",
     "xi.place.store": "core.place.store",
-    "xi.throw": "core.error.publish after explicit cleanup CFG",
+    "xi.throw": "core.panic.publish after explicit cleanup CFG; implicit handler-state Xi is rejected",
     "xi.call.builtin[copy]": "core.owner.copy for an explicit source copy; unrelated builtins have no projection",
     "xi.retain": "no canonical projection",
     "xi.release": "no canonical projection unless source/cleanup owner.drop identity is explicit",

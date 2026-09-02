@@ -75,6 +75,7 @@ typedef struct XrValidatedFunction {
     uint16_t result_type_id;
     XrCoreIrOwnershipDisposition result_ownership;
     uint16_t error_type_id;
+    uint16_t panic_type_id;
     uint32_t effect_mask;
     uint32_t capability_mask;
     uint32_t entry_block;
@@ -119,13 +120,15 @@ static inline const XrValidatedType *xr_validated_program_type(const XrValidated
 
 static inline XrCoreIrTypeOwnership
 xr_validated_program_type_ownership(const XrValidatedProgram *program, uint16_t type_id) {
+    if (type_id == XR_CORE_TYPE_PANIC_INFO)
+        return XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
     const XrValidatedType *type = xr_validated_program_type(program, type_id);
     return type ? type->ownership : XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
 }
 
 static inline XrCoreIrCopyContract
 xr_validated_program_copy_contract(const XrValidatedProgram *program, uint16_t type_id) {
-    if (type_id == XR_CORE_TYPE_VOID)
+    if (type_id == XR_CORE_TYPE_VOID || type_id == XR_CORE_TYPE_PANIC_INFO)
         return XR_CORE_IR_COPY_FORBIDDEN;
     const XrValidatedType *type = xr_validated_program_type(program, type_id);
     return type ? type->copy_contract : XR_CORE_IR_COPY_TRIVIAL;

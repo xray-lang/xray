@@ -79,9 +79,11 @@ ARITHMETIC_KINDS = {
 SUCCESSOR_KEYS = {"normal", "error", "panic", "cancel", "suspend"}
 GENERIC_TYPES = {
     "A", "E", "V", "T", "T...", "R?", "P...",
-    "normal-edge-values...", "error-edge-values...",
+    "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
 }
-VARIADIC_TYPES = {"T...", "P...", "normal-edge-values...", "error-edge-values..."}
+VARIADIC_TYPES = {
+    "T...", "P...", "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
+}
 IMPLEMENTATION_KEYS = {
     "aot_handler",
     "c_spelling",
@@ -320,8 +322,9 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
         require(operation["kat_validator"] in {
             "aggregate-construct", "aggregate-project", "aggregate-update",
             "block-arguments", "branch", "conditional-branch", "error-publish",
-            "owner-copy", "owner-drop", "owner-move", "place-load", "place-local", "place-store",
-            "return", "scalar-oracle", "sealed-call", "sealed-invoke", "variant-construct",
+            "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
+            "place-local", "place-store", "return", "scalar-oracle", "sealed-call",
+            "sealed-invoke", "variant-construct",
             "variant-project", "variant-test",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
@@ -471,13 +474,21 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (actual.get("callee_sealed") is True
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and actual.get("actual_result_type") == actual.get("declared_result_type")
-                and actual.get("callee_error_type") == "void")
+                and actual.get("callee_error_type") == "void"
+                and actual.get("callee_panic_type") == "void")
     if validator == "sealed-invoke":
+        error_type = actual.get("callee_error_type")
+        panic_type = actual.get("callee_panic_type")
+        has_error = error_type not in {None, "void"}
+        has_panic = panic_type not in {None, "void"}
         return (actual.get("callee_sealed") is True
                 and actual.get("argument_types") == actual.get("parameter_types")
-                and actual.get("callee_error_type") not in {None, "void"}
+                and (has_error or has_panic)
                 and actual.get("normal_result_type") == actual.get("callee_result_type")
-                and actual.get("error_argument_type") == actual.get("callee_error_type"))
+                and actual.get("error_argument_type") == error_type
+                and actual.get("panic_argument_type") == panic_type
+                and (not has_error or error_type != "panic-info")
+                and (not has_panic or panic_type == "panic-info"))
     if validator == "aggregate-construct":
         return (actual.get("operand_types") == actual.get("field_types")
                 and actual.get("result_type") == actual.get("aggregate_type"))
@@ -517,8 +528,11 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and isinstance(field, int) and 0 <= field < len(payloads[variant])
                 and actual.get("result_type") == payloads[variant][field])
     if validator == "error-publish":
-        return (actual.get("function_error_type") not in {None, "void"}
+        return (actual.get("function_error_type") not in {None, "void", "panic-info"}
                 and actual.get("operand_types") == [actual.get("function_error_type")])
+    if validator == "panic-publish":
+        return (actual.get("function_panic_type") == "panic-info"
+                and actual.get("operand_types") == ["panic-info"])
     if validator == "owner-copy":
         ownership = actual.get("type_ownership")
         operand_ownership = actual.get("operand_ownership")

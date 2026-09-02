@@ -196,7 +196,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 277,
+  "operation_count": 278,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -1659,6 +1659,28 @@
       "observable_edges": [],
       "operation_id": "xi.agg.set",
       "ownership": "stored-value",
+      "targets": [
+        "vm-bytecode",
+        "aot-c",
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/xi-class-pure",
+      "capabilities": [],
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_struct_update",
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "xi-class-pure",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.agg.update",
+      "ownership": "borrow",
       "targets": [
         "vm-bytecode",
         "aot-c",
@@ -7350,5 +7372,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "2f23b885e5d857d60d97b467ed8232f5e6f7c7dc72cabeb7f3944c81f4ccdeb0"
+  "source_tree_fingerprint": "47ffe83baddfacaf156350465870a9c263f76252ab5a34b0ab444f38fc4bb714"
 }

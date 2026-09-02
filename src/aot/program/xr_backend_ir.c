@@ -33,6 +33,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_TRAP:
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
+        case XR_CORE_OP_CORE_PANIC_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
@@ -157,6 +158,9 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
             break;
         case XR_CORE_TYPE_ERROR:
             representation = XR_BACKEND_VALUE_ERROR_U32;
+            break;
+        case XR_CORE_TYPE_PANIC_INFO:
+            representation = XR_BACKEND_VALUE_PANIC_U32;
             break;
         default:
             if (type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
@@ -298,6 +302,7 @@ static bool lower_function(const XrValidatedFunction *source, XrBackendFunction 
     destination->result_type_id = source->result_type_id;
     destination->result_ownership = source->result_ownership;
     destination->error_type_id = source->error_type_id;
+    destination->panic_type_id = source->panic_type_id;
     destination->effect_mask = source->effect_mask;
     destination->capability_mask = source->capability_mask;
     destination->entry_block = source->entry_block;
@@ -405,6 +410,7 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
         hash_u16(&context, fn->result_type_id);
         hash_u32(&context, (uint32_t) fn->result_ownership);
         hash_u16(&context, fn->error_type_id);
+        hash_u16(&context, fn->panic_type_id);
         hash_u32(&context, fn->effect_mask);
         hash_u32(&context, fn->capability_mask);
         hash_u32(&context, fn->entry_block);

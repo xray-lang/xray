@@ -241,14 +241,14 @@
     },
     {
       "id": "core.call.sealed_invoke",
-      "core_spec_contract": "closed-world fallible function identity with exact parameters and mutually exclusive normal/typed-error continuations",
-      "program_encoding": "stable callee id, ordered call operands, normal/error targets, implicit typed result/error block arguments, and explicit pass-through operands",
-      "decoder_verifier_evaluator": "callee signature and typed error channel, both continuation prefixes/suffixes, handled effects, and path-complete ownership checks",
-      "vm_implementation": "private typed frame call followed by one verified normal or error edge without an ambient pending-error slot",
-      "aot_lowering": "typed result/error out parameters and direct C control transfer generated only from validated BackendIR",
-      "source_producer": "resolved fallible Xi call immediately paired with explicit xi.err.check CFG; the pair is collapsed into one canonical invoke terminator",
-      "old_owner_deletion": "canonical source/reference/VM/AOT contain no pending-error opcode, slot, or inferred post-call check; the frozen pre-cut route is physically deleted by Task 302",
-      "status": "COMPLETE_W7_WAVE3_SLICE4",
+      "core_spec_contract": "closed-world function identity with exact parameters and mutually exclusive normal, optional typed-error, and optional typed-panic continuations",
+      "program_encoding": "stable callee id, ordered call operands, dynamic normal/error/panic targets, implicit typed channel block arguments, and explicit pass-through operands",
+      "decoder_verifier_evaluator": "callee signature and orthogonal error/panic channels, all continuation prefixes/suffixes, handled effects, and path-complete ownership checks",
+      "vm_implementation": "private typed frame call followed by one verified normal, error, or panic edge without ambient pending state",
+      "aot_lowering": "typed result/error/panic out parameters and direct C control transfer generated only from validated BackendIR",
+      "source_producer": "resolved fallible Xi call plus xi.err.check maps error CFG; panicful calls without explicit panic CFG fail closed",
+      "old_owner_deletion": "canonical source/reference/VM/AOT contain no pending-error or pending-panic slot, inferred post-call check, or implicit unwind state; the frozen pre-cut route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE3_SLICE5",
       "evidence": [
         "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
@@ -283,6 +283,25 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_invoke_fixture.h"
+      ]
+    },
+    {
+      "id": "core.panic.publish",
+      "core_spec_contract": "consume exactly one affine panic-info payload and terminate through the typed panic channel, never the business-error channel",
+      "program_encoding": "panic-info operand, panic effect, function PanicTypeId, and terminal operation id",
+      "decoder_verifier_evaluator": "panic-info type, forbidden copy, owner transfer, panic effect, terminal placement, and normal/error/panic continuation indexing",
+      "vm_implementation": "publish a distinct typed panic outcome and transfer through the verified panic continuation",
+      "aot_lowering": "distinct typed out_panic ABI value and panic outcome kind with generated direct C control transfer",
+      "source_producer": "uncaught xi.throw(PanicInfo) after explicit cleanup CFG; implicit XI_TRY/CATCH/END_TRY and panicful calls without explicit panic continuations fail closed",
+      "old_owner_deletion": "panic is not encoded through error_type_id, core.error.publish, pending_error, hard trap, or an ambient unwind stack",
+      "status": "COMPLETE_W7_WAVE3_SLICE5",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/program/xr_program_panic_fixture.h",
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c"
       ]
     },
     {

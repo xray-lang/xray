@@ -7,6 +7,7 @@
 #include "program/xr_program_verify.h"
 #include "program/xr_reference_evaluator.h"
 #include "xr_program_invoke_fixture.h"
+#include "xr_program_panic_fixture.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -14,6 +15,7 @@
 #include <string.h>
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
 
 static int failures = 0;
 
@@ -237,6 +239,7 @@ static bool mode_fixture_offsets(const XrProgramArtifact *artifact, size_t *mode
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* result type */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* result ownership */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* error type */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* panic type */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* effects */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* capabilities */
     uint32_t entry_block = (uint32_t) test_take_uvar(artifact->bytes, artifact->size, &cursor);
@@ -1790,9 +1793,9 @@ static void test_sealed_invoke_and_cleanup_cfg(void) {
         {XR_INVOKE_FIXTURE_INVOKE_INFALLIBLE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
         {XR_INVOKE_FIXTURE_WRONG_NORMAL_RESULT_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
         {XR_INVOKE_FIXTURE_WRONG_ERROR_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
-        {XR_INVOKE_FIXTURE_MISSING_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_INVOKE_FIXTURE_MISSING_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
         {XR_INVOKE_FIXTURE_DUPLICATE_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
-        {XR_INVOKE_FIXTURE_MISSING_ERROR_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_INVOKE_FIXTURE_MISSING_ERROR_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
         {XR_INVOKE_FIXTURE_DUPLICATE_ERROR_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
     };
     for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
@@ -1800,6 +1803,55 @@ static void test_sealed_invoke_and_cleanup_cfg(void) {
         CHECK(xr_program_invoke_fixture_write_mutated(invalid[index].mutation, &artifact,
                                                       diagnostic,
                                                       sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, invalid[index].diagnostic);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
+static void test_typed_panic_invoke_and_cleanup_cfg(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_panic_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        uint32_t entry = xr_validated_program_entry_function(program);
+        XrReferenceValue arguments[] = {
+            {.kind = XR_REFERENCE_VALUE_BOOL, .as.boolean = true},
+            {.kind = XR_REFERENCE_VALUE_PANIC_INFO, .as.panic_info = 91u},
+            {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = 9},
+        };
+        XrReferenceOutcome normal =
+            xr_reference_evaluate(program, entry, arguments, 3u, NULL, NULL);
+        CHECK(normal.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(normal.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(normal.value.as.i64 == 42);
+        arguments[0].as.boolean = false;
+        XrReferenceOutcome panic = xr_reference_evaluate(program, entry, arguments, 3u, NULL, NULL);
+        CHECK(panic.kind == XR_REFERENCE_OUTCOME_PANIC);
+        CHECK(panic.panic_value.kind == XR_REFERENCE_VALUE_PANIC_INFO);
+        CHECK(panic.panic_value.as.panic_info == 91u);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    const struct {
+        XrProgramPanicFixtureMutation mutation;
+        XrProgramDiagnosticKind diagnostic;
+    } invalid[] = {
+        {XR_PANIC_FIXTURE_DIRECT_PANICFUL, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PANIC_FIXTURE_COPY_PANIC, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PANIC_FIXTURE_PANIC_AS_ERROR, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PANIC_FIXTURE_WRONG_CHANNEL_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PANIC_FIXTURE_MISSING_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
+        {XR_PANIC_FIXTURE_DUPLICATE_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {XR_PANIC_FIXTURE_MISSING_PANIC_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
+        {XR_PANIC_FIXTURE_DUPLICATE_PANIC_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+    };
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        memset(diagnostic, 0, sizeof(diagnostic));
+        CHECK(xr_program_panic_fixture_write_mutated(invalid[index].mutation, &artifact, diagnostic,
+                                                     sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
         expect_semantic_reject(&artifact, invalid[index].diagnostic);
         xr_program_artifact_free(&artifact);
     }
@@ -2176,6 +2228,7 @@ int main(void) {
     test_parameter_modes_and_value_categories();
     test_terminal_operations();
     test_sealed_invoke_and_cleanup_cfg();
+    test_typed_panic_invoke_and_cleanup_cfg();
     test_negative_diagnostics_and_budget();
     test_evaluator_traps_and_budget();
     test_typed_random_and_linear_work();

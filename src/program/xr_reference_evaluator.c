@@ -77,6 +77,8 @@ static bool reference_value_matches_type(const XrValidatedProgram *program, XrRe
             return value.kind == XR_REFERENCE_VALUE_U32;
         case XR_CORE_TYPE_ERROR:
             return value.kind == XR_REFERENCE_VALUE_ERROR;
+        case XR_CORE_TYPE_PANIC_INFO:
+            return value.kind == XR_REFERENCE_VALUE_PANIC_INFO;
         default:
             return xr_validated_program_type(program, type_id) &&
                    value.kind == XR_REFERENCE_VALUE_AGGREGATE && value.as.aggregate &&
@@ -450,6 +452,18 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                             .as.value = nested.error_value,
                         };
                         implicit = 1u;
+                    } else if (nested.kind == XR_REFERENCE_OUTCOME_PANIC) {
+                        successor = 1u + (callee->error_type_id == XR_CORE_TYPE_VOID ? 0u : 1u);
+                        operand += function->blocks[instruction->successors[0]].argument_count -
+                                   (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u);
+                        if (callee->error_type_id != XR_CORE_TYPE_VOID)
+                            operand +=
+                                function->blocks[instruction->successors[1]].argument_count - 1u;
+                        scratch[0] = (EvalRuntimeValue) {
+                            .category = XR_CORE_IR_VALUE,
+                            .as.value = nested.panic_value,
+                        };
+                        implicit = 1u;
                     } else {
                         result = nested;
                         goto done;
@@ -469,6 +483,10 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = outcome(XR_REFERENCE_OUTCOME_ERROR, context);
                     result.error_value = values[instruction->operands[0]].as.value;
+                    goto done;
+                case XR_CORE_OP_CORE_PANIC_PUBLISH:
+                    result = outcome(XR_REFERENCE_OUTCOME_PANIC, context);
+                    result.panic_value = values[instruction->operands[0]].as.value;
                     goto done;
                 case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
                     if (context->profile.pointer_width != 32u &&
@@ -646,6 +664,9 @@ XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     if (result.kind == XR_REFERENCE_OUTCOME_ERROR &&
         result.error_value.kind == XR_REFERENCE_VALUE_AGGREGATE)
+        result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
+    if (result.kind == XR_REFERENCE_OUTCOME_PANIC &&
+        result.panic_value.kind != XR_REFERENCE_VALUE_PANIC_INFO)
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     free_aggregates(&context);
     return result;

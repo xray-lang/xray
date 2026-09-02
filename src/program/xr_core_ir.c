@@ -68,7 +68,7 @@ bool xr_core_ir_key_is_zero(XrCoreIrKey key) {
 }
 
 static bool type_id_is_builtin(uint16_t type_id) {
-    return type_id <= XR_CORE_TYPE_ERROR;
+    return type_id <= XR_CORE_TYPE_PANIC_INFO;
 }
 
 static bool type_id_supported(const XrCoreIrProgram *program, uint16_t type_id) {
@@ -88,6 +88,8 @@ static bool ownership_disposition_is_valid(XrCoreIrOwnershipDisposition ownershi
 }
 
 static XrCoreIrTypeOwnership type_ownership(const XrCoreIrProgram *program, uint16_t type_id) {
+    if (type_id == XR_CORE_TYPE_PANIC_INFO)
+        return XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
     if (!program || type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
         return XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
     return program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].ownership;
@@ -264,6 +266,7 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     output->result_type_id = input->result_type_id;
     output->result_ownership = input->result_ownership;
     output->error_type_id = input->error_type_id;
+    output->panic_type_id = input->panic_type_id;
     output->effect_mask = input->effect_mask;
     output->capability_mask = input->capability_mask;
     output->entry_block = input->entry_block;
@@ -418,6 +421,9 @@ static bool remap_program_types(XrCoreIrProgram *program) {
                 return false;
             if (!remap_type_id(program->types, program->type_count, function_row->error_type_id,
                                &function_row->error_type_id))
+                return false;
+            if (!remap_type_id(program->types, program->type_count, function_row->panic_type_id,
+                               &function_row->panic_type_id))
                 return false;
             for (uint32_t parameter = 0; parameter < function_row->parameter_count; ++parameter) {
                 if (!remap_type_id(program->types, program->type_count,
@@ -653,6 +659,9 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                 find_function(program, function->key) != function ||
                 !type_id_supported(program, function->result_type_id) ||
                 !type_id_supported(program, function->error_type_id) ||
+                !type_id_supported(program, function->panic_type_id) ||
+                (function->panic_type_id != XR_CORE_TYPE_VOID &&
+                 function->panic_type_id != XR_CORE_TYPE_PANIC_INFO) ||
                 !ownership_disposition_is_valid(function->result_ownership) ||
                 (function->result_type_id == XR_CORE_TYPE_VOID &&
                  function->result_ownership != XR_CORE_IR_NON_OWNER) ||
@@ -808,7 +817,7 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         !input->required_features || input->required_feature_count == 0 ||
         input->required_feature_count > XR_PROGRAM_LIMIT_FEATURES || !input->modules ||
         input->module_count == 0 || input->module_count > XR_PROGRAM_LIMIT_FUNCTIONS ||
-        input->type_count > XR_PROGRAM_LIMIT_TYPES - 5u ||
+        input->type_count > XR_PROGRAM_LIMIT_TYPES - 6u ||
         input->type_count > UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u ||
         (input->type_count == 0u) != (input->types == NULL)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,

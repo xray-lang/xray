@@ -30,6 +30,11 @@
     },
     {
       "stable_id": 5,
+      "name": "panic-info",
+      "description": "Typed catchable runtime panic payload on a channel disjoint from language errors and hard traps."
+    },
+    {
+      "stable_id": 6,
       "name": "type-variable",
       "description": "Registry meta-type resolved by a verified function or block signature."
     }
@@ -54,6 +59,11 @@
       "stable_id": 4,
       "name": "target-query",
       "description": "Read one immutable value from the bound XrTargetProfile."
+    },
+    {
+      "stable_id": 5,
+      "name": "panic",
+      "description": "Typed catchable panic continuation publication, distinct from business errors and hard traps."
     }
   ],
   "capabilities": [
@@ -264,7 +274,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": true,
+        "panic": false,
         "cancel": false,
         "suspend": false
       },
@@ -347,7 +357,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": true,
+        "panic": false,
         "cancel": false,
         "suspend": false
       },
@@ -430,7 +440,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": true,
+        "panic": false,
         "cancel": false,
         "suspend": false
       },
@@ -512,7 +522,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": true,
+        "panic": false,
         "cancel": false,
         "suspend": false
       },
@@ -1004,13 +1014,15 @@
         "operands": [
           "P...",
           "normal-edge-values...",
-          "error-edge-values..."
+          "error-edge-values...",
+          "panic-edge-values..."
         ],
         "result": "void",
         "immediates": {
           "parameter_types": "type-list",
           "result_type": "type-or-void",
-          "error_type": "non-void-type",
+          "error_type": "type-or-void",
+          "panic_type": "type-or-void",
           "callee_id": "program-function-id"
         }
       },
@@ -1018,7 +1030,7 @@
       "successors": {
         "normal": true,
         "error": true,
-        "panic": false,
+        "panic": true,
         "cancel": false,
         "suspend": false
       },
@@ -1033,15 +1045,16 @@
         "operands": [
           "parameter-mode...",
           "normal-edge-transfer...",
-          "error-edge-transfer..."
+          "error-edge-transfer...",
+          "panic-edge-transfer..."
         ],
-        "result": "normal-result-and-error-value-are-successor-block-arguments"
+        "result": "normal-result-and-present-error/panic-values-are-successor-block-arguments"
       },
       "profile_dependency": "none",
       "materialization": "call-terminator",
       "determinism": {
         "kind": "deterministic",
-        "allowed_trace": "exactly one normal or typed-error continuation under the same CoreSpec"
+        "allowed_trace": "exactly one normal, typed-error, or typed-panic continuation under the same CoreSpec"
       },
       "kat_validator": "sealed-invoke",
       "coverage": {
@@ -1090,7 +1103,7 @@
       "successors": {
         "normal": false,
         "error": false,
-        "panic": true,
+        "panic": false,
         "cancel": false,
         "suspend": false
       },
@@ -1208,6 +1221,74 @@
       }
     },
     {
+      "stable_id": 50,
+      "spelling": "core.panic.publish",
+      "class": "termination",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "panic-info"
+        ],
+        "result": "void",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": false,
+        "error": false,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "panic"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "panic-transfer"
+        ],
+        "result": "none"
+      },
+      "profile_dependency": "none",
+      "materialization": "panic",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one typed panic successor"
+      },
+      "kat_validator": "panic-publish",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
       "stable_id": 64,
       "spelling": "core.target.pointer_width",
       "class": "target-query",
@@ -1222,7 +1303,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": true,
+        "panic": false,
         "cancel": false,
         "suspend": false
       },
@@ -1634,7 +1715,7 @@
       "successors": {
         "normal": true,
         "error": false,
-        "panic": true,
+        "panic": false,
         "cancel": false,
         "suspend": false
       },

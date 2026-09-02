@@ -19,6 +19,7 @@ typedef enum XrReferenceValueKind {
     XR_REFERENCE_VALUE_I64,
     XR_REFERENCE_VALUE_U32,
     XR_REFERENCE_VALUE_ERROR,
+    XR_REFERENCE_VALUE_PANIC_INFO,
     XR_REFERENCE_VALUE_AGGREGATE,
 } XrReferenceValueKind;
 
@@ -29,6 +30,7 @@ typedef struct XrReferenceValue {
         int64_t i64;
         uint32_t u32;
         uint32_t error;
+        uint32_t panic_info;
         const void *aggregate;
     } as;
 } XrReferenceValue;
@@ -47,6 +49,7 @@ typedef enum XrReferenceOutcomeKind {
     XR_REFERENCE_OUTCOME_RETURN = 0,
     XR_REFERENCE_OUTCOME_TRAP,
     XR_REFERENCE_OUTCOME_ERROR,
+    XR_REFERENCE_OUTCOME_PANIC,
     XR_REFERENCE_OUTCOME_RESOURCE_LIMIT,
     XR_REFERENCE_OUTCOME_INVALID_INVOCATION,
 } XrReferenceOutcomeKind;
@@ -65,6 +68,7 @@ typedef struct XrReferenceOutcome {
     XrReferenceOutcomeKind kind;
     XrReferenceValue value;
     XrReferenceValue error_value;
+    XrReferenceValue panic_value;
     XrReferenceTrap trap;
     uint64_t steps;
 } XrReferenceOutcome;

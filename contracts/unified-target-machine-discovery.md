@@ -148,8 +148,8 @@ LF bytes on every host.  Their policy and contract digests therefore identify
 the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 053d2ac5f468e0866a3e23fd7e99ffa5c517c4731bc7f93bdb0e44736dd34a2e
-anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 3aa48ccc7b1f61a17a8c24e492fd85c50a563840efff729a3d30b01d8c4e9755
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json a5c2a4b2cffd3fa3775c0ec2fcadc9fda1e3615ff00d772a75c92a2ce4b50737
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 57a27ff4326ad81a88fa6d16b81118f86e831ad4d1abaf2065f79303c4ad20ee
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json a1b272985a73b80df6eab458fff3a221f08af8c32488ee199cb48633552c1916
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: contracts/target-machine/migration-source-classification.json e0adb045a60f4b5d4c5a5f243b6a43cb217236190a4d2163eab2368f8663cacc

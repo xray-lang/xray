@@ -178,6 +178,13 @@ static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
                 return true;
             }
             return false;
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            if (type->instance.class_name && strcmp(type->instance.class_name, "PanicInfo") == 0) {
+                *type_id = XR_CORE_TYPE_PANIC_INFO;
+                return true;
+            }
+            return false;
         default:
             return false;
     }
@@ -692,6 +699,85 @@ static bool map_type(XrXiBuildContext *context, const XrType *type, uint16_t *ty
     return map_type_recursive(context, type, type_id, NULL, 0u);
 }
 
+static const XiFunc *resolved_direct_callee(const XiFunc *caller, const XiValue *call);
+
+static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *context,
+                                                        const XiFunc *function,
+                                                        const XiFunc **stack, uint32_t depth,
+                                                        uint32_t capacity, bool *has_panic,
+                                                        char *diagnostic, size_t diagnostic_size) {
+    if (!context || !function || !stack || !has_panic || depth >= capacity)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi panic call graph is not finitely representable");
+    for (uint32_t index = 0u; index < depth; ++index) {
+        if (stack[index] == function) {
+            *has_panic = false;
+            return XR_PROGRAM_BUILD_OK;
+        }
+    }
+    stack[depth] = function;
+    bool found = false;
+    for (uint32_t block_index = 0u; block_index < function->nblocks; ++block_index) {
+        const XiBlock *block = function->blocks[block_index];
+        for (uint32_t value_index = 0u; block && value_index < block->nvalues; ++value_index) {
+            const XiValue *value = block->values[value_index];
+            if (!value)
+                continue;
+            if (value->op == XI_TRY || value->op == XI_CATCH || value->op == XI_END_TRY)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi function %s still uses implicit panic-handler state",
+                            function->name ? function->name : "<anonymous>");
+            if (value->op == XI_THROW) {
+                uint16_t payload_type = XR_CORE_TYPE_VOID;
+                if (value->nargs != 1u || !value->args || !value->args[0] ||
+                    !map_type(context, value->args[0]->type, &payload_type) ||
+                    payload_type != XR_CORE_TYPE_PANIC_INFO)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi throw v%u does not publish typed PanicInfo", value->id);
+                found = true;
+            }
+            if (value->op == XI_CALL) {
+                const XiFunc *callee = resolved_direct_callee(function, value);
+                if (!callee)
+                    continue;
+                bool callee_panic = false;
+                XrProgramBuildStatus status =
+                    function_has_uncaught_panic(context, callee, stack, depth + 1u, capacity,
+                                                &callee_panic, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                found = found || callee_panic;
+            }
+        }
+    }
+    *has_panic = found;
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus map_function_panic_type(XrXiBuildContext *context,
+                                                    const XiFunc *function, uint16_t *panic_type_id,
+                                                    char *diagnostic, size_t diagnostic_size) {
+    if (!context || !function || !panic_type_id)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    uint32_t capacity = 1u;
+    for (uint32_t module = 0u; module < context->source->module_count; ++module) {
+        const XiFunc *root = context->source->module_roots[module];
+        if (root && root->module)
+            capacity += root->module->nfuncs;
+    }
+    const XiFunc **stack = xr_calloc(capacity, sizeof(*stack));
+    if (!stack)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    bool has_panic = false;
+    XrProgramBuildStatus status = function_has_uncaught_panic(
+        context, function, stack, 0u, capacity, &has_panic, diagnostic, diagnostic_size);
+    xr_free(stack);
+    if (status != XR_PROGRAM_BUILD_OK)
+        return status;
+    *panic_type_id = has_panic ? XR_CORE_TYPE_PANIC_INFO : XR_CORE_TYPE_VOID;
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus map_function_error_type(XrXiBuildContext *context,
                                                     const XiFunc *function, uint16_t *error_type_id,
                                                     char *diagnostic, size_t diagnostic_size) {
@@ -727,6 +813,8 @@ static XrProgramBuildStatus map_function_error_type(XrXiBuildContext *context,
 
 static XrCoreIrOwnershipDisposition logical_ownership_for_type(const XrXiBuildContext *context,
                                                                uint16_t type_id) {
+    if (type_id == XR_CORE_TYPE_PANIC_INFO)
+        return XR_CORE_IR_OWNER;
     const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
     return type && type->input.ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ? XR_CORE_IR_OWNER
                                                                              : XR_CORE_IR_NON_OWNER;
@@ -734,7 +822,7 @@ static XrCoreIrOwnershipDisposition logical_ownership_for_type(const XrXiBuildCo
 
 static XrCoreIrCopyContract logical_copy_contract_for_type(const XrXiBuildContext *context,
                                                            uint16_t type_id) {
-    if (type_id == XR_CORE_TYPE_VOID)
+    if (type_id == XR_CORE_TYPE_VOID || type_id == XR_CORE_TYPE_PANIC_INFO)
         return XR_CORE_IR_COPY_FORBIDDEN;
     const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
     return type ? type->input.copy_contract : XR_CORE_IR_COPY_TRIVIAL;
@@ -1140,6 +1228,14 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
     if (error_type != XR_CORE_TYPE_VOID)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "fallible Xi call v%u lacks an explicit invoke continuation", value->id);
+    uint16_t panic_type = XR_CORE_TYPE_VOID;
+    XrProgramBuildStatus panic_status =
+        map_function_panic_type(context, callee, &panic_type, diagnostic, diagnostic_size);
+    if (panic_status != XR_PROGRAM_BUILD_OK)
+        return panic_status;
+    if (panic_type != XR_CORE_TYPE_VOID)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "panic-capable Xi call v%u lacks an explicit panic continuation", value->id);
 
     uint16_t result_type = XR_CORE_TYPE_VOID;
     if (!map_type(context, value->type, &result_type))
@@ -1431,7 +1527,7 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
 static bool value_is_skipped(const XiFunc *function, const XiValue *value) {
     if (value_is_invoke_scaffold(function, value))
         return true;
-    if (value->op == XI_PARAM || xi_copy_is_identity_alias(value) ||
+    if (value->op == XI_PARAM || value->op == XI_THROW || xi_copy_is_identity_alias(value) ||
         (xi_copy_is_value_clone(value) && logical_value_identity(value) != value))
         return true;
     if ((value->op == XI_RETAIN || value->op == XI_RELEASE) && value->nargs == 1u && value->args &&
@@ -1511,6 +1607,13 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
         if (error_type == XR_CORE_TYPE_VOID)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi error check in b%u guards an infallible sealed call", source->id);
+        uint16_t panic_type = XR_CORE_TYPE_VOID;
+        status = map_function_panic_type(context, callee, &panic_type, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+        if (panic_type != XR_CORE_TYPE_VOID)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi invoke b%u has no explicit panic continuation", source->id);
         XrXiBlockStorage *normal = find_block_storage(function, source->succs[1]);
         XrXiBlockStorage *error = find_block_storage(function, source->succs[0]);
         const XiValue *caught = block_error_catch(source->succs[0]);
@@ -1750,6 +1853,10 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
         map_function_error_type(context, xi, &output->error_type_id, diagnostic, diagnostic_size);
     if (signature_status != XR_PROGRAM_BUILD_OK)
         return signature_status;
+    signature_status =
+        map_function_panic_type(context, xi, &output->panic_type_id, diagnostic, diagnostic_size);
+    if (signature_status != XR_PROGRAM_BUILD_OK)
+        return signature_status;
     output->result_ownership = logical_ownership_for_type(context, output->result_type_id);
     if (xi->nparams != 0) {
         storage->parameter_types = xr_calloc(xi->nparams, sizeof(*storage->parameter_types));
@@ -1865,6 +1972,27 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
             terminator->successor_count = 2u;
             status = set_invoke_operands(terminator, storage, block_storage, invoke_call, normal,
                                          error, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        } else if (xi_block->kind == XI_BLOCK_UNREACHABLE) {
+            const XiValue *throw_value = NULL;
+            for (uint32_t value_index = 0u; value_index < xi_block->nvalues; ++value_index) {
+                const XiValue *candidate = xi_block->values[value_index];
+                if (!candidate || candidate->op != XI_THROW)
+                    continue;
+                if (throw_value)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                "Xi panic block b%u has multiple throw terminals", xi_block->id);
+                throw_value = candidate;
+            }
+            if (!throw_value || throw_value->nargs != 1u || !throw_value->args ||
+                !throw_value->args[0])
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi unreachable block b%u has no typed panic terminal", xi_block->id);
+            terminator->operation_id = XR_CORE_OP_CORE_PANIC_PUBLISH;
+            XiValue *published[] = {throw_value->args[0]};
+            status = set_operands(terminator, storage, block_storage, published, 1u, diagnostic,
+                                  diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         } else if (xi_block->kind == XI_BLOCK_RETURN && xi_block->control &&

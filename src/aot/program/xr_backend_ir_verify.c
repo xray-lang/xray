@@ -90,6 +90,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
+        case XR_CORE_OP_CORE_PANIC_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_OWNER_COPY:
@@ -299,6 +300,7 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
         if (source->parameter_count != lowered->parameter_count ||
             source->result_type_id != lowered->result_type_id ||
             source->error_type_id != lowered->error_type_id ||
+            source->panic_type_id != lowered->panic_type_id ||
             source->result_ownership != lowered->result_ownership ||
             source->effect_mask != lowered->effect_mask ||
             source->capability_mask != lowered->capability_mask ||
