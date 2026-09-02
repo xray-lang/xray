@@ -276,6 +276,7 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
         }
         uint64_t result_type = take_uvar(&section);
         uint64_t result_ownership = take_uvar(&section);
+        uint64_t error_type = take_uvar(&section);
         (void) take_uvar(&section); /* effect mask */
         (void) take_uvar(&section); /* capability mask */
         uint64_t entry_block = take_uvar(&section);
@@ -283,6 +284,7 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
         uint64_t value_count = take_uvar(&section);
         (void) take_uvar(&section); /* flags */
         if (encoded_id != id || !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
+            !encoded_type_id_is_valid(error_type, dynamic_type_count) ||
             result_ownership > XR_CORE_IR_OWNER || block_count == 0 ||
             block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION || entry_block >= block_count ||
             value_count > XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION)

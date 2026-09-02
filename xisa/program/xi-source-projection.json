@@ -209,6 +209,14 @@
     {
       "source": "function-return",
       "core_operation": "core.return"
+    },
+    {
+      "source": "resolved-fallible-call-plus-xi.err.check-cfg",
+      "core_operation": "core.call.sealed_invoke"
+    },
+    {
+      "source": "xi.err.return-after-explicit-cleanup-cfg",
+      "core_operation": "core.error.publish"
     }
   ]
 }

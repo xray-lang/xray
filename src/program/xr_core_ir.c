@@ -263,6 +263,7 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     output->parameter_count = input->parameter_count;
     output->result_type_id = input->result_type_id;
     output->result_ownership = input->result_ownership;
+    output->error_type_id = input->error_type_id;
     output->effect_mask = input->effect_mask;
     output->capability_mask = input->capability_mask;
     output->entry_block = input->entry_block;
@@ -414,6 +415,9 @@ static bool remap_program_types(XrCoreIrProgram *program) {
             XrCoreIrFunction *function_row = &module_row->functions[function];
             if (!remap_type_id(program->types, program->type_count, function_row->result_type_id,
                                &function_row->result_type_id))
+                return false;
+            if (!remap_type_id(program->types, program->type_count, function_row->error_type_id,
+                               &function_row->error_type_id))
                 return false;
             for (uint32_t parameter = 0; parameter < function_row->parameter_count; ++parameter) {
                 if (!remap_type_id(program->types, program->type_count,
@@ -648,6 +652,7 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
             if (xr_core_ir_key_is_zero(function->key) ||
                 find_function(program, function->key) != function ||
                 !type_id_supported(program, function->result_type_id) ||
+                !type_id_supported(program, function->error_type_id) ||
                 !ownership_disposition_is_valid(function->result_ownership) ||
                 (function->result_type_id == XR_CORE_TYPE_VOID &&
                  function->result_ownership != XR_CORE_IR_NON_OWNER) ||

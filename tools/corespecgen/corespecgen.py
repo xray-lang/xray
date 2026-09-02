@@ -77,8 +77,11 @@ ARITHMETIC_KINDS = {
     "signed-integer-compare",
 }
 SUCCESSOR_KEYS = {"normal", "error", "panic", "cancel", "suspend"}
-GENERIC_TYPES = {"A", "V", "T", "T...", "R?", "P..."}
-VARIADIC_TYPES = {"T...", "P..."}
+GENERIC_TYPES = {
+    "A", "E", "V", "T", "T...", "R?", "P...",
+    "normal-edge-values...", "error-edge-values...",
+}
+VARIADIC_TYPES = {"T...", "P...", "normal-edge-values...", "error-edge-values..."}
 IMPLEMENTATION_KEYS = {
     "aot_handler",
     "c_spelling",
@@ -316,9 +319,9 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 f"operation {spelling} lacks allowed trace")
         require(operation["kat_validator"] in {
             "aggregate-construct", "aggregate-project", "aggregate-update",
-            "block-arguments", "branch", "conditional-branch", "fixed-contract",
+            "block-arguments", "branch", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "place-load", "place-local", "place-store",
-            "return", "scalar-oracle", "sealed-call", "variant-construct",
+            "return", "scalar-oracle", "sealed-call", "sealed-invoke", "variant-construct",
             "variant-project", "variant-test",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
@@ -467,7 +470,14 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
     if validator == "sealed-call":
         return (actual.get("callee_sealed") is True
                 and actual.get("argument_types") == actual.get("parameter_types")
-                and actual.get("actual_result_type") == actual.get("declared_result_type"))
+                and actual.get("actual_result_type") == actual.get("declared_result_type")
+                and actual.get("callee_error_type") == "void")
+    if validator == "sealed-invoke":
+        return (actual.get("callee_sealed") is True
+                and actual.get("argument_types") == actual.get("parameter_types")
+                and actual.get("callee_error_type") not in {None, "void"}
+                and actual.get("normal_result_type") == actual.get("callee_result_type")
+                and actual.get("error_argument_type") == actual.get("callee_error_type"))
     if validator == "aggregate-construct":
         return (actual.get("operand_types") == actual.get("field_types")
                 and actual.get("result_type") == actual.get("aggregate_type"))
@@ -506,8 +516,9 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and 0 <= variant < len(payloads) and isinstance(payloads[variant], list)
                 and isinstance(field, int) and 0 <= field < len(payloads[variant])
                 and actual.get("result_type") == payloads[variant][field])
-    if validator == "fixed-contract":
-        return actual.get("operand_types") == ["error"]
+    if validator == "error-publish":
+        return (actual.get("function_error_type") not in {None, "void"}
+                and actual.get("operand_types") == [actual.get("function_error_type")])
     if validator == "owner-copy":
         ownership = actual.get("type_ownership")
         operand_ownership = actual.get("operand_ownership")
@@ -622,6 +633,22 @@ def generate_header(registry: dict[str, Any], digest: str) -> str:
         lines.append(f"    XR_CORE_TYPE_{c_identifier(row['name'])} = {row['stable_id']},")
     lines.extend([
         "} XrCoreTypeId;",
+        "",
+        "typedef enum XrCoreEffectMask {",
+    ])
+    for row in registry["effects"]:
+        lines.append(
+            f"    XR_CORE_EFFECT_{c_identifier(row['name'])} = UINT32_C({1 << (row['stable_id'] - 1)}),")
+    lines.extend([
+        "} XrCoreEffectMask;",
+        "",
+        "typedef enum XrCoreCapabilityMask {",
+    ])
+    for row in registry["capabilities"]:
+        lines.append(
+            f"    XR_CORE_CAPABILITY_{c_identifier(row['name'])} = UINT32_C({1 << (row['stable_id'] - 1)}),")
+    lines.extend([
+        "} XrCoreCapabilityMask;",
         "",
         "typedef enum XrCoreFeatureId {",
     ])

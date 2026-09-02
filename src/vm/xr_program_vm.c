@@ -539,12 +539,53 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value = nested.value;
                     break;
                 }
+                case XR_CORE_OP_CORE_CALL_SEALED_INVOKE: {
+                    const XrValidatedFunction *callee =
+                        &context->code->program->functions[instruction.immediate.function_id];
+                    for (uint32_t index = 0; index < callee->parameter_count; ++index)
+                        scratch[index] = values[instruction.operands[index]];
+                    XrVmOutcome nested =
+                        execute_function(context, instruction.immediate.function_id, scratch,
+                                         callee->parameter_count, depth + 1u);
+                    uint32_t successor = 0u;
+                    uint32_t implicit = 0u;
+                    uint32_t operand = callee->parameter_count;
+                    if (nested.kind == XR_VM_OUTCOME_RETURN) {
+                        if (callee->result_type_id != XR_CORE_TYPE_VOID) {
+                            scratch[0] = (XrVmRuntimeValue) {
+                                .category = XR_CORE_IR_VALUE,
+                                .as.value = nested.value,
+                            };
+                            implicit = 1u;
+                        }
+                    } else if (nested.kind == XR_VM_OUTCOME_ERROR) {
+                        successor = 1u;
+                        operand += function->blocks[instruction.successors[0]].argument_count -
+                                   (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u);
+                        scratch[0] = (XrVmRuntimeValue) {
+                            .category = XR_CORE_IR_VALUE,
+                            .as.value = nested.error_value,
+                        };
+                        implicit = 1u;
+                    } else {
+                        result = nested;
+                        goto done;
+                    }
+                    const XrValidatedBlock *target =
+                        &function->blocks[instruction.successors[successor]];
+                    for (uint32_t index = implicit; index < target->argument_count; ++index)
+                        scratch[index] = values[instruction.operands[operand + index - implicit]];
+                    incoming_count = target->argument_count;
+                    block_id = instruction.successors[successor];
+                    transferred = true;
+                    break;
+                }
                 case XR_CORE_OP_CORE_TRAP:
                     result = vm_trap(XR_VM_TRAP_EXPLICIT, context);
                     goto done;
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = vm_outcome(XR_VM_OUTCOME_ERROR, context);
-                    result.error = values[instruction.operands[0]].as.value.as.error;
+                    result.error_value = values[instruction.operands[0]].as.value;
                     goto done;
                 case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
                     if (context->code->pointer_width != 32u &&
@@ -889,9 +930,13 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     xr_free(runtime_arguments);
     if (outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_AGGREGATE)
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
+    if (outcome.kind == XR_VM_OUTCOME_ERROR && outcome.error_value.kind == XR_VM_VALUE_AGGREGATE)
+        outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     hash_u32(&context.trace, (uint32_t) outcome.kind);
     hash_u32(&context.trace, (uint32_t) outcome.trap);
-    hash_u32(&context.trace, outcome.error);
+    hash_u32(&context.trace, (uint32_t) outcome.error_value.kind);
+    if (outcome.error_value.kind == XR_VM_VALUE_ERROR)
+        hash_u32(&context.trace, outcome.error_value.as.error);
     xr_sha256_final(&context.trace, outcome.logical_trace.bytes);
     outcome.steps = context.steps;
     free_aggregates(&context);

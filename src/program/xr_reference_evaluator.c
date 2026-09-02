@@ -422,12 +422,53 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.as.value = nested.value;
                     break;
                 }
+                case XR_CORE_OP_CORE_CALL_SEALED_INVOKE: {
+                    const XrValidatedFunction *callee =
+                        &context->program->functions[instruction->immediate.function_id];
+                    for (uint32_t index = 0; index < callee->parameter_count; ++index)
+                        scratch[index] = values[instruction->operands[index]];
+                    XrReferenceOutcome nested =
+                        evaluate_function(context, instruction->immediate.function_id, scratch,
+                                          callee->parameter_count, depth + 1u);
+                    uint32_t successor = 0u;
+                    uint32_t implicit = 0u;
+                    uint32_t operand = callee->parameter_count;
+                    if (nested.kind == XR_REFERENCE_OUTCOME_RETURN) {
+                        if (callee->result_type_id != XR_CORE_TYPE_VOID) {
+                            scratch[0] = (EvalRuntimeValue) {
+                                .category = XR_CORE_IR_VALUE,
+                                .as.value = nested.value,
+                            };
+                            implicit = 1u;
+                        }
+                    } else if (nested.kind == XR_REFERENCE_OUTCOME_ERROR) {
+                        successor = 1u;
+                        operand += function->blocks[instruction->successors[0]].argument_count -
+                                   (callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u);
+                        scratch[0] = (EvalRuntimeValue) {
+                            .category = XR_CORE_IR_VALUE,
+                            .as.value = nested.error_value,
+                        };
+                        implicit = 1u;
+                    } else {
+                        result = nested;
+                        goto done;
+                    }
+                    const XrValidatedBlock *target =
+                        &function->blocks[instruction->successors[successor]];
+                    for (uint32_t index = implicit; index < target->argument_count; ++index)
+                        scratch[index] = values[instruction->operands[operand + index - implicit]];
+                    incoming_count = target->argument_count;
+                    block_id = instruction->successors[successor];
+                    transferred = true;
+                    break;
+                }
                 case XR_CORE_OP_CORE_TRAP:
                     result = trap_outcome(context, XR_REFERENCE_TRAP_EXPLICIT);
                     goto done;
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = outcome(XR_REFERENCE_OUTCOME_ERROR, context);
-                    result.error = values[instruction->operands[0]].as.value.as.error;
+                    result.error_value = values[instruction->operands[0]].as.value;
                     goto done;
                 case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
                     if (context->profile.pointer_width != 32u &&
@@ -602,6 +643,9 @@ XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint
     xr_free(runtime_arguments);
     if (result.kind == XR_REFERENCE_OUTCOME_RETURN &&
         result.value.kind == XR_REFERENCE_VALUE_AGGREGATE)
+        result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
+    if (result.kind == XR_REFERENCE_OUTCOME_ERROR &&
+        result.error_value.kind == XR_REFERENCE_VALUE_AGGREGATE)
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     free_aggregates(&context);
     return result;

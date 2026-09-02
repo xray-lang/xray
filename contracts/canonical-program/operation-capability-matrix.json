@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; trap, error publication, and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke and typed error publication are COMPLETE_W7_WAVE3_SLICE4; trap and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 27 registered operations have bounded verification and independent reference evaluation. Explicit owner copy and the affine ownership-domain proof are active; sealed invoke, cleanup CFG, coroutine, import, and boundary surfaces fail closed until their owning slices activate them."
+    "note": "All 28 registered operations have bounded verification and independent reference evaluation. Explicit owner copy, affine ownership-domain proof, sealed invoke, and typed error publication are active; panic, coroutine, import, and boundary surfaces fail closed until their owning slices activate them."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 27 registered operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 28 registered operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 27 registered operations lower through an independently verified BackendIR into portable C11. The pure native fixture links no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 28 registered operations lower through an independently verified BackendIR into portable C11. The pure native fixture links no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -240,6 +240,23 @@
       ]
     },
     {
+      "id": "core.call.sealed_invoke",
+      "core_spec_contract": "closed-world fallible function identity with exact parameters and mutually exclusive normal/typed-error continuations",
+      "program_encoding": "stable callee id, ordered call operands, normal/error targets, implicit typed result/error block arguments, and explicit pass-through operands",
+      "decoder_verifier_evaluator": "callee signature and typed error channel, both continuation prefixes/suffixes, handled effects, and path-complete ownership checks",
+      "vm_implementation": "private typed frame call followed by one verified normal or error edge without an ambient pending-error slot",
+      "aot_lowering": "typed result/error out parameters and direct C control transfer generated only from validated BackendIR",
+      "source_producer": "resolved fallible Xi call immediately paired with explicit xi.err.check CFG; the pair is collapsed into one canonical invoke terminator",
+      "old_owner_deletion": "canonical source/reference/VM/AOT contain no pending-error opcode, slot, or inferred post-call check; the frozen pre-cut route is physically deleted by Task 302",
+      "status": "COMPLETE_W7_WAVE3_SLICE4",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/program/xr_program_invoke_fixture.h"
+      ]
+    },
+    {
       "id": "core.trap",
       "core_spec_contract": "one explicit deterministic terminal trap with no normal successor",
       "program_encoding": "terminal operation plus stable trap id",
@@ -259,9 +276,14 @@
       "vm_implementation": "publish one typed error outcome without backend return-code inference",
       "aot_lowering": "BackendIR typed error terminal projected through the selected private ABI",
       "source_producer": "typed error propagation after cleanup lowering",
-      "old_owner_deletion": "delete pending-error opcode and CGen error-channel inference in W7-error",
-      "status": "FROZEN_WALKING_SKELETON",
-      "evidence": []
+      "old_owner_deletion": "canonical source/reference/VM/AOT publish the function-declared typed error directly; pending-error state remains only in the frozen pre-cut route until Task 302",
+      "status": "COMPLETE_W7_WAVE3_SLICE4",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c",
+        "tests/unit/program/xr_program_invoke_fixture.h"
+      ]
     },
     {
       "id": "core.target.pointer_width",

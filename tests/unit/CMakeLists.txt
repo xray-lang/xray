@@ -655,6 +655,26 @@ add_xr_program_aot_native_case(checked_overflow checked-overflow 211)
 add_xr_program_aot_native_case(wrapping_overflow wrapping-overflow 0)
 add_xr_program_aot_native_case(division_zero division-zero 212)
 
+set(XR_PROGRAM_AOT_INVOKE_C
+    ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_sealed_invoke.c)
+add_custom_command(
+    OUTPUT ${XR_PROGRAM_AOT_INVOKE_C}
+    COMMAND $<TARGET_FILE:test_xr_program_aot>
+        ${XR_PROGRAM_AOT_INVOKE_C} sealed-invoke-object
+    DEPENDS test_xr_program_aot
+    COMMENT "Generating sealed-invoke canonical XrProgram C object fixture"
+    VERBATIM)
+set_source_files_properties(${XR_PROGRAM_AOT_INVOKE_C} PROPERTIES GENERATED TRUE)
+add_library(test_xr_program_aot_sealed_invoke_object OBJECT ${XR_PROGRAM_AOT_INVOKE_C})
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    target_compile_options(test_xr_program_aot_sealed_invoke_object PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xr_program_aot_sealed_invoke_object PRIVATE
+        -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+endif()
+
 add_test(NAME test_xr_program_aot_providers
     COMMAND ${XRAY_PYTHON}
         ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_providers.py

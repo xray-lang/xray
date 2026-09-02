@@ -805,16 +805,12 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool pr
 
         xi_lower_braun_seal(l, cont);
         l->cur_block = cont;
-    } else if (!xi_lower_cleanup_has_active_site(l)) {
-        /* Outside a cleanup owner, use the compact direct propagation form. */
-        XiValue *check = xi_value_new(l->func, l->cur_block, XI_ERR_CHECK, l->type_unit, 0);
-        if (!check)
-            return;
-        check->flags |= XI_FLAG_SIDE_EFFECT;
-        check->line = node ? (uint32_t) node->line : 0;
     } else {
-        /* An escaping value error is an ordinary CFG edge. Materialize it so
-         * the same static cleanup ladder used by return/break can run first. */
+        /* An escaping value error is always an ordinary CFG edge.  The old
+         * operand-free unit check encoded propagation through an ambient
+         * pending-error slot and could not be projected to a typed invoke.
+         * Materialize both continuations even when no cleanup is active so
+         * canonical-program production has one structural source shape. */
         XiValue *check = xi_value_new(l->func, l->cur_block, XI_ERR_CHECK, l->type_bool, 0);
         if (!check)
             return;
@@ -834,7 +830,8 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool pr
             error->flags |= XI_FLAG_SIDE_EFFECT;
             error->line = node ? (uint32_t) node->line : 0;
         }
-        xi_lower_cleanup_run_to_depth(l, 0, node ? node->line : 0);
+        if (xi_lower_cleanup_has_active_site(l))
+            xi_lower_cleanup_run_to_depth(l, 0, node ? node->line : 0);
         if (l->cur_block && error) {
             XiValue *reprop = xi_value_new(l->func, l->cur_block, XI_ERR_RETURN, l->type_unit, 1);
             if (reprop) {

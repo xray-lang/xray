@@ -30,6 +30,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
+        case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
         case XR_CORE_OP_CORE_TRAP:
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
@@ -296,6 +297,7 @@ static bool lower_function(const XrValidatedFunction *source, XrBackendFunction 
     destination->parameter_count = source->parameter_count;
     destination->result_type_id = source->result_type_id;
     destination->result_ownership = source->result_ownership;
+    destination->error_type_id = source->error_type_id;
     destination->effect_mask = source->effect_mask;
     destination->capability_mask = source->capability_mask;
     destination->entry_block = source->entry_block;
@@ -402,6 +404,7 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
         }
         hash_u16(&context, fn->result_type_id);
         hash_u32(&context, (uint32_t) fn->result_ownership);
+        hash_u16(&context, fn->error_type_id);
         hash_u32(&context, fn->effect_mask);
         hash_u32(&context, fn->capability_mask);
         hash_u32(&context, fn->entry_block);

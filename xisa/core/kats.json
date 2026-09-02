@@ -584,6 +584,7 @@
         ],
         "actual_result_type": "i64",
         "declared_result_type": "i64",
+        "callee_error_type": "void",
         "callee_sealed": true
       },
       "expect": {
@@ -599,6 +600,7 @@
         "parameter_types": [],
         "actual_result_type": "void",
         "declared_result_type": "void",
+        "callee_error_type": "void",
         "callee_sealed": false
       },
       "expect": {
@@ -618,6 +620,45 @@
         ],
         "actual_result_type": "i64",
         "declared_result_type": "i64",
+        "callee_error_type": "void",
+        "callee_sealed": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "sealed-invoke-valid",
+      "operation": "core.call.sealed_invoke",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "callee_result_type": "bool",
+        "normal_result_type": "bool",
+        "callee_error_type": "ParseError",
+        "error_argument_type": "ParseError",
+        "callee_sealed": true
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "sealed-invoke-rejects-infallible-callee",
+      "operation": "core.call.sealed_invoke",
+      "kind": "contract",
+      "actual": {
+        "argument_types": [],
+        "parameter_types": [],
+        "callee_result_type": "void",
+        "normal_result_type": "void",
+        "callee_error_type": "void",
+        "error_argument_type": "void",
         "callee_sealed": true
       },
       "expect": {
@@ -641,8 +682,9 @@
       "operation": "core.error.publish",
       "kind": "contract",
       "actual": {
+        "function_error_type": "ParseError",
         "operand_types": [
-          "error"
+          "ParseError"
         ]
       },
       "expect": {
@@ -654,6 +696,7 @@
       "operation": "core.error.publish",
       "kind": "contract",
       "actual": {
+        "function_error_type": "ParseError",
         "operand_types": [
           "i64"
         ]

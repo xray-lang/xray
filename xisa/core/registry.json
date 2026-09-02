@@ -942,10 +942,10 @@
       "evaluation_order": "left-to-right",
       "successors": {
         "normal": true,
-        "error": true,
-        "panic": true,
-        "cancel": true,
-        "suspend": true
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
       },
       "arithmetic": {
         "kind": "none"
@@ -967,6 +967,83 @@
         "allowed_trace": "callee-declared trace under the same CoreSpec"
       },
       "kat_validator": "sealed-call",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 37,
+      "spelling": "core.call.sealed_invoke",
+      "class": "call-terminator",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "P...",
+          "normal-edge-values...",
+          "error-edge-values..."
+        ],
+        "result": "void",
+        "immediates": {
+          "parameter_types": "type-list",
+          "result_type": "type-or-void",
+          "error_type": "non-void-type",
+          "callee_id": "program-function-id"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": true,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "parameter-mode...",
+          "normal-edge-transfer...",
+          "error-edge-transfer..."
+        ],
+        "result": "normal-result-and-error-value-are-successor-block-arguments"
+      },
+      "profile_dependency": "none",
+      "materialization": "call-terminator",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "exactly one normal or typed-error continuation under the same CoreSpec"
+      },
+      "kat_validator": "sealed-invoke",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",
@@ -1070,7 +1147,7 @@
       "epoch": 1,
       "type_rule": {
         "operands": [
-          "error"
+          "E"
         ],
         "result": "void",
         "immediates": {}
@@ -1102,7 +1179,7 @@
         "kind": "deterministic",
         "allowed_trace": "one typed error successor"
       },
-      "kat_validator": "fixed-contract",
+      "kat_validator": "error-publish",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

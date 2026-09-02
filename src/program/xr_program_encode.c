@@ -314,6 +314,7 @@ static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, u
         }
         buffer_put_uvar(buffer, function->result_type_id);
         buffer_put_uvar(buffer, function->result_ownership);
+        buffer_put_uvar(buffer, function->error_type_id);
         buffer_put_uvar(buffer, function->effect_mask);
         buffer_put_uvar(buffer, function->capability_mask);
         buffer_put_uvar(buffer, entry);

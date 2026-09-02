@@ -49,6 +49,10 @@ def validate(root: Path) -> None:
         "xr_program_xi_value_is_materialized",
         "map_type_recursive",
         "logical_value_identity",
+        "block_sealed_invoke_call",
+        "map_function_error_type",
+        "XR_CORE_OP_CORE_CALL_SEALED_INVOKE",
+        "XR_CORE_OP_CORE_ERROR_PUBLISH",
     ):
         require(token in producer, f"source producer lacks {token}")
     for token in ("program_semantic_closure", "psc_", "semantic_function"):
@@ -115,6 +119,8 @@ def validate(root: Path) -> None:
         "repeated_artifact.size == artifact.size",
         "XR_PROGRAM_BUILD_INVALID_INPUT",
         "XR_CORE_OP_CORE_OWNER_COPY",
+        "XR_CORE_OP_CORE_CALL_SEALED_INVOKE",
+        "XR_CORE_OP_CORE_ERROR_PUBLISH",
         "xr_reference_evaluate",
         "xr_vm_code_execute",
         "xr_backend_ir_translation_validate",
@@ -133,6 +139,16 @@ def validate(root: Path) -> None:
             "pure aggregate update is not exact")
     require(("xi.call.builtin", "owner-copy", "core.owner.copy") in projection_rows,
             "explicit source copy is not exact")
+    structural_rows = {
+        (row.get("source"), row.get("core_operation"))
+        for row in projection.get("structural_mappings", []) if isinstance(row, dict)
+    }
+    require(("resolved-fallible-call-plus-xi.err.check-cfg",
+             "core.call.sealed_invoke") in structural_rows,
+            "fallible call/check CFG does not project to sealed invoke")
+    require(("xi.err.return-after-explicit-cleanup-cfg",
+             "core.error.publish") in structural_rows,
+            "typed error publication source projection is absent")
     require(not any(row.get("xi_operation") == "xi.agg.set" for row in value_mappings
                     if isinstance(row, dict)),
             "mutating aggregate storage regained a CoreSpec projection")
@@ -230,7 +246,6 @@ def validate(root: Path) -> None:
     }
     frozen = {
         "core.trap",
-        "core.error.publish",
         "core.target.pointer_width",
     }
     wave_three_slice_two = {
@@ -243,12 +258,17 @@ def validate(root: Path) -> None:
     wave_three_slice_three = {
         "core.owner.copy",
     }
+    wave_three_slice_four = {
+        "core.call.sealed_invoke",
+        "core.error.publish",
+    }
     rows = {row["id"]: row for row in matrix["operations"]}
     expected_status = {
         **{operation: "COMPLETE_W7_WAVE1" for operation in wave_one},
         **{operation: "COMPLETE_W7_WAVE2" for operation in wave_two_complete},
         **{operation: "COMPLETE_W7_WAVE3_SLICE2" for operation in wave_three_slice_two},
         **{operation: "COMPLETE_W7_WAVE3_SLICE3" for operation in wave_three_slice_three},
+        **{operation: "COMPLETE_W7_WAVE3_SLICE4" for operation in wave_three_slice_four},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,
@@ -280,6 +300,7 @@ def self_test(root: Path) -> None:
             "src/ir/xi_pipeline.c",
             "tests/unit/ir/test_xi_pipeline.c",
             "tests/unit/program/test_xr_program_verify.c",
+            "tests/unit/program/xr_program_invoke_fixture.h",
             "tests/unit/vm/test_xr_program_vm.c",
             "tests/unit/aot/test_xr_program_aot.c",
             "xisa/core/registry.json",

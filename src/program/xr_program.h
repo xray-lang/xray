@@ -165,6 +165,9 @@ typedef struct XrCoreIrFunctionInput {
     uint32_t parameter_count;
     uint16_t result_type_id;
     XrCoreIrOwnershipDisposition result_ownership;
+    /* VOID denotes an infallible function. A non-VOID TypeId is the exact
+     * value transferred by core.error.publish and sealed-invoke's error edge. */
+    uint16_t error_type_id;
     uint32_t effect_mask;
     uint32_t capability_mask;
     XrCoreIrKey entry_block;

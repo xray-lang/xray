@@ -9,11 +9,13 @@
  */
 
 #include "xr_program_from_xi.h"
+#include "xr_program_internal.h"
 #include "xr_program_xi_projection_gen.h"
 #include "../ir/xi_op_name.h"
 
 #include "../base/xmalloc.h"
 #include "../core/xr_core_spec_gen.h"
+#include "../frontend/analyzer/xanalyzer.h"
 #include "../ir/xi.h"
 #include "../ir/xi_module.h"
 #include "../runtime/class/xclass_info.h"
@@ -33,7 +35,14 @@ typedef struct XrXiBlockArgumentStorage {
     uint16_t type_id;
     XrCoreIrValueCategory category;
     XrCoreIrOwnershipDisposition ownership;
+    uint8_t implicit_invoke_kind;
 } XrXiBlockArgumentStorage;
+
+enum {
+    XR_XI_INVOKE_ARGUMENT_NONE = 0,
+    XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT = 1,
+    XR_XI_INVOKE_ARGUMENT_ERROR = 2,
+};
 
 typedef struct XrXiBlockStorage {
     const XiBlock *xi;
@@ -683,6 +692,39 @@ static bool map_type(XrXiBuildContext *context, const XrType *type, uint16_t *ty
     return map_type_recursive(context, type, type_id, NULL, 0u);
 }
 
+static XrProgramBuildStatus map_function_error_type(XrXiBuildContext *context,
+                                                    const XiFunc *function, uint16_t *error_type_id,
+                                                    char *diagnostic, size_t diagnostic_size) {
+    if (!context || !function || !error_type_id)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    *error_type_id = XR_CORE_TYPE_VOID;
+    if (function->error_effect_nothrow)
+        return XR_PROGRAM_BUILD_OK;
+    const XaAnalyzer *analyzer = function->analyzer;
+    const XaEffectSummary *effect =
+        analyzer && function->analyzer_effect_id != XA_EFFECT_NONE
+            ? xa_effect_db_get(analyzer->effect_db, function->analyzer_effect_id)
+            : NULL;
+    if (!effect || !function->analyzer_effect_complete ||
+        effect->error_set_completeness != XA_EFFECT_COMPLETE ||
+        effect->error_unknown_reasons != XA_UNKNOWN_NONE || effect->escaping.count != 1u)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi function %s does not have one complete typed escaping-error set",
+                    function->name ? function->name : "<anonymous>");
+    const XaErrorTypeSet *error = &effect->escaping.types[0];
+    XrType *type = xa_effect_db_error_type_handle(analyzer->effect_db, error->type_id);
+    if (!type || !map_type(context, type, error_type_id) || *error_type_id == XR_CORE_TYPE_VOID)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi function %s escaping error type is not active in CoreSpec",
+                    function->name ? function->name : "<anonymous>");
+    const XrXiTypeStorage *mapped = find_dynamic_type_by_id(context, *error_type_id);
+    if (!mapped || mapped->input.kind != XR_CORE_IR_TYPE_VARIANT)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi function %s escaping error is not a closed record enum",
+                    function->name ? function->name : "<anonymous>");
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrCoreIrOwnershipDisposition logical_ownership_for_type(const XrXiBuildContext *context,
                                                                uint16_t type_id) {
     const XrXiTypeStorage *type = find_dynamic_type_by_id(context, type_id);
@@ -782,6 +824,54 @@ static const XiFunc *resolved_direct_callee(const XiFunc *caller, const XiValue 
     return owner->slot_funcs[callee_value->aux_int];
 }
 
+static const XiValue *block_sealed_invoke_call(const XiFunc *function, const XiBlock *block) {
+    if (!function || !block || block->kind != XI_BLOCK_IF || !block->control ||
+        block->control->op != XI_ERR_CHECK || !block->succs[0] || !block->succs[1])
+        return NULL;
+    const XiValue *previous = NULL;
+    bool reached_check = false;
+    for (uint32_t index = 0; index < block->nvalues; ++index) {
+        const XiValue *value = block->values[index];
+        if (value == block->control) {
+            reached_check = true;
+            break;
+        }
+        previous = value;
+    }
+    return reached_check && previous && previous->op == XI_CALL &&
+                   resolved_direct_callee(function, previous)
+               ? previous
+               : NULL;
+}
+
+static const XiValue *block_error_catch(const XiBlock *block) {
+    const XiValue *found = NULL;
+    for (uint32_t index = 0; block && index < block->nvalues; ++index) {
+        const XiValue *value = block->values[index];
+        if (!value || value->op != XI_ERR_CATCH)
+            continue;
+        if (found)
+            return NULL;
+        found = value;
+    }
+    return found;
+}
+
+static bool value_is_invoke_scaffold(const XiFunc *function, const XiValue *value) {
+    if (!value)
+        return false;
+    if (value->op == XI_ERR_RETURN)
+        return true;
+    if (!function || !value->block)
+        return false;
+    const XiValue *call = block_sealed_invoke_call(function, value->block);
+    if (value == call || value == value->block->control)
+        return call != NULL;
+    if (value->op == XI_ERR_CATCH)
+        return block_error_catch(value->block) == value;
+    return false;
+}
+
 static XrCoreIrKey imported_value_key(const XrXiFunctionStorage *function, const XiBlock *block,
                                       const XiValue *value) {
     uint8_t material[1u + XR_CORE_IR_KEY_SIZE + 8u];
@@ -848,8 +938,9 @@ static XrCoreIrValueCategory logical_value_category(const XiValue *value) {
 static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
                                                XrXiFunctionStorage *function,
                                                XrXiBlockStorage *block, const XiValue *source,
-                                               const XiPhi *phi, bool *changed, char *diagnostic,
-                                               size_t diagnostic_size) {
+                                               const XiPhi *phi, uint16_t type_override,
+                                               uint8_t implicit_invoke_kind, bool *changed,
+                                               char *diagnostic, size_t diagnostic_size) {
     source = logical_value_identity(source);
     if (!source || !source->type)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
@@ -868,8 +959,9 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
         block->argument_storage = arguments;
         block->argument_capacity = capacity;
     }
-    uint16_t type_id = XR_CORE_TYPE_VOID;
-    if (!map_type(context, source->type, &type_id) || type_id == XR_CORE_TYPE_VOID)
+    uint16_t type_id = type_override;
+    if ((type_id == XR_CORE_TYPE_VOID && !map_type(context, source->type, &type_id)) ||
+        type_id == XR_CORE_TYPE_VOID)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi live-in v%u has no active CoreSpec value type", source->id);
     XrXiBlockArgumentStorage *argument = &block->argument_storage[block->argument_count++];
@@ -881,9 +973,12 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
                    : imported_value_key(function, block->xi, source),
         .type_id = type_id,
         .category = logical_value_category(source),
-        .ownership = source->op == XI_PARAM && source->param_mode == XR_PARAM_MOVE
+        .ownership = implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE
+                         ? logical_ownership_for_type(context, type_id)
+                     : source->op == XI_PARAM && source->param_mode == XR_PARAM_MOVE
                          ? logical_ownership_for_type(context, type_id)
                          : XR_CORE_IR_NON_OWNER,
+        .implicit_invoke_kind = implicit_invoke_kind,
     };
     if (changed)
         *changed = true;
@@ -895,13 +990,13 @@ static bool value_operand_key(const XrXiFunctionStorage *function, const XrXiBlo
     value = logical_value_identity(value);
     if (!value || !key_out)
         return false;
-    if (value->block != block->xi) {
-        XrXiBlockArgumentStorage *argument = find_block_argument((XrXiBlockStorage *) block, value);
-        if (!argument)
-            return false;
+    XrXiBlockArgumentStorage *argument = find_block_argument((XrXiBlockStorage *) block, value);
+    if (argument) {
         *key_out = argument->key;
         return true;
     }
+    if (value->block != block->xi)
+        return false;
     if (!xr_program_xi_value_is_materialized(value->op))
         return false;
     *key_out = value_key(function, value);
@@ -1037,6 +1132,14 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
     if (!callee || !callee_storage)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi call v%u is not an exact resolved sealed direct call", value->id);
+    uint16_t error_type = XR_CORE_TYPE_VOID;
+    XrProgramBuildStatus error_status =
+        map_function_error_type(context, callee, &error_type, diagnostic, diagnostic_size);
+    if (error_status != XR_PROGRAM_BUILD_OK)
+        return error_status;
+    if (error_type != XR_CORE_TYPE_VOID)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "fallible Xi call v%u lacks an explicit invoke continuation", value->id);
 
     uint16_t result_type = XR_CORE_TYPE_VOID;
     if (!map_type(context, value->type, &result_type))
@@ -1326,6 +1429,8 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
 }
 
 static bool value_is_skipped(const XiFunc *function, const XiValue *value) {
+    if (value_is_invoke_scaffold(function, value))
+        return true;
     if (value->op == XI_PARAM || xi_copy_is_identity_alias(value) ||
         (xi_copy_is_value_clone(value) && logical_value_identity(value) != value))
         return true;
@@ -1350,8 +1455,8 @@ static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
     if (block->xi == function->xi->entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi entry block depends on non-parameter v%u", value->id);
-    return add_block_argument(context, function, block, value, NULL, changed, diagnostic,
-                              diagnostic_size);
+    return add_block_argument(context, function, block, value, NULL, XR_CORE_TYPE_VOID,
+                              XR_XI_INVOKE_ARGUMENT_NONE, changed, diagnostic, diagnostic_size);
 }
 
 static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
@@ -1372,6 +1477,9 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
 static int block_argument_compare(const void *left, const void *right) {
     const XrXiBlockArgumentStorage *a = left;
     const XrXiBlockArgumentStorage *b = right;
+    if ((a->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE) !=
+        (b->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE))
+        return a->implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE ? -1 : 1;
     return memcmp(a->key.bytes, b->key.bytes, sizeof(a->key.bytes));
 }
 
@@ -1386,6 +1494,49 @@ static const XiValue *edge_argument_value(const XrXiBlockArgumentStorage *argume
     return NULL;
 }
 
+static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
+                                                     XrXiFunctionStorage *function,
+                                                     char *diagnostic, size_t diagnostic_size) {
+    for (uint32_t block_index = 0; block_index < function->xi->nblocks; ++block_index) {
+        const XiBlock *source = function->xi->blocks[block_index];
+        const XiValue *call = block_sealed_invoke_call(function->xi, source);
+        if (!call)
+            continue;
+        const XiFunc *callee = resolved_direct_callee(function->xi, call);
+        uint16_t error_type = XR_CORE_TYPE_VOID;
+        XrProgramBuildStatus status =
+            map_function_error_type(context, callee, &error_type, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+        if (error_type == XR_CORE_TYPE_VOID)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi error check in b%u guards an infallible sealed call", source->id);
+        XrXiBlockStorage *normal = find_block_storage(function, source->succs[1]);
+        XrXiBlockStorage *error = find_block_storage(function, source->succs[0]);
+        const XiValue *caught = block_error_catch(source->succs[0]);
+        if (!normal || !error || !caught)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi invoke b%u does not expose direct typed normal/error continuations",
+                        source->id);
+        uint16_t result_type = XR_CORE_TYPE_VOID;
+        if (!map_type(context, call->type, &result_type))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi invoke call v%u result type is not active in CoreSpec", call->id);
+        if (result_type != XR_CORE_TYPE_VOID) {
+            status = add_block_argument(context, function, normal, call, NULL, result_type,
+                                        XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT, NULL, diagnostic,
+                                        diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        }
+        status = add_block_argument(context, function, error, caught, NULL, error_type,
+                                    XR_XI_INVOKE_ARGUMENT_ERROR, NULL, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                                                   XrXiFunctionStorage *function, char *diagnostic,
                                                   size_t diagnostic_size) {
@@ -1393,22 +1544,27 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         XrXiBlockStorage *block = &function->block_storage[block_index];
         block->xi = function->xi->blocks[block_index];
     }
+    XrProgramBuildStatus invoke_status =
+        prepare_invoke_arguments(context, function, diagnostic, diagnostic_size);
+    if (invoke_status != XR_PROGRAM_BUILD_OK)
+        return invoke_status;
     XrXiBlockStorage *entry = find_block_storage(function, function->xi->entry);
     if (!entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function entry block is absent");
     for (uint16_t parameter = 0; parameter < function->xi->nparams; ++parameter) {
-        XrProgramBuildStatus status =
-            add_block_argument(context, function, entry, function->xi->params[parameter], NULL,
-                               NULL, diagnostic, diagnostic_size);
+        XrProgramBuildStatus status = add_block_argument(
+            context, function, entry, function->xi->params[parameter], NULL, XR_CORE_TYPE_VOID,
+            XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic, diagnostic_size);
         if (status != XR_PROGRAM_BUILD_OK)
             return status;
     }
     for (uint32_t block_index = 0; block_index < function->xi->nblocks; ++block_index) {
         XrXiBlockStorage *block = &function->block_storage[block_index];
         for (const XiPhi *phi = block->xi->phis; phi; phi = phi->next) {
-            XrProgramBuildStatus status = add_block_argument(
-                context, function, block, &phi->value, phi, NULL, diagnostic, diagnostic_size);
+            XrProgramBuildStatus status =
+                add_block_argument(context, function, block, &phi->value, phi, XR_CORE_TYPE_VOID,
+                                   XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
                 return status;
         }
@@ -1446,6 +1602,8 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
                 for (uint32_t argument_index = 0; argument_index < argument_count;
                      ++argument_index) {
                     XrXiBlockArgumentStorage argument = successor->argument_storage[argument_index];
+                    if (argument.implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NONE)
+                        continue;
                     const XiValue *incoming =
                         edge_argument_value(&argument, predecessor_xi, successor->xi);
                     XrProgramBuildStatus status =
@@ -1523,6 +1681,51 @@ set_edge_operands(XrCoreIrInstructionInput *instruction, const XrXiFunctionStora
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrProgramBuildStatus set_invoke_operands(XrCoreIrInstructionInput *instruction,
+                                                const XrXiFunctionStorage *function,
+                                                const XrXiBlockStorage *predecessor,
+                                                const XiValue *call, const XrXiBlockStorage *normal,
+                                                const XrXiBlockStorage *error, char *diagnostic,
+                                                size_t diagnostic_size) {
+    uint32_t normal_implicit = call->type && call->type->kind != XR_KIND_UNIT ? 1u : 0u;
+    if (normal->argument_count < normal_implicit || error->argument_count == 0u ||
+        (normal_implicit != 0u &&
+         normal->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_NORMAL_RESULT) ||
+        error->argument_storage[0].implicit_invoke_kind != XR_XI_INVOKE_ARGUMENT_ERROR)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi invoke continuations lack ordered implicit result/error arguments");
+    uint32_t parameter_count = call->nargs - 1u;
+    uint32_t count =
+        parameter_count + normal->argument_count - normal_implicit + error->argument_count - 1u;
+    XrCoreIrKey *operands = count ? xr_calloc(count, sizeof(*operands)) : NULL;
+    if (count && !operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    uint32_t cursor = 0u;
+    for (uint16_t parameter = 1u; parameter < call->nargs; ++parameter) {
+        if (!value_operand_key(function, predecessor, call->args[parameter], &operands[cursor++]))
+            goto unavailable;
+    }
+    const XrXiBlockStorage *successors[2] = {normal, error};
+    const uint32_t starts[2] = {normal_implicit, 1u};
+    for (uint32_t edge = 0u; edge < 2u; ++edge) {
+        const XrXiBlockStorage *successor = successors[edge];
+        for (uint32_t argument = starts[edge]; argument < successor->argument_count; ++argument) {
+            const XiValue *incoming = edge_argument_value(&successor->argument_storage[argument],
+                                                          predecessor->xi, successor->xi);
+            if (!value_operand_key(function, predecessor, incoming, &operands[cursor++]))
+                goto unavailable;
+        }
+    }
+    instruction->operands = operands;
+    instruction->operand_count = count;
+    return XR_PROGRAM_BUILD_OK;
+
+unavailable:
+    xr_free(operands);
+    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                "Xi invoke edge operand is unavailable in predecessor b%u", predecessor->xi->id);
+}
+
 static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModuleStorage *module,
                                            uint32_t function_index, char *diagnostic,
                                            size_t diagnostic_size) {
@@ -1543,6 +1746,10 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
     if (!map_type(context, xi->return_type, &output->result_type_id))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi function %u result type is not active in CoreSpec", function_index);
+    XrProgramBuildStatus signature_status =
+        map_function_error_type(context, xi, &output->error_type_id, diagnostic, diagnostic_size);
+    if (signature_status != XR_PROGRAM_BUILD_OK)
+        return signature_status;
     output->result_ownership = logical_ownership_for_type(context, output->result_type_id);
     if (xi->nparams != 0) {
         storage->parameter_types = xr_calloc(xi->nparams, sizeof(*storage->parameter_types));
@@ -1636,7 +1843,42 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
         XrCoreIrInstructionInput *terminator = &block_storage->instructions[instruction_index++];
         terminator->result_type_id = XR_CORE_TYPE_VOID;
         terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
-        if (xi_block->kind == XI_BLOCK_RETURN) {
+        const XiValue *invoke_call = block_sealed_invoke_call(xi, xi_block);
+        if (invoke_call) {
+            const XiFunc *callee = resolved_direct_callee(xi, invoke_call);
+            const XrXiFunctionStorage *callee_storage =
+                find_xi_function(context, callee, NULL, NULL);
+            XrXiBlockStorage *normal = find_block_storage(storage, xi_block->succs[1]);
+            XrXiBlockStorage *error = find_block_storage(storage, xi_block->succs[0]);
+            if (!callee_storage || !normal || !error)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi invoke block b%u has an unresolved continuation", xi_block->id);
+            terminator->operation_id = XR_CORE_OP_CORE_CALL_SEALED_INVOKE;
+            terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
+            terminator->immediate.key = callee_storage->key;
+            XrCoreIrKey *successors = xr_calloc(2u, sizeof(*successors));
+            if (!successors)
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            successors[0] = block_key(storage, normal->xi);
+            successors[1] = block_key(storage, error->xi);
+            terminator->successors = successors;
+            terminator->successor_count = 2u;
+            status = set_invoke_operands(terminator, storage, block_storage, invoke_call, normal,
+                                         error, diagnostic, diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        } else if (xi_block->kind == XI_BLOCK_RETURN && xi_block->control &&
+                   xi_block->control->op == XI_ERR_RETURN) {
+            if (xi_block->control->nargs != 1u || !xi_block->control->args[0])
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                            "Xi error publication in b%u has no typed payload", xi_block->id);
+            terminator->operation_id = XR_CORE_OP_CORE_ERROR_PUBLISH;
+            XiValue *published[] = {xi_block->control->args[0]};
+            status = set_operands(terminator, storage, block_storage, published, 1u, diagnostic,
+                                  diagnostic_size);
+            if (status != XR_PROGRAM_BUILD_OK)
+                return status;
+        } else if (xi_block->kind == XI_BLOCK_RETURN) {
             terminator->operation_id = XR_CORE_OP_CORE_RETURN;
             if (xi_block->control) {
                 XiValue *returned[] = {xi_block->control};
@@ -1736,8 +1978,11 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                             return fail(diagnostic, diagnostic_size,
                                         XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
                                         "Xi effect closure has an unresolved sealed call");
-                        effects |=
+                        uint32_t callee_effects =
                             context->storage[callee_module].functions[callee_function].effect_mask;
+                        if (block_sealed_invoke_call(function->xi, block) == value)
+                            callee_effects &= ~XR_CORE_EFFECT_ERROR;
+                        effects |= callee_effects;
                     }
                 }
                 if (effects != module->functions[function_index].effect_mask) {
@@ -1910,11 +2155,42 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                                                            NULL, &validated, &verify_diagnostic);
         xr_validated_program_free(validated);
         if (verify != XR_PROGRAM_VERIFY_OK) {
+            const XrCoreIrInstruction *failed_instruction = NULL;
+            uint32_t flat_function = 0u;
+            for (uint32_t module = 0u;
+                 program && module < program->module_count && !failed_instruction; ++module) {
+                const XrCoreIrModule *module_row = &program->modules[module];
+                for (uint32_t function = 0u; function < module_row->function_count;
+                     ++function, ++flat_function) {
+                    if (flat_function != verify_diagnostic.location.function_id)
+                        continue;
+                    const XrCoreIrFunction *function_row = &module_row->functions[function];
+                    if (verify_diagnostic.location.block_id < function_row->block_count) {
+                        const XrCoreIrBlock *block =
+                            &function_row->blocks[verify_diagnostic.location.block_id];
+                        if (verify_diagnostic.location.instruction_id < block->instruction_count)
+                            failed_instruction =
+                                &block->instructions[verify_diagnostic.location.instruction_id];
+                    }
+                    break;
+                }
+            }
             xr_program_artifact_free(artifact_out);
-            status = fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                          "Xi-produced XrProgram failed semantic verification: %s/%s",
-                          xr_program_verify_status_name(verify),
-                          xr_program_diagnostic_kind_name(verify_diagnostic.kind));
+            status = fail(
+                diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                "Xi-produced XrProgram failed semantic verification: %s/%s "
+                "at function=%u block=%u instruction=%u value=%u operation=%u "
+                "result_type=%u category=%u ownership=%u result_zero=%u",
+                xr_program_verify_status_name(verify),
+                xr_program_diagnostic_kind_name(verify_diagnostic.kind),
+                verify_diagnostic.location.function_id, verify_diagnostic.location.block_id,
+                verify_diagnostic.location.instruction_id, verify_diagnostic.location.value_id,
+                failed_instruction ? failed_instruction->operation_id : 0u,
+                failed_instruction ? failed_instruction->result_type_id : 0u,
+                failed_instruction ? failed_instruction->result_category : 0u,
+                failed_instruction ? failed_instruction->result_ownership : 0u,
+                failed_instruction ? (unsigned) xr_core_ir_key_is_zero(failed_instruction->result)
+                                   : 1u);
         }
     }
     xr_core_ir_program_free(program);

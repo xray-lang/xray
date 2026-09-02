@@ -12,10 +12,13 @@
 #include "program/xr_reference_evaluator.h"
 #include "vm/xr_program_vm.h"
 #include "../plan/target_profile_test_fixture.h"
+#include "../program/xr_program_invoke_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+_Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -673,7 +676,8 @@ static XrValidatedProgram *build_full_program(void) {
          .parameter_types = &error_parameter,
          .parameter_count = 1u,
          .result_type_id = XR_CORE_TYPE_VOID,
-         .effect_mask = UINT32_C(2),
+         .error_type_id = XR_CORE_TYPE_ERROR,
+         .effect_mask = XR_CORE_EFFECT_ERROR,
          .entry_block = error_block_key,
          .blocks = &error_block,
          .block_count = 1u},
@@ -914,6 +918,38 @@ static void test_affine_copy_lowering(void) {
     xr_validated_program_free(program);
 }
 
+static void test_sealed_invoke_typed_error_cleanup_lowering(void) {
+    XrProgramArtifact artifact = {0};
+    char build_diagnostic[256] = {0};
+    REQUIRE(xr_program_invoke_fixture_write(&artifact, build_diagnostic,
+                                            sizeof(build_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestBindings bindings;
+    build_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 77u);
+    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, false, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "out_error") != NULL);
+    REQUIRE(strstr(generated.bytes, "invoke_error_") != NULL);
+    REQUIRE(strstr(generated.bytes, "if (call_") != NULL);
+    REQUIRE(strstr(generated.bytes, ".kind == 2") != NULL);
+    REQUIRE(strstr(generated.bytes, "goto xr_f") != NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    retire_instance(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstance *instance) {
     XrReferenceProfile reference_profile = {.pointer_width = 64u};
     XrReferenceOutcome reference = xr_reference_evaluate(
@@ -1041,11 +1077,11 @@ static void test_foreign_profile_and_translation_mutation(void) {
     xr_validated_program_free(program);
 }
 
-static void write_generated_fixture(const char *path, XrInstance *instance) {
+static void write_generated_fixture(const char *path, XrInstance *instance, bool standalone_main) {
     XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
     XrGeneratedC generated = {0};
     XrBackendDiagnostic diagnostic;
-    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(xr_backend_ir_emit_c(ir, standalone_main, &generated, &diagnostic) == XR_BACKEND_OK);
     FILE *output = fopen(path, "wb");
     REQUIRE(output != NULL);
     REQUIRE(fwrite(generated.bytes, 1u, generated.size, output) == generated.size);
@@ -1089,6 +1125,7 @@ static void seal_native_file(const char *path, XrInstance *instance) {
 int main(int argc, char **argv) {
     REQUIRE(argc >= 1 && argc <= 3);
     bool seal_mode = argc == 3 && strcmp(argv[1], "--seal") == 0;
+    bool invoke_object_mode = argc == 3 && strcmp(argv[2], "sealed-invoke-object") == 0;
     XrValidatedProgram *program = NULL;
     if (seal_mode)
         program = build_full_program();
@@ -1098,7 +1135,16 @@ int main(int argc, char **argv) {
         program = build_binary_program(XR_CORE_OP_CORE_ADD_I64, INT64_MAX, 1, 1u);
     else if (argc == 3 && strcmp(argv[2], "division-zero") == 0)
         program = build_binary_program(XR_CORE_OP_CORE_DIV_I64, 42, 0, 0u);
-    else {
+    else if (invoke_object_mode) {
+        XrProgramArtifact artifact = {0};
+        char diagnostic[256] = {0};
+        REQUIRE(xr_program_invoke_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+                XR_PROGRAM_BUILD_OK);
+        XrProgramDiagnostic verify_diagnostic;
+        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                    &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+        xr_program_artifact_free(&artifact);
+    } else {
         REQUIRE(argc != 3);
         program = build_full_program();
     }
@@ -1111,10 +1157,11 @@ int main(int argc, char **argv) {
     if (seal_mode) {
         seal_native_file(argv[2], instance);
     } else if (argc >= 2) {
-        write_generated_fixture(argv[1], instance);
+        write_generated_fixture(argv[1], instance, !invoke_object_mode);
     } else {
         test_reference_vm_aot_identity(program, instance);
         test_affine_copy_lowering();
+        test_sealed_invoke_typed_error_cleanup_lowering();
         test_foreign_profile_and_translation_mutation();
         puts("canonical XrProgram AOT tests passed");
     }

@@ -103,6 +103,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 == 4u;
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
+        case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
                    instruction->immediate.function_id < ir->function_count;
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
@@ -297,6 +298,7 @@ bool xr_backend_ir_translation_validate(const XrBackendIR *ir,
         const XrBackendFunction *lowered = &ir->functions[function_id];
         if (source->parameter_count != lowered->parameter_count ||
             source->result_type_id != lowered->result_type_id ||
+            source->error_type_id != lowered->error_type_id ||
             source->result_ownership != lowered->result_ownership ||
             source->effect_mask != lowered->effect_mask ||
             source->capability_mask != lowered->capability_mask ||

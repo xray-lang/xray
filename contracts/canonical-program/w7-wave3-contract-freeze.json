@@ -41,7 +41,7 @@
       "id": "core.call.sealed_invoke",
       "law": "call one sealed function and transfer exactly once to either normal or typed-error continuation",
       "source": "fallible sealed direct call",
-      "status": "FROZEN_W7_WAVE3"
+      "status": "COMPLETE_W7_WAVE3_SLICE4"
     },
     {
       "stable_id": 48,
@@ -55,7 +55,7 @@
       "id": "core.error.publish",
       "law": "consume one typed enum error value and terminate through the caller error continuation",
       "source": "throw, rethrow or uncaught invoke error edge after cleanup",
-      "status": "FROZEN_W7_WAVE3"
+      "status": "COMPLETE_W7_WAVE3_SLICE4"
     },
     {
       "stable_id": 50,

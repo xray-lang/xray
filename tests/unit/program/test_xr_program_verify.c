@@ -6,11 +6,14 @@
 #include "program/xr_program.h"
 #include "program/xr_program_verify.h"
 #include "program/xr_reference_evaluator.h"
+#include "xr_program_invoke_fixture.h"
 
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+_Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
 
 static int failures = 0;
 
@@ -233,6 +236,7 @@ static bool mode_fixture_offsets(const XrProgramArtifact *artifact, size_t *mode
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* result type */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* result ownership */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* error type */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* effects */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* capabilities */
     uint32_t entry_block = (uint32_t) test_take_uvar(artifact->bytes, artifact->size, &cursor);
@@ -974,6 +978,12 @@ static void test_direct_call(void) {
         CHECK(result.value.as.i64 == 42);
         xr_validated_program_free(program);
     }
+    xr_program_artifact_free(&artifact);
+
+    functions[0].error_type_id = XR_CORE_TYPE_ERROR;
+    functions[0].effect_mask |= XR_CORE_EFFECT_ERROR;
+    CHECK(write_modules(&module, 1, &artifact) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
     xr_program_artifact_free(&artifact);
 }
 
@@ -1723,7 +1733,8 @@ static void test_terminal_operations(void) {
         .parameter_types = parameter_types,
         .parameter_count = 1,
         .result_type_id = XR_CORE_TYPE_VOID,
-        .effect_mask = 2u,
+        .error_type_id = XR_CORE_TYPE_ERROR,
+        .effect_mask = XR_CORE_EFFECT_ERROR,
         .entry_block = error_block_key,
         .blocks = &error_block,
         .block_count = 1,
@@ -1735,10 +1746,63 @@ static void test_terminal_operations(void) {
         XrReferenceValue argument = {.kind = XR_REFERENCE_VALUE_ERROR, .as.error = 73u};
         XrReferenceOutcome result = xr_reference_evaluate(program, 0, &argument, 1, NULL, NULL);
         CHECK(result.kind == XR_REFERENCE_OUTCOME_ERROR);
-        CHECK(result.error == 73u);
+        CHECK(result.error_value.kind == XR_REFERENCE_VALUE_ERROR);
+        CHECK(result.error_value.as.error == 73u);
         xr_validated_program_free(program);
     }
     xr_program_artifact_free(&artifact);
+}
+
+static void test_sealed_invoke_and_cleanup_cfg(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    XrProgramBuildStatus build_status =
+        xr_program_invoke_fixture_write(&artifact, diagnostic, sizeof(diagnostic));
+    if (build_status != XR_PROGRAM_BUILD_OK)
+        fprintf(stderr, "invoke fixture build failed: %s\n", diagnostic);
+    CHECK(build_status == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        uint32_t entry = xr_validated_program_entry_function(program);
+        XrReferenceValue arguments[] = {
+            {.kind = XR_REFERENCE_VALUE_BOOL, .as.boolean = true},
+            {.kind = XR_REFERENCE_VALUE_ERROR, .as.error = 73u},
+            {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = 9},
+        };
+        XrReferenceOutcome normal =
+            xr_reference_evaluate(program, entry, arguments, 3u, NULL, NULL);
+        CHECK(normal.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(normal.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(normal.value.as.i64 == 42);
+        arguments[0].as.boolean = false;
+        XrReferenceOutcome error = xr_reference_evaluate(program, entry, arguments, 3u, NULL, NULL);
+        CHECK(error.kind == XR_REFERENCE_OUTCOME_ERROR);
+        CHECK(error.error_value.kind == XR_REFERENCE_VALUE_ERROR);
+        CHECK(error.error_value.as.error == 73u);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    const struct {
+        XrProgramInvokeFixtureMutation mutation;
+        XrProgramDiagnosticKind diagnostic;
+    } invalid[] = {
+        {XR_INVOKE_FIXTURE_INVOKE_INFALLIBLE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_INVOKE_FIXTURE_WRONG_NORMAL_RESULT_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_INVOKE_FIXTURE_WRONG_ERROR_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_INVOKE_FIXTURE_MISSING_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_INVOKE_FIXTURE_DUPLICATE_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+        {XR_INVOKE_FIXTURE_MISSING_ERROR_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_INVOKE_FIXTURE_DUPLICATE_ERROR_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
+    };
+    for (size_t index = 0u; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        memset(diagnostic, 0, sizeof(diagnostic));
+        CHECK(xr_program_invoke_fixture_write_mutated(invalid[index].mutation, &artifact,
+                                                      diagnostic,
+                                                      sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, invalid[index].diagnostic);
+        xr_program_artifact_free(&artifact);
+    }
 }
 
 typedef enum InvalidFixture {
@@ -2111,6 +2175,7 @@ int main(void) {
     test_affine_owner_domain();
     test_parameter_modes_and_value_categories();
     test_terminal_operations();
+    test_sealed_invoke_and_cleanup_cfg();
     test_negative_diagnostics_and_budget();
     test_evaluator_traps_and_budget();
     test_typed_random_and_linear_work();

@@ -64,8 +64,8 @@ typedef enum XrReferenceTrap {
 typedef struct XrReferenceOutcome {
     XrReferenceOutcomeKind kind;
     XrReferenceValue value;
+    XrReferenceValue error_value;
     XrReferenceTrap trap;
-    uint32_t error;
     uint64_t steps;
 } XrReferenceOutcome;
 

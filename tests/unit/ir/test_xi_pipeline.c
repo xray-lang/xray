@@ -1232,6 +1232,16 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "}\n"
                                          "enum Packet { Data { code: i64, flag: bool }, Empty }\n"
                                          "enum Nested<T> { Value { pair: (T, bool) }, Empty }\n"
+                                         "enum ComputeError { Negative { code: i64 } }\n"
+                                         "fn maybe_error(value: i64) -> i64 {\n"
+                                         "  if (value < 0) {\n"
+                                         "    throw ComputeError.Negative { code: value }\n"
+                                         "  }\n"
+                                         "  return value + 1\n"
+                                         "}\n"
+                                         "fn invoke_value() -> i64 {\n"
+                                         "  return maybe_error(4)\n"
+                                         "}\n"
                                          "fn sum_to(limit: i64) -> i64 {\n"
                                          "  var index: i64 = 0\n"
                                          "  var total: i64 = 0\n"
@@ -1293,6 +1303,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  return choose(10) + scalar_matrix(10, 2) + "
                                          "choose_bool(true) + choose_bool(false) + pair_value() + "
                                          "packet_value() + ref_value()\n"
+                                         "    + invoke_value()\n"
                                          "}\n";
     PIPELINE_TEST_REQUIRE(
         xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
@@ -1322,6 +1333,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XiFunc *packet_function = NULL;
     XiFunc *update_function = NULL;
     XiFunc *ref_function = NULL;
+    XiFunc *maybe_error_function = NULL;
     for (uint16_t function = 0; function < result.ir->module->nfuncs; ++function) {
         XiFunc *candidate = result.ir->module->functions[function];
         if (candidate && candidate->name && strcmp(candidate->name, "root") == 0)
@@ -1332,11 +1344,14 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
             update_function = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "ref_value") == 0)
             ref_function = candidate;
+        if (candidate && candidate->name && strcmp(candidate->name, "maybe_error") == 0)
+            maybe_error_function = candidate;
     }
     PIPELINE_TEST_REQUIRE(entry != NULL);
     PIPELINE_TEST_REQUIRE(packet_function != NULL);
     PIPELINE_TEST_REQUIRE(update_function != NULL);
     PIPELINE_TEST_REQUIRE(ref_function != NULL);
+    PIPELINE_TEST_REQUIRE(maybe_error_function != NULL);
     PIPELINE_TEST_REQUIRE(xi_function_has_operation(update_function, XI_AGG_GET));
     PIPELINE_TEST_REQUIRE(xi_function_has_operation(update_function, XI_AGG_UPDATE));
     PIPELINE_TEST_REQUIRE(!xi_function_has_operation(update_function, XI_AGG_SET));
@@ -1514,6 +1529,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_CONDITIONAL_BRANCH,
         XR_CORE_OP_CORE_RETURN,
         XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+        XR_CORE_OP_CORE_CALL_SEALED_INVOKE,
+        XR_CORE_OP_CORE_ERROR_PUBLISH,
         XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
         XR_CORE_OP_CORE_AGGREGATE_PROJECT,
         XR_CORE_OP_CORE_AGGREGATE_UPDATE,
@@ -1538,7 +1555,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 182);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 187);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);
@@ -1579,6 +1596,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                           XR_BACKEND_OK);
     PIPELINE_TEST_REQUIRE(generated.bytes != NULL && generated.size != 0u);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "int main(void)") != NULL);
+    PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "out_error") != NULL);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "XrProto") == NULL);
     PIPELINE_TEST_REQUIRE(strstr(generated.bytes, "SemanticPlan") == NULL);
     xr_generated_c_free(&generated);

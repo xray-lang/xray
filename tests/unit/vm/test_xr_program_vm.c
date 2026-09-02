@@ -10,12 +10,15 @@
 #include "vm/xr_program_vm.h"
 #include "os/os_thread.h"
 #include "../plan/target_profile_test_fixture.h"
+#include "../program/xr_program_invoke_fixture.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+_Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -878,7 +881,8 @@ static XrValidatedProgram *build_error_program(void) {
         .parameter_types = &parameter,
         .parameter_count = 1,
         .result_type_id = XR_CORE_TYPE_VOID,
-        .effect_mask = 2u,
+        .error_type_id = XR_CORE_TYPE_ERROR,
+        .effect_mask = XR_CORE_EFFECT_ERROR,
         .entry_block = block_key,
         .blocks = &block,
         .block_count = 1,
@@ -963,7 +967,8 @@ static void compare_outcomes(XrReferenceOutcome reference, XrVmOutcome vm) {
     REQUIRE((unsigned) reference.kind == (unsigned) vm.kind);
     REQUIRE(reference.steps == vm.steps);
     REQUIRE((unsigned) reference.trap == (unsigned) vm.trap);
-    REQUIRE(reference.error == vm.error);
+    if (reference.kind == XR_REFERENCE_OUTCOME_ERROR)
+        compare_value(reference.error_value, vm.error_value);
     if (reference.kind == XR_REFERENCE_OUTCOME_RETURN)
         compare_value(reference.value, vm.value);
 }
@@ -1035,10 +1040,40 @@ static void run_program(XrValidatedProgram *program, bool ilp32,
         else if (expected_value_kind == XR_VM_VALUE_U32)
             REQUIRE(result.value.as.u32 == (uint32_t) expected_value);
     } else if (expected_kind == XR_VM_OUTCOME_ERROR) {
-        REQUIRE(result.error == (uint32_t) expected_value);
+        REQUIRE(result.error_value.kind == XR_VM_VALUE_ERROR);
+        REQUIRE(result.error_value.as.error == (uint32_t) expected_value);
     }
     retire_and_free(&instance);
     xr_target_profile_free(profile);
+}
+
+static void test_sealed_invoke_and_cleanup_cfg(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_invoke_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    XrReferenceValue reference_arguments[] = {
+        {.kind = XR_REFERENCE_VALUE_BOOL, .as.boolean = true},
+        {.kind = XR_REFERENCE_VALUE_ERROR, .as.error = 73u},
+        {.kind = XR_REFERENCE_VALUE_I64, .as.i64 = 9},
+    };
+    XrVmValue vm_arguments[] = {
+        {.kind = XR_VM_VALUE_BOOL, .as.boolean = true},
+        {.kind = XR_VM_VALUE_ERROR, .as.error = 73u},
+        {.kind = XR_VM_VALUE_I64, .as.i64 = 9},
+    };
+    run_program(program, false, reference_arguments, vm_arguments, 3u, XR_VM_OUTCOME_RETURN,
+                XR_VM_VALUE_I64, 42u);
+    reference_arguments[0].as.boolean = false;
+    vm_arguments[0].as.boolean = false;
+    run_program(program, false, reference_arguments, vm_arguments, 3u, XR_VM_OUTCOME_ERROR,
+                XR_VM_VALUE_VOID, 73u);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
 }
 
 static void test_operation_semantics(void) {
@@ -1288,6 +1323,7 @@ static void test_policy_budget_generation_and_smoke_benchmark(void) {
 
 int main(void) {
     test_operation_semantics();
+    test_sealed_invoke_and_cleanup_cfg();
     test_arithmetic_edges();
     test_concurrent_execution_and_drain();
     test_policy_budget_generation_and_smoke_benchmark();

@@ -470,6 +470,7 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         }
         uint64_t result_type = take_uvar(&reader);
         uint64_t result_ownership = take_uvar(&reader);
+        uint64_t error_type = take_uvar(&reader);
         uint64_t effect_mask = take_uvar(&reader);
         uint64_t capability_mask = take_uvar(&reader);
         uint64_t entry_block = take_uvar(&reader);
@@ -477,8 +478,8 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         uint64_t value_count = take_uvar(&reader);
         uint64_t flags = take_uvar(&reader);
         if (!type_is_runtime(context->program, result_type) ||
-            result_ownership > XR_CORE_IR_OWNER || effect_mask > UINT32_MAX ||
-            capability_mask > UINT32_MAX || block_count == 0 ||
+            !type_is_runtime(context->program, error_type) || result_ownership > XR_CORE_IR_OWNER ||
+            effect_mask > UINT32_MAX || capability_mask > UINT32_MAX || block_count == 0 ||
             block_count > context->budget.max_blocks_per_function || entry_block >= block_count ||
             value_count > context->budget.max_values_per_function || flags > UINT32_MAX ||
             block_count > SIZE_MAX / sizeof(XrValidatedBlock) ||
@@ -489,6 +490,7 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         }
         function->result_type_id = (uint16_t) result_type;
         function->result_ownership = (XrCoreIrOwnershipDisposition) result_ownership;
+        function->error_type_id = (uint16_t) error_type;
         function->effect_mask = (uint32_t) effect_mask;
         function->capability_mask = (uint32_t) capability_mask;
         function->entry_block = (uint32_t) entry_block;
@@ -830,6 +832,7 @@ static bool value_is_available(const XrValidatedFunction *function, uint32_t blo
 static bool instruction_is_terminator(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
+           operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
            operation_id == XR_CORE_OP_CORE_RETURN || operation_id == XR_CORE_OP_CORE_TRAP ||
            operation_id == XR_CORE_OP_CORE_ERROR_PUBLISH;
 }
@@ -940,6 +943,37 @@ static bool verify_successor_arguments(VerifyContext *context, const XrValidated
     return true;
 }
 
+static bool verify_successor_argument_suffix(VerifyContext *context,
+                                             const XrValidatedFunction *function,
+                                             const XrValidatedInstruction *instruction,
+                                             uint32_t successor_index, uint32_t target_start,
+                                             uint32_t operand_start,
+                                             XrProgramSemanticLocation location) {
+    if (successor_index >= instruction->successor_count ||
+        instruction->successors[successor_index] >= function->block_count) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
+        return false;
+    }
+    const XrValidatedBlock *target = &function->blocks[instruction->successors[successor_index]];
+    if (target_start > target->argument_count || operand_start > instruction->operand_count ||
+        target->argument_count - target_start > instruction->operand_count - operand_start) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY, location);
+        return false;
+    }
+    for (uint32_t index = target_start; index < target->argument_count; ++index) {
+        uint32_t operand = operand_start + index - target_start;
+        if (!operand_type_is(function, instruction, operand, target->argument_types[index]) ||
+            !operand_category_is(function, instruction, operand,
+                                 target->argument_categories[index]) ||
+            !operand_ownership_is(function, instruction, operand,
+                                  target->argument_ownerships[index])) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool operation_consumes_operand(const VerifyContext *context,
                                        const XrValidatedInstruction *instruction,
                                        uint32_t operand_index) {
@@ -952,7 +986,10 @@ static bool operation_consumes_operand(const VerifyContext *context,
         return true;
     if (instruction->operation_id == XR_CORE_OP_CORE_RETURN && operand_index == 0u)
         return true;
-    if (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+    if (instruction->operation_id == XR_CORE_OP_CORE_ERROR_PUBLISH && operand_index == 0u)
+        return true;
+    if ((instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT &&
+         instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_INVOKE) ||
         instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
         instruction->immediate.function_id >= context->program->function_count)
         return false;
@@ -962,7 +999,8 @@ static bool operation_consumes_operand(const VerifyContext *context,
            callee->parameter_modes[operand_index] == XR_PARAM_MOVE;
 }
 
-static uint32_t owner_occurrences_on_successor_edge(const XrValidatedFunction *function,
+static uint32_t owner_occurrences_on_successor_edge(const VerifyContext *context,
+                                                    const XrValidatedFunction *function,
                                                     const XrValidatedInstruction *terminator,
                                                     uint32_t successor_index, uint32_t value_id) {
     uint32_t start = 0u;
@@ -970,6 +1008,21 @@ static uint32_t owner_occurrences_on_successor_edge(const XrValidatedFunction *f
         start = 1u;
         if (successor_index != 0u)
             start += function->blocks[terminator->successors[0]].argument_count;
+    } else if (terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE) {
+        const XrValidatedFunction *callee =
+            &context->program->functions[terminator->immediate.function_id];
+        start = callee->parameter_count;
+        uint32_t normal_implicit = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+        if (successor_index != 0u) {
+            start += function->blocks[terminator->successors[0]].argument_count - normal_implicit;
+        }
+        uint32_t implicit = 1u;
+        uint32_t count =
+            function->blocks[terminator->successors[successor_index]].argument_count - implicit;
+        uint32_t occurrences = 0u;
+        for (uint32_t index = 0; index < count; ++index)
+            occurrences += terminator->operands[start + index] == value_id;
+        return occurrences;
     }
     uint32_t count = function->blocks[terminator->successors[successor_index]].argument_count;
     uint32_t occurrences = 0u;
@@ -984,7 +1037,8 @@ static bool verify_owner_block_closure(VerifyContext *context, uint32_t function
     const XrValidatedBlock *block = &function->blocks[block_id];
     const XrValidatedInstruction *terminator = &block->instructions[block->instruction_count - 1u];
     bool transfers = terminator->operation_id == XR_CORE_OP_CORE_BRANCH ||
-                     terminator->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH;
+                     terminator->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
+                     terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE;
     for (uint32_t value = 0; value < function->value_count; ++value) {
         if (function->value_blocks[value] != block_id ||
             function->value_ownerships[value] != XR_CORE_IR_OWNER || consumed[value])
@@ -1001,7 +1055,8 @@ static bool verify_owner_block_closure(VerifyContext *context, uint32_t function
             return false;
         }
         for (uint32_t successor = 0; successor < terminator->successor_count; ++successor) {
-            if (owner_occurrences_on_successor_edge(function, terminator, successor, value) != 1u) {
+            if (owner_occurrences_on_successor_edge(context, function, terminator, successor,
+                                                    value) != 1u) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
                 return false;
             }
@@ -1050,6 +1105,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                                 instruction->operation_id == XR_CORE_OP_CORE_BRANCH ||
                                 instruction->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
                                 instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+                                instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE;
@@ -1194,7 +1250,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             const XrValidatedFunction *callee =
                 &context->program->functions[instruction->immediate.function_id];
-            if (instruction->operand_count != callee->parameter_count ||
+            if (callee->error_type_id != XR_CORE_TYPE_VOID ||
+                instruction->operand_count != callee->parameter_count ||
                 (callee->result_type_id == XR_CORE_TYPE_VOID) !=
                     (instruction->result_id == XR_PROGRAM_LOCATION_NONE) ||
                 instruction->result_type_id != callee->result_type_id ||
@@ -1226,6 +1283,73 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             return true;
         }
+        case XR_CORE_OP_CORE_CALL_SEALED_INVOKE: {
+            if (instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
+                instruction->successor_count != 2u ||
+                instruction->immediate.function_id >= context->program->function_count ||
+                instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_type_id != XR_CORE_TYPE_VOID) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            const XrValidatedFunction *callee =
+                &context->program->functions[instruction->immediate.function_id];
+            if (callee->error_type_id == XR_CORE_TYPE_VOID ||
+                instruction->successors[0] >= function->block_count ||
+                instruction->successors[1] >= function->block_count) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
+            const XrValidatedBlock *error = &function->blocks[instruction->successors[1]];
+            uint32_t normal_implicit = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+            if (normal->argument_count < normal_implicit || error->argument_count == 0u ||
+                instruction->operand_count != callee->parameter_count + normal->argument_count -
+                                                  normal_implicit + error->argument_count - 1u ||
+                (normal_implicit != 0u &&
+                 (normal->argument_types[0] != callee->result_type_id ||
+                  normal->argument_categories[0] != XR_CORE_IR_VALUE ||
+                  normal->argument_ownerships[0] != callee->result_ownership)) ||
+                error->argument_types[0] != callee->error_type_id ||
+                error->argument_categories[0] != XR_CORE_IR_VALUE ||
+                error->argument_ownerships[0] !=
+                    ownership_for_type(context->program, callee->error_type_id)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            for (uint32_t argument = 0; argument < callee->parameter_count; ++argument) {
+                if (!operand_type_is(function, instruction, argument,
+                                     callee->parameter_types[argument]) ||
+                    !operand_category_is(function, instruction, argument,
+                                         callee->parameter_modes[argument] == XR_PARAM_REF
+                                             ? XR_CORE_IR_PLACE
+                                             : XR_CORE_IR_VALUE) ||
+                    !call_operand_ownership_is(context->program, function, instruction, argument,
+                                               callee->parameter_modes[argument],
+                                               callee->parameter_types[argument])) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                    return false;
+                }
+            }
+            uint32_t normal_operand = callee->parameter_count;
+            uint32_t error_operand = normal_operand + normal->argument_count - normal_implicit;
+            if (!verify_successor_argument_suffix(context, function, instruction, 0u,
+                                                  normal_implicit, normal_operand, location) ||
+                !verify_successor_argument_suffix(context, function, instruction, 1u, 1u,
+                                                  error_operand, location))
+                return false;
+            uint32_t escaping_effects = callee->effect_mask & ~XR_CORE_EFFECT_ERROR;
+            *local_effects |= escaping_effects;
+            if ((function->effect_mask & escaping_effects) != escaping_effects) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_EFFECT, location);
+                return false;
+            }
+            if ((function->capability_mask & callee->capability_mask) != callee->capability_mask) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_CAPABILITY, location);
+                return false;
+            }
+            return true;
+        }
         case XR_CORE_OP_CORE_TRAP:
             if (!expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_U32,
                               XR_CORE_TYPE_VOID, false) ||
@@ -1237,7 +1361,11 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
             if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
                               XR_CORE_TYPE_VOID, false) ||
-                !operand_type_is(function, instruction, 0, XR_CORE_TYPE_ERROR)) {
+                function->error_type_id == XR_CORE_TYPE_VOID ||
+                !operand_type_is(function, instruction, 0, function->error_type_id) ||
+                !operand_ownership_is(
+                    function, instruction, 0,
+                    ownership_for_type(context->program, function->error_type_id))) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                 return false;
             }
@@ -1448,6 +1576,8 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     if ((function->flags & ~XR_PROGRAM_FUNCTION_ENTRY) != 0u ||
         (function->effect_mask & ~UINT32_C(0x0f)) != 0u ||
         (function->capability_mask & ~UINT32_C(0x01)) != 0u ||
+        ((function->error_type_id == XR_CORE_TYPE_VOID) !=
+         ((function->effect_mask & XR_CORE_EFFECT_ERROR) == 0u)) ||
         function->result_ownership !=
             (function->result_type_id != XR_CORE_TYPE_VOID
                  ? ownership_for_type(context->program, function->result_type_id)

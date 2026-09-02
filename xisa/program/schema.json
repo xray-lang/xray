@@ -44,7 +44,7 @@
   },
   "value_system": {
     "function_parameter_contract": "ordered-(TypeId,ParamMode)",
-    "function_result_contract": "ordered-(TypeId,OwnershipDisposition)",
+    "function_result_contract": "ordered-(TypeId,OwnershipDisposition,ErrorTypeId); ErrorTypeId=void is infallible",
     "parameter_modes": [
       "0:read",
       "1:ref",

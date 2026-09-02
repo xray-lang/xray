@@ -78,8 +78,8 @@ typedef enum XrVmTrap {
 typedef struct XrVmOutcome {
     XrVmOutcomeKind kind;
     XrVmValue value;
+    XrVmValue error_value;
     XrVmTrap trap;
-    uint32_t error;
     uint64_t steps;
     XrFingerprint logical_trace;
 } XrVmOutcome;

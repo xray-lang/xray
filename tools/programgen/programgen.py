@@ -206,7 +206,7 @@ def validate(schema: dict[str, Any]) -> None:
             "value-system contract fields drifted")
     require(value_system == {
         "function_parameter_contract": "ordered-(TypeId,ParamMode)",
-        "function_result_contract": "ordered-(TypeId,OwnershipDisposition)",
+        "function_result_contract": "ordered-(TypeId,OwnershipDisposition,ErrorTypeId); ErrorTypeId=void is infallible",
         "parameter_modes": ["0:read", "1:ref", "2:move"],
         "value_categories": ["0:value", "1:place"],
         "ownership_dispositions": ["0:non-owner", "1:owner"],
@@ -301,7 +301,12 @@ def validate_source_projection(projection: dict[str, Any], core: dict[str, Any],
         require(row["core_operation"] in core_operations,
                 f"unknown structural CoreSpec operation {row['core_operation']}")
     require(sources == {
-        "block-argument", "unconditional-edge", "conditional-edge", "function-return"
+        "block-argument",
+        "unconditional-edge",
+        "conditional-edge",
+        "function-return",
+        "resolved-fallible-call-plus-xi.err.check-cfg",
+        "xi.err.return-after-explicit-cleanup-cfg",
     }, "structural projection set drifted")
 
 
