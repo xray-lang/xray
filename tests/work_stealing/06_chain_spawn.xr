@@ -7,7 +7,7 @@
 */
 import time
 
-enum WsErr { Failed(string) }
+enum WsErr { Failed { message: string } }
 
 print("========== 测试6：链式创建测试 ==========")
 /* 测试参数 */
@@ -70,6 +70,6 @@ if (result.sum > 0) {
     print("\n✓ 链式创建测试通过：所有层级协程都执行了")
 } else {
     print("\n✗ 测试失败")
-    throw WsErr.Failed("链式创建测试失败")
+    throw WsErr.Failed { message: "链式创建测试失败" }
 }
 print("========== 测试6 完成 ==========")

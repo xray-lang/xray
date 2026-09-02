@@ -1,10 +1,10 @@
 // anchor: exception-propagation
 enum AppErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 fn deep() {
-    throw AppErr.Msg("boom")
+    throw AppErr.Msg { s: "boom" }
 }
 
 var order: Array<string> = []
@@ -14,7 +14,7 @@ try {
     order.push("unreachable")
 } catch (e) {
     match (e) {
-        AppErr.Msg(s) -> {
+        AppErr.Msg { s } -> {
             order.push("caught:" + s)
         }
     }

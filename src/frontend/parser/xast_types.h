@@ -159,10 +159,11 @@ typedef enum {
     AST_MEMBER_SET,          // obj.field = value
 
     // Enum nodes
-    AST_ENUM_DECL,    // enum Status { Success }
-    AST_ENUM_MEMBER,  // Success
-    AST_ENUM_ACCESS,  // Status.Success
-    AST_ENUM_INDEX,   // enum_type.members[idx] (compiler-generated for for-in)
+    AST_ENUM_DECL,       // enum Status { Success }
+    AST_ENUM_MEMBER,     // Success
+    AST_ENUM_ACCESS,     // Status.Success
+    AST_ENUM_CONSTRUCT,  // Shape.Circle { radius: value }
+    AST_ENUM_INDEX,      // enum_type.members[idx] (compiler-generated for for-in)
 
     // Exception handling
     AST_TRY_CATCH,   // try-catch-finally
@@ -187,7 +188,7 @@ typedef enum {
     AST_PATTERN_WILDCARD,  // _
     AST_PATTERN_MULTI,     // 1 | 2 | 3 (alternation list)
     AST_PATTERN_TUPLE,     // (a, b) / (0, _) / ((x, y), z) — positional tuple destructure
-    AST_PATTERN_ADT,       // Shape.Circle(r) — ADT variant destructure
+    AST_PATTERN_ADT,       // Shape.Circle { radius } — named ADT variant destructure
     AST_PATTERN_OBJECT,    // { x, y } / { x: sub } — object field destructure
     AST_PATTERN_ARRAY,     // [a, b, ..rest] — array element destructure with optional rest
     AST_PATTERN_TYPE,      // is T  /  is T name — runtime type check with optional binding

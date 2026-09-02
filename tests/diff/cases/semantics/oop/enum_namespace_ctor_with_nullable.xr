@@ -1,22 +1,22 @@
 // anchor: enum-namespace-ctor-with-nullable
 //
-// Regression guard: constructing E.Variant(...) must work even when the module
+// Regression guard: constructing `E.Variant { field: value }` must work even when the module
 // elsewhere mentions the nullable enum type E?. Before the fix, a module-level
-// `var x: E? = null` poisoned the enum type symbol so that `E.Num(5)` in an
+// `var x: E? = null` poisoned the enum type symbol so that `E.Num { value: 5 }` in an
 // argument / inferred context was misreported as "member access on a
 // possibly-null value" (E0379). The enum namespace reference is never a nullable
 // value; only actual nullable enum values require narrowing.
 
 enum E {
     Null,
-    Num(i64),
-    Pair(i64, i64)
+    Num { value: i64 },
+    Pair { left: i64, right: i64 }
 }
 
 fn take(e: E) -> i64 {
     return match (e) {
-        E.Num(v) -> v,
-        E.Pair(a, b) -> a + b,
+        E.Num { value: v } -> v,
+        E.Pair { left: a, right: b } -> a + b,
         E.Null -> -1
     }
 }
@@ -25,12 +25,12 @@ fn take(e: E) -> i64 {
 var x: E? = null
 print(x == null)
 
-var a = E.Num(5)
+var a = E.Num { value: 5 }
 print(take(a))
 
-var b: E = E.Pair(3, 4)
+var b: E = E.Pair { left: 3, right: 4 }
 print(take(b))
 
 // construction directly in argument position (was the failing form)
-print(take(E.Num(7)))
+print(take(E.Num { value: 7 }))
 print(take(E.Null))

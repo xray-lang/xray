@@ -10,7 +10,7 @@ enum Direction {
     North,
     East
 
-    fn symbol() -> string {
+    symbol() -> string {
         return match (this) {
             Direction.North -> "N",
             Direction.East -> "E"
@@ -22,7 +22,7 @@ enum HttpStatus {
     OK,
     NotFound
 
-    fn code() -> i64 {
+    code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404

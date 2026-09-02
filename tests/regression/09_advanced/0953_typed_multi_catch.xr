@@ -3,17 +3,17 @@
 // Single-catch, typed-catch, multi-catch with catch-all, and `defer`
 // cleanup interactions are all tested.
 
-enum CatchErr { Msg(string) }
-enum OtherErr { Msg(string) }
+enum CatchErr { Msg { message: string } }
+enum OtherErr { Msg { message: string } }
 
 // 1. Single catch — existing syntax unchanged
 @test
 fn test_single_catch() {
     var msg = ""
     try {
-        throw CatchErr.Msg("single")
+        throw CatchErr.Msg { message: "single" }
     } catch (e) {
-        match (e) { CatchErr.Msg(s) -> { msg = s } }
+        match (e) { CatchErr.Msg { message: s } -> { msg = s } }
     }
     assertEqual(msg, "single")
 }
@@ -23,9 +23,9 @@ fn test_single_catch() {
 fn test_typed_catch_exception() {
     var msg = ""
     try {
-        throw CatchErr.Msg("typed")
+        throw CatchErr.Msg { message: "typed" }
     } catch (e: CatchErr) {
-        match (e) { CatchErr.Msg(s) -> { msg = s } }
+        match (e) { CatchErr.Msg { message: s } -> { msg = s } }
     }
     assertEqual(msg, "typed")
 }
@@ -38,9 +38,9 @@ fn test_typed_catch_defer() {
     fn work() {
         defer { fin = true }
         try {
-            throw CatchErr.Msg("tcf")
+            throw CatchErr.Msg { message: "tcf" }
         } catch (e: CatchErr) {
-            match (e) { CatchErr.Msg(s) -> { msg = s } }
+            match (e) { CatchErr.Msg { message: s } -> { msg = s } }
         }
     }
     work()
@@ -53,9 +53,9 @@ fn test_typed_catch_defer() {
 fn test_multi_catch_typed_then_catchall() {
     var result = ""
     try {
-        throw CatchErr.Msg("multi")
+        throw CatchErr.Msg { message: "multi" }
     } catch (e: CatchErr) {
-        match (e) { CatchErr.Msg(s) -> { result = "typed:" + s } }
+        match (e) { CatchErr.Msg { message: s } -> { result = "typed:" + s } }
     } catch (e) {
         result = "catchall"
     }
@@ -67,7 +67,7 @@ fn test_multi_catch_typed_then_catchall() {
 fn test_multi_catch_all_typed() {
     var result = ""
     try {
-        throw CatchErr.Msg("first")
+        throw CatchErr.Msg { message: "first" }
     } catch (e: CatchErr) {
         result = "match"
     }
@@ -82,9 +82,9 @@ fn test_multi_catch_defer() {
     fn work() {
         defer { fin = true }
         try {
-            throw CatchErr.Msg("mf")
+            throw CatchErr.Msg { message: "mf" }
         } catch (e: CatchErr) {
-            match (e) { CatchErr.Msg(s) -> { result = s } }
+            match (e) { CatchErr.Msg { message: s } -> { result = s } }
         } catch (e) {
             result = "catchall"
         }
@@ -100,14 +100,14 @@ fn test_nested_multi_catch_rethrow() {
     var log: Array<string> = []
     try {
         try {
-            throw CatchErr.Msg("inner")
+            throw CatchErr.Msg { message: "inner" }
         } catch (e: CatchErr) {
             log.push("inner-catch")
-            throw CatchErr.Msg("rethrown")
+            throw CatchErr.Msg { message: "rethrown" }
         }
     } catch (e: CatchErr) {
         log.push("outer-catch")
-        match (e) { CatchErr.Msg(s) -> { assertEqual(s, "rethrown") } }
+        match (e) { CatchErr.Msg { message: s } -> { assertEqual(s, "rethrown") } }
     }
     assertEqual(len(log), 2)
     assertEqual(log[0], "inner-catch")
@@ -120,14 +120,14 @@ fn test_sequential_multi_catch() {
     var a = ""
     var b = ""
     try {
-        throw CatchErr.Msg("first")
+        throw CatchErr.Msg { message: "first" }
     } catch (e: CatchErr) {
-        match (e) { CatchErr.Msg(s) -> { a = s } }
+        match (e) { CatchErr.Msg { message: s } -> { a = s } }
     }
     try {
-        throw CatchErr.Msg("second")
+        throw CatchErr.Msg { message: "second" }
     } catch (e: CatchErr) {
-        match (e) { CatchErr.Msg(s) -> { b = s } }
+        match (e) { CatchErr.Msg { message: s } -> { b = s } }
     }
     assertEqual(a, "first")
     assertEqual(b, "second")
@@ -138,9 +138,9 @@ fn test_sequential_multi_catch() {
 fn test_catchall_only() {
     var msg = ""
     try {
-        throw CatchErr.Msg("any")
+        throw CatchErr.Msg { message: "any" }
     } catch (e) {
-        match (e) { CatchErr.Msg(s) -> { msg = s } }
+        match (e) { CatchErr.Msg { message: s } -> { msg = s } }
     }
     assertEqual(msg, "any")
 }
@@ -150,11 +150,11 @@ fn test_catchall_only() {
 fn test_multi_catch_fallthrough_to_catchall() {
     var result = ""
     try {
-        throw CatchErr.Msg("fall")
+        throw CatchErr.Msg { message: "fall" }
     } catch (e: OtherErr) {
         result = "other"
     } catch (e) {
-        match (e) { CatchErr.Msg(s) -> { result = "catchall:" + s } }
+        match (e) { CatchErr.Msg { message: s } -> { result = "catchall:" + s } }
     }
     assertEqual(result, "catchall:fall")
 }

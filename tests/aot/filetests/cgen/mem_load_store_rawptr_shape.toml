@@ -1,5 +1,5 @@
 [package]
-name = "filetest-mem-load-store-rawptr-shape"
+name = "xray-tests/filetest-mem-load-store-rawptr-shape"
 version = "1.0.0"
 license = "MIT"
 main = "mem_load_store_rawptr_shape.xr"

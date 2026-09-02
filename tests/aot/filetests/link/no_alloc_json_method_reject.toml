@@ -1,5 +1,5 @@
 [package]
-name = "filetest-no_alloc_json_method_reject"
+name = "xray-tests/filetest-no_alloc_json_method_reject"
 version = "1.0.0"
 license = "MIT"
 main = "no_alloc_json_method_reject.xr"

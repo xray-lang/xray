@@ -583,6 +583,52 @@ XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_TUPLE_GET, dst, tup, idx));
 }
 
+/* The pre-cut bytecode runtime still stores enum constructors in the enum
+ * namespace. Xi has already resolved the exact variant ordinal; this adapter
+ * preserves the current runtime carrier without restoring call syntax as a
+ * semantic authority. */
+XR_FUNC void xi_emit_variant_construct(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!v || v->nargs < 2 || !v->args[0] || !v->aux || v->aux_int < 0 ||
+        (uint64_t) v->aux_int > UINT32_MAX) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiValue call = *v;
+    call.op = XI_CALL_METHOD;
+    call.aux_int = 0;
+    xi_emit_call_method(ctx, &call, dst);
+}
+
+XR_FUNC void xi_emit_variant_test(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!v || v->nargs != 1 || !v->args[0] || v->aux_int < 0 ||
+        (uint64_t) v->aux_int > UINT32_MAX || ctx->next_reg >= MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg source = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    XiEmitReg expected = (XiEmitReg) ctx->next_reg++;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    emit_inst(ctx, CREATE_ABC(OP_GETFIELD, dst, source, 0));
+    xi_emit_i64_const_reg(ctx, expected, v->aux_int);
+    if (ctx->status == XI_EMIT_OK)
+        emit_inst(ctx, CREATE_ABC(OP_CMP_EQ, dst, dst, expected));
+}
+
+XR_FUNC void xi_emit_variant_project(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    uint32_t field = xi_variant_projection_field(v);
+    if (!v || v->nargs != 1 || !v->args[0] || field >= UINT16_MAX) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg source = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_GETFIELD, dst, source, (uint16_t) (field + 1u)));
+}
+
 /* Map creation */
 XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint16_t cap = 0;
@@ -1130,7 +1176,8 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             uv_index = cap->index;
         }
         xr_instruction_unit_add_upvalue(child_proto, uv_index, 0, 0, 0, cap->source,
-                                (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
+                                        (uint8_t) xi_capture_cross_execution_action(cap),
+                                        cap->type);
     }
 
     /* IR ownership is transferred only after the complete proto tree exists.
@@ -1537,7 +1584,8 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
             uv_idx = cap->index;
         }
         xr_instruction_unit_add_upvalue(child_proto, uv_idx, 0, 0, 0, cap->source,
-                                (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
+                                        (uint8_t) xi_capture_cross_execution_action(cap),
+                                        cap->type);
     }
 
     return xr_instruction_unit_add_child(ctx->proto, child_proto);
@@ -1565,12 +1613,10 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     }
 
     desc->class_name = xr_strdup(cd->name);
-    desc->super_name =
-        (cd->super_name && !cd->super_module) ? xr_strdup(cd->super_name) : NULL;
+    desc->super_name = (cd->super_name && !cd->super_module) ? xr_strdup(cd->super_name) : NULL;
     desc->generic_origin_name =
         cdata->generic_origin_name ? xr_strdup(cdata->generic_origin_name) : NULL;
-    desc->display_name =
-        cdata->display_name ? xr_strdup(cdata->display_name) : NULL;
+    desc->display_name = cdata->display_name ? xr_strdup(cdata->display_name) : NULL;
     desc->is_monomorphized = cdata->is_monomorphized;
     desc->mono_type_arg_names = NULL;
     desc->mono_type_arg_count = 0;
@@ -1580,9 +1626,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
         if (names) {
             for (int i = 0; i < cdata->mono_type_arg_count; i++)
                 names[i] =
-                    cdata->mono_type_arg_names[i]
-                        ? xr_strdup(cdata->mono_type_arg_names[i])
-                        : NULL;
+                    cdata->mono_type_arg_names[i] ? xr_strdup(cdata->mono_type_arg_names[i]) : NULL;
             desc->mono_type_arg_names = names;
             desc->mono_type_arg_count = cdata->mono_type_arg_count;
         }

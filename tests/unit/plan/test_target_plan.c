@@ -2383,10 +2383,8 @@ static void test_plan_snapshot_and_determinism(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
-    if (strcmp(target_hex, "df9872b6b46651c3044e269f37085d98f6a70012d0fc1808d897e9c52e63d17b") != 0)
-        fprintf(stderr, "TargetPlan fingerprint KAT changed to %s\n", target_hex);
     REQUIRE(strcmp(target_hex,
-                   "df9872b6b46651c3044e269f37085d98f6a70012d0fc1808d897e9c52e63d17b") == 0);
+                   "1b6fd4f3f7ab0f38a264f261835fd21ba56e79ef5f1da4efdc03a474b2298fce") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4761,7 +4759,7 @@ static void test_channel_close_call_authority(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f. */
-    REQUIRE(strcmp(call_hex, "346e59956a6184a7b4f33e413665323091bedcee1af8b95c98456e7471344e04") ==
+    REQUIRE(strcmp(call_hex, "b46b26a760a8d76b5bb434fd8ed148a2202c348761be21518fe98e479a8e2d2f") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -5275,8 +5273,7 @@ static void test_source_export_call_authority(void) {
     XrSemanticTypeRecord *namespace_type =
         &semantic->types[semantic->operations[import_operation].result_type];
     REQUIRE(namespace_type->kind == XR_KIND_UNKNOWN &&
-            namespace_type->flags ==
-                (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT));
+            namespace_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT));
     uint8_t saved_namespace_flags = namespace_type->flags;
     namespace_type->flags |= XR_SEM_TYPE_CONST;
     resign_mutated_semantic_target(semantic, plan);
@@ -5599,7 +5596,7 @@ static void test_direct_local_call_adapter_family(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc. */
-    REQUIRE(strcmp(call_hex, "3164aac10bd060915a9bee5306a9a0f4ee6d3f869e6c39bb7ac538b7fc501351") ==
+    REQUIRE(strcmp(call_hex, "9e3078b2d60b479b8eab553d5e6a3421b107f303cbc7d0449064977f3b61bd6f") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -6201,7 +6198,7 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
      * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e. */
-    REQUIRE(strcmp(tail_hex, "abf48c00cf8ebb404d444bf19d0cce87538ddcb1200b763d0fbf0f2ec8cb6fb1") ==
+    REQUIRE(strcmp(tail_hex, "6749158010ff69b1cd6d87630c9c7b0ab0acc4b37b8e7e6debd83ea53d4c9d7e") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

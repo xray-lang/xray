@@ -19,7 +19,7 @@ var running = true
 while (running) {
     var r = ch.tryRecv()
     match (r) {
-        Recv.Value(v) -> {
+        Recv.Value { value: v } -> {
             got = v
             running = false
         }

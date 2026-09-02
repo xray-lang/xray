@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_fixed_array"
+name = "xray-tests/filetest-freestanding_fixed_array"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_fixed_array.xr"

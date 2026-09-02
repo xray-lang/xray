@@ -615,18 +615,16 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
         if (m->payload_count > 0) {
-            xfmt_write_char(ctx, '(');
+            xfmt_write_str(ctx, " { ");
             for (int pi = 0; pi < m->payload_count; pi++) {
                 if (pi > 0)
                     xfmt_write_str(ctx, ", ");
-                if (m->payload_names && m->payload_names[pi]) {
-                    xfmt_write_str(ctx, m->payload_names[pi]);
-                    xfmt_write_str(ctx, ": ");
-                }
+                xfmt_write_str(ctx, m->payload_names[pi]);
+                xfmt_write_str(ctx, ": ");
                 if (m->payload_types && m->payload_types[pi])
                     xfmt_emit_type(ctx, m->payload_types[pi]);
             }
-            xfmt_write_char(ctx, ')');
+            xfmt_write_str(ctx, " }");
         }
         if (i < en->member_count - 1) {
             xfmt_write_char(ctx, ',');
@@ -643,9 +641,13 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_leading_comments(ctx, method->leading_comments);
         xfmt_emit_attributes(ctx, m->attributes, m->attr_count);
         xfmt_write_indent(ctx);
-        if (m->is_static)
+        if (m->is_static) {
             xfmt_write_str(ctx, "static ");
-        xfmt_write_str(ctx, "fn ");
+        } else if (m->receiver_mode == XR_PARAM_REF) {
+            xfmt_write_str(ctx, "ref ");
+        } else if (m->receiver_mode == XR_PARAM_MOVE) {
+            xfmt_write_str(ctx, "move ");
+        }
         xfmt_write_str(ctx, m->name);
         xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
         xfmt_write_char(ctx, '(');

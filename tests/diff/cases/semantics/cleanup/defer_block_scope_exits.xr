@@ -4,11 +4,11 @@
 // and caught panic unwind. Function-body top-level defer remains the root scope.
 
 enum BlockErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 fn fail() {
-    throw BlockErr.Msg("bad")
+    throw BlockErr.Msg { s: "bad" }
 }
 
 fn plain_block() {

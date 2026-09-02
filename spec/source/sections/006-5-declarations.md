@@ -879,10 +879,11 @@ xray 的 `enum` 是**安全 tagged aggregate**：每个值包含编译器分配�
 EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
-EnumVariant    ::= Identifier VariantPayload?
-EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-VariantPayload ::= '(' VariantField (',' VariantField)* ')'
-VariantField   ::= (Identifier ':')? Type
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ```
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
@@ -902,7 +903,7 @@ enum HttpStatus {
     NotFound,
     InternalError
 
-    fn code() -> i64 {
+    code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404,
@@ -916,19 +917,19 @@ enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backi
 
 #### 5.6.2 Payload enum
 
-变体名后跟括号声明 payload 字段（位置参数或具名字段）：
+payload 变体使用具名记录字段；每个字段必须有非空且唯一的名称：
 
 ```xray @id=decl-enum-payload
 enum Option<T> {
-    Some(T),
+    Some { value: T },
     None,
 }
 
 enum NetEvent {
     Connected,
-    Disconnected(reason: string),
-    DataReceived(bytes: Array<u8>),
-    Error(code: i64, message: string),
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
 }
 
 // 递归 enum 的 payload 必须经 class 节点间接化
@@ -939,9 +940,9 @@ class ExprNode {
 }
 
 enum Expr {
-    Number(i64),
-    Binary(op: string, left: ExprNode, right: ExprNode),
-    Call(name: string, args: Array<Expr>),
+    Number { value: i64 },
+    Binary { op: string, left: ExprNode, right: ExprNode },
+    Call { name: string, args: Array<Expr> },
 }
 ```
 
@@ -958,20 +959,20 @@ enum Expr {
 
 ```xray
 var c = Color.Red
-var r1 = Option.Some(42)                            // 位置 payload
-var e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
-var e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
-var e3 = NetEvent.Connected                         // 无 payload 变体不写括号
+var r1 = Option.Some { value: 42 }
+var e1 = NetEvent.DataReceived { bytes: b }
+var e2 = NetEvent.Error { code: 404, message: "not found" }
+var e3 = NetEvent.Connected                         // unit 变体不写 braces
 ```
 
 解构（match）：
 
 ```xray @id=decl-enum-match
 match (event) {
-    NetEvent.Connected            -> print("connected"),
-    NetEvent.Disconnected(reason) -> print("by:", reason),
-    NetEvent.DataReceived(b)      -> process(b),
-    NetEvent.Error(code, msg)     -> log.error(code, msg),
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
 }
 ```
 
@@ -1027,7 +1028,7 @@ descriptor API 是封闭白名单：
 | `EnumPayloads<E>` | `length: i64`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
 | `EnumPayloadField<E>` | `index: i64`、`name: string`、`type: i64`（canonical TypeId） |
 
-命名 payload 字段的 `name` 是源码声明名；位置 payload 字段没有声明名，其 `name` 确定为 `""`，不使用 `null`，因此 descriptor 表面保持非空 `string` 类型。
+payload 字段的 `name` 始终是源码声明名；空名称、重复名称或名称/类型计数不一致的 metadata 必须拒绝。
 
 这些类型不可由用户构造，描述符不可调用，也不提供从名字/ordinal 构造 enum 值的入口。越界索引按普通 checked index 失败。descriptor 不进入 C ABI，FFI 边界会编译拒绝。
 
@@ -1056,47 +1057,47 @@ fn statusFromCode(code: i64) -> HttpStatus? {
 
 ```xray
 enum Shape {
-    Circle(radius: f64),
-    Rect(w: f64, h: f64),
-    Triangle(a: f64, b: f64, c: f64)
+    Circle { radius: f64 },
+    Rect { width: f64, height: f64 },
+    Triangle { a: f64, b: f64, c: f64 }
 
-    fn area() -> f64 {
+    area() -> f64 {
         return match (this) {
-            Shape.Circle(r)     -> 3.14159 * r * r,
-            Shape.Rect(w, h)    -> w * h,
-            Shape.Triangle(a, b, c) -> {
+            Shape.Circle { radius } -> 3.14159 * radius * radius,
+            Shape.Rect { width, height } -> width * height,
+            Shape.Triangle { a, b, c } -> {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
         }
     }
 
-    fn isRound() -> bool {
+    isRound() -> bool {
         return match (this) {
-            Shape.Circle(_) -> true,
+            Shape.Circle {} -> true,
             _               -> false,
         }
     }
 }
 
-var s = Shape.Circle(radius: 1.0)
+var s = Shape.Circle { radius: 1.0 }
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-静态方法使用 `static fn`，常用于工厂、查表和 enum 相关 helper；静态方法没有 `this`：
+静态方法使用 `static name(...)`；实例方法默认 READ receiver，也可使用 `ref` 或 `move` receiver。enum 方法不写 `fn`：
 
 ```xray
 enum Color {
     Red, Green, Blue
 
-    static fn fromInt(v: i64) -> Color {
+    static fromInt(v: i64) -> Color {
         if (v == 1) { return Color.Red }
         if (v == 2) { return Color.Green }
         return Color.Blue
     }
 
-    fn label() -> string {
+    label() -> string {
         return this.name
     }
 }
@@ -1104,11 +1105,11 @@ enum Color {
 print(Color.fromInt(2).label())     // "Green"
 ```
 
-> 注意 `Triangle(...)` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
+> 注意 `Triangle { ... }` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
 
 **规则**：
 
-- 方法语法与 `class` 内方法一致：`fn name(params) -> ReturnType { body }` 或 `static fn name(params) -> ReturnType { body }`
+- 方法语法与类型体内方法一致：`name(...)`、`ref name(...)`、`move name(...)` 或 `static name(...)`；不写 `fn`
 - 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
 - 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
 - **不**支持 `constructor`（变体语法本身就是构造器）
@@ -1118,7 +1119,7 @@ print(Color.fromInt(2).label())     // "Green"
   enum Color {
       Red, Green, Blue
 
-      fn isWarm() -> bool { return this == Color.Red }
+      isWarm() -> bool { return this == Color.Red }
   }
   ```
 - 方法**不能**和变体名同名
@@ -2047,10 +2048,11 @@ xray's `enum` is a **safe tagged aggregate**: each value contains a compiler-ass
 EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
-EnumVariant    ::= Identifier VariantPayload?
-EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-VariantPayload ::= '(' VariantField (',' VariantField)* ')'
-VariantField   ::= (Identifier ':')? Type
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ```
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
@@ -2070,7 +2072,7 @@ enum HttpStatus {
     NotFound,
     InternalError
 
-    fn code() -> i64 {
+    code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404,
@@ -2084,19 +2086,19 @@ Enum variants use declaration order for their stable `ordinal` and do not declar
 
 #### 5.6.2 Payload enum
 
-A variant name may be followed by parentheses declaring payload fields (positional or named):
+Payload variants use named record fields. Every field has a non-empty name unique within the variant:
 
 ```xray @id=decl-enum-payload
 enum Option<T> {
-    Some(T),
+    Some { value: T },
     None,
 }
 
 enum NetEvent {
     Connected,
-    Disconnected(reason: string),
-    DataReceived(bytes: Array<u8>),
-    Error(code: i64, message: string),
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
 }
 
 // A recursive enum payload must be indirected through a class node
@@ -2107,9 +2109,9 @@ class ExprNode {
 }
 
 enum Expr {
-    Number(i64),
-    Binary(op: string, left: ExprNode, right: ExprNode),
-    Call(name: string, args: Array<Expr>),
+    Number { value: i64 },
+    Binary { op: string, left: ExprNode, right: ExprNode },
+    Call { name: string, args: Array<Expr> },
 }
 ```
 
@@ -2126,20 +2128,20 @@ Construction:
 
 ```xray
 var c = Color.Red
-var r1 = Option.Some(42)                            // positional payload
-var e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
-var e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
-var e3 = NetEvent.Connected                         // payload-free variant: no parentheses
+var r1 = Option.Some { value: 42 }
+var e1 = NetEvent.DataReceived { bytes: b }
+var e2 = NetEvent.Error { code: 404, message: "not found" }
+var e3 = NetEvent.Connected                         // unit variant: no braces
 ```
 
 Destructuring (match):
 
 ```xray @id=decl-enum-match
 match (event) {
-    NetEvent.Connected            -> print("connected"),
-    NetEvent.Disconnected(reason) -> print("by:", reason),
-    NetEvent.DataReceived(b)      -> process(b),
-    NetEvent.Error(code, msg)     -> log.error(code, msg),
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
 }
 ```
 
@@ -2195,7 +2197,7 @@ The descriptor API is a closed whitelist:
 | `EnumPayloads<E>` | `length: i64`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
 | `EnumPayloadField<E>` | `index: i64`, `name: string`, `type: i64` (canonical TypeId) |
 
-For a named payload field, `name` is its source declaration name. A positional payload field has no declared name and deterministically reports `""`, not `null`, so the descriptor surface keeps a non-null `string` type.
+Every payload-field `name` is its source declaration name. Metadata with an empty or duplicate name, or mismatched name/type counts, is rejected.
 
 Users cannot construct these types, descriptors are not callable, and they do not provide name/ordinal-to-value construction. Out-of-range access fails like other checked indexing. Descriptors have no C ABI and are rejected at FFI boundaries.
 
@@ -2224,47 +2226,47 @@ Instance and static methods may be defined inside `enum` bodies with the same sy
 
 ```xray
 enum Shape {
-    Circle(radius: f64),
-    Rect(w: f64, h: f64),
-    Triangle(a: f64, b: f64, c: f64)
+    Circle { radius: f64 },
+    Rect { width: f64, height: f64 },
+    Triangle { a: f64, b: f64, c: f64 }
 
-    fn area() -> f64 {
+    area() -> f64 {
         return match (this) {
-            Shape.Circle(r)     -> 3.14159 * r * r,
-            Shape.Rect(w, h)    -> w * h,
-            Shape.Triangle(a, b, c) -> {
+            Shape.Circle { radius } -> 3.14159 * radius * radius,
+            Shape.Rect { width, height } -> width * height,
+            Shape.Triangle { a, b, c } -> {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
         }
     }
 
-    fn isRound() -> bool {
+    isRound() -> bool {
         return match (this) {
-            Shape.Circle(_) -> true,
+            Shape.Circle {} -> true,
             _               -> false,
         }
     }
 }
 
-var s = Shape.Circle(radius: 1.0)
+var s = Shape.Circle { radius: 1.0 }
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-Static methods use `static fn` and are useful for factories, lookup helpers, and enum-scoped utilities. Static methods do not have `this`:
+Static methods use `static name(...)`. Instance methods have a READ receiver by default and may use `ref` or `move`; enum methods do not write `fn`:
 
 ```xray
 enum Color {
     Red, Green, Blue
 
-    static fn fromInt(v: i64) -> Color {
+    static fromInt(v: i64) -> Color {
         if (v == 1) { return Color.Red }
         if (v == 2) { return Color.Green }
         return Color.Blue
     }
 
-    fn label() -> string {
+    label() -> string {
         return this.name
     }
 }
@@ -2272,11 +2274,11 @@ enum Color {
 print(Color.fromInt(2).label())     // "Green"
 ```
 
-> Note that `Triangle(...)` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
+> Note that `Triangle { ... }` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
 
 **Rules**:
 
-- Method syntax matches `class` methods: `fn name(params) -> ReturnType { body }` or `static fn name(params) -> ReturnType { body }`.
+- Type-body method forms are `name(...)`, `ref name(...)`, `move name(...)`, and `static name(...)`; enum methods do not write `fn`.
 - Inside a method, the static type of `this` is the enum itself (e.g. `Option<T>`); use `match (this)` to extract a variant's payload.
 - Static methods have no `this`; call them as `EnumName.method(args...)`.
 - `constructor` is **not** supported (variant syntax already serves as the constructor).
@@ -2286,7 +2288,7 @@ print(Color.fromInt(2).label())     // "Green"
   enum Color {
       Red, Green, Blue
 
-      fn isWarm() -> bool { return this == Color.Red }
+      isWarm() -> bool { return this == Color.Red }
   }
   ```
 - Methods **may not** share a name with a variant.

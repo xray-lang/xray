@@ -183,6 +183,9 @@
     X(REGEX_COMPILE, xi_emit_regex_compile) \
     X(TUPLE_NEW, xi_emit_tuple_new) \
     X(TUPLE_GET, xi_emit_tuple_get) \
+    X(VARIANT_CONSTRUCT, xi_emit_variant_construct) \
+    X(VARIANT_TEST, xi_emit_variant_test) \
+    X(VARIANT_PROJECT, xi_emit_variant_project) \
     X(BYTE_SLICE_LOAD_U16, xi_emit_byte_slice_load_u16) \
     X(BYTE_SLICE_LOAD_U32, xi_emit_byte_slice_load_u32) \
     X(BYTE_SLICE_LOAD_U64, xi_emit_byte_slice_load_u64) \

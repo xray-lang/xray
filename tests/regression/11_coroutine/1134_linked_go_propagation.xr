@@ -1,9 +1,9 @@
 // Test standalone linked go error propagation (outside scope)
 
-enum LinkErr { Msg(string) }
+enum LinkErr { Msg { message: string } }
 
 fn failing() -> i64 {
-    throw LinkErr.Msg("linked child error")
+    throw LinkErr.Msg { message: "linked child error" }
     return 0
 }
 fn slow_work() -> i64 {
@@ -17,7 +17,7 @@ fn test_linked_go_fail() {
     var t = linked go failing()
     var r = t.awaitResult()
     match (r) {
-        TaskResult.Failed(_) -> assert(true, "failed linked go should report TaskResult.Failed")
+        TaskResult.Failed { error: _ } -> assert(true, "failed linked go should report TaskResult.Failed")
         _ -> assert(false, "failed linked go should not return null or success")
     }
 }

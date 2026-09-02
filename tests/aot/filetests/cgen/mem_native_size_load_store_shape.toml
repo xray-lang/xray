@@ -1,5 +1,5 @@
 [package]
-name = "filetest-mem-native-size-load-store-shape"
+name = "xray-tests/filetest-mem-native-size-load-store-shape"
 version = "1.0.0"
 license = "MIT"
 main = "mem_native_size_load_store_shape.xr"

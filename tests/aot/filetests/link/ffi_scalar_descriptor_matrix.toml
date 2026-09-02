@@ -1,5 +1,5 @@
 [package]
-name = "filetest-ffi_scalar_descriptor_matrix"
+name = "xray-tests/filetest-ffi_scalar_descriptor_matrix"
 version = "1.0.0"
 license = "MIT"
 main = "ffi_scalar_descriptor_matrix.xr"

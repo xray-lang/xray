@@ -18,18 +18,18 @@ select {
 var r1 = ch.tryRecv()
 var r2 = ch.tryRecv()
 print(match (r1) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> -1
 })
 print(match (r2) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> -1
 })
 print(match (r1) {
-    Recv.Value(_) -> true
+    Recv.Value { value: _ } -> true
     _ -> false
 } && match (r2) {
-    Recv.Value(_) -> true
+    Recv.Value { value: _ } -> true
     _ -> false
 })
 ch.close()

@@ -13,6 +13,7 @@
 #include "../../base/xjson.h"
 #include "xlsp_utils.h"
 #include "xlsp_keywords.h"
+#include "xlsp_enum_fields.h"
 #include "../../base/xmalloc.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -43,6 +44,22 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx);
 
 // Add a text edit for renaming
 static void add_rename_edit(RenameContext *ctx, int line, int col, int len);
+
+typedef struct EnumFieldRenameContext {
+    XrJsonValue *edits;
+    const char *new_name;
+} EnumFieldRenameContext;
+
+static void add_enum_field_rename(const XlspEnumFieldOccurrence *occurrence, void *raw_ctx) {
+    EnumFieldRenameContext *ctx = raw_ctx;
+    XrLocation loc = occurrence->location;
+    XrJsonValue *edit = xjson_new_object();
+    xjson_object_set(edit, "range",
+                     xjson_make_range((int) loc.line - 1, (int) loc.column - 1,
+                                      (int) loc.end_line - 1, (int) loc.end_column - 1));
+    xjson_object_set(edit, "newText", xjson_new_string(ctx->new_name));
+    xjson_array_push(ctx->edits, edit);
+}
 
 // Helper: check if cursor is on this identifier (line and column match)
 // Returns true if the cursor position matches this identifier location
@@ -854,13 +871,54 @@ XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc, XrLspP
     if (!old_name)
         return NULL;
 
+    XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
+    XlspEnumFieldOccurrence enum_field;
+    if (analyzer && doc->ast &&
+        xlsp_enum_field_at(analyzer, doc->ast, doc->uri, pos, &enum_field)) {
+        XrJsonValue *result = xjson_new_object();
+        XrJsonValue *changes = xjson_new_object();
+        if (server && server->doc_table) {
+            for (int i = 0; i < server->doc_table->bucket_count; i++) {
+                for (XrLspDocBucket *bucket = server->doc_table->buckets[i]; bucket;
+                     bucket = bucket->next) {
+                    XrLspDocument *open_doc = bucket->doc;
+                    if (!open_doc || !open_doc->ast || !open_doc->uri)
+                        continue;
+                    XrJsonValue *edits = xjson_new_array();
+                    EnumFieldRenameContext rename_ctx = {
+                        .edits = edits,
+                        .new_name = new_name,
+                    };
+                    xlsp_visit_enum_field_occurrences(analyzer, open_doc->ast, open_doc->uri,
+                                                      enum_field.identity, add_enum_field_rename,
+                                                      &rename_ctx);
+                    if (xjson_array_len(edits) > 0)
+                        xjson_object_set(changes, open_doc->uri, edits);
+                    else
+                        xjson_free(edits);
+                }
+            }
+        } else {
+            XrJsonValue *edits = xjson_new_array();
+            EnumFieldRenameContext rename_ctx = {.edits = edits, .new_name = new_name};
+            xlsp_visit_enum_field_occurrences(analyzer, doc->ast, doc->uri, enum_field.identity,
+                                              add_enum_field_rename, &rename_ctx);
+            if (xjson_array_len(edits) > 0)
+                xjson_object_set(changes, doc->uri, edits);
+            else
+                xjson_free(edits);
+        }
+        xjson_object_set(result, "changes", changes);
+        xr_free(old_name);
+        return result;
+    }
+
     // Build WorkspaceEdit with changes
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *changes = xjson_new_object();
     XrJsonValue *edits = xjson_new_array();  // Always create, attach to result at end
 
     // Use XaScope from analyzer for unified scope handling
-    XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
     if (doc->ast && analyzer && analyzer->global_scope) {
         // Phase 1: Find the scope where the symbol is defined
         RenameContext ctx = {.target_name = old_name,

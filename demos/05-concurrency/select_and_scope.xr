@@ -74,7 +74,7 @@ scope {
 results.close()
 while (true) {
     match (results.recv()) {
-        Recv.Value(r) -> print("got: ${r}")
+        Recv.Value { value: r } -> print("got: ${r}")
         Recv.Closed   -> { break }
         _             -> { break }
     }

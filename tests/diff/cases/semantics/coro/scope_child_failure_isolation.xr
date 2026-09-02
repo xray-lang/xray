@@ -1,4 +1,4 @@
-enum DiffScopeErr { Msg(string) }
+enum DiffScopeErr { Msg { message: string } }
 
 fn ok(ch: Channel<i64>) -> i64 {
     ch.send(1)
@@ -7,7 +7,7 @@ fn ok(ch: Channel<i64>) -> i64 {
 
 fn fail(ch: Channel<i64>) -> i64 {
     ch.send(10)
-    throw DiffScopeErr.Msg("diff_fail")
+    throw DiffScopeErr.Msg { message: "diff_fail" }
     return 0
 }
 
@@ -15,7 +15,7 @@ fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
-            Recv.Value(v) -> { sum = sum + v }
+            Recv.Value { value: v } -> { sum = sum + v }
             _ -> {}
         }
     }

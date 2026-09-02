@@ -8,11 +8,11 @@
 // payload-aware formatter. Every stringification surface below must agree
 // byte-for-byte across backends.
 
-enum E { A(i64), B }
-enum P { Pair(i64, string), Solo }
-enum W { Wrap(E), Empty }
+enum E { A { value: i64 }, B }
+enum P { Pair { first: i64, second: string }, Solo }
+enum W { Wrap { value: E }, Empty }
 
-var e = E.A(7)
+var e = E.A { value: 7 }
 
 // The reported divergence: explicit toString() concatenated into a string.
 print("x=" + e.toString())
@@ -31,12 +31,12 @@ print(E.B.toString())
 print("b=${E.B}")
 
 // Multiple payloads: nested string payloads render quoted, matching print.
-var p = P.Pair(3, "hi")
+var p = P.Pair { first: 3, second: "hi" }
 print(p.toString())
 print("p=${p}")
 
 // Enum payload nested inside another enum renders recursively.
-var w = W.Wrap(E.A(9))
+var w = W.Wrap { value: E.A { value: 9 } }
 print(w.toString())
 print("w=${w}")
 
@@ -50,6 +50,6 @@ print(describe(p))
 
 // Payload text has no fixed-size bound: a string payload far longer than
 // any formatting scratch buffer must survive untruncated.
-var long = P.Pair(42, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+var long = P.Pair { first: 42, second: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
 print("L=" + long.toString())
 print("M=${long}")

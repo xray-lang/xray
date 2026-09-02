@@ -10,14 +10,14 @@ fn is_sent(r: SendResult) -> bool {
 
 fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }
 
 fn has_value(r: Recv<i64>) -> bool {
     return match (r) {
-        Recv.Value(_) -> true
+        Recv.Value { value: _ } -> true
         _ -> false
     }
 }

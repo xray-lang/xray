@@ -27,6 +27,7 @@
 #include "../../frontend/parser/xast_nodes.h"
 #include "xlsp_stdlib.h"
 #include "xlsp_imports.h"
+#include "xlsp_enum_fields.h"
 #include "xlsp_builtins.h"
 #include "xlsp_index_pool.h"
 #include "xlsp_symbol_index.h"
@@ -831,6 +832,28 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
 
     const char *content = doc->content;
 
+    char hover_buf[2048];
+    XlspEnumFieldOccurrence enum_field;
+    if (analyzer && doc->ast &&
+        xlsp_enum_field_at(analyzer, doc->ast, doc->uri, pos, &enum_field)) {
+        const char *type_name =
+            enum_field.field_type ? xr_type_to_string(enum_field.field_type) : "<error>";
+        snprintf(hover_buf, sizeof(hover_buf), "```xray\n%s.%s.%s: %s\n```\n\n(enum payload field)",
+                 enum_field.enum_name, enum_field.variant_name, enum_field.field_name, type_name);
+        XrJsonValue *result = xjson_new_object();
+        XrJsonValue *contents = xjson_new_object();
+        xjson_object_set(contents, "kind", xjson_new_string("markdown"));
+        xjson_object_set(contents, "value", xjson_new_string(hover_buf));
+        xjson_object_set(result, "contents", contents);
+        xjson_object_set(result, "range",
+                         xjson_make_range((int) enum_field.location.line - 1,
+                                          (int) enum_field.location.column - 1,
+                                          (int) enum_field.location.end_line - 1,
+                                          (int) enum_field.location.end_column - 1));
+        xr_free(word);
+        return result;
+    }
+
     // Check if it's a keyword (data-driven lookup)
     const char *description = lookup_doc(keyword_docs, word);
 
@@ -840,7 +863,6 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
     }
 
     // Check if it's a stdlib module
-    char hover_buf[2048];
     if (!description) {
         const XlspModuleInfo *module = xlsp_stdlib_find_module(word);
         if (module) {

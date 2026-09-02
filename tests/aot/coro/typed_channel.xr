@@ -6,7 +6,7 @@ const buffered = Channel<i64>(1)
 buffered.send(9)
 var buffered_value = buffered.recv()
 print(match (buffered_value) {
-    Recv.Value(value) -> value + 1
+    Recv.Value { value } -> value + 1
     _ -> -1
 })
 buffered.close()
@@ -16,7 +16,7 @@ var task = go send_int(rendezvous)
 var direct_value = rendezvous.recv()
 await task
 print(match (direct_value) {
-    Recv.Value(value) -> value + 1
+    Recv.Value { value } -> value + 1
     _ -> -1
 })
 rendezvous.close()

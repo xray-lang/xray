@@ -3,7 +3,7 @@
 
 fn blocked(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }
@@ -26,7 +26,7 @@ fn test_main() {
     var result = await task
     print("after:", result)
     print("again:", match (task.poll()) {
-        TaskResult.Success(v) -> v
+        TaskResult.Success { value: v } -> v
         _ -> -1
     })
     ch.close()
@@ -46,7 +46,7 @@ fn test_main() {
     var task3 = go compute(21)
     var done = task3.awaitResult()
     print("completed:", match (done) {
-        TaskResult.Success(v) -> v
+        TaskResult.Success { value: v } -> v
         _ -> -1
     })
 }

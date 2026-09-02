@@ -1,19 +1,19 @@
 // Built-in Task type (coroutine handle) — implementation in src/runtime/coro/
 
 enum TaskResult<T> {
-    Success(T)
-    Failed(Error)
-    Cancelled
-    Timeout
-    Pending
+    Success { value: T },
+    Failed { error: Error },
+    Cancelled,
+    Timeout,
+    Pending,
 }
 
 enum TaskStatus {
-    Pending
-    Running
-    Success
-    Failed
-    Cancelled
+    Pending,
+    Running,
+    Success,
+    Failed,
+    Cancelled,
 }
 class Task<T> {
     done: bool

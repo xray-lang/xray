@@ -198,11 +198,13 @@ borrowed `xr_span_t` view, its source semantic value, and the fixed
 `xrt_span_from_string_bytes` recipe. CGen has no selector-, alias-, or
 type-derived fallback; this grants no generic String method or Slice ABI.
 For an exact payload-bearing source enum constructor, schema 30 owns the
-immutable enum layout ID, discriminant, declaration/member spellings,
-namespace receiver identity, and ordered payload semantic identities. Target
-call rows authorize the constructor and tagged result; CGen only consumes the
-verified recipe and cannot infer its type, selector, arity, or representation
-from Xi. Direct-local enum arguments may bind distinct owned/borrowed physical
+immutable enum layout ID, discriminant, declaration/member spellings, ordered
+nonempty payload field names, namespace receiver identity, and declaration-
+ordered payload semantic identities. The analyzer plan is the only owner of
+the source-order-to-slot permutation. Target call rows authorize the
+constructor and tagged result; CGen only consumes the verified recipe and
+cannot infer its type, selector, arity, field order, or representation from Xi.
+Direct-local enum arguments may bind distinct owned/borrowed physical
 representation rows, but their caller and callee ABI remains exactly tagged.
 For exact `Array.withCapacity` and `Array.filled` constructors, schema 30 owns
 the constructor kind, element storage, owned dynamic result, fixed runtime
@@ -918,22 +920,22 @@ anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de0
 anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759eb00fd65b40b648f0fc7c661
 anchor-sha256: src/aot/xaot_prepare.c 645908d0b41bf63693ed07515795525c248027d92b92c47f81d3412adf442032
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
-anchor-sha256: src/aot/xaot_bundle.c 16a2e899a2c11b3c64dee5ed2fbc48d43ca967e8eba1487ffe6c9666004f55e1
-anchor-sha256: src/aot/xaot_verify.c 7d9295861d3be074ede618497268bb5d47c8f537c0c759f78adec000143cd12b
+anchor-sha256: src/aot/xaot_bundle.c ba841869547bc2d2cbc463ecab796b84213c4408a078e47b9759f6a7f6e01f69
+anchor-sha256: src/aot/xaot_verify.c d9927f5b3e5ef7f31beb45d7497844bed8724e5b924378cd1c880b27d26f36ce
 anchor-sha256: src/aot/refine/xr_aot_refinement.h 5d275c7ba1f9d1bcee80ab1f98cf0507b7ee5a148d9a39119ba2901026da1231
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 1a5e586bacddb3ff517c094e5a1a1b73fd0949b3d2d2d3977d1042f4762e23ac
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c d8f467820e4784f3d337be602692e48354b33c7bcc3ba2b692cfc0a3794959e2
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.h 4a5e0dcc2a7cb10707bfeb45d2b5437d4751664edd89854ffeb241311ef766ee
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h ff60dac943a74d84c08f125195c857431d97fffaf4e61d97d2e501a714afc38b
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c ef79278f61d49194f0f9cd3f170602f28a52bb282e8ff8e4fb3fde24fad47f16
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 48a12f44007efef7846d8cadcf784f3a4739d0e6b058a48089de1d9b7e4778e7
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 4b97fe55b1b38c7fd0106cdd2be47b9bcd811b9a669457491c54ba1ba00bb152
-anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c b7f9fd5dd8323ca5609706eabede704d97aaf8cde38a26a808688353d5fa0821
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 05c9ce4f1d63bc09a6df82451cd98636590f2a68e2d526050e1cabd6bd321629
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 160ba76cf05aa8aa6f53164665af377880a489044670bbef8f5f3655d5561938
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 650a3f6009010841b462567a86b104c00feb2112cc180905511da4f2f3040dff
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.h e95422b2cf84d1dc5e0a94e542344172e569660196da81ac2a9a79fc7d8123a4
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 8d187b7e0f3efb58d6061f13c0342b55ef0918ccafd6d8e9ec437afca8c613cd
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 512b427eda13816f7b1a19ff46f1443608ded14d46118b0d4682cee559bb498d
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 91bfe08338099bbcbe51014753e3c6e2e4bd34a157d5c875313dd169a7898397
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10e3219107cda157e37096f9f7a961e91ffbea78ea1fe
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 022a99ffcd7990f061e219356081f2f6f864a7f83b2b56c231f8a1fa16c5e6d0
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h 14b7af26f15a2c9add8ec4fa7d58a782b4bdfda1f69a18904d668627d2238562
@@ -958,14 +960,14 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5a
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c c053f25b71fb2a2df09b0519bd05e9d75a960d8b1354787b2e4fee9e612cf070
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c beb41376aa7a07437592b99ddce71c4ce21b5442c6d00042cb5a268dd0355e4e
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 706460461cfc548a14773f320bc4764f034b5446a810246ee00d9a562061f379
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 118dd87b462922f77ca6432acfab6e7c3d003012192a41f23963b7e0eb77fdfa
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ea9c4ac67c31537fc6f41326f09481e702c1592f159946d54da89eae8a5a1baf
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: src/aot/xi_cgen.c dda2d964f2575d104e57c242b0fa57e7d0b723a4c7afeafb85d01ebe6f335824
+anchor-sha256: src/aot/xi_cgen.c 9e412a31174c38b8bb90b55d3670068b6afcc47afcdff9edb5e2d8d344559607
 anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
 anchor-sha256: src/ir/xi_opt.c 416cd34f77c8efeea65f105eb4bf0ee2d82cba5a859a7e4e5983cc971aeab4e1
-anchor-sha256: src/aot/xrt_coll.h b94938ed2676895322929b84ff56185fdbda0755b62303f07add4a693c953998
-anchor-sha256: src/aot/xrt_core_freestanding.h 357372683ceeb4e51f65ea00ae40c7f22f05187ab271368562ab10e0db40e082
+anchor-sha256: src/aot/xrt_coll.h d04cd4b87bbe28e76f75fb3d68077f53976f7a3d91dcb86b307ba63f31fb41a4
+anchor-sha256: src/aot/xrt_core_freestanding.h 4b40e983bdc2219dbd3b6e2f261069ca4e6313c5e2f0e7b867dea2ce11bb374e
 anchor-sha256: src/aot/xrt_method.h 4a4b691a60a66b84e216221bb3c124e9c09edc0fb7c01db3dc8265645c2c6a55
 anchor-sha256: src/aot/xrt_time.h 952014f00082d8ca8ab66452176fd736596819c2158efa35762c332841f9fdf9
 anchor-sha256: include/xray_hosted_fragment_abi.h 7006c7c84c50e138c7837e1737de9756c153a29fc757256e593782f52f535678
@@ -973,7 +975,7 @@ anchor-sha256: src/app/cli/xcmd_build.c f872ddcab690111e76d318c8c263ced89956d532
 anchor-sha256: tests/aot/run_aot_incremental_cache.py e93b33ce73699eca5ca83c9b17f42e721f971a0f2403b5e7dd5db71ea20f2f66
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 883a5ee95f39dbf335144289a5db2b693112a5a072d96dcf85ecf4abcfd42a09
-anchor-sha256: src/ir/xi.h d05506f5f95df50cb214319064749fa72bbd80718d0731a84c10bef5bd368562
+anchor-sha256: src/ir/xi.h 751ad4dba24a0c453cca949a7ac0b63faf76726b8b5974a661590be14abac03c
 anchor-sha256: stdlib/simd/simd.xr 35c745eb6a37f37a0c7a2d2daf4d4bb953582e930929970d330a2cd3469696d9
 anchor-sha256: src/stdlib/xstdlib_vm_fastpath_amalgam.c 1e76506a0f62d91bdc6c0237d7537c19dd16a4889b937d2754b0df031cd027c2
 anchor-sha256: src/aot/xaot_coro.h 8af75d5a55537dd4302ba1fcc03de3b7739135df7e243b2816c5bb6e4398ee01

@@ -1,5 +1,5 @@
 [package]
-name = "filetest-rawptr-const-abi"
+name = "xray-tests/filetest-rawptr-const-abi"
 version = "1.0.0"
 license = "MIT"
 main = "rawptr_const_abi.xr"

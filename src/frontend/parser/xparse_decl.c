@@ -1445,6 +1445,64 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
         node = xr_ast_member_access(parser->compiler_session, object, member_name, line);
     }
     node->column = parser->previous.column;
+
+    if (!parser->parsing_pattern && xr_parser_match(parser, TK_LBRACE)) {
+        char **field_names = NULL;
+        XrNameSpan *field_name_spans = NULL;
+        AstNode **field_values = NULL;
+        int field_count = 0;
+        int field_capacity = 0;
+
+        while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+            xr_parser_consume(parser, TK_NAME, "expected field name in payload enum constructor");
+            Token field_token = parser->previous;
+            char *field_name =
+                (char *) ast_alloc(parser->compiler_session, (size_t) field_token.length + 1);
+            memcpy(field_name, field_token.start, (size_t) field_token.length);
+            field_name[field_token.length] = '\0';
+            xr_parser_consume(parser, TK_COLON,
+                              "payload enum constructors require 'field: expression'");
+            AstNode *field_value = xr_parse_expression(parser);
+
+            if (field_count >= field_capacity) {
+                int old_capacity = field_capacity;
+                field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
+                char **new_names = (char **) ast_alloc_array(
+                    parser->compiler_session, sizeof(char *), (size_t) field_capacity);
+                XrNameSpan *new_name_spans = (XrNameSpan *) ast_alloc_array(
+                    parser->compiler_session, sizeof(XrNameSpan), (size_t) field_capacity);
+                AstNode **new_values = (AstNode **) ast_alloc_array(
+                    parser->compiler_session, sizeof(AstNode *), (size_t) field_capacity);
+                if (old_capacity > 0) {
+                    memcpy(new_names, field_names, sizeof(char *) * (size_t) old_capacity);
+                    memcpy(new_name_spans, field_name_spans,
+                           sizeof(XrNameSpan) * (size_t) old_capacity);
+                    memcpy(new_values, field_values, sizeof(AstNode *) * (size_t) old_capacity);
+                }
+                field_names = new_names;
+                field_name_spans = new_name_spans;
+                field_values = new_values;
+            }
+            field_names[field_count] = field_name;
+            field_name_spans[field_count] =
+                (XrNameSpan) {.line = field_token.line, .column = field_token.column};
+            field_values[field_count] = field_value;
+            field_count++;
+
+            if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_match(parser, TK_COMMA)) {
+                xr_parser_error(parser, "expected ',' or '}' in payload enum constructor");
+                break;
+            }
+        }
+        xr_parser_consume(parser, TK_RBRACE, "expected '}' after payload enum constructor");
+        AstNode *construct =
+            xr_ast_enum_construct(parser->compiler_session, node, field_names, field_name_spans,
+                                  field_values, field_count, line);
+        construct->column = node->column;
+        construct->end_line = parser->previous.line;
+        construct->end_column = parser->previous.column + parser->previous.length;
+        return construct;
+    }
     return node;
 }
 
@@ -2029,7 +2087,7 @@ static const char *catch_pattern_enum_head_name(AstNode *pattern) {
  *   catch (e: NetErr)    { ... }
  *   catch (e: DiskErr)   { ... }
  *   catch (e)            { ... }   // catch-all
- *   catch NetErr.NotFound(path) { ... } // variant/payload pattern
+ *   catch NetErr.NotFound { path } { ... } // variant/payload pattern
  *   catch NetErr          { ... }   // typed enum catch without binding
  *   catch panic (p)      { ... }   // recoverable-fault boundary
  * There is no `finally`; use `defer` for cleanup (runs on all exits).
@@ -2074,28 +2132,44 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         }
 
         if (xr_parser_match(parser, TK_LPAREN)) {
-            if (parser->current.type != TK_NAME) {
-                xr_parser_error_expected_name(parser, "expected catch variable name");
-                return NULL;
+            XrParserStreamState saved = xr_parser_stream_save(parser);
+            bool is_binding_header = false;
+            if (xr_parser_check(parser, TK_NAME)) {
+                xr_parser_advance(parser);
+                is_binding_header =
+                    xr_parser_check(parser, TK_COLON) || xr_parser_check(parser, TK_RPAREN);
             }
+            xr_parser_stream_restore(parser, &saved);
 
-            // Save variable name and position
-            var_name =
-                (char *) ast_alloc(parser->compiler_session, (size_t) parser->current.length + 1);
-            memcpy(var_name, parser->current.start, parser->current.length);
-            var_name[parser->current.length] = '\0';
-            var_line = parser->current.line;
-            var_column = parser->current.column;
-            xr_parser_advance(parser);  // consume variable name
-
-            // Optional enum error filter annotation: catch (e: NetErr)
-            if (xr_parser_match(parser, TK_COLON)) {
-                type_ann = xr_parse_type_annotation(parser);
+            if (is_binding_header) {
+                var_name = (char *) ast_alloc(parser->compiler_session,
+                                              (size_t) parser->current.length + 1);
+                memcpy(var_name, parser->current.start, parser->current.length);
+                var_name[parser->current.length] = '\0';
+                var_line = parser->current.line;
+                var_column = parser->current.column;
+                xr_parser_advance(parser);
+                if (xr_parser_match(parser, TK_COLON))
+                    type_ann = xr_parse_type_annotation(parser);
+            } else {
+                if (is_panic) {
+                    xr_parser_error(parser, "catch panic requires a variable binding");
+                    return NULL;
+                }
+                pattern = xr_parse_match_pattern(parser);
+                if (!pattern) {
+                    xr_parser_error(parser, "expected catch pattern");
+                    return NULL;
+                }
+                var_line = pattern->line;
+                var_column = pattern->column;
+                const char *head = catch_pattern_enum_head_name(pattern);
+                if (head)
+                    type_ann = xr_tref_named(parser->compiler_session, head);
             }
-
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' after catch variable");
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' after catch header");
         } else {
-            pattern = xr_parse_match_pattern(parser);
+            pattern = xr_parse_unparenthesized_catch_pattern(parser);
             if (!pattern) {
                 xr_parser_error(parser, "expected catch pattern");
                 return NULL;

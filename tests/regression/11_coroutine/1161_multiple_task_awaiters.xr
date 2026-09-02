@@ -15,7 +15,7 @@ fn await_and_report(id: i64, task: Task<i64>, ready: Channel<i64>, out: Channel<
 
 fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }

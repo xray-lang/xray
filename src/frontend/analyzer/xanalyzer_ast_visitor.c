@@ -151,6 +151,12 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.member_access.object, v);
             break;
 
+        case AST_ENUM_CONSTRUCT:
+            visit_node(node->as.enum_construct.variant_path, v);
+            for (int i = 0; i < node->as.enum_construct.field_count; i++)
+                visit_node(node->as.enum_construct.field_values[i], v);
+            break;
+
         case AST_MEMBER_SET:
             visit_node(node->as.member_set.object, v);
             visit_node(node->as.member_set.value, v);

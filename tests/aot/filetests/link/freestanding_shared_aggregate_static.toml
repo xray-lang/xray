@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_shared_aggregate_static"
+name = "xray-tests/filetest-freestanding_shared_aggregate_static"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_shared_aggregate_static.xr"

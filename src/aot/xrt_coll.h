@@ -739,6 +739,13 @@ static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
     return XR_NULL_VAL;
 }
 
+static inline XrValue xrt_enum_variant_field_get(XrValue boxed, int64_t variant, int64_t field) {
+    XrValue tag = xrt_enum_field_get(boxed, 0);
+    if (!XR_IS_INT(tag) || tag.i != variant)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "enum variant projection tag mismatch");
+    return xrt_enum_field_get(boxed, field + 1);
+}
+
 /* Splice every element of `src_val` onto the end of `dst_val` (array spread
  * `[...a]`).  Borrowed source: each copied element is retained because the
  * source array keeps its own references.  Typed primitive arrays bulk-copy

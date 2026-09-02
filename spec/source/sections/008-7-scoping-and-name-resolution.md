@@ -165,7 +165,7 @@ var t3 = go fn(b: Array<u8>) -> i64 {
 const ch = Channel<i64>(10)
 var t4 = go fn(c: Channel<i64>) -> i64 {
     return match (c.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> 0
     }
 }(ch)
@@ -357,7 +357,7 @@ var t3 = go fn(b: Array<u8>) -> i64 {
 const ch = Channel<i64>(10)
 var t4 = go fn(c: Channel<i64>) -> i64 {
     return match (c.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> 0
     }
 }(ch)

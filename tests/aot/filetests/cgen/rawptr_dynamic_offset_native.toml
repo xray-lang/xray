@@ -1,5 +1,5 @@
 [package]
-name = "filetest-rawptr-dynamic-offset-native"
+name = "xray-tests/filetest-rawptr-dynamic-offset-native"
 version = "1.0.0"
 license = "MIT"
 main = "rawptr_dynamic_offset_native.xr"

@@ -84,6 +84,9 @@ PROJECTION_KINDS = {
     "sealed-direct-call": "XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL",
     "aggregate-construct": "XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT",
     "aggregate-project": "XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT",
+    "variant-construct": "XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT",
+    "variant-test": "XR_PROGRAM_XI_PROJECTION_VARIANT_TEST",
+    "variant-project": "XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT",
 }
 CORE_TYPE_NAMES = {
     "any": "XR_PROGRAM_XI_ANY_RESULT_TYPE",
@@ -298,6 +301,9 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL = 4,",
         "    XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT = 5,",
         "    XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT = 6,",
+        "    XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT = 7,",
+        "    XR_PROGRAM_XI_PROJECTION_VARIANT_TEST = 8,",
+        "    XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT = 9,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef struct XrProgramXiProjection {",

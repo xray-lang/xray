@@ -6,7 +6,7 @@ enum SpectrumMark {
 
 enum PacketShape {
     EmptyToken,
-    DataToken(code: i64)
+    DataToken { code: i64 }
 }
 
 fn firstVariant() -> EnumVariant<SpectrumMark> {

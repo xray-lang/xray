@@ -1,7 +1,7 @@
 import sys
 
 enum ThreadLintErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 fn closeOnlyInTry() {

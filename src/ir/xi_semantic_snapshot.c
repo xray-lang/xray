@@ -249,6 +249,8 @@ static XrEnumLayout *snapshot_enum_layout(XiSemanticSnapshot *snapshot,
         dst_variant->payload_type_ids = NULL;
         if (src_variant->name && !dst_variant->name)
             return NULL;
+        if (!xr_enum_variant_payload_metadata_is_exact(src_variant))
+            return NULL;
         if (src_variant->payload_count == 0)
             continue;
         dst_variant->payload_names = (const char **) snapshot_alloc(
@@ -258,13 +260,11 @@ static XrEnumLayout *snapshot_enum_layout(XiSemanticSnapshot *snapshot,
         if (!dst_variant->payload_names || !dst_variant->payload_type_ids)
             return NULL;
         for (uint16_t p = 0; p < src_variant->payload_count; p++) {
-            const char *payload_name =
-                src_variant->payload_names ? src_variant->payload_names[p] : NULL;
+            const char *payload_name = src_variant->payload_names[p];
             dst_variant->payload_names[p] = snapshot_strdup(snapshot, payload_name);
-            if (payload_name && !dst_variant->payload_names[p])
+            if (!dst_variant->payload_names[p])
                 return NULL;
-            dst_variant->payload_type_ids[p] =
-                src_variant->payload_type_ids ? src_variant->payload_type_ids[p] : 0;
+            dst_variant->payload_type_ids[p] = src_variant->payload_type_ids[p];
         }
     }
     return copy;
@@ -562,16 +562,26 @@ static bool snapshot_enum_data(XiSemanticSnapshot *snapshot, XiEnumData *data) {
         snapshot->failed = true;
         return false;
     }
-    if (data->member_count > 0 && !data->members)
+    if (!data->name || !data->name[0] || (data->member_count > 0 && !data->members))
         return false;
     for (uint32_t i = 0; i < data->member_count; i++) {
         XiEnumMemberData *member = &data->members[i];
-        if (member->payload_count < 0 || (member->payload_count > 0 && !member->payload_types))
+        if (!member->name || !member->name[0] || member->ordinal != i ||
+            member->payload_count < 0 || member->payload_count > UINT16_MAX ||
+            !xr_enum_payload_names_are_exact(member->payload_names,
+                                             (uint16_t) member->payload_count) ||
+            (member->payload_count > 0 && !member->payload_types))
             return false;
+        for (uint32_t prior = 0; prior < i; prior++) {
+            if (strcmp(member->name, data->members[prior].name) == 0)
+                return false;
+        }
         for (int p = 0; p < member->payload_count; p++) {
             XrType *source = member->payload_types[p];
+            if (!source)
+                return false;
             member->payload_types[p] = snapshot_type(snapshot, source);
-            if (source && !member->payload_types[p])
+            if (!member->payload_types[p])
                 return false;
         }
     }

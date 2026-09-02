@@ -4672,6 +4672,35 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Task 285 is a clean source cut: record payloads, dedicated constructors,
+    # and named patterns are the only enum surface. The token-level gate uses
+    # exact enum/module identity so ordinary methods are not false positives.
+    add_test(
+        NAME enum_record_surface_residue
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_enum_record_surface_residue.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(enum_record_surface_residue PROPERTIES
+        LABELS "meta;surface;enum-record;task-285"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME enum_record_surface_residue_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_enum_record_surface_residue.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(enum_record_surface_residue_self_test PROPERTIES
+        LABELS "meta;surface;enum-record;task-285"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
     # Built-in symbol registry. stdlib/prelude/builtin_symbols.def is the single
     # source of truth for every name available without an import; this gate keeps
     # the generated specification registry, the specification's normative prose,

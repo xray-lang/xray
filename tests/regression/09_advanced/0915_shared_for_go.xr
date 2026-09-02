@@ -45,7 +45,7 @@ fn test_shared_channel_for_go() {
     var sum = 0
     for (i in 0..3) {
         sum = sum + match (ch.recv()) {
-            Recv.Value(v) -> v
+            Recv.Value { value: v } -> v
             _ -> 0
         }
     }

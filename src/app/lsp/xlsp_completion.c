@@ -25,10 +25,12 @@
 #include "../../frontend/analyzer/xanalyzer_builtins.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/parser/xast_types.h"
+#include "../../frontend/parser/xtype_ref.h"
 #include "../../frontend/parser/xattribute_registry.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 
 // lsp_log declared in xlsp_server.h (included via xlsp_completion.h)
@@ -623,13 +625,109 @@ static XrJsonValue *complete_import_namespace(XrLspDocument *doc, const char *pr
 }
 
 // Enum declaration: prefix IS the enum name (e.g. "Color.").
-static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
+static bool enum_completion_is_pattern_context(XrLspDocument *doc, XrLspPosition pos) {
+    if (!doc || !doc->content)
+        return false;
+    uint32_t offset = xlsp_position_to_offset(doc, pos);
+    if (offset > doc->length)
+        return false;
+    uint32_t line_start = offset;
+    while (line_start > 0 && doc->content[line_start - 1] != '\n')
+        line_start--;
+    for (uint32_t i = line_start; i + 1 < offset; i++) {
+        if (doc->content[i] == '-' && doc->content[i + 1] == '>')
+            return false;
+    }
+
+    const char *cursor = doc->content + offset;
+    const char *match = cursor;
+    while (match > doc->content) {
+        match--;
+        if ((size_t) (cursor - match) >= 5 && strncmp(match, "match", 5) == 0) {
+            char before = match == doc->content ? '\0' : match[-1];
+            char after = match[5];
+            bool before_ident = (before >= 'a' && before <= 'z') ||
+                                (before >= 'A' && before <= 'Z') ||
+                                (before >= '0' && before <= '9') || before == '_';
+            bool after_ident = (after >= 'a' && after <= 'z') || (after >= 'A' && after <= 'Z') ||
+                               (after >= '0' && after <= '9') || after == '_';
+            if (!before_ident && !after_ident)
+                break;
+        }
+    }
+    if (match == doc->content && strncmp(match, "match", 5) != 0)
+        return false;
+
+    int brace_depth = 0;
+    for (const char *scan = match + 5; scan < cursor; scan++) {
+        if (*scan == '{')
+            brace_depth++;
+        else if (*scan == '}' && brace_depth > 0)
+            brace_depth--;
+    }
+    return brace_depth > 0;
+}
+
+static void completion_buffer_append(char *buffer, size_t capacity, size_t *length,
+                                     const char *format, ...) {
+    if (!buffer || capacity == 0 || !length || *length >= capacity - 1)
+        return;
+    va_list args;
+    va_start(args, format);
+    int written = vsnprintf(buffer + *length, capacity - *length, format, args);
+    va_end(args);
+    if (written < 0)
+        return;
+    size_t available = capacity - *length;
+    *length += (size_t) written >= available ? available - 1 : (size_t) written;
+}
+
+static void set_enum_payload_completion(XrJsonValue *item, const EnumMemberNode *member,
+                                        bool pattern_context) {
+    if (!item || !member || member->payload_count <= 0 || !member->name || !member->payload_names)
+        return;
+
+    char insertion[1024];
+    char detail[1024];
+    size_t insert_len = 0;
+    size_t detail_len = 0;
+    insertion[0] = '\0';
+    detail[0] = '\0';
+    completion_buffer_append(insertion, sizeof(insertion), &insert_len, "%s { ", member->name);
+    completion_buffer_append(detail, sizeof(detail), &detail_len, "%s { ", member->name);
+    for (int i = 0; i < member->payload_count; i++) {
+        if (i > 0) {
+            completion_buffer_append(insertion, sizeof(insertion), &insert_len, ", ");
+            completion_buffer_append(detail, sizeof(detail), &detail_len, ", ");
+        }
+        const char *field_name = member->payload_names[i];
+        if (pattern_context) {
+            completion_buffer_append(insertion, sizeof(insertion), &insert_len, "%s", field_name);
+        } else {
+            completion_buffer_append(insertion, sizeof(insertion), &insert_len, "%s: ${%d}",
+                                     field_name, i + 1);
+        }
+        char type_name[160];
+        xr_tref_to_string_buf(member->payload_types[i], type_name, (int) sizeof(type_name));
+        completion_buffer_append(detail, sizeof(detail), &detail_len, "%s: %s", field_name,
+                                 type_name);
+    }
+    completion_buffer_append(insertion, sizeof(insertion), &insert_len, " }");
+    completion_buffer_append(detail, sizeof(detail), &detail_len, " }");
+    xjson_object_set(item, "insertText", xjson_new_string(insertion));
+    if (!pattern_context)
+        xjson_object_set(item, "insertTextFormat", xjson_new_number(2));
+    xjson_object_set(item, "detail", xjson_new_string(detail));
+}
+
+static XrJsonValue *complete_enum_decl(XrLspDocument *doc, XrLspPosition pos, const char *prefix) {
     if (!doc->ast)
         return NULL;
     AstNode *enum_node = find_enum_in_ast(doc->ast, prefix);
     if (!enum_node)
         return NULL;
     XrJsonValue *items = xjson_new_array();
+    bool pattern_context = enum_completion_is_pattern_context(doc, pos);
     char detail_buf[256];
     snprintf(detail_buf, sizeof(detail_buf), "%s.variants: EnumVariants<%s>", prefix, prefix);
     XrJsonValue *variants = make_completion_item("variants", XR_COMPLETION_PROPERTY, detail_buf);
@@ -641,6 +739,7 @@ static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
             snprintf(detail_buf, sizeof(detail_buf), "%s.%s", prefix, member->as.enum_member.name);
             XrJsonValue *item = make_completion_item(member->as.enum_member.name,
                                                      XR_COMPLETION_ENUM_MEMBER, detail_buf);
+            set_enum_payload_completion(item, &member->as.enum_member, pattern_context);
             xjson_object_set(item, "sortText", xjson_new_string("0"));
             xjson_array_push(items, item);
         }
@@ -1182,7 +1281,7 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
         return r;
     if ((r = complete_import_namespace(doc, prefix)))
         return r;
-    if ((r = complete_enum_decl(doc, prefix)))
+    if ((r = complete_enum_decl(doc, pos, prefix)))
         return r;
 
     // Class-instance path via text scan for `var`/`const`/`shared` bindings.

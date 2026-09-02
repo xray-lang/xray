@@ -1,6 +1,6 @@
 fn wait_for_value(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(value) -> value
+        Recv.Value { value } -> value
         _ -> -1
     }
 }

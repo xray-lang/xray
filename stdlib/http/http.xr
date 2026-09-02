@@ -1239,14 +1239,14 @@ fn _headerValueValid(value: string) -> bool {
 }
 
 export enum HttpError {
-    InvalidHeaderName(string),
-    InvalidHeaderValue(string),
-    InvalidMethod(string),
-    InvalidUrl(string),
-    ConnectionFailed(string),
-    ProtocolError(string),
+    InvalidHeaderName { name: string },
+    InvalidHeaderValue { value: string },
+    InvalidMethod { method: string },
+    InvalidUrl { url: string },
+    ConnectionFailed { target: string },
+    ProtocolError { reason: string },
     WriteFailed,
-    UnsupportedVersion(HttpVersion)
+    UnsupportedVersion { version: HttpVersion }
 }
 
 // HttpVersion selects the HTTP wire protocol used by the typed client.
@@ -1263,7 +1263,7 @@ export class HttpMethod {
 
     constructor(token: string) {
         var parsed = _requestMethod(token)
-        if (parsed == null) { throw HttpError.InvalidMethod(token) }
+        if (parsed == null) { throw HttpError.InvalidMethod { method: token } }
         this.token = parsed!
     }
 
@@ -1301,15 +1301,15 @@ export class Headers {
     }
 
     add(name: string, value: string) {
-        if (!_headerNameValid(name)) { throw HttpError.InvalidHeaderName(name) }
-        if (!_headerValueValid(value)) { throw HttpError.InvalidHeaderValue(value) }
+        if (!_headerNameValid(name)) { throw HttpError.InvalidHeaderName { name: name } }
+        if (!_headerValueValid(value)) { throw HttpError.InvalidHeaderValue { value: value } }
         this.names.push(name)
         this.values.push(value)
     }
 
     set(name: string, value: string) {
-        if (!_headerNameValid(name)) { throw HttpError.InvalidHeaderName(name) }
-        if (!_headerValueValid(value)) { throw HttpError.InvalidHeaderValue(value) }
+        if (!_headerNameValid(name)) { throw HttpError.InvalidHeaderName { name: name } }
+        if (!_headerValueValid(value)) { throw HttpError.InvalidHeaderValue { value: value } }
         var nextNames: Array<string> = []
         var nextValues: Array<string> = []
         var replaced = false
@@ -2108,7 +2108,7 @@ fn _dialHttpConn(url: _HttpRequestUrl, timeoutMs: i64) -> NetConn? {
 fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, body: Array<u8>,
                   timeoutMs: i64, stripSensitive: bool) -> HttpResponse {
     var conn = _dialHttpConn(url, timeoutMs)
-    if (conn == null) { throw HttpError.ConnectionFailed(_httpRequestUrlText(url)) }
+    if (conn == null) { throw HttpError.ConnectionFailed { target: _httpRequestUrlText(url) } }
 
     var deadline = time.monotonic() + timeoutMs
     net.setDeadline(conn!, deadline)
@@ -2125,7 +2125,7 @@ fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, bo
     )
     if (requestHead == null) {
         net.close(conn!)
-        throw HttpError.ProtocolError("invalid request head")
+        throw HttpError.ProtocolError { reason: "invalid request head" }
     }
 
     var headBytes = requestHead!.copyBytes()
@@ -2140,7 +2140,7 @@ fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, bo
 
     var msg = _readHttpResponse(conn!, method.token)
     net.close(conn!)
-    if (msg == null) { throw HttpError.ProtocolError("invalid response") }
+    if (msg == null) { throw HttpError.ProtocolError { reason: "invalid response" } }
     return HttpResponse(
         HttpVersion.Http1,
         msg!.head.status,
@@ -2153,9 +2153,9 @@ fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, bo
 fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Headers,
                        body: Array<u8>, timeoutMs: i64,
                        stripSensitive: bool) -> HttpResponse {
-    if (!http2.supported()) { throw HttpError.UnsupportedVersion(HttpVersion.Http2) }
+    if (!http2.supported()) { throw HttpError.UnsupportedVersion { version: HttpVersion.Http2 } }
     if (!url.isHttps) {
-        throw HttpError.ProtocolError("HTTP/2 requires HTTPS")
+        throw HttpError.ProtocolError { reason: "HTTP/2 requires HTTPS" }
     }
 
     var wireHeaders = _requestWireHeaders(headers, stripSensitive)
@@ -2199,18 +2199,18 @@ fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Header
 // because every refusal http2 makes carries one of these five names.
 fn _http2ToHttpError(e: Http2Error) -> HttpError {
     match (e) {
-        Http2Error.ProtocolError(reason) -> { return HttpError.ProtocolError(reason) }
-        Http2Error.FramingError(reason) -> { return HttpError.ProtocolError(reason) }
-        Http2Error.CompressionError(reason) -> { return HttpError.ProtocolError(reason) }
-        Http2Error.ConnectionFailed(target) -> { return HttpError.ConnectionFailed(target) }
-        Http2Error.TlsUnavailable -> { return HttpError.UnsupportedVersion(HttpVersion.Http2) }
+        Http2Error.ProtocolError { reason } -> { return HttpError.ProtocolError { reason: reason } }
+        Http2Error.FramingError { reason } -> { return HttpError.ProtocolError { reason: reason } }
+        Http2Error.CompressionError { reason } -> { return HttpError.ProtocolError { reason: reason } }
+        Http2Error.ConnectionFailed { target } -> { return HttpError.ConnectionFailed { target: target } }
+        Http2Error.TlsUnavailable -> { return HttpError.UnsupportedVersion { version: HttpVersion.Http2 } }
     }
 }
 
 
 export fn request(options: HttpRequestOptions) -> HttpResponse {
     var current = _parseHttpRequestUrl(options.url)
-    if (current == null) { throw HttpError.InvalidUrl(options.url) }
+    if (current == null) { throw HttpError.InvalidUrl { url: options.url } }
 
     var method = options.method ?? HttpMethod.get()
     var version = options.version ?? HttpVersion.Auto
@@ -2237,7 +2237,7 @@ export fn request(options: HttpRequestOptions) -> HttpResponse {
         if (next == null) { return response }
 
         var nextUrl = _parseHttpRequestUrl(next!.url)
-        if (nextUrl == null) { throw HttpError.InvalidUrl(next!.url) }
+        if (nextUrl == null) { throw HttpError.InvalidUrl { url: next!.url } }
 
         current = nextUrl
         method = HttpMethod(next!.method)
@@ -2245,7 +2245,7 @@ export fn request(options: HttpRequestOptions) -> HttpResponse {
         if (next!.dropBody) { body = Array<u8>(0) }
         redirects = redirects + 1
     }
-    throw HttpError.InvalidUrl(options.url)
+    throw HttpError.InvalidUrl { url: options.url }
 }
 
 // get performs a GET request for the given URL and returns the response.

@@ -1,12 +1,12 @@
 enum AppErr {
-    Bad(code: i64)
+    Bad { code: i64 }
 }
 
 fn worker() -> i64 {
     var result = 0
     try {
         Coro.yield()
-        throw AppErr.Bad(7)
+        throw AppErr.Bad { code: 7 }
     } catch (e) {
         result = 42
     }

@@ -8,7 +8,7 @@ fn linked_value() -> i64 {
     return 41
 }
 
-enum ScopeAotErr { Msg(string) }
+enum ScopeAotErr { Msg { message: string } }
 
 fn sibling_ok(ch: Channel<i64>) -> i64 {
     ch.send(1)
@@ -17,7 +17,7 @@ fn sibling_ok(ch: Channel<i64>) -> i64 {
 
 fn sibling_fail(ch: Channel<i64>) -> i64 {
     ch.send(10)
-    throw ScopeAotErr.Msg("aot_fail")
+    throw ScopeAotErr.Msg { message: "aot_fail" }
     return 0
 }
 
@@ -25,7 +25,7 @@ fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
-            Recv.Value(v) -> {
+            Recv.Value { value: v } -> {
                 sum = sum + v
             }
             _ -> {}
@@ -43,8 +43,8 @@ scope {
 var a = ch.recv()
 var b = ch.recv()
 print(match (a) {
-    Recv.Value(av) -> match (b) {
-        Recv.Value(bv) -> av + bv
+    Recv.Value { value: av } -> match (b) {
+        Recv.Value { value: bv } -> av + bv
         _ -> -1
     }
     _ -> -1

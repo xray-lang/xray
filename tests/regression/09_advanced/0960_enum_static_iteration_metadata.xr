@@ -10,18 +10,18 @@ enum Color {
 
 enum WireEvent {
     Ready,
-    Data(bytes: string, code: i64),
-    Error(message: string)
+    Data { bytes: string, code: i64 },
+    Error { message: string }
 }
 
 enum GenericResult<T> {
-    Ok(value: T),
-    Error(message: string),
+    Ok { value: T },
+    Error { message: string },
     Empty
 }
 
-enum PositionalPayload {
-    Pair(i64, i64)
+enum NamedPayload {
+    Pair { left: i64, right: i64 }
 }
 
 type PaletteColor = Color
@@ -127,10 +127,10 @@ fn test_concrete_generic_enum_variant_descriptors() {
 }
 
 @test
-fn test_positional_payload_descriptor_names_are_empty() {
-    assertEqual(PositionalPayload.variants[0].payloads.length, 2)
-    assertEqual(PositionalPayload.variants[0].payloads[0].name, "")
-    assertEqual(PositionalPayload.variants[0].payloads[1].name, "")
+fn test_named_payload_descriptor_names_are_exact() {
+    assertEqual(NamedPayload.variants[0].payloads.length, 2)
+    assertEqual(NamedPayload.variants[0].payloads[0].name, "left")
+    assertEqual(NamedPayload.variants[0].payloads[1].name, "right")
 }
 
 @test

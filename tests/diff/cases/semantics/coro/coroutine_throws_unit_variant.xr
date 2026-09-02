@@ -8,19 +8,19 @@ fn body() -> i64 {
 }
 
 fn payload_body() -> i64 {
-    throw E2.Code(7)
+    throw E2.Code { code: 7 }
 }
 
-enum E2 { Code(i64) }
+enum E2 { Code { code: i64 } }
 
 var a = go body()
 match (a.awaitResult()) {
-    TaskResult.Failed(e) -> print("failed: unit variant")
+    TaskResult.Failed { error: e } -> print("failed: unit variant")
     _ -> print("other")
 }
 
 var b = go payload_body()
 match (b.awaitResult()) {
-    TaskResult.Failed(e) -> print("failed: payload variant")
+    TaskResult.Failed { error: e } -> print("failed: payload variant")
     _ -> print("other")
 }

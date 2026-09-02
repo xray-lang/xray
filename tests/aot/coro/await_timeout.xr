@@ -1,6 +1,6 @@
 fn wait_for_value(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(value) -> value
+        Recv.Value { value } -> value
         _ -> -1
     }
 }
@@ -22,6 +22,6 @@ ch.close()
 var quick = go quick_value(21)
 var value = quick.awaitTimeout(1000)
 print(match (value) {
-    TaskResult.Success(v) -> v
+    TaskResult.Success { value: v } -> v
     _ -> -1
 })

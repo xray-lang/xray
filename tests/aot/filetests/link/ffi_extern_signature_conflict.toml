@@ -1,5 +1,5 @@
 [package]
-name = "filetest-ffi-extern-signature-conflict"
+name = "xray-tests/filetest-ffi-extern-signature-conflict"
 version = "1.0.0"
 license = "MIT"
 main = "ffi_extern_signature_conflict.xr"

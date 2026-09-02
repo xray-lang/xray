@@ -25,7 +25,7 @@ fn test_error_isolation() {
     var result1 = task1.awaitResult()
     print("  done:", task1.done)
     print("  failed:", match (result1) {
-        TaskResult.Failed(_) -> true
+        TaskResult.Failed { error: _ } -> true
         _ -> false
     })
 

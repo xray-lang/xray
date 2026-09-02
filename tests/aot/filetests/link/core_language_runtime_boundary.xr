@@ -1,5 +1,5 @@
 enum LangErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 var xs = [1, 2, 3]
@@ -7,7 +7,7 @@ var ys = copy(xs)
 print(len(ys))
 
 try {
-    throw LangErr.Msg("boom")
+    throw LangErr.Msg { s: "boom" }
 } catch (e) {
     print(typeName(ys))
 }

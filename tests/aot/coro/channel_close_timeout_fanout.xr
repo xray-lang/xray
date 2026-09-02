@@ -31,7 +31,7 @@ ch.close()
 var closed_waiters = 0
 for (var i = 0; i < waiter_count; i++) {
     if (match (done.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> false
     }) {
         closed_waiters++

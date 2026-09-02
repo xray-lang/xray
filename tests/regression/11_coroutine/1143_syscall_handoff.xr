@@ -8,11 +8,11 @@
 
 import time
 
-enum HandoffErr { Failed(string) }
+enum HandoffErr { Failed { message: string } }
 
 fn recv_string(ch: Channel<string>) -> string {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> ""
     }
 }
@@ -62,6 +62,6 @@ fn test_syscall_handoff() {
     if (fast_done == FAST_COUNT && slow_done) {
         print("handoff test passed")
     } else {
-        throw HandoffErr.Failed("handoff test failed")
+        throw HandoffErr.Failed { message: "handoff test failed" }
     }
 }

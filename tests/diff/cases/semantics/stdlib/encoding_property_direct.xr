@@ -47,8 +47,8 @@ fn hexErrorCode(text: string) -> i64 {
         return -1 - len(decoded)
     } catch (e: HexError) {
         return match (e) {
-            HexError.OddLength(length) -> 1000 + length,
-            HexError.InvalidDigit(offset, value) -> 2000 + offset
+            HexError.OddLength { length } -> 1000 + length,
+            HexError.InvalidDigit { byteOffset: offset, value } -> 2000 + offset
         }
     }
 }
@@ -59,10 +59,10 @@ fn utf16ErrorCode(data: Slice<u8>) -> i64 {
         return -1 - len(decoded)
     } catch (e: Utf16Error) {
         return match (e) {
-            Utf16Error.OddByteLength(length) -> 1000 + length,
-            Utf16Error.UnexpectedLowSurrogate(offset, value) -> 2000 + offset,
-            Utf16Error.MissingLowSurrogate(offset, value) -> 3000 + offset,
-            Utf16Error.InvalidLowSurrogate(offset, value) -> 4000 + offset
+            Utf16Error.OddByteLength { length } -> 1000 + length,
+            Utf16Error.UnexpectedLowSurrogate { byteOffset: offset, value } -> 2000 + offset,
+            Utf16Error.MissingLowSurrogate { byteOffset: offset, value } -> 3000 + offset,
+            Utf16Error.InvalidLowSurrogate { byteOffset: offset, value } -> 4000 + offset
         }
     }
 }

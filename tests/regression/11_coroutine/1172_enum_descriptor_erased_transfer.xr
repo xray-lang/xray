@@ -5,14 +5,14 @@ enum TransferHue {
 
 enum TransferState {
     Idle,
-    Busy(i64)
+    Busy { value: i64 }
 }
 
 type TransferVariant = EnumVariant<TransferHue> | EnumVariant<TransferState>
 
 fn recv_variant(ch: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState>>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(value) -> {
+        Recv.Value { value } -> {
             if (value is EnumVariant<TransferHue>) {
                 return value.ordinal
             }

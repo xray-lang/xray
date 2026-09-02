@@ -1,6 +1,6 @@
 // anchor: array-class-throw-cleanup-lifetime
 enum ParseError {
-    Invalid(i64)
+    Invalid { code: i64 }
 }
 
 class ParsedType {
@@ -12,7 +12,7 @@ class ParsedType {
 }
 
 fn parseFunctionType() -> ParsedType {
-    throw ParseError.Invalid(42)
+    throw ParseError.Invalid { code: 42 }
 }
 
 fn parseTypeSection(types: ref Array<ParsedType>) {
@@ -32,7 +32,7 @@ fn parseOwned() -> Array<ParsedType> {
 var caught = false
 try {
     parseOwned()
-} catch ParseError.Invalid(code) {
+} catch ParseError.Invalid { code } {
     caught = code == 42
 }
 

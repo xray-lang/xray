@@ -13,7 +13,7 @@ fn test_go_with_await_result() {
     var result = t.awaitResult()
     assert(t.done, "awaitResult should complete the task")
     match (result) {
-        TaskResult.Success(value) -> assert(value == 42, "awaitResult should carry the task value")
+        TaskResult.Success { value } -> assert(value == 42, "awaitResult should carry the task value")
         _ -> assert(false, "awaitResult should return Success")
     }
 }

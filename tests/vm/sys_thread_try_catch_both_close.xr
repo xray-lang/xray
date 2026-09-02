@@ -1,7 +1,7 @@
 import sys
 
 enum ThreadLintErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 fn closeInTryOrCatch(throwNow: bool) {
@@ -10,7 +10,7 @@ fn closeInTryOrCatch(throwNow: bool) {
     })
     try {
         if (throwNow) {
-            throw ThreadLintErr.Msg("boom")
+            throw ThreadLintErr.Msg { s: "boom" }
         }
         print(t.join())
     } catch (e) {

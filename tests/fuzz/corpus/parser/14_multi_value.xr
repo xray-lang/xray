@@ -23,7 +23,7 @@ let (val, _) = getTwoValues()
 const ch = new Channel(1)
 ch.send(42)
 match (ch.tryRecv()) {
-    Recv.Value(value) -> {
+    Recv.Value { value } -> {
         print(value)
     }
     _ -> {}

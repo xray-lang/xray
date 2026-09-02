@@ -246,6 +246,10 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
         case AST_MEMBER_ACCESS:
             emit(w, n->as.member_access.object);
             return true;
+        case AST_ENUM_CONSTRUCT:
+            emit(w, n->as.enum_construct.variant_path);
+            emit_array(w, n->as.enum_construct.field_values, n->as.enum_construct.field_count);
+            return true;
         case AST_MEMBER_SET:
             emit(w, n->as.member_set.object);
             emit(w, n->as.member_set.value);
@@ -766,6 +770,13 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
         case AST_MEMBER_ACCESS:
             sig_name(s, "name", n->as.member_access.name);
             return true;
+        case AST_ENUM_CONSTRUCT:
+            sig_add(s, " fields=%d", n->as.enum_construct.field_count);
+            for (int i = 0; i < n->as.enum_construct.field_count; i++)
+                sig_name(s, "f",
+                         n->as.enum_construct.field_names ? n->as.enum_construct.field_names[i]
+                                                          : NULL);
+            return true;
         case AST_MEMBER_SET:
             sig_name(s, "member", n->as.member_set.member);
             return true;
@@ -846,13 +857,14 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_name(s, "name", n->as.method_decl.name);
             sig_add(s,
                     " ctor=%d static=%d priv=%d prot=%d get=%d set=%d sctor=%d var=%d op=%d/%u"
-                    " req=%d",
+                    " req=%d recv=%u",
                     n->as.method_decl.is_constructor ? 1 : 0, n->as.method_decl.is_static ? 1 : 0,
                     n->as.method_decl.is_private ? 1 : 0, n->as.method_decl.is_protected ? 1 : 0,
                     n->as.method_decl.is_getter ? 1 : 0, n->as.method_decl.is_setter ? 1 : 0,
                     n->as.method_decl.is_static_constructor ? 1 : 0,
                     n->as.method_decl.is_variadic ? 1 : 0, n->as.method_decl.is_operator ? 1 : 0,
-                    (unsigned) n->as.method_decl.op_type, n->as.method_decl.required_count);
+                    (unsigned) n->as.method_decl.op_type, n->as.method_decl.required_count,
+                    (unsigned) n->as.method_decl.receiver_mode);
             sig_params(s, n->as.method_decl.params, n->as.method_decl.param_count);
             sig_generic_params(s, n->as.method_decl.type_params,
                                n->as.method_decl.type_param_count);
@@ -964,6 +976,9 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             return true;
         case AST_PATTERN_ADT:
             sig_add(s, " n=%d", n->as.pattern_adt.count);
+            for (int i = 0; i < n->as.pattern_adt.count; i++)
+                sig_name(s, "f",
+                         n->as.pattern_adt.field_names ? n->as.pattern_adt.field_names[i] : NULL);
             return true;
         case AST_PATTERN_TYPE:
             sig_name(s, "bind", n->as.pattern_type.binding_name);

@@ -965,8 +965,7 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
             return report(error, error_size, "XR_SEM_0002", "builtin type identity is not exact");
         if (type->kind >= XR_KIND_COUNT)
             return report(error, error_size, "XR_SEM_0005", "plan contains an invalid type kind");
-        if (type->kind == XR_KIND_STRUCT_OBJECT &&
-            (type->flags & XR_SEM_TYPE_VALUE) == 0)
+        if (type->kind == XR_KIND_STRUCT_OBJECT && (type->flags & XR_SEM_TYPE_VALUE) == 0)
             return report(error, error_size, "XR_SEM_0012",
                           "struct object lacks value-aggregate identity");
         if ((type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0 &&
@@ -2682,6 +2681,13 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             if (!xr_semantic_operation_assertion_plan(operation, &assertion_plan))
                 return report(error, error_size, "XR_SEM_0019",
                               "assertion operation lacks an exact typed plan");
+        }
+        if (operation->opcode == XI_VARIANT_CONSTRUCT &&
+            !xr_semantic_variant_construct_is_exact(plan, operation, NULL)) {
+            if (getenv("XRAY_XI_SEMANTIC_DUMP"))
+                (void) xr_semantic_plan_dump(plan, stderr);
+            return report(error, error_size, "XR_SEM_0019",
+                          "variant constructor does not match its frozen enum declaration");
         }
         if (!verify_string_byte_slice_view(plan, operation, error, error_size))
             return false;

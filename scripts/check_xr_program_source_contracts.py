@@ -146,12 +146,12 @@ def validate(root: Path) -> None:
     wave_two_complete = {
         "core.aggregate.construct",
         "core.aggregate.project",
-    }
-    wave_two_in_progress = {
-        "core.aggregate.update",
         "core.variant.construct",
         "core.variant.test",
         "core.variant.project",
+    }
+    wave_two_in_progress = {
+        "core.aggregate.update",
     }
     frozen = {
         "core.trap",
@@ -198,6 +198,8 @@ def self_test(root: Path) -> None:
             "xisa/program/xi-source-projection.json",
             "src/program/xr_program_xi_projection_gen.h",
             "src/program/xr_program_xi_projection_gen.c",
+            "src/frontend/analyzer/xa_enum_record_plan.c",
+            "src/ir/xi_lower_misc.c",
             "src/vm/xr_program_vm.c",
             "contracts/canonical-program/operation-capability-matrix.json",
         ):

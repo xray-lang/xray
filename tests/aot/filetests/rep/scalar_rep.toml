@@ -1,5 +1,5 @@
 [package]
-name = "filetest-scalar-rep"
+name = "xray-tests/filetest-scalar-rep"
 version = "1.0.0"
 license = "MIT"
 main = "scalar_rep.xr"

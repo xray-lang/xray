@@ -1209,6 +1209,7 @@ static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, 
     parser->bracket_depth = 0;
     parser->match_arm_body_depth = 0;
     parser->expr_value_observed = false;
+    parser->parsing_pattern = false;
 }
 
 // Allocate and install a new arena on a toolchain compiler session.

@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_top_var_aggregate_attrs"
+name = "xray-tests/filetest-freestanding_top_var_aggregate_attrs"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_top_var_aggregate_attrs.xr"

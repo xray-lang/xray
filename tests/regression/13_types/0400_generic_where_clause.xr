@@ -31,7 +31,7 @@ interface Seq<T> where T: Comparable {
 }
 
 enum Wrap<T> where T: Comparable {
-    One(T)
+    One { value: T }
 }
 
 @test

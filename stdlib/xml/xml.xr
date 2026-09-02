@@ -39,12 +39,12 @@ export class XmlAttribute {
 }
 
 export enum XmlNode {
-    Document(Array<XmlNode>),
-    Element(XmlName, Array<XmlAttribute>, Array<XmlNode>),
-    Text(string),
-    Comment(string),
-    CData(string),
-    ProcessingInstruction(string, string)
+    Document { children: Array<XmlNode> },
+    Element { name: XmlName, attributes: Array<XmlAttribute>, children: Array<XmlNode> },
+    Text { content: string },
+    Comment { content: string },
+    CData { content: string },
+    ProcessingInstruction { target: string, data: string }
 }
 
 // ===== Access API =====
@@ -59,7 +59,7 @@ export enum XmlNode {
 // Local name of an Element, or null for non-element nodes.
 export fn tag(node: XmlNode) -> string? {
     return match (node) {
-        XmlNode.Element(name, attrs, kids) -> name.local,
+        XmlNode.Element { name, attributes: attrs, children: kids } -> name.local,
         _                                  -> null
     }
 }
@@ -71,7 +71,7 @@ export fn tag(node: XmlNode) -> string? {
 // globally, which then breaks unrelated Element matches.
 export fn qualifiedName(node: XmlNode) -> XmlName? {
     match (node) {
-        XmlNode.Element(name, attrs, kids) -> { return name }
+        XmlNode.Element { name, attributes: attrs, children: kids } -> { return name }
         _ -> { return null }
     }
     return null
@@ -80,7 +80,7 @@ export fn qualifiedName(node: XmlNode) -> XmlName? {
 // Ordered attributes of an Element (empty for other node kinds).
 export fn attributes(node: XmlNode) -> Array<XmlAttribute> {
     return match (node) {
-        XmlNode.Element(name, attrs, kids) -> copy(attrs),
+        XmlNode.Element { name, attributes: attrs, children: kids } -> copy(attrs),
         _                                  -> copy(_emptyAttrs())
     }
 }
@@ -111,8 +111,8 @@ export fn namespace(node: XmlNode, prefix: string) -> string? {
 // Direct children of a Document or Element (empty otherwise).
 export fn children(node: XmlNode) -> Array<XmlNode> {
     return match (node) {
-        XmlNode.Document(kids)             -> copy(kids),
-        XmlNode.Element(name, attrs, kids) -> copy(kids),
+        XmlNode.Document { children: kids }             -> copy(kids),
+        XmlNode.Element { name, attributes: attrs, children: kids } -> copy(kids),
         _                                  -> copy(_emptyNodes())
     }
 }
@@ -120,9 +120,9 @@ export fn children(node: XmlNode) -> Array<XmlNode> {
 // Own textual payload of a Text/Comment/CData node.
 export fn nodeText(node: XmlNode) -> string? {
     return match (node) {
-        XmlNode.Text(s)    -> s,
-        XmlNode.Comment(s) -> s,
-        XmlNode.CData(s)   -> s,
+        XmlNode.Text { content: s }    -> s,
+        XmlNode.Comment { content: s } -> s,
+        XmlNode.CData { content: s }   -> s,
         _                  -> null
     }
 }
@@ -131,10 +131,10 @@ export fn nodeText(node: XmlNode) -> string? {
 // Text/CData leaf).
 export fn textContent(node: XmlNode) -> string {
     return match (node) {
-        XmlNode.Element(name, attrs, kids) -> _directText(kids),
-        XmlNode.Document(kids)             -> _directText(kids),
-        XmlNode.Text(s)                    -> s,
-        XmlNode.CData(s)                   -> s,
+        XmlNode.Element { name, attributes: attrs, children: kids } -> _directText(kids),
+        XmlNode.Document { children: kids }             -> _directText(kids),
+        XmlNode.Text { content: s }                    -> s,
+        XmlNode.CData { content: s }                   -> s,
         _                                  -> ""
     }
 }
@@ -170,8 +170,8 @@ export class XmlDiagnostic {
 }
 
 export enum XmlError {
-    Parse(XmlDiagnostic),
-    Io(string)
+    Parse { diagnostic: XmlDiagnostic },
+    Io { message: string }
 }
 
 // ===== Options =====
@@ -449,14 +449,14 @@ fn _emptyNodes() -> Array<XmlNode> {
 
 fn _isTextNode(node: XmlNode) -> bool {
     return match (node) {
-        XmlNode.Text(s) -> true,
+        XmlNode.Text { content: s } -> true,
         _               -> false
     }
 }
 
 fn _textOf(node: XmlNode) -> string {
     return match (node) {
-        XmlNode.Text(s) -> s,
+        XmlNode.Text { content: s } -> s,
         _               -> ""
     }
 }
@@ -465,8 +465,8 @@ fn _directText(kids: Array<XmlNode>) -> string {
     var out = StringBuilder()
     for (child in kids) {
         var piece = match (child) {
-            XmlNode.Text(s)  -> s,
-            XmlNode.CData(s) -> s,
+            XmlNode.Text { content: s }  -> s,
+            XmlNode.CData { content: s } -> s,
             _                -> ""
         }
         out.append(piece)
@@ -654,12 +654,12 @@ class XmlParser {
                 this.advance()
                 this.advance()
                 this.advance()
-                return XmlNode.Comment(content)
+                return XmlNode.Comment { content: content }
             }
             this.advance()
         }
         this.addError(XmlErrorKind.UnterminatedComment, "Unterminated comment")
-        return XmlNode.Comment(this.data.slice(start, this.pos))
+        return XmlNode.Comment { content: this.data.slice(start, this.pos) }
     }
 
     parseCDataNode() -> XmlNode? {
@@ -672,15 +672,15 @@ class XmlParser {
                 this.advance()
                 this.advance()
                 this.advance()
-                if (this.preserveCData) { return XmlNode.CData(content) }
-                return XmlNode.Text(content)
+                if (this.preserveCData) { return XmlNode.CData { content: content } }
+                return XmlNode.Text { content: content }
             }
             this.advance()
         }
         this.addError(XmlErrorKind.UnterminatedCData, "Unterminated CDATA")
         var content = this.data.slice(start, this.pos)
-        if (this.preserveCData) { return XmlNode.CData(content) }
-        return XmlNode.Text(content)
+        if (this.preserveCData) { return XmlNode.CData { content: content } }
+        return XmlNode.Text { content: content }
     }
 
     parseTextNode() -> XmlNode? {
@@ -691,7 +691,7 @@ class XmlParser {
         if (this.pos == start) { return null }
         var value = this.decodeEntities(this.data.slice(start, this.pos))
         if (!this.preserveWhitespace && _allWhitespace(value)) { return null }
-        return XmlNode.Text(value)
+        return XmlNode.Text { content: value }
     }
 
     parseAttributeValue() -> string {
@@ -734,7 +734,7 @@ class XmlParser {
             if (this.startsWith("/>")) {
                 this.advance()
                 this.advance()
-                return XmlNode.Element(_splitName(rawTag), attrs, children)
+                return XmlNode.Element { name: _splitName(rawTag), attributes: attrs, children: children }
             }
             if (this.peek() == ">") {
                 this.advance()
@@ -774,7 +774,7 @@ class XmlParser {
                 if (closeTag != rawTag) {
                     this.addError(XmlErrorKind.MismatchedTag, "Mismatched closing tag")
                 }
-                return XmlNode.Element(_splitName(rawTag), attrs, children)
+                return XmlNode.Element { name: _splitName(rawTag), attributes: attrs, children: children }
             }
 
             if (this.startsWith("<!--")) {
@@ -812,7 +812,7 @@ class XmlParser {
         }
 
         this.addError(XmlErrorKind.UnclosedTag, "Unclosed tag")
-        return XmlNode.Element(_splitName(rawTag), attrs, children)
+        return XmlNode.Element { name: _splitName(rawTag), attributes: attrs, children: children }
     }
 
     parseDocument() {
@@ -948,27 +948,27 @@ fn _serializePI(target: string, data: string, config: XmlWriteOptions, level: i6
 fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: i64, depth: i64) -> string {
     if (depth > XML_MAX_DEPTH) { return "" }
     return match (node) {
-        XmlNode.Document(kids)                          -> _serializeChildren(kids, config, level, depth),
-        XmlNode.Element(name, attrs, kids)              -> _serializeElement(name, attrs, kids, config, level, depth),
-        XmlNode.Text(value)                             -> _serializeText(value, config, level),
-        XmlNode.Comment(value)                          -> _serializeComment(value, config, level),
-        XmlNode.CData(value)                            -> _serializeCData(value, config, level),
-        XmlNode.ProcessingInstruction(target, piData)   -> _serializePI(target, piData, config, level)
+        XmlNode.Document { children: kids }                          -> _serializeChildren(kids, config, level, depth),
+        XmlNode.Element { name, attributes: attrs, children: kids }              -> _serializeElement(name, attrs, kids, config, level, depth),
+        XmlNode.Text { content: value }                             -> _serializeText(value, config, level),
+        XmlNode.Comment { content: value }                          -> _serializeComment(value, config, level),
+        XmlNode.CData { content: value }                            -> _serializeCData(value, config, level),
+        XmlNode.ProcessingInstruction { target, data: piData }   -> _serializePI(target, piData, config, level)
     }
 }
 
 // ===== Public API =====
 
 // parse is strict: any recoverable diagnostic or a missing root element enters
-// the typed error channel via `throw XmlError.Parse(...)`.
+// the typed error channel via `throw XmlError.Parse { diagnostic: value }`.
 export fn parse(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlNode {
     var parser = _parse(data, options)
     if (len(parser.errors) > 0) {
-        throw XmlError.Parse(parser.errors[0])
+        throw XmlError.Parse { diagnostic: parser.errors[0] }
     }
     if (!parser.hasRoot) {
-        throw XmlError.Parse(XmlDiagnostic(XmlErrorKind.InvalidTag, parser.line, parser.column,
-                                           "No root element"))
+        throw XmlError.Parse { diagnostic: XmlDiagnostic(XmlErrorKind.InvalidTag, parser.line, parser.column,
+                                           "No root element") }
     }
     return parser.root!
 }
@@ -985,7 +985,7 @@ export fn parseReport(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -
 export fn parseFile(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlNode {
     var content = io.readFile(path)
     if (content == null) {
-        throw XmlError.Io("Failed to read file")
+        throw XmlError.Io { message: "Failed to read file" }
     }
     return parse(content!, options)
 }
@@ -1012,25 +1012,25 @@ export fn writeFile(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DE
 // ===== Builders =====
 
 export fn document(children: Array<XmlNode>? = null) -> XmlNode {
-    if (children == null) { return XmlNode.Document(_emptyNodes()) }
-    return XmlNode.Document(children!)
+    if (children == null) { return XmlNode.Document { children: _emptyNodes() } }
+    return XmlNode.Document { children: children! }
 }
 
 export fn element(tag: string, attrs: Array<XmlAttribute>? = null,
                   children: Array<XmlNode>? = null) -> XmlNode {
     var resolvedAttrs = attrs ?? _emptyAttrs()
     var resolvedChildren = children ?? _emptyNodes()
-    return XmlNode.Element(_splitName(tag), resolvedAttrs, resolvedChildren)
+    return XmlNode.Element { name: _splitName(tag), attributes: resolvedAttrs, children: resolvedChildren }
 }
 
 export fn text(content: string) -> XmlNode {
-    return XmlNode.Text(content)
+    return XmlNode.Text { content: content }
 }
 
 export fn comment(content: string) -> XmlNode {
-    return XmlNode.Comment(content)
+    return XmlNode.Comment { content: content }
 }
 
 export fn cdata(content: string) -> XmlNode {
-    return XmlNode.CData(content)
+    return XmlNode.CData { content: content }
 }

@@ -1,5 +1,5 @@
 [package]
-name = "filetest-function-item-direct-call-vs-value"
+name = "xray-tests/filetest-function-item-direct-call-vs-value"
 version = "1.0.0"
 license = "MIT"
 main = "function_item_direct_call_vs_value.xr"

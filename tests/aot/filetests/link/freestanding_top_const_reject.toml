@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_top_const_reject"
+name = "xray-tests/filetest-freestanding_top_const_reject"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_top_const_reject.xr"

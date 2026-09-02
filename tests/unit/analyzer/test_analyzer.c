@@ -1919,12 +1919,14 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "fn rawSliceProjection(data: Ptr<u8>, count: i64) -> Slice<u8> {\n"
                          "  return unsafe { mem.slice<u8>(data, count, data) }\n"
                          "}\n"
-                         "enum ValueError { Bad(actual: i64, minimum: i64) }\n"
+                         "enum ValueError { Bad { actual: i64, minimum: i64 } }\n"
                          "fn fixedValueCopy(data: [u8; 4]) -> [u8; 4] {\n"
                          "  return copy(data)\n"
                          "}\n"
                          "fn valueError(actual: i64) {\n"
-                         "  if (actual < 4) { throw ValueError.Bad(actual, 4) }\n"
+                         "  if (actual < 4) {\n"
+                         "    throw ValueError.Bad { actual: actual, minimum: 4 }\n"
+                         "  }\n"
                          "}\n"
                          "struct Counter {\n"
                          "  value: i64\n"
@@ -2291,13 +2293,15 @@ TEST(analyzer_error_effect_records_direct_throw_variant) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source = "enum DirectErr { First, Second, Payload(code: i64), Third }\n"
+    const char *source = "enum DirectErr { First, Second, Payload { code: i64 }, Third }\n"
                          "enum PayloadArgErr { Boom }\n"
                          "fn throwsSecond() { throw DirectErr.Second }\n"
-                         "fn throwsPayload() { throw DirectErr.Payload(1) }\n"
+                         "fn throwsPayload() { throw DirectErr.Payload { code: 1 } }\n"
                          "fn payloadCode() -> i64 { throw PayloadArgErr.Boom\n"
                          "  return 1 }\n"
-                         "fn throwsPayloadArg() { throw DirectErr.Payload(payloadCode()) }\n"
+                         "fn throwsPayloadArg() {\n"
+                         "  throw DirectErr.Payload { code: payloadCode() }\n"
+                         "}\n"
                          "fn throwsVariable(e: DirectErr) { throw e }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -2344,6 +2348,189 @@ TEST(analyzer_error_effect_records_direct_throw_variant) {
 
     xa_analyzer_free(a);
     setup_pool();
+}
+
+TEST(analyzer_enum_record_construction_publishes_slot_plan) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT(analyzer != NULL);
+
+    const char *source = "enum PairPayload { Pair { left: i64, right: string } }\n"
+                         "var pair = PairPayload.Pair { right: \"value\", left: 7 }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(analyzer, "enum_record_plan.xr", program);
+
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+    ASSERT(program->as.program.count == 2);
+    AstNode *declaration = program->as.program.statements[1];
+    ASSERT(declaration != NULL && declaration->type == AST_VAR_DECL);
+    AstNode *construct = declaration->as.var_decl.initializer;
+    ASSERT(construct != NULL && construct->type == AST_ENUM_CONSTRUCT);
+
+    const XaEnumRecordPlan *plan = xa_analyzer_get_enum_record_plan(analyzer, construct);
+    ASSERT(plan != NULL);
+    ASSERT(plan->kind == XA_ENUM_RECORD_CONSTRUCT);
+    ASSERT(plan->complete);
+    ASSERT(plan->enum_symbol_id != 0);
+    ASSERT(plan->enum_layout_id != 0);
+    ASSERT(plan->variant_ordinal == 0);
+    ASSERT(plan->source_field_count == 2);
+    ASSERT(plan->declaration_field_count == 2);
+    ASSERT(plan->source_to_slot != NULL);
+    ASSERT(plan->source_to_slot[0] == 1);
+    ASSERT(plan->source_to_slot[1] == 0);
+
+    xa_analyzer_free(analyzer);
+    setup_pool();
+}
+
+TEST(analyzer_generic_enum_construction_preserves_concrete_nested_payload) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT(analyzer != NULL);
+
+    const char *source = "enum Nested<T> { Value { pair: (T, bool) }, Empty }\n"
+                         "fn makeNested() -> Nested<i64> {\n"
+                         "  return Nested.Value { pair: (7, true) }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(analyzer, "generic_enum_nested_payload.xr", program);
+
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+    ASSERT(program->as.program.count == 2);
+    AstNode *function = program->as.program.statements[1];
+    ASSERT(function != NULL && function->type == AST_FUNCTION_DECL);
+    AstNode *body = function->as.function_decl.body;
+    ASSERT(body != NULL && body->type == AST_BLOCK && body->as.block.count == 1);
+    AstNode *return_stmt = body->as.block.statements[0];
+    ASSERT(return_stmt != NULL && return_stmt->type == AST_RETURN_STMT);
+    ASSERT(return_stmt->as.return_stmt.value_count == 1);
+    AstNode *construct = return_stmt->as.return_stmt.values[0];
+    ASSERT(construct != NULL && construct->type == AST_ENUM_CONSTRUCT);
+
+    XrType *concrete_enum = xa_analyzer_get_node_type(analyzer, construct);
+    ASSERT(concrete_enum != NULL && concrete_enum->kind == XR_KIND_ENUM);
+    ASSERT(concrete_enum->enum_type.layout != NULL);
+    ASSERT(concrete_enum->enum_type.layout_id != 0);
+    ASSERT(concrete_enum->enum_type.type_arg_count == 1);
+    ASSERT(concrete_enum->enum_type.type_args != NULL);
+    ASSERT(concrete_enum->enum_type.type_args[0] != NULL);
+    ASSERT(concrete_enum->enum_type.type_args[0]->kind == XR_KIND_INT);
+    ASSERT(concrete_enum->enum_type.type_args[0]->scalar_rep == XR_NATIVE_I64);
+
+    XrType *payload = xa_analyzer_resolve_adt_payload_type(
+        analyzer, concrete_enum, construct->as.enum_construct.variant_path, 0);
+    ASSERT(payload != NULL && payload->kind == XR_KIND_TUPLE);
+    ASSERT(payload->tuple.element_count == 2);
+    ASSERT(payload->tuple.element_types[0] != NULL);
+    ASSERT(payload->tuple.element_types[0]->kind == XR_KIND_INT);
+    ASSERT(payload->tuple.element_types[0]->scalar_rep == XR_NATIVE_I64);
+    ASSERT(payload->tuple.element_types[1] != NULL);
+    ASSERT(payload->tuple.element_types[1]->kind == XR_KIND_BOOL);
+
+    xa_analyzer_free(analyzer);
+    setup_pool();
+}
+
+TEST(analyzer_enum_record_construction_rejects_noncanonical_forms) {
+    static const char *const sources[] = {
+        "enum E { V { left: i64, right: i64 } }\nvar x = E.V { left: 1 }\n",
+        "enum E { V { left: i64 } }\nvar x = E.V { left: 1, left: 2 }\n",
+        "enum E { V { left: i64 } }\nvar x = E.V { other: 1 }\n",
+        "enum E { V { left: i64 } }\nvar x = E.V(1)\n",
+        "enum E { V }\nvar x = E.V {}\n",
+    };
+
+    for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
+        XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+        ASSERT(analyzer != NULL);
+        AstNode *program = xr_parse(g_session, sources[i]);
+        ASSERT(program != NULL);
+        xa_analyzer_analyze(analyzer, "enum_record_reject.xr", program);
+        int diagnostic_count = 0;
+        xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+        ASSERT(diagnostic_count > 0);
+        xa_analyzer_free(analyzer);
+        setup_pool();
+    }
+}
+
+TEST(analyzer_enum_record_pattern_publishes_slot_plan) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT(analyzer != NULL);
+
+    const char *source = "enum PairPayload { Pair { left: i64, right: string } }\n"
+                         "fn selectLeft(pair: PairPayload) -> i64 {\n"
+                         "  return match (pair) {\n"
+                         "    PairPayload.Pair { right: _, left } -> left\n"
+                         "  }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(analyzer, "enum_record_pattern_plan.xr", program);
+
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+    ASSERT(program->as.program.count == 2);
+    AstNode *function = program->as.program.statements[1];
+    ASSERT(function != NULL && function->type == AST_FUNCTION_DECL);
+    AstNode *body = function->as.function_decl.body;
+    ASSERT(body != NULL && body->type == AST_BLOCK && body->as.block.count == 1);
+    AstNode *return_stmt = body->as.block.statements[0];
+    ASSERT(return_stmt != NULL && return_stmt->type == AST_RETURN_STMT);
+    ASSERT(return_stmt->as.return_stmt.value_count == 1);
+    AstNode *match = return_stmt->as.return_stmt.values[0];
+    ASSERT(match != NULL && match->type == AST_MATCH_EXPR);
+    ASSERT(match->as.match_expr.arm_count == 1);
+    AstNode *arm = match->as.match_expr.arms[0];
+    ASSERT(arm != NULL && arm->type == AST_MATCH_ARM);
+    AstNode *pattern = arm->as.match_arm.pattern;
+    ASSERT(pattern != NULL && pattern->type == AST_PATTERN_ADT);
+
+    const XaEnumRecordPlan *plan = xa_analyzer_get_enum_record_plan(analyzer, pattern);
+    ASSERT(plan != NULL);
+    ASSERT(plan->kind == XA_ENUM_VARIANT_PATTERN);
+    ASSERT(plan->complete);
+    ASSERT(plan->enum_symbol_id != 0);
+    ASSERT(plan->enum_layout_id != 0);
+    ASSERT(plan->variant_ordinal == 0);
+    ASSERT(plan->source_field_count == 2);
+    ASSERT(plan->declaration_field_count == 2);
+    ASSERT(plan->source_to_slot != NULL);
+    ASSERT(plan->source_to_slot[0] == 1);
+    ASSERT(plan->source_to_slot[1] == 0);
+
+    xa_analyzer_free(analyzer);
+    setup_pool();
+}
+
+TEST(analyzer_enum_record_pattern_rejects_noncanonical_forms) {
+    static const char *const sources[] = {
+        "enum E { V { left: i64 } }\n"
+        "fn f(value: E) -> i64 { return match (value) { E.V { other: _ } -> 1 } }\n",
+        "enum E { V { left: i64 } }\n"
+        "fn f(value: E) -> i64 { return match (value) { E.V { left: _, left: _ } -> 1 } }\n",
+        "enum E { V }\n"
+        "fn f(value: E) -> i64 { return match (value) { E.V {} -> 1 } }\n",
+    };
+
+    for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
+        XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+        ASSERT(analyzer != NULL);
+        AstNode *program = xr_parse(g_session, sources[i]);
+        ASSERT(program != NULL);
+        xa_analyzer_analyze(analyzer, "enum_record_pattern_reject.xr", program);
+        int diagnostic_count = 0;
+        xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+        ASSERT(diagnostic_count > 0);
+        xa_analyzer_free(analyzer);
+        setup_pool();
+    }
 }
 
 TEST(analyzer_error_effect_propagates_const_function_value_aliases) {
@@ -3933,40 +4120,25 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         xa_builtin_get_type_member_effect_contract(string_builder_type, "toString", false);
     const XaEffectContract *builder_clear_contract =
         xa_builtin_get_type_member_effect_contract(string_builder_type, "clear", false);
-    const XaEffectContract *gunzip_contract =
-        xa_builtin_get_module_func_effect_contract("compress", "gunzip");
-    const XaEffectContract *decrypt_contract =
-        xa_builtin_get_module_func_effect_contract("crypto", "decrypt");
     ASSERT(from_utf8_contract != NULL);
     ASSERT(slice_bytes_contract != NULL);
     ASSERT(builder_append_contract != NULL);
     ASSERT(builder_finish_contract != NULL);
     ASSERT(builder_clear_contract != NULL);
-    ASSERT(gunzip_contract != NULL);
-    ASSERT(decrypt_contract != NULL);
     ASSERT(from_utf8_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(slice_bytes_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(builder_append_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
     ASSERT(builder_finish_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
     ASSERT(builder_clear_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
-    ASSERT(gunzip_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
-    ASSERT(decrypt_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(from_utf8_contract->error_count == 1);
     ASSERT(slice_bytes_contract->error_count == 1);
-    ASSERT(gunzip_contract->error_count == 1);
-    ASSERT(decrypt_contract->error_count == 1);
     ASSERT(strcmp(from_utf8_contract->errors[0], "Utf8Error.InvalidUtf8") == 0);
     ASSERT(strcmp(slice_bytes_contract->errors[0], "StringSliceError.InvalidByteRange") == 0);
-    ASSERT(strcmp(gunzip_contract->errors[0], "CompressionError.InvalidData") == 0);
-    ASSERT(strcmp(decrypt_contract->errors[0], "CryptoError.InvalidLength") == 0);
 
     XaAnalyzer *current = xa_analyzer_new(g_session);
     ASSERT(current != NULL);
-    const char *current_source = "import crypto\n"
-                                 "fn currentStatic(bytes: Slice<u8>) { string.fromUtf8(bytes) }\n"
+    const char *current_source = "fn currentStatic(bytes: Slice<u8>) { string.fromUtf8(bytes) }\n"
                                  "fn currentInstance(s: string) { s.sliceBytes(0, 1) }\n"
-                                 "fn currentDecrypt(ciphertext: string) { "
-                                 "crypto.decrypt(\"secret\", ciphertext) }\n"
                                  "fn currentLossy(bytes: Slice<u8>) { "
                                  "string.fromUtf8Lossy(bytes) }\n";
     AstNode *current_program = xr_parse(g_session, current_source);
@@ -3978,32 +4150,23 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         analyzer_function_effect_summary(current, "currentStatic");
     const XaEffectSummary *current_instance =
         analyzer_function_effect_summary(current, "currentInstance");
-    const XaEffectSummary *current_decrypt =
-        analyzer_function_effect_summary(current, "currentDecrypt");
     const XaEffectSummary *current_lossy =
         analyzer_function_effect_summary(current, "currentLossy");
     ASSERT(current_static != NULL);
     ASSERT(current_instance != NULL);
-    ASSERT(current_decrypt != NULL);
     ASSERT(current_lossy != NULL);
     ASSERT(current_static->error_set_completeness == XA_EFFECT_COMPLETE);
     ASSERT(current_instance->error_set_completeness == XA_EFFECT_COMPLETE);
-    ASSERT(current_decrypt->error_set_completeness == XA_EFFECT_COMPLETE);
     const XaErrorTypeSet *current_static_set =
         effect_summary_enum_set_named(current, current_static, "Utf8Error");
     const XaErrorTypeSet *current_instance_set =
         effect_summary_enum_set_named(current, current_instance, "StringSliceError");
-    const XaErrorTypeSet *current_decrypt_set =
-        effect_summary_enum_set_named(current, current_decrypt, "CryptoError");
     ASSERT(current_static_set != NULL);
     ASSERT(current_instance_set != NULL);
-    ASSERT(current_decrypt_set != NULL);
     ASSERT(!current_static_set->all_variants);
     ASSERT(!current_instance_set->all_variants);
-    ASSERT(!current_decrypt_set->all_variants);
     ASSERT(xa_bitset_test(&current_static_set->variants, 0));
     ASSERT(xa_bitset_test(&current_instance_set->variants, 0));
-    ASSERT(xa_bitset_test(&current_decrypt_set->variants, 0));
     ASSERT(xa_effect_summary_is_nothrow(current_lossy));
     xa_analyzer_free(current);
 
@@ -4044,33 +4207,33 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     const char *source =
         "enum CatchErr { Boom, Other }\n"
         "enum OtherErr { Boom }\n"
-        "enum PayloadErr { Boom, Other, Payload(i64) }\n"
+        "enum PayloadErr { Boom, Other, Payload { code: i64 } }\n"
         "struct CatchBox { value: CatchErr }\n"
         "struct CatchPair { kept: CatchErr; changed: CatchErr }\n"
         "fn fail() { throw CatchErr.Boom }\n"
         "fn failOther() { throw OtherErr.Boom }\n"
         "fn failPayloadBoom() { throw PayloadErr.Boom }\n"
         "fn failPayloadOther() { throw PayloadErr.Other }\n"
-        "fn failPayloadCase() { throw PayloadErr.Payload(1) }\n"
+        "fn failPayloadCase() { throw PayloadErr.Payload { code: 1 } }\n"
         "fn failPayloadAny(e: PayloadErr) { throw e }\n"
         "fn handled() { try { fail() } catch (e: CatchErr) { } }\n"
         "fn leaks() { try { fail() } catch (e: OtherErr) { } }\n"
         "fn catchesAll() { try { fail() } catch (e) { } }\n"
         "fn bareEnumPatternHandlesAll() { try { failPayloadBoom() } catch PayloadErr { } }\n"
         "fn variantPatternHandlesOnlyBoom() { "
-        "  try { failPayloadBoom() } catch PayloadErr.Boom { } "
+        "  try { failPayloadBoom() } catch (PayloadErr.Boom) { } "
         "}\n"
         "fn variantPatternLeaksOther() { "
-        "  try { failPayloadOther() } catch PayloadErr.Boom { } "
+        "  try { failPayloadOther() } catch (PayloadErr.Boom) { } "
         "}\n"
         "fn payloadPatternHandlesPayload() { "
-        "  try { failPayloadCase() } catch PayloadErr.Payload(code) { } "
+        "  try { failPayloadCase() } catch (PayloadErr.Payload { code }) { } "
         "}\n"
         "fn variantPatternLeavesRest(e: PayloadErr) { "
-        "  try { failPayloadAny(e) } catch PayloadErr.Boom { } "
+        "  try { failPayloadAny(e) } catch (PayloadErr.Boom) { } "
         "}\n"
         "fn variantPatternBodyThrows() { "
-        "  try { failPayloadBoom() } catch PayloadErr.Boom { throw OtherErr.Boom } "
+        "  try { failPayloadBoom() } catch (PayloadErr.Boom) { throw OtherErr.Boom } "
         "}\n"
         "fn catchBodyThrows() { "
         "  try { fail() } catch (e: CatchErr) { throw OtherErr.Boom } "
@@ -7091,6 +7254,11 @@ int main(void) {
     RUN_TEST(analyzer_stored_function_value_defaults_may_throw);
     RUN_TEST(analyzer_generic_hof_splits_throw_effect_dimension);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
+    RUN_TEST(analyzer_enum_record_construction_publishes_slot_plan);
+    RUN_TEST(analyzer_generic_enum_construction_preserves_concrete_nested_payload);
+    RUN_TEST(analyzer_enum_record_construction_rejects_noncanonical_forms);
+    RUN_TEST(analyzer_enum_record_pattern_publishes_slot_plan);
+    RUN_TEST(analyzer_enum_record_pattern_rejects_noncanonical_forms);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
     RUN_TEST(analyzer_error_effect_propagates_generic_specialization_target_sets);

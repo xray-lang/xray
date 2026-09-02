@@ -125,9 +125,11 @@
     "src/plan/semantic/xr_program_semantic_closure.h",
     "src/plan/semantic/xr_semantic_enum_shape.h",
     "src/plan/semantic/xr_semantic_ids.h",
+    "src/plan/semantic/xr_semantic_local_call_target_shape.h",
     "src/plan/semantic/xr_semantic_number_parse_error_shape.h",
     "src/plan/semantic/xr_semantic_panic_catch_shape.h",
     "src/plan/semantic/xr_semantic_plan.h",
+    "src/plan/semantic/xr_semantic_shared_read_shape.h",
     "src/plan/target/xr_target_capability.h",
     "src/plan/target/xr_target_instruction_gen.h",
     "src/plan/target/xr_target_plan.h",
@@ -194,7 +196,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 274,
+  "operation_count": 277,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -6578,6 +6580,80 @@
       ]
     },
     {
+      "benchmark_anchor": "target-machine/allocation-and-ownership",
+      "capabilities": [],
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_variant_construct",
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "effects": [
+        "memory-write",
+        "allocates"
+      ],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "allocation-and-ownership",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "ownership-certificate-plus-runtime-event-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.variant.construct",
+      "ownership": "method-args",
+      "targets": [
+        "vm-bytecode",
+        "aot-c",
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/memory-and-place",
+      "capabilities": [],
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_variant_project",
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "effects": [
+        "may-throw",
+        "memory-read"
+      ],
+      "error_panic_suspend_cancel_publication": [
+        "may-throw"
+      ],
+      "family": "memory-and-place",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.variant.project",
+      "ownership": "borrow",
+      "targets": [
+        "vm-bytecode",
+        "aot-c",
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/arithmetic-and-conversion",
+      "capabilities": [],
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_variant_test",
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "arithmetic-and-conversion",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "independent-kat-property-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.variant.test",
+      "ownership": "borrow",
+      "targets": [
+        "vm-bytecode",
+        "aot-c",
+        "aot-verify"
+      ]
+    },
+    {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
       "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_vec",
@@ -7274,5 +7350,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "c14acefda3de23f9b6074490a801c0edfa420851c33989fbf1b0c000009b1e16"
+  "source_tree_fingerprint": "2f23b885e5d857d60d97b467ed8232f5e6f7c7dc72cabeb7f3944c81f4ccdeb0"
 }

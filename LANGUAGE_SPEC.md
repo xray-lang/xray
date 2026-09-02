@@ -1595,7 +1595,7 @@ The split is deliberate: binding state is a CFG fact, aliasing is an object-grap
 | Action | Effect on root aliasing | Recoverable |
 |--|--|--|
 | `var b = a` | `LOCAL_ALIASED` | Yes. After `b`'s last use the root is `UNIQUE` again |
-| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V(a)` | `ESCAPED` | **No.** Function-local analysis cannot see that slot being overwritten |
+| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V { value: a }` | `ESCAPED` | **No.** Function-local analysis cannot see that slot being overwritten |
 | Result of a call with unknown provenance | `ALIAS_UNKNOWN` | No |
 | `copy(a)` | `a` unaffected; the result is a fresh `UNIQUE` root | — |
 | `move a` | `a` becomes `MOVED`; the root moves with it | — |
@@ -2663,14 +2663,14 @@ CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
 ```
 
 ```xray
-enum AppError { NotFound, Timeout(ms: i64) }
+enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // Recoverable errors: enum values flow through the value-return channel,
 // caught by catch (e)
 try { throw AppError.NotFound } catch (e) {
     match (e) {
         AppError.NotFound -> log.error("not found"),
-        AppError.Timeout(ms) -> log.error("timeout after ${ms}ms")
+        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
     }
 }
 
@@ -3651,10 +3651,11 @@ xray's `enum` is a **safe tagged aggregate**: each value contains a compiler-ass
 EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
-EnumVariant    ::= Identifier VariantPayload?
-EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-VariantPayload ::= '(' VariantField (',' VariantField)* ')'
-VariantField   ::= (Identifier ':')? Type
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ```
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
@@ -3674,7 +3675,7 @@ enum HttpStatus {
     NotFound,
     InternalError
 
-    fn code() -> i64 {
+    code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404,
@@ -3688,19 +3689,19 @@ Enum variants use declaration order for their stable `ordinal` and do not declar
 
 #### 5.6.2 Payload enum
 
-A variant name may be followed by parentheses declaring payload fields (positional or named):
+Payload variants use named record fields. Every field has a non-empty name unique within the variant:
 
 ```xray
 enum Option<T> {
-    Some(T),
+    Some { value: T },
     None,
 }
 
 enum NetEvent {
     Connected,
-    Disconnected(reason: string),
-    DataReceived(bytes: Array<u8>),
-    Error(code: i64, message: string),
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
 }
 
 // A recursive enum payload must be indirected through a class node
@@ -3711,9 +3712,9 @@ class ExprNode {
 }
 
 enum Expr {
-    Number(i64),
-    Binary(op: string, left: ExprNode, right: ExprNode),
-    Call(name: string, args: Array<Expr>),
+    Number { value: i64 },
+    Binary { op: string, left: ExprNode, right: ExprNode },
+    Call { name: string, args: Array<Expr> },
 }
 ```
 
@@ -3730,20 +3731,20 @@ Construction:
 
 ```xray
 var c = Color.Red
-var r1 = Option.Some(42)                            // positional payload
-var e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
-var e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
-var e3 = NetEvent.Connected                         // payload-free variant: no parentheses
+var r1 = Option.Some { value: 42 }
+var e1 = NetEvent.DataReceived { bytes: b }
+var e2 = NetEvent.Error { code: 404, message: "not found" }
+var e3 = NetEvent.Connected                         // unit variant: no braces
 ```
 
 Destructuring (match):
 
 ```xray
 match (event) {
-    NetEvent.Connected            -> print("connected"),
-    NetEvent.Disconnected(reason) -> print("by:", reason),
-    NetEvent.DataReceived(b)      -> process(b),
-    NetEvent.Error(code, msg)     -> log.error(code, msg),
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
 }
 ```
 
@@ -3799,7 +3800,7 @@ The descriptor API is a closed whitelist:
 | `EnumPayloads<E>` | `length: i64`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
 | `EnumPayloadField<E>` | `index: i64`, `name: string`, `type: i64` (canonical TypeId) |
 
-For a named payload field, `name` is its source declaration name. A positional payload field has no declared name and deterministically reports `""`, not `null`, so the descriptor surface keeps a non-null `string` type.
+Every payload-field `name` is its source declaration name. Metadata with an empty or duplicate name, or mismatched name/type counts, is rejected.
 
 Users cannot construct these types, descriptors are not callable, and they do not provide name/ordinal-to-value construction. Out-of-range access fails like other checked indexing. Descriptors have no C ABI and are rejected at FFI boundaries.
 
@@ -3828,47 +3829,47 @@ Instance and static methods may be defined inside `enum` bodies with the same sy
 
 ```xray
 enum Shape {
-    Circle(radius: f64),
-    Rect(w: f64, h: f64),
-    Triangle(a: f64, b: f64, c: f64)
+    Circle { radius: f64 },
+    Rect { width: f64, height: f64 },
+    Triangle { a: f64, b: f64, c: f64 }
 
-    fn area() -> f64 {
+    area() -> f64 {
         return match (this) {
-            Shape.Circle(r)     -> 3.14159 * r * r,
-            Shape.Rect(w, h)    -> w * h,
-            Shape.Triangle(a, b, c) -> {
+            Shape.Circle { radius } -> 3.14159 * radius * radius,
+            Shape.Rect { width, height } -> width * height,
+            Shape.Triangle { a, b, c } -> {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
         }
     }
 
-    fn isRound() -> bool {
+    isRound() -> bool {
         return match (this) {
-            Shape.Circle(_) -> true,
+            Shape.Circle {} -> true,
             _               -> false,
         }
     }
 }
 
-var s = Shape.Circle(radius: 1.0)
+var s = Shape.Circle { radius: 1.0 }
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-Static methods use `static fn` and are useful for factories, lookup helpers, and enum-scoped utilities. Static methods do not have `this`:
+Static methods use `static name(...)`. Instance methods have a READ receiver by default and may use `ref` or `move`; enum methods do not write `fn`:
 
 ```xray
 enum Color {
     Red, Green, Blue
 
-    static fn fromInt(v: i64) -> Color {
+    static fromInt(v: i64) -> Color {
         if (v == 1) { return Color.Red }
         if (v == 2) { return Color.Green }
         return Color.Blue
     }
 
-    fn label() -> string {
+    label() -> string {
         return this.name
     }
 }
@@ -3876,11 +3877,11 @@ enum Color {
 print(Color.fromInt(2).label())     // "Green"
 ```
 
-> Note that `Triangle(...)` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
+> Note that `Triangle { ... }` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
 
 **Rules**:
 
-- Method syntax matches `class` methods: `fn name(params) -> ReturnType { body }` or `static fn name(params) -> ReturnType { body }`.
+- Type-body method forms are `name(...)`, `ref name(...)`, `move name(...)`, and `static name(...)`; enum methods do not write `fn`.
 - Inside a method, the static type of `this` is the enum itself (e.g. `Option<T>`); use `match (this)` to extract a variant's payload.
 - Static methods have no `this`; call them as `EnumName.method(args...)`.
 - `constructor` is **not** supported (variant syntax already serves as the constructor).
@@ -3890,7 +3891,7 @@ print(Color.fromInt(2).label())     // "Green"
   enum Color {
       Red, Green, Blue
 
-      fn isWarm() -> bool { return this == Color.Red }
+      isWarm() -> bool { return this == Color.Red }
   }
   ```
 - Methods **may not** share a name with a variant.
@@ -4005,34 +4006,33 @@ match (color) {
 
 #### 6.3.2 ADT variant (with payload) destructuring
 
-ADT variant patterns may destructure payload fields (positionally or by name):
+ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
 
 ```xray
-// Positional destructuring
 match (event) {
-    NetEvent.Connected            -> print("connected"),
-    NetEvent.Disconnected(reason) -> print("by:", reason),
-    NetEvent.DataReceived(b)      -> process(b),
-    NetEvent.Error(code, msg)     -> log.error(code, msg),
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
 }
 
-// Option patterns (positional)
+// Same-name binding shorthand
 match (opt) {
-    Option.Some(v) -> print("got:", v),
+    Option.Some { value: v } -> print("got:", v),
     Option.None    -> print("nothing"),
 }
 
-// Wildcards skip payload fields you don't care about
+// List only fields that are observed
 match (event) {
-    NetEvent.Error(code, _) if (code >= 500) -> throw NetErr.ServerFault(code),
-    _                                         -> continue,
+    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
+    _                                        -> continue,
 }
 
 // Nested destructuring
 match (msg) {
-    Option.Some(NetEvent.DataReceived(bytes)) -> process(bytes),
-    Option.None                               -> skip(),
-    _                                         -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
+    Option.None                                           -> skip(),
+    _                                                     -> skip(),
 }
 ```
 
@@ -4046,14 +4046,14 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 ```xray
 enum NetEvent {
     Connected,
-    Disconnected(reason: string),
-    DataReceived(bytes: Array<u8>),
-    Error(code: i64, message: string),
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
 }
 
 match (event) {
-    NetEvent.Connected            -> "ok",
-    NetEvent.Disconnected(r)      -> "down: ${r}",
+    NetEvent.Connected                     -> "ok",
+    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
     // ❌ E0371: missing variants DataReceived and Error; add `_ -> ...` as catch-all
 }
 ```
@@ -4308,7 +4308,7 @@ var t3 = go fn(b: Array<u8>) -> i64 {
 const ch = Channel<i64>(10)
 var t4 = go fn(c: Channel<i64>) -> i64 {
     return match (c.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> 0
     }
 }(ch)
@@ -4366,10 +4366,10 @@ Design principles:
 `throw expr` raises an enum error value. `expr` must be a variant of an enum type:
 
 ```xray
-enum AppErr { NotFound, InvalidInput(string) }
+enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ simple enum variant
-throw AppErr.InvalidInput("bad format")     // ✅ ADT enum variant with payload
+throw AppErr.InvalidInput { message: "bad format" } // ✅ ADT enum variant with payload
 ```
 
 After a throw:
@@ -4385,14 +4385,14 @@ throw point → write to pending_error → return up the call stack → run stat
 #### 8.1.2 `try` / `catch`
 
 ```xray
-enum IOErr { Timeout, Refused(string) }
+enum IOErr { Timeout, Refused { reason: string } }
 
 try {
     connect(host)
 } catch (e) {
     match (e) {
         IOErr.Timeout -> log("timeout"),
-        IOErr.Refused(reason) -> log("refused: " + reason),
+        IOErr.Refused { reason } -> log("refused: " + reason),
     }
 }
 ```
@@ -4409,7 +4409,7 @@ A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test 
 
 ```xray
 enum NetErr { Timeout, Refused }
-enum DbErr { ConnLost, QueryFailed(string) }
+enum DbErr { ConnLost, QueryFailed { query: string } }
 
 try {
     riskyIO()
@@ -4428,6 +4428,12 @@ try {
 - Multiple `catch` clauses are tried in declaration order; the first match wins.
 - If every typed clause fails and there is no catch-all, the error continues propagating.
 - A `try` **must** be followed by at least one of `catch` or `catch panic`.
+
+`catch` may also use an enum variant pattern directly. A unit variant is written as
+`catch NetErr.Timeout { ... }`, where the only brace group is the catch body. A payload variant is
+written as `catch DbErr.QueryFailed { query } { ... }`: the first braces are the named pattern and
+the second braces are the body. Brace-group count alone determines this boundary; the parser does
+not query the variant schema, and a unit pattern still cannot use `{}`.
 
 #### 8.1.3 Rethrowing and error conversion
 
@@ -4451,19 +4457,19 @@ Define business errors as ADT enums with context-carrying payloads:
 
 ```xray
 enum HttpErr {
-    NotFound(string),
-    ServerError(i64, string),
+    NotFound { message: string },
+    ServerError { code: i64, message: string },
     Timeout,
 }
 
 enum ParseErr {
     Empty,
-    InvalidChar(string, i64),
+    InvalidChar { value: string, offset: i64 },
     Overflow,
 }
 
 fn fetchUser(id: i64) -> User {
-    if (id <= 0) { throw HttpErr.NotFound("user not found") }
+    if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
     // ...
 }
 
@@ -4471,8 +4477,8 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound(msg) -> log("404:", msg),
-        HttpErr.ServerError(code, msg) -> log(string(code) + ":", msg),
+        HttpErr.NotFound { message: msg } -> log("404:", msg),
+        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
         HttpErr.Timeout -> log("timeout"),
     }
 }
@@ -4492,7 +4498,7 @@ Ways to pass child coroutine errors:
 1. **Explicit Channel**:
 
 ```xray
-enum WorkerErr { Failed(string) }
+enum WorkerErr { Failed { message: string } }
 const err_ch = Channel<string>(1)
 
 go fn() {
@@ -4505,7 +4511,7 @@ go fn() {
 }()
 
 var result = match (err_ch.recv()) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> "error"
 }
 if (result != "ok") { log("worker failed") }
@@ -4772,10 +4778,10 @@ main()
 #### Pattern 2: throw + catch for library APIs
 
 ```xray
-enum ConfigErr { Missing(string) }
+enum ConfigErr { Missing { field: string } }
 
 fn requirePort(cfg: JSON.Object) {
-    if (!cfg.containsKey("port")) { throw ConfigErr.Missing("port") }
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
     print("port:", cfg["port"])
 }
 
@@ -4785,7 +4791,7 @@ fn main() {
         requirePort(JSON.parseObject("{}"))                  // throws ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
+            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
         }
     }
 }
@@ -4819,11 +4825,11 @@ These are self-contained programs that run as-is and pass `xray check` (comments
 #### Example 1: `throw` / `catch` / `match`
 
 ```xray
-enum ParseErr { Empty, BadChar(string) }
+enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
-    if (s == "x") { throw ParseErr.BadChar(s) }
+    if (s == "x") { throw ParseErr.BadChar { value: s } }
     return 42
 }
 
@@ -4833,7 +4839,7 @@ fn main() {
     } catch (e: ParseErr) {
         match (e) {
             ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar(c) -> print("bad char:", c),
+            ParseErr.BadChar { value: c } -> print("bad char:", c),
         }
     }
 }
@@ -5317,8 +5323,8 @@ var r = await t
 
 match (t.poll()) {
     TaskResult.Pending -> print("running")
-    TaskResult.Success(value) -> print(value)
-    TaskResult.Failed(err) -> print(err)
+    TaskResult.Success { value } -> print(value)
+    TaskResult.Failed { error: err } -> print(err)
     TaskResult.Cancelled -> print("cancelled")
     TaskResult.Timeout -> print("timeout")
 }
@@ -5363,14 +5369,14 @@ const cha = Channel(3)          // element type inferred from the first send
 const ch = Channel<i64>(10)
 ch.send(42)                             // blocking send
 var v = match (ch.recv()) {
-    Recv.Value(value) -> value
+    Recv.Value { value } -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
 var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
 match (ch.tryRecv()) {
-    Recv.Value(next) -> print(next)
+    Recv.Value { value: next } -> print(next)
     Recv.Empty -> print("empty")
     Recv.Closed -> print("closed")
     Recv.Timeout -> print("timeout")
@@ -5399,7 +5405,7 @@ fn producer(ch: Channel<i64>) {
 - **MPMC** (multi-producer, multi-consumer).
 - Buffered channel: senders suspend when full; receivers suspend when empty.
 - Unbuffered channel: send and receive must rendezvous (synchronous handshake).
-- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value { value: v }`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
 - `for (msg in ch)` is equivalent to blocking receive until the channel is closed and drained; the loop variable has type `T`. Channels do not support key-value iteration.
 
 ### 10.6 `select`
@@ -5428,7 +5434,7 @@ select {
 ```
 
 **Semantics**:
-- Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value(name)` payload to `name`.
+- Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value { value: name }` payload to `name`.
 - Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
@@ -6212,7 +6218,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `close()` | close the channel |
 | `capacity` / `isClosed` | capacity and closed-state fields |
 
-`Recv.Value(v)` carries the channel payload, so `Channel<i64?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
+`Recv.Value { value: v }` carries the channel payload, so `Channel<i64?>` can distinguish a real `Recv.Value { value: null }` from `Recv.Closed`.
 
 ### 14.11 `JSON` Namespace
 
@@ -7153,8 +7159,10 @@ Pattern ::= LiteralPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
-EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload destructuring
-VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
+EnumPattern     ::= QualifiedIdent
+                  | QualifiedIdent '{' EnumFieldPatternList? '}'
+EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
+EnumFieldPattern ::= Identifier | Identifier ':' Pattern
 TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
@@ -7288,10 +7296,11 @@ InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
-EnumVariant    ::= Identifier VariantPayload?
-EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-VariantPayload ::= '(' VariantField (',' VariantField)* ')'
-VariantField   ::= (Identifier ':')? Type
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type

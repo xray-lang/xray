@@ -6,7 +6,7 @@ export enum ExportColor {
 
 export enum ExportEvent {
     Ready,
-    Data(code: i64)
+    Data { code: i64 }
 }
 
 export fn failWithBlue() {

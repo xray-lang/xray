@@ -21,7 +21,7 @@ const result_ch = Channel(100)
 
 fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(value) -> value
+        Recv.Value { value } -> value
         _ -> fallback
     }
 }
@@ -31,7 +31,7 @@ fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
 fn worker(id: i64) {
     while (true) {
         match (task_ch.recv()) {
-            Recv.Value(task) -> {
+            Recv.Value { value: task } -> {
                 // 模拟计算
                 var result = task * 2
                 result_ch.send(result)

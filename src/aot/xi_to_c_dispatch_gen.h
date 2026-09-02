@@ -152,6 +152,9 @@
     X(FIXED_BYTES_CONST, "xi.fixed.bytes.const", xicgen_fixed_bytes_const) \
     X(TUPLE_NEW, "xi.tuple.new", xicgen_tuple_new) \
     X(TUPLE_GET, "xi.tuple.get", xicgen_tuple_get) \
+    X(VARIANT_CONSTRUCT, "xi.variant.construct", xicgen_variant_construct) \
+    X(VARIANT_TEST, "xi.variant.test", xicgen_variant_test) \
+    X(VARIANT_PROJECT, "xi.variant.project", xicgen_variant_project) \
     X(BYTE_SLICE_LOAD_U16, "xi.byte.slice.load.u16", xicgen_byte_slice_load_u16) \
     X(BYTE_SLICE_LOAD_U32, "xi.byte.slice.load.u32", xicgen_byte_slice_load_u32) \
     X(BYTE_SLICE_LOAD_U64, "xi.byte.slice.load.u64", xicgen_byte_slice_load_u64) \

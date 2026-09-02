@@ -6,7 +6,7 @@ print("========== 测试1：Channel 深拷贝隔离 ==========")
 
 fn recvValue(ch) {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> null
     }
 }

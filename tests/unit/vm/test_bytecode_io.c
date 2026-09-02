@@ -199,20 +199,26 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     ASSERT_EQ_UINT(roundtrip->entry_plan.scheduler_mode, XR_SCHED_NONE);
 
     xr_instruction_unit_free(roundtrip);
-    roundtrip = NULL;
     xr_free(bytes);
-    bytes = NULL;
+    xr_instruction_unit_free(proto);
+    xray_vm_delete(iso);
+}
+
+#ifndef XR_STDLIB_FROM_FILE
+TEST(embedded_stdlib_bytecode_preserves_producer_identity) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
 
     /* Exercise the real embedded-bytecode diagnostic boundary.  The decoded
      * proto first carries its serialized producer identity; clearing that
      * field mutates the fixture to the stripped-container case, which must
      * not manufacture an artifact path. */
-    size = 0;
+    size_t size = 0;
     const uint8_t *embedded_bytecode = xr_get_embedded_stdlib_bytecode("path", &size);
     ASSERT_NOT_NULL(embedded_bytecode);
     ASSERT_GT(size, 0);
-    error = XR_BOOTSTRAP_CONTAINER_OK;
-    roundtrip = xr_bootstrap_container_read(iso, embedded_bytecode, size, &error);
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
+    XrProto *roundtrip = xr_bootstrap_container_read(iso, embedded_bytecode, size, &error);
     ASSERT_NOT_NULL(roundtrip);
     ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
     ASSERT_NOT_NULL(roundtrip->source_file);
@@ -236,10 +242,9 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
 
     xr_free(producer_source);
     xr_instruction_unit_free(roundtrip);
-    xr_free(bytes);
-    xr_instruction_unit_free(proto);
     xray_vm_delete(iso);
 }
+#endif
 
 TEST(bytecode_roundtrips_reachable_entry_plan) {
     XrVMRuntime *iso = new_test_isolate();
@@ -991,7 +996,8 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     xr_free(with_trailing_byte);
     ASSERT_STR_EQ(xr_bootstrap_container_error_string(XR_BOOTSTRAP_CONTAINER_ERR_TARGET_ABI),
                   "bytecode aggregate layout target ABI mismatch");
-    ASSERT_STR_EQ(xr_bootstrap_container_error_string(XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT), "corrupt bytecode metadata");
+    ASSERT_STR_EQ(xr_bootstrap_container_error_string(XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT),
+                  "corrupt bytecode metadata");
 
     xr_free(bytes);
     xr_instruction_unit_free(proto);
@@ -1178,6 +1184,66 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     xray_vm_delete(writer);
 }
 
+TEST(enum_payload_metadata_rejects_ambiguous_names_atomically) {
+    const char *variants[] = {"Data"};
+    XrEnumLayout *layout = xr_enum_layout_new("test.metadata", "Packet", variants, 1);
+    ASSERT_NOT_NULL(layout);
+    int payload_counts[] = {2};
+    ASSERT_TRUE(xr_enum_layout_set_payload_counts(layout, payload_counts, 1));
+
+    const char *valid_names[] = {"code", "message"};
+    uint8_t valid_types[] = {XR_TID_I64, XR_TID_STRING};
+    ASSERT_TRUE(
+        xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, valid_types, 2));
+    const XrEnumVariantLayout *variant = xr_enum_layout_variant(layout, 0);
+    ASSERT_TRUE(xr_enum_variant_payload_metadata_is_exact(variant));
+
+    const char *empty_names[] = {"code", ""};
+    const char *duplicate_names[] = {"code", "code"};
+    uint8_t invalid_types[] = {XR_TID_I64, XR_TID_COUNT};
+    ASSERT_FALSE(
+        xr_enum_layout_set_variant_payload_metadata(layout, 0, empty_names, valid_types, 2));
+    ASSERT_FALSE(
+        xr_enum_layout_set_variant_payload_metadata(layout, 0, duplicate_names, valid_types, 2));
+    ASSERT_FALSE(xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, NULL, 2));
+    ASSERT_FALSE(
+        xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, invalid_types, 2));
+
+    variant = xr_enum_layout_variant(layout, 0);
+    ASSERT_TRUE(xr_enum_variant_payload_metadata_is_exact(variant));
+    ASSERT_STR_EQ(variant->payload_names[0], "code");
+    ASSERT_STR_EQ(variant->payload_names[1], "message");
+    ASSERT_EQ_UINT(variant->payload_type_ids[0], XR_TID_I64);
+    ASSERT_EQ_UINT(variant->payload_type_ids[1], XR_TID_STRING);
+    xr_enum_layout_free(layout);
+}
+
+TEST(bytecode_writer_rejects_payload_enum_without_exact_field_metadata) {
+    XrVMRuntime *isolate = new_test_isolate();
+    ASSERT_NOT_NULL(isolate);
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+
+    char *members[] = {"Data"};
+    XrEnumType *enum_type =
+        xr_enum_type_new(isolate, "test.bytecode", "IncompletePacket", members, 1);
+    ASSERT_NOT_NULL(enum_type);
+    int payload_counts[] = {1};
+    ASSERT_TRUE(xr_enum_type_set_adt_payloads(enum_type, payload_counts, 1));
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(enum_type)), 0);
+    proto->maxstacksize = 1;
+    xr_instruction_unit_write(proto, CREATE_ABx(OP_LOADK, 0, 0), 1);
+    xr_instruction_unit_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size = 0;
+    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
+    ASSERT_NULL(xr_bootstrap_container_write(isolate, proto, 0, &size, &error));
+    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_ERR_METADATA);
+
+    xr_instruction_unit_free(proto);
+    xray_vm_delete(isolate);
+}
+
 TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules) {
     XrVMRuntime *writer = new_test_isolate();
     ASSERT_NOT_NULL(writer);
@@ -1258,7 +1324,7 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
     ASSERT_EQ_INT(xr_instruction_unit_add_upvalue(proto, 300, 0, 1, 0, UPVAL_SRC_REG,
-                                          XR_TRANSFER_EXPLICIT_COPY, NULL),
+                                                  XR_TRANSFER_EXPLICIT_COPY, NULL),
                   0);
 
     size_t size = 0;
@@ -1476,6 +1542,9 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
     RUN_TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction);
+#ifndef XR_STDLIB_FROM_FILE
+    RUN_TEST(embedded_stdlib_bytecode_preserves_producer_identity);
+#endif
     RUN_TEST(bytecode_roundtrips_reachable_entry_plan);
     RUN_TEST(bytecode_roundtrips_struct_area_size);
     RUN_TEST(bytecode_roundtrips_exact_string_constant_lengths);
@@ -1492,6 +1561,8 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth);
     RUN_TEST(vm_struct_layout_class_resolves_semantically_equal_descriptor_copy);
     RUN_TEST(bytecode_roundtrips_enum_type_constants);
+    RUN_TEST(enum_payload_metadata_rejects_ambiguous_names_atomically);
+    RUN_TEST(bytecode_writer_rejects_payload_enum_without_exact_field_metadata);
     RUN_TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules);
     RUN_TEST(bytecode_rejects_mismatched_native_stdlib_enum_shape);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);

@@ -1,7 +1,7 @@
 import sys
 
 enum ProcessLintErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 const processLintCh = Channel<i64>(1)
@@ -11,7 +11,7 @@ fn closeProcessInTryOrCatch(throwNow: bool) {
     var p = sys.Process.spawn("sh", ["-c", "exit 0"])
     try {
         if (throwNow) {
-            throw ProcessLintErr.Msg("boom")
+            throw ProcessLintErr.Msg { s: "boom" }
         }
         print(p!.wait())
     } catch (e) {

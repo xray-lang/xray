@@ -30,11 +30,11 @@ go spin_until_sent(data, out)
 go drain_one(data)
 
 var done = match (out.recvTimeout(1000)) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> -1
 }
 var value = match (data.recvTimeout(1000)) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> -1
 }
 

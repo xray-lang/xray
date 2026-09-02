@@ -20,6 +20,7 @@
 #include "xa_memory_effect_db.h"
 #include "xa_alloc_effect.h"
 #include "xa_parallel_call_plan.h"
+#include "xa_enum_record_plan.h"
 #include "xa_resolved_call.h"
 #include "xa_selection.h"
 #include "../../runtime/value/xtype_internal.h"
@@ -388,8 +389,8 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
 static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
                                        const char **type_param_names, int type_param_count,
                                        const char **member_names, int member_count,
-                                       const int *payload_counts, XrType ***payload_types,
-                                       bool is_adt) {
+                                       const int *payload_counts, const char **payload_names,
+                                       XrType ***payload_types, bool is_adt) {
     XR_DCHECK(analyzer != NULL, "register_prelude_enum: NULL analyzer");
     XaSymbol *sym = xa_symbol_new(name, XA_SYM_ENUM);
     sym->location.line = 0;
@@ -415,6 +416,11 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
                     (uint16_t) (is_adt && payload_counts ? payload_counts[i] : 0);
                 int pc = info->variants[i].payload_count;
                 if (pc > 0 && payload_types && payload_types[i]) {
+                    const char *names[] = {payload_names ? payload_names[i] : NULL};
+                    if (!xa_enum_variant_set_payload_names(&info->variants[i], names, 1)) {
+                        xa_enum_info_free(info);
+                        return;
+                    }
                     info->variants[i].payload_types =
                         (XrType **) xr_calloc((size_t) pc, sizeof(XrType *));
                     if (info->variants[i].payload_types) {
@@ -447,6 +453,7 @@ typedef enum {
 typedef struct {
     const char *name;
     uint8_t payload;
+    const char *payload_name;
 } XaPreludeVariantDesc;
 
 typedef struct {
@@ -459,7 +466,11 @@ typedef struct {
  * enum's slice starts where the previous one ended. */
 static const XaPreludeVariantDesc g_prelude_enum_variants[] = {
 #define XR_BUILTIN_ENUM(ename, earity, evm_slot, evariants) evariants
-#define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XA_PRELUDE_PAYLOAD_##payload},
+#define XR_BUILTIN_ENUM_VARIANT(vname, payload)                                                    \
+    {(vname), XA_PRELUDE_PAYLOAD_##payload, XA_PRELUDE_PAYLOAD_NAME_##payload},
+#define XA_PRELUDE_PAYLOAD_NAME_NONE NULL
+#define XA_PRELUDE_PAYLOAD_NAME_TYPE_PARAM_0 "value"
+#define XA_PRELUDE_PAYLOAD_NAME_ERROR "error"
 #include "../../../stdlib/prelude/builtin_symbols.def"
 };
 
@@ -467,9 +478,14 @@ static const XaPreludeEnumDesc g_prelude_enums[] = {
 #define XR_BUILTIN_ENUM(ename, earity, evm_slot, evariants)                                        \
     {(ename), (earity),                                                                            \
      (int) (sizeof((const XaPreludeVariantDesc[]) {evariants}) / sizeof(XaPreludeVariantDesc))},
-#define XR_BUILTIN_ENUM_VARIANT(vname, payload) {(vname), XA_PRELUDE_PAYLOAD_##payload},
+#define XR_BUILTIN_ENUM_VARIANT(vname, payload)                                                    \
+    {(vname), XA_PRELUDE_PAYLOAD_##payload, XA_PRELUDE_PAYLOAD_NAME_##payload},
 #include "../../../stdlib/prelude/builtin_symbols.def"
 };
+
+#undef XA_PRELUDE_PAYLOAD_NAME_NONE
+#undef XA_PRELUDE_PAYLOAD_NAME_TYPE_PARAM_0
+#undef XA_PRELUDE_PAYLOAD_NAME_ERROR
 
 #define XA_PRELUDE_ENUM_COUNT (sizeof(g_prelude_enums) / sizeof(g_prelude_enums[0]))
 /* Widest prelude enum; sizes the per-enum scratch arrays below. */
@@ -494,6 +510,7 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
 
         const char *member_names[XA_PRELUDE_ENUM_MAX_VARIANTS];
         int payload_counts[XA_PRELUDE_ENUM_MAX_VARIANTS];
+        const char *payload_names[XA_PRELUDE_ENUM_MAX_VARIANTS];
         XrType *payload_slots[XA_PRELUDE_ENUM_MAX_VARIANTS];
         XrType **payload_types[XA_PRELUDE_ENUM_MAX_VARIANTS];
         bool is_adt = false;
@@ -521,6 +538,7 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
                     break;
             }
             payload_counts[v] = payload_slots[v] ? 1 : 0;
+            payload_names[v] = variants[v].payload_name;
             payload_types[v] = payload_slots[v] ? &payload_slots[v] : NULL;
             is_adt = is_adt || payload_counts[v] > 0;
         }
@@ -528,7 +546,7 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
         register_prelude_enum_full(
             analyzer, desc->name, desc->arity > 0 ? (const char **) type_param_names : NULL,
             desc->arity, member_names, desc->variant_count, is_adt ? payload_counts : NULL,
-            is_adt ? payload_types : NULL, is_adt);
+            is_adt ? payload_names : NULL, is_adt ? payload_types : NULL, is_adt);
     }
 }
 
@@ -613,6 +631,9 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // AST call -> resolved stdlib parallel intrinsic identity.
     analyzer->parallel_call_plan_table = xa_parallel_call_plan_table_new();
 
+    // Named enum record syntax -> immutable declaration-slot plans.
+    analyzer->enum_record_plan_table = xa_enum_record_plan_table_new();
+
     // AST call -> canonical resolved call identity.
     analyzer->resolved_call_table = xa_resolved_call_table_new();
 
@@ -625,7 +646,8 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // Canonical allocation-effect summaries.
     analyzer->allocation_db = xa_allocation_db_new();
 
-    if (!analyzer->effect_db || !analyzer->memory_effect_db || !analyzer->allocation_db) {
+    if (!analyzer->enum_record_plan_table || !analyzer->effect_db || !analyzer->memory_effect_db ||
+        !analyzer->allocation_db) {
         xa_analyzer_free(analyzer);
         return NULL;
     }
@@ -703,6 +725,11 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         xa_parallel_call_plan_table_free(
             (XaParallelCallPlanTable *) analyzer->parallel_call_plan_table);
         analyzer->parallel_call_plan_table = NULL;
+    }
+
+    if (analyzer->enum_record_plan_table) {
+        xa_enum_record_plan_table_free((XaEnumRecordPlanTable *) analyzer->enum_record_plan_table);
+        analyzer->enum_record_plan_table = NULL;
     }
 
     if (analyzer->resolved_call_table) {
@@ -2021,6 +2048,9 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     if (!analyzer || !ast)
         return;
 
+    xa_enum_record_plan_table_begin_analysis(
+        (XaEnumRecordPlanTable *) analyzer->enum_record_plan_table);
+
     /* Analyzer inference may materialize syntax-level type references (for
      * example inferred generic call arguments).  Those nodes are AST state,
      * so allocate them from the program's arena and keep their lifetime tied
@@ -2339,6 +2369,14 @@ const XaParallelCallPlan *xa_analyzer_get_parallel_call_plan(XaAnalyzer *analyze
         (XaParallelCallPlanTable *) analyzer->parallel_call_plan_table, node);
 }
 
+const XaEnumRecordPlan *xa_analyzer_get_enum_record_plan(XaAnalyzer *analyzer,
+                                                         const struct AstNode *node) {
+    if (!analyzer || !node)
+        return NULL;
+    return xa_enum_record_plan_table_get((XaEnumRecordPlanTable *) analyzer->enum_record_plan_table,
+                                         node);
+}
+
 const XaResolvedCall *xa_analyzer_get_resolved_call(XaAnalyzer *analyzer,
                                                     const struct AstNode *node) {
     if (!analyzer || !node)
@@ -2423,11 +2461,17 @@ struct XrType *xa_analyzer_resolve_adt_payload_type(XaAnalyzer *analyzer,
         return NULL;
 
     int param_count = xa_symbol_links_get_type_param_count(links);
-    bool subject_can_carry_type_args =
-        subject_type && (subject_type->kind == XR_KIND_INSTANCE ||
-                         subject_type->kind == XR_KIND_CLASS || subject_type->kind == XR_KIND_ENUM);
-    if (param_count <= 0 || !subject_can_carry_type_args ||
-        subject_type->instance.type_arg_count != param_count || !subject_type->instance.type_args)
+    XrType **type_args = NULL;
+    int type_arg_count = 0;
+    if (subject_type && subject_type->kind == XR_KIND_ENUM) {
+        type_args = subject_type->enum_type.type_args;
+        type_arg_count = subject_type->enum_type.type_arg_count;
+    } else if (subject_type &&
+               (subject_type->kind == XR_KIND_INSTANCE || subject_type->kind == XR_KIND_CLASS)) {
+        type_args = subject_type->instance.type_args;
+        type_arg_count = subject_type->instance.type_arg_count;
+    }
+    if (param_count <= 0 || type_arg_count != param_count || !type_args)
         return payload_type;
 
     const char *stack_names[8];
@@ -2440,8 +2484,8 @@ struct XrType *xa_analyzer_resolve_adt_payload_type(XaAnalyzer *analyzer,
     for (int i = 0; i < param_count; i++)
         param_names[i] = xa_symbol_links_get_type_param_name(links, i);
 
-    XrType *resolved = xr_type_substitute(analyzer->isolate, payload_type, param_names,
-                                          subject_type->instance.type_args, param_count);
+    XrType *resolved =
+        xr_type_substitute(analyzer->isolate, payload_type, param_names, type_args, param_count);
     if (param_names != stack_names)
         xr_free((void *) param_names);
     return resolved ? resolved : payload_type;

@@ -1,22 +1,22 @@
 enum FastResult {
-    Ok(i64),
-    Err(i64)
+    Ok { value: i64 },
+    Err { code: i64 }
 }
 
 fn pick(n: i64) -> FastResult {
     if (n != 0) {
-        return FastResult.Ok(41)
+        return FastResult.Ok { value: 41 }
     }
-    return FastResult.Err(9)
+    return FastResult.Err { code: 9 }
 }
 
 fn xray_enum_payload_value(n: i64) -> i64 {
     var result = pick(n)
     match (result) {
-        FastResult.Ok(value) -> {
+        FastResult.Ok { value } -> {
             return value + 1
         }
-        FastResult.Err(code) -> {
+        FastResult.Err { code } -> {
             return 0 - code
         }
     }

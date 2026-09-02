@@ -5,10 +5,10 @@ import { FastResult, pick } from "./enum_result_lib"
 fn score(ok: bool) -> i64 {
     var result = pick(ok)
     match (result) {
-        FastResult.Ok(value) -> {
+        FastResult.Ok { value } -> {
             return value + 1
         }
-        FastResult.Err(code) -> {
+        FastResult.Err { code } -> {
             return 0 - code
         }
     }

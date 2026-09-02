@@ -9,8 +9,8 @@ enum Color {
 
 enum Event {
     Ready,
-    Data(value: i64),
-    Error(message: string)
+    Data { value: i64 },
+    Error { message: string }
 }
 
 fn firstPayloadVariantOrdinal() -> i64 {

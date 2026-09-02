@@ -26,41 +26,41 @@ class Attr {
 }
 
 enum Node {
-    Document(Array<Node>),
-    Element(Name, Array<Attr>, Array<Node>),
-    Text(string)
+    Document { children: Array<Node> },
+    Element { name: Name, attributes: Array<Attr>, children: Array<Node> },
+    Text { content: string }
 }
 
 fn tagOf(node: Node) -> string {
     return match (node) {
-        Node.Element(name, attrs, children) -> name.local,
-        Node.Text(t) -> "#text",
-        Node.Document(kids) -> "#document"
+        Node.Element { name, attributes: attrs, children } -> name.local,
+        Node.Text { content: t } -> "#text",
+        Node.Document { children: kids } -> "#document"
     }
 }
 
 fn childCount(node: Node) -> i64 {
     return match (node) {
-        Node.Document(kids) -> len(kids),
-        Node.Element(name, attrs, kids) -> len(kids),
-        Node.Text(t) -> 0
+        Node.Document { children: kids } -> len(kids),
+        Node.Element { name, attributes: attrs, children: kids } -> len(kids),
+        Node.Text { content: t } -> 0
     }
 }
 
 fn firstAttrValue(node: Node) -> string {
     return match (node) {
-        Node.Element(name, attrs, kids) -> (len(attrs) > 0 ? attrs[0].value : ""),
+        Node.Element { name, attributes: attrs, children: kids } -> (len(attrs) > 0 ? attrs[0].value : ""),
         _ -> ""
     }
 }
 
 var emptyAttrs: Array<Attr> = []
 var attrs: Array<Attr> = [Attr(Name("", "id"), "7"), Attr(Name("x", "lang"), "en")]
-var inner: Array<Node> = [Node.Text("hello")]
-var item = Node.Element(Name("", "item"), attrs, inner)
+var inner: Array<Node> = [Node.Text { content: "hello" }]
+var item = Node.Element { name: Name("", "item"), attributes: attrs, children: inner }
 var roots: Array<Node> = [item]
-var root = Node.Element(Name("", "root"), emptyAttrs, roots)
-var doc = Node.Document([root])
+var root = Node.Element { name: Name("", "root"), attributes: emptyAttrs, children: roots }
+var doc = Node.Document { children: [root] }
 
 print(tagOf(root))
 print(childCount(root))

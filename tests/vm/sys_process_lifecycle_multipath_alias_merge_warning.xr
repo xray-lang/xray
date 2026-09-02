@@ -2,7 +2,7 @@ import sys
 import { Pipe } from sys
 
 enum ProcessAliasMergeErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 const processAliasMergeCh = Channel<i64>(1)

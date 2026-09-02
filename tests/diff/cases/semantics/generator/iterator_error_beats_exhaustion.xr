@@ -5,12 +5,12 @@
 // swallow the diagnosis a failing generator owes its consumer.
 
 enum GenErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 fn gen() -> Iterator<i64> {
     yield 1
-    throw GenErr.Msg("boom")
+    throw GenErr.Msg { s: "boom" }
 }
 
 // next() drives the producer itself when nothing is buffered, so the second
@@ -35,7 +35,7 @@ try {
     direct()
 } catch (e) {
     match (e) {
-        GenErr.Msg(s) -> print("direct-caught " + s)
+        GenErr.Msg { s } -> print("direct-caught " + s)
     }
 } catch panic (p) {
     print("direct-panic " + string(p.code))
@@ -45,7 +45,7 @@ try {
     looped()
 } catch (e) {
     match (e) {
-        GenErr.Msg(s) -> print("looped-caught " + s)
+        GenErr.Msg { s } -> print("looped-caught " + s)
     }
 } catch panic (p) {
     print("looped-panic " + string(p.code))

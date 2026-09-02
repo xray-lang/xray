@@ -1580,7 +1580,7 @@ Xray 不要求写生命周期，也不提供借用检查器语法。但**所有�
 | 动作 | 对根别名的影响 | 能否恢复 |
 |--|--|--|
 | `var b = a` | `LOCAL_ALIASED` | 能。`b` 最后一次使用后，根重新是 `UNIQUE` |
-| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V(a)` | `ESCAPED` | **不能**。函数内分析看不到那个槽何时被覆盖 |
+| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V { value: a }` | `ESCAPED` | **不能**。函数内分析看不到那个槽何时被覆盖 |
 | 来源不明的调用结果 | `ALIAS_UNKNOWN` | 不能 |
 | `copy(a)` | 不影响 `a`；结果是新的 `UNIQUE` 根 | — |
 | `move a` | `a` 变为 `MOVED`；根随之转移 | — |
@@ -2648,13 +2648,13 @@ CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
 ```
 
 ```xray
-enum AppError { NotFound, Timeout(ms: i64) }
+enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获
 try { throw AppError.NotFound } catch (e) {
     match (e) {
         AppError.NotFound -> log.error("not found"),
-        AppError.Timeout(ms) -> log.error("timeout after ${ms}ms")
+        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
     }
 }
 
@@ -3643,10 +3643,11 @@ xray 的 `enum` 是**安全 tagged aggregate**：每个值包含编译器分配�
 EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
-EnumVariant    ::= Identifier VariantPayload?
-EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-VariantPayload ::= '(' VariantField (',' VariantField)* ')'
-VariantField   ::= (Identifier ':')? Type
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ```
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
@@ -3666,7 +3667,7 @@ enum HttpStatus {
     NotFound,
     InternalError
 
-    fn code() -> i64 {
+    code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404,
@@ -3680,19 +3681,19 @@ enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backi
 
 #### 5.6.2 Payload enum
 
-变体名后跟括号声明 payload 字段（位置参数或具名字段）：
+payload 变体使用具名记录字段；每个字段必须有非空且唯一的名称：
 
 ```xray
 enum Option<T> {
-    Some(T),
+    Some { value: T },
     None,
 }
 
 enum NetEvent {
     Connected,
-    Disconnected(reason: string),
-    DataReceived(bytes: Array<u8>),
-    Error(code: i64, message: string),
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
 }
 
 // 递归 enum 的 payload 必须经 class 节点间接化
@@ -3703,9 +3704,9 @@ class ExprNode {
 }
 
 enum Expr {
-    Number(i64),
-    Binary(op: string, left: ExprNode, right: ExprNode),
-    Call(name: string, args: Array<Expr>),
+    Number { value: i64 },
+    Binary { op: string, left: ExprNode, right: ExprNode },
+    Call { name: string, args: Array<Expr> },
 }
 ```
 
@@ -3722,20 +3723,20 @@ enum Expr {
 
 ```xray
 var c = Color.Red
-var r1 = Option.Some(42)                            // 位置 payload
-var e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
-var e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
-var e3 = NetEvent.Connected                         // 无 payload 变体不写括号
+var r1 = Option.Some { value: 42 }
+var e1 = NetEvent.DataReceived { bytes: b }
+var e2 = NetEvent.Error { code: 404, message: "not found" }
+var e3 = NetEvent.Connected                         // unit 变体不写 braces
 ```
 
 解构（match）：
 
 ```xray
 match (event) {
-    NetEvent.Connected            -> print("connected"),
-    NetEvent.Disconnected(reason) -> print("by:", reason),
-    NetEvent.DataReceived(b)      -> process(b),
-    NetEvent.Error(code, msg)     -> log.error(code, msg),
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
 }
 ```
 
@@ -3791,7 +3792,7 @@ descriptor API 是封闭白名单：
 | `EnumPayloads<E>` | `length: i64`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
 | `EnumPayloadField<E>` | `index: i64`、`name: string`、`type: i64`（canonical TypeId） |
 
-命名 payload 字段的 `name` 是源码声明名；位置 payload 字段没有声明名，其 `name` 确定为 `""`，不使用 `null`，因此 descriptor 表面保持非空 `string` 类型。
+payload 字段的 `name` 始终是源码声明名；空名称、重复名称或名称/类型计数不一致的 metadata 必须拒绝。
 
 这些类型不可由用户构造，描述符不可调用，也不提供从名字/ordinal 构造 enum 值的入口。越界索引按普通 checked index 失败。descriptor 不进入 C ABI，FFI 边界会编译拒绝。
 
@@ -3820,47 +3821,47 @@ fn statusFromCode(code: i64) -> HttpStatus? {
 
 ```xray
 enum Shape {
-    Circle(radius: f64),
-    Rect(w: f64, h: f64),
-    Triangle(a: f64, b: f64, c: f64)
+    Circle { radius: f64 },
+    Rect { width: f64, height: f64 },
+    Triangle { a: f64, b: f64, c: f64 }
 
-    fn area() -> f64 {
+    area() -> f64 {
         return match (this) {
-            Shape.Circle(r)     -> 3.14159 * r * r,
-            Shape.Rect(w, h)    -> w * h,
-            Shape.Triangle(a, b, c) -> {
+            Shape.Circle { radius } -> 3.14159 * radius * radius,
+            Shape.Rect { width, height } -> width * height,
+            Shape.Triangle { a, b, c } -> {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
         }
     }
 
-    fn isRound() -> bool {
+    isRound() -> bool {
         return match (this) {
-            Shape.Circle(_) -> true,
+            Shape.Circle {} -> true,
             _               -> false,
         }
     }
 }
 
-var s = Shape.Circle(radius: 1.0)
+var s = Shape.Circle { radius: 1.0 }
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-静态方法使用 `static fn`，常用于工厂、查表和 enum 相关 helper；静态方法没有 `this`：
+静态方法使用 `static name(...)`；实例方法默认 READ receiver，也可使用 `ref` 或 `move` receiver。enum 方法不写 `fn`：
 
 ```xray
 enum Color {
     Red, Green, Blue
 
-    static fn fromInt(v: i64) -> Color {
+    static fromInt(v: i64) -> Color {
         if (v == 1) { return Color.Red }
         if (v == 2) { return Color.Green }
         return Color.Blue
     }
 
-    fn label() -> string {
+    label() -> string {
         return this.name
     }
 }
@@ -3868,11 +3869,11 @@ enum Color {
 print(Color.fromInt(2).label())     // "Green"
 ```
 
-> 注意 `Triangle(...)` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
+> 注意 `Triangle { ... }` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
 
 **规则**：
 
-- 方法语法与 `class` 内方法一致：`fn name(params) -> ReturnType { body }` 或 `static fn name(params) -> ReturnType { body }`
+- 方法语法与类型体内方法一致：`name(...)`、`ref name(...)`、`move name(...)` 或 `static name(...)`；不写 `fn`
 - 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
 - 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
 - **不**支持 `constructor`（变体语法本身就是构造器）
@@ -3882,7 +3883,7 @@ print(Color.fromInt(2).label())     // "Green"
   enum Color {
       Red, Green, Blue
 
-      fn isWarm() -> bool { return this == Color.Red }
+      isWarm() -> bool { return this == Color.Red }
   }
   ```
 - 方法**不能**和变体名同名
@@ -3997,34 +3998,33 @@ match (color) {
 
 #### 6.3.2 ADT 变体（带 payload）解构
 
-ADT 变体的模式可解构 payload 字段（按位置或按字段名）：
+ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
 
 ```xray
-// 位置解构
 match (event) {
-    NetEvent.Connected            -> print("connected"),
-    NetEvent.Disconnected(reason) -> print("by:", reason),
-    NetEvent.DataReceived(b)      -> process(b),
-    NetEvent.Error(code, msg)     -> log.error(code, msg),
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
 }
 
-// Option 模式（位置）
+// 同名 binding shorthand
 match (opt) {
-    Option.Some(v) -> print("got:", v),
+    Option.Some { value: v } -> print("got:", v),
     Option.None    -> print("nothing"),
 }
 
-// 通配符跳过 payload 中不关心的字段
+// 只列需要观察的字段
 match (event) {
-    NetEvent.Error(code, _) if (code >= 500) -> throw NetErr.ServerFault(code),
-    _                                         -> continue,
+    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
+    _                                        -> continue,
 }
 
 // 嵌套解构
 match (msg) {
-    Option.Some(NetEvent.DataReceived(bytes)) -> process(bytes),
-    Option.None                               -> skip(),
-    _                                         -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
+    Option.None                                           -> skip(),
+    _                                                     -> skip(),
 }
 ```
 
@@ -4038,14 +4038,14 @@ match (msg) {
 ```xray
 enum NetEvent {
     Connected,
-    Disconnected(reason: string),
-    DataReceived(bytes: Array<u8>),
-    Error(code: i64, message: string),
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
 }
 
 match (event) {
-    NetEvent.Connected            -> "ok",
-    NetEvent.Disconnected(r)      -> "down: ${r}",
+    NetEvent.Connected                     -> "ok",
+    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
     // ❌ E0371: 缺失变体 DataReceived 和 Error；可加 `_ -> ...` 兜底
 }
 ```
@@ -4298,7 +4298,7 @@ var t3 = go fn(b: Array<u8>) -> i64 {
 const ch = Channel<i64>(10)
 var t4 = go fn(c: Channel<i64>) -> i64 {
     return match (c.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> 0
     }
 }(ch)
@@ -4356,10 +4356,10 @@ Xray 的错误处理分为两个严格分离的通道：
 `throw expr` 抛出一个枚举错误值。`expr` 必须是枚举类型的变体值：
 
 ```xray
-enum AppErr { NotFound, InvalidInput(string) }
+enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ 简单枚举变体
-throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
+throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚举变体
 ```
 
 抛出后行为：
@@ -4375,14 +4375,14 @@ throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
 #### 8.1.2 `try` / `catch`
 
 ```xray
-enum IOErr { Timeout, Refused(string) }
+enum IOErr { Timeout, Refused { reason: string } }
 
 try {
     connect(host)
 } catch (e) {
     match (e) {
         IOErr.Timeout -> log("timeout"),
-        IOErr.Refused(reason) -> log("refused: " + reason),
+        IOErr.Refused { reason } -> log("refused: " + reason),
     }
 }
 ```
@@ -4399,7 +4399,7 @@ try {
 
 ```xray
 enum NetErr { Timeout, Refused }
-enum DbErr { ConnLost, QueryFailed(string) }
+enum DbErr { ConnLost, QueryFailed { query: string } }
 
 try {
     riskyIO()
@@ -4418,6 +4418,11 @@ try {
 - 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
 - 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
 - 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
+
+`catch` 也可以直接使用 enum variant pattern。unit variant 写作
+`catch NetErr.Timeout { ... }`，其中唯一一对花括号是 catch 块体；payload variant 写作
+`catch DbErr.QueryFailed { query } { ... }`，第一对花括号是具名 pattern，第二对是块体。
+这个边界只由 brace-group 数量决定，不查询 variant schema，也不允许 unit pattern 写 `{}`。
 
 #### 8.1.3 重抛与错误转换
 
@@ -4441,19 +4446,19 @@ try {
 
 ```xray
 enum HttpErr {
-    NotFound(string),
-    ServerError(i64, string),
+    NotFound { message: string },
+    ServerError { code: i64, message: string },
     Timeout,
 }
 
 enum ParseErr {
     Empty,
-    InvalidChar(string, i64),
+    InvalidChar { value: string, offset: i64 },
     Overflow,
 }
 
 fn fetchUser(id: i64) -> User {
-    if (id <= 0) { throw HttpErr.NotFound("user not found") }
+    if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
     // ...
 }
 
@@ -4461,8 +4466,8 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound(msg) -> log("404:", msg),
-        HttpErr.ServerError(code, msg) -> log(string(code) + ":", msg),
+        HttpErr.NotFound { message: msg } -> log("404:", msg),
+        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
         HttpErr.Timeout -> log("timeout"),
     }
 }
@@ -4482,7 +4487,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 1. **Channel 显式传递**：
 
 ```xray
-enum WorkerErr { Failed(string) }
+enum WorkerErr { Failed { message: string } }
 const err_ch = Channel<string>(1)
 
 go fn() {
@@ -4495,7 +4500,7 @@ go fn() {
 }()
 
 var result = match (err_ch.recv()) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> "error"
 }
 if (result != "ok") { log("worker failed") }
@@ -4750,10 +4755,10 @@ main()
 #### 模式 2：throw + catch 用于库 API
 
 ```xray
-enum ConfigErr { Missing(string) }
+enum ConfigErr { Missing { field: string } }
 
 fn requirePort(cfg: JSON.Object) {
-    if (!cfg.containsKey("port")) { throw ConfigErr.Missing("port") }
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
     print("port:", cfg["port"])
 }
 
@@ -4763,7 +4768,7 @@ fn main() {
         requirePort(JSON.parseObject("{}"))                  // 抛出 ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
+            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
         }
     }
 }
@@ -4797,11 +4802,11 @@ fn safeDivide(a: i64, b: i64) -> string {
 #### 示例 1：`throw` / `catch` / `match`
 
 ```xray
-enum ParseErr { Empty, BadChar(string) }
+enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
-    if (s == "x") { throw ParseErr.BadChar(s) }
+    if (s == "x") { throw ParseErr.BadChar { value: s } }
     return 42
 }
 
@@ -4811,7 +4816,7 @@ fn main() {
     } catch (e: ParseErr) {
         match (e) {
             ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar(c) -> print("bad char:", c),
+            ParseErr.BadChar { value: c } -> print("bad char:", c),
         }
     }
 }
@@ -5291,8 +5296,8 @@ var r = await t
 
 match (t.poll()) {
     TaskResult.Pending -> print("running")
-    TaskResult.Success(value) -> print(value)
-    TaskResult.Failed(err) -> print(err)
+    TaskResult.Success { value } -> print(value)
+    TaskResult.Failed { error: err } -> print(err)
     TaskResult.Cancelled -> print("cancelled")
     TaskResult.Timeout -> print("timeout")
 }
@@ -5337,14 +5342,14 @@ const cha = Channel(3)          // 元素类型从首次 send 推断
 const ch = Channel<i64>(10)
 ch.send(42)                             // 阻塞发送
 var v = match (ch.recv()) {
-    Recv.Value(value) -> value
+    Recv.Value { value } -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
 var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
 match (ch.tryRecv()) {
-    Recv.Value(next) -> print(next)
+    Recv.Value { value: next } -> print(next)
     Recv.Empty -> print("empty")
     Recv.Closed -> print("closed")
     Recv.Timeout -> print("timeout")
@@ -5373,7 +5378,7 @@ fn producer(ch: Channel<i64>) {
 - **MPMC**（多生产者多消费者）。
 - 有缓冲 ch：满则发送方挂起，空则接收方挂起。
 - 无缓冲 ch：发送/接收必须同时握手（rendezvous）。
-- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value(v)`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value { value: v }`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
 - `for (msg in ch)` 等价于阻塞接收直到 channel 关闭且 drained；循环变量类型为 `T`。Channel 不支持 key-value 迭代。
 
 ### 10.6 `select`
@@ -5402,7 +5407,7 @@ select {
 ```
 
 **语义**：
-- 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value(name)` 的 payload 绑定到 `name`。
+- 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
 - 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
@@ -6183,7 +6188,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `close()` | 关闭 channel |
 | `capacity` / `isClosed` | 容量和关闭状态属性 |
 
-`Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<i64?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
+`Recv.Value { value: v }` 中的 `v` 就是 channel payload，因此 `Channel<i64?>` 可以区分真实的 `Recv.Value { value: null }` 和 `Recv.Closed`。
 
 ### 14.11 `JSON` 命名空间
 
@@ -7124,8 +7129,10 @@ Pattern ::= LiteralPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
-EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload 解构
-VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
+EnumPattern     ::= QualifiedIdent
+                  | QualifiedIdent '{' EnumFieldPatternList? '}'
+EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
+EnumFieldPattern ::= Identifier | Identifier ':' Pattern
 TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
@@ -7258,10 +7265,11 @@ InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
-EnumVariant    ::= Identifier VariantPayload?
-EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-VariantPayload ::= '(' VariantField (',' VariantField)* ')'
-VariantField   ::= (Identifier ':')? Type
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type

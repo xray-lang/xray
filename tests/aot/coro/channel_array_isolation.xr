@@ -1,6 +1,6 @@
 fn worker(ch: Channel<Array<i64>>) -> i64 {
     var xs: Array<i64> = match (ch.recv()) {
-        Recv.Value(value) -> value
+        Recv.Value { value } -> value
         _ -> Array<i64>(0)
     }
     xs.push(99)

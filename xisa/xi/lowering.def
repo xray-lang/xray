@@ -1248,6 +1248,24 @@
       (selector)
       (emitter "src/aot/xi_cgen_abi_helpers.inc.c" emit_value_as_rep_ctx))))
 
+(lower xi.variant.construct
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_variant_construct)
+  :aot-c (driver xicgen_variant_construct))
+
+(lower xi.variant.test
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_variant_test)
+  :aot-c (driver xicgen_variant_test))
+
+(lower xi.variant.project
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_variant_project)
+  :aot-c (driver xicgen_variant_project))
+
 (lower xi.byte.slice.load.u16
   :match ()
   :required-targets (vm-bytecode aot-c)

@@ -2,10 +2,10 @@
 
 import time
 
-enum LinkErr { Msg(string) }
+enum LinkErr { Msg { message: string } }
 
 fn failing() -> i64 {
-    throw LinkErr.Msg("link error")
+    throw LinkErr.Msg { message: "link error" }
     return 0
 }
 fn slow_work() -> i64 {
@@ -28,7 +28,7 @@ fn test_failed_result() {
     var t = go failing()
     var r = t.awaitResult()
     match (r) {
-        TaskResult.Failed(_) -> assert(true, "failed task should return TaskResult.Failed")
+        TaskResult.Failed { error: _ } -> assert(true, "failed task should return TaskResult.Failed")
         _ -> assert(false, "failed task should not return success")
     }
 }

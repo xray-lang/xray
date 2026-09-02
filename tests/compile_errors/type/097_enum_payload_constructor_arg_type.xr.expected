@@ -1,2 +1,2 @@
---> 6:23 E0356
-Argument 1: type 'string' is not assignable to enum payload type 'i64'
+--> 6:32 E0356
+enum field 'Result.Ok.value' has type 'i64', but value has type 'string'

@@ -7,7 +7,7 @@
 const HEX = "0123456789ABCDEF"
 
 export enum UrlError {
-    InvalidPercentEncoding(i64)
+    InvalidPercentEncoding { byteOffset: i64 }
 }
 
 // QueryParams preserves insertion order, duplicate names, empty names, and
@@ -214,12 +214,12 @@ fn decodeQueryComponent(s: string, baseOffset: i64) -> string {
     while (i < len(src)) {
         if (src[i] == 37) {
             if (i + 2 >= len(src)) {
-                throw UrlError.InvalidPercentEncoding(baseOffset + i)
+                throw UrlError.InvalidPercentEncoding { byteOffset: baseOffset + i }
             }
             var hi = hexVal(src[i + 1] as i64)
             var lo = hexVal(src[i + 2] as i64)
             if (hi < 0 || lo < 0) {
-                throw UrlError.InvalidPercentEncoding(baseOffset + i)
+                throw UrlError.InvalidPercentEncoding { byteOffset: baseOffset + i }
             }
             out[oi] = ((hi << 4) | lo) as u8
             oi = oi + 1

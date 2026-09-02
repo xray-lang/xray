@@ -1,5 +1,5 @@
 [package]
-name = "filetest-uint-unsigned-arith-native"
+name = "xray-tests/filetest-uint-unsigned-arith-native"
 version = "1.0.0"
 license = "MIT"
 main = "uint_unsigned_arith_native.xr"

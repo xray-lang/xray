@@ -1,5 +1,5 @@
 [package]
-name = "filetest-_freestanding_static_data_lib"
+name = "xray-tests/filetest-_freestanding_static_data_lib"
 version = "1.0.0"
 license = "MIT"
 main = "_freestanding_static_data_lib.xr"

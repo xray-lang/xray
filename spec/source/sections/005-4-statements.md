@@ -250,13 +250,13 @@ CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
 ```
 
 ```xray @id=stmt-try
-enum AppError { NotFound, Timeout(ms: i64) }
+enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获
 try { throw AppError.NotFound } catch (e) {
     match (e) {
         AppError.NotFound -> log.error("not found"),
-        AppError.Timeout(ms) -> log.error("timeout after ${ms}ms")
+        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
     }
 }
 
@@ -619,14 +619,14 @@ CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
 ```
 
 ```xray @id=stmt-try
-enum AppError { NotFound, Timeout(ms: i64) }
+enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // Recoverable errors: enum values flow through the value-return channel,
 // caught by catch (e)
 try { throw AppError.NotFound } catch (e) {
     match (e) {
         AppError.NotFound -> log.error("not found"),
-        AppError.Timeout(ms) -> log.error("timeout after ${ms}ms")
+        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
     }
 }
 

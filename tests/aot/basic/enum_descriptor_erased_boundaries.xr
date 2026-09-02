@@ -5,7 +5,7 @@ enum BoundaryHue {
 
 enum BoundaryState {
     Idle,
-    Busy(i64)
+    Busy { value: i64 }
 }
 
 type BoundaryVariant = EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>

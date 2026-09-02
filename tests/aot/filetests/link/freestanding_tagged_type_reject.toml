@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_tagged_type_reject"
+name = "xray-tests/filetest-freestanding_tagged_type_reject"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_tagged_type_reject.xr"

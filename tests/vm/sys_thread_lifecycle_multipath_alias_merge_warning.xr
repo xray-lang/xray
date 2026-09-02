@@ -1,7 +1,7 @@
 import sys
 
 enum ThreadAliasMergeErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 const aliasMergeCh = Channel<i64>(1)

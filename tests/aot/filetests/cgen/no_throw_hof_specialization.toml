@@ -1,5 +1,5 @@
 [package]
-name = "filetest-no-throw-hof-specialization"
+name = "xray-tests/filetest-no-throw-hof-specialization"
 version = "1.0.0"
 license = "MIT"
 main = "no_throw_hof_specialization.xr"

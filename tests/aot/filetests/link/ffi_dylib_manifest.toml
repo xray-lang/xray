@@ -1,5 +1,5 @@
 [package]
-name = "filetest-ffi_dylib_manifest"
+name = "xray-tests/filetest-ffi_dylib_manifest"
 version = "1.0.0"
 license = "MIT"
 main = "ffi_dylib_manifest.xr"

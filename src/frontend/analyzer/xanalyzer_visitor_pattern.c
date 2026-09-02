@@ -21,6 +21,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xa_selection.h"
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
@@ -377,6 +378,229 @@ static void xa_check_range_pattern_operands(XaInferContext *ctx, AstNode *patter
     }
 }
 
+static void report_enum_pattern_error(XaInferContext *ctx, AstNode *node, int code,
+                                      const char *message) {
+    XrLocation location = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, code, message, &location);
+}
+
+static const char *enum_pattern_variant_name(AstNode *variant) {
+    if (!variant)
+        return NULL;
+    if (variant->type == AST_ENUM_ACCESS)
+        return variant->as.enum_access.member_name;
+    if (variant->type == AST_MEMBER_ACCESS)
+        return variant->as.member_access.name;
+    return NULL;
+}
+
+static const char *enum_pattern_owner_name(AstNode *variant) {
+    if (!variant)
+        return NULL;
+    if (variant->type == AST_ENUM_ACCESS)
+        return variant->as.enum_access.enum_name;
+    if (variant->type == AST_MEMBER_ACCESS && variant->as.member_access.object &&
+        variant->as.member_access.object->type == AST_VARIABLE)
+        return variant->as.member_access.object->as.variable.name;
+    return NULL;
+}
+
+static XaSymbol *enum_pattern_symbol(XaInferContext *ctx, AstNode *variant, XrType *slot_type,
+                                     uint16_t *ordinal_out) {
+    const XaSelection *selection = xa_analyzer_get_selection(ctx->analyzer, variant);
+    if (selection && selection->kind == XA_SEL_ENUM_MEMBER && selection->target_symbol &&
+        selection->target_symbol->kind == XA_SYM_ENUM && selection->field_index >= 0 &&
+        selection->field_index <= UINT16_MAX) {
+        *ordinal_out = (uint16_t) selection->field_index;
+        return selection->target_symbol;
+    }
+
+    const char *enum_name =
+        slot_type && XR_TYPE_IS_ENUM(slot_type) ? slot_type->enum_type.enum_name : NULL;
+    if (!enum_name)
+        enum_name = enum_pattern_owner_name(variant);
+    const char *variant_name = enum_pattern_variant_name(variant);
+    if (!enum_name || !variant_name)
+        return NULL;
+    XaSymbol *symbol = xa_lookup_visible_symbol(ctx, enum_name);
+    if (!symbol || symbol->kind != XA_SYM_ENUM)
+        symbol = xa_analyzer_lookup_deep(ctx->analyzer, enum_name);
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+    int ordinal = xa_enum_info_find_variant(links ? links->enum_info : NULL, variant_name);
+    if (!symbol || symbol->kind != XA_SYM_ENUM || ordinal < 0 || ordinal > UINT16_MAX)
+        return NULL;
+    *ordinal_out = (uint16_t) ordinal;
+    return symbol;
+}
+
+static int enum_pattern_payload_slot(const XaEnumVariantInfo *variant, const char *field_name) {
+    if (!variant || !variant->payload_names || !field_name)
+        return -1;
+    for (uint16_t i = 0; i < variant->payload_count; i++) {
+        if (variant->payload_names[i] && strcmp(variant->payload_names[i], field_name) == 0)
+            return (int) i;
+    }
+    return -1;
+}
+
+XR_FUNC bool xa_resolve_enum_pattern_plans(XaInferContext *ctx, AstNode *pattern,
+                                           XrType *slot_type) {
+    if (!ctx || !ctx->analyzer || !pattern)
+        return true;
+
+    if (pattern->type == AST_PATTERN_LITERAL && pattern->as.pattern_literal.value) {
+        AstNode *variant_path = pattern->as.pattern_literal.value;
+        if (variant_path->type != AST_ENUM_ACCESS && variant_path->type != AST_MEMBER_ACCESS)
+            return true;
+        uint16_t ordinal = 0;
+        XaSymbol *symbol = enum_pattern_symbol(ctx, variant_path, slot_type, &ordinal);
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+        XaEnumInfo *info = links ? links->enum_info : NULL;
+        if (!symbol || !info || !info->is_payload_enum || !info->variants ||
+            ordinal >= info->variant_count)
+            return true;
+        XaEnumVariantInfo *variant = &info->variants[ordinal];
+        if (variant->payload_count != 0) {
+            char message[224];
+            snprintf(message, sizeof(message),
+                     "payload enum variant '%s.%s' requires a named-field pattern",
+                     symbol->name ? symbol->name : "?", variant->name ? variant->name : "?");
+            report_enum_pattern_error(ctx, pattern, XR_ERR_ANALYZE_TYPE_MISMATCH, message);
+            return false;
+        }
+        XaEnumRecordPlan plan = {
+            .kind = XA_ENUM_VARIANT_PATTERN,
+            .enum_symbol_id = symbol->id,
+            .enum_layout_id = info->layout ? info->layout->layout_id : 0,
+            .variant_ordinal = ordinal,
+            .source_field_count = 0,
+            .declaration_field_count = 0,
+            .source_to_slot = NULL,
+            .complete = true,
+        };
+        if (!xa_enum_record_plan_table_set(
+                (XaEnumRecordPlanTable *) ctx->analyzer->enum_record_plan_table, pattern, &plan)) {
+            report_enum_pattern_error(ctx, pattern, XR_ERR_ANALYZE,
+                                      "failed to publish immutable enum unit-pattern plan");
+            return false;
+        }
+        return true;
+    }
+
+    if (pattern->type == AST_PATTERN_ADT) {
+        PatternAdtNode *adt = &pattern->as.pattern_adt;
+        uint16_t ordinal = 0;
+        XaSymbol *symbol = enum_pattern_symbol(ctx, adt->variant, slot_type, &ordinal);
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+        XaEnumInfo *info = links ? links->enum_info : NULL;
+        if (!symbol || !info || !info->variants || ordinal >= info->variant_count) {
+            report_enum_pattern_error(ctx, pattern, XR_ERR_ANALYZE_UNDEFINED_VAR,
+                                      "enum record pattern requires an exact enum variant path");
+            return false;
+        }
+        XaEnumVariantInfo *variant = &info->variants[ordinal];
+        if (variant->payload_count == 0) {
+            char message[224];
+            snprintf(message, sizeof(message),
+                     "unit enum variant '%s.%s' has no payload and cannot use '{}' in a pattern",
+                     symbol->name ? symbol->name : "?", variant->name ? variant->name : "?");
+            report_enum_pattern_error(ctx, pattern, XR_ERR_ANALYZE_TYPE_MISMATCH, message);
+            return false;
+        }
+
+        uint16_t source_count = adt->count > UINT16_MAX ? UINT16_MAX : (uint16_t) adt->count;
+        uint16_t *source_to_slot =
+            source_count ? xr_malloc((size_t) source_count * sizeof(*source_to_slot)) : NULL;
+        bool *seen = xr_calloc((size_t) variant->payload_count, sizeof(*seen));
+        bool complete =
+            source_count == (uint16_t) adt->count && seen && (source_count == 0 || source_to_slot);
+        for (uint16_t i = 0; i < source_count; i++)
+            source_to_slot[i] = UINT16_MAX;
+        for (int i = 0; i < adt->count; i++) {
+            const char *field_name = adt->field_names ? adt->field_names[i] : NULL;
+            int slot = enum_pattern_payload_slot(variant, field_name);
+            if (slot < 0) {
+                char message[256];
+                snprintf(message, sizeof(message), "enum variant '%s.%s' has no field '%s'",
+                         symbol->name ? symbol->name : "?", variant->name ? variant->name : "?",
+                         field_name ? field_name : "<missing>");
+                report_enum_pattern_error(ctx, pattern, XR_ERR_ANALYZE_UNDEFINED_VAR, message);
+                complete = false;
+                continue;
+            }
+            if (seen && seen[slot]) {
+                char message[256];
+                snprintf(message, sizeof(message),
+                         "enum pattern field '%s.%s.%s' is listed more than once",
+                         symbol->name ? symbol->name : "?", variant->name ? variant->name : "?",
+                         field_name);
+                report_enum_pattern_error(ctx, pattern, XR_ERR_ANALYZE_ARG_TYPE, message);
+                complete = false;
+            } else if (seen) {
+                seen[slot] = true;
+            }
+            if (source_to_slot && i < source_count)
+                source_to_slot[i] = (uint16_t) slot;
+        }
+
+        if (complete) {
+            XaEnumRecordPlan plan = {
+                .kind = XA_ENUM_VARIANT_PATTERN,
+                .enum_symbol_id = symbol->id,
+                .enum_layout_id = info->layout ? info->layout->layout_id : 0,
+                .variant_ordinal = ordinal,
+                .source_field_count = source_count,
+                .declaration_field_count = variant->payload_count,
+                .source_to_slot = source_to_slot,
+                .complete = true,
+            };
+            complete = xa_enum_record_plan_table_set(
+                (XaEnumRecordPlanTable *) ctx->analyzer->enum_record_plan_table, pattern, &plan);
+            if (!complete)
+                report_enum_pattern_error(ctx, pattern, XR_ERR_ANALYZE,
+                                          "failed to publish immutable enum pattern plan");
+        }
+
+        bool children_complete = true;
+        for (int i = 0; i < adt->count; i++) {
+            int slot =
+                source_to_slot && i < source_count && source_to_slot[i] < variant->payload_count
+                    ? source_to_slot[i]
+                    : -1;
+            XrType *payload_type = slot >= 0 ? xa_analyzer_resolve_adt_payload_type(
+                                                   ctx->analyzer, slot_type, adt->variant, slot)
+                                             : NULL;
+            children_complete =
+                xa_resolve_enum_pattern_plans(ctx, adt->patterns[i], payload_type) &&
+                children_complete;
+        }
+        xr_free(seen);
+        xr_free(source_to_slot);
+        return complete && children_complete;
+    }
+
+    AstNode **children = NULL;
+    int count = 0;
+    if (pattern->type == AST_PATTERN_TUPLE) {
+        children = pattern->as.pattern_tuple.patterns;
+        count = pattern->as.pattern_tuple.count;
+    } else if (pattern->type == AST_PATTERN_OBJECT) {
+        children = pattern->as.pattern_object.patterns;
+        count = pattern->as.pattern_object.count;
+    } else if (pattern->type == AST_PATTERN_ARRAY) {
+        children = pattern->as.pattern_array.patterns;
+        count = pattern->as.pattern_array.count;
+    } else if (pattern->type == AST_PATTERN_MULTI) {
+        children = pattern->as.pattern_multi.patterns;
+        count = pattern->as.pattern_multi.count;
+    }
+    bool complete = true;
+    for (int i = 0; i < count; i++)
+        complete = xa_resolve_enum_pattern_plans(ctx, children[i], NULL) && complete;
+    return complete;
+}
+
 // Recursively register binding symbols introduced by `pattern` into the
 // current scope. `slot_type` is the static type of the value flowing
 // into this position; for tuple sub-slots it's drawn from the tuple's
@@ -420,12 +644,18 @@ XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern,
      * the current match subject. */
     if (pattern->type == AST_PATTERN_ADT) {
         PatternAdtNode *ap = &pattern->as.pattern_adt;
+        const XaEnumRecordPlan *plan = xa_analyzer_get_enum_record_plan(ctx->analyzer, pattern);
         for (int i = 0; i < ap->count; i++) {
             AstNode *sub = ap->patterns[i];
             if (!sub)
                 continue;
-            XrType *payload_type =
-                xa_analyzer_resolve_adt_payload_type(ctx->analyzer, slot_type, ap->variant, i);
+            int slot = plan && plan->complete && i < plan->source_field_count &&
+                               plan->source_to_slot[i] < plan->declaration_field_count
+                           ? plan->source_to_slot[i]
+                           : -1;
+            XrType *payload_type = slot >= 0 ? xa_analyzer_resolve_adt_payload_type(
+                                                   ctx->analyzer, slot_type, ap->variant, slot)
+                                             : NULL;
             xa_register_pattern_bindings(ctx, sub, payload_type);
         }
     }
@@ -538,6 +768,7 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
         // fresh scoped symbols typed from the matching subject slot.
         xa_check_array_pattern_elements(ctx, arm_node->pattern);
         xa_check_range_pattern_operands(ctx, arm_node->pattern);
+        xa_resolve_enum_pattern_plans(ctx, arm_node->pattern, subject_type);
 
         bool has_binding = xa_pattern_has_binding(arm_node->pattern);
         if (has_binding) {

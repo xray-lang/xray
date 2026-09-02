@@ -1,5 +1,5 @@
 [package]
-name = "filetest-rawptr-value-struct-method-receiver"
+name = "xray-tests/filetest-rawptr-value-struct-method-receiver"
 version = "1.0.0"
 license = "MIT"
 main = "rawptr_value_struct_method_receiver.xr"

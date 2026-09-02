@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "9dd017c70e18363ba192960bbfb63c886e66ca3dc141a3c5fb2e37027af4894f",
+  "canonical_fingerprint": "575fb0e396738a8348e557a89d4a5cf1b6776dd90d209eacc3f64310082de021",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -4353,6 +4353,72 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.value.product.project"
+      ],
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "owner": "xi.variant.construct",
+      "owner_id": "4a52b30af872ccdf0060fcdf3859b81e",
+      "owner_id_hi": "0x4a52b30af872ccdf",
+      "owner_id_lo": "0x0060fcdf3859b81e",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.variant.construct"
+      ],
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "owner": "xi.variant.project",
+      "owner_id": "9d2968a82f32a7efb3903988ba1d86bf",
+      "owner_id_hi": "0x9d2968a82f32a7ef",
+      "owner_id_lo": "0xb3903988ba1d86bf",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.variant.project"
+      ],
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "owner": "xi.variant.test",
+      "owner_id": "bb0fba3366e0f4327438a802d91a49de",
+      "owner_id_hi": "0xbb0fba3366e0f432",
+      "owner_id_lo": "0x7438a802d91a49de",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.variant.test"
       ],
       "consumers": [
         "semantic-plan"
@@ -9504,6 +9570,78 @@
       "owner_id": "9ed8851fbbbb9d91ce2f9ed1013a54d9",
       "owner_id_hi": "0x9ed8851fbbbb9d91",
       "owner_id_lo": "0xce2f9ed1013a54d9",
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "category": "declarative-primitive",
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "operation": "xi.variant.construct",
+      "operation_id": "4a52b30af872ccdf0060fcdf3859b81e",
+      "operation_id_hi": "0x4a52b30af872ccdf",
+      "operation_id_lo": "0x0060fcdf3859b81e",
+      "owner": "xi.variant.construct",
+      "owner_id": "4a52b30af872ccdf0060fcdf3859b81e",
+      "owner_id_hi": "0x4a52b30af872ccdf",
+      "owner_id_lo": "0x0060fcdf3859b81e",
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "category": "declarative-primitive",
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "operation": "xi.variant.test",
+      "operation_id": "bb0fba3366e0f4327438a802d91a49de",
+      "operation_id_hi": "0xbb0fba3366e0f432",
+      "operation_id_lo": "0x7438a802d91a49de",
+      "owner": "xi.variant.test",
+      "owner_id": "bb0fba3366e0f4327438a802d91a49de",
+      "owner_id_hi": "0xbb0fba3366e0f432",
+      "owner_id_lo": "0x7438a802d91a49de",
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "category": "declarative-primitive",
+      "consumers": [
+        "semantic-plan"
+      ],
+      "consumer_bits": "0x00000001",
+      "cgen_adapter": null,
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        }
+      ]
+    },
+    {
+      "operation": "xi.variant.project",
+      "operation_id": "9d2968a82f32a7efb3903988ba1d86bf",
+      "operation_id_hi": "0x9d2968a82f32a7ef",
+      "operation_id_lo": "0xb3903988ba1d86bf",
+      "owner": "xi.variant.project",
+      "owner_id": "9d2968a82f32a7efb3903988ba1d86bf",
+      "owner_id_hi": "0x9d2968a82f32a7ef",
+      "owner_id_lo": "0xb3903988ba1d86bf",
       "observable_contract": "contracts/xi-canonical-ops.md",
       "category": "declarative-primitive",
       "consumers": [

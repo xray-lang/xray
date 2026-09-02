@@ -1860,122 +1860,126 @@ AstNode *xr_parse_interface_member(Parser *parser) {
 
 /* ========== Enum Declaration Parsing ========== */
 
-/* Build a type ref from an already-consumed TK_NAME token.
- * Handles generic type args (Name<T, U>) and type scope resolution. */
-static XrTypeRef *build_type_from_consumed_name(Parser *parser, Token *name_tok) {
-    char temp_name[256];
-    int name_len = name_tok->length < 255 ? name_tok->length : 255;
-    memcpy(temp_name, name_tok->start, (size_t) name_len);
-    temp_name[name_len] = '\0';
-
-    XrTypeRef *result = NULL;
-    if (xr_parser_match(parser, TK_LT)) {
-        /* Generic: Name<T1, T2, ...> */
-        XrTypeRef *type_args[16];
-        int type_arg_count = 0;
-        do {
-            if (type_arg_count < 16)
-                type_args[type_arg_count++] = xr_parse_type_annotation(parser);
-        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
-        xr_parser_consume(parser, TK_GT, "expected '>' in generic type");
-        result = xr_parse_generic_type_name_ref(parser, temp_name, type_args, type_arg_count);
-    } else {
-        result = xr_parse_type_name_ref(parser, temp_name);
-    }
-
-    /* Handle trailing '?' for optional */
-    if (result && xr_parser_match(parser, TK_QUESTION)) {
-        result = xr_tref_optional(parser->compiler_session, result);
-    }
-    return result;
-}
-
-/* Parse ADT variant payload: '(' FieldList ')'.
- * FieldList ::= Field (',' Field)*
- * Field     ::= (Name ':')? Type
- *
- * Strategy: consume the leading TK_NAME; if ':' follows, it was a field
- * name; otherwise it was the start of a type and we build the type ref
- * from the consumed name. This avoids lexer-position rewind issues. */
-static void parse_enum_variant_payload(Parser *parser, char ***out_names, XrTypeRef ***out_types,
-                                       int *out_count) {
-    XR_DCHECK(parser != NULL, "parse_variant_payload: NULL parser");
+static void parse_enum_variant_fields(Parser *parser, char ***out_names,
+                                      XrNameSpan **out_name_spans, XrTypeRef ***out_types,
+                                      int *out_count) {
+    XR_DCHECK(parser != NULL, "parse_enum_variant_fields: NULL parser");
 
     char **names = NULL;
+    XrNameSpan *name_spans = NULL;
     XrTypeRef **types = NULL;
     int count = 0;
-    int name_capacity = 0;
+    int capacity = 0;
 
-    do {
-        if (xr_parser_check(parser, TK_RPAREN))
-            break;
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' to start enum payload fields");
+    if (xr_parser_check(parser, TK_RBRACE))
+        xr_parser_error(parser, "payload enum declarations require at least one named field");
 
-        char *field_name = NULL;
-        XrTypeRef *field_type = NULL;
-
-        if (xr_parser_check(parser, TK_NAME)) {
-            /* Consume the name and decide based on what follows. */
-            Token name_tok = parser->current;
-            xr_parser_advance(parser);
-
-            if (xr_parser_match(parser, TK_COLON)) {
-                /* Named field: 'name: Type' */
-                field_name = token_to_string(parser, &name_tok);
-                field_type = xr_parse_type_annotation(parser);
-            } else {
-                /* Positional: the consumed name was the type itself. */
-                field_type = build_type_from_consumed_name(parser, &name_tok);
-            }
-        } else {
-            /* Keyword type (int, string, etc.) — parse normally. */
-            field_type = xr_parse_type_annotation(parser);
-        }
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        xr_parser_consume(parser, TK_NAME, "enum payload field requires a name");
+        Token name_token = parser->previous;
+        char *field_name = token_to_string(parser, &name_token);
+        xr_parser_consume(parser, TK_COLON, "expected ':' after enum payload field name");
+        XrTypeRef *field_type = xr_parse_type_annotation(parser);
 
         if (!field_type) {
-            xr_parser_error(parser, "expected type in variant payload");
+            xr_parser_error(parser, "expected type after enum payload field name");
             break;
         }
 
-        /* Grow name and type arrays in lockstep. */
-        XR_PARSE_PUSH(parser, names, count, name_capacity, field_name);
-        {
-            XrTypeRef **new_types =
-                (XrTypeRef **) ast_alloc_array(parser->compiler_session, sizeof(XrTypeRef *),
-                                               (size_t) (count > 4 ? count * 2 : 8));
-            if (types) {
-                for (int i = 0; i < count - 1; i++)
-                    new_types[i] = types[i];
+        if (count >= capacity) {
+            int old_capacity = capacity;
+            capacity = capacity == 0 ? 4 : capacity * 2;
+            char **new_names = (char **) ast_alloc_array(parser->compiler_session, sizeof(char *),
+                                                         (size_t) capacity);
+            XrNameSpan *new_name_spans = (XrNameSpan *) ast_alloc_array(
+                parser->compiler_session, sizeof(XrNameSpan), (size_t) capacity);
+            XrTypeRef **new_types = (XrTypeRef **) ast_alloc_array(
+                parser->compiler_session, sizeof(XrTypeRef *), (size_t) capacity);
+            if (old_capacity > 0) {
+                memcpy(new_names, names, sizeof(char *) * (size_t) old_capacity);
+                memcpy(new_name_spans, name_spans, sizeof(XrNameSpan) * (size_t) old_capacity);
+                memcpy(new_types, types, sizeof(XrTypeRef *) * (size_t) old_capacity);
             }
-            new_types[count - 1] = field_type;
+            names = new_names;
+            name_spans = new_name_spans;
             types = new_types;
         }
-    } while (xr_parser_match(parser, TK_COMMA));
+        names[count] = field_name;
+        name_spans[count] = (XrNameSpan) {.line = name_token.line, .column = name_token.column};
+        types[count] = field_type;
+        count++;
+
+        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_match(parser, TK_COMMA)) {
+            xr_parser_error(parser, "expected ',' or '}' after enum payload field");
+            break;
+        }
+    }
+    xr_parser_consume(parser, TK_RBRACE, "expected '}' after enum payload fields");
 
     *out_names = names;
+    *out_name_spans = name_spans;
     *out_types = types;
     *out_count = count;
 }
 
-/* Parse one enum method: ('static')? 'fn' Name '(' params ')' ReturnType? Block.
- * Enum methods require 'fn' keyword (unlike class methods). */
-static AstNode *parse_enum_method(Parser *parser, bool is_static) {
+static bool enum_name_starts_method(Parser *parser) {
+    if (!parser || !xr_parser_check(parser, TK_NAME))
+        return false;
+    XrParserStreamState saved = xr_parser_stream_save(parser);
+    xr_parser_advance(parser);
+    if (xr_parser_check(parser, TK_LT)) {
+        xr_parser_stream_restore(parser, &saved);
+        return true;
+    }
+    if (!xr_parser_match(parser, TK_LPAREN)) {
+        xr_parser_stream_restore(parser, &saved);
+        return false;
+    }
+
+    int depth = 1;
+    while (depth > 0 && !xr_parser_check(parser, TK_EOF)) {
+        if (xr_parser_check(parser, TK_LPAREN))
+            depth++;
+        else if (xr_parser_check(parser, TK_RPAREN))
+            depth--;
+        xr_parser_advance(parser);
+    }
+    bool is_method =
+        depth == 0 && (xr_parser_check(parser, TK_ARROW) || xr_parser_check(parser, TK_COLON) ||
+                       xr_parser_check(parser, TK_LBRACE));
+    xr_parser_stream_restore(parser, &saved);
+    return is_method;
+}
+
+static bool enum_method_starts(Parser *parser) {
+    return parser && (xr_parser_check(parser, TK_AT) || xr_parser_check(parser, TK_STATIC) ||
+                      xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref") ||
+                      xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move") ||
+                      xr_parser_check(parser, TK_FN) || enum_name_starts_method(parser));
+}
+
+static AstNode *parse_enum_method(Parser *parser, bool is_static, XrParamMode receiver_mode) {
     XR_DCHECK(parser != NULL, "parse_enum_method: NULL parser");
 
-    /* 'fn' already consumed by caller */
-    xr_parser_consume(parser, TK_NAME, "expected method name after 'fn'");
+    xr_parser_consume(parser, TK_NAME, "expected enum method name");
     char *name = token_to_string(parser, &parser->previous);
     int name_line = parser->previous.line;
     int name_col = parser->previous.column;
 
-    return xr_parse_method_declaration(parser, name, name_line, name_col,
-                                       /* is_private */ false, /* is_static */ is_static);
+    AstNode *method = xr_parse_method_declaration(parser, name, name_line, name_col,
+                                                  /* is_private */ false,
+                                                  /* is_static */ is_static);
+    if (method)
+        method->as.method_decl.receiver_mode = receiver_mode;
+    return method;
 }
 
 // Parse enum declaration (safe tagged aggregate)
 // Syntax:
 //   enum Color { Red, Green, Blue }
-//   enum Result<T, E> { Ok(T), Err(E)  fn isOk() -> bool { ... } }
-//   enum Shape implements Printable { Circle(float), Rect(float, float) }
+//   enum Result<T, E> { Ok { value: T }, Err { error: E } }
+//   enum Shape { Circle { radius: f64 }, Rect { width: f64, height: f64 } }
 AstNode *xr_parse_enum_declaration(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_enum_declaration: NULL parser");
     int line = parser->previous.line;
@@ -2035,10 +2039,10 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         xr_parser_error(parser, "enum requires at least one variant");
     }
 
-    /* Variant phase: parse comma-separated variants until we hit a method or '}'. */
+    /* Variant and method syntax are disjoint after one bounded lookahead:
+     * variants end at a comma/brace, while methods continue to a body. */
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF) &&
-           !xr_parser_check(parser, TK_AT) && !xr_parser_check(parser, TK_FN) &&
-           !xr_parser_check(parser, TK_STATIC)) {
+           !enum_method_starts(parser)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
@@ -2058,46 +2062,51 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         int member_col = parser->previous.column;
         int member_name_len = parser->previous.length;
 
-        /* ADT payload: Variant '(' fields ')' */
         char **payload_names = NULL;
+        XrNameSpan *payload_name_spans = NULL;
         XrTypeRef **payload_types = NULL;
         int payload_count = 0;
 
-        if (xr_parser_match(parser, TK_LPAREN)) {
-            /* ADT variant with payload */
-            parse_enum_variant_payload(parser, &payload_names, &payload_types, &payload_count);
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' after variant payload");
+        if (xr_parser_check(parser, TK_LBRACE)) {
+            parse_enum_variant_fields(parser, &payload_names, &payload_name_spans, &payload_types,
+                                      &payload_count);
+        } else if (xr_parser_check(parser, TK_LPAREN)) {
+            xr_parser_error(parser,
+                            "payload enum declarations use named record fields, not '(...)'");
+            int depth = 0;
+            do {
+                if (xr_parser_check(parser, TK_LPAREN))
+                    depth++;
+                else if (xr_parser_check(parser, TK_RPAREN))
+                    depth--;
+                xr_parser_advance(parser);
+            } while (depth > 0 && !xr_parser_check(parser, TK_EOF));
+            parser->panic_mode = 0;
         } else if (xr_parser_match(parser, TK_ASSIGN)) {
             xr_parser_error(parser, "enum backing values have been removed");
             (void) xr_parse_expression(parser);
         }
 
-        AstNode *member = xr_ast_enum_member(parser->compiler_session, member_name, payload_names,
-                                             payload_types, payload_count, member_line);
+        AstNode *member =
+            xr_ast_enum_member(parser->compiler_session, member_name, payload_names,
+                               payload_name_spans, payload_types, payload_count, member_line);
         member->column = member_col;
         member->end_line = member_line;
         member->end_column = member_col + member_name_len;
 
         XR_PARSE_PUSH(parser, members, member_count, member_capacity, member);
 
-        /* Comma after variant: required between variants, optional before
-         * '}', 'fn', or 'static fn'. */
-        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_AT) &&
-            !xr_parser_check(parser, TK_FN) && !xr_parser_check(parser, TK_STATIC)) {
+        if (!xr_parser_check(parser, TK_RBRACE) && !enum_method_starts(parser)) {
             if (!xr_parser_match(parser, TK_COMMA)) {
                 xr_parser_error(parser, "expected ',' between enum variants");
                 break;
             }
-            /* Allow trailing comma before '}', 'fn', or 'static fn' */
-            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_AT) ||
-                xr_parser_check(parser, TK_FN) || xr_parser_check(parser, TK_STATIC))
+            if (xr_parser_check(parser, TK_RBRACE) || enum_method_starts(parser))
                 break;
         }
     }
 
-    /* Method phase: parse 'fn' and 'static fn' methods until '}'. */
-    while (xr_parser_check(parser, TK_AT) || xr_parser_check(parser, TK_FN) ||
-           xr_parser_check(parser, TK_STATIC)) {
+    while (enum_method_starts(parser) && !xr_parser_check(parser, TK_RBRACE)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
@@ -2119,18 +2128,22 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
             break;
 
-        bool is_static = false;
-        if (xr_parser_match(parser, TK_STATIC)) {
-            is_static = true;
-            if (!xr_parser_match(parser, TK_FN)) {
-                xr_parser_error(parser, "expected 'fn' after 'static' in enum body");
-                break;
-            }
-        } else {
-            xr_parser_consume(parser, TK_FN, "expected 'fn' in enum method declaration");
+        if (xr_parser_check(parser, TK_FN)) {
+            xr_parser_error(parser, "enum methods do not use the 'fn' keyword");
+            break;
         }
 
-        AstNode *method = parse_enum_method(parser, is_static);
+        bool is_static = false;
+        XrParamMode receiver_mode = XR_PARAM_READ;
+        if (xr_parser_match(parser, TK_STATIC)) {
+            is_static = true;
+        } else if (xr_parser_match(parser, TK_REF) || xr_parser_match_name(parser, "ref")) {
+            receiver_mode = XR_PARAM_REF;
+        } else if (xr_parser_match(parser, TK_MOVE) || xr_parser_match_name(parser, "move")) {
+            receiver_mode = XR_PARAM_MOVE;
+        }
+
+        AstNode *method = parse_enum_method(parser, is_static, receiver_mode);
         if (method) {
             method->as.method_decl.attributes = attributes;
             method->as.method_decl.attr_count = attr_count;

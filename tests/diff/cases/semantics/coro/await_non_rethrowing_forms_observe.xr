@@ -18,8 +18,8 @@ fn ok(n: i64) -> i64 {
 fn observe_result() -> string {
     var t = go failing()
     match (t.awaitResult()) {
-        TaskResult.Success(v) -> { return "success" }
-        TaskResult.Failed(e) -> { return "failed" }
+        TaskResult.Success { value: v } -> { return "success" }
+        TaskResult.Failed { error: e } -> { return "failed" }
         _ -> { return "other" }
     }
 }
@@ -28,8 +28,8 @@ fn observe_result() -> string {
 fn observe_timeout() -> string {
     var t = go failing()
     match (t.awaitTimeout(5000)) {
-        TaskResult.Success(v) -> { return "success" }
-        TaskResult.Failed(e) -> { return "failed" }
+        TaskResult.Success { value: v } -> { return "success" }
+        TaskResult.Failed { error: e } -> { return "failed" }
         _ -> { return "other" }
     }
 }

@@ -35,6 +35,8 @@
 #include "../../base/xlocation.h"
 #include "../../base/xstorage.h"
 
+typedef struct XrNameSpan XrNameSpan;
+
 // Symbol kinds
 typedef enum XaSymbolKind {
     XA_SYM_VARIABLE,    // var/const/shared variable (is_const=true for const)
@@ -148,6 +150,7 @@ typedef struct XaEnumVariantInfo {
     int symbol;
     uint32_t tag;
     const char **payload_names;
+    XrLocation *payload_locations;
     XrType **payload_types;
     uint16_t payload_count;
 } XaEnumVariantInfo;
@@ -478,6 +481,12 @@ XR_FUNC XaSymbol *xa_class_info_lookup_instance_member_owner(XrClassInfo *info, 
 // API: Enum metadata
 XR_FUNC XaEnumInfo *xa_enum_info_new(const char *nominal_owner, const char *name,
                                      uint32_t variant_count);
+XR_FUNC bool xa_enum_variant_set_payload_names(XaEnumVariantInfo *variant,
+                                               const char *const *payload_names,
+                                               uint16_t payload_count);
+XR_FUNC bool xa_enum_variant_set_payload_locations(XaEnumVariantInfo *variant, const char *file,
+                                                   const XrNameSpan *payload_name_spans,
+                                                   uint16_t payload_count);
 XR_FUNC bool xa_enum_info_finalize_layout(XaEnumInfo *info);
 XR_FUNC XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src);
 XR_FUNC void xa_enum_info_free(XaEnumInfo *info);

@@ -1,5 +1,5 @@
 enum FsErr {
-    Bad(i64)
+    Bad { code: i64 }
 }
 
 struct Pair {
@@ -9,7 +9,7 @@ struct Pair {
 
 fn mayFail(n: i64) -> Pair {
     if (n == 0) {
-        throw FsErr.Bad(7)
+        throw FsErr.Bad { code: 7 }
     }
     return Pair{left: n, right: n + 1}
 }
@@ -21,7 +21,7 @@ fn xray_enum_payload_error(n: i64) -> i64 {
         out = pair.left + pair.right
     } catch (e: FsErr) {
         match (e) {
-            FsErr.Bad(code) -> {
+            FsErr.Bad { code } -> {
                 out = 0 - code
             }
         }

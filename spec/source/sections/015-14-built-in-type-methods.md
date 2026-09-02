@@ -171,7 +171,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `close()` | 关闭 channel |
 | `capacity` / `isClosed` | 容量和关闭状态属性 |
 
-`Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<i64?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
+`Recv.Value { value: v }` 中的 `v` 就是 channel payload，因此 `Channel<i64?>` 可以区分真实的 `Recv.Value { value: null }` 和 `Recv.Closed`。
 
 ### 14.11 `JSON` 命名空间
 
@@ -473,7 +473,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `close()` | close the channel |
 | `capacity` / `isClosed` | capacity and closed-state fields |
 
-`Recv.Value(v)` carries the channel payload, so `Channel<i64?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
+`Recv.Value { value: v }` carries the channel payload, so `Channel<i64?>` can distinguish a real `Recv.Value { value: null }` from `Recv.Closed`.
 
 ### 14.11 `JSON` Namespace
 

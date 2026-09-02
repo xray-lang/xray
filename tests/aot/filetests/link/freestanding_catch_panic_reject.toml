@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_catch_panic_reject"
+name = "xray-tests/filetest-freestanding_catch_panic_reject"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_catch_panic_reject.xr"

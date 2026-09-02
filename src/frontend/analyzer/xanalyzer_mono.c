@@ -419,6 +419,15 @@ static char **clone_str_array(char **arr, int count) {
     return result;
 }
 
+static XrNameSpan *clone_name_spans(const XrNameSpan *spans, int count) {
+    if (!spans || count <= 0)
+        return NULL;
+    XrNameSpan *result = (XrNameSpan *) xr_malloc((size_t) count * sizeof(*result));
+    if (result)
+        memcpy(result, spans, (size_t) count * sizeof(*result));
+    return result;
+}
+
 /* Clone method-local generic params. Constraints go through sub_tref so a
  * bound that mentions an enclosing class type param (for example
  * `find<U: Comparable<T>>` inside `Box<T>`) lands on the substituted type. */
@@ -897,6 +906,17 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 clone_node_array(node->as.pattern_object.patterns, node->as.pattern_object.count,
                                  map, mc, clone_ctx);
             break;
+        case AST_PATTERN_ADT:
+            n->as.pattern_adt.variant =
+                xr_ast_clone_ctx(node->as.pattern_adt.variant, map, mc, clone_ctx);
+            n->as.pattern_adt.count = node->as.pattern_adt.count;
+            n->as.pattern_adt.field_names =
+                clone_str_array(node->as.pattern_adt.field_names, node->as.pattern_adt.count);
+            n->as.pattern_adt.field_name_spans =
+                clone_name_spans(node->as.pattern_adt.field_name_spans, node->as.pattern_adt.count);
+            n->as.pattern_adt.patterns = clone_node_array(
+                node->as.pattern_adt.patterns, node->as.pattern_adt.count, map, mc, clone_ctx);
+            break;
         case AST_PATTERN_ARRAY:
             n->as.pattern_array.count = node->as.pattern_array.count;
             n->as.pattern_array.patterns = clone_node_array(
@@ -955,6 +975,18 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.enum_access.enum_name = clone_str(node->as.enum_access.enum_name);
             n->as.enum_access.member_name = clone_str(node->as.enum_access.member_name);
             break;
+        case AST_ENUM_CONSTRUCT:
+            n->as.enum_construct.variant_path =
+                xr_ast_clone_ctx(node->as.enum_construct.variant_path, map, mc, clone_ctx);
+            n->as.enum_construct.field_count = node->as.enum_construct.field_count;
+            n->as.enum_construct.field_names = clone_str_array(node->as.enum_construct.field_names,
+                                                               node->as.enum_construct.field_count);
+            n->as.enum_construct.field_name_spans = clone_name_spans(
+                node->as.enum_construct.field_name_spans, node->as.enum_construct.field_count);
+            n->as.enum_construct.field_values =
+                clone_node_array(node->as.enum_construct.field_values,
+                                 node->as.enum_construct.field_count, map, mc, clone_ctx);
+            break;
         case AST_ENUM_INDEX:
             n->as.enum_index.collection =
                 xr_ast_clone_ctx(node->as.enum_index.collection, map, mc, clone_ctx);
@@ -1009,6 +1041,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->is_getter = src->is_getter;
             dst->is_setter = src->is_setter;
             dst->is_static_constructor = src->is_static_constructor;
+            dst->receiver_mode = src->receiver_mode;
             dst->attributes = src->attributes;
             dst->attr_count = src->attr_count;
             dst->is_operator = src->is_operator;
@@ -1056,6 +1089,17 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             break;
         }
 
+        case AST_ENUM_MEMBER:
+            n->as.enum_member.name = clone_str(node->as.enum_member.name);
+            n->as.enum_member.payload_count = node->as.enum_member.payload_count;
+            n->as.enum_member.payload_names = clone_str_array(node->as.enum_member.payload_names,
+                                                              node->as.enum_member.payload_count);
+            n->as.enum_member.payload_name_spans = clone_name_spans(
+                node->as.enum_member.payload_name_spans, node->as.enum_member.payload_count);
+            n->as.enum_member.payload_types = clone_tref_array(
+                node->as.enum_member.payload_types, node->as.enum_member.payload_count, map, mc);
+            break;
+
         // === Nodes not typically inside generic bodies (shallow copy) ===
         case AST_INTERFACE_DECL:
         case AST_ENUM_DECL:
@@ -1072,7 +1116,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_DESTRUCTURE_ASSIGN:
         case AST_INTERFACE_METHOD:
         case AST_INTERFACE_PROPERTY:
-        case AST_ENUM_MEMBER:
         default:
             // Shallow copy union data for unsupported node types
             n->as = node->as;
@@ -1663,6 +1706,14 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         return;
     }
 
+    if (node->type == AST_ENUM_CONSTRUCT) {
+        EnumConstructNode *construct = &node->as.enum_construct;
+        for (int i = 0; i < construct->field_count; i++)
+            collect_instantiation_sites(construct->field_values[i], registry, collector,
+                                        import_aliases, local_only);
+        return;
+    }
+
     // Generic recursive walk for all other node types
     switch (node->type) {
         case AST_PROGRAM:
@@ -2009,6 +2060,13 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         }
         for (int i = 0; i < sl->field_count; i++)
             rewrite_call_sites(sl->field_values[i], registry, collector, import_aliases);
+        return;
+    }
+
+    if (node->type == AST_ENUM_CONSTRUCT) {
+        EnumConstructNode *construct = &node->as.enum_construct;
+        for (int i = 0; i < construct->field_count; i++)
+            rewrite_call_sites(construct->field_values[i], registry, collector, import_aliases);
         return;
     }
 

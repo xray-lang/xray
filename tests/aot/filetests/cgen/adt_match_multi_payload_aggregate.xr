@@ -1,16 +1,16 @@
 enum PairResult {
-    Pair(i64, i64),
+    Pair { left: i64, right: i64 },
     Empty
 }
 
 fn make_pair() -> PairResult {
-    return PairResult.Pair(10, 32)
+    return PairResult.Pair { left: 10, right: 32 }
 }
 
 fn score() -> i64 {
     var result = make_pair()
     match (result) {
-        PairResult.Pair(left, right) -> {
+        PairResult.Pair { left, right } -> {
             return left + right
         }
         PairResult.Empty -> {

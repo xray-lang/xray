@@ -67,8 +67,9 @@ static int prelude_enum_builtin_index(const char *enum_name) {
     return -1;
 }
 
-XR_FUNC XiValue *xi_lower_number_parse_error_member_access(
-    XiLower *l, XiValue *enum_value, const char *member_name, struct XrType *result_type, int line) {
+XR_FUNC XiValue *xi_lower_number_parse_error_member_access(XiLower *l, XiValue *enum_value,
+                                                           const char *member_name,
+                                                           struct XrType *result_type, int line) {
     int member_index = xr_number_parse_error_member_index(member_name);
     if (!l || !enum_value || !result_type || member_index < 0)
         return NULL;
@@ -183,8 +184,8 @@ XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (builtin_idx == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR)
-        return xi_lower_number_parse_error_member_access(
-            l, enum_val, ea->member_name, result_type, (int) node->line);
+        return xi_lower_number_parse_error_member_access(l, enum_val, ea->member_name, result_type,
+                                                         (int) node->line);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v)
         return NULL;
@@ -229,6 +230,12 @@ static int xi_lower_configure_adt_layout(XiLower *l, XrEnumType *enum_type,
         EnumMemberNode *member = &decl->members[i]->as.enum_member;
         if (member->payload_count <= 0)
             continue;
+        if (member->payload_count > UINT16_MAX ||
+            !xr_enum_payload_names_are_exact((const char *const *) member->payload_names,
+                                             (uint16_t) member->payload_count)) {
+            l->had_error = true;
+            return max_payload;
+        }
         uint8_t *type_ids =
             (uint8_t *) xr_calloc((size_t) member->payload_count, sizeof(*type_ids));
         if (!type_ids)
@@ -238,9 +245,10 @@ static int xi_lower_configure_adt_layout(XiLower *l, XrEnumType *enum_type,
                 members && members[i].payload_types ? members[i].payload_types[p] : NULL;
             type_ids[p] = xr_type_to_tid(payload_type);
         }
-        (void) xr_enum_layout_set_variant_payload_metadata(
-            enum_type->layout, (uint32_t) i, (const char *const *) member->payload_names, type_ids,
-            (uint16_t) member->payload_count);
+        if (!xr_enum_layout_set_variant_payload_metadata(
+                enum_type->layout, (uint32_t) i, (const char *const *) member->payload_names,
+                type_ids, (uint16_t) member->payload_count))
+            l->had_error = true;
         xr_free(type_ids);
     }
     (void) l;
@@ -303,6 +311,13 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     }
     for (int i = 0; i < n; i++) {
         EnumMemberNode *m = &ed->members[i]->as.enum_member;
+        if (m->payload_count < 0 || m->payload_count > UINT16_MAX ||
+            !xr_enum_payload_names_are_exact((const char *const *) m->payload_names,
+                                             (uint16_t) m->payload_count)) {
+            l->had_error = true;
+            enum_data = NULL;
+            enum_members = NULL;
+        }
         names[i] = xr_strdup(m->name);
         if (enum_members) {
             enum_members[i].name = arena_strdup(l->func, m->name);
@@ -313,8 +328,7 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
                     l->func, (uint32_t) ((size_t) m->payload_count * sizeof(const char *)));
                 if (payload_names) {
                     for (int p = 0; p < m->payload_count; p++)
-                        payload_names[p] =
-                            arena_strdup(l->func, m->payload_names[p] ? m->payload_names[p] : "");
+                        payload_names[p] = arena_strdup(l->func, m->payload_names[p]);
                     enum_members[i].payload_names = payload_names;
                 }
             }

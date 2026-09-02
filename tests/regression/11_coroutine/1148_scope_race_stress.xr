@@ -4,7 +4,7 @@
 // siblings, and no child may be lost. The test observes completion through an
 // explicit channel.
 
-enum RaceErr { Msg(string) }
+enum RaceErr { Msg { message: string } }
 
 const ITERATIONS = 50
 const FAILING_PER_SCOPE = 200
@@ -15,7 +15,7 @@ fn make_failing(id: i64) -> i64 {
     for (var k = 0; k < 50; k++) {
         x = x + k
     }
-    throw RaceErr.Msg("err_" + string(id))
+    throw RaceErr.Msg { message: "err_" + string(id) }
     return x
 }
 
@@ -25,7 +25,7 @@ fn make_failing_report(ch: Channel<i64>, id: i64) -> i64 {
         x = x + k
     }
     ch.send(-1)
-    throw RaceErr.Msg("err_" + string(id))
+    throw RaceErr.Msg { message: "err_" + string(id) }
     return x
 }
 
@@ -42,7 +42,7 @@ fn drain_counts(ch: Channel<i64>, expected: i64) -> Array<i64> {
     var counts: Array<i64> = [0, 0]
     for (var i = 0; i < expected; i++) {
         match (ch.recv()) {
-            Recv.Value(v) -> {
+            Recv.Value { value: v } -> {
                 if (v < 0) {
                     counts[0] = counts[0] + 1
                 } else {

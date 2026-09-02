@@ -1,5 +1,5 @@
 [package]
-name = "filetest-zero_cost_bounds_reject"
+name = "xray-tests/filetest-zero_cost_bounds_reject"
 version = "1.0.0"
 license = "MIT"
 main = "zero_cost_bounds_reject.xr"

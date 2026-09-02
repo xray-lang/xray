@@ -17,7 +17,7 @@ fn test_main() {
     var r1 = t1.awaitResult()
     print("t1.done:", t1.done)
     print("t1.failed:", match (r1) {
-        TaskResult.Failed(_) -> true
+        TaskResult.Failed { error: _ } -> true
         _ -> false
     })
 
@@ -26,7 +26,7 @@ fn test_main() {
     var r = t2.awaitResult()
     print("t2.done:", t2.done)
     print("t2.result:", match (r) {
-        TaskResult.Success(v) -> v
+        TaskResult.Success { value: v } -> v
         _ -> -1
     })
 }

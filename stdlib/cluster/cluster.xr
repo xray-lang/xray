@@ -113,9 +113,9 @@ export type ClusterConfig = {
 }
 
 export enum AddressError {
-    MissingPort(string),
-    InvalidHost(string),
-    InvalidPort(string)
+    MissingPort { address: string },
+    InvalidHost { host: string },
+    InvalidPort { port: string }
 }
 
 export class NodeAddress {
@@ -179,15 +179,15 @@ fn _stripIpv6Brackets(host: string) -> string {
 // backend and connected to port 80 on the other.
 export fn parseAddress(addr: string) -> NodeAddress {
     var colon = addr.lastIndexOf(":")
-    if (colon <= 0 || colon + 1 >= len(addr)) { throw AddressError.MissingPort(addr) }
+    if (colon <= 0 || colon + 1 >= len(addr)) { throw AddressError.MissingPort { address: addr } }
     var rawHost = addr.slice(0, colon)
     var host = _stripIpv6Brackets(rawHost)
     if (len(host) == 0 || (rawHost.indexOf(":") >= 0 && !rawHost.startsWith("["))) {
-        throw AddressError.InvalidHost(rawHost)
+        throw AddressError.InvalidHost { host: rawHost }
     }
     var rawPort = addr.slice(colon + 1)
     var port = _parsePort(rawPort)
-    if (port <= 0) { throw AddressError.InvalidPort(rawPort) }
+    if (port <= 0) { throw AddressError.InvalidPort { port: rawPort } }
     return NodeAddress(host, port)
 }
 

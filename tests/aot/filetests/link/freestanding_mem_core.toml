@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_mem_core"
+name = "xray-tests/filetest-freestanding_mem_core"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_mem_core.xr"

@@ -1,7 +1,7 @@
 // Fixed local mailbox workload for the disposable typed-slot calibration.
 fn receive(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(value) -> value
+        Recv.Value { value } -> value
         _ -> -1
     }
 }

@@ -3,11 +3,11 @@
 // absorb the error inside the defer body. This compiles (rule D1 sees an empty
 // escaping set) and both backends must run the defer and continue normally,
 // including when an error is already in flight from the body.
-enum CleanupErr { Failed(s: string) }
+enum CleanupErr { Failed { s: string } }
 enum BodyErr { Boom }
 
 fn closeIt() {
-    throw CleanupErr.Failed("close")
+    throw CleanupErr.Failed { s: "close" }
 }
 
 fn f() {

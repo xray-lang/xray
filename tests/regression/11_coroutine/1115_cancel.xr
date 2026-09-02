@@ -3,7 +3,7 @@
 
 fn blocked_task(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }
@@ -31,7 +31,7 @@ fn test_cancel() {
     var r2 = await t2
     t2.cancel()
     print("t2 success:", match (t2.poll()) {
-        TaskResult.Success(_) -> true
+        TaskResult.Success { value: _ } -> true
         _ -> false
     })
     print("t2 result:", r2)

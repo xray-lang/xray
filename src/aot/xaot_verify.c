@@ -27,6 +27,7 @@
 #include "../ir/xi_program_semantic_plan.h"
 #include "../plan/target/xr_target_verify.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../runtime/value/xenum_layout.h"
 #include "../shared/xr_derive_flags.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
@@ -805,6 +806,27 @@ XR_FUNC bool xaot_verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan 
         return set_error(errbuf, errbuf_len, "AOT enum scalar plan is missing C type");
     if (plan->member_count != ed->member_count)
         return set_error(errbuf, errbuf_len, "AOT enum scalar plan member count is stale");
+    if (plan->member_count > 0 && !plan->members)
+        return set_error(errbuf, errbuf_len, "AOT enum plan has no member metadata");
+    for (uint32_t i = 0; i < plan->member_count; i++) {
+        const XiEnumMemberData *member = &plan->members[i];
+        if (!member->name || !member->name[0] || member->ordinal != i ||
+            member->payload_count < 0 || member->payload_count > UINT16_MAX ||
+            !xr_enum_payload_names_are_exact(member->payload_names,
+                                             (uint16_t) member->payload_count) ||
+            (member->payload_count > 0 && !member->payload_types))
+            return set_error(errbuf, errbuf_len,
+                             "AOT enum plan has incomplete payload field metadata");
+        for (uint32_t prior = 0; prior < i; prior++) {
+            if (strcmp(member->name, plan->members[prior].name) == 0)
+                return set_error(errbuf, errbuf_len, "AOT enum plan has duplicate variant names");
+        }
+        for (int p = 0; p < member->payload_count; p++) {
+            if (!member->payload_types[p])
+                return set_error(errbuf, errbuf_len,
+                                 "AOT enum plan has a missing payload field type");
+        }
+    }
     if (plan->layout_id != ed->layout_id)
         return set_error(errbuf, errbuf_len, "AOT enum scalar plan layout id is stale");
     expected_max_payload = ed->max_payload > 0 ? (uint16_t) ed->max_payload : 0;

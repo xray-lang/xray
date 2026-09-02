@@ -9,11 +9,11 @@
 // XmlNode? report fields.
 //
 // Enum variants are constructed only in typed (annotated / return) contexts to
-// avoid the separate frontend gap where `E.Variant(...)` in an argument position
+// avoid the separate frontend gap where `E.Variant { field: value }` in an argument position
 // is misjudged null when the module also mentions E? (tracked in known_bugs).
 
 enum E {
-    A(i64),
+    A { value: i64 },
     B
 }
 
@@ -26,18 +26,18 @@ class Box {
 
 fn make(b: bool) -> E? {
     if (b) { return null }
-    return E.A(5)
+    return E.A { value: 5 }
 }
 
 fn describe(e: E?) -> i64 {
     if (e == null) { return -1 }
-    return match (e!) { E.A(v) -> v, E.B -> 0 }
+    return match (e!) { E.A { value: v } -> v, E.B -> 0 }
 }
 
 // local materialization (typed contexts)
 var x: E? = null
 print(x == null)
-var y: E = E.A(9)
+var y: E = E.A { value: 9 }
 print(describe(y))
 
 // return materialization
@@ -53,6 +53,6 @@ var bVal: E = E.B
 box.set(bVal)
 print(box.get() == null)
 print(describe(box.get()))
-var aVal: E = E.A(42)
+var aVal: E = E.A { value: 42 }
 box.set(aVal)
 print(describe(box.get()!))

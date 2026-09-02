@@ -138,6 +138,7 @@ XR_FUNC AstNode *xr_parse_index_access(Parser *parser, AstNode *array);
 XR_FUNC AstNode *xr_parse_member_access(Parser *parser, AstNode *object);
 XR_FUNC AstNode *xr_parse_match_expr(Parser *parser);
 XR_FUNC AstNode *xr_parse_match_pattern(Parser *parser);
+XR_FUNC AstNode *xr_parse_unparenthesized_catch_pattern(Parser *parser);
 XR_FUNC AstNode *xr_parse_new_expression(Parser *parser);
 XR_FUNC AstNode *xr_parse_this_expression(Parser *parser);
 XR_FUNC AstNode *xr_parse_super_expression(Parser *parser);

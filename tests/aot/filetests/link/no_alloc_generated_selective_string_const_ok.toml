@@ -1,5 +1,5 @@
 [package]
-name = "filetest-no_alloc_generated_selective_string_const_ok"
+name = "xray-tests/filetest-no_alloc_generated_selective_string_const_ok"
 version = "1.0.0"
 license = "MIT"
 main = "no_alloc_generated_selective_string_const_ok.xr"

@@ -872,6 +872,9 @@ static bool oracle_array_tagged_carrier_storage(const VerifyAuthority *ctx, uint
 static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                  uint32_t semantic_value, XrRep *out_storage,
                                                  uint16_t *out_machine_kind);
+static bool oracle_adt_enum_tagged_carrier_storage(const VerifyAuthority *ctx,
+                                                   uint32_t semantic_value, XrRep *out_storage,
+                                                   uint16_t *out_machine_kind);
 static bool oracle_tagged_reference_carrier_storage(const VerifyAuthority *ctx,
                                                     uint32_t semantic_value, XrRep *out_storage,
                                                     uint16_t *out_machine_kind);
@@ -885,6 +888,9 @@ static bool oracle_dynamic_direct_local_array_result_storage(const VerifyAuthori
                                                              uint16_t *out_machine_kind);
 static bool oracle_resolve_identity_rename(const VerifyAuthority *ctx, uint32_t semantic_value,
                                            uint32_t *out_value);
+static bool oracle_dynamic_merge_carrier_storage(const VerifyAuthority *ctx,
+                                                 uint32_t semantic_value, uint32_t expected_kind,
+                                                 XrRep *out_storage, uint16_t *out_machine_kind);
 
 static bool verify_charge_work(VerifyAuthority *ctx, uint64_t amount) {
     if (!ctx || amount > XR_AOT_REP_VERIFY_MAX_WORK - ctx->work) {
@@ -1641,8 +1647,7 @@ static bool aot_direct_local_array_result_is_exact(const XrSemanticPlan *semanti
                                                    uint32_t operation_index) {
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(semantic, operation_index);
-    if (!semantic || !operation ||
-        !xr_semantic_local_call_result_opcode_is_exact(operation) ||
+    if (!semantic || !operation || !xr_semantic_local_call_result_opcode_is_exact(operation) ||
         operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
         operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
         !aot_array_type_is_exact(semantic, operation->result_type, false, NULL))
@@ -1663,6 +1668,35 @@ static bool aot_direct_local_array_result_is_exact(const XrSemanticPlan *semanti
     }
     return callee && callee->return_type == operation->result_type &&
            callee->return_parameter == -1 && callee->return_provenance == XR_SEM_RETURN_OWNED;
+}
+
+/* A direct-local call returning a payload enum transfers one owned tagged
+ * carrier to the caller. The shared semantic judgement pins the call result
+ * and callee contract; this independent lookup proves that exactly one local
+ * target supplies that contract. */
+static bool aot_direct_local_adt_enum_result_is_exact(const VerifyAuthority *ctx,
+                                                      uint32_t operation_index) {
+    if (!ctx)
+        return false;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(ctx->semantic, operation_index);
+    if (!ctx->semantic || !operation)
+        return false;
+    size_t target_count = xr_semantic_plan_call_target_count(ctx->semantic);
+    const XrSemanticFunctionRecord *callee = NULL;
+    for (size_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(ctx->semantic, i);
+        if (!target || target->operation != operation_index ||
+            !xr_semantic_call_target_names_local_function(
+                target, operation, (uint32_t) xr_semantic_plan_function_count(ctx->semantic)))
+            continue;
+        if (callee)
+            return false;
+        callee = xr_semantic_plan_function(ctx->semantic, target->function);
+        if (!callee)
+            return false;
+    }
+    return xr_semantic_direct_local_adt_enum_result_is_exact(ctx->semantic, operation, callee);
 }
 
 /* The borrowed read of an Array held in a shared cell. The read hands over the
@@ -6699,6 +6733,36 @@ static bool tagged_value_temporary_rows_are_exact(const VerifyAuthority *ctx,
            slot->ownership == ownership;
 }
 
+/* Every operation that can introduce a payload-enum carrier in this function:
+ * construction and a direct-local result own the carrier, while a shared read
+ * borrows it. All three must agree with the same dynamic TargetPlan rows. */
+static bool oracle_adt_enum_operation_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                              XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(ctx->semantic, operation->result_type) : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !xr_semantic_adt_enum_type_is_exact(type))
+        return false;
+    bool shared_read = xr_semantic_adt_enum_shared_read_is_exact(
+        operation, type, xr_semantic_unique_value_definition(ctx->semantic, semantic_value));
+    bool owned = xr_semantic_variant_construct_is_exact(ctx->semantic, operation, NULL) ||
+                 aot_direct_local_adt_enum_result_is_exact(ctx, operation_index);
+    uint8_t ownership = shared_read ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED;
+    if ((!shared_read && !owned) || !tagged_value_temporary_rows_are_exact(
+                                        ctx, semantic_value, operation, operation_index, ownership))
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool oracle_dynamic_direct_local_string_result_storage(const VerifyAuthority *ctx,
                                                               uint32_t semantic_value,
                                                               XrRep *out_storage,
@@ -7419,6 +7483,35 @@ static bool oracle_direct_local_string_value_parameter_storage(const VerifyAutho
         !tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter,
                                                callee_owns ? XR_TARGET_OWNERSHIP_OWNED
                                                            : XR_TARGET_OWNERSHIP_BORROWED))
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
+/* A payload enum parameter has one tagged carrier. An explicitly borrowed
+ * parameter borrows it; every other admitted by-value declaration owns the
+ * reference it receives. */
+static bool oracle_adt_enum_parameter_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                              XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    const XrSemanticTypeRecord *type =
+        parameter ? xr_semantic_plan_type(ctx->semantic, parameter->type) : NULL;
+    if (!parameter || parameter->value != semantic_value ||
+        !xr_semantic_adt_enum_type_is_exact(type) || parameter->mode != XR_PARAM_READ ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->ownership != XI_OWN_NONE && parameter->ownership != XI_OWN_OWNED &&
+         parameter->ownership != XI_OWN_BORROWED))
+        return false;
+    uint8_t ownership = parameter->ownership == XI_OWN_BORROWED ? XR_TARGET_OWNERSHIP_BORROWED
+                                                                : XR_TARGET_OWNERSHIP_OWNED;
+    if (!tagged_value_parameter_rows_are_exact(ctx, semantic_value, parameter, ownership))
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -8310,6 +8403,8 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
         if (oracle_direct_local_string_value_parameter_storage(ctx, semantic_value, out_storage,
                                                                out_machine_kind))
             return true;
+        if (oracle_adt_enum_parameter_storage(ctx, semantic_value, out_storage, out_machine_kind))
+            return true;
         if (oracle_dynamic_source_class_parameter_storage(ctx, semantic_value, out_storage,
                                                           out_machine_kind))
             return true;
@@ -8485,6 +8580,12 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 return true;
             }
             break;
+        case XI_VARIANT_PROJECT:
+            /* The runtime projects a payload as its stored XrValue carrier;
+             * scalar consumers unbox from this explicit boundary. */
+            *out_storage = XR_REP_TAGGED;
+            *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+            return true;
         case XI_OBJECT_NEW:
             if (oracle_dynamic_struct_object_storage(ctx, semantic_value, out_storage,
                                                      out_machine_kind))
@@ -8509,6 +8610,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 return true;
             break;
         case XI_GET_SHARED: {
+            if (oracle_adt_enum_operation_storage(ctx, semantic_value, out_storage,
+                                                  out_machine_kind))
+                return true;
             if (oracle_dynamic_array_ref_storage(ctx, semantic_value, out_storage,
                                                  out_machine_kind))
                 return true;
@@ -8655,6 +8759,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (oracle_dynamic_direct_local_array_result_storage(ctx, semantic_value, out_storage,
                                                                  out_machine_kind))
                 return true;
+            if (oracle_adt_enum_operation_storage(ctx, semantic_value, out_storage,
+                                                  out_machine_kind))
+                return true;
             if (oracle_dynamic_source_class_instance_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind))
                 return true;
@@ -8666,6 +8773,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                                                     out_machine_kind))
                 return true;
             break;
+        case XI_VARIANT_CONSTRUCT:
+            return oracle_adt_enum_operation_storage(ctx, semantic_value, out_storage,
+                                                     out_machine_kind);
         default:
             break;
     }
@@ -8691,6 +8801,8 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
      * plan already carries, so it is answered on the same terms: asking the
      * family here rather than once per defining opcode is what keeps an opcode
      * nobody has written a branch for from refusing a value the plan names. */
+    if (oracle_adt_enum_tagged_carrier_storage(ctx, semantic_value, out_storage, out_machine_kind))
+        return true;
     if (oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind))
         return true;
     return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
@@ -9591,6 +9703,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                                                               &ignored_kind) ||
                 oracle_array_tagged_carrier_storage(ctx, source_value, out_storage,
                                                     &ignored_kind) ||
+                oracle_adt_enum_tagged_carrier_storage(ctx, source_value, out_storage,
+                                                       &ignored_kind) ||
                 oracle_string_tagged_carrier_storage(ctx, source_value, out_storage, &ignored_kind))
                 return true;
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
@@ -10085,6 +10199,14 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_ENUM_DESCRIPTOR_UNBOX:
             *out_storage = XR_REP_TAGGED;
             return true;
+        case XI_VARIANT_CONSTRUCT:
+            /* The enum namespace and every declaration-order payload enter the
+             * canonical constructor as XrValue carriers. Native payloads are
+             * therefore boxed at this explicit semantic boundary. */
+            if (!xr_semantic_variant_construct_is_exact(ctx->semantic, operation, NULL))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
         default:
             break;
     }
@@ -10105,6 +10227,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
      * names no storage for, is refused here exactly as before; the reference
      * families that carry those answer above. */
     if (oracle_dynamic_heap_literal_storage(ctx, source_value, out_storage, &ignored_kind))
+        return true;
+    if (oracle_adt_enum_tagged_carrier_storage(ctx, source_value, out_storage, &ignored_kind))
         return true;
     /* An untyped reference occupies the tagged carrier its family bound, and
      * the rule above is about the storage the operand is already in, whatever
@@ -10384,6 +10508,20 @@ static bool oracle_string_tagged_carrier_storage(const VerifyAuthority *ctx,
                                                 out_machine_kind);
 }
 
+/* Every way a payload enum can reach a use site already holding its one tagged
+ * carrier. The producer/parameter oracles prove ownership and TargetPlan rows;
+ * the merge case proves only that a dynamic phi preserves the exact enum type. */
+static bool oracle_adt_enum_tagged_carrier_storage(const VerifyAuthority *ctx,
+                                                   uint32_t semantic_value, XrRep *out_storage,
+                                                   uint16_t *out_machine_kind) {
+    if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value))
+        return false;
+    return oracle_adt_enum_parameter_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_adt_enum_operation_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_dynamic_merge_carrier_storage(ctx, semantic_value, XR_KIND_ENUM, out_storage,
+                                                out_machine_kind);
+}
+
 /* Every reference family this authority can name whose single storage fact is
  * the tagged carrier. A use site that consumes a reference without caring which
  * family it belongs to -- a refcount adjustment, a store into a shared cell, a
@@ -10406,7 +10544,9 @@ static bool oracle_tagged_reference_carrier_storage(const VerifyAuthority *ctx,
                                                     uint16_t *out_machine_kind) {
     if (!oracle_resolve_identity_rename(ctx, semantic_value, &semantic_value))
         return false;
-    return oracle_string_tagged_carrier_storage(ctx, semantic_value, out_storage,
+    return oracle_adt_enum_tagged_carrier_storage(ctx, semantic_value, out_storage,
+                                                  out_machine_kind) ||
+           oracle_string_tagged_carrier_storage(ctx, semantic_value, out_storage,
                                                 out_machine_kind) ||
            oracle_array_tagged_carrier_storage(ctx, semantic_value, out_storage,
                                                out_machine_kind) ||
@@ -10565,6 +10705,7 @@ static bool oracle_return_storage(const VerifyAuthority *ctx, uint32_t value, Xr
                                                         out_machine_kind) ||
            oracle_dynamic_direct_local_string_result_storage(ctx, value, out_storage,
                                                              out_machine_kind) ||
+           oracle_adt_enum_tagged_carrier_storage(ctx, value, out_storage, out_machine_kind) ||
            oracle_array_tagged_carrier_storage(ctx, value, out_storage, out_machine_kind);
 }
 
@@ -11272,6 +11413,13 @@ static bool verify_no_extra_materialized_adapters(const XiFunc *function,
         for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
             if (phi->value.backend_origin != XI_BACKEND_VALUE_NONE &&
                 !matched_adapter_contains(matched, matched_count, &phi->value)) {
+                if (getenv("XRAY_AOT_REFINE_TRACE"))
+                    fprintf(stderr,
+                            "[aot-refine] unmatched materialized phi function=%s value=%u "
+                            "op=%u:%s backend-origin=%u\n",
+                            function->name ? function->name : "<anonymous>", phi->value.id,
+                            phi->value.op, xi_generated_op_name(phi->value.op),
+                            phi->value.backend_origin);
                 set_diag(diag, XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE, 0, phi->value.id,
                          XR_SEMANTIC_INDEX_NONE);
                 return false;
@@ -11281,6 +11429,12 @@ static bool verify_no_extra_materialized_adapters(const XiFunc *function,
             const XiValue *value = block->values[v];
             if (value && value->backend_origin != XI_BACKEND_VALUE_NONE &&
                 !matched_adapter_contains(matched, matched_count, value)) {
+                if (getenv("XRAY_AOT_REFINE_TRACE"))
+                    fprintf(stderr,
+                            "[aot-refine] unmatched materialized value function=%s value=%u "
+                            "op=%u:%s backend-origin=%u\n",
+                            function->name ? function->name : "<anonymous>", value->id, value->op,
+                            xi_generated_op_name(value->op), value->backend_origin);
                 set_diag(diag, XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE, 0, value->id,
                          XR_SEMANTIC_INDEX_NONE);
                 return false;

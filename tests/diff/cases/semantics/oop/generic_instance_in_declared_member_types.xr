@@ -41,20 +41,20 @@ print(holder.combine(Box<i64>(2)))
 // 4 + 5
 enum Shape {
     Empty,
-    Boxed(b: Box<i64>),
-    Point(p: Pt<i64>),
+    Boxed { b: Box<i64> },
+    Point { p: Pt<i64> },
 }
 
 fn shapeValue(s: Shape) -> i64 {
     return match (s) {
         Shape.Empty -> 0,
-        Shape.Boxed(b) -> b.get(),
-        Shape.Point(p) -> p.x + p.y,
+        Shape.Boxed { b } -> b.get(),
+        Shape.Point { p } -> p.x + p.y,
     }
 }
 
-print(shapeValue(Shape.Boxed(Box<i64>(7))))
-print(shapeValue(Shape.Point(Pt<i64>{x: 20, y: 22})))
+print(shapeValue(Shape.Boxed { b: Box<i64>(7) }))
+print(shapeValue(Shape.Point { p: Pt<i64>{x: 20, y: 22} }))
 print(shapeValue(Shape.Empty))
 
 // 6
@@ -69,22 +69,19 @@ print(line.a.x + line.b.y)
 // 7 — the spec-documented alternative to a hand-written wrapper class per
 // recursive type: a generic node reused for every recursive payload.
 enum Expr {
-    Num(v: i64),
-    Add(l: Box<Expr>, r: Box<Expr>),
-    Mul(l: Box<Expr>, r: Box<Expr>),
+    Num { v: i64 },
+    Add { l: Box<Expr>, r: Box<Expr> },
+    Mul { l: Box<Expr>, r: Box<Expr> },
 }
 
 fn eval(e: Expr) -> i64 {
     return match (e) {
-        Expr.Num(v) -> v,
-        Expr.Add(l, r) -> eval(l.get()) + eval(r.get()),
-        Expr.Mul(l, r) -> eval(l.get()) * eval(r.get()),
+        Expr.Num { v } -> v,
+        Expr.Add { l, r } -> eval(l.get()) + eval(r.get()),
+        Expr.Mul { l, r } -> eval(l.get()) * eval(r.get()),
     }
 }
 
 // (2 + 5) * 6
-var ast = Expr.Mul(
-    Box<Expr>(Expr.Add(Box<Expr>(Expr.Num(2)), Box<Expr>(Expr.Num(5)))),
-    Box<Expr>(Expr.Num(6)),
-)
+var ast = Expr.Mul { l: Box<Expr>(Expr.Add { l: Box<Expr>(Expr.Num { v: 2 }), r: Box<Expr>(Expr.Num { v: 5 }) }), r: Box<Expr>(Expr.Num { v: 6 }) }
 print(eval(ast))

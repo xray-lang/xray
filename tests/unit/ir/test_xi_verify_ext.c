@@ -130,8 +130,7 @@ static XiValue *make_owned_assertion(XiFunc *f, char *source_file) {
     assertion->source_span = (XiSourceSpan) {7, 3, 7, 18};
     XrLocation source = {source_file, 7, 3, 7, 18};
     XrAssertionPlan plan;
-    if (xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT, 1, source,
-                                XR_CORE_INTRINSIC_TARGET_VM,
+    if (xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT, 1, source, XR_CORE_INTRINSIC_TARGET_VM,
                                 XR_ASSERTION_CAPABILITY_NONE, &plan) != XR_ASSERTION_PLAN_OK ||
         !xi_value_set_assertion_plan(f, assertion, &plan))
         return NULL;
@@ -251,9 +250,11 @@ TEST(semantic_snapshot_preserves_aliased_class_and_enum_inventory_identity) {
     module->nclasses = 1;
 
     XrType *payload_types[1] = {&instance_type};
+    const char *payload_names[1] = {"value"};
     XiEnumMemberData member = {
         .name = "Wrapped",
         .payload_count = 1,
+        .payload_names = payload_names,
         .payload_types = payload_types,
     };
     XiEnumData enum_data = {
@@ -282,6 +283,46 @@ TEST(semantic_snapshot_preserves_aliased_class_and_enum_inventory_identity) {
     ASSERT(xi_semantic_snapshot_detach(root));
     ASSERT(root->return_type == detached_type);
     ASSERT(class_data.class_info == detached_class);
+    xi_func_free(root);
+}
+
+TEST(semantic_snapshot_rejects_ambiguous_enum_payload_fields) {
+    XiFunc *root = xi_func_new("snapshot_invalid_enum_root", &stub_unit);
+    ASSERT(root != NULL);
+    XiBlock *entry = xi_block_new(root);
+    ASSERT(entry != NULL);
+    entry->sealed = true;
+
+    XiModule *module = xi_module_new("snapshot_invalid_enum.xr", "snapshot_invalid_enum", root);
+    ASSERT(module != NULL);
+    root->module = module;
+
+    XrType *payload_types[2] = {&stub_int, &stub_bool};
+    const char *payload_names[2] = {"value", "value"};
+    XiEnumMemberData member = {
+        .name = "Data",
+        .ordinal = 0,
+        .payload_count = 2,
+        .payload_names = payload_names,
+        .payload_types = payload_types,
+    };
+    XiEnumData enum_data = {
+        .name = "Packet",
+        .member_count = 1,
+        .is_adt = true,
+        .max_payload = 2,
+        .layout_id = 11,
+        .members = &member,
+    };
+    module->nslots = 1;
+    module->slot_enums = (XiEnumData **) xr_calloc(1, sizeof(*module->slot_enums));
+    ASSERT(module->slot_enums != NULL);
+    module->slot_enums[0] = &enum_data;
+
+    char error[256] = {0};
+    ASSERT(!xi_semantic_snapshot_detach_ex(root, error, sizeof(error)));
+    ASSERT(strstr(error, "module metadata") != NULL);
+    ASSERT(!root->semantic_snapshot_detached);
     xi_func_free(root);
 }
 
@@ -1959,8 +2000,8 @@ TEST(coro_lower_mutation_rejects_invalid_child_edge) {
     ASSERT(f->coro_plan->nstates == 1);
     ASSERT(f->coro_plan->points[0].nlive == 1);
     ASSERT(f->coro_plan->points[0].live[0] == call);
-    XiCoroEdge *child = (XiCoroEdge *) xi_coro_point_find_edge(
-        &f->coro_plan->points[0], XI_CORO_EDGE_CHILD);
+    XiCoroEdge *child =
+        (XiCoroEdge *) xi_coro_point_find_edge(&f->coro_plan->points[0], XI_CORO_EDGE_CHILD);
     ASSERT(child != NULL);
     ASSERT(child->child == callee);
     ASSERT(verify_ok(f));
@@ -2064,8 +2105,8 @@ static XiFunc *make_lowered_error_continuation_coro(void) {
     }
     xi_block_set_if(body, condition, catch_block, merge);
 
-    XiErrorRegion *region = (XiErrorRegion *) xi_func_arena_alloc(
-        f, (uint32_t) sizeof(XiErrorRegion));
+    XiErrorRegion *region =
+        (XiErrorRegion *) xi_func_arena_alloc(f, (uint32_t) sizeof(XiErrorRegion));
     if (!region) {
         xi_func_free(f);
         return NULL;
@@ -2100,11 +2141,9 @@ static XiFunc *make_lowered_error_continuation_coro(void) {
     return f;
 }
 
-static bool coro_exception_verify_error_prefix(const XiFunc *f,
-                                               const char *prefix) {
+static bool coro_exception_verify_error_prefix(const XiFunc *f, const char *prefix) {
     char error[256] = {0};
-    return !xi_coro_exception_verify(f, f ? f->coro_plan : NULL, error,
-                                     sizeof(error)) &&
+    return !xi_coro_exception_verify(f, f ? f->coro_plan : NULL, error, sizeof(error)) &&
            strncmp(error, prefix, strlen(prefix)) == 0;
 }
 
@@ -2118,10 +2157,8 @@ TEST(coro_lower_freezes_source_panic_handler_across_suspend) {
     ASSERT(point->active_handler_count == 1);
     ASSERT(point->active_handlers == plan->active_handlers);
     ASSERT(point->active_handlers[0]->op == XI_TRY);
-    const XiCoroEdge *panic =
-        xi_coro_point_find_edge(point, XI_CORO_EDGE_PANIC);
-    const XiCoroEdge *cancel =
-        xi_coro_point_find_edge(point, XI_CORO_EDGE_CANCEL);
+    const XiCoroEdge *panic = xi_coro_point_find_edge(point, XI_CORO_EDGE_PANIC);
+    const XiCoroEdge *cancel = xi_coro_point_find_edge(point, XI_CORO_EDGE_CANCEL);
     ASSERT(panic != NULL && !panic->terminal);
     ASSERT(panic->target_block == (XiBlock *) point->active_handlers[0]->aux);
     ASSERT(panic->ndrops == 0);
@@ -2130,8 +2167,7 @@ TEST(coro_lower_freezes_source_panic_handler_across_suspend) {
     ASSERT(cancel->drops == point->drops && cancel->ndrops == point->ndrops);
     XiCoroSuspendPoint *handler_point = &plan->points[1];
     ASSERT(handler_point->active_handler_count == 0);
-    const XiCoroEdge *handler_panic =
-        xi_coro_point_find_edge(handler_point, XI_CORO_EDGE_PANIC);
+    const XiCoroEdge *handler_panic = xi_coro_point_find_edge(handler_point, XI_CORO_EDGE_PANIC);
     ASSERT(handler_panic != NULL && handler_panic->terminal);
     ASSERT(verify_ok(f));
     xi_func_free(f);
@@ -2152,8 +2188,8 @@ TEST(coro_exception_verifier_rejects_handler_identity_mutation) {
 TEST(coro_exception_verifier_rejects_panic_edge_mutation) {
     XiFunc *f = make_lowered_source_panic_coro();
     ASSERT(f != NULL);
-    XiCoroEdge *panic = (XiCoroEdge *) xi_coro_point_find_edge(
-        &f->coro_plan->points[0], XI_CORO_EDGE_PANIC);
+    XiCoroEdge *panic =
+        (XiCoroEdge *) xi_coro_point_find_edge(&f->coro_plan->points[0], XI_CORO_EDGE_PANIC);
     ASSERT(panic != NULL);
     panic->target_block = f->entry;
     ASSERT(coro_exception_verify_error_prefix(f, "XR_CORO_4003"));
@@ -2164,8 +2200,7 @@ TEST(coro_exception_verifier_rejects_cancel_to_handler_mutation) {
     XiFunc *f = make_lowered_source_panic_coro();
     ASSERT(f != NULL);
     XiCoroSuspendPoint *point = &f->coro_plan->points[0];
-    XiCoroEdge *cancel = (XiCoroEdge *) xi_coro_point_find_edge(
-        point, XI_CORO_EDGE_CANCEL);
+    XiCoroEdge *cancel = (XiCoroEdge *) xi_coro_point_find_edge(point, XI_CORO_EDGE_CANCEL);
     ASSERT(cancel != NULL);
     cancel->terminal = false;
     cancel->target_state_id = point->state_id;
@@ -2182,8 +2217,7 @@ TEST(coro_lower_freezes_error_continuation_across_suspend) {
     XiCoroSuspendPoint *point = &f->coro_plan->points[0];
     ASSERT(point->error_region != NULL);
     ASSERT(point->error_continuation == point->error_region->catch_block);
-    const XiCoroEdge *error =
-        xi_coro_point_find_edge(point, XI_CORO_EDGE_ERROR);
+    const XiCoroEdge *error = xi_coro_point_find_edge(point, XI_CORO_EDGE_ERROR);
     ASSERT(error != NULL && !error->terminal);
     ASSERT(error->target_block == point->error_continuation);
     ASSERT(error->ndrops == 0);
@@ -2204,8 +2238,7 @@ TEST(coro_verifier_rejects_continuation_action_mutation) {
     ASSERT(f != NULL);
     XiCoroSuspendPoint *point = &f->coro_plan->points[0];
     bool mutated = false;
-    for (uint32_t i = point->action_begin;
-         i < point->action_begin + point->action_count; i++) {
+    for (uint32_t i = point->action_begin; i < point->action_begin + point->action_count; i++) {
         XiCoroFrameAction *action = &f->coro_plan->frame_actions[i];
         if (action->kind == XI_CORO_FRAME_STORE_ERROR_CONTINUATION) {
             action->target = f->entry;
@@ -2683,6 +2716,7 @@ int main(void) {
 
     run_assertion_plan_aux_is_owned_cloned_snapshotted_and_verified();
     run_semantic_snapshot_preserves_aliased_class_and_enum_inventory_identity();
+    run_semantic_snapshot_rejects_ambiguous_enum_payload_fields();
     run_coro_depth_bound_fails_closed();
 
     run_non_unit_return_requires_value();

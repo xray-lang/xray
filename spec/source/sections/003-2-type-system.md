@@ -994,7 +994,7 @@ Xray 不要求写生命周期，也不提供借用检查器语法。但**所有�
 | 动作 | 对根别名的影响 | 能否恢复 |
 |--|--|--|
 | `var b = a` | `LOCAL_ALIASED` | 能。`b` 最后一次使用后，根重新是 `UNIQUE` |
-| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V(a)` | `ESCAPED` | **不能**。函数内分析看不到那个槽何时被覆盖 |
+| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V { value: a }` | `ESCAPED` | **不能**。函数内分析看不到那个槽何时被覆盖 |
 | 来源不明的调用结果 | `ALIAS_UNKNOWN` | 不能 |
 | `copy(a)` | 不影响 `a`；结果是新的 `UNIQUE` 根 | — |
 | `move a` | `a` 变为 `MOVED`；根随之转移 | — |
@@ -2150,7 +2150,7 @@ The split is deliberate: binding state is a CFG fact, aliasing is an object-grap
 | Action | Effect on root aliasing | Recoverable |
 |--|--|--|
 | `var b = a` | `LOCAL_ALIASED` | Yes. After `b`'s last use the root is `UNIQUE` again |
-| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V(a)` | `ESCAPED` | **No.** Function-local analysis cannot see that slot being overwritten |
+| `arr.push(a)` / `obj.f = a` / `m[k] = a` / `[a]` / `#{k: a}` / `Enum.V { value: a }` | `ESCAPED` | **No.** Function-local analysis cannot see that slot being overwritten |
 | Result of a call with unknown provenance | `ALIAS_UNKNOWN` | No |
 | `copy(a)` | `a` unaffected; the result is a fresh `UNIQUE` root | — |
 | `move a` | `a` becomes `MOVED`; the root moves with it | — |

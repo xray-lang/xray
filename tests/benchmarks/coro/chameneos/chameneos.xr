@@ -40,7 +40,7 @@ const done_ch: Channel<i64> = Channel(100)    // report results
 
 fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(value) -> value
+        Recv.Value { value } -> value
         _ -> fallback
     }
 }
@@ -51,9 +51,9 @@ fn broker(meetings: i64, participants: i64) {
         var first_result = request_ch.recv()
         var second_result = request_ch.recv()
         match (first_result) {
-            Recv.Value(first) -> {
+            Recv.Value { value: first } -> {
                 match (second_result) {
-                    Recv.Value(second) -> {
+                    Recv.Value { value: second } -> {
                         // Exchange colors via their response channels
                         first[2].send(second[1])
                         second[2].send(first[1])
@@ -68,7 +68,7 @@ fn broker(meetings: i64, participants: i64) {
     // Ask every participant to stop after it submits its next request.
     for (var i = 0; i < participants; i++) {
         match (request_ch.recv()) {
-            Recv.Value(req) -> req[2].send(-1)
+            Recv.Value { value: req } -> req[2].send(-1)
             _ -> { break }
         }
     }

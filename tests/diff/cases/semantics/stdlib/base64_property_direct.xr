@@ -53,10 +53,10 @@ fn errorCode(text: string) -> i64 {
         return -1 - len(decoded)
     } catch (e: Base64Error) {
         return match (e) {
-            Base64Error.InvalidLength(length) -> 1000 + length,
-            Base64Error.InvalidByte(offset, value) -> 2000 + offset,
-            Base64Error.InvalidPadding(offset) -> 3000 + offset,
-            Base64Error.NonCanonicalTrailingBits(offset) -> 4000 + offset
+            Base64Error.InvalidLength { length } -> 1000 + length,
+            Base64Error.InvalidByte { byteOffset: offset, value } -> 2000 + offset,
+            Base64Error.InvalidPadding { byteOffset: offset } -> 3000 + offset,
+            Base64Error.NonCanonicalTrailingBits { byteOffset: offset } -> 4000 + offset
         }
     }
 }

@@ -20,7 +20,7 @@ print("轮数:", ROUNDS)
 // 等待者：从 channel 接收一个信号后立即返回
 fn waiter(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(val) -> val
+        Recv.Value { value: val } -> val
         _ -> 0
     }
 }

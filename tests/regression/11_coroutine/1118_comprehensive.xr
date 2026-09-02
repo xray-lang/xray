@@ -4,14 +4,14 @@
 
 fn recv_int(r: Recv<i64>) -> i64 {
     return match (r) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }
 
 fn blocked(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }

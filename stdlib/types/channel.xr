@@ -1,17 +1,17 @@
 // Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c
 
 enum Recv<T> {
-    Value(T)
-    Empty
-    Timeout
-    Closed
+    Value { value: T },
+    Empty,
+    Timeout,
+    Closed,
 }
 
 enum SendResult {
-    Sent
-    Full
-    Timeout
-    Closed
+    Sent,
+    Full,
+    Timeout,
+    Closed,
 }
 class Channel<T> {
     capacity: i64

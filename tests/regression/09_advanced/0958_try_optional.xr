@@ -3,7 +3,7 @@
 ** Covers scenarios where exceptions are caught and replaced with defaults.
 */
 
-enum OptErr { Msg(string) }
+enum OptErr { Msg { message: string } }
 type User = { id: i64, name: string }
 type Database = { host: string, port: i64 }
 type Config = { database: Database }
@@ -11,20 +11,20 @@ type ServerConfig = { port: i64, host: string }
 
 fn maybeFailInt(should_throw: bool) -> i64 {
     if (should_throw) {
-        throw OptErr.Msg("intentional int failure")
+        throw OptErr.Msg { message: "intentional int failure" }
     }
     return 42
 }
 
 fn maybeFailJson(should_throw: bool) -> User {
     if (should_throw) {
-        throw OptErr.Msg("intentional json failure")
+        throw OptErr.Msg { message: "intentional json failure" }
     }
     return { id: 1, name: "Alice" }
 }
 
 fn parseConfig() -> Config {
-    throw OptErr.Msg("config missing")
+    throw OptErr.Msg { message: "config missing" }
 }
 
 fn parseConfigOK() -> Config {
@@ -99,7 +99,7 @@ fn test_catch_object_default() {
     print("7. catch with object literal as fallback")
     var cfg: ServerConfig = { port: 8080, host: "localhost" }
     try {
-        throw OptErr.Msg("server config missing")
+        throw OptErr.Msg { message: "server config missing" }
     } catch (e) {
         cfg = { port: 8080, host: "localhost" }
     }
@@ -132,9 +132,9 @@ fn test_catch_function_return() {
 @test
 fn test_catch_batch() {
     print("9. batch try-catch for multiple independent fallible ops")
-    fn fetchName() -> string { throw OptErr.Msg("no name") }
+    fn fetchName() -> string { throw OptErr.Msg { message: "no name" } }
     fn fetchAge() -> i64 { return 27 }
-    fn fetchEmail() -> string { throw OptErr.Msg("no email") }
+    fn fetchEmail() -> string { throw OptErr.Msg { message: "no email" } }
 
     var name = "unknown"
     try { name = fetchName() } catch (e) { name = "unknown" }

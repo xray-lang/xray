@@ -26,9 +26,9 @@ fn main() {
         _ -> { print("scalar full") }
     }
 
-    var r1 = match (ch.tryRecv()) { Recv.Value(v) -> v[0]  _ -> -1 }
-    var r2 = match (ch.tryRecv()) { Recv.Value(v) -> v[0]  _ -> -1 }
-    var r3 = match (sch.tryRecv()) { Recv.Value(v) -> v  _ -> -1 }
+    var r1 = match (ch.tryRecv()) { Recv.Value { value: v } -> v[0]  _ -> -1 }
+    var r2 = match (ch.tryRecv()) { Recv.Value { value: v } -> v[0]  _ -> -1 }
+    var r3 = match (sch.tryRecv()) { Recv.Value { value: v } -> v  _ -> -1 }
 
     ch.close()
     sch.close()

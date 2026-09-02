@@ -3857,6 +3857,12 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
             es_walk_expr(ctx, node->as.member_access.object);
             break;
 
+        case AST_ENUM_CONSTRUCT:
+            es_walk_expr(ctx, node->as.enum_construct.variant_path);
+            for (int i = 0; i < node->as.enum_construct.field_count; i++)
+                es_walk_expr(ctx, node->as.enum_construct.field_values[i]);
+            break;
+
         case AST_INDEX_GET:
             es_walk_expr(ctx, node->as.index_get.array);
             es_walk_expr(ctx, node->as.index_get.index);
@@ -4025,6 +4031,20 @@ static void es_walk_stmt_inner(ErrorSetCtx *ctx, AstNode *node) {
                 xa_effect_summary_add_summary(ctx->analyzer->effect_db, ctx->current_summary,
                                               ctx->current_caught);
                 break;
+            }
+
+            if (expr->type == AST_ENUM_CONSTRUCT) {
+                const XaEnumRecordPlan *plan =
+                    xa_analyzer_get_enum_record_plan(ctx->analyzer, expr);
+                XaSymbol *enum_symbol =
+                    plan ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, plan->enum_symbol_id)
+                         : NULL;
+                XrType *enum_type = enum_symbol ? enum_symbol->links.type : NULL;
+                if (plan && plan->complete && enum_type && XR_TYPE_IS_ENUM(enum_type)) {
+                    es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
+                                             enum_type, plan->variant_ordinal);
+                    break;
+                }
             }
 
             const XaSelection *throw_sel = xa_analyzer_get_selection(ctx->analyzer, expr);

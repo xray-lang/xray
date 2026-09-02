@@ -914,7 +914,7 @@ static bool exact_adt_enum_constructor_recipe(const XrTargetPlan *target_plan,
         *payloads = NULL;
     if (!target_plan || !binding || !semantic || !operation || !operands || !calls ||
         operation->result_value != binding->semantic_value ||
-        !xr_semantic_adt_enum_constructor_is_exact(semantic, operation, &derived) ||
+        !xr_semantic_variant_construct_is_exact(semantic, operation, &derived) ||
         derived.payload_operand_begin > operand_count ||
         derived.payload_count > operand_count - derived.payload_operand_begin)
         return false;
@@ -2079,14 +2079,13 @@ static bool build_direct_local_tagged_ref_argument_view(const XrTargetPlan *targ
         }
         forwarded_parameter = candidate;
     }
-    bool local_tagged_caller =
-        caller_register && caller_memory && caller_slot &&
-        caller_register->kind == XR_MACHINE_REP_DYN_VALUE &&
-        caller_memory->kind == XR_MACHINE_REP_DYN_VALUE &&
-        caller_register->ownership == caller_memory->ownership &&
-        (caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED ||
-         caller_register->ownership == XR_TARGET_OWNERSHIP_BORROWED) &&
-        caller_slot->root_kind == XR_TARGET_ROOT_DYNAMIC;
+    bool local_tagged_caller = caller_register && caller_memory && caller_slot &&
+                               caller_register->kind == XR_MACHINE_REP_DYN_VALUE &&
+                               caller_memory->kind == XR_MACHINE_REP_DYN_VALUE &&
+                               caller_register->ownership == caller_memory->ownership &&
+                               (caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED ||
+                                caller_register->ownership == XR_TARGET_OWNERSHIP_BORROWED) &&
+                               caller_slot->root_kind == XR_TARGET_ROOT_DYNAMIC;
     bool forwarded_tagged_caller =
         caller_register && caller_memory && caller_slot && operand &&
         operand->origin == XI_PLACE_ORIGIN_PARAM && forwarded_parameter &&

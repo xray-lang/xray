@@ -1,2 +1,2 @@
---> 8:27 E0383
-cannot store Slice view in enum payload 'Hold.Slice'
+--> 8:35 E0383
+cannot store Slice view in enum payload 'Hold.Slice.view'

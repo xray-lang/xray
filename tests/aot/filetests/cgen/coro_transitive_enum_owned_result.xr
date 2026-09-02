@@ -6,10 +6,10 @@ enum Failure {
 }
 
 enum Outcome {
-    Unit(i64, i64),
-    Echo(i64, i64, Buffer?),
-    State(i64, i64, i64),
-    Failed(Failure)
+    Unit { id: i64, generation: i64 },
+    Echo { id: i64, generation: i64, payload: Buffer? },
+    State { id: i64, generation: i64, n: i64 },
+    Failed { reason: Failure }
 }
 
 fn pause() {
@@ -21,7 +21,7 @@ fn step() {
 }
 
 fn worker(n: i64) -> Outcome {
-    var owned = Outcome.Echo(1, 2, mem.allocZeroed(n))
+    var owned = Outcome.Echo { id: 1, generation: 2, payload: mem.allocZeroed(n) }
     step()
     return owned
 }
@@ -29,7 +29,7 @@ fn worker(n: i64) -> Outcome {
 fn run() -> i64 {
     var result = worker(41)
     return match (result) {
-        Outcome.Echo(_id, _generation, payload) -> len(payload!.asBytes()),
+        Outcome.Echo { id: _id, generation: _generation, payload } -> len(payload!.asBytes()),
         _ -> 0
     }
 }

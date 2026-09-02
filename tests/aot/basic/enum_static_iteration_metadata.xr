@@ -6,13 +6,13 @@ enum Color {
 
 enum WireEvent {
     Ready,
-    Data(bytes: string, code: i64),
-    Error(message: string)
+    Data { bytes: string, code: i64 },
+    Error { message: string }
 }
 
 enum GenericResult<T> {
-    Ok(value: T),
-    Error(message: string),
+    Ok { value: T },
+    Error { message: string },
     Empty
 }
 

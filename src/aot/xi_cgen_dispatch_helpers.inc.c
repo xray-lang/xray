@@ -658,6 +658,71 @@ static bool xicgen_emit_adt_field_load(XiCgenCtx *ctx, FILE *out, const XiValue 
     return true;
 }
 
+static const XiEnumData *xicgen_variant_operation_enum(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiValue *v) {
+    if (!v || !v->type || v->type->kind != XR_KIND_ENUM)
+        return NULL;
+    const XiEnumData *data = xicgen_adt_enum_for_type(ctx, v->type);
+    if (!data && v->nargs > 0) {
+        data = cg_enum_for_namespace_value(v->args[0]);
+        if (!data)
+            data = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
+        if (!data)
+            data = cg_resolve_imported_enum_value(ctx, f, v->args[0]);
+    }
+    return data && data->is_adt ? data : NULL;
+}
+
+static void xicgen_variant_construct(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    (void) prefix;
+    const XiEnumData *data = xicgen_variant_operation_enum(ctx, f, v);
+    uint32_t ordinal = v && v->aux_int >= 0 ? (uint32_t) v->aux_int : UINT32_MAX;
+    if (!data || !data->members || ordinal >= data->member_count || v->nargs < 2 ||
+        data->members[ordinal].payload_count != (int) v->nargs - 1) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    emit_adt_enum_construct_expr(ctx, out, data, (int) ordinal, v);
+}
+
+static void xicgen_variant_test(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (!v || v->nargs != 1 || !v->args[0] || v->aux_int < 0 ||
+        (uint64_t) v->aux_int > UINT32_MAX) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    const char *suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "(XR_TO_INT(xrt_enum_field_get(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", INT64_C(0))) == INT64_C(%" PRId64 "))", v->aux_int);
+    emit_conversion_suffix(out, suffix);
+}
+
+static void xicgen_variant_project(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) f;
+    (void) prefix;
+    uint32_t variant = xi_variant_projection_variant(v);
+    uint32_t field = xi_variant_projection_field(v);
+    if (!v || v->nargs != 1 || !v->args[0]) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    const char *suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
+    fprintf(out, "xrt_enum_variant_field_get(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", UINT32_C(%u), UINT32_C(%u))", (unsigned) variant, (unsigned) field);
+    emit_conversion_suffix(out, suffix);
+}
+
 static XrRep xicgen_value_c_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 static void xicgen_vec_error(XiCgenCtx *ctx, FILE *out, const XiValue *value, const char *detail);
 
@@ -6791,10 +6856,9 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
         return;
     }
 
-    bool enum_integer_shape = v->args[0] && v->args[0]->type && v->type &&
-                              v->args[0]->type->kind == XR_KIND_ENUM &&
-                              !v->args[0]->type->is_nullable &&
-                              v->type->kind == XR_KIND_INT && !v->type->is_nullable;
+    bool enum_integer_shape =
+        v->args[0] && v->args[0]->type && v->type && v->args[0]->type->kind == XR_KIND_ENUM &&
+        !v->args[0]->type->is_nullable && v->type->kind == XR_KIND_INT && !v->type->is_nullable;
     if (((v->aux_int & 1) == 0 && enum_integer_shape) ||
         v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) {
         cg_ctx_set_error(ctx);
@@ -14401,6 +14465,16 @@ static void xicgen_emit_enum_payload_offsets(FILE *out, const XaotEnumPlan *plan
 static void xicgen_emit_enum_payload_values(XiCgenCtx *ctx, FILE *out, const XaotEnumPlan *plan,
                                             bool strings) {
     uint32_t total = xicgen_enum_payload_field_count(plan);
+    for (uint32_t i = 0; plan && i < plan->member_count; i++) {
+        const XiEnumMemberData *member = &plan->members[i];
+        if (member->payload_count < 0 || member->payload_count > UINT16_MAX ||
+            !xr_enum_payload_names_are_exact(member->payload_names,
+                                             (uint16_t) member->payload_count) ||
+            (member->payload_count > 0 && !member->payload_types)) {
+            ctx->error = true;
+            return;
+        }
+    }
     fprintf(out, "static const %s _xenum_values[%u] = {", strings ? "XrValue" : "uint16_t",
             (unsigned) (total > 0 ? total : 1u));
     if (total == 0) {
@@ -14414,9 +14488,7 @@ static void xicgen_emit_enum_payload_values(XiCgenCtx *ctx, FILE *out, const Xao
                     fprintf(out, ",");
                 first = false;
                 if (strings) {
-                    const char *name = member->payload_names && member->payload_names[p]
-                                           ? member->payload_names[p]
-                                           : "";
+                    const char *name = member->payload_names[p];
                     cg_emit_static_str_value_initializer(ctx, out, name);
                 } else {
                     fprintf(out, "%u",
@@ -14820,8 +14892,7 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     }
     bool enum_integer_shape = v->args[0]->type->kind == XR_KIND_ENUM && XR_TYPE_IS_INT(v->type);
     if ((enum_integer_shape || v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) &&
-        (v->op != XI_CONVERT || v->nargs != 1 ||
-         v->conversion.kind != XR_CONVERSION_ENUM_ORDINAL ||
+        (v->op != XI_CONVERT || v->nargs != 1 || v->conversion.kind != XR_CONVERSION_ENUM_ORDINAL ||
          v->xa_intrinsic_id != XA_INTRINSIC_NONE)) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
@@ -14848,8 +14919,7 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     XrRep src_rep = cg_value_plan_storage_rep(ctx, v->args[0]);
     if (v->conversion.kind == XR_CONVERSION_ENUM_ORDINAL) {
         if (!v->args[0] || !v->args[0]->type || v->args[0]->type->kind != XR_KIND_ENUM ||
-            v->args[0]->type->is_nullable ||
-            v->args[0]->type->scalar_rep != XR_SCALAR_REP_NONE ||
+            v->args[0]->type->is_nullable || v->args[0]->type->scalar_rep != XR_SCALAR_REP_NONE ||
             !v->type || v->type->is_nullable || !XR_TYPE_IS_INT(v->type) ||
             !xr_conversion_scalar_rep_is_integer(v->type->scalar_rep) ||
             v->conversion.source_scalar_rep != XR_SCALAR_REP_NONE ||
@@ -14874,8 +14944,8 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, "))");
         }
-        fprintf(out, ", %u, %u, (uint8_t)(sizeof(void *) * 8u))",
-                (unsigned) XR_NATIVE_I64, (unsigned) v->conversion.target_scalar_rep);
+        fprintf(out, ", %u, %u, (uint8_t)(sizeof(void *) * 8u))", (unsigned) XR_NATIVE_I64,
+                (unsigned) v->conversion.target_scalar_rep);
         emit_conversion_suffix(out, suffix);
         return;
     }

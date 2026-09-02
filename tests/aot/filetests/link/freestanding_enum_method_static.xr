@@ -3,11 +3,11 @@ enum FsMode {
     Run,
     Halt
 
-    fn code(offset: i64) -> i64 {
+    code(offset: i64) -> i64 {
         return this.ordinal + offset
     }
 
-    static fn base() -> i64 {
+    static base() -> i64 {
         return 40
     }
 }

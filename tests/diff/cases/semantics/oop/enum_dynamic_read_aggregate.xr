@@ -11,8 +11,8 @@
 // fields and Array<Node> payloads.
 
 enum Node {
-    Leaf(i64),
-    Branch(Array<Node>)
+    Leaf { value: i64 },
+    Branch { children: Array<Node> }
 }
 
 class Tree {
@@ -28,14 +28,14 @@ class Tree {
 
 fn describe(n: Node) -> i64 {
     return match (n) {
-        Node.Leaf(v) -> v,
-        Node.Branch(a) -> len(a)
+        Node.Leaf { value: v } -> v,
+        Node.Branch { children: a } -> len(a)
     }
 }
 
-var t = Tree(Node.Leaf(7))
-t.kids.push(Node.Leaf(1))
-t.kids.push(Node.Branch([Node.Leaf(2), Node.Leaf(3)]))
+var t = Tree(Node.Leaf { value: 7 })
+t.kids.push(Node.Leaf { value: 1 })
+t.kids.push(Node.Branch { children: [Node.Leaf { value: 2 }, Node.Leaf { value: 3 }] })
 
 print(describe(t.getRoot()))
 print(describe(t.at(0)))
@@ -44,12 +44,12 @@ print(describe(t.at(1)))
 // nested: read a Branch's inner Array<Node> element back out
 var emptyNodes: Array<Node> = []
 var branch = t.at(1)
-var inner = match (branch) { Node.Branch(a) -> a, Node.Leaf(v) -> emptyNodes }
+var inner = match (branch) { Node.Branch { children: a } -> a, Node.Leaf { value: v } -> emptyNodes }
 print(len(inner))
 print(describe(inner[0]))
 print(describe(inner[1]))
 
 // enum stored and re-read through a plain local Array<Node>
-var pool: Array<Node> = [Node.Leaf(10), Node.Branch([Node.Leaf(11)])]
+var pool: Array<Node> = [Node.Leaf { value: 10 }, Node.Branch { children: [Node.Leaf { value: 11 }] }]
 print(describe(pool[0]))
 print(describe(pool[1]))

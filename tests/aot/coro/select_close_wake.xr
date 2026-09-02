@@ -14,7 +14,7 @@ const done = Channel<i64>(1)
 
 go wait_select_close(ch, ready, done)
 print(match (ready.recv()) {
-    Recv.Value(value) -> value
+    Recv.Value { value } -> value
     _ -> -1
 })
 
@@ -25,11 +25,11 @@ for (var i = 0; i < 16; i++) {
 ch.close()
 var result = done.recvTimeout(2000)
 print(match (result) {
-    Recv.Value(value) -> value
+    Recv.Value { value } -> value
     _ -> -1
 })
 print(match (result) {
-    Recv.Value(_) -> true
+    Recv.Value { value: _ } -> true
     _ -> false
 })
 ready.close()

@@ -8,11 +8,11 @@
 // - 错误传播：协程中的异常处理
 print("========== 测试11：协程监控与调试 ==========")
 
-enum MonDebugErr { Msg(string) }
+enum MonDebugErr { Msg { message: string } }
 
 fn tryRecvValue(ch) {
     return match (ch.tryRecv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> null
     }
 }
@@ -57,7 +57,7 @@ fn test_coro_cancel_status() {
     var result = t.awaitResult()
     var cancelled = match (result) {
         TaskResult.Cancelled -> true
-        TaskResult.Success(value) -> value == "was cancelled"
+        TaskResult.Success { value } -> value == "was cancelled"
         _ -> false
     }
     print("取消状态:", cancelled)
@@ -119,7 +119,7 @@ fn test_batch_status_query() {
 // 测试5：协程错误捕获
 fn test_coro_error_capture() {
     fn failing_task() {
-        throw MonDebugErr.Msg("Something went wrong!")
+        throw MonDebugErr.Msg { message: "Something went wrong!" }
     }
     fn safe_task() {
         return "success"

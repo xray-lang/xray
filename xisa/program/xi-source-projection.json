@@ -114,6 +114,27 @@
       "projection_kind": "aggregate-project",
       "core_operation": "core.aggregate.project",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.variant.construct",
+      "result_type": "any",
+      "projection_kind": "variant-construct",
+      "core_operation": "core.variant.construct",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.variant.test",
+      "result_type": "bool",
+      "projection_kind": "variant-test",
+      "core_operation": "core.variant.test",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.variant.project",
+      "result_type": "any",
+      "projection_kind": "variant-project",
+      "core_operation": "core.variant.project",
+      "immediate_u32": 0
     }
   ],
   "structural_mappings": [

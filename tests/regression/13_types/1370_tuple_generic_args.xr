@@ -8,11 +8,11 @@ fn test_channel_tuple_send_recv() {
     ch.send((1, "hello"))
     ch.send((2, "world"))
     var t1 = match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> (0, "")
     }
     var t2 = match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> (0, "")
     }
     var (n1, s1) = t1

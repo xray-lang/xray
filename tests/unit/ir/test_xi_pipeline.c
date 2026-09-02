@@ -1137,6 +1137,12 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT},
         {XI_TUPLE_GET, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_AGGREGATE_PROJECT, 0u,
          XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT},
+        {XI_VARIANT_CONSTRUCT, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+         0u, XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT},
+        {XI_VARIANT_TEST, XR_CORE_TYPE_BOOL, XR_CORE_OP_CORE_VARIANT_TEST, 0u,
+         XR_PROGRAM_XI_PROJECTION_VARIANT_TEST},
+        {XI_VARIANT_PROJECT, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_VARIANT_PROJECT, 0u,
+         XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT},
     };
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
         XrProgramXiProjection projection = {0};
@@ -1193,7 +1199,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(xr_compiler_session_set_target_profile(session, profile));
 
     XiPipelineScalarFixture fixture = {0};
-    static const char program_source[] = "fn sum_to(limit: i64) -> i64 {\n"
+    static const char program_source[] = "enum Packet { Data { code: i64, flag: bool }, Empty }\n"
+                                         "enum Nested<T> { Value { pair: (T, bool) }, Empty }\n"
+                                         "fn sum_to(limit: i64) -> i64 {\n"
                                          "  var index: i64 = 0\n"
                                          "  var total: i64 = 0\n"
                                          "  while (index < limit) {\n"
@@ -1226,9 +1234,20 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  var pair = make_pair(40, true)\n"
                                          "  return pair.0\n"
                                          "}\n"
+                                         "fn packet_value() -> i64 {\n"
+                                         "  var packet = Packet.Data { flag: true, code: 29 }\n"
+                                         "  return match (packet) {\n"
+                                         "    Packet.Data { code } -> code,\n"
+                                         "    Packet.Empty -> 0\n"
+                                         "  }\n"
+                                         "}\n"
+                                         "fn accepts_nested(value: Nested<i64>) -> i64 {\n"
+                                         "  return 1\n"
+                                         "}\n"
                                          "fn root() -> i64 {\n"
                                          "  return choose(10) + scalar_matrix(10, 2) + "
-                                         "choose_bool(true) + choose_bool(false) + pair_value()\n"
+                                         "choose_bool(true) + choose_bool(false) + pair_value() + "
+                                         "packet_value()\n"
                                          "}\n";
     PIPELINE_TEST_REQUIRE(
         xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
@@ -1255,12 +1274,16 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         xr_core_ir_key("xi-program-input-profile", strlen("xi-program-input-profile"));
     const XiFunc *module_roots[] = {result.ir};
     const XiFunc *entry = NULL;
+    XiFunc *packet_function = NULL;
     for (uint16_t function = 0; function < result.ir->module->nfuncs; ++function) {
-        const XiFunc *candidate = result.ir->module->functions[function];
+        XiFunc *candidate = result.ir->module->functions[function];
         if (candidate && candidate->name && strcmp(candidate->name, "root") == 0)
             entry = candidate;
+        if (candidate && candidate->name && strcmp(candidate->name, "packet_value") == 0)
+            packet_function = candidate;
     }
     PIPELINE_TEST_REQUIRE(entry != NULL);
+    PIPELINE_TEST_REQUIRE(packet_function != NULL);
     XrProgramFromXiInput producer_input = {
         .module_roots = module_roots,
         .module_count = 1u,
@@ -1284,6 +1307,81 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(memcmp(repeated_artifact.bytes, artifact.bytes, artifact.size) == 0);
     xr_program_artifact_free(&repeated_artifact);
 
+    XiEnumData *packet_schema = NULL;
+    for (uint16_t slot = 0; slot < result.ir->module->nslots; ++slot) {
+        XiEnumData *candidate =
+            result.ir->module->slot_enums ? result.ir->module->slot_enums[slot] : NULL;
+        if (candidate && candidate->name && strcmp(candidate->name, "Packet") == 0) {
+            PIPELINE_TEST_REQUIRE(packet_schema == NULL || packet_schema == candidate);
+            packet_schema = candidate;
+        }
+    }
+    PIPELINE_TEST_REQUIRE(packet_schema != NULL);
+    PIPELINE_TEST_REQUIRE(packet_schema->member_count == 2u);
+    PIPELINE_TEST_REQUIRE(packet_schema->members[0].payload_count == 2);
+
+    const char *saved_field_name = packet_schema->members[0].payload_names[0];
+    packet_schema->members[0].payload_names[0] = "status";
+    XrProgramArtifact renamed_field_artifact = {0};
+    PIPELINE_TEST_REQUIRE(
+        xr_program_write_from_xi(&producer_input, &renamed_field_artifact, producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_OK);
+    PIPELINE_TEST_REQUIRE(!xr_program_id_equal(artifact.id, renamed_field_artifact.id));
+    xr_program_artifact_free(&renamed_field_artifact);
+    packet_schema->members[0].payload_names[0] = saved_field_name;
+
+    const char *saved_second_field_name = packet_schema->members[0].payload_names[1];
+    packet_schema->members[0].payload_names[1] = packet_schema->members[0].payload_names[0];
+    XrProgramArtifact ambiguous_field_artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+                              &producer_input, &ambiguous_field_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
+    PIPELINE_TEST_REQUIRE(ambiguous_field_artifact.bytes == NULL);
+    packet_schema->members[0].payload_names[1] = saved_second_field_name;
+
+    XiValue *variant_construct = NULL;
+    XiValue *variant_project = NULL;
+    for (uint32_t block = 0; block < packet_function->nblocks; ++block) {
+        XiBlock *row = packet_function->blocks[block];
+        for (uint32_t value = 0; row && value < row->nvalues; ++value) {
+            XiValue *operation = row->values[value];
+            if (operation->op == XI_VARIANT_CONSTRUCT)
+                variant_construct = operation;
+            else if (operation->op == XI_VARIANT_PROJECT)
+                variant_project = operation;
+        }
+    }
+    PIPELINE_TEST_REQUIRE(variant_construct != NULL);
+    PIPELINE_TEST_REQUIRE(variant_project != NULL);
+
+    int64_t saved_construct_ordinal = variant_construct->aux_int;
+    variant_construct->aux_int = INT64_C(99);
+    XrProgramArtifact invalid_variant_artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+                              &producer_input, &invalid_variant_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
+    PIPELINE_TEST_REQUIRE(invalid_variant_artifact.bytes == NULL);
+    variant_construct->aux_int = saved_construct_ordinal;
+
+    int64_t saved_projection = variant_project->aux_int;
+    variant_project->aux_int = xi_variant_pack_projection(0u, 99u);
+    XrProgramArtifact invalid_projection_artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+                              &producer_input, &invalid_projection_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
+    PIPELINE_TEST_REQUIRE(invalid_projection_artifact.bytes == NULL);
+    variant_project->aux_int = saved_projection;
+
+    XrType *saved_projection_type = variant_project->type;
+    variant_project->type = variant_construct->type;
+    XrProgramArtifact invalid_projection_type_artifact = {0};
+    PIPELINE_TEST_REQUIRE(
+        xr_program_write_from_xi(&producer_input, &invalid_projection_type_artifact,
+                                 producer_diagnostic, sizeof(producer_diagnostic)) ==
+        XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE);
+    PIPELINE_TEST_REQUIRE(invalid_projection_type_artifact.bytes == NULL);
+    variant_project->type = saved_projection_type;
+
     XrProgramFromXiInput invalid_entry_input = producer_input;
     invalid_entry_input.entry_function = result.ir;
     XrProgramArtifact invalid_entry_artifact = {0};
@@ -1297,6 +1395,29 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &validated,
                                               &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
+    bool found_nested_generic_variant = false;
+    for (uint32_t type_index = 0; type_index < validated->type_count; ++type_index) {
+        const XrValidatedType *variant = &validated->types[type_index];
+        if (variant->kind != XR_CORE_IR_TYPE_VARIANT || variant->variant_count != 2u ||
+            !variant->variants || variant->variants[0].payload_count != 1u ||
+            !variant->variants[0].payload_types)
+            continue;
+        uint16_t payload_type = variant->variants[0].payload_types[0];
+        const XrValidatedType *aggregate = NULL;
+        for (uint32_t candidate = 0; candidate < validated->type_count; ++candidate) {
+            if (validated->types[candidate].type_id == payload_type) {
+                aggregate = &validated->types[candidate];
+                break;
+            }
+        }
+        if (!aggregate || aggregate->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+            aggregate->field_count != 2u || !aggregate->field_types)
+            continue;
+        if (aggregate->field_types[0] == XR_CORE_TYPE_I64 &&
+            aggregate->field_types[1] == XR_CORE_TYPE_BOOL)
+            found_nested_generic_variant = true;
+    }
+    PIPELINE_TEST_REQUIRE(found_nested_generic_variant);
     static const uint16_t required_source_operations[] = {
         XR_CORE_OP_CORE_CONSTANT_I64,
         XR_CORE_OP_CORE_CONSTANT_BOOL,
@@ -1312,6 +1433,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
         XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
         XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+        XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+        XR_CORE_OP_CORE_VARIANT_TEST,
+        XR_CORE_OP_CORE_VARIANT_PROJECT,
     };
     for (size_t index = 0;
          index < sizeof(required_source_operations) / sizeof(required_source_operations[0]);
@@ -1323,7 +1447,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 111);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 140);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);

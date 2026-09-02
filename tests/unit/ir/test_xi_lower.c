@@ -428,8 +428,7 @@ static uint32_t func_tree_count_intrinsic_method(XiFunc *f, const char *name,
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
             if (v && v->op == XI_CALL_METHOD && v->aux &&
-                strcmp((const char *) v->aux, name) == 0 &&
-                v->xa_intrinsic_id == intrinsic_id)
+                strcmp((const char *) v->aux, name) == 0 && v->xa_intrinsic_id == intrinsic_id)
                 count++;
         }
     }
@@ -439,7 +438,7 @@ static uint32_t func_tree_count_intrinsic_method(XiFunc *f, const char *name,
 }
 
 static XrSemanticOperationRecord *semantic_find_intrinsic_operation(XrSemanticPlan *plan,
-                                                                   XaIntrinsicId intrinsic_id) {
+                                                                    XaIntrinsicId intrinsic_id) {
     for (uint32_t i = 0; plan && i < plan->operation_count; i++) {
         if (plan->operations[i].evidence[1] == intrinsic_id)
             return &plan->operations[i];
@@ -452,10 +451,9 @@ static uint32_t semantic_count_string_builder_append_operations(const XrSemantic
     uint32_t count = 0;
     for (uint32_t i = 0; plan && i < plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &plan->operations[i];
-        bool append =
-            operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
-            (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
-             operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE);
+        bool append = operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
+                      (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
+                       operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE);
         if (append && (ownership == UINT8_MAX || operation->result_ownership == ownership))
             count++;
     }
@@ -844,12 +842,9 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "}\n"
                              "exerciseBytes()\n");
     assert(f != NULL);
-    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U16) &&
-           "load<u16> should lower to Array<u8> op");
-    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U32) &&
-           "load<u32> should lower to Array<u8> op");
-    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U64) &&
-           "load<u64> should lower to Array<u8> op");
+    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U16) && "load<u16> should lower to Array<u8> op");
+    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U32) && "load<u32> should lower to Array<u8> op");
+    assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U64) && "load<u64> should lower to Array<u8> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_STORE_U16) &&
            "store<u16> should lower to Array<u8> op");
     XiValue *load_u16 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U16);
@@ -920,11 +915,11 @@ TEST(mem_slice_is_caller_proven_nothrow_raw_view) {
 }
 
 TEST(scalar_parse_lowering_separates_typed_error_and_optional_flows) {
-    XiFunc *root = lower_source(
-        "fn requiredI(value: string) -> i64 { return i64.parse(value) }\n"
-        "fn optionalI(value: string) -> i64? { return i64.tryParse(value) }\n"
-        "fn requiredF(value: string) -> f64 { return f64.parse(value) }\n"
-        "fn optionalF(value: string) -> f64? { return f64.tryParse(value) }\n");
+    XiFunc *root =
+        lower_source("fn requiredI(value: string) -> i64 { return i64.parse(value) }\n"
+                     "fn optionalI(value: string) -> i64? { return i64.tryParse(value) }\n"
+                     "fn requiredF(value: string) -> f64 { return f64.parse(value) }\n"
+                     "fn optionalF(value: string) -> f64? { return f64.tryParse(value) }\n");
     assert(root != NULL);
     XiFunc *required_i = func_tree_find_func_name(root, "requiredI");
     XiFunc *optional_i = func_tree_find_func_name(root, "optionalI");
@@ -935,11 +930,9 @@ TEST(scalar_parse_lowering_separates_typed_error_and_optional_flows) {
     XiValue *required_f_parse = required_f ? func_tree_find_op(required_f, XI_CONVERT) : NULL;
     XiValue *optional_f_parse = optional_f ? func_tree_find_op(optional_f, XI_CONVERT) : NULL;
     assert(required_i_parse && required_i_parse->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE);
-    assert(optional_i_parse &&
-           optional_i_parse->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE);
+    assert(optional_i_parse && optional_i_parse->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE);
     assert(required_f_parse && required_f_parse->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE);
-    assert(optional_f_parse &&
-           optional_f_parse->xa_intrinsic_id == XA_INTRINSIC_F64_TRY_PARSE);
+    assert(optional_f_parse && optional_f_parse->xa_intrinsic_id == XA_INTRINSIC_F64_TRY_PARSE);
     assert((required_i_parse->flags & XI_FLAG_MAY_THROW) != 0 &&
            (required_f_parse->flags & XI_FLAG_MAY_THROW) != 0);
     assert((optional_i_parse->flags & XI_FLAG_MAY_THROW) == 0 &&
@@ -1011,8 +1004,7 @@ TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
         "}\n",
         &evidence);
     assert(f != NULL);
-    assert(func_tree_count_intrinsic_method(
-               f, "append", XA_INTRINSIC_STRING_BUILDER_APPEND) == 3 &&
+    assert(func_tree_count_intrinsic_method(f, "append", XA_INTRINSIC_STRING_BUILDER_APPEND) == 3 &&
            "every builtin StringBuilder.append call must carry one stable intrinsic identity");
     XiValue *append = func_tree_find_method(f, "append");
     assert(append && append->aux_int == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
@@ -1035,13 +1027,13 @@ TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
     if (!built)
         fprintf(stderr, "StringBuilder.append SemanticPlan build failed: %s\n", error);
     assert(built && plan != NULL);
-    assert(semantic_count_string_builder_append_operations(plan, UINT8_MAX) == 3 &&
-           semantic_count_string_builder_append_operations(
-               plan, XI_GEN_RESULT_OWNERSHIP_BORROWED) == 1 &&
-           semantic_count_string_builder_append_operations(plan, XI_GEN_RESULT_OWNERSHIP_OWNED) ==
-               2 &&
-           "every producer-marked append must freeze one exact shape and preserve receiver "
-           "ownership");
+    assert(
+        semantic_count_string_builder_append_operations(plan, UINT8_MAX) == 3 &&
+        semantic_count_string_builder_append_operations(plan, XI_GEN_RESULT_OWNERSHIP_BORROWED) ==
+            1 &&
+        semantic_count_string_builder_append_operations(plan, XI_GEN_RESULT_OWNERSHIP_OWNED) == 2 &&
+        "every producer-marked append must freeze one exact shape and preserve receiver "
+        "ownership");
     XrSemanticOperationRecord *operation =
         semantic_find_intrinsic_operation(plan, XA_INTRINSIC_STRING_BUILDER_APPEND);
     assert(operation &&
@@ -2232,28 +2224,28 @@ TEST(nested_body_identity_binds_method_calls_through_frozen_parent) {
 #define REQUIRE_NESTED_IDENTITY(cond, msg)                                                         \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
-            fprintf(stderr, "nested_body_identity: %s\n", msg);                                  \
+            fprintf(stderr, "nested_body_identity: %s\n", msg);                                    \
             abort();                                                                               \
         }                                                                                          \
     } while (0)
 
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
-    XiFunc *root = lower_source_with_global_evidence(
-        "class Counter {\n"
-        "    value: i64\n"
-        "    constructor(value: i64) { this.value = value }\n"
-        "    read() -> i64 { return this.value }\n"
-        "}\n"
-        "fn exerciseNestedBody() -> i64 {\n"
-        "    const counter = Counter(7)\n"
-        "    const read = fn() -> i64 {\n"
-        "        return counter.read()\n"
-        "    }\n"
-        "    return read()\n"
-        "}\n"
-        "print(exerciseNestedBody())\n",
-        &ev);
+    XiFunc *root =
+        lower_source_with_global_evidence("class Counter {\n"
+                                          "    value: i64\n"
+                                          "    constructor(value: i64) { this.value = value }\n"
+                                          "    read() -> i64 { return this.value }\n"
+                                          "}\n"
+                                          "fn exerciseNestedBody() -> i64 {\n"
+                                          "    const counter = Counter(7)\n"
+                                          "    const read = fn() -> i64 {\n"
+                                          "        return counter.read()\n"
+                                          "    }\n"
+                                          "    return read()\n"
+                                          "}\n"
+                                          "print(exerciseNestedBody())\n",
+                                          &ev);
     REQUIRE_NESTED_IDENTITY(root != NULL, "source should lower with global evidence");
 
     const XgBodySummary *outer = NULL;
@@ -3256,8 +3248,7 @@ TEST(enum_ordinal_as_lowers_to_typed_convert) {
            convert->conversion.kind == XR_CONVERSION_ENUM_ORDINAL &&
            convert->conversion.source_scalar_rep == XR_SCALAR_REP_NONE &&
            convert->conversion.target_scalar_rep == XR_NATIVE_I64 &&
-           !convert->conversion.is_implicit &&
-           (convert->flags & XI_FLAG_MAY_THROW) == 0);
+           !convert->conversion.is_implicit && (convert->flags & XI_FLAG_MAY_THROW) == 0);
     assert(!func_tree_has_op(f, XI_AS));
     xi_func_free(f);
 }
@@ -3270,8 +3261,8 @@ static bool lower_enum_after_conversion_mutation(XrConversionKind kind, uint8_t 
     };
     assert(xr_compiler_session_set_compile_unit_identity(session, &identity));
     AstNode *program = xr_parse(session, "enum Ordinal { Zero, Two }\n"
-                                      "var value = Ordinal.Two as i64\n"
-                                      "print(value)\n");
+                                         "var value = Ordinal.Two as i64\n"
+                                         "print(value)\n");
     assert(program != NULL);
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     assert(analyzer != NULL);
@@ -3287,7 +3278,7 @@ static bool lower_enum_after_conversion_mutation(XrConversionKind kind, uint8_t 
     XrCompilerSessionScope canon_scope;
     bool has_canon_scope = program->as.program.arena &&
                            xr_compiler_session_push_arena(session, program->as.program.arena,
-                                                           "enum_witness_mutation.xr", &canon_scope);
+                                                          "enum_witness_mutation.xr", &canon_scope);
     xr_canon_program(program, analyzer, session);
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
@@ -3412,6 +3403,58 @@ TEST(enum_access) {
     }
     assert(found_load && "should have LOAD_FIELD for enum access");
     xi_func_free(f);
+}
+
+TEST(enum_record_syntax_lowers_to_exact_variant_operations) {
+    XiFunc *root = lower_source("enum Packet {\n"
+                                "  Data { code: i64, flag: bool },\n"
+                                "  Empty\n"
+                                "}\n"
+                                "fn inspect_packet() -> i64 {\n"
+                                "  var packet = Packet.Data { flag: true, code: 29 }\n"
+                                "  return match (packet) {\n"
+                                "    Packet.Data { code } -> code,\n"
+                                "    Packet.Empty -> 0\n"
+                                "  }\n"
+                                "}\n"
+                                "inspect_packet()\n");
+    assert(root != NULL);
+    XiFunc *inspect = NULL;
+    for (uint16_t i = 0; root->module && i < root->module->nfuncs; ++i) {
+        XiFunc *candidate = root->module->functions[i];
+        if (candidate && candidate->name && strcmp(candidate->name, "inspect_packet") == 0)
+            inspect = candidate;
+    }
+    assert(inspect != NULL);
+
+    XiValue *construct = NULL;
+    XiValue *test = NULL;
+    XiValue *project = NULL;
+    for (uint32_t block = 0; block < inspect->nblocks; ++block) {
+        XiBlock *row = inspect->blocks[block];
+        for (uint32_t value = 0; row && value < row->nvalues; ++value) {
+            XiValue *operation = row->values[value];
+            assert(operation->op != XI_CALL_METHOD);
+            assert(operation->op != XI_LOAD_FIELD);
+            if (operation->op == XI_VARIANT_CONSTRUCT)
+                construct = operation;
+            else if (operation->op == XI_VARIANT_TEST && operation->aux_int == 0)
+                test = operation;
+            else if (operation->op == XI_VARIANT_PROJECT)
+                project = operation;
+        }
+    }
+
+    assert(construct != NULL && construct->aux_int == 0 && construct->nargs == 3);
+    assert(construct->args[1] && construct->args[1]->op == XI_CONST &&
+           construct->args[1]->aux_int == 29);
+    assert(construct->args[2] && construct->args[2]->op == XI_CONST &&
+           construct->args[2]->aux_int == 1);
+    assert(test != NULL && test->aux_int == 0 && test->nargs == 1 && test->args[0] == construct);
+    assert(project != NULL && xi_variant_projection_variant(project) == 0 &&
+           xi_variant_projection_field(project) == 0 && project->nargs == 1 &&
+           project->args[0] == construct);
+    xi_func_free(root);
 }
 
 TEST(import_export_skip) {
@@ -3573,6 +3616,7 @@ int main(void) {
     run_destructure_decl();
     run_multi_assign();
     run_enum_access();
+    run_enum_record_syntax_lowers_to_exact_variant_operations();
     run_import_export_skip();
     run_class_decl_skip();
     run_yield_stmt();

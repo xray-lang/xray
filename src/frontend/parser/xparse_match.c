@@ -25,7 +25,39 @@
  * - Tuple pattern: (a, b) / (0, _) / ((x, y), z)
  */
 static AstNode *parse_pattern_single(Parser *parser);
-static AstNode *expr_to_pattern(Parser *parser, AstNode *expr);
+
+/* In an unparenthesized catch clause the final brace group is the catch body.
+ * A qualified variant path therefore owns a record-pattern brace only when the
+ * matching brace is followed by another top-level pattern (`,`) or by the body
+ * brace (`{`). This token-only delimiter rule never queries variant metadata
+ * and leaves nested record patterns unchanged. */
+static bool catch_brace_starts_record_pattern(Parser *parser) {
+    XR_DCHECK(parser != NULL, "catch_brace_starts_record_pattern: NULL parser");
+    XR_DCHECK(xr_parser_check(parser, TK_LBRACE),
+              "catch_brace_starts_record_pattern: expected current '{'");
+
+    XrParserStreamState saved = xr_parser_stream_save(parser);
+    int brace_depth = 0;
+    while (!xr_parser_check(parser, TK_EOF)) {
+        if (xr_parser_check(parser, TK_LBRACE)) {
+            brace_depth++;
+            xr_parser_advance(parser);
+            continue;
+        }
+        if (xr_parser_check(parser, TK_RBRACE)) {
+            brace_depth--;
+            xr_parser_advance(parser);
+            if (brace_depth == 0)
+                break;
+            continue;
+        }
+        xr_parser_advance(parser);
+    }
+    bool is_record_pattern = brace_depth == 0 && (xr_parser_check(parser, TK_COMMA) ||
+                                                  xr_parser_check(parser, TK_LBRACE));
+    xr_parser_stream_restore(parser, &saved);
+    return is_record_pattern;
+}
 
 /* Parse a positional tuple pattern starting at the current `(` token.
  * `()`, `(p,)` and `(p1, p2, ...)` are all accepted; sub-patterns
@@ -199,52 +231,69 @@ static AstNode *parse_array_pattern(Parser *parser) {
                                 line);
 }
 
-static AstNode *expr_to_adt_pattern(Parser *parser, AstNode *expr) {
-    if (!parser || !expr || expr->type != AST_CALL_EXPR)
-        return NULL;
+static AstNode *parse_adt_record_pattern(Parser *parser, AstNode *variant, int line) {
+    XR_DCHECK(parser != NULL, "parse_adt_record_pattern: NULL parser");
+    XR_DCHECK(variant != NULL, "parse_adt_record_pattern: NULL variant");
 
-    AstNode *callee = expr->as.call_expr.callee;
-    if (!callee || (callee->type != AST_MEMBER_ACCESS && callee->type != AST_ENUM_ACCESS))
-        return NULL;
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' to start payload enum pattern");
+    char **field_names = NULL;
+    XrNameSpan *field_name_spans = NULL;
+    AstNode **patterns = NULL;
+    int count = 0;
+    int capacity = 0;
 
-    int argc = expr->as.call_expr.arg_count;
-    AstNode **sub_pats = NULL;
-    if (argc > 0) {
-        sub_pats = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
-                                                (size_t) argc);
-        for (int i = 0; i < argc; i++)
-            sub_pats[i] = expr_to_pattern(parser, expr->as.call_expr.arguments[i]);
-    }
-    return xr_ast_pattern_adt(parser->compiler_session, callee, sub_pats, argc, expr->line);
-}
-
-static AstNode *expr_to_pattern(Parser *parser, AstNode *expr) {
-    if (!parser || !expr)
-        return NULL;
-
-    if (expr->type == AST_VARIABLE) {
-        if (strcmp(expr->as.variable.name, "_") == 0)
-            return xr_ast_pattern_wildcard(parser->compiler_session, expr->line);
-        return xr_ast_pattern_literal(parser->compiler_session, expr, expr->line);
-    }
-
-    if (expr->type == AST_TUPLE_LITERAL) {
-        int count = expr->as.tuple_literal.count;
-        AstNode **patterns = NULL;
-        if (count > 0) {
-            patterns = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
-                                                    (size_t) count);
-            for (int i = 0; i < count; i++)
-                patterns[i] = expr_to_pattern(parser, expr->as.tuple_literal.elements[i]);
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        if (xr_parser_check(parser, TK_RANGE) || xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+            xr_parser_error(parser, "payload enum patterns ignore omitted fields; remove '..'");
+            return NULL;
         }
-        return xr_ast_pattern_tuple(parser->compiler_session, patterns, count, expr->line);
+        xr_parser_consume(parser, TK_NAME, "expected field name in payload enum pattern");
+        Token field_token = parser->previous;
+        char *field_name = pattern_copy_token(parser, &field_token);
+        AstNode *subpattern = NULL;
+        if (xr_parser_match(parser, TK_COLON)) {
+            subpattern = parse_pattern_single(parser);
+        } else {
+            AstNode *binding =
+                xr_ast_variable(parser->compiler_session, field_name, field_token.line);
+            subpattern =
+                xr_ast_pattern_literal(parser->compiler_session, binding, field_token.line);
+        }
+
+        if (count >= capacity) {
+            int old_capacity = capacity;
+            capacity = capacity == 0 ? 4 : capacity * 2;
+            char **new_names = (char **) ast_alloc_array(parser->compiler_session, sizeof(char *),
+                                                         (size_t) capacity);
+            XrNameSpan *new_name_spans = (XrNameSpan *) ast_alloc_array(
+                parser->compiler_session, sizeof(XrNameSpan), (size_t) capacity);
+            AstNode **new_patterns = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
+            if (old_capacity > 0) {
+                memcpy(new_names, field_names, sizeof(char *) * (size_t) old_capacity);
+                memcpy(new_name_spans, field_name_spans,
+                       sizeof(XrNameSpan) * (size_t) old_capacity);
+                memcpy(new_patterns, patterns, sizeof(AstNode *) * (size_t) old_capacity);
+            }
+            field_names = new_names;
+            field_name_spans = new_name_spans;
+            patterns = new_patterns;
+        }
+        field_names[count] = field_name;
+        field_name_spans[count] =
+            (XrNameSpan) {.line = field_token.line, .column = field_token.column};
+        patterns[count] = subpattern;
+        count++;
+
+        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_match(parser, TK_COMMA)) {
+            xr_parser_error(parser, "expected ',' or '}' in payload enum pattern");
+            return NULL;
+        }
     }
 
-    AstNode *adt = expr_to_adt_pattern(parser, expr);
-    if (adt)
-        return adt;
-
-    return xr_ast_pattern_literal(parser->compiler_session, expr, expr->line);
+    xr_parser_consume(parser, TK_RBRACE, "expected '}' after payload enum pattern");
+    return xr_ast_pattern_adt(parser->compiler_session, variant, field_names, field_name_spans,
+                              patterns, count, line);
 }
 
 /* Parse exactly one pattern atom — wildcard, tuple destructure,
@@ -255,7 +304,7 @@ static AstNode *expr_to_pattern(Parser *parser, AstNode *expr) {
 // Inner implementation; parse_pattern_single wraps this with the recursion-depth
 // guard. Nested tuple/object/array patterns recurse through the public
 // wrapper, so the guard bounds pattern nesting depth.
-static AstNode *parse_pattern_single_inner(Parser *parser) {
+static AstNode *parse_pattern_single_inner(Parser *parser, bool unparenthesized_catch_header) {
     XR_DCHECK(parser != NULL, "parse_pattern_single: NULL parser");
     int line = parser->current.line;
 
@@ -299,7 +348,10 @@ static AstNode *parse_pattern_single_inner(Parser *parser) {
         return xr_ast_pattern_type(parser->compiler_session, type, binding_name, line);
     }
 
+    bool saved_pattern_mode = parser->parsing_pattern;
+    parser->parsing_pattern = true;
     AstNode *first = xr_parse_precedence(parser, PREC_CALL);
+    parser->parsing_pattern = saved_pattern_mode;
     if (!first) {
         xr_parser_error(parser, "expected pattern");
         return NULL;
@@ -316,22 +368,17 @@ static AstNode *parse_pattern_single_inner(Parser *parser) {
         return xr_ast_pattern_range(parser->compiler_session, first, end, inclusive_end, line);
     }
 
-    /* ADT variant destructure: Shape.Circle(r, ...)
-     * The Pratt parser already consumed `Shape.Circle(r)` as AST_CALL
-     * whose callee is AST_MEMBER_ACCESS. Unwrap into AST_PATTERN_ADT
-     * with the callee as variant and call args as sub-patterns. */
+    if ((first->type == AST_MEMBER_ACCESS || first->type == AST_ENUM_ACCESS) &&
+        xr_parser_check(parser, TK_LBRACE) &&
+        (!unparenthesized_catch_header || catch_brace_starts_record_pattern(parser))) {
+        return parse_adt_record_pattern(parser, first, line);
+    }
+
     if (first->type == AST_CALL_EXPR) {
         AstNode *callee = first->as.call_expr.callee;
         if (callee && (callee->type == AST_MEMBER_ACCESS || callee->type == AST_ENUM_ACCESS)) {
-            int argc = first->as.call_expr.arg_count;
-            AstNode **sub_pats = NULL;
-            if (argc > 0) {
-                sub_pats = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
-                                                        (size_t) argc);
-                for (int i = 0; i < argc; i++)
-                    sub_pats[i] = expr_to_pattern(parser, first->as.call_expr.arguments[i]);
-            }
-            return xr_ast_pattern_adt(parser->compiler_session, callee, sub_pats, argc, line);
+            xr_parser_error(parser, "payload enum patterns use named record fields, not '(...)'");
+            return NULL;
         }
     }
 
@@ -341,27 +388,32 @@ static AstNode *parse_pattern_single_inner(Parser *parser) {
 // Public pattern-atom entry: recursion-depth guard around
 // parse_pattern_single_inner. Nested tuple/object/array patterns recurse
 // through here, so this bounds pattern nesting depth.
-static AstNode *parse_pattern_single(Parser *parser) {
+static AstNode *parse_pattern_single_with_context(Parser *parser,
+                                                  bool unparenthesized_catch_header) {
     XR_DCHECK(parser != NULL, "parse_pattern_single: NULL parser");
     if (++parser->recursion_depth > XR_PARSER_MAX_DEPTH) {
         parser->recursion_depth--;
         xr_parser_error(parser, "pattern nesting too deep (max 1000 levels)");
         return NULL;
     }
-    AstNode *result = parse_pattern_single_inner(parser);
+    AstNode *result = parse_pattern_single_inner(parser, unparenthesized_catch_header);
     parser->recursion_depth--;
     return result;
+}
+
+static AstNode *parse_pattern_single(Parser *parser) {
+    return parse_pattern_single_with_context(parser, false);
 }
 
 /* Top-level match-arm pattern: parse one atom, then optionally fold
  * in further atoms separated by `,` into an alternation pattern up
  * to the `->`. This is the only place where a top-level comma starts
  * an alternation; tuple sub-elements use parse_pattern_single. */
-XR_FUNC AstNode *xr_parse_match_pattern(Parser *parser) {
+static AstNode *parse_top_level_pattern(Parser *parser, bool unparenthesized_catch_header) {
     XR_DCHECK(parser != NULL, "parse_pattern: NULL parser");
     int line = parser->current.line;
 
-    AstNode *first = parse_pattern_single(parser);
+    AstNode *first = parse_pattern_single_with_context(parser, unparenthesized_catch_header);
     if (!first)
         return NULL;
 
@@ -388,7 +440,7 @@ XR_FUNC AstNode *xr_parse_match_pattern(Parser *parser) {
             patterns = _new_patterns;
         }
 
-        AstNode *next = parse_pattern_single(parser);
+        AstNode *next = parse_pattern_single_with_context(parser, unparenthesized_catch_header);
         if (!next) {
             xr_parser_error(parser, "expected pattern value");
             break;
@@ -397,6 +449,14 @@ XR_FUNC AstNode *xr_parse_match_pattern(Parser *parser) {
     }
 
     return xr_ast_pattern_multi(parser->compiler_session, patterns, count, line);
+}
+
+XR_FUNC AstNode *xr_parse_match_pattern(Parser *parser) {
+    return parse_top_level_pattern(parser, false);
+}
+
+XR_FUNC AstNode *xr_parse_unparenthesized_catch_pattern(Parser *parser) {
+    return parse_top_level_pattern(parser, true);
 }
 
 /*

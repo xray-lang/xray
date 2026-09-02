@@ -26,6 +26,7 @@
 #include "../../base/xtarget_data_layout.h"
 #include "xanalyzer_symbol.h"
 #include "xa_parallel_call_plan.h"
+#include "xa_enum_record_plan.h"
 #include "xa_memory_effect_db.h"
 #include "xa_resolved_call.h"
 #include "../../runtime/value/xtype_pool.h"
@@ -190,6 +191,10 @@ struct XaAnalyzer {
     // Consumed by lowerer/backend before falling back to textual rediscovery.
     void *parallel_call_plan_table;  // XaParallelCallPlanTable* (forward declared)
 
+    // Named enum construction/pattern nodes -> resolved declaration slots.
+    // Lowering consumes this instead of repeating field-name resolution.
+    void *enum_record_plan_table;  // XaEnumRecordPlanTable* (forward declared)
+
     // AST call -> immutable canonical call identity. Intrinsics are assigned
     // from declaration metadata and survive alias/re-export spelling changes.
     void *resolved_call_table;  // XaResolvedCallTable* (forward declared)
@@ -328,6 +333,8 @@ XR_FUNC const struct XaSelection *xa_analyzer_get_selection(XaAnalyzer *analyzer
                                                             const struct AstNode *node);
 XR_FUNC const XaParallelCallPlan *xa_analyzer_get_parallel_call_plan(XaAnalyzer *analyzer,
                                                                      const struct AstNode *node);
+XR_FUNC const XaEnumRecordPlan *xa_analyzer_get_enum_record_plan(XaAnalyzer *analyzer,
+                                                                 const struct AstNode *node);
 XR_FUNC const XaResolvedCall *xa_analyzer_get_resolved_call(XaAnalyzer *analyzer,
                                                             const struct AstNode *node);
 

@@ -10,6 +10,10 @@
 
 #include "xlsp_code_action.h"
 #include "xlsp_cycle_report.h"
+#include "../../frontend/analyzer/xanalyzer.h"
+#include "../../frontend/analyzer/xanalyzer_ast_visitor.h"
+#include "../../frontend/analyzer/xa_selection.h"
+#include "../../frontend/parser/xast_nodes.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -96,6 +100,332 @@ static void push_enum_variants_action(XrJsonValue *actions, const char *uri, con
     xjson_object_set(edit, "changes", changes);
     xjson_object_set(action, "edit", edit);
     xjson_array_push(actions, action);
+}
+
+typedef struct MissingEnumFieldDiagnostic {
+    char enum_name[128];
+    char variant_name[128];
+    char field_name[128];
+} MissingEnumFieldDiagnostic;
+
+static bool is_identifier(const char *start, size_t length) {
+    if (!start || length == 0)
+        return false;
+    char first = start[0];
+    if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_'))
+        return false;
+    for (size_t i = 1; i < length; i++) {
+        char ch = start[i];
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+              ch == '_'))
+            return false;
+    }
+    return true;
+}
+
+static bool copy_identifier(char *destination, size_t capacity, const char *start, size_t length) {
+    if (!destination || capacity == 0 || length >= capacity || !is_identifier(start, length))
+        return false;
+    memcpy(destination, start, length);
+    destination[length] = '\0';
+    return true;
+}
+
+static bool parse_missing_enum_field_diagnostic(const char *message,
+                                                MissingEnumFieldDiagnostic *out) {
+    static const char prefix[] = "enum construction '";
+    static const char field_marker[] = "' is missing field '";
+    if (!message || !out || strncmp(message, prefix, sizeof(prefix) - 1) != 0)
+        return false;
+
+    const char *enum_start = message + sizeof(prefix) - 1;
+    const char *dot = strchr(enum_start, '.');
+    const char *marker = dot ? strstr(dot + 1, field_marker) : NULL;
+    if (!dot || !marker)
+        return false;
+    const char *field_start = marker + sizeof(field_marker) - 1;
+    const char *field_end = strchr(field_start, '\'');
+    if (!field_end || field_end[1] != '\0')
+        return false;
+
+    return copy_identifier(out->enum_name, sizeof(out->enum_name), enum_start,
+                           (size_t) (dot - enum_start)) &&
+           copy_identifier(out->variant_name, sizeof(out->variant_name), dot + 1,
+                           (size_t) (marker - dot - 1)) &&
+           copy_identifier(out->field_name, sizeof(out->field_name), field_start,
+                           (size_t) (field_end - field_start));
+}
+
+static bool enum_construct_path_matches(const AstNode *node,
+                                        const MissingEnumFieldDiagnostic *diagnostic) {
+    if (!node || node->type != AST_ENUM_CONSTRUCT || !diagnostic)
+        return false;
+    const AstNode *path = node->as.enum_construct.variant_path;
+    if (!path)
+        return false;
+    if (path->type == AST_ENUM_ACCESS)
+        return path->as.enum_access.enum_name && path->as.enum_access.member_name &&
+               strcmp(path->as.enum_access.enum_name, diagnostic->enum_name) == 0 &&
+               strcmp(path->as.enum_access.member_name, diagnostic->variant_name) == 0;
+    return path->type == AST_MEMBER_ACCESS && path->as.member_access.object &&
+           path->as.member_access.object->type == AST_VARIABLE &&
+           path->as.member_access.object->as.variable.name && path->as.member_access.name &&
+           strcmp(path->as.member_access.object->as.variable.name, diagnostic->enum_name) == 0 &&
+           strcmp(path->as.member_access.name, diagnostic->variant_name) == 0;
+}
+
+typedef struct EnumConstructAtDiagnostic {
+    const MissingEnumFieldDiagnostic *diagnostic;
+    int line;
+    int column;
+    AstNode *found;
+} EnumConstructAtDiagnostic;
+
+static void find_enum_construct_at_diagnostic(AstNode *node, void *raw_context) {
+    EnumConstructAtDiagnostic *context = raw_context;
+    if (!node || !context || context->found || node->line - 1 != context->line ||
+        node->column - 1 != context->column ||
+        !enum_construct_path_matches(node, context->diagnostic))
+        return;
+    context->found = node;
+}
+
+static bool construct_has_field(const EnumConstructNode *construct, const char *name) {
+    if (!construct || !name)
+        return false;
+    for (int i = 0; i < construct->field_count; i++) {
+        if (construct->field_names && construct->field_names[i] &&
+            strcmp(construct->field_names[i], name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static size_t enum_missing_field_text_size(const XaEnumVariantInfo *variant,
+                                           const EnumConstructNode *construct) {
+    size_t size = 1;
+    if (!variant)
+        return size;
+    for (uint16_t i = 0; i < variant->payload_count; i++) {
+        const char *name = variant->payload_names ? variant->payload_names[i] : NULL;
+        if (name && !construct_has_field(construct, name))
+            size += strlen(name) * 2 + 8;
+    }
+    return size;
+}
+
+static int line_indent_width(const char *content, int line) {
+    if (!content || line < 0)
+        return 0;
+    const char *start = content;
+    for (int current = 0; current < line; current++) {
+        const char *newline = strchr(start, '\n');
+        if (!newline)
+            return 0;
+        start = newline + 1;
+    }
+    int width = 0;
+    while (start[width] == ' ' || start[width] == '\t')
+        width++;
+    return width;
+}
+
+static const char *content_at_position(const char *content, int line, int character) {
+    if (!content || line < 0 || character < 0)
+        return NULL;
+    const char *position = content;
+    for (int current = 0; current < line; current++) {
+        const char *newline = strchr(position, '\n');
+        if (!newline)
+            return NULL;
+        position = newline + 1;
+    }
+    for (int current = 0; current < character; current++) {
+        if (position[current] == '\0' || position[current] == '\n')
+            return NULL;
+    }
+    return position + character;
+}
+
+static char *make_missing_field_text(const XaEnumVariantInfo *variant,
+                                     const EnumConstructNode *construct, bool multiline, int indent,
+                                     bool trailing_whitespace, bool *out_has_missing) {
+    size_t capacity = enum_missing_field_text_size(variant, construct) +
+                      (multiline ? ((size_t) indent + 2) * variant->payload_count : 4);
+    char *text = xr_malloc(capacity);
+    size_t length = 0;
+    int missing_count = 0;
+    for (uint16_t i = 0; i < variant->payload_count; i++) {
+        const char *name = variant->payload_names ? variant->payload_names[i] : NULL;
+        if (!name || construct_has_field(construct, name))
+            continue;
+        if (multiline) {
+            if (missing_count > 0)
+                text[length++] = ',';
+            if (missing_count > 0)
+                text[length++] = '\n';
+            for (int column = 0; column < indent; column++)
+                text[length++] = ' ';
+        } else if (missing_count > 0) {
+            text[length++] = ',';
+            text[length++] = ' ';
+        }
+        int written = snprintf(text + length, capacity - length, "%s: %s", name, name);
+        if (written < 0 || (size_t) written >= capacity - length) {
+            xr_free(text);
+            return NULL;
+        }
+        length += (size_t) written;
+        missing_count++;
+    }
+    if (missing_count == 0) {
+        xr_free(text);
+        return NULL;
+    }
+    if (!multiline && !trailing_whitespace)
+        text[length++] = ' ';
+    if (multiline)
+        text[length++] = '\n';
+    text[length] = '\0';
+    if (out_has_missing)
+        *out_has_missing = true;
+    return text;
+}
+
+static void push_missing_enum_fields_action(XrJsonValue *actions, const char *uri,
+                                            const char *content, XaAnalyzer *analyzer,
+                                            AstNode *node, XrJsonValue *diagnostic,
+                                            const MissingEnumFieldDiagnostic *parsed) {
+    if (!actions || !uri || !content || !analyzer || !analyzer->global_scope || !node ||
+        node->type != AST_ENUM_CONSTRUCT || !diagnostic || !parsed || node->end_line <= 0 ||
+        node->end_column <= 1)
+        return;
+
+    const XaSelection *selection =
+        xa_analyzer_get_selection(analyzer, node->as.enum_construct.variant_path);
+    XaSymbol *symbol =
+        selection && selection->kind == XA_SEL_ENUM_MEMBER ? selection->target_symbol : NULL;
+    XaEnumInfo *info = symbol && symbol->kind == XA_SYM_ENUM ? symbol->links.enum_info : NULL;
+    int ordinal = selection && selection->field_index >= 0
+                      ? selection->field_index
+                      : xa_enum_info_find_variant(info, parsed->variant_name);
+    if (!info || ordinal < 0 || (uint32_t) ordinal >= info->variant_count)
+        return;
+    XaEnumVariantInfo *variant = &info->variants[ordinal];
+    EnumConstructNode *construct = &node->as.enum_construct;
+    if (variant->payload_count == 0 || !variant->payload_names)
+        return;
+    bool diagnosed_field_is_missing = false;
+    for (uint16_t slot = 0; slot < variant->payload_count; slot++) {
+        if (strcmp(variant->payload_names[slot], parsed->field_name) == 0 &&
+            !construct_has_field(construct, parsed->field_name)) {
+            diagnosed_field_is_missing = true;
+            break;
+        }
+    }
+    if (!diagnosed_field_is_missing)
+        return;
+
+    int close_line = node->end_line - 1;
+    int close_character = node->end_column - 2;
+    bool multiline = close_line != node->line - 1;
+    int insertion_line = close_line;
+    int insertion_character = close_character;
+    bool trailing_whitespace = false;
+    int indent = 0;
+    bool has_existing_fields = construct->field_count > 0;
+    bool add_existing_separator = false;
+
+    if (!multiline) {
+        const char *line_start = content;
+        for (int line = 0; line < close_line; line++) {
+            const char *newline = strchr(line_start, '\n');
+            if (!newline)
+                return;
+            line_start = newline + 1;
+        }
+        const char *close = line_start + close_character;
+        if (*close != '}')
+            return;
+        const char *insert = close;
+        while (insert > line_start && (insert[-1] == ' ' || insert[-1] == '\t'))
+            insert--;
+        trailing_whitespace = insert != close;
+        insertion_character = (int) (insert - line_start);
+    } else {
+        insertion_character = 0;
+        if (construct->field_count > 0 && construct->field_name_spans) {
+            indent = construct->field_name_spans[construct->field_count - 1].column - 1;
+        } else {
+            indent = line_indent_width(content, close_line) + 4;
+        }
+        if (has_existing_fields) {
+            AstNode *last_value = construct->field_values[construct->field_count - 1];
+            if (!last_value || last_value->end_line <= 0 || last_value->end_column <= 0)
+                return;
+            const char *after_value =
+                content_at_position(content, last_value->end_line - 1, last_value->end_column - 1);
+            if (!after_value)
+                return;
+            while (*after_value == ' ' || *after_value == '\t' || *after_value == '\n' ||
+                   *after_value == '\r')
+                after_value++;
+            add_existing_separator = *after_value != ',';
+        }
+    }
+
+    bool has_missing = false;
+    char *field_text = make_missing_field_text(variant, construct, multiline, indent,
+                                               trailing_whitespace, &has_missing);
+    if (!field_text || !has_missing)
+        return;
+
+    size_t prefix_size = strlen(field_text) + 4;
+    char *new_text = xr_malloc(prefix_size);
+    if (multiline) {
+        snprintf(new_text, prefix_size, "%s", field_text);
+    } else if (has_existing_fields) {
+        snprintf(new_text, prefix_size, ", %s", field_text);
+    } else {
+        snprintf(new_text, prefix_size, " %s", field_text);
+    }
+    xr_free(field_text);
+
+    char title[256];
+    snprintf(title, sizeof(title), "Add missing fields to '%s.%s'", parsed->enum_name,
+             parsed->variant_name);
+    XrJsonValue *action = xjson_new_object();
+    xjson_object_set(action, "title", xjson_new_string(title));
+    xjson_object_set(action, "kind", xjson_new_string("quickfix"));
+    XrJsonValue *diagnostics = xjson_new_array();
+    xjson_array_push(diagnostics, xjson_clone(diagnostic));
+    xjson_object_set(action, "diagnostics", diagnostics);
+
+    XrJsonValue *edit = xjson_new_object();
+    XrJsonValue *changes = xjson_new_object();
+    XrJsonValue *edits = xjson_new_array();
+    XrJsonValue *text_edit = xjson_new_object();
+    xjson_object_set(text_edit, "newText", xjson_new_string(new_text));
+    xjson_object_set(
+        text_edit, "range",
+        xjson_make_range(insertion_line, insertion_character, insertion_line, insertion_character));
+    xjson_array_push(edits, text_edit);
+
+    if (multiline && add_existing_separator) {
+        AstNode *last_value = construct->field_values[construct->field_count - 1];
+        XrJsonValue *separator = xjson_new_object();
+        xjson_object_set(separator, "newText", xjson_new_string(","));
+        xjson_object_set(separator, "range",
+                         xjson_make_range(last_value->end_line - 1, last_value->end_column - 1,
+                                          last_value->end_line - 1, last_value->end_column - 1));
+        xjson_array_push(edits, separator);
+    }
+
+    xjson_object_set(changes, uri, edits);
+    xjson_object_set(edit, "changes", changes);
+    xjson_object_set(action, "edit", edit);
+    xjson_array_push(actions, action);
+    xr_free(new_text);
 }
 
 /* ---------- Reference cycles ----------
@@ -297,9 +627,40 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
     // Check for diagnostics with undefined symbols or unused variables
     XrJsonValue *diagnostics = xjson_get(context, "diagnostics");
     if (diagnostics && diagnostics->type == XR_JSON_ARRAY) {
-        for (int i = 0; i < xjson_array_len(diagnostics); i++) {
+        int diagnostic_count = xjson_array_len(diagnostics);
+        AstNode **enum_constructs_with_action =
+            diagnostic_count > 0 ? xr_calloc((size_t) diagnostic_count, sizeof(AstNode *)) : NULL;
+        int enum_construct_action_count = 0;
+        for (int i = 0; i < diagnostic_count; i++) {
             XrJsonValue *diag = xjson_array_get(diagnostics, i);
             const char *msg = xjson_get_string(diag, "message");
+
+            MissingEnumFieldDiagnostic missing_field;
+            if (msg && parse_missing_enum_field_diagnostic(msg, &missing_field) && doc->ast &&
+                server->workspace_analyzer) {
+                XrJsonValue *diag_range = xjson_get_object(diag, "range");
+                XrJsonValue *diag_start = diag_range ? xjson_get_object(diag_range, "start") : NULL;
+                EnumConstructAtDiagnostic find = {
+                    .diagnostic = &missing_field,
+                    .line = diag_start ? (int) xjson_get_int(diag_start, "line") : -1,
+                    .column = diag_start ? (int) xjson_get_int(diag_start, "character") : -1,
+                };
+                if (diag_start)
+                    xa_ast_walk(doc->ast, find_enum_construct_at_diagnostic, NULL, &find);
+                bool duplicate = false;
+                for (int seen = 0; seen < enum_construct_action_count; seen++) {
+                    if (enum_constructs_with_action[seen] == find.found) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (find.found && !duplicate) {
+                    push_missing_enum_fields_action(actions, uri, doc->content,
+                                                    server->workspace_analyzer, find.found, diag,
+                                                    &missing_field);
+                    enum_constructs_with_action[enum_construct_action_count++] = find.found;
+                }
+            }
 
             // QuickFix: Remove unused variable
             if (msg && (strstr(msg, "unused") || strstr(msg, "never used"))) {
@@ -389,6 +750,7 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                 }
             }
         }
+        xr_free(enum_constructs_with_action);
     }
 
     // Refactor: Convert var → const (when variable is never reassigned)

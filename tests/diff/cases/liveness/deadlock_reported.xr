@@ -12,7 +12,7 @@
 print("before recv")
 var ch = Channel<i64>(0)
 var got = match (ch.recv()) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> -1
 }
 print(got)

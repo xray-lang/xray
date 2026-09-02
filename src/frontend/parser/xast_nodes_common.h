@@ -35,6 +35,13 @@ struct XrArena;
 
 /* ========== Leaf / shared primitives ========== */
 
+/* Exact source position of one identifier token. The identifier spelling
+ * supplies the length, so a separate end position would duplicate data. */
+typedef struct XrNameSpan {
+    int line;
+    int column;
+} XrNameSpan;
+
 typedef struct BinaryNode {
     AstNode *left;
     AstNode *right;

@@ -1,11 +1,11 @@
 // AOT test: D22 block-scoped defer exit edges.
 
 enum BlockErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 fn fail() {
-    throw BlockErr.Msg("bad")
+    throw BlockErr.Msg { s: "bad" }
 }
 
 fn loop_sum() -> i64 {

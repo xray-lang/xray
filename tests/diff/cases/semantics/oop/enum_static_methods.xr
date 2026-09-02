@@ -11,7 +11,7 @@ enum Color {
     Green,
     Blue
 
-    static fn fromInt(v: i64) -> Color {
+    static fromInt(v: i64) -> Color {
         if (v == 1) {
             return Color.Red
         }
@@ -21,11 +21,11 @@ enum Color {
         return Color.Blue
     }
 
-    static fn describe(c: Color) -> string {
+    static describe(c: Color) -> string {
         return c.label()
     }
 
-    fn label() -> string {
+    label() -> string {
         return this.name
     }
 }
@@ -34,11 +34,11 @@ enum Code {
     Ok,
     Err
 
-    static fn ok() -> Code {
+    static ok() -> Code {
         return Code.Ok
     }
 
-    fn code() -> i64 {
+    code() -> i64 {
         return match (this) {
             Code.Ok -> 200,
             Code.Err -> 500

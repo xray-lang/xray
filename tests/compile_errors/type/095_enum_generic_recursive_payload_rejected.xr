@@ -1,6 +1,6 @@
 enum List<T> {
     Nil,
-    Cons(T, List<T>)
+    Cons { head: T, tail: List<T> }
 }
 
 print(1)

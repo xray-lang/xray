@@ -94,7 +94,7 @@ fn handleRequest(req, res, controller: UserController) {
 // Concurrent task example
 fn recvValue(ch) {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> null
     }
 }

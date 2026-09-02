@@ -1667,6 +1667,13 @@ static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
     return XR_NULL_VAL;
 }
 
+static inline XrValue xrt_enum_variant_field_get(XrValue boxed, int64_t variant, int64_t field) {
+    XrValue tag = xrt_enum_field_get(boxed, 0);
+    if (!XR_IS_INT(tag) || tag.i != variant)
+        xrt_freestanding_trap("enum variant projection tag mismatch");
+    return xrt_enum_field_get(boxed, field + 1);
+}
+
 static inline XrValue xrt_enum_box_ordinal(XrValue obj) {
     if (XR_IS_INT(obj))
         return obj;

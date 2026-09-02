@@ -1,10 +1,10 @@
 enum Hold {
-    Slice(Slice<i64>)
+    Slice { view: Slice<i64> }
 }
 
 fn main() {
     var owner = [1, 2, 3]
     var view: Slice<i64> = owner[0:2]
-    var hold = Hold.Slice(view)
+    var hold = Hold.Slice { view: view }
     print(hold)
 }

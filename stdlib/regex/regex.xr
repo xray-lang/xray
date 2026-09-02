@@ -1740,7 +1740,7 @@ fn rxLimitArg(present: bool, v: i64) -> i64 {
 // its values, while an .xr enum is usable directly -- csv.xr and encoding.xr
 // do the same.
 export enum RegexError {
-    InvalidPattern(message: string, position: i64)
+    InvalidPattern { message: string, position: i64 }
 }
 
 // The program image is compiled on first use and memoised in the handle.
@@ -1788,10 +1788,13 @@ export fn compile(pattern: string, flags: string = "") -> Regex {
     var t = rxParse(pattern, re.flags)
     // The C binding threw away error_msg and error_pos and reported a generic
     // code (xregex_binding.c:238-242); both travel out of here.
-    if (rxErr(t) != 0) { throw RegexError.InvalidPattern(t.errMsg[0], t.meta[RXM_ERRPOS]) }
+    if (rxErr(t) != 0) { throw RegexError.InvalidPattern { message: t.errMsg[0], position: t.meta[RXM_ERRPOS] } }
     var prog = rxCompile(t)
     if (len(prog) == 0) {
-        throw RegexError.InvalidPattern("pattern exceeds ${RX_MAX_INSTS} instructions", 0)
+        throw RegexError.InvalidPattern {
+            message: "pattern exceeds ${RX_MAX_INSTS} instructions",
+            position: 0
+        }
     }
     var i = 0
     while (i < len(prog)) {

@@ -12,6 +12,6 @@ fn body() -> i64 {
 
 var t = go body()
 match (t.awaitResult()) {
-    TaskResult.Ok(v) -> print(v)
+    TaskResult.Success { value: v } -> print(v)
     _ -> print("other")
 }

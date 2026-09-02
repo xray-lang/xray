@@ -126,6 +126,10 @@ struct Parser {
     // the previous arm body is still open, that leading `is` starts the next
     // arm's type pattern and must end the body instead.
     int match_arm_body_depth;
+
+    // Record braces after a qualified path belong to the enclosing pattern
+    // parser while this flag is set; expression parsing must leave them unread.
+    bool parsing_pattern;
 };
 
 // Maximum nesting depth for expressions / types / match patterns. Chosen to

@@ -6,14 +6,14 @@ import text
 // in an explicit schema/decode layer, never in the tokenizer.
 
 export enum CsvDelimiter {
-    Exact(rune),
+    Exact { delimiter: rune },
     Auto
 }
 
 export enum CsvHeader {
     None,
     FirstRow,
-    Explicit(Array<string>)
+    Explicit { names: Array<string> }
 }
 
 export enum CsvErrorKind {
@@ -42,13 +42,13 @@ export class CsvDiagnostic {
 }
 
 export enum CsvError {
-    InvalidOption(string),
-    InputLimitExceeded(i64),
-    FieldLimitExceeded(i64),
-    ColumnLimitExceeded(i64),
-    UnterminatedQuote(i64, i64, i64, i64, string),
-    InvalidEscape(i64, i64, i64, i64, string),
-    FieldCountMismatch(i64, i64, i64, i64, string)
+    InvalidOption { message: string },
+    InputLimitExceeded { limit: i64 },
+    FieldLimitExceeded { limit: i64 },
+    ColumnLimitExceeded { limit: i64 },
+    UnterminatedQuote { byteOffset: i64, line: i64, record: i64, column: i64, message: string },
+    InvalidEscape { byteOffset: i64, line: i64, record: i64, column: i64, message: string },
+    FieldCountMismatch { byteOffset: i64, line: i64, record: i64, column: i64, message: string }
 }
 
 export type CsvParseOptions = {
@@ -75,7 +75,7 @@ export type CsvWriteOptions = {
 
 export fn defaultParseOptions() -> CsvParseOptions {
     var options: CsvParseOptions = {
-        delimiter: CsvDelimiter.Exact(','),
+        delimiter: CsvDelimiter.Exact { delimiter: ',' },
         quoteChar: '"',
         escapeChar: '"',
         header: CsvHeader.None,
@@ -168,16 +168,16 @@ class _CsvState {
 fn _validateParseOptions(options: CsvParseOptions) {
     if (options.skipRecords < 0 || options.maxRecords < 0 || options.maxInputBytes < 0 ||
         options.maxFieldBytes < 0 || options.maxColumns < 0) {
-        throw CsvError.InvalidOption("CSV limits and record counts must be non-negative")
+        throw CsvError.InvalidOption { message: "CSV limits and record counts must be non-negative" }
     }
 }
 
 fn _validateWriteOptions(options: CsvWriteOptions) {
     if (options.delimiter == options.quoteChar) {
-        throw CsvError.InvalidOption("delimiter and quoteChar must differ")
+        throw CsvError.InvalidOption { message: "delimiter and quoteChar must differ" }
     }
     if (len(options.linebreak) == 0) {
-        throw CsvError.InvalidOption("linebreak must not be empty")
+        throw CsvError.InvalidOption { message: "linebreak must not be empty" }
     }
 }
 
@@ -231,11 +231,11 @@ fn _detectDelimiter(data: string, quoteChar: rune, escapeChar: rune) -> rune {
 
 fn _resolveDelimiter(data: string, options: CsvParseOptions) -> rune {
     var delimiter = match (options.delimiter) {
-        CsvDelimiter.Exact(value) -> value,
+        CsvDelimiter.Exact { delimiter: value } -> value,
         CsvDelimiter.Auto         -> _detectDelimiter(data, options.quoteChar, options.escapeChar)
     }
     if (delimiter == options.quoteChar) {
-        throw CsvError.InvalidOption("delimiter and quoteChar must differ")
+        throw CsvError.InvalidOption { message: "delimiter and quoteChar must differ" }
     }
     return delimiter
 }
@@ -243,7 +243,7 @@ fn _resolveDelimiter(data: string, options: CsvParseOptions) -> rune {
 fn _explicitHeaders(header: CsvHeader) -> Array<string> {
     var empty: Array<string> = []
     return match (header) {
-        CsvHeader.Explicit(values) -> copy(values),
+        CsvHeader.Explicit { names: values } -> copy(values),
         _                          -> empty
     }
 }
@@ -272,7 +272,7 @@ fn _addRecordDiagnostic(state: ref _CsvState, kind: CsvErrorKind, record: i64, m
 
 fn _checkFieldLimit(state: _CsvState, options: CsvParseOptions) {
     if (options.maxFieldBytes > 0 && state.currentFieldBytes > options.maxFieldBytes) {
-        throw CsvError.FieldLimitExceeded(options.maxFieldBytes)
+        throw CsvError.FieldLimitExceeded { limit: options.maxFieldBytes }
     }
 }
 
@@ -300,7 +300,7 @@ fn _appendText(state: ref _CsvState, field: ref StringBuilder, value: string,
 
 fn _finishField(state: ref _CsvState, options: CsvParseOptions, field: ref StringBuilder) {
     if (options.maxColumns > 0 && state.currentColumn + 1 > options.maxColumns) {
-        throw CsvError.ColumnLimitExceeded(options.maxColumns)
+        throw CsvError.ColumnLimitExceeded { limit: options.maxColumns }
     }
     var value = field.toString()
     if (options.trimFields) { value = text.trim(value) }
@@ -393,7 +393,7 @@ fn _consumeRow(state: ref _CsvState, options: CsvParseOptions) -> bool {
 fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
     _validateParseOptions(options)
     if (options.maxInputBytes > 0 && len(data.bytes()) > options.maxInputBytes) {
-        throw CsvError.InputLimitExceeded(options.maxInputBytes)
+        throw CsvError.InputLimitExceeded { limit: options.maxInputBytes }
     }
 
     var delimiter = _resolveDelimiter(data, options)
@@ -527,21 +527,12 @@ export fn parseReport(data: string, options: CsvParseOptions? = null) -> CsvPars
 
 fn _throwDiagnostic(diagnostic: CsvDiagnostic) {
     if (diagnostic.kind == CsvErrorKind.UnterminatedQuote) {
-        throw CsvError.UnterminatedQuote(
-            diagnostic.byteOffset, diagnostic.line, diagnostic.record, diagnostic.column,
-            diagnostic.message
-        )
+        throw CsvError.UnterminatedQuote { byteOffset: diagnostic.byteOffset, line: diagnostic.line, record: diagnostic.record, column: diagnostic.column, message: diagnostic.message }
     }
     if (diagnostic.kind == CsvErrorKind.InvalidEscape) {
-        throw CsvError.InvalidEscape(
-            diagnostic.byteOffset, diagnostic.line, diagnostic.record, diagnostic.column,
-            diagnostic.message
-        )
+        throw CsvError.InvalidEscape { byteOffset: diagnostic.byteOffset, line: diagnostic.line, record: diagnostic.record, column: diagnostic.column, message: diagnostic.message }
     }
-    throw CsvError.FieldCountMismatch(
-        diagnostic.byteOffset, diagnostic.line, diagnostic.record, diagnostic.column,
-        diagnostic.message
-    )
+    throw CsvError.FieldCountMismatch { byteOffset: diagnostic.byteOffset, line: diagnostic.line, record: diagnostic.record, column: diagnostic.column, message: diagnostic.message }
 }
 
 // parse is strict: the first recoverable syntax diagnostic enters the enum

@@ -1,5 +1,5 @@
 [package]
-name = "filetest-rawptr-address-of-direct"
+name = "xray-tests/filetest-rawptr-address-of-direct"
 version = "1.0.0"
 license = "MIT"
 main = "rawptr_address_of_direct.xr"

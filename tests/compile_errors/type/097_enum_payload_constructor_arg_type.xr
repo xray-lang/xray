@@ -1,7 +1,7 @@
 enum Result {
-    Ok(i64),
-    Err(string)
+    Ok { value: i64 },
+    Err { error: string }
 }
 
-var value = Result.Ok("bad")
+var value = Result.Ok { value: "bad" }
 print(value)

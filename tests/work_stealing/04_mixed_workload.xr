@@ -7,7 +7,7 @@
 */
 import time
 
-enum WsErr { Failed(string) }
+enum WsErr { Failed { message: string } }
 
 print("========== 测试4：混合负载测试 ==========")
 /* 测试参数 */
@@ -75,7 +75,7 @@ if (cpu_completed == CPU_COROS && io_completed == IO_COROS) {
     print("\n✓ 混合负载测试通过")
 } else {
     print("\n✗ 测试失败")
-    throw WsErr.Failed("混合负载测试失败")
+    throw WsErr.Failed { message: "混合负载测试失败" }
 }
 /* 性能分析：总时间应该接近 IO 等待时间，而不是 CPU + IO */
 var expected_sequential = (CPU_COROS * 10) + (IO_COROS * IO_SLEEP_MS)

@@ -5,6 +5,6 @@ enum Ordinal { Idle, Ready }
 print(Ordinal.Ready as u8)
 var ready: Ordinal = Ordinal.Ready
 print(ready as i64)
-enum BoxedOrdinal { Payload(i64), Ready }
+enum BoxedOrdinal { Payload { value: i64 }, Ready }
 var boxed_ready: BoxedOrdinal = BoxedOrdinal.Ready
 print(boxed_ready as i64)

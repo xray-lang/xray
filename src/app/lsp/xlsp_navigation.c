@@ -14,6 +14,7 @@
 #include "../../base/xjson.h"
 #include "xlsp_analysis.h"
 #include "xlsp_imports.h"
+#include "xlsp_enum_fields.h"
 #include "xlsp_utils.h"
 #include "xlsp_symbol_index.h"
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -39,6 +40,18 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
 
     const char *content = doc->content;
     XrJsonValue *result = NULL;
+
+    XlspEnumFieldOccurrence field;
+    XlspEnumFieldOccurrence definition;
+    if (analyzer && doc->ast && xlsp_enum_field_at(analyzer, doc->ast, doc->uri, pos, &field) &&
+        xlsp_enum_field_definition(analyzer, field.identity, &definition)) {
+        result = xjson_make_location(definition.location.file, (int) definition.location.line - 1,
+                                     (int) definition.location.column - 1,
+                                     (int) definition.location.end_line - 1,
+                                     (int) definition.location.end_column - 1);
+        xr_free(word);
+        return result;
+    }
 
     // First try XaAnalyzer for accurate definition lookup (position-aware)
     if (analyzer) {
@@ -141,6 +154,17 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
 // Helper: create a reference location JSON object
 static XrJsonValue *make_ref_location(const char *uri, int line, int start_col, int end_col) {
     return xjson_make_location(uri, line, start_col, line, end_col);
+}
+
+typedef struct EnumFieldRefContext {
+    XrJsonValue *refs;
+} EnumFieldRefContext;
+
+static void add_enum_field_reference(const XlspEnumFieldOccurrence *occurrence, void *raw_ctx) {
+    EnumFieldRefContext *ctx = raw_ctx;
+    XrLocation loc = occurrence->location;
+    xjson_array_push(ctx->refs, make_ref_location(loc.file, (int) loc.line - 1,
+                                                  (int) loc.column - 1, (int) loc.end_column - 1));
 }
 
 // Reference context for AST traversal
@@ -479,6 +503,28 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
         return refs;
 
     size_t word_len = end - start;
+
+    XlspEnumFieldOccurrence field;
+    if (analyzer && doc->ast && xlsp_enum_field_at(analyzer, doc->ast, doc->uri, pos, &field)) {
+        EnumFieldRefContext ctx = {.refs = refs};
+        if (server && server->doc_table) {
+            for (int i = 0; i < server->doc_table->bucket_count; i++) {
+                for (XrLspDocBucket *bucket = server->doc_table->buckets[i]; bucket;
+                     bucket = bucket->next) {
+                    XrLspDocument *open_doc = bucket->doc;
+                    if (open_doc && open_doc->ast && open_doc->uri)
+                        xlsp_visit_enum_field_occurrences(analyzer, open_doc->ast, open_doc->uri,
+                                                          field.identity, add_enum_field_reference,
+                                                          &ctx);
+                }
+            }
+        } else {
+            xlsp_visit_enum_field_occurrences(analyzer, doc->ast, doc->uri, field.identity,
+                                              add_enum_field_reference, &ctx);
+        }
+        xr_free(search_word);
+        return refs;
+    }
 
     // =========================================================================
     // Scope-aware reference finding using AST and XaAnalyzer

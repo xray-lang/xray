@@ -213,8 +213,11 @@ static inline void xa_freestanding_report_tagged_type_unavailable(XaInferContext
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);
+XR_FUNC XrType *xa_visit_enum_construct(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC bool xa_pattern_has_binding(AstNode *pattern);
+XR_FUNC bool xa_resolve_enum_pattern_plans(XaInferContext *ctx, AstNode *pattern,
+                                           XrType *slot_type);
 XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrType *slot_type);
 XR_FUNC XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node);

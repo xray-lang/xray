@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_panic_hook"
+name = "xray-tests/filetest-freestanding_panic_hook"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_panic_hook.xr"

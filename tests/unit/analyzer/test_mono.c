@@ -38,18 +38,12 @@ TEST(mono_scalar_tags_are_semantic_and_unique) {
         uint8_t scalar_rep;
         const char *tag;
     } cases[] = {
-        {XR_TREF_SCALAR, XR_NATIVE_I8, "i8"},
-        {XR_TREF_SCALAR, XR_NATIVE_U8, "u8"},
-        {XR_TREF_SCALAR, XR_NATIVE_I16, "i16"},
-        {XR_TREF_SCALAR, XR_NATIVE_U16, "u16"},
-        {XR_TREF_SCALAR, XR_NATIVE_I32, "i32"},
-        {XR_TREF_SCALAR, XR_NATIVE_U32, "u32"},
-        {XR_TREF_SCALAR, XR_NATIVE_I64, "i64"},
-        {XR_TREF_SCALAR, XR_NATIVE_U64, "u64"},
-        {XR_TREF_SCALAR, XR_NATIVE_ISIZE, "isize"},
-        {XR_TREF_SCALAR, XR_NATIVE_USIZE, "usize"},
-        {XR_TREF_SCALAR, XR_NATIVE_F32, "f32"},
-        {XR_TREF_SCALAR, XR_NATIVE_F64, "f64"},
+        {XR_TREF_SCALAR, XR_NATIVE_I8, "i8"},       {XR_TREF_SCALAR, XR_NATIVE_U8, "u8"},
+        {XR_TREF_SCALAR, XR_NATIVE_I16, "i16"},     {XR_TREF_SCALAR, XR_NATIVE_U16, "u16"},
+        {XR_TREF_SCALAR, XR_NATIVE_I32, "i32"},     {XR_TREF_SCALAR, XR_NATIVE_U32, "u32"},
+        {XR_TREF_SCALAR, XR_NATIVE_I64, "i64"},     {XR_TREF_SCALAR, XR_NATIVE_U64, "u64"},
+        {XR_TREF_SCALAR, XR_NATIVE_ISIZE, "isize"}, {XR_TREF_SCALAR, XR_NATIVE_USIZE, "usize"},
+        {XR_TREF_SCALAR, XR_NATIVE_F32, "f32"},     {XR_TREF_SCALAR, XR_NATIVE_F64, "f64"},
     };
     XrTypeRef refs[sizeof(cases) / sizeof(cases[0])];
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -356,6 +350,75 @@ TEST(ast_clone_with_type_substitution) {
     free(clone);
 }
 
+TEST(ast_clone_named_enum_record_nodes) {
+    AstNode variant = {.type = AST_ENUM_ACCESS, .line = 1};
+    variant.as.enum_access.enum_name = "PairPayload";
+    variant.as.enum_access.member_name = "Pair";
+    AstNode value = {.type = AST_LITERAL_INT, .line = 1};
+    value.as.literal.kind = LITERAL_KIND_INT;
+    value.as.literal.raw_value.int_val = 7;
+    char *construct_names[] = {"left"};
+    AstNode *construct_values[] = {&value};
+    AstNode construct = {.type = AST_ENUM_CONSTRUCT, .line = 1};
+    construct.as.enum_construct.variant_path = &variant;
+    construct.as.enum_construct.field_names = construct_names;
+    construct.as.enum_construct.field_values = construct_values;
+    construct.as.enum_construct.field_count = 1;
+
+    AstNode *construct_clone = xr_ast_clone(&construct, NULL, 0);
+    ASSERT(construct_clone != NULL && construct_clone->type == AST_ENUM_CONSTRUCT);
+    ASSERT(construct_clone->as.enum_construct.variant_path != &variant);
+    ASSERT(construct_clone->as.enum_construct.field_names != construct_names);
+    ASSERT(construct_clone->as.enum_construct.field_names[0] != construct_names[0]);
+    ASSERT_STR_EQ(construct_clone->as.enum_construct.field_names[0], "left");
+    ASSERT(construct_clone->as.enum_construct.field_values != construct_values);
+    ASSERT(construct_clone->as.enum_construct.field_values[0] != &value);
+
+    AstNode wildcard = {.type = AST_PATTERN_WILDCARD, .line = 2};
+    char *pattern_names[] = {"right"};
+    AstNode *patterns[] = {&wildcard};
+    AstNode pattern = {.type = AST_PATTERN_ADT, .line = 2};
+    pattern.as.pattern_adt.variant = &variant;
+    pattern.as.pattern_adt.field_names = pattern_names;
+    pattern.as.pattern_adt.patterns = patterns;
+    pattern.as.pattern_adt.count = 1;
+
+    AstNode *pattern_clone = xr_ast_clone(&pattern, NULL, 0);
+    ASSERT(pattern_clone != NULL && pattern_clone->type == AST_PATTERN_ADT);
+    ASSERT(pattern_clone->as.pattern_adt.variant != &variant);
+    ASSERT(pattern_clone->as.pattern_adt.field_names != pattern_names);
+    ASSERT(pattern_clone->as.pattern_adt.field_names[0] != pattern_names[0]);
+    ASSERT_STR_EQ(pattern_clone->as.pattern_adt.field_names[0], "right");
+    ASSERT(pattern_clone->as.pattern_adt.patterns != patterns);
+    ASSERT(pattern_clone->as.pattern_adt.patterns[0] != &wildcard);
+
+    AstNode method = {.type = AST_METHOD_DECL, .line = 3};
+    method.as.method_decl.name = "inspect";
+    method.as.method_decl.receiver_mode = XR_PARAM_MOVE;
+    AstNode *method_clone = xr_ast_clone(&method, NULL, 0);
+    ASSERT(method_clone != NULL && method_clone->type == AST_METHOD_DECL);
+    ASSERT(method_clone->as.method_decl.receiver_mode == XR_PARAM_MOVE);
+
+    free(construct_clone->as.enum_construct.variant_path->as.enum_access.enum_name);
+    free(construct_clone->as.enum_construct.variant_path->as.enum_access.member_name);
+    free(construct_clone->as.enum_construct.variant_path);
+    free(construct_clone->as.enum_construct.field_names[0]);
+    free(construct_clone->as.enum_construct.field_names);
+    free(construct_clone->as.enum_construct.field_values[0]);
+    free(construct_clone->as.enum_construct.field_values);
+    free(construct_clone);
+    free(pattern_clone->as.pattern_adt.variant->as.enum_access.enum_name);
+    free(pattern_clone->as.pattern_adt.variant->as.enum_access.member_name);
+    free(pattern_clone->as.pattern_adt.variant);
+    free(pattern_clone->as.pattern_adt.field_names[0]);
+    free(pattern_clone->as.pattern_adt.field_names);
+    free(pattern_clone->as.pattern_adt.patterns[0]);
+    free(pattern_clone->as.pattern_adt.patterns);
+    free(pattern_clone);
+    free(method_clone->as.method_decl.name);
+    free(method_clone);
+}
+
 /* ========== Mono Collector Tests ========== */
 
 TEST(mono_collector_basic) {
@@ -506,6 +569,7 @@ int main(void) {
     RUN_TEST(ast_clone_binary);
     RUN_TEST(ast_clone_variable);
     RUN_TEST(ast_clone_with_type_substitution);
+    RUN_TEST(ast_clone_named_enum_record_nodes);
 
     RUN_TEST_SUITE("Mono Collector");
     RUN_TEST(mono_collector_basic);

@@ -1,12 +1,12 @@
 // A generic enum arrives monomorphized as an instance type naming the enum,
 // so the same check has to reach through it.
-enum Box<T> { Full(T), Empty }
+enum Box<T> { Full { value: T }, Empty }
 
 fn pick() -> Box<i64> { return Box<i64>.Empty }
 
 fn main() {
     match (pick()) {
-        Box.Full(v) -> print("full")
+        Box.Full { value: v } -> print("full")
         Box.Nope -> print("nope")
         _ -> print("other")
     }

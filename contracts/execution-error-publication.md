@@ -65,4 +65,4 @@ anchor-sha256: tools/stdlibgen/generate_vm_fastpaths.py d4d84f3cb3c19bcc7f12e6ff
 anchor-sha256: stdlib/crypto/crypto.c 9f92561b5670d8ca323202c4c128545311114c96f1905f130d71f2171da8184d
 anchor-sha256: stdlib/net/net.c f591e35128e5a9eb8e8d9e3501ac86aab44ab988b12dddd20d8c1749758fd46a
 anchor-sha256: tests/unit/runtime/test_execution_error_channel.c 6402bf9a867f5b4a107fb180344b63becd6b142e677d14fb6f421d83185f03b0
-anchor-sha256: tests/unit/vm/test_vm_exception.c a8300b244b00b02359d8876f8c71088ef60d3df6baf2bee64cc83e85f5d96754
+anchor-sha256: tests/unit/vm/test_vm_exception.c c7f010047fd2a8b733e8bafc29b527543ba0a750de474cc0b2c63e3c4541bf86

@@ -2,7 +2,7 @@
 
 fn recv_has_value(r: Recv<i64>) -> bool {
     return match (r) {
-        Recv.Value(_) -> true
+        Recv.Value { value: _ } -> true
         _ -> false
     }
 }

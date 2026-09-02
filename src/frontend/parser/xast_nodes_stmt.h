@@ -171,10 +171,8 @@ typedef struct PatternTupleNode {
     int count;
 } PatternTupleNode;
 
-/* ADT variant destructure: `Shape.Circle(r)` / `Result.Ok(v)`.
- * variant is the AST_MEMBER_ACCESS / AST_ENUM_ACCESS node for the
- * variant name; sub-patterns are AST_PATTERN_* nodes for each payload
- * slot (bindings, wildcards, or literals). */
+/* Named ADT variant destructure. Field names and patterns retain source order;
+ * the analyzer resolves every field to its declaration slot. */
 // Object match pattern: `{ x, y }` or `{ x: sub }`. field_names[i] is the
 // source field; patterns[i] is the sub-pattern bound to that field value (a
 // bare-name binding for shorthand `{ x }`, or a nested/renamed sub-pattern for
@@ -197,9 +195,11 @@ typedef struct PatternArrayNode {
 } PatternArrayNode;
 
 typedef struct PatternAdtNode {
-    AstNode *variant;    // e.g. AST_MEMBER_ACCESS(Shape, Circle)
-    AstNode **patterns;  // payload sub-patterns
-    int count;           // number of payload slots
+    AstNode *variant;
+    char **field_names;
+    XrNameSpan *field_name_spans;
+    AstNode **patterns;
+    int count;
 } PatternAdtNode;
 
 /* Type pattern: `is T` or `is T name`.

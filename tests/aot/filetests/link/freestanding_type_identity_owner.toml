@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding-type-identity-owner"
+name = "xray-tests/filetest-freestanding-type-identity-owner"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_type_identity_owner.xr"

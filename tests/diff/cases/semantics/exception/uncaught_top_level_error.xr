@@ -4,10 +4,10 @@
 // This program spawns nothing, so its entry plan elides the root: the VM runs
 // it on the native stack with no main coroutine, and AOT calls the module init
 // directly. Both once returned the exit code silently.
-enum TopErr { Failed(reason: string) }
+enum TopErr { Failed { reason: string } }
 
 fn run() {
-    throw TopErr.Failed("top-level")
+    throw TopErr.Failed { reason: "top-level" }
 }
 
 print("before")

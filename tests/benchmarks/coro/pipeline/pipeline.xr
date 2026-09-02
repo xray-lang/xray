@@ -19,7 +19,7 @@ print("数据项数:", ITEMS)
 
 fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(value) -> value
+        Recv.Value { value } -> value
         _ -> fallback
     }
 }

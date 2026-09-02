@@ -818,10 +818,10 @@ TEST(parser_enum_static_method) {
                                 "  Red,\n"
                                 "  Green\n"
                                 "  @deprecated\n"
-                                "  static fn fromInt(v: i64) -> Color {\n"
+                                "  static fromInt(v: i64) -> Color {\n"
                                 "    return Color.Red\n"
                                 "  }\n"
-                                "  fn label() -> string {\n"
+                                "  ref label() -> string {\n"
                                 "    return this.name\n"
                                 "  }\n"
                                 "}");
@@ -839,6 +839,68 @@ TEST(parser_enum_static_method) {
     ASSERT_EQ_INT(label->type, AST_METHOD_DECL);
     ASSERT(!label->as.method_decl.is_static);
     ASSERT_STR_EQ(label->as.method_decl.name, "label");
+    ASSERT_EQ_INT(label->as.method_decl.receiver_mode, XR_PARAM_REF);
+    teardown();
+}
+
+TEST(parser_enum_record_payload_surface) {
+    setup();
+    AstNode *decl = parse_first("enum Result<T, E> {\n"
+                                "  Ok { value: T },\n"
+                                "  Err { error: E }\n"
+                                "}");
+    ASSERT_EQ_INT(decl->type, AST_ENUM_DECL);
+    ASSERT_EQ_INT(decl->as.enum_decl.member_count, 2);
+    AstNode *ok = decl->as.enum_decl.members[0];
+    ASSERT_EQ_INT(ok->type, AST_ENUM_MEMBER);
+    ASSERT_EQ_INT(ok->as.enum_member.payload_count, 1);
+    ASSERT_STR_EQ(ok->as.enum_member.payload_names[0], "value");
+
+    AstNode *construct = parse_expr("Result.Ok { value: 42 }");
+    ASSERT_EQ_INT(construct->type, AST_ENUM_CONSTRUCT);
+    ASSERT_EQ_INT(construct->as.enum_construct.variant_path->type, AST_MEMBER_ACCESS);
+    ASSERT_EQ_INT(construct->as.enum_construct.field_count, 1);
+    ASSERT_STR_EQ(construct->as.enum_construct.field_names[0], "value");
+    ASSERT_EQ_INT(construct->as.enum_construct.field_values[0]->type, AST_LITERAL_INT);
+
+    AstNode *binding = parse_first("var y = match (x) {\n"
+                                   "  Result.Ok { value } -> value,\n"
+                                   "  Result.Err { error: _ } -> 0\n"
+                                   "}");
+    AstNode *match = binding->as.var_decl.initializer;
+    ASSERT_EQ_INT(match->type, AST_MATCH_EXPR);
+    AstNode *pattern = match->as.match_expr.arms[0]->as.match_arm.pattern;
+    ASSERT_EQ_INT(pattern->type, AST_PATTERN_ADT);
+    ASSERT_EQ_INT(pattern->as.pattern_adt.count, 1);
+    ASSERT_STR_EQ(pattern->as.pattern_adt.field_names[0], "value");
+
+    AstNode *catch_program = parse_ok("enum Failure { Done, Bad { code: i64 } }\n"
+                                      "fn probe() {\n"
+                                      "  try { throw Failure.Done }\n"
+                                      "  catch Failure.Done { return }\n"
+                                      "  catch Failure.Bad { code } { return }\n"
+                                      "}\n");
+    ASSERT_EQ_INT(catch_program->as.program.count, 2);
+    AstNode *probe = catch_program->as.program.statements[1];
+    AstNode *try_catch = probe->as.function_decl.body->as.block.statements[0];
+    ASSERT_EQ_INT(try_catch->type, AST_TRY_CATCH);
+    ASSERT_EQ_INT(try_catch->as.try_catch.catch_count, 2);
+    ASSERT_EQ_INT(try_catch->as.try_catch.catch_clauses[0]->pattern->type, AST_PATTERN_LITERAL);
+    ASSERT_EQ_INT(try_catch->as.try_catch.catch_clauses[1]->pattern->type, AST_PATTERN_ADT);
+    ASSERT_EQ_INT(try_catch->as.try_catch.catch_clauses[1]->pattern->as.pattern_adt.count, 1);
+    ASSERT_STR_EQ(try_catch->as.try_catch.catch_clauses[1]->pattern->as.pattern_adt.field_names[0],
+                  "code");
+    teardown();
+}
+
+TEST(parser_rejects_positional_enum_payload_surface) {
+    setup();
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+                         "enum Result { Ok(i64), Err(string) }"));
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+                         "var y = match (x) { Result.Ok(value) -> value }"));
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+                         "enum Color { Red fn label() -> string { return this.name } }"));
     teardown();
 }
 
@@ -1374,6 +1436,8 @@ int main(void) {
     RUN_TEST(parser_rejects_posthoc_local_export);
     RUN_TEST(parser_reexport_preserves_module_identity_kind);
     RUN_TEST(parser_enum_static_method);
+    RUN_TEST(parser_enum_record_payload_surface);
+    RUN_TEST(parser_rejects_positional_enum_payload_surface);
 
     // Calls
     RUN_TEST(parser_call_expr);

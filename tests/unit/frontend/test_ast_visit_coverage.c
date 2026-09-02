@@ -111,6 +111,7 @@ static bool is_expression_node(AstNodeType t) {
         /* Call / member / index */
         case AST_CALL_EXPR:
         case AST_MEMBER_ACCESS:
+        case AST_ENUM_CONSTRUCT:
         case AST_INDEX_GET:
         case AST_INDEX_SET:
         case AST_SLICE_EXPR:
@@ -255,6 +256,12 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
 
         case AST_MEMBER_ACCESS:
             check_node(ctx, node->as.member_access.object);
+            break;
+
+        case AST_ENUM_CONSTRUCT:
+            check_node(ctx, node->as.enum_construct.variant_path);
+            for (int i = 0; i < node->as.enum_construct.field_count; i++)
+                check_node(ctx, node->as.enum_construct.field_values[i]);
             break;
 
         case AST_MEMBER_SET:

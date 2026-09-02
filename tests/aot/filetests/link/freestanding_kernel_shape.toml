@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_kernel_shape"
+name = "xray-tests/filetest-freestanding_kernel_shape"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_kernel_shape.xr"

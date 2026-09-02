@@ -98,6 +98,19 @@ static bool bc_enum_shape_matches(const XrEnumType *actual, const XrEnumType *ca
         if (!actual_name || !canonical_name || strcmp(actual_name, canonical_name) != 0 ||
             xr_enum_type_payload_count(actual, i) != xr_enum_type_payload_count(canonical, i))
             return false;
+        const XrEnumVariantLayout *actual_variant =
+            actual->layout ? xr_enum_layout_variant(actual->layout, i) : NULL;
+        const XrEnumVariantLayout *canonical_variant =
+            canonical->layout ? xr_enum_layout_variant(canonical->layout, i) : NULL;
+        if (!xr_enum_variant_payload_metadata_is_exact(actual_variant) ||
+            !xr_enum_variant_payload_metadata_is_exact(canonical_variant))
+            return false;
+        for (uint16_t p = 0; p < actual_variant->payload_count; p++) {
+            if (strcmp(actual_variant->payload_names[p], canonical_variant->payload_names[p]) !=
+                    0 ||
+                actual_variant->payload_type_ids[p] != canonical_variant->payload_type_ids[p])
+                return false;
+        }
     }
     return true;
 }
@@ -940,7 +953,7 @@ static bool bc_write_enum_type(BcWriter *w, XrValue val) {
 
     for (uint32_t i = 0; i < enum_type->member_count; i++) {
         const char *name = xr_enum_type_member_name(enum_type, i);
-        if (!name || !bc_put_string(w, name))
+        if (!name || !name[0] || !bc_put_string(w, name))
             return false;
         int payload_count = xr_enum_type_payload_count(enum_type, i);
         if (payload_count < 0 || payload_count > UINT16_MAX)
@@ -949,13 +962,14 @@ static bool bc_write_enum_type(BcWriter *w, XrValue val) {
             return false;
         const XrEnumVariantLayout *variant =
             enum_type->layout ? xr_enum_layout_variant(enum_type->layout, i) : NULL;
+        if (!xr_enum_variant_payload_metadata_is_exact(variant) ||
+            variant->payload_count != (uint16_t) payload_count) {
+            w->error = XR_BOOTSTRAP_CONTAINER_ERR_METADATA;
+            return false;
+        }
         for (int p = 0; p < payload_count; p++) {
-            const char *payload_name =
-                variant && variant->payload_names && variant->payload_names[p]
-                    ? variant->payload_names[p]
-                    : "";
-            uint8_t payload_type_id =
-                variant && variant->payload_type_ids ? variant->payload_type_ids[p] : XR_TID_NULL;
+            const char *payload_name = variant->payload_names[p];
+            uint8_t payload_type_id = variant->payload_type_ids[p];
             if (!bc_put_string(w, payload_name) || !bc_put_u8(w, payload_type_id))
                 return false;
         }
@@ -1237,6 +1251,14 @@ static XrValue bc_read_enum_type(BcReader *r) {
             r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
             break;
         }
+        for (uint32_t prior = 0; prior < i; prior++) {
+            if (strcmp(member_names[i], member_names[prior]) == 0) {
+                r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
+                break;
+            }
+        }
+        if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
+            break;
         payload_counts[i] = (int) payload_count;
         if (payload_count > 0) {
             has_payloads = true;
@@ -1251,9 +1273,16 @@ static XrValue bc_read_enum_type(BcReader *r) {
                 payload_type_ids[i][p] = bc_get_u8(r);
                 if (r->error != XR_BOOTSTRAP_CONTAINER_OK)
                     break;
-                if (!payload_names[i][p] || payload_type_ids[i][p] >= XR_TID_COUNT) {
+                if (!payload_names[i][p] || payload_names[i][p][0] == '\0' ||
+                    payload_type_ids[i][p] >= XR_TID_COUNT) {
                     r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                     break;
+                }
+                for (uint16_t prior = 0; prior < p; prior++) {
+                    if (strcmp(payload_names[i][p], payload_names[i][prior]) == 0) {
+                        r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
+                        break;
+                    }
                 }
             }
             if (r->error != XR_BOOTSTRAP_CONTAINER_OK)

@@ -3241,6 +3241,78 @@ static XiValue *lower_tuple_literal(XiLower *l, AstNode *node) {
     return tup_val;
 }
 
+static XiValue *lower_enum_record_construct(XiLower *l, AstNode *node) {
+    EnumConstructNode *construct = &node->as.enum_construct;
+    const XaEnumRecordPlan *plan = xa_analyzer_get_enum_record_plan(l->analyzer, node);
+    if (!plan || !plan->complete || plan->kind != XA_ENUM_RECORD_CONSTRUCT ||
+        plan->source_field_count != (uint16_t) construct->field_count ||
+        plan->declaration_field_count == 0 || !plan->source_to_slot) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    XaSymbol *enum_symbol = xa_scope_lookup_by_id(l->analyzer->global_scope, plan->enum_symbol_id);
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, enum_symbol);
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    if (!enum_symbol || !enum_symbol->name || !info || !info->variants ||
+        plan->variant_ordinal >= info->variant_count || !info->layout ||
+        info->layout->layout_id != plan->enum_layout_id) {
+        l->had_error = true;
+        return NULL;
+    }
+    XaEnumVariantInfo *variant = &info->variants[plan->variant_ordinal];
+    if (!variant->name || variant->payload_count != plan->declaration_field_count) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    XiValue *enum_namespace =
+        xi_lower_enum_namespace_value(l, enum_symbol, enum_symbol->name, (int) node->line);
+    if (!enum_namespace)
+        return NULL;
+    XrType *result_type = xi_lower_node_type(l, node);
+    XiValue **payloads = xi_func_arena_alloc(
+        l->func, (uint32_t) ((size_t) plan->declaration_field_count * sizeof(*payloads)));
+    if (!payloads)
+        return NULL;
+    memset(payloads, 0, (size_t) plan->declaration_field_count * sizeof(*payloads));
+    for (uint16_t source = 0; source < plan->source_field_count; ++source) {
+        uint16_t slot = plan->source_to_slot[source];
+        AstNode *field = construct->field_values[source];
+        if (slot >= plan->declaration_field_count || payloads[slot] || !field) {
+            l->had_error = true;
+            return NULL;
+        }
+        XiValue *field_value = xi_lower_expr(l, field);
+        if (!field_value)
+            return NULL;
+        XrType *field_type = xa_analyzer_resolve_adt_payload_type(l->analyzer, result_type,
+                                                                  construct->variant_path, slot);
+        field_value = xi_lower_apply_numeric_conversion_witness(l, field, field_value, field_type);
+        if (!field_value)
+            return NULL;
+        payloads[slot] = field_value;
+    }
+    for (uint16_t slot = 0; slot < plan->declaration_field_count; ++slot) {
+        if (!payloads[slot]) {
+            l->had_error = true;
+            return NULL;
+        }
+    }
+    uint16_t operand_count = (uint16_t) (plan->declaration_field_count + 1u);
+    XiValue *value =
+        xi_value_new(l->func, l->cur_block, XI_VARIANT_CONSTRUCT, result_type, operand_count);
+    if (!value)
+        return NULL;
+    value->args[0] = enum_namespace;
+    for (uint16_t slot = 0; slot < plan->declaration_field_count; ++slot)
+        value->args[slot + 1u] = payloads[slot];
+    value->aux = (void *) arena_strdup(l->func, variant->name);
+    value->aux_int = plan->variant_ordinal;
+    value->line = (uint32_t) node->line;
+    return value;
+}
+
 /* Array literal with `...spread` elements: `[...a, x, ...b]`.
  * Built dynamically because spread sources have runtime length — a fresh
  * array is allocated (heap; it grows), singletons are appended with
@@ -5248,29 +5320,10 @@ static bool lower_call_uses_indirect_function_value(XiLower *l, CallExprNode *ca
  * though, unlike a class constructor, it allocates no object header.  Publish
  * that semantic fact at lowering so ARC, VM, and every AOT representation read
  * one backend-neutral ownership contract. */
-static bool lower_call_is_payload_enum_constructor(XiLower *l, CallExprNode *call) {
-    if (!l || !l->analyzer || !call || !call->callee)
-        return false;
-    const XaSelection *selection = xa_analyzer_get_selection(l->analyzer, call->callee);
-    if (!selection || selection->kind != XA_SEL_ENUM_MEMBER || !selection->target_symbol ||
-        selection->target_symbol->kind != XA_SYM_ENUM)
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, selection->target_symbol);
-    XaEnumInfo *info = links ? links->enum_info : NULL;
-    return info && info->variants && selection->field_index >= 0 &&
-           (uint32_t) selection->field_index < info->variant_count &&
-           info->variants[selection->field_index].payload_count > 0;
-}
-
 static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *call,
                                                      XiValue *callee_value) {
     XiReturnOwnership result = {
         .kind = XI_RETURN_OWNERSHIP_UNKNOWN, .param_index = -1, .complete = false};
-    if (lower_call_is_payload_enum_constructor(l, call)) {
-        result.kind = XI_RETURN_OWNERSHIP_OWNED;
-        result.complete = true;
-        return result;
-    }
     XaSymbolLinks *links = lower_call_return_ownership_links(l, call);
     if (links && links->return_ownership.complete) {
         switch ((XaReturnOwnershipKind) links->return_ownership.kind) {
@@ -10479,7 +10532,8 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
             conversion.source_scalar_rep != XR_SCALAR_REP_NONE ||
             conversion.target_scalar_rep != cast_type->scalar_rep || conversion.is_implicit ||
             conversion.is_compile_time) {
-            fprintf(stderr, "[LOWER] enum ordinal `as` lacks an exact conversion witness at line %d\n",
+            fprintf(stderr,
+                    "[LOWER] enum ordinal `as` lacks an exact conversion witness at line %d\n",
                     (int) node->line);
             l->had_error = true;
             return NULL;
@@ -11251,6 +11305,8 @@ static XiValue *xi_lower_expr_impl(XiLower *l, AstNode *node) {
         /* Calls */
         case AST_CALL_EXPR:
             return lower_call(l, node);
+        case AST_ENUM_CONSTRUCT:
+            return lower_enum_record_construct(l, node);
 
         /* Ternary */
         case AST_TERNARY:

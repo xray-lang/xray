@@ -1,5 +1,5 @@
 [package]
-name = "filetest-cfn-tail-thread"
+name = "xray-tests/filetest-cfn-tail-thread"
 version = "1.0.0"
 license = "MIT"
 main = "cfn_tail_thread.xr"

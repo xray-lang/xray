@@ -202,7 +202,7 @@ fn test_query_invalid_percent_is_typed_error() {
         url.parseQuery("ok=1&bad=%GG")
     } catch (e: UrlError) {
         offset = match (e) {
-            UrlError.InvalidPercentEncoding(at) -> at
+            UrlError.InvalidPercentEncoding { byteOffset: at } -> at
         }
     }
     assertEqual(offset, 9)

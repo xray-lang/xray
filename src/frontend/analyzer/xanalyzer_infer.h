@@ -139,9 +139,9 @@ typedef struct XaInferContext {
     // typed as a Slice without an explicit Slice target; the copy result is owned.
     bool allow_view_expr_for_copy;
 
-    // Payload enum variants are constructors, not first-class values. The call
-    // visitor sets this while typing the callee of `Enum.Variant(...)`.
-    bool allow_payload_enum_ctor_value;
+    // Payload enum variants are not first-class values. Named enum record
+    // construction sets this only while resolving its variant path.
+    bool allow_payload_enum_record_path;
 
     // Direct-only core intrinsics have a call-site plan and no value form. The
     // call visitor sets this while typing a bare-identifier callee, which is

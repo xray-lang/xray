@@ -1,5 +1,5 @@
 [package]
-name = "filetest-no-throw-equivalence-asserted"
+name = "xray-tests/filetest-no-throw-equivalence-asserted"
 version = "1.0.0"
 license = "MIT"
 main = "no_throw_equivalence_asserted.xr"

@@ -92,7 +92,7 @@ var combined = (...p, true)         // spread → (1, "hi", true)
 var task = go compute(42)      // spawn coroutine
 var result = await task         // wait for result
 const ch = Channel<int>(10)
-ch.send(val); match (ch.recv()) { Recv.Value(v) -> use(v); _ -> {} }
+ch.send(val); match (ch.recv()) { Recv.Value { value: v } -> use(v); _ -> {} }
 const CFG = { ... }     // immutable cross-coroutine data
 ```
 

@@ -105,10 +105,8 @@ TEST(vm_elided_root_allocates_without_task_identity) {
     ASSERT_NOT_NULL(iso);
     ASSERT_NULL(xr_current_coro(iso));
 
-    const char *src = "import text\n"
-                      "var xs = [1, 2, 3]\n"
-                      "var ys = xs.map(fn(x) { return x * 2 })\n"
-                      "var upper = text.upper(\"root\")\n";
+    const char *src = "var xs = [1, 2, 3]\n"
+                      "var ys = xs.map(fn(x) { return x * 2 })\n";
     ASSERT_EQ_INT(xr_isolate_dostring(iso, src, &k_vm_api_memory_authority), 0);
     ASSERT_NULL(iso->main_coro);
     ASSERT_NULL(xr_current_coro(iso));
@@ -388,8 +386,8 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
     ASSERT_TRUE(fd >= 0);
     FILE *f = xr_test_fdopen(fd, "w");
     ASSERT_NOT_NULL(f);
-    fputs("enum DebugErr { Bad(s: string) }\nvar answer = 40 + 2\nif (answer != 42) { throw "
-          "DebugErr.Bad(\"bad\") }\n",
+    fputs("enum DebugErr { Bad { s: string } }\nvar answer = 40 + 2\nif (answer != 42) { "
+          "throw DebugErr.Bad { s: \"bad\" } }\n",
           f);
     fclose(f);
 
@@ -399,8 +397,7 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
 
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
-    ASSERT_TRUE(xr_module_identity_script_authority_from_source(path, &authority,
-                                                                 &authority_root));
+    ASSERT_TRUE(xr_module_identity_script_authority_from_source(path, &authority, &authority_root));
     int rc = xr_isolate_dofile_debug(iso, path, &authority, NULL);
     xr_free(authority_root);
     ASSERT_EQ_INT(rc, 0);

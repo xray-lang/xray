@@ -172,8 +172,10 @@ Pattern ::= LiteralPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
-EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload 解构
-VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
+EnumPattern     ::= QualifiedIdent
+                  | QualifiedIdent '{' EnumFieldPatternList? '}'
+EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
+EnumFieldPattern ::= Identifier | Identifier ':' Pattern
 TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
@@ -306,10 +308,11 @@ InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
-EnumVariant    ::= Identifier VariantPayload?
-EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-VariantPayload ::= '(' VariantField (',' VariantField)* ')'
-VariantField   ::= (Identifier ':')? Type
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
@@ -508,8 +511,10 @@ Pattern ::= LiteralPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
-EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload destructuring
-VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
+EnumPattern     ::= QualifiedIdent
+                  | QualifiedIdent '{' EnumFieldPatternList? '}'
+EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
+EnumFieldPattern ::= Identifier | Identifier ':' Pattern
 TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
@@ -643,10 +648,11 @@ InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
-EnumVariant    ::= Identifier VariantPayload?
-EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-VariantPayload ::= '(' VariantField (',' VariantField)* ')'
-VariantField   ::= (Identifier ':')? Type
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type

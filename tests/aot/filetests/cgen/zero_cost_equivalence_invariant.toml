@@ -1,5 +1,5 @@
 [package]
-name = "filetest-zero-cost-equivalence-invariant"
+name = "xray-tests/filetest-zero-cost-equivalence-invariant"
 version = "1.0.0"
 license = "MIT"
 main = "zero_cost_equivalence_invariant.xr"

@@ -14,7 +14,7 @@ fn body() -> i64 {
 
 var t = go body()
 match (started.recv()) {
-    Recv.Value(v) -> {}
+    Recv.Value { value: v } -> {}
     _ -> {}
 }
 t.cancel()

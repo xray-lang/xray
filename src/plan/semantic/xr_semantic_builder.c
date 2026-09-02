@@ -38,6 +38,7 @@
 #include "../../ir/xi_arc.h"
 #include "../../ir/xi_coro_analyze.h"
 #include "../../ir/xi_module.h"
+#include "../../runtime/value/xenum_layout.h"
 #include "../../ir/xi_program_semantic.h"
 #include "../../ir/xi_program_semantic_plan.h"
 #include "../../ir/xi_own.h"
@@ -351,10 +352,9 @@ static const char *copy_canonical_source_file(XrSemanticBuildContext *ctx, const
  * fields nothing declares. Everything asking "is this a value aggregate" asks
  * here, so the key and the record flag can no longer disagree. */
 static bool semantic_type_is_value(const XrType *type) {
-    return type &&
-           (type->kind == XR_KIND_STRUCT_OBJECT || type->is_value_type ||
-            (type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
-             type->instance.class_ref->struct_layout));
+    return type && (type->kind == XR_KIND_STRUCT_OBJECT || type->is_value_type ||
+                    (type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
+                     type->instance.class_ref->struct_layout));
 }
 
 static uint32_t program_type_row_for_source(const XrSemanticBuildContext *ctx, const XrType *type);
@@ -2094,15 +2094,25 @@ static bool add_enum_metadata(XrSemanticBuildContext *ctx, const XiEnumData *dat
         return false;
     for (uint32_t i = 0; i < data->member_count; i++) {
         const XiEnumMemberData *member = &data->members[i];
-        if (!member->name || member->payload_count < 0 ||
-            !add_metadata(ctx, record, member->name) ||
+        if (!member->name || !member->name[0] || member->ordinal != i ||
+            member->payload_count < 0 || member->payload_count > UINT16_MAX ||
+            !xr_enum_payload_names_are_exact(member->payload_names,
+                                             (uint16_t) member->payload_count) ||
+            (member->payload_count > 0 && !member->payload_types))
+            return fail(ctx, "XR_SEM_0007", "enum payload metadata is incomplete or ambiguous");
+        for (uint32_t prior = 0; prior < i; prior++) {
+            if (strcmp(member->name, data->members[prior].name) == 0)
+                return fail(ctx, "XR_SEM_0007", "enum variant names are not unique");
+        }
+        if (!add_metadata(ctx, record, member->name) ||
             !add_metadata_u32(ctx, record, member->ordinal) ||
             !add_metadata_u32(ctx, record, (uint32_t) member->payload_count))
             return false;
         for (int p = 0; p < member->payload_count; p++) {
             uint32_t type_index;
-            if (!member->payload_types || !add_type(ctx, member->payload_types[p], &type_index) ||
-                !add_metadata(ctx, record, member->payload_names ? member->payload_names[p] : "") ||
+            if (!member->payload_types[p] ||
+                !add_type(ctx, member->payload_types[p], &type_index) ||
+                !add_metadata(ctx, record, member->payload_names[p]) ||
                 !add_metadata_u32(ctx, record, type_index))
                 return false;
         }
@@ -2124,6 +2134,7 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
         case XI_CALL_METHOD_DIRECT:
         case XI_AS:
         case XI_GET_BUILTIN:
+        case XI_VARIANT_CONSTRUCT:
             return add_metadata(ctx, record, (const char *) value->aux);
         case XI_CALL_BUILTIN:
             return value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_NONE

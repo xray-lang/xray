@@ -3,8 +3,8 @@
 ** 用于验证跨模块导出的泛型 ADT enum 会保留 payload 元数据。
 */
 export enum Result<T> {
-    Ok(T),
-    Err(i64)
+    Ok { value: T },
+    Err { error: i64 }
 }
 
 export enum Traffic {
@@ -15,5 +15,5 @@ export enum Traffic {
 
 export fn makeByteArray() -> Result<Array<u8>> {
     var bytes: Array<u8> = [65, 66]
-    return Result.Ok(bytes)
+    return Result.Ok { value: bytes }
 }

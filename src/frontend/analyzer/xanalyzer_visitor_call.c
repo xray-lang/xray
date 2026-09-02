@@ -1473,123 +1473,6 @@ static void xa_report_c_callback_signature_mismatch(XaInferContext *ctx, AstNode
                                &loc);
 }
 
-static const XaEnumVariantInfo *xa_call_payload_enum_variant(XaInferContext *ctx,
-                                                             const CallExprNode *call,
-                                                             const char **enum_name_out,
-                                                             const char **variant_name_out) {
-    if (enum_name_out)
-        *enum_name_out = NULL;
-    if (variant_name_out)
-        *variant_name_out = NULL;
-    if (!ctx || !ctx->analyzer || !call || !call->callee)
-        return NULL;
-
-    const char *enum_name = NULL;
-    const char *variant_name = NULL;
-    if (call->callee->type == AST_MEMBER_ACCESS) {
-        MemberAccessNode *ma = &call->callee->as.member_access;
-        if (!ma->object || ma->object->type != AST_VARIABLE || !ma->name)
-            return NULL;
-        enum_name = ma->object->as.variable.name;
-        variant_name = ma->name;
-    } else if (call->callee->type == AST_ENUM_ACCESS) {
-        EnumAccessNode *ea = &call->callee->as.enum_access;
-        enum_name = ea->enum_name;
-        variant_name = ea->member_name;
-    } else {
-        return NULL;
-    }
-    if (!enum_name || !variant_name)
-        return NULL;
-
-    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, enum_name);
-    if (!sym || sym->kind != XA_SYM_ENUM)
-        return NULL;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    XaEnumInfo *info = links ? links->enum_info : NULL;
-    int idx = xa_enum_info_find_variant(info, variant_name);
-    if (idx < 0 || !info->variants || info->variants[idx].payload_count == 0)
-        return NULL;
-
-    if (enum_name_out)
-        *enum_name_out = enum_name;
-    if (variant_name_out)
-        *variant_name_out = variant_name;
-    return &info->variants[idx];
-}
-
-static void xa_check_payload_enum_variant_call(XaInferContext *ctx, AstNode *node,
-                                               const CallExprNode *call,
-                                               const XaEnumVariantInfo *variant,
-                                               const char *enum_name, const char *variant_name) {
-    if (!ctx || !node || !call || !variant)
-        return;
-
-    int expected = (int) variant->payload_count;
-    if (call->arg_count != expected) {
-        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-        char msg[192];
-        snprintf(msg, sizeof(msg),
-                 "payload enum variant '%s.%s' expects %d argument(s), but got %d",
-                 enum_name ? enum_name : "?", variant_name ? variant_name : "?", expected,
-                 call->arg_count);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
-                                   msg, &loc);
-    }
-
-    int n = call->arg_count < expected ? call->arg_count : expected;
-    for (int i = 0; i < n; i++) {
-        AstNode *arg = call->arguments ? call->arguments[i] : NULL;
-        if (!arg)
-            continue;
-        if (arg->type == AST_SPREAD_EXPR) {
-            XrLocation loc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                "payload enum variant constructors require explicit payload arguments", &loc);
-            continue;
-        }
-
-        XrType *param_type = variant->payload_types ? variant->payload_types[i] : NULL;
-        XrType *saved_expected = ctx->expected_type;
-        XrType *saved_from_signature = ctx->expected_from_signature;
-        if (param_type && !XR_TYPE_IS_UNKNOWN(param_type))
-            ctx->expected_type = param_type;
-        ctx->expected_from_signature = ctx->expected_type;
-        XrType *arg_type = xa_visit_infer_expr(ctx, arg);
-        ctx->expected_type = saved_expected;
-        ctx->expected_from_signature = saved_from_signature;
-        if (xa_type_contains_span_view(arg_type)) {
-            char context[160];
-            snprintf(context, sizeof(context), "store Slice view in enum payload '%s.%s'",
-                     enum_name ? enum_name : "?", variant_name ? variant_name : "?");
-            xa_check_span_value_escape(ctx, arg, arg_type, context);
-        }
-        if (arg_type && XR_TYPE_IS_POINTER(arg_type)) {
-            char context[160];
-            snprintf(context, sizeof(context), "store raw pointer borrow in enum payload '%s.%s'",
-                     enum_name ? enum_name : "?", variant_name ? variant_name : "?");
-            xa_check_pointer_borrow_escape(ctx, arg, arg, arg_type, context);
-        }
-        xa_note_owner_escapes_into_heap(ctx, arg);
-        if (!param_type || XR_TYPE_IS_UNKNOWN(param_type) || !arg_type ||
-            XR_TYPE_IS_UNKNOWN(arg_type))
-            continue;
-
-        XrLocation loc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
-        bool null_err = xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
-        if (!null_err && !xa_typecheck_assignable(param_type, arg_type) &&
-            !xr_is_json_coercion(param_type, arg_type)) {
-            char msg[256];
-            snprintf(msg, sizeof(msg),
-                     "Argument %d: type '%s' is not assignable to enum payload type '%s'", i + 1,
-                     xr_type_to_string(arg_type), xr_type_to_string(param_type));
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
-        }
-    }
-}
-
 static bool xa_call_is_sys_thread_spawn(const CallExprNode *call) {
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
@@ -7099,21 +6982,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     const XaParallelCallPlan *parallel_call_plan =
         xa_analyzer_get_parallel_call_plan(ctx->analyzer, node);
 
-    const char *payload_enum_name = NULL;
-    const char *payload_variant_name = NULL;
-    const XaEnumVariantInfo *payload_variant =
-        xa_call_payload_enum_variant(ctx, call, &payload_enum_name, &payload_variant_name);
-
-    bool saved_payload_ctor_value = ctx->allow_payload_enum_ctor_value;
-    if (payload_variant)
-        ctx->allow_payload_enum_ctor_value = true;
     /* Only a bare identifier callee names an intrinsic; an argument or a
      * member path that happens to be typed here is still a value position. */
     bool saved_core_intrinsic_callee = ctx->allow_core_intrinsic_callee;
     ctx->allow_core_intrinsic_callee = call->callee->type == AST_VARIABLE;
     XrType *callee_type = xa_visit_infer_expr(ctx, call->callee);
     ctx->allow_core_intrinsic_callee = saved_core_intrinsic_callee;
-    ctx->allow_payload_enum_ctor_value = saved_payload_ctor_value;
     if (optional_function_call && callee_type)
         callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
     /* Member lookup yields the declaration signature before the receiver's class arguments are
@@ -7204,12 +7078,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
          * declaration is no longer the same type-parameter object. */
         XrType *opaque_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[0]);
         return opaque_type ? opaque_type : xr_type_new_error(ctx->analyzer->isolate);
-    }
-
-    if (payload_variant) {
-        xa_check_payload_enum_variant_call(ctx, node, call, payload_variant, payload_enum_name,
-                                           payload_variant_name);
-        return callee_type ? callee_type : xr_type_new_unknown(NULL);
     }
 
     /* Namespace-imported class construction (`ns.Class(...)` / `ns.Class<T>(...)`)

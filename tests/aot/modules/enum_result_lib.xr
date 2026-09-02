@@ -1,13 +1,13 @@
 // AOT module test library: exported generic enum aggregate result.
 
 export enum FastResult<T> {
-    Ok(T),
-    Err(i64)
+    Ok { value: T },
+    Err { code: i64 }
 }
 
 export fn pick(ok: bool) -> FastResult<i64> {
     if (ok) {
-        return FastResult.Ok(41)
+        return FastResult.Ok { value: 41 }
     }
-    return FastResult.Err(9)
+    return FastResult.Err { code: 9 }
 }

@@ -3,13 +3,13 @@
 ** 作者：xingleixu@gmail.com
 */
 
-enum CoroErr { Msg(string) }
+enum CoroErr { Msg { message: string } }
 
 fn success() -> i64 {
     return 42
 }
 fn failing() -> i64 {
-    throw CoroErr.Msg("error")
+    throw CoroErr.Msg { message: "error" }
     return 0
 }
 
@@ -36,7 +36,7 @@ fn test_await_any_success() {
     var t5 = go success()
     var failed = t4.awaitResult()
     assert(match (failed) {
-        TaskResult.Failed(_) -> true
+        TaskResult.Failed { error: _ } -> true
         _ -> false
     })
     await t5

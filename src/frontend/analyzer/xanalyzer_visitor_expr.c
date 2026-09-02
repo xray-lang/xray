@@ -346,13 +346,12 @@ static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *
 
     ma->object->as.variable.symbol_id = enum_sym->id;
     if (info->variants && info->variants[member_index].payload_count > 0 &&
-        !ctx->allow_payload_enum_ctor_value) {
+        !ctx->allow_payload_enum_record_path) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[192];
         snprintf(msg, sizeof(msg),
-                 "payload enum variant '%s.%s' is a constructor; call it as '%s.%s(...)' "
-                 "without explicit type arguments on the enum — the payload determines the "
-                 "instantiation",
+                 "payload enum variant '%s.%s' requires named record construction such as "
+                 "'%s.%s { field: value }'",
                  enum_sym->name ? enum_sym->name : "?", ma->name,
                  enum_sym->name ? enum_sym->name : "?", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
@@ -360,13 +359,10 @@ static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *
         return xr_type_new_error(ctx->analyzer->isolate);
     }
 
-    XrType *enum_type =
-        xr_type_new_enum(ctx->analyzer->isolate, ctx->expected_type->enum_type.enum_name);
-    if (enum_type) {
-        enum_type->enum_type.layout = info ? info->layout : ctx->expected_type->enum_type.layout;
-        enum_type->enum_type.layout_id = enum_type->enum_type.layout
-                                             ? enum_type->enum_type.layout->layout_id
-                                             : ctx->expected_type->enum_type.layout_id;
+    XrType *enum_type = xr_type_copy(ctx->analyzer->isolate, ctx->expected_type);
+    if (enum_type && info && info->layout) {
+        enum_type->enum_type.layout = info->layout;
+        enum_type->enum_type.layout_id = info->layout->layout_id;
     }
     note_selection(ctx, node, XA_SEL_ENUM_MEMBER, enum_type ? enum_type : ctx->expected_type,
                    enum_sym, member_index, enum_type ? enum_type : ctx->expected_type, false);
@@ -2157,7 +2153,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         if (enum_info->variants[i].name &&
                             strcmp(enum_info->variants[i].name, ma->name) == 0) {
                             if (enum_info->variants[i].payload_count > 0 &&
-                                !ctx->allow_payload_enum_ctor_value) {
+                                !ctx->allow_payload_enum_record_path) {
                                 XrLocation loc = {
                                     .file = ctx->file_path,
                                     .line = node->line,
@@ -2165,20 +2161,19 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                 };
                                 char msg[224];
                                 snprintf(msg, sizeof(msg),
-                                         "payload enum variant '%s.%s' is a constructor; call it "
-                                         "as '%s.%s(...)' without explicit type arguments on the "
-                                         "enum — the payload determines the instantiation",
+                                         "payload enum variant '%s.%s' requires named record "
+                                         "construction such as '%s.%s { field: value }'",
                                          obj_type->enum_type.enum_name, ma->name,
                                          obj_type->enum_type.enum_name, ma->name);
                                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                            XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
                                 return xr_type_new_error(ctx->analyzer->isolate);
                             }
-                            XrType *enum_type = xr_type_new_enum(ctx->analyzer->isolate,
-                                                                 obj_type->enum_type.enum_name);
+                            XrType *enum_type = xr_type_copy(ctx->analyzer->isolate, obj_type);
                             enum_type->enum_type.layout = enum_info->layout;
-                            enum_type->enum_type.layout_id =
-                                enum_info->layout ? enum_info->layout->layout_id : 0;
+                            enum_type->enum_type.layout_id = enum_info->layout
+                                                                 ? enum_info->layout->layout_id
+                                                                 : obj_type->enum_type.layout_id;
                             note_selection(ctx, node, XA_SEL_ENUM_MEMBER, obj_type, enum_sym, i,
                                            enum_type, false);
                             return enum_type;

@@ -3845,8 +3845,7 @@ TEST(global_evidence_verifier_rederives_func_attr_body_summary) {
     ASSERT_NOT_NULL(xaot_bundle_add_func_attr_plan(&call_contradicts_summary, &helper_func,
                                                    XAOT_FN_ATTR_CONST, &call_body));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&call_contradicts_summary, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&call_contradicts_summary, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT function attribute plan has unresolved call effects"));
     xaot_bundle_free(&call_contradicts_summary);
     xg_global_evidence_free(&call_ev);
@@ -5156,8 +5155,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     missing_source_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_source_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&missing_source_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&missing_source_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence callsite source identity is missing"));
     xaot_bundle_free(&missing_source_bundle);
     xg_global_evidence_free(&missing_source_ev);
@@ -5213,8 +5211,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     duplicate_source_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&duplicate_source_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&duplicate_source_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&duplicate_source_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence callsite source identity is duplicated"));
     xaot_bundle_free(&duplicate_source_bundle);
     xg_global_evidence_free(&duplicate_source_ev);
@@ -5355,8 +5352,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     closure_stale_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&closure_stale_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&closure_stale_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&closure_stale_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence closure callsite identity is stale"));
     xaot_bundle_free(&closure_stale_bundle);
     xg_global_evidence_free(&closure_stale_ev);
@@ -5382,8 +5378,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     direct_no_target_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&direct_no_target_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&direct_no_target_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&direct_no_target_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence direct callsite has no target"));
     xaot_bundle_free(&direct_no_target_bundle);
     xg_global_evidence_free(&direct_no_target_ev);
@@ -5411,8 +5406,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     direct_missing_body_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&direct_missing_body_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&direct_missing_body_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&direct_missing_body_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence direct callsite target body is missing"));
     xaot_bundle_free(&direct_missing_body_bundle);
     xg_global_evidence_free(&direct_missing_body_ev);
@@ -5475,8 +5469,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     method_no_receiver_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_no_receiver_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&method_no_receiver_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&method_no_receiver_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite identity is stale"));
     xaot_bundle_free(&method_no_receiver_bundle);
     xg_global_evidence_free(&method_no_receiver_ev);
@@ -5509,8 +5502,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     method_no_signature_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_no_signature_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&method_no_signature_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&method_no_signature_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite identity is stale"));
     xaot_bundle_free(&method_no_signature_bundle);
     xg_global_evidence_free(&method_no_signature_ev);
@@ -5565,8 +5557,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     method_wrong_target_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&method_wrong_target_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&method_wrong_target_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&method_wrong_target_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence method callsite target does not re-derive"));
     xaot_bundle_free(&method_wrong_target_bundle);
     xg_global_evidence_free(&method_wrong_target_ev);
@@ -5597,8 +5588,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     interface_stale_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&interface_stale_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&interface_stale_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&interface_stale_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface callsite identity is stale"));
     xaot_bundle_free(&interface_stale_bundle);
     xg_global_evidence_free(&interface_stale_ev);
@@ -5631,7 +5621,8 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     interface_missing_decl_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&interface_missing_decl_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&interface_missing_decl_bundle, err, sizeof(err)));
+    ASSERT_TRUE(
+        !xaot_verify_global_evidence_plan(&interface_missing_decl_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface callsite declaration is missing"));
     xaot_bundle_free(&interface_missing_decl_bundle);
     xg_global_evidence_free(&interface_missing_decl_ev);
@@ -5672,7 +5663,8 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     interface_missing_method_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&interface_missing_method_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&interface_missing_method_bundle, err, sizeof(err)));
+    ASSERT_TRUE(
+        !xaot_verify_global_evidence_plan(&interface_missing_method_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(
         strstr(err, "AOT global evidence interface callsite method does not re-derive"));
     xaot_bundle_free(&interface_missing_method_bundle);
@@ -5762,8 +5754,7 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     extern_missing_decl_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&extern_missing_decl_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&extern_missing_decl_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&extern_missing_decl_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence extern callsite declaration is missing"));
     xaot_bundle_free(&extern_missing_decl_bundle);
     xg_global_evidence_free(&extern_missing_decl_ev);
@@ -5841,8 +5832,7 @@ TEST(global_evidence_verifier_rejects_stale_interface_extends_rows) {
     missing_parent_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_parent_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&missing_parent_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&missing_parent_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence interface extends parent is missing"));
     xaot_bundle_free(&missing_parent_bundle);
     xg_global_evidence_free(&missing_parent_ev);
@@ -5996,8 +5986,7 @@ TEST(global_evidence_verifier_rederives_method_body_signature) {
     swapped_source_identity.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&swapped_source_identity, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&swapped_source_identity, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&swapped_source_identity, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence method body owner method does not re-derive"));
     xaot_bundle_free(&swapped_source_identity);
 
@@ -6078,8 +6067,7 @@ TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
     missing_decl_source_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_decl_source_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&missing_decl_source_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&missing_decl_source_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence declaration source identity is missing"));
     xaot_bundle_free(&missing_decl_source_bundle);
     xg_global_evidence_free(&missing_decl_source_ev);
@@ -6127,8 +6115,7 @@ TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
     missing_body_source_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&missing_body_source_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&missing_body_source_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&missing_body_source_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence function body identity is stale"));
     xaot_bundle_free(&missing_body_source_bundle);
     xg_global_evidence_free(&missing_body_source_ev);
@@ -6383,8 +6370,7 @@ TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
     duplicate_method_body.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&duplicate_method_body, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&duplicate_method_body, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&duplicate_method_body, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence method body owner method does not re-derive"));
     xaot_bundle_free(&duplicate_method_body);
     xg_global_evidence_free(&duplicate_method_ev);
@@ -6432,8 +6418,8 @@ TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
     native_missing_method_body.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&native_missing_method_body, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_MSG(
-        xaot_verify_global_evidence_plan(&native_missing_method_body, err, sizeof(err)), err);
+    ASSERT_MSG(xaot_verify_global_evidence_plan(&native_missing_method_body, err, sizeof(err)),
+               err);
     xaot_bundle_free(&native_missing_method_body);
     xg_global_evidence_free(&native_method_ev);
 
@@ -6454,8 +6440,7 @@ TEST(global_evidence_verifier_rejects_stale_body_identity_rows) {
     native_method_with_body.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&native_method_with_body, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&native_method_with_body, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&native_method_with_body, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT global evidence native method has a body"));
     xaot_bundle_free(&native_method_with_body);
     xg_global_evidence_free(&native_body_ev);
@@ -7290,7 +7275,6 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     ev.generic_storages[0].flags &= ~XG_GENERIC_STORAGE_BOXED;
     bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
 
-
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
 }
@@ -7444,6 +7428,10 @@ TEST(xaot_verifier_rejects_stale_enum_scalar_plan) {
     XgGlobalEvidence ev;
     XiFunc init_func;
     XiEnumMemberData members[2];
+    XrType payload_type = {.kind = XR_KIND_INT, .scalar_rep = XR_NATIVE_I64};
+    XrType *payload_types[] = {&payload_type};
+    const char *ok_payload_names[] = {"value"};
+    const char *err_payload_names[] = {"error"};
     XiEnumData enum_data;
     XiModule module;
     XiModule *modules[1];
@@ -7457,9 +7445,13 @@ TEST(xaot_verifier_rejects_stale_enum_scalar_plan) {
     members[0].name = "Ok";
     members[0].ordinal = 0;
     members[0].payload_count = 1;
+    members[0].payload_names = ok_payload_names;
+    members[0].payload_types = payload_types;
     members[1].name = "Err";
     members[1].ordinal = 1;
     members[1].payload_count = 1;
+    members[1].payload_names = err_payload_names;
+    members[1].payload_types = payload_types;
     memset(&enum_data, 0, sizeof(enum_data));
     enum_data.name = "FastResult";
     enum_data.member_count = 2;
@@ -7487,9 +7479,25 @@ TEST(xaot_verifier_rejects_stale_enum_scalar_plan) {
 
     bundle.enum_plans[0].scalar_action = XAOT_ENUM_SCALAR_RUNTIME_AGGREGATE;
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_enum_plan(&bundle, &bundle.enum_plans[0], err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_enum_plan(&bundle, &bundle.enum_plans[0], err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT enum scalar action does not re-derive"));
+    bundle.enum_plans[0].scalar_action = XAOT_ENUM_SCALAR_COMPACT_AGGREGATE;
+
+    const char *saved_payload_name = ok_payload_names[0];
+    ok_payload_names[0] = "";
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_enum_plan(&bundle, &bundle.enum_plans[0], err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "incomplete payload field metadata"));
+    ok_payload_names[0] = saved_payload_name;
+
+    const char *saved_variant_name = members[1].name;
+    members[1].name = members[0].name;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_enum_plan(&bundle, &bundle.enum_plans[0], err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "duplicate variant names"));
+    members[1].name = saved_variant_name;
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_enum_plan(&bundle, &bundle.enum_plans[0], err, sizeof(err)), err);
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -7522,8 +7530,7 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_CLOSURE);
     ASSERT_EQ_UINT(ev.callsites[0].static_target_func_id, XG_NO_ID);
     uint32_t composed_effects = UINT32_MAX;
-    ASSERT_TRUE(
-        !xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
+    ASSERT_TRUE(!xg_body_effects_compose_closed_world_calls(&ev, &ev.bodies[0], &composed_effects));
 
     xg_global_evidence_free(&ev);
     teardown_parser_session();
@@ -7949,17 +7956,15 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
 
 TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_methods) {
     setup_parser_session();
-    const char *http_source =
-        "export class Server {\n"
-        "    constructor() {}\n"
-        "    route(path: string) -> bool { return true }\n"
-        "}\n";
-    const char *entry_source =
-        "import http\n"
-        "fn serve() -> bool {\n"
-        "    var server = http.Server()\n"
-        "    return server.route(\"/ok\")\n"
-        "}\n";
+    const char *http_source = "export class Server {\n"
+                              "    constructor() {}\n"
+                              "    route(path: string) -> bool { return true }\n"
+                              "}\n";
+    const char *entry_source = "import http\n"
+                               "fn serve() -> bool {\n"
+                               "    var server = http.Server()\n"
+                               "    return server.route(\"/ok\")\n"
+                               "}\n";
     AstNode *http_ast = xr_parse(g_session, http_source);
     AstNode *entry_ast = xr_parse(g_session, entry_source);
     ASSERT_NOT_NULL(http_ast);
@@ -10787,8 +10792,7 @@ TEST(global_evidence_records_options_bag_plans) {
     owner_mismatch_bundle.nmodules = 1;
     ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&owner_mismatch_bundle, &init_func, 0, 0));
     memset(err, 0, sizeof(err));
-    ASSERT_TRUE(
-        !xaot_verify_global_evidence_plan(&owner_mismatch_bundle, err, sizeof(err)));
+    ASSERT_TRUE(!xaot_verify_global_evidence_plan(&owner_mismatch_bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT options evidence action does not re-derive"));
     xaot_bundle_free(&owner_mismatch_bundle);
 
@@ -11168,8 +11172,7 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_TRUE(!xaot_verify_global_evidence_plan(&bundle, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT bulk plan action does not re-derive"));
     bundle.bulk_plans[1].action = XAOT_BULK_TYPED_LOOP;
-    XgGlobalEvidence *mutable_evidence =
-        (XgGlobalEvidence *) bundle.global_evidence_plan.evidence;
+    XgGlobalEvidence *mutable_evidence = (XgGlobalEvidence *) bundle.global_evidence_plan.evidence;
     mutable_evidence->encoding_ops[0].flags |= 1u << 31;
     bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(mutable_evidence);
     memset(err, 0, sizeof(err));
@@ -13557,9 +13560,7 @@ TEST(entry_plan_defers_open_function_value_reachability_until_callable_convergen
                              .effect_bits = XG_BODY_MAY_SUSPEND,
                              .capability_bits = XG_CAP_TIMER,
                              .body_hash = 0x197b};
-    XgCallsiteSummary call = {.callsite_id = 1,
-                              .owner_func_id = 1,
-                              .kind = XG_CALL_CLOSURE};
+    XgCallsiteSummary call = {.callsite_id = 1, .owner_func_id = 1, .kind = XG_CALL_CLOSURE};
     XiFunc init_func;
     XiFunc handler_func;
     XiFunc *children[1];

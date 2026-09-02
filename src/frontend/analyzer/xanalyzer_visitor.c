@@ -3585,6 +3585,24 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         variant->name = mem->as.enum_member.name;
                         int pc = mem->as.enum_member.payload_count;
                         variant->payload_count = (uint16_t) pc;
+                        if (!xa_enum_variant_set_payload_names(
+                                variant, (const char *const *) mem->as.enum_member.payload_names,
+                                (uint16_t) pc)) {
+                            XrLocation loc = {
+                                .file = ctx->file_path, .line = mem->line, .column = mem->column};
+                            xa_analyzer_add_diagnostic(
+                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                "enum payload fields must have unique non-empty names", &loc);
+                        }
+                        if (!xa_enum_variant_set_payload_locations(
+                                variant, ctx->file_path, mem->as.enum_member.payload_name_spans,
+                                (uint16_t) pc)) {
+                            XrLocation loc = {
+                                .file = ctx->file_path, .line = mem->line, .column = mem->column};
+                            xa_analyzer_add_diagnostic(
+                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                "enum payload fields require exact source locations", &loc);
+                        }
                         if (pc > 0 && mem->as.enum_member.payload_types) {
                             XrType **ptypes = xr_calloc((size_t) pc, sizeof(XrType *));
                             for (int p = 0; p < pc; p++) {
@@ -3861,6 +3879,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 }
                 if (cc->pattern) {
                     XrType *catch_type = xa_resolve_catch_binding_type(ctx, cc, false);
+                    if (!xa_catch_pattern_is_bare_type(cc))
+                        xa_resolve_enum_pattern_plans(ctx, cc->pattern, catch_type);
                     xa_register_catch_pattern_bindings(ctx, cc, catch_type);
                 }
                 xa_visit_collect(ctx, cc->body);
@@ -4003,6 +4023,7 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_DIV:
         case AST_CALL_EXPR:
         case AST_MEMBER_ACCESS:
+        case AST_ENUM_CONSTRUCT:
         case AST_INDEX_GET:
         case AST_ARRAY_LITERAL:
         case AST_TUPLE_LITERAL:
@@ -5138,6 +5159,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_MEMBER_ACCESS:
             result = xa_visit_member_access(ctx, node);
+            break;
+        case AST_ENUM_CONSTRUCT:
+            result = xa_visit_enum_construct(ctx, node);
             break;
         case AST_INDEX_GET:
             result = xa_visit_index_get(ctx, node);

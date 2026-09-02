@@ -9,11 +9,11 @@ var data = [10, 20, 30]
 ch.send(copy(data))
 
 var first = match (ch.tryRecv()) {
-    Recv.Value(v) -> v[0]
+    Recv.Value { value: v } -> v[0]
     _ -> -1
 }
 var empty = match (ch.tryRecv()) {
-    Recv.Value(v) -> v[0]
+    Recv.Value { value: v } -> v[0]
     _ -> -1
 }
 ch.close()

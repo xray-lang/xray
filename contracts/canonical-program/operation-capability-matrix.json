@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project are COMPLETE_W7_WAVE2; the remaining aggregate/variant rows are active Wave 2 work; trap, error publication, and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project and all three named record-variant operations are COMPLETE_W7_WAVE2; aggregate update remains active Wave 2 work; trap, error publication, and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -330,13 +330,14 @@
       "decoder_verifier_evaluator": "variant kind, ordinal, payload arity/type, and resource checks with independent construction",
       "vm_implementation": "private tagged carrier with logical payload values",
       "aot_lowering": "private C11 tag plus union case construction",
-      "source_producer": "pending named record-variant frontend and typed Xi projection; call-shape recognition is forbidden",
-      "old_owner_deletion": "canonical executors contain no old enum layout dependency; source activation remains fail closed",
-      "status": "IN_PROGRESS_W7_WAVE2",
+      "source_producer": "dedicated named record constructor AST and immutable analyzer slot plan lower directly to xi.variant.construct and the generated Xi-to-CoreSpec projection",
+      "old_owner_deletion": "canonical source and executor paths consume explicit variant ordinals, exact field names, declaration-order slots, and types; no call-shape, payload-arity, SemanticPlan, TargetPlan, opcode, or CGen inference is reachable",
+      "status": "COMPLETE_W7_WAVE2",
       "evidence": [
-        "tests/unit/program/test_xr_program_verify.c",
-        "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/aot/test_xr_program_aot.c"
+        "src/frontend/analyzer/xa_enum_record_plan.c",
+        "src/ir/xi_lower_misc.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
       ]
     },
     {
@@ -346,13 +347,14 @@
       "decoder_verifier_evaluator": "variant kind and ordinal checks with independent tag comparison",
       "vm_implementation": "private carrier tag comparison",
       "aot_lowering": "direct native tag comparison",
-      "source_producer": "pending named variant-pattern plan projection; field-load/tag-compare recognition is forbidden",
-      "old_owner_deletion": "canonical executors contain no old tag inference dependency; source activation remains fail closed",
-      "status": "IN_PROGRESS_W7_WAVE2",
+      "source_producer": "dedicated named selective-pattern AST and immutable analyzer slot plan lower directly to xi.variant.test",
+      "old_owner_deletion": "canonical source and executor paths consume the explicit variant ordinal; no field-load, source pattern shape, SemanticPlan, TargetPlan, opcode, or CGen inference is reachable",
+      "status": "COMPLETE_W7_WAVE2",
       "evidence": [
-        "tests/unit/program/test_xr_program_verify.c",
-        "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/aot/test_xr_program_aot.c"
+        "src/frontend/analyzer/xa_enum_record_plan.c",
+        "src/ir/xi_lower_misc.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
       ]
     },
     {
@@ -362,13 +364,14 @@
       "decoder_verifier_evaluator": "variant/field range, result type, and deterministic mismatched-tag trap checks",
       "vm_implementation": "private carrier tag guard followed by payload projection",
       "aot_lowering": "native tag guard followed by direct union-case field read",
-      "source_producer": "pending named selective-pattern plan projection; ADT field-shape recognition is forbidden",
-      "old_owner_deletion": "canonical executors contain no old payload slot dependency; source activation remains fail closed",
-      "status": "IN_PROGRESS_W7_WAVE2",
+      "source_producer": "selected named fields resolve once to canonical declaration slots and lower directly to xi.variant.project",
+      "old_owner_deletion": "canonical source and executor paths consume explicit variant and field ordinals plus exact result types; no ADT field-shape, payload-arity, SemanticPlan, TargetPlan, opcode, or CGen inference is reachable",
+      "status": "COMPLETE_W7_WAVE2",
       "evidence": [
-        "tests/unit/program/test_xr_program_verify.c",
-        "tests/unit/vm/test_xr_program_vm.c",
-        "tests/unit/aot/test_xr_program_aot.c"
+        "src/frontend/analyzer/xa_enum_record_plan.c",
+        "src/ir/xi_lower_misc.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
       ]
     }
   ],

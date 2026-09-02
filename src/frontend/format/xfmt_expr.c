@@ -931,6 +931,21 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, node->as.enum_access.member_name);
             break;
 
+        case AST_ENUM_CONSTRUCT: {
+            EnumConstructNode *construct = &node->as.enum_construct;
+            xfmt_emit_expression(ctx, construct->variant_path);
+            xfmt_write_str(ctx, " { ");
+            for (int i = 0; i < construct->field_count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, construct->field_names[i]);
+                xfmt_write_str(ctx, ": ");
+                xfmt_emit_expression(ctx, construct->field_values[i]);
+            }
+            xfmt_write_str(ctx, " }");
+            break;
+        }
+
         // Go expression
         case AST_GO_EXPR: {
             xfmt_write_indent(ctx);
@@ -1045,17 +1060,27 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
         }
 
-        // ADT variant destructure: `Shape.Circle(r)`
+        // Named ADT variant destructure: `Shape.Circle { radius: r }`
         case AST_PATTERN_ADT: {
             PatternAdtNode *pa = &node->as.pattern_adt;
             xfmt_emit_expression(ctx, pa->variant);
-            xfmt_write_char(ctx, '(');
+            xfmt_write_str(ctx, " { ");
             for (int i = 0; i < pa->count; i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, pa->patterns[i]);
+                AstNode *sub = pa->patterns[i];
+                bool shorthand =
+                    sub && sub->type == AST_PATTERN_LITERAL && sub->as.pattern_literal.value &&
+                    sub->as.pattern_literal.value->type == AST_VARIABLE && pa->field_names[i] &&
+                    strcmp(sub->as.pattern_literal.value->as.variable.name, pa->field_names[i]) ==
+                        0;
+                xfmt_write_str(ctx, pa->field_names[i]);
+                if (!shorthand) {
+                    xfmt_write_str(ctx, ": ");
+                    xfmt_emit_expression(ctx, sub);
+                }
             }
-            xfmt_write_char(ctx, ')');
+            xfmt_write_str(ctx, " }");
             break;
         }
 

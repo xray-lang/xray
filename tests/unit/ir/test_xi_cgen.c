@@ -31,6 +31,7 @@
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_panic_info_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan.h"
+#include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/semantic/xr_semantic_string_shape.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_profile.h"
@@ -1265,14 +1266,37 @@ static void require_detached_semantic_snapshot(const XiFunc *func) {
 }
 
 TEST(aot_semantic_snapshot_survives_analyzer_pool_churn) {
-    const char *src = "enum SnapshotValue { Text(value: string) }\n"
+    const char *src = "enum SnapshotValue { Text { value: string } }\n"
                       "fn echo(v: SnapshotValue) -> SnapshotValue { return v }\n"
-                      "var value = echo(SnapshotValue.Text(\"ok\"))\n"
+                      "var value = echo(SnapshotValue.Text { value: \"ok\" })\n"
                       "print(value)\n";
     XiPipelineConfig cfg = xi_pipeline_aot_config();
     XiFunc *ir = compile_to_ir_with_module_graph_config(src, cfg);
     TEST_REQUIRE(ir != NULL, "semantic snapshot fixture compiled to AOT IR");
     require_detached_semantic_snapshot(ir);
+
+    XrSemanticOperationRecord *variant_construct = NULL;
+    for (size_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        XrSemanticOperationRecord *operation =
+            (XrSemanticOperationRecord *) xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (operation && operation->opcode == XI_VARIANT_CONSTRUCT) {
+            TEST_REQUIRE(variant_construct == NULL,
+                         "semantic snapshot fixture has one canonical variant constructor");
+            variant_construct = operation;
+        }
+    }
+    TEST_REQUIRE(variant_construct != NULL && variant_construct->metadata_count == 1,
+                 "variant constructor freezes ordinal and member metadata");
+    int64_t saved_variant_ordinal = variant_construct->semantic_immediate;
+    variant_construct->semantic_immediate = INT64_C(1);
+    char mutation_error[512] = {0};
+    TEST_REQUIRE(
+        !xr_semantic_plan_verify(ir->semantic_plan, mutation_error, sizeof(mutation_error)) &&
+            strstr(mutation_error, "XR_SEM_0019") != NULL,
+        "SemanticPlan admission rejects a variant ordinal outside the frozen declaration");
+    variant_construct->semantic_immediate = saved_variant_ordinal;
+    TEST_REQUIRE(xr_semantic_plan_verify(ir->semantic_plan, mutation_error, sizeof(mutation_error)),
+                 "restored variant constructor re-verifies exactly");
 
     /* The compiling analyzer and its type arena were destroyed by the helper.
      * Repeatedly allocate and destroy a new analyzer pool so stale semantic
@@ -1320,8 +1344,7 @@ static bool test_prepare_backend_ir(XiFunc *ir) {
     if (!saved_module) {
         ir->module = &fixture_module;
     } else if (!saved_module->identity &&
-               !xi_module_set_identity(saved_module,
-                                       "memory-module-v1:id=18:xi-cgen-fixture-v1")) {
+               !xi_module_set_identity(saved_module, "memory-module-v1:id=18:xi-cgen-fixture-v1")) {
         fprintf(stderr, "  fixture module identity allocation failed for '%s'\n",
                 ir->name ? ir->name : "<anonymous>");
         return false;
@@ -2742,9 +2765,13 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture below imports
-     * nothing.  Old: 9a99849f192ca8108c6ba9502a8dcc43f03f6d93251e03551d19f1df2155a02b. */
+     * nothing. The record-enum cutover changed the frozen stdlib declaration
+     * metadata from 3463fe33e6b5b6f9cbed3fadd9e6da7ae2d1ee5667d4e2185f618b5135ad1673. */
+    if (strcmp(semantic_hex, "e9f8680dc4223e208a8a396edb9b1bb510f81d8a099f7839cf431a091cc70b93") !=
+        0)
+        fprintf(stderr, "  SemanticPlan KAT drift: actual=%s\n", semantic_hex);
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "3463fe33e6b5b6f9cbed3fadd9e6da7ae2d1ee5667d4e2185f618b5135ad1673") == 0,
+                        "e9f8680dc4223e208a8a396edb9b1bb510f81d8a099f7839cf431a091cc70b93") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;
@@ -3162,6 +3189,10 @@ TEST(cgen_string_slice_range_consumes_immutable_emission_recipe) {
     TEST_REQUIRE(slice_call_count == 1, "CGen must consume the exact range-slice recipe once");
     TEST_REQUIRE(!contains(code, "XRT_SYM_SLICE"),
                  "CGen must not select String.slice by symbol id");
+    TEST_REQUIRE(!contains(code, " = INT64_C(1);") && !contains(code, " = INT64_C(4);"),
+                 "constant slice bounds must not retain dead C locals");
+    TEST_REQUIRE(contains(code, "INT64_C(1)") && contains(code, "INT64_C(4)"),
+                 "the immutable recipe must retain both exact immediate bounds");
     TEST_REQUIRE(contains(code, "xrt_has_pending_error("),
                  "String.slice must preserve the pending-error poll");
     xr_free(code);
@@ -3789,9 +3820,9 @@ static XiFunc *make_manual_enum_ordinal_cgen_function(const char *name, XrType *
     return func;
 }
 
-static char *generate_manual_enum_cgen(XiFunc *func, const XiEnumData *enum_data,
-                                       TestAotPlan *plan, XiCgenCtx **ctx_out,
-                                       TestCEmissionRegistry *registry_out, XiModule **module_out) {
+static char *generate_manual_enum_cgen(XiFunc *func, const XiEnumData *enum_data, TestAotPlan *plan,
+                                       XiCgenCtx **ctx_out, TestCEmissionRegistry *registry_out,
+                                       XiModule **module_out) {
     XiModule *module = xi_module_new("enum_ordinal.xr", func->name, func);
     TEST_REQUIRE(module != NULL, "manual enum ordinal module allocated");
     TEST_REQUIRE(xi_module_set_identity(module, "memory-module-v1:id=18:xi-cgen-fixture-v1"),
@@ -3837,27 +3868,31 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
     };
     XrEnumLayout *compact_layout = xr_enum_layout_new("test.cgen.enum", "CgenOrdinalCompact",
                                                       compact_names, XR_COUNTOF(compact_names));
-    TEST_REQUIRE(compact_layout && compact_layout->is_zero_payload,
-                 "compact enum layout created");
-    XiEnumData compact_data = {
-        .name = "CgenOrdinalCompact", .member_count = XR_COUNTOF(compact_members),
-        .max_payload = 0, .layout_id = compact_layout->layout_id, .members = compact_members};
-    XrType compact_type = {.kind = XR_KIND_ENUM, .id = compact_layout->layout_id,
-                           .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true,
+    TEST_REQUIRE(compact_layout && compact_layout->is_zero_payload, "compact enum layout created");
+    XiEnumData compact_data = {.name = "CgenOrdinalCompact",
+                               .member_count = XR_COUNTOF(compact_members),
+                               .max_payload = 0,
+                               .layout_id = compact_layout->layout_id,
+                               .members = compact_members};
+    XrType compact_type = {.kind = XR_KIND_ENUM,
+                           .id = compact_layout->layout_id,
+                           .scalar_rep = XR_SCALAR_REP_NONE,
+                           .frozen = true,
                            .enum_type = {.enum_name = "CgenOrdinalCompact",
                                          .layout_id = compact_layout->layout_id,
                                          .layout = compact_layout}};
     XrType u8_type = {.kind = XR_KIND_INT, .id = 988, .scalar_rep = XR_NATIVE_U8, .frozen = true};
     XiFunc *compact = make_manual_enum_ordinal_cgen_function("enum_ordinal_compact", &compact_type,
-                                                              &u8_type, true);
+                                                             &u8_type, true);
     TestAotPlan compact_plan;
     TestCEmissionRegistry compact_registry = {0};
     XiCgenCtx *compact_ctx = NULL;
     XiModule *compact_module = NULL;
-    char *compact_code = generate_manual_enum_cgen(compact, &compact_data, &compact_plan,
-                                                   &compact_ctx, &compact_registry, &compact_module);
+    char *compact_code = generate_manual_enum_cgen(
+        compact, &compact_data, &compact_plan, &compact_ctx, &compact_registry, &compact_module);
     TEST_REQUIRE(compact_code && !xi_cgen_has_error(compact_ctx), "compact enum CGen succeeds");
-    const char *compact_body = find_static_function_definition(compact_code, "enum_ordinal_compact");
+    const char *compact_body =
+        find_static_function_definition(compact_code, "enum_ordinal_compact");
     const char *compact_end = compact_body ? strstr(compact_body, "\n}\n") : NULL;
     TEST_REQUIRE(compact_body && compact_end &&
                      contains_between(compact_body, compact_end, "xr_numeric_int_convert_i64(") &&
@@ -3873,8 +3908,16 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
     xi_func_free(compact);
 
     static const char *boxed_names[] = {"Payload", "Ready"};
+    static const char *boxed_payload_names[] = {"value"};
+    static const uint8_t boxed_payload_type_ids[] = {XR_TID_I64};
+    XrType i64_type = {.kind = XR_KIND_INT, .id = 989, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType *boxed_payload_types[] = {&i64_type};
     XiEnumMemberData boxed_members[] = {
-        {.name = "Payload", .ordinal = 0, .payload_count = 1},
+        {.name = "Payload",
+         .ordinal = 0,
+         .payload_count = 1,
+         .payload_names = boxed_payload_names,
+         .payload_types = boxed_payload_types},
         {.name = "Ready", .ordinal = 1, .payload_count = 0},
     };
     XrEnumLayout *boxed_layout = xr_enum_layout_new("test.cgen.enum", "CgenOrdinalBoxed",
@@ -3882,20 +3925,26 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
     const int boxed_payload_counts[] = {1, 0};
     TEST_REQUIRE(boxed_layout &&
                      xr_enum_layout_set_payload_counts(boxed_layout, boxed_payload_counts,
-                                                        XR_COUNTOF(boxed_payload_counts)),
+                                                       XR_COUNTOF(boxed_payload_counts)),
                  "boxed enum payload layout populated");
-    XrType boxed_type = {.kind = XR_KIND_ENUM, .id = boxed_layout->layout_id,
-                         .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true,
+    TEST_REQUIRE(xr_enum_layout_set_variant_payload_metadata(boxed_layout, 0, boxed_payload_names,
+                                                             boxed_payload_type_ids, 1),
+                 "boxed enum payload metadata populated");
+    XrType boxed_type = {.kind = XR_KIND_ENUM,
+                         .id = boxed_layout->layout_id,
+                         .scalar_rep = XR_SCALAR_REP_NONE,
+                         .frozen = true,
                          .enum_type = {.enum_name = "CgenOrdinalBoxed",
                                        .layout_id = boxed_layout->layout_id,
                                        .layout = boxed_layout}};
-    XrType i64_type = {.kind = XR_KIND_INT, .id = 989, .scalar_rep = XR_NATIVE_I64, .frozen = true};
-    XiEnumData boxed_data = {
-        .name = "CgenOrdinalBoxed", .member_count = XR_COUNTOF(boxed_members),
-        .is_adt = true, .max_payload = 1, .layout_id = boxed_layout->layout_id,
-        .members = boxed_members};
-    XiFunc *boxed = make_manual_enum_ordinal_cgen_function("enum_ordinal_boxed", &boxed_type,
-                                                            &i64_type, false);
+    XiEnumData boxed_data = {.name = "CgenOrdinalBoxed",
+                             .member_count = XR_COUNTOF(boxed_members),
+                             .is_adt = true,
+                             .max_payload = 1,
+                             .layout_id = boxed_layout->layout_id,
+                             .members = boxed_members};
+    XiFunc *boxed =
+        make_manual_enum_ordinal_cgen_function("enum_ordinal_boxed", &boxed_type, &i64_type, false);
     TestAotPlan boxed_plan;
     TestCEmissionRegistry boxed_registry = {0};
     XiCgenCtx *boxed_ctx = NULL;
@@ -3917,23 +3966,21 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
     uint32_t source_semantic_value = XR_SEMANTIC_INDEX_NONE;
     char source_semantic_error[256] = {0};
     TEST_REQUIRE(xr_aot_scalar_semantic_value_id(
-                     xaot_bundle_program_target_plan(&boxed_plan.bundle), boxed,
-                     forged->args[0], &source_semantic_function, &source_semantic_value,
-                     source_semantic_error, sizeof(source_semantic_error)),
+                     xaot_bundle_program_target_plan(&boxed_plan.bundle), boxed, forged->args[0],
+                     &source_semantic_function, &source_semantic_value, source_semantic_error,
+                     sizeof(source_semantic_error)),
                  source_semantic_error[0] ? source_semantic_error
                                           : "CGen source semantic value identity resolved");
     (void) source_semantic_function;
 
     XiCgenCtx *source_rep_ctx = xi_cgen_ctx_new();
     TestCEmissionRegistry source_rep_registry = {0};
-    TEST_REQUIRE(source_rep_ctx &&
-                     xi_cgen_ctx_set_aot_bundle(source_rep_ctx, &boxed_plan.bundle),
+    TEST_REQUIRE(source_rep_ctx && xi_cgen_ctx_set_aot_bundle(source_rep_ctx, &boxed_plan.bundle),
                  "CGen source-representation mutation reuses frozen TargetPlan");
-    TEST_REQUIRE(test_c_emission_registry_install(&source_rep_registry, source_rep_ctx,
-                                                  &boxed_plan.bundle),
-                 "CGen source-representation mutation installs valid frozen C plans");
-    XrCEmissionPlan *source_rep_plan =
-        (XrCEmissionPlan *) source_rep_registry.plans[0];
+    TEST_REQUIRE(
+        test_c_emission_registry_install(&source_rep_registry, source_rep_ctx, &boxed_plan.bundle),
+        "CGen source-representation mutation installs valid frozen C plans");
+    XrCEmissionPlan *source_rep_plan = (XrCEmissionPlan *) source_rep_registry.plans[0];
     XrCValueEmissionView *source_rep_row = NULL;
     for (uint32_t row = 0; row < source_rep_plan->value_count; row++) {
         if (source_rep_plan->values[row].semantic_value == source_semantic_value) {
@@ -3961,12 +4008,11 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
 
     XiCgenCtx *target_rep_ctx = xi_cgen_ctx_new();
     TestCEmissionRegistry target_rep_registry = {0};
-    TEST_REQUIRE(target_rep_ctx &&
-                     xi_cgen_ctx_set_aot_bundle(target_rep_ctx, &boxed_plan.bundle),
+    TEST_REQUIRE(target_rep_ctx && xi_cgen_ctx_set_aot_bundle(target_rep_ctx, &boxed_plan.bundle),
                  "CGen target-representation mutation reuses frozen TargetPlan");
-    TEST_REQUIRE(test_c_emission_registry_install(&target_rep_registry, target_rep_ctx,
-                                                  &boxed_plan.bundle),
-                 "CGen target-representation mutation reuses frozen C plans");
+    TEST_REQUIRE(
+        test_c_emission_registry_install(&target_rep_registry, target_rep_ctx, &boxed_plan.bundle),
+        "CGen target-representation mutation reuses frozen C plans");
     uint8_t saved_target_rep = i64_type.scalar_rep;
     uint8_t saved_witness_target_rep = forged->conversion.target_scalar_rep;
     i64_type.scalar_rep = XR_SCALAR_REP_NONE;
@@ -3990,8 +4036,7 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
     TestCEmissionRegistry forged_registry = {0};
     TEST_REQUIRE(forged_ctx && xi_cgen_ctx_set_aot_bundle(forged_ctx, &boxed_plan.bundle),
                  "CGen forged mutation reuses frozen TargetPlan");
-    TEST_REQUIRE(test_c_emission_registry_install(&forged_registry, forged_ctx,
-                                                  &boxed_plan.bundle),
+    TEST_REQUIRE(test_c_emission_registry_install(&forged_registry, forged_ctx, &boxed_plan.bundle),
                  "CGen forged mutation reuses frozen C plans");
     forged->conversion.kind = XR_CONVERSION_NONE;
     char *forged_code = NULL;
@@ -4012,8 +4057,7 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
     TestCEmissionRegistry arity_registry = {0};
     TEST_REQUIRE(arity_ctx && xi_cgen_ctx_set_aot_bundle(arity_ctx, &boxed_plan.bundle),
                  "CGen arity mutation reuses frozen TargetPlan");
-    TEST_REQUIRE(test_c_emission_registry_install(&arity_registry, arity_ctx,
-                                                  &boxed_plan.bundle),
+    TEST_REQUIRE(test_c_emission_registry_install(&arity_registry, arity_ctx, &boxed_plan.bundle),
                  "CGen arity mutation reuses frozen C plans");
     forged->nargs = 0;
     char *arity_code = NULL;
@@ -4058,12 +4102,11 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
 
     XiCgenCtx *mixed_as_ctx = xi_cgen_ctx_new();
     TestCEmissionRegistry mixed_as_registry = {0};
-    TEST_REQUIRE(mixed_as_ctx &&
-                     xi_cgen_ctx_set_aot_bundle(mixed_as_ctx, &boxed_plan.bundle),
+    TEST_REQUIRE(mixed_as_ctx && xi_cgen_ctx_set_aot_bundle(mixed_as_ctx, &boxed_plan.bundle),
                  "CGen mixed XI_AS mutation reuses frozen TargetPlan");
-    TEST_REQUIRE(test_c_emission_registry_install(&mixed_as_registry, mixed_as_ctx,
-                                                  &boxed_plan.bundle),
-                 "CGen mixed XI_AS mutation reuses frozen C plans");
+    TEST_REQUIRE(
+        test_c_emission_registry_install(&mixed_as_registry, mixed_as_ctx, &boxed_plan.bundle),
+        "CGen mixed XI_AS mutation reuses frozen C plans");
     XrType *saved_as_source_type = forged->args[0]->type;
     forged->args[0]->type = &i64_type;
     forged->op = XI_AS;
@@ -4088,12 +4131,11 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
 
     XiCgenCtx *arity_as_ctx = xi_cgen_ctx_new();
     TestCEmissionRegistry arity_as_registry = {0};
-    TEST_REQUIRE(arity_as_ctx &&
-                     xi_cgen_ctx_set_aot_bundle(arity_as_ctx, &boxed_plan.bundle),
+    TEST_REQUIRE(arity_as_ctx && xi_cgen_ctx_set_aot_bundle(arity_as_ctx, &boxed_plan.bundle),
                  "CGen XI_AS arity mutation reuses frozen TargetPlan");
-    TEST_REQUIRE(test_c_emission_registry_install(&arity_as_registry, arity_as_ctx,
-                                                  &boxed_plan.bundle),
-                 "CGen XI_AS arity mutation reuses frozen C plans");
+    TEST_REQUIRE(
+        test_c_emission_registry_install(&arity_as_registry, arity_as_ctx, &boxed_plan.bundle),
+        "CGen XI_AS arity mutation reuses frozen C plans");
     forged->op = XI_AS;
     forged->nargs = 0;
     forged->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
@@ -4115,11 +4157,9 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
 
     XiCgenCtx *neg_ctx = xi_cgen_ctx_new();
     TestCEmissionRegistry neg_registry = {0};
-    TEST_REQUIRE(neg_ctx &&
-                     xi_cgen_ctx_set_aot_bundle(neg_ctx, &boxed_plan.bundle),
+    TEST_REQUIRE(neg_ctx && xi_cgen_ctx_set_aot_bundle(neg_ctx, &boxed_plan.bundle),
                  "CGen XI_NEG mutation reuses frozen TargetPlan");
-    TEST_REQUIRE(test_c_emission_registry_install(&neg_registry, neg_ctx,
-                                                  &boxed_plan.bundle),
+    TEST_REQUIRE(test_c_emission_registry_install(&neg_registry, neg_ctx, &boxed_plan.bundle),
                  "CGen XI_NEG mutation reuses frozen C plans");
     XiOp saved_neg_op = forged->op;
     forged->op = XI_NEG;
@@ -4139,8 +4179,7 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
 
     XiCgenCtx *recv_status_ctx = xi_cgen_ctx_new();
     TestCEmissionRegistry recv_status_registry = {0};
-    TEST_REQUIRE(recv_status_ctx &&
-                     xi_cgen_ctx_set_aot_bundle(recv_status_ctx, &boxed_plan.bundle),
+    TEST_REQUIRE(recv_status_ctx && xi_cgen_ctx_set_aot_bundle(recv_status_ctx, &boxed_plan.bundle),
                  "CGen channel-status mutation reuses frozen TargetPlan");
     TEST_REQUIRE(test_c_emission_registry_install(&recv_status_registry, recv_status_ctx,
                                                   &boxed_plan.bundle),
@@ -4165,8 +4204,7 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
     TestCEmissionRegistry elided_registry = {0};
     TEST_REQUIRE(elided_ctx && xi_cgen_ctx_set_aot_bundle(elided_ctx, &boxed_plan.bundle),
                  "CGen elided-value mutation reuses frozen TargetPlan");
-    TEST_REQUIRE(test_c_emission_registry_install(&elided_registry, elided_ctx,
-                                                  &boxed_plan.bundle),
+    TEST_REQUIRE(test_c_emission_registry_install(&elided_registry, elided_ctx, &boxed_plan.bundle),
                  "CGen elided-value mutation reuses frozen C plans");
     XiOp saved_elided_op = forged->op;
     forged->op = XI_CONST;
@@ -4207,8 +4245,7 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
 
     XiCgenCtx *mixed_parse_ctx = xi_cgen_ctx_new();
     TestCEmissionRegistry mixed_parse_registry = {0};
-    TEST_REQUIRE(mixed_parse_ctx &&
-                     xi_cgen_ctx_set_aot_bundle(mixed_parse_ctx, &boxed_plan.bundle),
+    TEST_REQUIRE(mixed_parse_ctx && xi_cgen_ctx_set_aot_bundle(mixed_parse_ctx, &boxed_plan.bundle),
                  "CGen mixed intrinsic mutation reuses frozen TargetPlan");
     TEST_REQUIRE(test_c_emission_registry_install(&mixed_parse_registry, mixed_parse_ctx,
                                                   &boxed_plan.bundle),
@@ -4311,77 +4348,10 @@ TEST(cgen_native_signed_i64_constant_emits_immediate_without_local) {
     const char *fn_end = next_static_after(fn);
     TEST_REQUIRE(!contains_between(fn, fn_end, " = INT64_C(1);"),
                  "signed wrap arithmetic must not retain a dead constant local");
-    TEST_REQUIRE(contains_between(fn, fn_end,
-                                  "xrt_int_wrap_eval(xr_i64_add_wrap, v0, INT64_C(1))"),
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_int_wrap_eval(xr_i64_add_wrap, v0, INT64_C(1))"),
                  "signed wrap arithmetic must retain the exact immediate operand");
 
     printf("  Generated immediate signed i64 arithmetic in %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_runtime_string_slice_constant_emits_immediate_without_local) {
-    const char *src = "@noinline\n"
-                      "fn firstArgumentTail() -> string {\n"
-                      "    var value = process.args[0]\n"
-                      "    return value.slice(2)\n"
-                      "}\n"
-                      "print(firstArgumentTail())\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "runtime string-slice constant IR compilation failed");
-
-    XiFunc *tail = NULL;
-    for (uint16_t i = 0; i < ir->nchildren; i++) {
-        if (ir->children[i] && ir->children[i]->name &&
-            strcmp(ir->children[i]->name, "firstArgumentTail") == 0) {
-            tail = ir->children[i];
-            break;
-        }
-    }
-    TEST_REQUIRE(tail != NULL, "runtime string-slice function IR exists");
-    XiValue *dynamic_slice = NULL;
-    XiValue *checked_slice = NULL;
-    XiValue *promotion = NULL;
-    uint32_t promotion_count = 0;
-    for (uint32_t b = 0; b < tail->nblocks; b++) {
-        XiBlock *block = tail->blocks[b];
-        for (uint32_t i = 0; block && i < block->nvalues; i++) {
-            XiValue *value = block->values[i];
-            if (value && value->op == XI_CALL_METHOD && value->aux &&
-                strcmp((const char *) value->aux, "slice") == 0)
-                dynamic_slice = value;
-            else if (value && value->op == XI_CHECKTYPE)
-                checked_slice = value;
-            else if (value && value->op == XI_RETAIN && checked_slice && value->nargs == 1 &&
-                     value->args[0] == checked_slice) {
-                promotion = value;
-                promotion_count++;
-            }
-        }
-    }
-    TEST_REQUIRE(dynamic_slice && !dynamic_slice->call_return_ownership.complete,
-                 "dynamic string-slice result remains alias-uncertain");
-    TEST_REQUIRE(checked_slice && checked_slice->nargs == 1 &&
-                     checked_slice->args[0] == dynamic_slice,
-                 "CHECKTYPE borrows the unresolved call result before promotion");
-    TEST_REQUIRE(promotion && promotion->nargs == 1 && promotion->args[0] == checked_slice,
-                 "return transfer promotes the checked unresolved result exactly once");
-    TEST_REQUIRE(promotion_count == 1, "return transfer has exactly one checked-result promotion");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL, "runtime string-slice constant C generation failed");
-    TEST_REQUIRE(!had_error, "runtime string-slice constant fixture should generate");
-    const char *fn = find_static_function_definition(code, "firstArgumentTail_");
-    TEST_REQUIRE(fn != NULL, "runtime string-slice definition should be emitted");
-    const char *fn_end = next_static_after(fn);
-    TEST_REQUIRE(!contains_between(fn, fn_end, " = INT64_C(2);"),
-                 "dynamic string slice must not retain a dead constant local");
-    TEST_REQUIRE(contains_between(fn, fn_end, "XR_FROM_INT(INT64_C(2))"),
-                 "dynamic string slice must retain the exact immediate operand");
-
-    printf("  Generated immediate dynamic string slice in %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4417,7 +4387,7 @@ TEST(cgen_typed_array_constants_emit_immediate_without_locals) {
     xi_func_free(ir);
 }
 
-TEST(cgen_clean_narrow_arithmetic_keeps_required_constant_local) {
+TEST(cgen_clean_narrow_arithmetic_emits_required_constant) {
     const char *src = "@noinline\n"
                       "fn narrow(value: u32) -> u32 {\n"
                       "    return value * 2246822519\n"
@@ -4434,12 +4404,12 @@ TEST(cgen_clean_narrow_arithmetic_keeps_required_constant_local) {
     const char *fn = find_static_function_definition(code, "narrow_");
     TEST_REQUIRE(fn != NULL, "clean-narrow constant definition should be emitted");
     const char *fn_end = next_static_after(fn);
-    TEST_REQUIRE(contains_between(fn, fn_end, " = INT64_C(2246822519);") &&
+    TEST_REQUIRE(!contains_between(fn, fn_end, " = INT64_C(2246822519);") &&
                      contains_between(fn, fn_end, "2246822519") &&
                      contains_between(fn, fn_end, "(v"),
-                 "clean-narrow arithmetic must retain constants referenced by emit_vref");
+                 "clean-narrow arithmetic must emit its exact constant without a dead local");
 
-    printf("  Preserved clean-narrow constant local in %zu bytes of C code\n", strlen(code));
+    printf("  Emitted clean-narrow constant in %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -11472,13 +11442,11 @@ TEST(cgen_statement_drivers_have_independent_behavior_oracles) {
     TEST_REQUIRE(count_op_in_func(fail, XI_ERR_RETURN) == 1 &&
                      count_op_in_func(fail, XI_ERR_SET) == 0,
                  "stmt_fail isolates ERR_RETURN from ERR_SET");
-    TEST_REQUIRE(count_op_in_func(set, XI_ERR_SET) == 1 &&
-                     count_op_in_func(set, XI_ERR_CATCH) == 1 &&
-                     count_op_in_func(set, XI_ERR_RETURN) == 0 &&
-                     count_op_in_func(set, XI_TRY) == 0 &&
-                     count_op_in_func(set, XI_CATCH) == 0 &&
-                     count_op_in_func(set, XI_END_TRY) == 0,
-                 "stmt_set isolates value-error SET/CATCH from panic handlers");
+    TEST_REQUIRE(
+        count_op_in_func(set, XI_ERR_SET) == 1 && count_op_in_func(set, XI_ERR_CATCH) == 1 &&
+            count_op_in_func(set, XI_ERR_RETURN) == 0 && count_op_in_func(set, XI_TRY) == 0 &&
+            count_op_in_func(set, XI_CATCH) == 0 && count_op_in_func(set, XI_END_TRY) == 0,
+        "stmt_set isolates value-error SET/CATCH from panic handlers");
     TEST_REQUIRE(count_op_in_func(check, XI_ERR_CHECK) == 1 &&
                      count_op_in_func(check, XI_ERR_CATCH) == 1 &&
                      count_op_in_func(check, XI_ERR_SET) == 0,
@@ -11486,11 +11454,9 @@ TEST(cgen_statement_drivers_have_independent_behavior_oracles) {
     const size_t cleanup_enters = count_op_in_func(cleanup, XI_CLEANUP_ENTER);
     const size_t cleanup_leaves = count_op_in_func(cleanup, XI_CLEANUP_LEAVE);
     const size_t cleanup_checks = count_op_in_func(cleanup, XI_CLEANUP_ERR_CHECK);
-    TEST_REQUIRE(cleanup_enters > 0 && cleanup_enters == cleanup_leaves &&
-                     cleanup_checks > 0,
+    TEST_REQUIRE(cleanup_enters > 0 && cleanup_enters == cleanup_leaves && cleanup_checks > 0,
                  "stmt_cleanup retains enter/leave/error-check cleanup operations");
-    TEST_REQUIRE(count_op_in_func(panic, XI_TRY) == 1 &&
-                     count_op_in_func(panic, XI_CATCH) == 1 &&
+    TEST_REQUIRE(count_op_in_func(panic, XI_TRY) == 1 && count_op_in_func(panic, XI_CATCH) == 1 &&
                      count_op_in_func(panic, XI_END_TRY) == 2,
                  "stmt_panic retains one panic interval and both normal exits");
 
@@ -11512,13 +11478,11 @@ TEST(cgen_statement_drivers_have_independent_behavior_oracles) {
     const char *panic_end = next_static_after(panic_c);
 
     TEST_REQUIRE(count_between(fail_c, fail_end, "xrt_pending_error =") == 1 &&
-                     count_between(fail_c, fail_end,
-                                   "xrt_pending_error = XR_NULL_VAL;") == 0 &&
+                     count_between(fail_c, fail_end, "xrt_pending_error = XR_NULL_VAL;") == 0 &&
                      count_between(fail_c, fail_end, "return 0;") == 1,
                  "ERR_RETURN writes the value-error channel then returns the ABI default");
     TEST_REQUIRE(count_between(set_c, set_end, "xrt_pending_error =") == 2 &&
-                     count_between(set_c, set_end,
-                                   "xrt_pending_error = XR_NULL_VAL;") == 1 &&
+                     count_between(set_c, set_end, "xrt_pending_error = XR_NULL_VAL;") == 1 &&
                      count_between(set_c, set_end, "return 0;") == 0 &&
                      count_between(set_c, set_end, "_ef") == 0,
                  "ERR_SET and ERR_CATCH stay on the value-error channel");
@@ -11531,27 +11495,23 @@ TEST(cgen_statement_drivers_have_independent_behavior_oracles) {
     char catch_token[96];
     snprintf(check_token, sizeof(check_token), "v%u = xrt_has_pending_error();", check_op->id);
     snprintf(catch_token, sizeof(catch_token), "v%u = xrt_pending_error", check_catch->id);
-    TEST_REQUIRE(count_between(check_c, check_end, check_token) == 1 &&
-                     count_between(check_c, check_end, catch_token) == 1 &&
-                     count_between(check_c, check_end,
-                                   "xrt_pending_error = XR_NULL_VAL;") == 1 &&
-                     count_between(check_c, check_end,
-                                   "if (XR_UNLIKELY(xrt_has_pending_error()))") == 0,
-                 "boolean ERR_CHECK branches to the exact ERR_CATCH value binding");
+    TEST_REQUIRE(
+        count_between(check_c, check_end, check_token) == 1 &&
+            count_between(check_c, check_end, catch_token) == 1 &&
+            count_between(check_c, check_end, "xrt_pending_error = XR_NULL_VAL;") == 1 &&
+            count_between(check_c, check_end, "if (XR_UNLIKELY(xrt_has_pending_error()))") == 0,
+        "boolean ERR_CHECK branches to the exact ERR_CATCH value binding");
 
-    TEST_REQUIRE(count_between(cleanup_c, cleanup_end, "xrt_cleanup_enter();") ==
-                     cleanup_enters &&
-                     count_between(cleanup_c, cleanup_end, "xrt_cleanup_leave();") ==
-                     cleanup_leaves &&
-                     count_between(cleanup_c, cleanup_end, "xrt_cleanup_err_check();") ==
-                     cleanup_checks,
-                 "cleanup drivers emit one exact runtime action per Backend IR operation");
+    TEST_REQUIRE(
+        count_between(cleanup_c, cleanup_end, "xrt_cleanup_enter();") == cleanup_enters &&
+            count_between(cleanup_c, cleanup_end, "xrt_cleanup_leave();") == cleanup_leaves &&
+            count_between(cleanup_c, cleanup_end, "xrt_cleanup_err_check();") == cleanup_checks,
+        "cleanup drivers emit one exact runtime action per Backend IR operation");
     const char *cleanup_enter = strstr(cleanup_c, "xrt_cleanup_enter();");
     const char *cleanup_check = strstr(cleanup_c, "xrt_cleanup_err_check();");
     const char *cleanup_leave = strstr(cleanup_c, "xrt_cleanup_leave();");
-    TEST_REQUIRE(cleanup_enter && cleanup_check && cleanup_leave &&
-                     cleanup_enter < cleanup_check && cleanup_check < cleanup_leave &&
-                     cleanup_leave < cleanup_end,
+    TEST_REQUIRE(cleanup_enter && cleanup_check && cleanup_leave && cleanup_enter < cleanup_check &&
+                     cleanup_check < cleanup_leave && cleanup_leave < cleanup_end,
                  "cleanup frontier preserves enter, error-check, leave order");
 
     XiValue *try_op = find_unique_op_in_func(panic, XI_TRY);
@@ -11567,8 +11527,8 @@ TEST(cgen_statement_drivers_have_independent_behavior_oracles) {
     snprintf(frame_token, sizeof(frame_token), "XrtExcFrame _ef%u;", try_op->id);
     snprintf(setjmp_token, sizeof(setjmp_token), "setjmp(_ef%u.buf)", try_op->id);
     snprintf(goto_token, sizeof(goto_token), "goto L%u;", catch_block->id);
-    snprintf(panic_catch_token, sizeof(panic_catch_token),
-             "v%u = _ef%u.exception;", catch_op->id, try_op->id);
+    snprintf(panic_catch_token, sizeof(panic_catch_token), "v%u = _ef%u.exception;", catch_op->id,
+             try_op->id);
     snprintf(restore_token, sizeof(restore_token), "xrt_exc_top = _ef%u.prev;", try_op->id);
     TEST_REQUIRE(count_between(panic_c, panic_end, frame_token) == 1 &&
                      count_between(panic_c, panic_end, setjmp_token) == 1 &&
@@ -11577,16 +11537,15 @@ TEST(cgen_statement_drivers_have_independent_behavior_oracles) {
                      count_between(panic_c, panic_end, restore_token) == 3,
                  "TRY/CATCH/END_TRY preserve distinct panic-frame behavior");
 
-    printf("  Generated independent statement-driver fixture %zu bytes of C code\n",
-           strlen(code));
+    printf("  Generated independent statement-driver fixture %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_err_return_stops_unreachable_tail) {
-    const char *src = "enum E { Msg(s: string) }\n"
+    const char *src = "enum E { Msg { s: string } }\n"
                       "fn failing() -> i64 {\n"
-                      "    throw E.Msg(\"boom\")\n"
+                      "    throw E.Msg { s: \"boom\" }\n"
                       "    return 0\n"
                       "}\n"
                       "print(failing())\n";
@@ -12050,18 +12009,19 @@ TEST(cgen_direct_suspend_enum_result_consumes_owned_box) {
     const char *src =
         "import mem\n"
         "export enum Failure { Closed, Failed }\n"
-        "export enum Outcome { Unit(id: i64, generation: i64), Echo(id: i64, generation: i64, "
-        "payload: Buffer?), State(id: i64, generation: i64, n: i64), Failed(reason: Failure) }\n"
+        "export enum Outcome { Unit { id: i64, generation: i64 }, Echo { id: i64, generation: "
+        "i64, payload: Buffer? }, State { id: i64, generation: i64, n: i64 }, Failed { reason: "
+        "Failure } }\n"
         "fn pause() { Coro.yield() }\n"
         "fn step() { pause() }\n"
         "fn worker(n: i64) -> Outcome {\n"
-        "    var owned = Outcome.Echo(1, 2, mem.allocZeroed(n))\n"
+        "    var owned = Outcome.Echo { id: 1, generation: 2, payload: mem.allocZeroed(n) }\n"
         "    step()\n"
         "    return owned\n"
         "}\n"
         "fn run() -> i64 {\n"
         "    var result = worker(41)\n"
-        "    return match (result) { Outcome.Echo(_id, _generation, payload) -> "
+        "    return match (result) { Outcome.Echo { payload } -> "
         "len(payload!.asBytes()), _ -> 0 }\n"
         "}\n"
         "print(run())\n";
@@ -15510,9 +15470,8 @@ int main(int argc, char **argv) {
     run_cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations();
     run_cgen_immediate_scalar_constant_inlines_into_place_store();
     run_cgen_native_signed_i64_constant_emits_immediate_without_local();
-    run_cgen_runtime_string_slice_constant_emits_immediate_without_local();
     run_cgen_typed_array_constants_emit_immediate_without_locals();
-    run_cgen_clean_narrow_arithmetic_keeps_required_constant_local();
+    run_cgen_clean_narrow_arithmetic_emits_required_constant();
     run_cgen_scalar_emission_plan_owns_local_rep_and_c_spelling();
     run_cgen_struct_fixed_array_index_keeps_required_constant_local();
     run_cgen_skips_unused_process_builtin_init();

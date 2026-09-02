@@ -482,7 +482,38 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                         result_add(result, member->line - 1, mcol, strlen(mname),
                                    XLSP_TOKEN_ENUM_MEMBER, XLSP_MOD_READONLY);
                     }
+                    EnumMemberNode *variant = &member->as.enum_member;
+                    for (int field = 0; field < variant->payload_count; field++) {
+                        const char *field_name = variant->payload_names[field];
+                        XrNameSpan span = variant->payload_name_spans[field];
+                        result_add(result, span.line - 1, span.column - 1, strlen(field_name),
+                                   XLSP_TOKEN_PROPERTY, XLSP_MOD_DECLARATION | XLSP_MOD_READONLY);
+                    }
                 }
+            }
+            break;
+        }
+
+        case AST_ENUM_CONSTRUCT: {
+            EnumConstructNode *construct = &node->as.enum_construct;
+            collect_tokens_ast(ctx, construct->variant_path);
+            for (int i = 0; i < construct->field_count; i++) {
+                XrNameSpan span = construct->field_name_spans[i];
+                result_add(result, span.line - 1, span.column - 1,
+                           strlen(construct->field_names[i]), XLSP_TOKEN_PROPERTY, 0);
+                collect_tokens_ast(ctx, construct->field_values[i]);
+            }
+            break;
+        }
+
+        case AST_PATTERN_ADT: {
+            PatternAdtNode *pattern = &node->as.pattern_adt;
+            collect_tokens_ast(ctx, pattern->variant);
+            for (int i = 0; i < pattern->count; i++) {
+                XrNameSpan span = pattern->field_name_spans[i];
+                result_add(result, span.line - 1, span.column - 1, strlen(pattern->field_names[i]),
+                           XLSP_TOKEN_PROPERTY, XLSP_MOD_READONLY);
+                collect_tokens_ast(ctx, pattern->patterns[i]);
             }
             break;
         }
@@ -740,6 +771,18 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             collect_tokens_ast(ctx, node->as.ternary.condition);
             collect_tokens_ast(ctx, node->as.ternary.true_expr);
             collect_tokens_ast(ctx, node->as.ternary.false_expr);
+            break;
+
+        case AST_MATCH_EXPR:
+            collect_tokens_ast(ctx, node->as.match_expr.expr);
+            for (int i = 0; i < node->as.match_expr.arm_count; i++)
+                collect_tokens_ast(ctx, node->as.match_expr.arms[i]);
+            break;
+
+        case AST_MATCH_ARM:
+            collect_tokens_ast(ctx, node->as.match_arm.pattern);
+            collect_tokens_ast(ctx, node->as.match_arm.guard);
+            collect_tokens_ast(ctx, node->as.match_arm.body);
             break;
 
         case AST_ARRAY_LITERAL:

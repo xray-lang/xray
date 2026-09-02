@@ -1,5 +1,5 @@
 [package]
-name = "filetest-static-cleanup-zero-residue"
+name = "xray-tests/filetest-static-cleanup-zero-residue"
 version = "1.0.0"
 license = "MIT"
 main = "static_cleanup_zero_residue.xr"

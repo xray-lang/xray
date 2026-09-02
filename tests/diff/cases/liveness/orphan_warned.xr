@@ -6,7 +6,7 @@ import time
 
 fn child(ch: Channel<i64>) -> i64 {
     var got = match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
     print("child done")

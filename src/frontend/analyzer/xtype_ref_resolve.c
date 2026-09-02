@@ -1274,9 +1274,8 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
 
     switch ((XrTypeRefKind) t->kind) {
         case XR_TREF_SCALAR:
-            return xr_scalar_rep_is_float(t->scalar_rep)
-                       ? xr_type_new_float_width(X, t->scalar_rep)
-                       : xr_type_new_int_width(X, t->scalar_rep);
+            return xr_scalar_rep_is_float(t->scalar_rep) ? xr_type_new_float_width(X, t->scalar_rep)
+                                                         : xr_type_new_int_width(X, t->scalar_rep);
         case XR_TREF_STRING:
             return xr_type_new_string(NULL);
         case XR_TREF_BOOL:
@@ -1904,6 +1903,12 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                         xr_free(args);
                     return xr_type_new_error(NULL);
                 }
+                int declared_arity = xa_symbol_links_get_type_param_count(links);
+                if (nargs != declared_arity) {
+                    if (args != stack_args)
+                        xr_free(args);
+                    return report_generic_arity_error(analyzer, tref->name, declared_arity, nargs);
+                }
                 /* A generic value struct annotation resolves to its
                  * monomorphized concrete instance so it is the same canonical
                  * type as the corresponding struct literal. Nominal classes
@@ -1917,11 +1922,19 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                         return mono;
                     }
                 }
-                XrType *result =
-                    head->kind == XR_KIND_INTERFACE
-                        ? xr_type_new_generic_interface(analyzer->isolate, tref->name, args, nargs)
-                        : xr_type_new_generic_instance(analyzer->isolate, tref->name,
-                                                       links->class_info, args, nargs);
+                XrType *result = NULL;
+                if (head->kind == XR_KIND_INTERFACE) {
+                    result =
+                        xr_type_new_generic_interface(analyzer->isolate, tref->name, args, nargs);
+                } else if (head->kind == XR_KIND_ENUM) {
+                    const XrEnumLayout *layout =
+                        links->enum_info ? links->enum_info->layout : head->enum_type.layout;
+                    result = xr_type_new_generic_enum(analyzer->isolate, tref->name, layout, args,
+                                                      nargs);
+                } else {
+                    result = xr_type_new_generic_instance(analyzer->isolate, tref->name,
+                                                          links->class_info, args, nargs);
+                }
                 if (args != stack_args)
                     xr_free(args);
                 return result;

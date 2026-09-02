@@ -7,7 +7,7 @@
 */
 import time
 
-enum WsErr { Failed(string) }
+enum WsErr { Failed { message: string } }
 
 print("========== 测试2：工作窃取公平性 ==========")
 /* 测试参数 */
@@ -88,6 +88,6 @@ for (var i = 0; i < CORO_COUNT; i++) {
 if (all_executed) {
     print("✓ 所有协程都获得了执行机会")
 } else {
-    throw WsErr.Failed("有协程未执行")
+    throw WsErr.Failed { message: "有协程未执行" }
 }
 print("========== 测试2 完成 ==========")

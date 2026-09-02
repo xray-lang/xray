@@ -146,8 +146,8 @@ var r = await t
 
 match (t.poll()) {
     TaskResult.Pending -> print("running")
-    TaskResult.Success(value) -> print(value)
-    TaskResult.Failed(err) -> print(err)
+    TaskResult.Success { value } -> print(value)
+    TaskResult.Failed { error: err } -> print(err)
     TaskResult.Cancelled -> print("cancelled")
     TaskResult.Timeout -> print("timeout")
 }
@@ -192,14 +192,14 @@ const cha = Channel(3)          // 元素类型从首次 send 推断
 const ch = Channel<i64>(10)
 ch.send(42)                             // 阻塞发送
 var v = match (ch.recv()) {
-    Recv.Value(value) -> value
+    Recv.Value { value } -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
 var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
 match (ch.tryRecv()) {
-    Recv.Value(next) -> print(next)
+    Recv.Value { value: next } -> print(next)
     Recv.Empty -> print("empty")
     Recv.Closed -> print("closed")
     Recv.Timeout -> print("timeout")
@@ -228,7 +228,7 @@ fn producer(ch: Channel<i64>) {
 - **MPMC**（多生产者多消费者）。
 - 有缓冲 ch：满则发送方挂起，空则接收方挂起。
 - 无缓冲 ch：发送/接收必须同时握手（rendezvous）。
-- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value(v)`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value { value: v }`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
 - `for (msg in ch)` 等价于阻塞接收直到 channel 关闭且 drained；循环变量类型为 `T`。Channel 不支持 key-value 迭代。
 
 ### 10.6 `select`
@@ -257,7 +257,7 @@ select {
 ```
 
 **语义**：
-- 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value(name)` 的 payload 绑定到 `name`。
+- 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
 - 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
@@ -625,8 +625,8 @@ var r = await t
 
 match (t.poll()) {
     TaskResult.Pending -> print("running")
-    TaskResult.Success(value) -> print(value)
-    TaskResult.Failed(err) -> print(err)
+    TaskResult.Success { value } -> print(value)
+    TaskResult.Failed { error: err } -> print(err)
     TaskResult.Cancelled -> print("cancelled")
     TaskResult.Timeout -> print("timeout")
 }
@@ -671,14 +671,14 @@ const cha = Channel(3)          // element type inferred from the first send
 const ch = Channel<i64>(10)
 ch.send(42)                             // blocking send
 var v = match (ch.recv()) {
-    Recv.Value(value) -> value
+    Recv.Value { value } -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
 var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
 match (ch.tryRecv()) {
-    Recv.Value(next) -> print(next)
+    Recv.Value { value: next } -> print(next)
     Recv.Empty -> print("empty")
     Recv.Closed -> print("closed")
     Recv.Timeout -> print("timeout")
@@ -707,7 +707,7 @@ fn producer(ch: Channel<i64>) {
 - **MPMC** (multi-producer, multi-consumer).
 - Buffered channel: senders suspend when full; receivers suspend when empty.
 - Unbuffered channel: send and receive must rendezvous (synchronous handshake).
-- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value { value: v }`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
 - `for (msg in ch)` is equivalent to blocking receive until the channel is closed and drained; the loop variable has type `T`. Channels do not support key-value iteration.
 
 ### 10.6 `select`
@@ -736,7 +736,7 @@ select {
 ```
 
 **Semantics**:
-- Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value(name)` payload to `name`.
+- Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value { value: name }` payload to `name`.
 - Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).

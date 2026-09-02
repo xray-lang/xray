@@ -5,7 +5,7 @@ export fn suspend_plus(x: i64) -> i64 {
 
 export fn recv_once(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }

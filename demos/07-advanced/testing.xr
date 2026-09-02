@@ -5,7 +5,7 @@ import text
 //
 // Run: xray test demos/07-advanced/testing.xr
 
-enum TestErr { Expected(string) }
+enum TestErr { Expected { message: string } }
 
 // === Basic tests ===
 @test
@@ -47,7 +47,7 @@ fn test_nullable() {
 @test
 fn test_exceptions() {
     assertThrows(() -> {
-        throw TestErr.Expected("expected error")
+        throw TestErr.Expected { message: "expected error" }
     })
 }
 

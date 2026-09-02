@@ -2,7 +2,7 @@
 enum PayloadErr {
     Boom,
     Other,
-    Payload(code: i64)
+    Payload { code: i64 }
 }
 
 fn fail(kind: i64) {
@@ -13,7 +13,7 @@ fn fail(kind: i64) {
         throw PayloadErr.Other
     }
     if (kind == 2) {
-        throw PayloadErr.Payload(7)
+        throw PayloadErr.Payload { code: 7 }
     }
 }
 
@@ -23,7 +23,7 @@ fn classify(kind: i64) -> string {
         fail(kind)
     } catch PayloadErr.Boom {
         tag = "boom"
-    } catch PayloadErr.Payload(code) {
+    } catch PayloadErr.Payload { code } {
         tag = "payload:${code}"
     } catch PayloadErr.Other {
         tag = "other"

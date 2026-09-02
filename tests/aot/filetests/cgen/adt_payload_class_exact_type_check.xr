@@ -7,18 +7,18 @@ class Box {
 }
 
 enum Payload<T> {
-    Item(T),
+    Item { value: T },
     Empty
 }
 
 fn make() -> Payload<Box> {
-    return Payload.Item(Box(7))
+    return Payload.Item { value: Box(7) }
 }
 
 fn score() -> i64 {
     var payload = make()
     match (payload) {
-        Payload.Item(box) -> {
+        Payload.Item { value: box } -> {
             return box.value
         }
         Payload.Empty -> {

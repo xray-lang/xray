@@ -49,7 +49,7 @@ fn test_h2_request_rejects_invalid_method_and_headers() {
     try {
         var headers = Headers()
         headers.add("X-Bad", "a\r\nInjected: y")
-    } catch HttpError.InvalidHeaderValue(_) {
+    } catch HttpError.InvalidHeaderValue { value: _ } {
         invalidValue = true
     }
     assert(invalidValue)
@@ -58,7 +58,7 @@ fn test_h2_request_rejects_invalid_method_and_headers() {
     try {
         var headers = Headers()
         headers.add(":path", "/override")
-    } catch HttpError.InvalidHeaderName(_) {
+    } catch HttpError.InvalidHeaderName { name: _ } {
         pseudoHeader = true
     }
     assert(pseudoHeader)

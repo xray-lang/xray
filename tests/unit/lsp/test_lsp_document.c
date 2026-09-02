@@ -22,6 +22,8 @@
 #include "../../../src/app/lsp/xlsp_completion.h"
 #include "../../../src/app/lsp/xlsp_inlay_hints.h"
 #include "../../../src/app/lsp/xlsp_imports.h"
+#include "../../../src/app/lsp/xlsp_navigation.h"
+#include "../../../src/app/lsp/xlsp_rename.h"
 #include "../../../src/app/lsp/xlsp_semantic_tokens.h"
 #include "../../../src/app/lsp/xlsp_workspace.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
@@ -625,7 +627,7 @@ TEST(completion_enum_descriptor_properties) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "enum Event { Data(value: i64) }\n"
+    const char *content = "enum Event { Data { value: i64 } }\n"
                           "for (variant in Event.variants) {\n"
                           "    for (field in variant.payloads) {\n"
                           "        field.\n"
@@ -1202,6 +1204,129 @@ TEST(throw_effect_inlay_hints_show_inferred_result) {
     xlsp_server_free(server);
 }
 
+TEST(enum_record_fields_share_one_semantic_identity) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    const char *uri = "file:///enum_record_fields.xr";
+    const char *content = "enum Result {\n"
+                          "    Ok { value: i64, code: i64 },\n"
+                          "    Err { value: string }\n"
+                          "}\n"
+                          "var made = Result.Ok { code: 7, value: 42 }\n"
+                          "var selected = match (made) {\n"
+                          "    Result.Ok { value, code: _ } -> value\n"
+                          "    Result.Err { value: message } -> 0\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+    ASSERT(doc->ast != NULL);
+    ASSERT(!doc->parse_error);
+
+    int declaration_line = 0;
+    int declaration_col = 0;
+    int construct_line = 0;
+    int construct_col = 0;
+    int pattern_line = 0;
+    int pattern_col = 0;
+    ASSERT(content_position_of_nth(content, "value", 1, &declaration_line, &declaration_col));
+    ASSERT(content_position_of_nth(content, "value", 3, &construct_line, &construct_col));
+    ASSERT(content_position_of_nth(content, "value", 4, &pattern_line, &pattern_col));
+
+    XrLspPosition construct_pos = {(uint32_t) construct_line, (uint32_t) construct_col + 1};
+    XrJsonValue *definition = xlsp_analyze_definition(server, doc, construct_pos);
+    ASSERT(definition != NULL);
+    ASSERT_STR_EQ(xjson_get_string(definition, "uri"), uri);
+    XrJsonValue *definition_start =
+        xjson_get_object(xjson_get_object(definition, "range"), "start");
+    ASSERT_EQ(xjson_get_int(definition_start, "line"), declaration_line);
+    ASSERT_EQ(xjson_get_int(definition_start, "character"), declaration_col);
+    xjson_free(definition);
+
+    XrJsonValue *references = xlsp_analyze_references(server, doc, construct_pos);
+    ASSERT(references != NULL);
+    ASSERT_EQ(xjson_array_len(references), 3);
+    xjson_free(references);
+
+    XrJsonValue *hover = xlsp_analyze_hover(
+        server, doc, (XrLspPosition) {(uint32_t) pattern_line, (uint32_t) pattern_col + 1});
+    ASSERT(hover != NULL);
+    const char *hover_text = hover_markdown_value(hover);
+    ASSERT(hover_text != NULL);
+    ASSERT(strstr(hover_text, "Result.Ok.value: i64") != NULL);
+    xjson_free(hover);
+
+    XrJsonValue *rename = xlsp_analyze_rename(server, doc, construct_pos, "payload");
+    ASSERT(rename != NULL);
+    XrJsonValue *changes = xjson_get_object(rename, "changes");
+    XrJsonValue *edits = changes ? xjson_get_array(changes, uri) : NULL;
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 3);
+    xjson_free(rename);
+
+    XlspSemanticTokensResult *tokens = xlsp_analyze_semantic_tokens(doc);
+    ASSERT(tokens != NULL);
+    int property_count = 0;
+    bool declaration_is_property = false;
+    bool construct_is_property = false;
+    bool pattern_is_property = false;
+    for (int i = 0; i < tokens->count; i++) {
+        XlspSemanticToken *token = &tokens->tokens[i];
+        if (token->type != XLSP_TOKEN_PROPERTY || token->length != 5)
+            continue;
+        property_count++;
+        if (token->line == declaration_line && token->start_char == declaration_col)
+            declaration_is_property = true;
+        if (token->line == construct_line && token->start_char == construct_col)
+            construct_is_property = true;
+        if (token->line == pattern_line && token->start_char == pattern_col)
+            pattern_is_property = true;
+    }
+    ASSERT(property_count >= 5);
+    ASSERT(declaration_is_property);
+    ASSERT(construct_is_property);
+    ASSERT(pattern_is_property);
+    xlsp_semantic_tokens_free(tokens);
+    xlsp_server_free(server);
+}
+
+TEST(enum_payload_completion_distinguishes_constructor_and_pattern) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *expression_uri = "file:///enum_constructor_completion.xr";
+    const char *expression = "enum Result { Ok { value: i64, code: string } }\n"
+                             "var made = Result.";
+    XrLspDocument *expression_doc = xlsp_document_open(server, expression_uri, expression, 1);
+    ASSERT(expression_doc != NULL);
+    xlsp_parse_document(expression_doc, server);
+    XrJsonValue *expression_items = xlsp_analyze_completion(
+        server, expression_doc, (XrLspPosition) {1, (uint32_t) strlen("var made = Result.")});
+    XrJsonValue *constructor = json_array_find_label(expression_items, "Ok");
+    ASSERT(constructor != NULL);
+    ASSERT_STR_EQ(xjson_get_string(constructor, "insertText"), "Ok { value: ${1}, code: ${2} }");
+    ASSERT_EQ(xjson_get_int(constructor, "insertTextFormat"), 2);
+    xjson_free(expression_items);
+
+    const char *pattern_uri = "file:///enum_pattern_completion.xr";
+    const char *pattern = "enum Result { Ok { value: i64, code: string } }\n"
+                          "var made = Result.Ok { value: 1, code: \"x\" }\n"
+                          "var selected = match (made) {\n"
+                          "    Result.\n"
+                          "}\n";
+    XrLspDocument *pattern_doc = xlsp_document_open(server, pattern_uri, pattern, 1);
+    ASSERT(pattern_doc != NULL);
+    xlsp_parse_document(pattern_doc, server);
+    XrJsonValue *pattern_items = xlsp_analyze_completion(
+        server, pattern_doc, (XrLspPosition) {3, (uint32_t) strlen("    Result.")});
+    XrJsonValue *pattern_item = json_array_find_label(pattern_items, "Ok");
+    ASSERT(pattern_item != NULL);
+    ASSERT_STR_EQ(xjson_get_string(pattern_item, "insertText"), "Ok { value, code }");
+    ASSERT_EQ(xjson_get_int(pattern_item, "insertTextFormat"), 0);
+    xjson_free(pattern_items);
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
@@ -1267,7 +1392,7 @@ TEST(code_action_payload_enum_iteration_to_variants) {
     ASSERT(server != NULL);
 
     const char *uri = "file:///enum_quickfix.xr";
-    const char *content = "enum Result { Ok(value: i64), Error(message: string) }\n"
+    const char *content = "enum Result { Ok { value: i64 }, Error { message: string } }\n"
                           "for (value in Result) {\n"
                           "    print(value)\n"
                           "}\n";
@@ -1296,6 +1421,55 @@ TEST(code_action_payload_enum_iteration_to_variants) {
     ASSERT_EQ(xjson_get_int(start, "line"), 1);
     ASSERT_EQ(xjson_get_int(start, "character"), 20);
 
+    xjson_free(actions);
+    xjson_free(params);
+    xlsp_server_free(server);
+}
+
+TEST(code_action_fills_only_missing_constructor_fields_in_declaration_order) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *uri = "file:///enum_missing_fields.xr";
+    const char *content = "enum Result {\n"
+                          "    Ok { value: i64, code: string, ready: bool },\n"
+                          "    Err { message: string }\n"
+                          "}\n"
+                          "var made = Result.Ok { value: 1 }\n"
+                          "var selected = match (made) {\n"
+                          "    Result.Ok { value } -> value\n"
+                          "    Result.Err { message } -> 0\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+    ASSERT(doc->ast != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        uri, 4, 18, 19, "enum construction 'Result.Ok' is missing field 'code'");
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+    XrJsonValue *action = find_action_with_title(actions, "Add missing fields to 'Result.Ok'");
+    ASSERT(action != NULL);
+    XrJsonValue *edit = xjson_get_object(action, "edit");
+    XrJsonValue *changes = edit ? xjson_get_object(edit, "changes") : NULL;
+    XrJsonValue *edits = changes ? xjson_get_array(changes, uri) : NULL;
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 1);
+    XrJsonValue *text_edit = xjson_array_get(edits, 0);
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), ", code: code, ready: ready");
+    XrJsonValue *edit_range = xjson_get_object(text_edit, "range");
+    XrJsonValue *edit_start = edit_range ? xjson_get_object(edit_range, "start") : NULL;
+    ASSERT(edit_start != NULL);
+    ASSERT_EQ(xjson_get_int(edit_start, "line"), 4);
+    ASSERT_EQ(xjson_get_int(edit_start, "character"), 31);
+    xjson_free(actions);
+    xjson_free(params);
+
+    params =
+        make_code_action_params(uri, 6, 4, 13, "enum pattern 'Result.Ok' is missing field 'code'");
+    actions = xlsp_handle_code_action(server, params);
+    ASSERT(find_action_with_title(actions, "Add missing fields") == NULL);
     xjson_free(actions);
     xjson_free(params);
     xlsp_server_free(server);
@@ -1731,9 +1905,12 @@ int main(int argc, char **argv) {
     RUN_TEST(block_import_path_uses_shared_quoted_literal_decoder);
     RUN_TEST(param_mode_inlay_hints_describe_modes);
     RUN_TEST(throw_effect_inlay_hints_show_inferred_result);
+    RUN_TEST(enum_record_fields_share_one_semantic_identity);
+    RUN_TEST(enum_payload_completion_distinguishes_constructor_and_pattern);
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_payload_enum_iteration_to_variants);
+    RUN_TEST(code_action_fills_only_missing_constructor_fields_in_declaration_order);
     RUN_TEST(code_action_go_capture_has_no_keyword_rewrite);
 
     printf("\nReference-cycle code actions (task 247 phase H):\n");

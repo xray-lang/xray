@@ -29,7 +29,7 @@ fn test_header_modes() {
 
     var names: Array<string> = ["user", "score"]
     var explicit = defaultParseOptions()
-    explicit.header = CsvHeader.Explicit(names)
+    explicit.header = CsvHeader.Explicit { names: names }
     var explicitDoc = csv.parse("Alice,30\nBob,25", explicit)
     assertEqual(explicitDoc.headers[0], "user")
     assertEqual(explicitDoc.rows[1][1], "25")
@@ -56,7 +56,7 @@ fn test_parse_report_and_strict_error() {
         csv.parse("a,b\n1")
     } catch (e: CsvError) {
         rejected = match (e) {
-            CsvError.FieldCountMismatch(offset, line, record, column, message) -> record == 1,
+            CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } -> record == 1,
             _ -> false
         }
     }
@@ -66,7 +66,7 @@ fn test_parse_report_and_strict_error() {
 @test
 fn test_exact_and_auto_delimiters() {
     var tsvOptions = defaultParseOptions()
-    tsvOptions.delimiter = CsvDelimiter.Exact('\t')
+    tsvOptions.delimiter = CsvDelimiter.Exact {  }
     var tsv = csv.parse("a\tb\tc\n1\t2\t3", tsvOptions)
     assertEqual(tsv.rows[0][1], "b")
 
@@ -136,7 +136,7 @@ fn test_limits() {
         csv.parse("a,b", options)
     } catch (e: CsvError) {
         rejected = match (e) {
-            CsvError.ColumnLimitExceeded(limit) -> limit == 1,
+            CsvError.ColumnLimitExceeded { limit } -> limit == 1,
             _                                   -> false
         }
     }

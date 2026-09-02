@@ -1,5 +1,5 @@
 enum Choice {
-    Value(i64),
+    Value { value: i64 },
     Empty
 }
 
@@ -20,9 +20,9 @@ var point_a: Point = { x: 1, y: 2 }
 var point_b: Point = { y: 2, x: 1 }
 assertEqual(point_a, point_b)
 
-assertEqual(Choice.Value(3), Choice.Value(3))
-assertPanics(() -> { assertEqual(Choice.Value(3), Choice.Value(4)) })
-assertPanics(() -> { assertEqual(Choice.Value(3), Choice.Empty) })
+assertEqual(Choice.Value { value: 3 }, Choice.Value { value: 3 })
+assertPanics(() -> { assertEqual(Choice.Value { value: 3 }, Choice.Value { value: 4 }) })
+assertPanics(() -> { assertEqual(Choice.Value { value: 3 }, Choice.Empty) })
 
 assertEqual(DerivedPoint(1, 2), DerivedPoint(1, 2))
 assertPanics(() -> { assertEqual(DerivedPoint(1, 2), DerivedPoint(1, 3)) })

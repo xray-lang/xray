@@ -9,20 +9,20 @@ fn test_recv_match_keeps_payload_status() {
     ch.send(null)
 
     var zero = match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
     assertEqual(zero, 0)
 
     var nil = match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> 7
     }
     assertEqual(nil, null)
 
     ch.close()
     var closed = match (ch.recv()) {
-        Recv.Value(_) -> false
+        Recv.Value { value: _ } -> false
         _ -> true
     }
     assertEqual(closed, true)

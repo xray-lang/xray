@@ -3,24 +3,24 @@
 // constructed, destructured via `match`, thrown, and caught correctly.
 
 enum TestErr {
-    Msg(s: string),
-    Wrapped(msg: string, cause: string)
+    Msg { s: string },
+    Wrapped { msg: string, cause: string }
 }
 
 @test
 fn test_enum_basic_construct() {
-    var e = TestErr.Msg("hi")
+    var e = TestErr.Msg { s: "hi" }
     match (e) {
-        TestErr.Msg(s) -> { assertEqual(s, "hi") }
+        TestErr.Msg { s } -> { assertEqual(s, "hi") }
         _ -> { assert(false) }
     }
 }
 
 @test
 fn test_enum_multi_field() {
-    var e = TestErr.Wrapped("outer", "inner")
+    var e = TestErr.Wrapped { msg: "outer", cause: "inner" }
     match (e) {
-        TestErr.Wrapped(msg, cause) -> {
+        TestErr.Wrapped { msg, cause } -> {
             assertEqual(msg, "outer")
             assertEqual(cause, "inner")
         }
@@ -30,13 +30,13 @@ fn test_enum_multi_field() {
 
 @test
 fn test_enum_cause_chain() {
-    var inner = TestErr.Msg("inner")
-    var outer = TestErr.Wrapped("outer", "inner")
+    var inner = TestErr.Msg { s: "inner" }
+    var outer = TestErr.Wrapped { msg: "outer", cause: "inner" }
     match (outer) {
-        TestErr.Wrapped(msg, cause) -> {
+        TestErr.Wrapped { msg, cause } -> {
             assertEqual(msg, "outer")
             match (inner) {
-                TestErr.Msg(s) -> { assertEqual(s, cause) }
+                TestErr.Msg { s } -> { assertEqual(s, cause) }
                 _ -> { assert(false) }
             }
         }
@@ -46,7 +46,7 @@ fn test_enum_cause_chain() {
 
 @test
 fn test_enum_to_string() {
-    var e = TestErr.Msg("boom")
+    var e = TestErr.Msg { s: "boom" }
     var s = string(e)
     assert(len(s) > 0)
 }
@@ -55,9 +55,9 @@ fn test_enum_to_string() {
 fn test_enum_throw_and_catch() {
     var caught_msg = ""
     try {
-        throw TestErr.Msg("oops")
+        throw TestErr.Msg { s: "oops" }
     } catch (e) {
-        match (e) { TestErr.Msg(s) -> { caught_msg = s } }
+        match (e) { TestErr.Msg { s } -> { caught_msg = s } }
     }
     assertEqual(caught_msg, "oops")
 }
@@ -67,10 +67,10 @@ fn test_enum_throw_with_wrapped() {
     var primary_msg = ""
     var cause_msg = ""
     try {
-        throw TestErr.Wrapped("wrapped", "primary")
+        throw TestErr.Wrapped { msg: "wrapped", cause: "primary" }
     } catch (e) {
         match (e) {
-            TestErr.Wrapped(msg, cause) -> {
+            TestErr.Wrapped { msg, cause } -> {
                 primary_msg = msg
                 cause_msg = cause
             }
@@ -84,7 +84,7 @@ fn test_enum_throw_with_wrapped() {
 fn test_enum_typed_catch() {
     var caught = false
     try {
-        throw TestErr.Msg("annotated")
+        throw TestErr.Msg { s: "annotated" }
     } catch (e: TestErr) {
         caught = true
     }
@@ -92,14 +92,14 @@ fn test_enum_typed_catch() {
 }
 
 fn make_failure(msg: string) -> TestErr {
-    return TestErr.Msg(msg)
+    return TestErr.Msg { s: msg }
 }
 
 @test
 fn test_enum_function_return() {
     var e = make_failure("via fn")
     match (e) {
-        TestErr.Msg(s) -> { assertEqual(s, "via fn") }
+        TestErr.Msg { s } -> { assertEqual(s, "via fn") }
         _ -> { assert(false) }
     }
 }

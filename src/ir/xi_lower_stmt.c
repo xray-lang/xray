@@ -544,51 +544,24 @@ static const char *stmt_adt_subject_enum_name(struct XrType *type) {
     return NULL;
 }
 
-static bool stmt_adt_variant_names(const AstNode *variant, const char **owner_out,
-                                   const char **member_out) {
-    if (owner_out)
-        *owner_out = NULL;
-    if (member_out)
-        *member_out = NULL;
-    if (!variant)
-        return false;
-    if (variant->type == AST_ENUM_ACCESS) {
-        if (owner_out)
-            *owner_out = variant->as.enum_access.enum_name;
-        if (member_out)
-            *member_out = variant->as.enum_access.member_name;
-        return variant->as.enum_access.member_name != NULL;
-    }
-    if (variant->type == AST_MEMBER_ACCESS) {
-        const MemberAccessNode *ma = &variant->as.member_access;
-        if (member_out)
-            *member_out = ma->name;
-        if (owner_out && ma->object && ma->object->type == AST_VARIABLE)
-            *owner_out = ma->object->as.variable.name;
-        return ma->name != NULL;
-    }
-    return false;
-}
-
-static int stmt_adt_member_index(XiLower *l, struct XrType *subject_type, const AstNode *variant) {
-    const char *owner_name = NULL;
-    const char *member_name = NULL;
-    if (!stmt_adt_variant_names(variant, &owner_name, &member_name) || !member_name)
+static int stmt_adt_pattern_member_index(XiLower *l, struct XrType *subject_type,
+                                         const AstNode *pattern) {
+    if (!l || !l->analyzer || !pattern)
+        return -1;
+    const XaEnumRecordPlan *plan = xa_analyzer_get_enum_record_plan(l->analyzer, pattern);
+    if (!plan || !plan->complete || plan->kind != XA_ENUM_VARIANT_PATTERN)
         return -1;
 
     const char *subject_name = stmt_adt_subject_enum_name(subject_type);
-    const char *enum_name = subject_name ? subject_name : owner_name;
-    if (!enum_name)
+    XaSymbol *subject_symbol = stmt_lookup_enum_symbol(l, subject_name);
+    if (!subject_symbol || subject_symbol->id != plan->enum_symbol_id)
         return -1;
-    if (subject_name && owner_name && strcmp(subject_name, owner_name) != 0)
-        return -1;
-
-    XaSymbol *enum_sym = stmt_lookup_enum_symbol(l, enum_name);
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, enum_sym);
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, subject_symbol);
     XaEnumInfo *info = links ? links->enum_info : NULL;
-    if (!info)
+    if (!info || plan->variant_ordinal >= info->variant_count || !info->layout ||
+        info->layout->layout_id != plan->enum_layout_id)
         return -1;
-    return xa_enum_info_find_variant(info, member_name);
+    return plan->variant_ordinal;
 }
 
 static XaSymbolLinks *stmt_adt_subject_links(XiLower *l, struct XrType *subject_type) {
@@ -1270,6 +1243,20 @@ static bool lower_match_mark_exhaustive_adt_pattern(XiLower *l, struct XrType *s
         }
         return marked;
     }
+    if (pattern->type == AST_PATTERN_LITERAL && pattern->as.pattern_literal.value) {
+        int member_index = stmt_adt_pattern_member_index(l, subject_type, pattern);
+        XaSymbolLinks *links = stmt_adt_subject_links(l, subject_type);
+        XaEnumInfo *info = links ? links->enum_info : NULL;
+        if (member_index < 0 || member_index >= member_count || !info || !info->variants ||
+            (uint32_t) member_index >= info->variant_count ||
+            info->variants[member_index].payload_count != 0)
+            return false;
+        if (!covered[member_index]) {
+            covered[member_index] = true;
+            (*covered_count)++;
+        }
+        return true;
+    }
     if (pattern->type != AST_PATTERN_ADT)
         return false;
 
@@ -1279,7 +1266,10 @@ static bool lower_match_mark_exhaustive_adt_pattern(XiLower *l, struct XrType *s
             return false;
     }
 
-    int member_index = stmt_adt_member_index(l, subject_type, ap->variant);
+    const XaEnumRecordPlan *plan = xa_analyzer_get_enum_record_plan(l->analyzer, pattern);
+    int member_index = plan && plan->complete && plan->kind == XA_ENUM_VARIANT_PATTERN
+                           ? (int) plan->variant_ordinal
+                           : -1;
     if (member_index < 0 || member_index >= member_count)
         return false;
     if (!covered[member_index]) {
@@ -1289,14 +1279,14 @@ static bool lower_match_mark_exhaustive_adt_pattern(XiLower *l, struct XrType *s
     return true;
 }
 
-static bool lower_match_is_exhaustive_adt(XiLower *l, struct XrType *subject_type,
-                                          MatchExprNode *m) {
+static int lower_match_exhaustive_adt_completion(XiLower *l, struct XrType *subject_type,
+                                                 MatchExprNode *m) {
     if (!l || !m)
-        return false;
+        return -1;
     XaSymbolLinks *links = stmt_adt_subject_links(l, subject_type);
     XaEnumInfo *info = links ? links->enum_info : NULL;
     if (!info || !info->is_payload_enum || info->variant_count == 0 || info->variant_count > 256)
-        return false;
+        return -1;
 
     bool stack_covered[256];
     memset(stack_covered, 0, sizeof(stack_covered));
@@ -1304,18 +1294,18 @@ static bool lower_match_is_exhaustive_adt(XiLower *l, struct XrType *subject_typ
     for (int i = 0; i < m->arm_count; i++) {
         AstNode *arm_node = m->arms[i];
         if (!arm_node || arm_node->type != AST_MATCH_ARM)
-            return false;
+            return -1;
         MatchArmNode *arm = &arm_node->as.match_arm;
         if (arm->guard)
             continue;
         if (pattern_is_irrefutable_binding(arm->pattern))
-            return true;
+            return i;
         lower_match_mark_exhaustive_adt_pattern(l, subject_type, arm->pattern, stack_covered,
                                                 (int) info->variant_count, &covered_count);
         if (covered_count == (int) info->variant_count)
-            return true;
+            return i;
     }
-    return false;
+    return -1;
 }
 
 /* Read object/Json field `fname` from `subject` (static Json index when known,
@@ -1384,46 +1374,53 @@ static struct XrType *tuple_elem_type(XiLower *l, struct XrType *subject_type, i
     return l->type_any;
 }
 
-/* Variant-ordinal test for an ADT-enum value: read logical ADT field 0 (the
- * tag) and compare it against the pattern variant's static ordinal. Logical
- * ADT fields are lowered through enum aggregate helpers in the VM/AOT backend,
- * so this numbering is an IR convention, not a runtime XrObjectInstance layout. */
-static XiValue *lower_adt_variant_tag_test(XiLower *l, XiValue *subject, AstNode *variant) {
-    int member_index = stmt_adt_member_index(l, subject->type, variant);
-    struct XrType *tag_type = member_index >= 0 ? l->type_int : l->type_any;
-    XiValue *tag = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, tag_type, 1);
-    if (!tag)
+/* Pattern matching consumes the analyzer's exact variant ordinal. No target
+ * may reconstruct the tag from the variant spelling or from a field-load
+ * convention. */
+static XiValue *lower_adt_variant_tag_test(XiLower *l, XiValue *subject, AstNode *pattern) {
+    const XaEnumRecordPlan *plan = xa_analyzer_get_enum_record_plan(l->analyzer, pattern);
+    if (!plan || !plan->complete || plan->kind != XA_ENUM_VARIANT_PATTERN) {
+        l->had_error = true;
         return NULL;
-    tag->args[0] = subject;
-    tag->aux_int = 0; /* logical ADT field 0 = variant tag */
-    tag->aux_kind = XI_AUX_KIND_ADT_FIELD;
-
-    if (member_index >= 0) {
-        XiValue *want = xi_const_int(l->func, l->cur_block, member_index, l->type_int);
-        if (!want)
-            return NULL;
-        return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, want);
     }
-
-    XiValue *variant_val = xi_lower_expr(l, variant);
-    if (!variant_val)
+    XiValue *test = xi_value_new(l->func, l->cur_block, XI_VARIANT_TEST, l->type_bool, 1);
+    if (!test)
         return NULL;
-    return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, variant_val);
+    test->args[0] = subject;
+    test->aux_int = plan->variant_ordinal;
+    test->line = (uint32_t) pattern->line;
+    return test;
+}
+
+static XiValue *lower_adt_literal_variant_tag_test(XiLower *l, XiValue *subject, AstNode *pattern) {
+    int ordinal = stmt_adt_pattern_member_index(l, subject->type, pattern);
+    if (ordinal < 0) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *test = xi_value_new(l->func, l->cur_block, XI_VARIANT_TEST, l->type_bool, 1);
+    if (!test)
+        return NULL;
+    test->args[0] = subject;
+    test->aux_int = ordinal;
+    test->line = pattern ? (uint32_t) pattern->line : 0u;
+    return test;
 }
 
 /* A bare enum-member pattern (`Recv.Empty`, no payload parens) parses as a
  * literal. When the subject is an ADT enum, it must still test the variant
  * ordinal rather than compare against the variant singleton, otherwise the
  * tagged-instance representation makes the match always fall through. */
-static bool lower_literal_is_adt_variant(XiLower *l, XiValue *subject, AstNode *value) {
-    if (!value)
+static bool lower_literal_is_adt_variant(XiLower *l, XiValue *subject, AstNode *pattern) {
+    if (!pattern || pattern->type != AST_PATTERN_LITERAL || !pattern->as.pattern_literal.value)
         return false;
+    AstNode *value = pattern->as.pattern_literal.value;
     if (value->type != AST_ENUM_ACCESS && value->type != AST_MEMBER_ACCESS)
         return false;
     XaSymbolLinks *links = stmt_adt_subject_links(l, subject->type);
     if (!links || !links->enum_info || !links->enum_info->is_payload_enum)
         return false;
-    return stmt_adt_member_index(l, subject->type, value) >= 0;
+    return stmt_adt_pattern_member_index(l, subject->type, pattern) >= 0;
 }
 
 XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pattern) {
@@ -1443,8 +1440,8 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             if (pval && pval->type == AST_VARIABLE)
                 return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
 
-            if (lower_literal_is_adt_variant(l, subject, pval))
-                return lower_adt_variant_tag_test(l, subject, pval);
+            if (lower_literal_is_adt_variant(l, subject, pattern))
+                return lower_adt_literal_variant_tag_test(l, subject, pattern);
 
             XiValue *lit = xi_lower_expr(l, pattern->as.pattern_literal.value);
             if (!lit)
@@ -1515,11 +1512,7 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
         }
 
         case AST_PATTERN_ADT: {
-            /* ADT variant destructure: field[0] stores the variant ordinal.
-             * Prefer a static ordinal compare so VM and AOT avoid dynamic enum
-             * member lookup in every pattern test. */
-            PatternAdtNode *ap = &pattern->as.pattern_adt;
-            return lower_adt_variant_tag_test(l, subject, ap->variant);
+            return lower_adt_variant_tag_test(l, subject, pattern);
         }
 
         case AST_PATTERN_OBJECT: {
@@ -1609,22 +1602,35 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
         }
     }
 
-    /* ADT variant destructure: bind logical payload fields.
-     * Logical field 0 is the tag; payloads start at logical field 1. */
+    /* Payload values are projected by declaration ordinal after the variant
+     * test has selected this arm. */
     if (pattern->type == AST_PATTERN_ADT) {
         PatternAdtNode *ap = &pattern->as.pattern_adt;
+        const XaEnumRecordPlan *plan = xa_analyzer_get_enum_record_plan(l->analyzer, pattern);
+        if (!plan || !plan->complete || plan->kind != XA_ENUM_VARIANT_PATTERN ||
+            plan->source_field_count != (uint16_t) ap->count ||
+            (ap->count > 0 && !plan->source_to_slot)) {
+            l->had_error = true;
+            return;
+        }
         for (int i = 0; i < ap->count; i++) {
             AstNode *sub = ap->patterns[i];
             if (!sub || sub->type == AST_PATTERN_WILDCARD)
                 continue;
+            uint16_t slot = plan->source_to_slot[i];
+            if (slot >= plan->declaration_field_count) {
+                l->had_error = true;
+                return;
+            }
             struct XrType *payload_type =
-                xa_analyzer_resolve_adt_payload_type(l->analyzer, subject->type, ap->variant, i);
-            XiValue *field = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, payload_type, 1);
+                xa_analyzer_resolve_adt_payload_type(l->analyzer, subject->type, ap->variant, slot);
+            XiValue *field =
+                xi_value_new(l->func, l->cur_block, XI_VARIANT_PROJECT, payload_type, 1);
             if (!field)
                 continue;
             field->args[0] = subject;
-            field->aux_int = 1 + i; /* logical ADT payload field */
-            field->aux_kind = XI_AUX_KIND_ADT_FIELD;
+            field->aux_int = xi_variant_pack_projection(plan->variant_ordinal, slot);
+            field->line = (uint32_t) pattern->line;
             lower_pattern_bindings(l, field, sub);
         }
     }
@@ -2032,7 +2038,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     int arm_count = m->arm_count;
     if (!lower_match_validate_arm_count(l, arm_count, node->line))
         return NULL;
-    bool exhaustive_adt = lower_match_is_exhaustive_adt(l, subject->type, m);
+    int exhaustive_adt_completion = lower_match_exhaustive_adt_completion(l, subject->type, m);
     XiBlock *stack_body_exits[XI_LOWER_MATCH_EXIT_STACK_CAP];
     XiValue *stack_body_vals[XI_LOWER_MATCH_EXIT_STACK_CAP];
     LowerMatchExitList exits;
@@ -2086,7 +2092,16 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             }
         }
 
+        /* Once the analyzer-proven prefix covers every variant, reaching this
+         * arm proves its refutable variant test. Emitting an impossible false
+         * successor would leak a synthetic UNREACHABLE block into the
+         * canonical program instead of preserving the proof in the CFG. */
+        if (i == exhaustive_adt_completion)
+            test = NULL;
+
         if (!test) {
+            if (defer_bindings)
+                lower_pattern_bindings(l, subject, arm->pattern);
             if (!lower_match_emit_arm_body(l, arm, &exits, merge, node->line))
                 return NULL;
             l->cur_block = NULL;
@@ -2128,7 +2143,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     }
 
     if (l->cur_block && l->cur_block != merge) {
-        if (exhaustive_adt) {
+        if (exhaustive_adt_completion >= 0) {
             l->cur_block->kind = XI_BLOCK_UNREACHABLE;
             l->cur_block->control = NULL;
             l->cur_block = NULL;

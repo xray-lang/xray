@@ -4,7 +4,7 @@ var packet = (7, reply)
 packet.1.send(42)
 
 var value = match (reply.recv()) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> -1
 }
 reply.close()

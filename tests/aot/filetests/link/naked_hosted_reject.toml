@@ -1,5 +1,5 @@
 [package]
-name = "filetest-naked-hosted-reject"
+name = "xray-tests/filetest-naked-hosted-reject"
 version = "1.0.0"
 license = "MIT"
 main = "naked_hosted_reject.xr"

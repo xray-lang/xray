@@ -35,7 +35,7 @@ try {
     print(regex.test(invalid, "a"))
 } catch (e: RegexError) {
     match (e) {
-        RegexError.InvalidPattern(message, position) -> {
+        RegexError.InvalidPattern { message, position } -> {
             error_position = position
         },
     }

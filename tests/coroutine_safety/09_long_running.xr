@@ -9,14 +9,14 @@ print("========== 测试9：长时间运行与抢占调度 ==========")
 
 fn tryRecvValue(ch) {
     return match (ch.tryRecv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> null
     }
 }
 
 fn recvTimeoutOk(ch, timeout_ms) -> bool {
     return match (ch.recvTimeout(timeout_ms)) {
-        Recv.Value(_) -> true
+        Recv.Value { value: _ } -> true
         _ -> false
     }
 }
@@ -85,7 +85,7 @@ fn test_cancel_running_coro() {
     var cancel_result = task.awaitResult()
     var was_cancelled = match (cancel_result) {
         TaskResult.Cancelled -> true
-        TaskResult.Success(value) -> value == "cancelled"
+        TaskResult.Success { value } -> value == "cancelled"
         _ -> false
     }
     print("任务已取消:", was_cancelled)

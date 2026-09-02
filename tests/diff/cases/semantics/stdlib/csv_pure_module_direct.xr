@@ -31,7 +31,7 @@ try {
     csv.parse("a,b\n1")
 } catch (e: CsvError) {
     print(match (e) {
-        CsvError.FieldCountMismatch(offset, line, record, column, message) -> record == 1,
+        CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } -> record == 1,
         _ -> false
     })
 }
@@ -42,7 +42,7 @@ var auto = csv.parse("a;b;c\n1;2;3", autoOptions)
 print(auto.rows[1][2])
 
 var tsvOptions = defaultParseOptions()
-tsvOptions.delimiter = CsvDelimiter.Exact('\t')
+tsvOptions.delimiter = CsvDelimiter.Exact {  }
 var tsv = csv.parse("x\ty\n4\t5", tsvOptions)
 print(tsv.rows[1][1])
 
@@ -69,7 +69,7 @@ try {
     csv.parse("a,b", limited)
 } catch (e: CsvError) {
     print(match (e) {
-        CsvError.ColumnLimitExceeded(limit) -> limit == 1,
+        CsvError.ColumnLimitExceeded { limit } -> limit == 1,
         _                                   -> false
     })
 }

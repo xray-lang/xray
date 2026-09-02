@@ -808,6 +808,12 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.member_access.object);
             break;
 
+        case AST_ENUM_CONSTRUCT:
+            canon_node(ctx, node->as.enum_construct.variant_path);
+            for (int i = 0; i < node->as.enum_construct.field_count; i++)
+                canon_node(ctx, node->as.enum_construct.field_values[i]);
+            break;
+
         case AST_MEMBER_SET:
             canon_node(ctx, node->as.member_set.object);
             canon_node(ctx, node->as.member_set.value);

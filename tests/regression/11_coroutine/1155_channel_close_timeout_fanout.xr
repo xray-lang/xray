@@ -1,14 +1,14 @@
 fn recv_timeout_until_close(ch: Channel<i64>, ready: Channel<i64>, done: Channel<i64>, timeout_ms: i64) {
     ready.send(1)
     match (ch.recvTimeout(timeout_ms)) {
-        Recv.Value(value) -> done.send(value)
+        Recv.Value { value } -> done.send(value)
         _ -> done.send(-1)
     }
 }
 
 fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }

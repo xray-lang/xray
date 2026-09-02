@@ -11,28 +11,28 @@ fn sent(r: SendResult) -> bool {
 
 fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
 }
 
 fn recv_string(ch: Channel<string>) -> string {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> ""
     }
 }
 
 fn recv_array(ch: Channel<Array<i64>>) -> Array<i64> {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> []
     }
 }
 
 fn recv_opt_int(ch: Channel<i64?>) -> i64? {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> null
     }
 }
@@ -68,7 +68,7 @@ fn test_generic_channel() {
     // Empty channel
     var r1 = tryCh.tryRecv()
     var ok1 = match (r1) {
-        Recv.Value(_) -> true
+        Recv.Value { value: _ } -> true
         _ -> false
     }
     assert(!ok1)
@@ -76,11 +76,11 @@ fn test_generic_channel() {
     tryCh.send(999)
     var r2 = tryCh.tryRecv()
     var ok2 = match (r2) {
-        Recv.Value(_) -> true
+        Recv.Value { value: _ } -> true
         _ -> false
     }
     var val2 = match (r2) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
     assert(ok2)

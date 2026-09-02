@@ -23,12 +23,12 @@
 // Error type: a single variant carrying a string payload lets tests
 // assert on the user-visible message via pattern matching.
 enum AppErr {
-    Msg(s: string)
+    Msg { s: string }
 }
 
 // 1. Helper functions used by multiple tests
-fn thr7() { throw AppErr.Msg("from_fn") }
-fn d4() { throw AppErr.Msg("deep") }
+fn thr7() { throw AppErr.Msg { s: "from_fn" } }
+fn d4() { throw AppErr.Msg { s: "deep" } }
 fn d3() { d4() }
 fn d2() { d3() }
 fn d1() { d2() }
@@ -36,22 +36,22 @@ fn r12() -> string {
     try { return "ret" } catch (e) { return "no" }
 }
 fn r13() -> string {
-    try { throw AppErr.Msg("x") } catch (e) { return "caught" }
+    try { throw AppErr.Msg { s: "x" } } catch (e) { return "caught" }
 }
 
 // defer-based cleanup that runs even when the body throws.
 var g8 = false
 fn fn8() {
     defer { g8 = true }
-    throw AppErr.Msg("x")
+    throw AppErr.Msg { s: "x" }
 }
 
 @test
 fn test_basic_catch() {
     print("1. try-catch")
     var got = ""
-    try { throw AppErr.Msg("e1") } catch (e) {
-        match (e) { AppErr.Msg(s) -> { got = s } }
+    try { throw AppErr.Msg { s: "e1" } } catch (e) {
+        match (e) { AppErr.Msg { s } -> { got = s } }
     }
     assertEqual(got, "e1")
     print("   PASS")
@@ -65,14 +65,14 @@ fn test_nested_rethrow() {
     var outer_msg = ""
     try {
         try {
-            throw AppErr.Msg("inner")
+            throw AppErr.Msg { s: "inner" }
         } catch (e) {
             i6 = true
-            throw AppErr.Msg("outer")
+            throw AppErr.Msg { s: "outer" }
         }
     } catch (e) {
         o6 = true
-        match (e) { AppErr.Msg(s) -> { outer_msg = s } }
+        match (e) { AppErr.Msg { s } -> { outer_msg = s } }
     }
     assertEqual(i6, true)
     assertEqual(o6, true)
@@ -85,7 +85,7 @@ fn test_cross_function() {
     print("3. cross function")
     var captured = ""
     try { thr7() } catch (e) {
-        match (e) { AppErr.Msg(s) -> { captured = s } }
+        match (e) { AppErr.Msg { s } -> { captured = s } }
     }
     assertEqual(captured, "from_fn")
     print("   PASS")
@@ -96,11 +96,11 @@ fn test_constructed_message() {
     print("4. constructed messages")
     var m1 = ""
     var m2 = ""
-    try { throw AppErr.Msg("str") } catch (e) {
-        match (e) { AppErr.Msg(s) -> { m1 = s } }
+    try { throw AppErr.Msg { s: "str" } } catch (e) {
+        match (e) { AppErr.Msg { s } -> { m1 = s } }
     }
-    try { throw AppErr.Msg("ans=" + string(42)) } catch (e) {
-        match (e) { AppErr.Msg(s) -> { m2 = s } }
+    try { throw AppErr.Msg { s: "ans=" + string(42) } } catch (e) {
+        match (e) { AppErr.Msg { s } -> { m2 = s } }
     }
     assertEqual(m1, "str")
     assertEqual(m2, "ans=42")
@@ -112,7 +112,7 @@ fn test_deep_call_stack() {
     print("5. deep call stack")
     var captured = ""
     try { d1() } catch (e) {
-        match (e) { AppErr.Msg(s) -> { captured = s } }
+        match (e) { AppErr.Msg { s } -> { captured = s } }
     }
     assertEqual(captured, "deep")
     print("   PASS")
@@ -126,18 +126,18 @@ fn test_rethrow_chain() {
     try {
         try {
             try {
-                throw AppErr.Msg("a")
+                throw AppErr.Msg { s: "a" }
             } catch (e) {
                 n11 = n11 + 1
-                match (e) { AppErr.Msg(s) -> { throw AppErr.Msg(s + "b") } }
+                match (e) { AppErr.Msg { s } -> { throw AppErr.Msg { s: s + "b" } } }
             }
         } catch (e) {
             n11 = n11 + 1
-            match (e) { AppErr.Msg(s) -> { throw AppErr.Msg(s + "c") } }
+            match (e) { AppErr.Msg { s } -> { throw AppErr.Msg { s: s + "c" } } }
         }
     } catch (e) {
         n11 = n11 + 1
-        match (e) { AppErr.Msg(s) -> { final_msg = s } }
+        match (e) { AppErr.Msg { s } -> { final_msg = s } }
     }
     assertEqual(n11, 3)
     assertEqual(final_msg, "abc")
@@ -162,8 +162,8 @@ fn test_return_in_catch() {
 fn test_sequential() {
     print("9. sequential try-catch")
     var s14: Array<string> = []
-    try { s14.push("a"); throw AppErr.Msg("x") } catch (e) { s14.push("b") }
-    try { s14.push("c"); throw AppErr.Msg("y") } catch (e) { s14.push("d") }
+    try { s14.push("a"); throw AppErr.Msg { s: "x" } } catch (e) { s14.push("b") }
+    try { s14.push("c"); throw AppErr.Msg { s: "y" } } catch (e) { s14.push("d") }
     assertEqual(len(s14), 4)
     assertEqual(s14[0], "a")
     assertEqual(s14[1], "b")
@@ -179,14 +179,14 @@ fn test_catch_rethrow_propagates() {
     var outer_msg = ""
     try {
         try {
-            throw AppErr.Msg("a")
+            throw AppErr.Msg { s: "a" }
         } catch (e) {
             a20.push("inner-catch")
-            throw AppErr.Msg("b")
+            throw AppErr.Msg { s: "b" }
         }
     } catch (e) {
         a20.push("outer-catch")
-        match (e) { AppErr.Msg(s) -> { outer_msg = s } }
+        match (e) { AppErr.Msg { s } -> { outer_msg = s } }
     }
     assertEqual(len(a20), 2)
     assertEqual(a20[0], "inner-catch")
@@ -212,7 +212,7 @@ fn test_defer_lifo_cleanup() {
         defer { order.push("close-1") }
         defer { order.push("close-2") }
         order.push("work")
-        throw AppErr.Msg("boom")
+        throw AppErr.Msg { s: "boom" }
     }
     try { body() } catch (e) { order.push("handled") }
     assertEqual(len(order), 4)

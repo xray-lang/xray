@@ -23,12 +23,16 @@ CoreIR writer, reference evaluator, TargetPlan, legacy Proto VM, and AOT. The ru
 links a build-produced XrProgram byte array against this archive and verifies the resulting symbol
 closure.
 
-The active walking skeleton covers all fifteen CoreSpec operations, native LP64 and explicit
-foreign ILP32 profiles, direct calls, branch arguments, target queries, traps, typed errors,
-resource limits, and generation invalidation. Full-language operation families, public embedding
-ABI, adaptive quickening, and any persistent private-code cache remain inactive for later tasks.
+The executor covers all twenty-one current CoreSpec operations. Wave 1 source activates scalar,
+control, block arguments, and sealed calls; Wave 2 adds logical aggregate construction/projection
+and variant construction/test/projection. Aggregate and variant values use VM-private typed arena
+cells and never expose a shared physical layout. Aggregate update and the walking-skeleton
+trap/error/profile rows remain source-gated by the operation matrix even though their typed handlers
+exist. Native LP64 and explicit foreign ILP32 profiles, resource limits, and generation invalidation
+remain covered. Full-language operation families, public embedding ABI, adaptive quickening, and any
+persistent private-code cache remain inactive for later tasks.
 
-anchor-sha256: CMakeLists.txt af8549125f9746d3915b0fff88e62c23eea9e818afc253822f4e3ba46e831083
+anchor-sha256: CMakeLists.txt a2c23451b1bda53528dc233ac464c95c5434bb01fc165de4418c89645b7ca310
 anchor-sha256: xisa/core/registry.json 18fbbba56262869fecbba8e262aed7d2bceb9d80e04c04ef99b5e77a6675403d
 anchor-sha256: src/vm/xr_program_vm.h 76316a1271c256f9899a895ebd20b7d4a86ae2e2a42f7bbc77823a83f7b56c15
 anchor-sha256: src/vm/xr_program_vm.c 1095dd240189e209b935f8981eb3aaf61f81712e6d1e0a76b44a56e448a9b37e

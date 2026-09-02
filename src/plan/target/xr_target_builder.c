@@ -7590,6 +7590,13 @@ static bool builder_add_direct_local_aggregate_result_storage(XrTargetPlanBuilde
     return true;
 }
 
+static int find_layout_intent(const XrTargetPlanBuilder *builder, uint32_t semantic_type) {
+    for (uint32_t i = 0; i < builder->layout_intent_count; i++)
+        if (builder->layout_intents[i].semantic_type == semantic_type)
+            return (int) i;
+    return -1;
+}
+
 static bool note_adt_enum_storage_value(XrTargetPlanBuilder *builder,
                                         XrTargetValueStorageAnalysis *analysis,
                                         uint32_t semantic_value, uint32_t semantic_type,
@@ -7667,7 +7674,8 @@ static bool builder_add_adt_enum_storage(XrTargetPlanBuilder *builder, char *err
         const XrTargetValueIntent *value = &builder->value_intents[i];
         if (value->semantic_value < analysis.total_values) {
             analysis.defined_values[value->semantic_value] = 1;
-            analysis.used_types[value->semantic_type] = 1;
+            analysis.used_types[value->semantic_type] =
+                find_layout_intent(builder, value->semantic_type) >= 0;
             analysis.value_types[value->semantic_value] = value->semantic_type;
             analysis.value_functions[value->semantic_value] = value->semantic_function;
         }
@@ -7703,7 +7711,7 @@ static bool builder_add_adt_enum_storage(XrTargetPlanBuilder *builder, char *err
         const XrSemanticFunctionRecord *callee =
             semantic_direct_local_callee_for_operation(builder->semantic_plan, i);
         bool constructor =
-            xr_semantic_adt_enum_constructor_is_exact(builder->semantic_plan, operation, NULL);
+            xr_semantic_variant_construct_is_exact(builder->semantic_plan, operation, NULL);
         bool direct_result = xr_semantic_direct_local_adt_enum_result_is_exact(
             builder->semantic_plan, operation, callee);
         if (!constructor && !direct_result)
@@ -7712,6 +7720,19 @@ static bool builder_add_adt_enum_storage(XrTargetPlanBuilder *builder, char *err
                                             operation->result_type, operation->function, i,
                                             XR_TARGET_SLOT_TEMPORARY, operation->id,
                                             XR_TARGET_OWNERSHIP_OWNED, error, error_size);
+    }
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *read =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!read || read->result_value >= analysis.total_values ||
+            analysis.defined_values[read->result_value] ||
+            !xr_semantic_adt_enum_shared_read_is_exact(
+                read, xr_semantic_plan_type(builder->semantic_plan, read->result_type),
+                xr_semantic_unique_value_definition(builder->semantic_plan, read->result_value)))
+            continue;
+        valid = note_adt_enum_storage_value(
+            builder, &analysis, read->result_value, read->result_type, read->function, i,
+            XR_TARGET_SLOT_TEMPORARY, read->id, XR_TARGET_OWNERSHIP_BORROWED, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
     if (!valid) {
@@ -8132,8 +8153,7 @@ static bool source_namespace_type_is_exact(const XrSemanticPlan *plan,
         operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
         type->kind != XR_KIND_UNKNOWN || type->scalar_rep != XR_SCALAR_REP_NONE ||
-        type->child_count != 0 ||
-        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->child_count != 0 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
         type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
         return false;
     return opcode == XI_IMPORT_REF
@@ -8195,8 +8215,7 @@ static bool source_namespace_identity_copy_is_exact(const XrSemanticPlan *plan,
         operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
         type->kind != XR_KIND_UNKNOWN || type->scalar_rep != XR_SCALAR_REP_NONE ||
-        type->child_count != 0 ||
-        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->child_count != 0 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
         type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
         return false;
     const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
@@ -8670,13 +8689,6 @@ static bool fixed_array_element_count(const XrSemanticPlan *plan, uint32_t seman
                     "fixed-array extent is outside the exact semantic field budget");
     *out = type->aggregate_extent;
     return true;
-}
-
-static int find_layout_intent(const XrTargetPlanBuilder *builder, uint32_t semantic_type) {
-    for (uint32_t i = 0; i < builder->layout_intent_count; i++)
-        if (builder->layout_intents[i].semantic_type == semantic_type)
-            return (int) i;
-    return -1;
 }
 
 static int aggregate_layout_eligibility(const XrSemanticPlan *plan, uint32_t semantic_type,
@@ -10419,7 +10431,7 @@ static bool collect_adt_enum_constructor_call_intent(XrTargetPlanBuilder *builde
     XrSemanticAdtEnumConstructorShape shape = {0};
     const XrSemanticTypeRecord *result_type =
         operation ? xr_semantic_plan_type(builder->semantic_plan, operation->result_type) : NULL;
-    if (!xr_semantic_adt_enum_constructor_is_exact(builder->semantic_plan, operation, &shape) ||
+    if (!xr_semantic_variant_construct_is_exact(builder->semantic_plan, operation, &shape) ||
         !result_type)
         return fail(error, error_size, "XR_TARGET_1003",
                     "ADT enum constructor dispatch authority is incomplete");
@@ -11582,7 +11594,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (xr_semantic_native_target_leaf_call_is_exact(plan, operation, NULL, NULL)) {
             valid = collect_native_target_leaf_scalar_call_intent(builder, i, operation, error,
                                                                   error_size);
-        } else if (xr_semantic_adt_enum_constructor_is_exact(plan, operation, NULL)) {
+        } else if (xr_semantic_variant_construct_is_exact(plan, operation, NULL)) {
             valid =
                 collect_adt_enum_constructor_call_intent(builder, i, operation, error, error_size);
         } else if (operation->opcode == XI_CALL_METHOD) {

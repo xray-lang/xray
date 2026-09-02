@@ -392,7 +392,7 @@ fn requestRejects(method: string, names: Array<string>, values: Array<string>) -
         http2.request("https://127.0.0.1:1/api", method, names, values, empty, 250)
     } catch (e: Http2Error) {
         match (e) {
-            Http2Error.ProtocolError(_) -> { return true }
+            Http2Error.ProtocolError { reason: _ } -> { return true }
             _ -> { return false }
         }
     }
@@ -407,7 +407,7 @@ fn urlRejects(url: string, timeoutMs: i64) -> bool {
         http2.request(url, "GET", names, values, empty, timeoutMs)
     } catch (e: Http2Error) {
         match (e) {
-            Http2Error.ProtocolError(_) -> { return true }
+            Http2Error.ProtocolError { reason: _ } -> { return true }
             _ -> { return false }
         }
     }

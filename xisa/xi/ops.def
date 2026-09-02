@@ -1350,6 +1350,43 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.variant.construct
+  :class allocation
+  :arity variadic
+  :escape-use heap
+  :escape-alloc heap
+  :own-use method-args
+  :tbaa-group fresh
+  :effects (memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.variant.test
+  :class arithmetic
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.variant.project
+  :class memory-read
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :speculation never
+  :vn-kind none
+  :tbaa-group tuple
+  :effects (may-throw memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.call
   :class call
   :arity variadic
@@ -2662,6 +2699,9 @@
     xi.map.new
     xi.tuple.new
     xi.tuple.get
+    xi.variant.construct
+    xi.variant.test
+    xi.variant.project
     xi.value.product.construct
     xi.value.product.project
     xi.call

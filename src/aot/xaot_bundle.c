@@ -20,6 +20,7 @@
 #include "../ir/xi_program_semantic_plan.h"
 #include "../plan/target/xr_target_verify.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/value/xenum_layout.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -152,6 +153,29 @@ static void xaot_enum_plan_free(XaotEnumPlan *plan) {
     xr_free(plan->type_args);
     xr_free((void *) plan->c_type);
     memset(plan, 0, sizeof(*plan));
+}
+
+static bool xaot_enum_data_has_exact_payload_metadata(const XiEnumData *data) {
+    if (!data || !data->name || !data->name[0] || data->member_count == 0 || !data->members)
+        return false;
+    for (uint32_t i = 0; i < data->member_count; i++) {
+        const XiEnumMemberData *member = &data->members[i];
+        if (!member->name || !member->name[0] || member->ordinal != i ||
+            member->payload_count < 0 || member->payload_count > UINT16_MAX ||
+            !xr_enum_payload_names_are_exact(member->payload_names,
+                                             (uint16_t) member->payload_count) ||
+            (member->payload_count > 0 && !member->payload_types))
+            return false;
+        for (uint32_t prior = 0; prior < i; prior++) {
+            if (strcmp(member->name, data->members[prior].name) == 0)
+                return false;
+        }
+        for (int p = 0; p < member->payload_count; p++) {
+            if (!member->payload_types[p])
+                return false;
+        }
+    }
+    return true;
 }
 
 static bool xaot_enum_plan_payloads_fit_compact_aggregate(const XaotEnumPlan *plan) {
@@ -5200,6 +5224,10 @@ XR_FUNC XaotEnumPlan *xaot_bundle_add_enum_plan(XaotBundle *bundle, const XiEnum
 
     if (!bundle || !enum_data)
         return NULL;
+    if (!xaot_enum_data_has_exact_payload_metadata(enum_data)) {
+        bundle->error_msg = "enum schema has incomplete payload field metadata";
+        return NULL;
+    }
     plan = (XaotEnumPlan *) xaot_bundle_find_enum_plan(bundle, enum_data);
     if (plan)
         return plan;
@@ -5575,6 +5603,10 @@ static XaotEnumPlan *xaot_bundle_add_concrete_enum_plan(XaotBundle *bundle,
 
     if (!bundle || !enum_data || !type || argc <= 0 || !args)
         return NULL;
+    if (!xaot_enum_data_has_exact_payload_metadata(enum_data)) {
+        bundle->error_msg = "generic enum schema has incomplete payload field metadata";
+        return NULL;
+    }
     plan = (XaotEnumPlan *) xaot_bundle_find_enum_plan_for_type(bundle, type);
     if (plan)
         return plan;
@@ -5628,6 +5660,7 @@ static XaotEnumPlan *xaot_bundle_add_concrete_enum_plan(XaotBundle *bundle,
             members[mi].name = src ? src->name : NULL;
             members[mi].ordinal = src ? src->ordinal : mi;
             members[mi].payload_count = src ? src->payload_count : 0;
+            members[mi].payload_names = src ? src->payload_names : NULL;
             if (src && src->payload_count > 0 && src->payload_types) {
                 members[mi].payload_types =
                     (XrType **) xr_calloc((size_t) src->payload_count, sizeof(XrType *));

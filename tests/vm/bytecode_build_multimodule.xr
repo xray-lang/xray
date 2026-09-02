@@ -15,7 +15,7 @@ assert(cluster.start({ name: "bundle-preload", port: 0, secret: null, tls: null 
 scope {
     go score(done)
     match (done.recv()) {
-        Recv.Value(value) -> { result = value }
+        Recv.Value { value } -> { result = value }
         _ -> {}
     }
 }

@@ -34,15 +34,18 @@ For every RC-managed value, including registered identity aliases:
   provenance is proved, its ABI is exactly `OWNED` and the return edge retains
   a borrowed value or moves an existing local owner.
 - C2b: a payload-enum constructor returns a fresh owned inline aggregate. The
-  aggregate has no object header, but every active payload lane is an ordinary
-  owner: aggregate retain/release visits those lanes, a consuming box transfers
-  them into the box, a borrowed box retains them, and consuming unbox clears the
-  wrapper lanes before releasing the wrapper. In particular, an aggregate sent
-  through a tagged `READ` call slot uses a borrowed box with independent payload
-  owners; transfer slots use the consuming box. A statically resolved local call
-  reads the callee's fixed-point return summary before falling back to callsite
-  metadata; a backend may not discard aggregate ARC operations merely because
-  the aggregate itself is unboxed.
+  dedicated record-construction plan evaluates named initializers once in
+  source order, then installs them in declaration slot order. The aggregate has
+  no object header, but every active payload lane is an ordinary owner:
+  aggregate retain/release visits those lanes, a consuming box transfers them
+  into the box, a borrowed box retains them, and consuming unbox clears the
+  wrapper lanes before releasing the wrapper. Runtime field-name lookup and a
+  call-shaped constructor fallback are forbidden. In particular, an aggregate
+  sent through a tagged `READ` call slot uses a borrowed box with independent
+  payload owners; transfer slots use the consuming box. A statically resolved
+  local call reads the callee's fixed-point return summary before falling back
+  to callsite metadata; a backend may not discard aggregate ARC operations
+  merely because the aggregate itself is unboxed.
 - C3: a borrowed view's owner remains live through every view use, including
   uses flowing through PHI edges. BOX, UNBOX, CHECKTYPE, and reference-to-
   reference CONVERT representation adapters preserve borrow provenance;
@@ -121,9 +124,9 @@ this one. A contract names what it proves; this line names what it does not.
 
 anchor-sha256: src/ir/xi_arc_verify.c b0344b309501c8daa318f5669974aba949d93187fb5087fd20ecc6a5be4e83a6
 anchor-sha256: src/ir/xi_arc.c b205e287e94f120bccbe233362061147e27f8c163b966e2421c87e2722678b38
-anchor-sha256: src/ir/xi_lower_expr.c 255f4e9d373d03f25a13afe05ce2ec69e0d2da60452e61b4a5d547a464cd63ab
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 706460461cfc548a14773f320bc4764f034b5446a810246ee00d9a562061f379
-anchor-sha256: src/aot/xrt_coll.h b94938ed2676895322929b84ff56185fdbda0755b62303f07add4a693c953998
+anchor-sha256: src/ir/xi_lower_expr.c a599894832a15e765bcad6be3852fc0dfd14530b663e30ed22b2a6bb8c1ebbef
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 118dd87b462922f77ca6432acfab6e7c3d003012192a41f23963b7e0eb77fdfa
+anchor-sha256: src/aot/xrt_coll.h d04cd4b87bbe28e76f75fb3d68077f53976f7a3d91dcb86b307ba63f31fb41a4
 anchor-sha256: src/runtime/mem/xfixed_heap.c 46e45573a71b10592f12f5215f374c6dd896b4cf0e16bfc85f04b586a33fb5c3
 anchor-sha256: src/runtime/core/xr_runtime_core.c cce6b3b7d317c83c167fadd906b742c90b48d5e84f7816993335c825f9465169
 anchor-sha256: src/api/xisolate.c 7b56106daee7fa48f9b08cf9d689a7b410f6be36ee795a575c1ac5c901446893

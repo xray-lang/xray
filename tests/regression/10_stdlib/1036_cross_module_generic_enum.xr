@@ -9,10 +9,10 @@ fn byteScore(payload: Array<u8>) -> i64 {
 @test
 fn test_cross_module_generic_enum_payload_type() {
     match (makeByteArray()) {
-        Result.Ok(payload) -> {
+        Result.Ok { value: payload } -> {
             assertEqual(byteScore(payload), 67)
         }
-        Result.Err(_)      -> {
+        Result.Err { error: _ }      -> {
             assert(false)
         }
     }

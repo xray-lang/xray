@@ -1,27 +1,27 @@
 // Dependency for the imported enum-payload type regression.
 export enum SharedError {
-    Invalid(string)
+    Invalid { message: string }
 }
 
 export type SharedValue = JSON.Value
 
 export enum SharedResult {
-    Ok(SharedValue),
-    Err(SharedError)
+    Ok { value: SharedValue },
+    Err { error: SharedError }
 }
 
 export enum MirroredResult {
-    Ok(SharedValue),
-    Err(SharedError)
+    Ok { value: SharedValue },
+    Err { error: SharedError }
 }
 
 export fn produce(ok: bool) -> SharedResult {
-    return ok ? SharedResult.Ok(JSON.value({ answer: 42 })) : SharedResult.Err(SharedError.Invalid("bad"))
+    return ok ? SharedResult.Ok { value: JSON.value({ answer: 42 }) } : SharedResult.Err { error: SharedError.Invalid { message: "bad" } }
 }
 
 export fn mirror(result: SharedResult) -> MirroredResult {
     return match (result) {
-        SharedResult.Ok(value)  -> MirroredResult.Ok(value)
-        SharedResult.Err(error) -> MirroredResult.Err(error)
+        SharedResult.Ok { value }  -> MirroredResult.Ok { value: value }
+        SharedResult.Err { error } -> MirroredResult.Err { error: error }
     }
 }

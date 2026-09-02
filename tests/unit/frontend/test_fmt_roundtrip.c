@@ -661,12 +661,12 @@ TEST(method_deprecated_attribute_roundtrip) {
                       "enum State {\n"
                       "  Ready\n"
                       "  @deprecated\n"
-                      "  static fn initial() -> State { return State.Ready }\n"
+                      "  static initial() -> State { return State.Ready }\n"
                       "}\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "@deprecated(\"use rotateLeft\")\n    rotate"));
-    ASSERT_TRUE(contains(fmt1, "@deprecated\n    static fn initial"));
+    ASSERT_TRUE(contains(fmt1, "@deprecated\n    static initial"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
@@ -1024,13 +1024,37 @@ TEST(enum_payload_members_roundtrip) {
     setup();
     const char *src = "enum E {\n"
                       "    A,\n"
-                      "    Bbb(x: i64, string)\n"
+                      "    Bbb { x: i64, text: string }\n"
                       "}\n";
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "A"));
-    ASSERT_TRUE(contains(out, "Bbb(x: i64, string)"));
+    ASSERT_TRUE(contains(out, "Bbb { x: i64, text: string }"));
     ASSERT_FALSE(contains(out, "="));
+    free(out);
+    teardown();
+}
+
+TEST(enum_record_construction_and_selective_pattern_are_idempotent) {
+    setup();
+    const char *src = "enum Result{Ok{value:i64,code:string}}\n"
+                      "var made=Result.Ok{code:\"ready\",value:1}\n"
+                      "fn inspect(input:Result)->i64{\n"
+                      "return match(input){\n"
+                      "Result.Ok{value,code:_}->value\n"
+                      "}\n"
+                      "}\n";
+    char *out = parse_and_format(src, "enum_record_surface.xr");
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(contains(out, "Ok { value: i64, code: string }"));
+    ASSERT_TRUE(contains(out, "Result.Ok { code: \"ready\", value: 1 }"));
+    ASSERT_TRUE(contains(out, "Result.Ok { value, code: _ } -> value"));
+    ASSERT_FALSE(contains(out, "value: value"));
+
+    char *again = parse_and_format(out, "enum_record_surface_formatted.xr");
+    ASSERT_NOT_NULL(again);
+    ASSERT_STR_EQ(out, again);
+    free(again);
     free(out);
     teardown();
 }
@@ -1038,8 +1062,8 @@ TEST(enum_payload_members_roundtrip) {
 TEST(enum_static_iteration_roundtrip) {
     setup();
     const char *src = "enum Color { Red, Green }\n"
-                      "enum Event { Ready, Data(value: i64) }\n"
-                      "export enum Result<T> { Empty, Ok(T) }\n"
+                      "enum Event { Ready, Data { value: i64 } }\n"
+                      "export enum Result<T> { Empty, Ok { value: T } }\n"
                       "for(color in Color){print(color.name)}\n"
                       "for(variant in Event.variants){\n"
                       "for(field in variant.payloads){print(field.name)}\n"
@@ -1296,6 +1320,7 @@ RUN_TEST(match_single_arm_no_padding);
 
 RUN_TEST(enum_members_ignore_removed_value_alignment);
 RUN_TEST(enum_payload_members_roundtrip);
+RUN_TEST(enum_record_construction_and_selective_pattern_are_idempotent);
 RUN_TEST(enum_static_iteration_roundtrip);
 
 RUN_TEST(class_fields_aligned_when_enabled);

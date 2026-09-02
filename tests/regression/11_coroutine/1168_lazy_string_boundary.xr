@@ -4,7 +4,7 @@ fn make_key(n: i64) -> string {
 
 fn recv_string(ch: Channel<string>) -> string {
     return match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> ""
     }
 }

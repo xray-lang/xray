@@ -95,15 +95,15 @@ export class YamlTagged {
 
 export enum YamlValue {
     Null,
-    Boolean(bool),
-    Integer(i64),
-    Float(f64),
-    String(string),
-    Binary(Array<u8>),
-    Sequence(Array<YamlValue>),
-    Mapping(YamlMapping),
-    Tagged(YamlTagged),
-    Alias(YamlAnchor)
+    Boolean { value: bool },
+    Integer { value: i64 },
+    Float { value: f64 },
+    String { value: string },
+    Binary { bytes: Array<u8> },
+    Sequence { items: Array<YamlValue> },
+    Mapping { mapping: YamlMapping },
+    Tagged { tagged: YamlTagged },
+    Alias { anchor: YamlAnchor }
 }
 
 // ===== Diagnostics & errors =====
@@ -130,8 +130,8 @@ export class YamlDiagnostic {
 }
 
 export enum YamlError {
-    Parse(YamlDiagnostic),
-    Io(string)
+    Parse { diagnostic: YamlDiagnostic },
+    Io { message: string }
 }
 
 export class YamlParseReport {
@@ -218,28 +218,28 @@ export fn isNull(value: YamlValue) -> bool {
 
 export fn asBool(value: YamlValue) -> bool? {
     return match (value) {
-        YamlValue.Boolean(b) -> b,
+        YamlValue.Boolean { value: b } -> b,
         _                    -> null
     }
 }
 
 export fn asInt(value: YamlValue) -> i64? {
     return match (value) {
-        YamlValue.Integer(n) -> n,
+        YamlValue.Integer { value: n } -> n,
         _                    -> null
     }
 }
 
 export fn asFloat(value: YamlValue) -> f64? {
     return match (value) {
-        YamlValue.Float(f) -> f,
+        YamlValue.Float { value: f } -> f,
         _                  -> null
     }
 }
 
 export fn asString(value: YamlValue) -> string? {
     return match (value) {
-        YamlValue.String(s) -> s,
+        YamlValue.String { value: s } -> s,
         _                   -> null
     }
 }
@@ -249,7 +249,7 @@ export fn asString(value: YamlValue) -> string? {
 // contaminates the enum payload-field type globally.
 export fn asSequence(value: YamlValue) -> Array<YamlValue>? {
     match (value) {
-        YamlValue.Sequence(items) -> { return items }
+        YamlValue.Sequence { items } -> { return items }
         _                         -> { return null }
     }
     return null
@@ -257,7 +257,7 @@ export fn asSequence(value: YamlValue) -> Array<YamlValue>? {
 
 export fn asMapping(value: YamlValue) -> YamlMapping? {
     match (value) {
-        YamlValue.Mapping(m) -> { return m }
+        YamlValue.Mapping { mapping: m } -> { return m }
         _                    -> { return null }
     }
     return null
@@ -266,7 +266,7 @@ export fn asMapping(value: YamlValue) -> YamlMapping? {
 // Value bound to `key` inside a Mapping (null for non-mappings / missing key).
 export fn get(value: YamlValue, key: string) -> YamlValue? {
     match (value) {
-        YamlValue.Mapping(m) -> { return m.get(key) }
+        YamlValue.Mapping { mapping: m } -> { return m.get(key) }
         _                    -> { return null }
     }
     return null
@@ -275,7 +275,7 @@ export fn get(value: YamlValue, key: string) -> YamlValue? {
 // Element at `index` inside a Sequence (null when out of range / not a sequence).
 export fn at(value: YamlValue, index: i64) -> YamlValue? {
     match (value) {
-        YamlValue.Sequence(items) -> {
+        YamlValue.Sequence { items } -> {
             if (index < 0 || index >= len(items)) { return null }
             return items[index]
         }
@@ -287,8 +287,8 @@ export fn at(value: YamlValue, index: i64) -> YamlValue? {
 // Element count of a Sequence or Mapping (0 otherwise).
 export fn length(value: YamlValue) -> i64 {
     match (value) {
-        YamlValue.Sequence(items) -> { return len(items) }
-        YamlValue.Mapping(m)      -> { return m.size() }
+        YamlValue.Sequence { items } -> { return len(items) }
+        YamlValue.Mapping { mapping: m }      -> { return m.size() }
         _                         -> { return 0 }
     }
     return 0
@@ -297,7 +297,7 @@ export fn length(value: YamlValue) -> i64 {
 // Ordered keys of a Mapping (empty otherwise).
 export fn keys(value: YamlValue) -> Array<string> {
     match (value) {
-        YamlValue.Mapping(m) -> { return copy(m.keys) }
+        YamlValue.Mapping { mapping: m } -> { return copy(m.keys) }
         _                    -> { return copy(_emptyStrings()) }
     }
     return copy(_emptyStrings())
@@ -310,41 +310,41 @@ export fn nullValue() -> YamlValue {
 }
 
 export fn boolValue(value: bool) -> YamlValue {
-    return YamlValue.Boolean(value)
+    return YamlValue.Boolean { value: value }
 }
 
 export fn intValue(value: i64) -> YamlValue {
-    return YamlValue.Integer(value)
+    return YamlValue.Integer { value: value }
 }
 
 export fn floatValue(value: f64) -> YamlValue {
-    return YamlValue.Float(value)
+    return YamlValue.Float { value: value }
 }
 
 export fn stringValue(value: string) -> YamlValue {
-    return YamlValue.String(value)
+    return YamlValue.String { value: value }
 }
 
 export fn binaryValue(value: Array<u8>) -> YamlValue {
-    return YamlValue.Binary(value)
+    return YamlValue.Binary { bytes: value }
 }
 
 export fn sequenceValue(items: Array<YamlValue>) -> YamlValue {
-    return YamlValue.Sequence(items)
+    return YamlValue.Sequence { items: items }
 }
 
 export fn mappingValue(mapping: YamlMapping) -> YamlValue {
-    return YamlValue.Mapping(mapping)
+    return YamlValue.Mapping { mapping: mapping }
 }
 
 export fn taggedValue(tag: YamlTag, value: YamlValue) -> YamlValue {
     var node = YamlTagged(tag, value)
-    return YamlValue.Tagged(node)
+    return YamlValue.Tagged { tagged: node }
 }
 
 export fn aliasValue(name: string) -> YamlValue {
     var anchor = YamlAnchor(name)
-    return YamlValue.Alias(anchor)
+    return YamlValue.Alias { anchor: anchor }
 }
 
 export fn newMapping() -> YamlMapping {
@@ -590,12 +590,12 @@ fn _parsePlainScalar(rawValue: string) -> YamlValue {
     var lower = textutil.lower(raw)
     if (len(raw) == 0) { return YamlValue.Null }
     if (lower == "null" || raw == "~") { return YamlValue.Null }
-    if (lower == "true") { return YamlValue.Boolean(true) }
-    if (lower == "false") { return YamlValue.Boolean(false) }
-    if (lower == ".inf" || lower == "+.inf") { return YamlValue.Float(1.0 / 0.0) }
-    if (lower == "-.inf") { return YamlValue.Float(-1.0 / 0.0) }
-    if (lower == ".nan" || lower == "+.nan" || lower == "-.nan") { return YamlValue.Float(0.0 / 0.0) }
-    if (raw.startsWith("\"") || raw.startsWith("'")) { return YamlValue.String(_parseQuotedLiteral(raw)) }
+    if (lower == "true") { return YamlValue.Boolean { value: true } }
+    if (lower == "false") { return YamlValue.Boolean { value: false } }
+    if (lower == ".inf" || lower == "+.inf") { return YamlValue.Float { value: 1.0 / 0.0 } }
+    if (lower == "-.inf") { return YamlValue.Float { value: -1.0 / 0.0 } }
+    if (lower == ".nan" || lower == "+.nan" || lower == "-.nan") { return YamlValue.Float { value: 0.0 / 0.0 } }
+    if (raw.startsWith("\"") || raw.startsWith("'")) { return YamlValue.String { value: _parseQuotedLiteral(raw) } }
 
     var sign = 1
     var offset = 0
@@ -607,19 +607,19 @@ fn _parsePlainScalar(rawValue: string) -> YamlValue {
     }
     if (offset + 2 < len(raw) && raw.slice(offset, (offset) + 1) == "0") {
         var p = textutil.lower(raw.slice(offset + 1, (offset + 1) + 1))
-        if (p == "x") { return YamlValue.Integer(_parseBaseInt(raw, 16, offset + 2, sign)) }
-        if (p == "o") { return YamlValue.Integer(_parseBaseInt(raw, 8, offset + 2, sign)) }
+        if (p == "x") { return YamlValue.Integer { value: _parseBaseInt(raw, 16, offset + 2, sign) } }
+        if (p == "o") { return YamlValue.Integer { value: _parseBaseInt(raw, 8, offset + 2, sign) } }
     }
     if (_looksDecimalNumber(raw)) {
         if (raw.contains(".") || raw.contains("e") || raw.contains("E")) {
             var f = f64.tryParse(raw)
-            if (f != null) { return YamlValue.Float(f!) }
+            if (f != null) { return YamlValue.Float { value: f! } }
         } else {
             var i = i64.tryParse(raw)
-            if (i != null) { return YamlValue.Integer(i!) }
+            if (i != null) { return YamlValue.Integer { value: i! } }
         }
     }
-    return YamlValue.String(raw)
+    return YamlValue.String { value: raw }
 }
 
 fn _parseKeyText(raw: string) -> string {
@@ -732,7 +732,7 @@ class YamlFlowParser {
         var c = this.peek()
         if (c == "[") { return this.parseSequence() }
         if (c == "{") { return this.parseMapping() }
-        if (c == "\"" || c == "'") { return YamlValue.String(this.parseQuoted()) }
+        if (c == "\"" || c == "'") { return YamlValue.String { value: this.parseQuoted() } }
         return this.parsePlain()
     }
 
@@ -742,7 +742,7 @@ class YamlFlowParser {
         this.skipWs()
         if (this.peek() == "]") {
             this.advance()
-            return YamlValue.Sequence(arr)
+            return YamlValue.Sequence { items: arr }
         }
         while (!this.atEnd()) {
             var value = this.parseValue()
@@ -758,7 +758,7 @@ class YamlFlowParser {
             }
             break
         }
-        return YamlValue.Sequence(arr)
+        return YamlValue.Sequence { items: arr }
     }
 
     parseMapping() -> YamlValue {
@@ -767,7 +767,7 @@ class YamlFlowParser {
         this.skipWs()
         if (this.peek() == "}") {
             this.advance()
-            return YamlValue.Mapping(mapping)
+            return YamlValue.Mapping { mapping: mapping }
         }
         while (!this.atEnd()) {
             var key = this.parseKey()
@@ -788,7 +788,7 @@ class YamlFlowParser {
             }
             break
         }
-        return YamlValue.Mapping(mapping)
+        return YamlValue.Mapping { mapping: mapping }
     }
 }
 
@@ -933,7 +933,7 @@ class YamlParser {
         var key = _parseKeyText(content.slice(0, colon))
         var rest = textutil.trim(content.slice(colon + 1, len(content)))
         if (rest.startsWith("|") || rest.startsWith(">")) {
-            var scalar: YamlValue = YamlValue.String(this.parseBlockScalar(rest, indent))
+            var scalar: YamlValue = YamlValue.String { value: this.parseBlockScalar(rest, indent) }
             mapping.set(key, scalar)
             return
         }
@@ -968,7 +968,7 @@ class YamlParser {
             if (content.startsWith("-")) { break }
             this.parseMappingLineInto(ref mapping, content, indent)
         }
-        return YamlValue.Mapping(mapping)
+        return YamlValue.Mapping { mapping: mapping }
     }
 
     parseSequenceInlineMapping(afterDash: string, indent: i64, depth: i64) -> YamlValue {
@@ -976,12 +976,12 @@ class YamlParser {
         var colon = _findTopColon(afterDash)
         if (colon < 0) {
             this.index = this.index + 1
-            return YamlValue.Mapping(mapping)
+            return YamlValue.Mapping { mapping: mapping }
         }
         var key = _parseKeyText(afterDash.slice(0, colon))
         var rest = textutil.trim(afterDash.slice(colon + 1, len(afterDash)))
         if (rest.startsWith("|") || rest.startsWith(">")) {
-            var scalar: YamlValue = YamlValue.String(this.parseBlockScalar(rest, indent))
+            var scalar: YamlValue = YamlValue.String { value: this.parseBlockScalar(rest, indent) }
             mapping.set(key, scalar)
         } else {
             this.index = this.index + 1
@@ -1013,7 +1013,7 @@ class YamlParser {
             if (content.startsWith("-")) { break }
             this.parseMappingLineInto(ref mapping, content, tailIndent)
         }
-        return YamlValue.Mapping(mapping)
+        return YamlValue.Mapping { mapping: mapping }
     }
 
     parseSequence(indent: i64, depth: i64) -> YamlValue {
@@ -1052,7 +1052,7 @@ class YamlParser {
                 this.index = this.index + 1
             }
         }
-        return YamlValue.Sequence(arr)
+        return YamlValue.Sequence { items: arr }
     }
 
     parseBlock(indent: i64, depth: i64) -> YamlValue {
@@ -1171,15 +1171,15 @@ fn _binaryText(bytes: Array<u8>) -> string {
 fn _scalarText(value: YamlValue) -> string {
     return match (value) {
         YamlValue.Null          -> "null",
-        YamlValue.Boolean(b)    -> _boolText(b),
-        YamlValue.Integer(n)    -> string(n),
-        YamlValue.Float(f)      -> string(f),
-        YamlValue.String(s)     -> _quoteString(s),
-        YamlValue.Binary(bytes) -> _binaryText(bytes),
-        YamlValue.Sequence(xs)  -> "[]",
-        YamlValue.Mapping(m)    -> "{}",
-        YamlValue.Tagged(tg)    -> _taggedText(tg),
-        YamlValue.Alias(a)      -> _aliasText(a)
+        YamlValue.Boolean { value: b }    -> _boolText(b),
+        YamlValue.Integer { value: n }    -> string(n),
+        YamlValue.Float { value: f }      -> string(f),
+        YamlValue.String { value: s }     -> _quoteString(s),
+        YamlValue.Binary { bytes } -> _binaryText(bytes),
+        YamlValue.Sequence { items: xs }  -> "[]",
+        YamlValue.Mapping { mapping: m }    -> "{}",
+        YamlValue.Tagged { tagged: tg }    -> _taggedText(tg),
+        YamlValue.Alias { anchor: a }      -> _aliasText(a)
     }
 }
 
@@ -1189,8 +1189,8 @@ fn _taggedText(tagged: YamlTagged) -> string {
 
 fn _isBlockValue(value: YamlValue) -> bool {
     match (value) {
-        YamlValue.Sequence(items) -> { return len(items) > 0 }
-        YamlValue.Mapping(m)      -> { return m.size() > 0 }
+        YamlValue.Sequence { items } -> { return len(items) > 0 }
+        YamlValue.Mapping { mapping: m }      -> { return m.size() > 0 }
         _                         -> { return false }
     }
     return false
@@ -1245,7 +1245,8 @@ fn _emitValue(value: YamlValue, level: i64, indent: i64) -> string {
 // ===== Public API =====
 
 // parse is strict about unsupported features (YAML tags, depth overflow) which
-// always enter the typed error channel via `throw YamlError.Parse(...)`. With
+// always enter the typed error channel via
+// `throw YamlError.Parse { diagnostic: value }`. With
 // `options.strict = true` every recorded diagnostic is fatal.
 export fn parse(data: string, options: YamlOptions? = null) -> YamlValue {
     var config = _resolveOptions(options)
@@ -1253,7 +1254,7 @@ export fn parse(data: string, options: YamlOptions? = null) -> YamlValue {
     parser.parseDocument()
     var err = _firstError(parser, config.strict)
     if (err != null) {
-        throw YamlError.Parse(err!)
+        throw YamlError.Parse { diagnostic: err! }
     }
     return parser.root
 }
@@ -1263,7 +1264,7 @@ export fn parseStrict(data: string) -> YamlValue {
     var parser = YamlParser(data)
     parser.parseDocument()
     if (len(parser.errors) > 0) {
-        throw YamlError.Parse(parser.errors[0])
+        throw YamlError.Parse { diagnostic: parser.errors[0] }
     }
     return parser.root
 }
@@ -1306,7 +1307,7 @@ export fn parseAll(data: string) -> Array<YamlValue> {
 export fn parseFile(path: Path, options: YamlOptions? = null) -> YamlValue {
     var content = io.readFile(path)
     if (content == null) {
-        throw YamlError.Io("Failed to read file")
+        throw YamlError.Io { message: "Failed to read file" }
     }
     return parse(content!, options)
 }

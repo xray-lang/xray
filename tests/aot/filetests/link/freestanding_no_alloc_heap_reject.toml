@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_no_alloc_heap_reject"
+name = "xray-tests/filetest-freestanding_no_alloc_heap_reject"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_no_alloc_heap_reject.xr"

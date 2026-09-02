@@ -532,21 +532,24 @@ typedef enum {
     XI_FIXED_BYTES_CONST, /* compact byte payload copied into fixed-array frame storage */
 
     /* Structural object allocation and access. */
-    XI_OBJECT_NEW,    /* Create exact object: aux=field_count, aux_ptr=field_names[] */
-    XI_OBJECT_INIT_F, /* Init field by index: args[0]=object, args[1]=val, aux_int=field_idx */
-    XI_OBJECT_GET_F,  /* Read field by index: args[0]=object, aux_int=field_idx */
-    XI_OBJECT_SET_F,  /* Write field by index: args[0]=object, args[1]=val, aux_int=field_idx */
-    XI_OBJECT_MERGE,  /* Merge all fields of src into dst: args[0]=dst, args[1]=src
-                       * (object spread `{...base}`; later fields override earlier) */
-    XI_JSON_DECODE,   /* Typed decode: args[0]=source, aux=field_names[], aux_int=field_count
-                       * result: T? (exact object or null on validation failure) */
-    XI_ARRAY_NEW,     /* new array: args[0]=capacity */
-    XI_ARRAY_PUSH,    /* append one element: args[0]=array, args[1]=value (in-place, void) */
-    XI_ARRAY_EXTEND,  /* splice all elements of src array into dst: args[0]=dst, args[1]=src
-                       * (in-place, void; retains each copied element) — array spread `[...a]` */
-    XI_MAP_NEW,       /* new map: args[0]=capacity */
-    XI_TUPLE_NEW,     /* new tuple: args[0..n-1]=elements, aux_int=n (arity) */
-    XI_TUPLE_GET,     /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
+    XI_OBJECT_NEW,        /* Create exact object: aux=field_count, aux_ptr=field_names[] */
+    XI_OBJECT_INIT_F,     /* Init field by index: args[0]=object, args[1]=val, aux_int=field_idx */
+    XI_OBJECT_GET_F,      /* Read field by index: args[0]=object, aux_int=field_idx */
+    XI_OBJECT_SET_F,      /* Write field by index: args[0]=object, args[1]=val, aux_int=field_idx */
+    XI_OBJECT_MERGE,      /* Merge all fields of src into dst: args[0]=dst, args[1]=src
+                           * (object spread `{...base}`; later fields override earlier) */
+    XI_JSON_DECODE,       /* Typed decode: args[0]=source, aux=field_names[], aux_int=field_count
+                           * result: T? (exact object or null on validation failure) */
+    XI_ARRAY_NEW,         /* new array: args[0]=capacity */
+    XI_ARRAY_PUSH,        /* append one element: args[0]=array, args[1]=value (in-place, void) */
+    XI_ARRAY_EXTEND,      /* splice all elements of src array into dst: args[0]=dst, args[1]=src
+                           * (in-place, void; retains each copied element) — array spread `[...a]` */
+    XI_MAP_NEW,           /* new map: args[0]=capacity */
+    XI_TUPLE_NEW,         /* new tuple: args[0..n-1]=elements, aux_int=n (arity) */
+    XI_TUPLE_GET,         /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
+    XI_VARIANT_CONSTRUCT, /* args[0]=enum namespace, args[1..]=declaration-order payloads */
+    XI_VARIANT_TEST,      /* args[0]=variant value, aux_int=declaration variant ordinal */
+    XI_VARIANT_PROJECT,   /* args[0]=variant value, aux_int=packed variant/field ordinals */
 
     /* Function calls */
     XI_CALL,        /* function call: args[0]=callee, args[1..n]=params
@@ -1518,6 +1521,18 @@ static inline int64_t xi_tuple_pack_aux(uint32_t arity, uint8_t storage_mode) {
 static inline void xi_tuple_set_storage_mode(XiValue *v, uint8_t storage_mode) {
     if (v && v->op == XI_TUPLE_NEW)
         v->aux_int = xi_tuple_pack_aux(v->nargs, storage_mode);
+}
+
+static inline int64_t xi_variant_pack_projection(uint32_t variant_ordinal, uint32_t field_ordinal) {
+    return (int64_t) (((uint64_t) variant_ordinal << 32u) | field_ordinal);
+}
+
+static inline uint32_t xi_variant_projection_variant(const XiValue *v) {
+    return v ? (uint32_t) ((uint64_t) v->aux_int >> 32u) : 0u;
+}
+
+static inline uint32_t xi_variant_projection_field(const XiValue *v) {
+    return v ? (uint32_t) v->aux_int : 0u;
 }
 
 /* XI_ERR_CHECK starts operand-free at lowering.  After all AOT value-rewriting

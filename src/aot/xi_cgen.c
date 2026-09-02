@@ -75,6 +75,7 @@
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../runtime/value/xenum_layout.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xnumber_parse_error.h"
 #include "../base/xchecks.h"
@@ -3289,11 +3290,10 @@ static bool cg_direct_local_tagged_ref_argument_emission(XiCgenCtx *ctx, const X
                          strcmp(out->c_type, "int64_t *") == 0;
     if (scalar_ref_v1)
         return false;
-    bool tagged_caller =
-        (out->caller_register_kind == XR_MACHINE_REP_DYN_VALUE &&
-         out->caller_memory_kind == XR_MACHINE_REP_DYN_VALUE) ||
-        (out->caller_register_kind == XR_MACHINE_REP_RAW_PTR &&
-         out->caller_memory_kind == XR_MACHINE_REP_RAW_PTR);
+    bool tagged_caller = (out->caller_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+                          out->caller_memory_kind == XR_MACHINE_REP_DYN_VALUE) ||
+                         (out->caller_register_kind == XR_MACHINE_REP_RAW_PTR &&
+                          out->caller_memory_kind == XR_MACHINE_REP_RAW_PTR);
     if (out->semantic_call_value != semantic_call || out->semantic_value != semantic_argument ||
         out->ordinal != ordinal || !tagged_caller ||
         out->callee_register_kind != XR_MACHINE_REP_RAW_PTR ||
@@ -15824,16 +15824,16 @@ static bool cg_aot_stdlib_import_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
 
 #include "xi_cgen_program_entry.inc.c"
 
-#define XI_LOWERING_ASSERT_CONSUMER_BINDING(                                      \
-    op_ident, op_name, owner_path, owner_symbol, witness_kind)                    \
-    _Static_assert(sizeof(&(owner_symbol)) > 0,                                   \
-                   "missing AOT-C lowering consumer owner: " op_name);
+#define XI_LOWERING_ASSERT_CONSUMER_BINDING(op_ident, op_name, owner_path, owner_symbol,           \
+                                            witness_kind)                                          \
+    _Static_assert(sizeof(&(owner_symbol)) > 0, "missing AOT-C lowering consumer "                 \
+                                                "owner: " op_name);
 XI_LOWERING_CONSUMER_BINDINGS(XI_LOWERING_ASSERT_CONSUMER_BINDING)
 #undef XI_LOWERING_ASSERT_CONSUMER_BINDING
 
-#define XI_LOWERING_ASSERT_CONSUMER_ROUTER_WITNESS(                               \
-    op_ident, op_name, router_path, router_symbol, owner_path, owner_symbol)       \
-    _Static_assert(sizeof(&(router_symbol)) > 0,                                  \
+#define XI_LOWERING_ASSERT_CONSUMER_ROUTER_WITNESS(op_ident, op_name, router_path, router_symbol,  \
+                                                   owner_path, owner_symbol)                       \
+    _Static_assert(sizeof(&(router_symbol)) > 0,                                                   \
                    "missing AOT-C lowering consumer router witness: " op_name);
 XI_LOWERING_CONSUMER_ROUTER_WITNESSES(XI_LOWERING_ASSERT_CONSUMER_ROUTER_WITNESS)
 #undef XI_LOWERING_ASSERT_CONSUMER_ROUTER_WITNESS

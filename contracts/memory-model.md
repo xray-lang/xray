@@ -12,7 +12,9 @@ either side has to be argued rather than drift.
 - M1: evaluation order is total and identical on every backend. There is no
   unspecified and no undefined evaluation order in the language. The rules
   are spec §3.0 E1-E11; `src/frontend/canonical/xcanon.c` is where the
-  non-trivial ones are realised.
+  non-trivial ones are realised. Record-enum initializers execute once in
+  source order; the analyzer-owned source-to-slot permutation changes only the
+  declaration-ordered aggregate destination, never evaluation order.
 - M2: a place expression in an assignment or compound assignment is evaluated
   exactly once. Where that requires a temporary, the canonicalizer emits a
   value block (`BlockNode.is_canon_value_block`) whose last statement produces
@@ -102,7 +104,7 @@ A change to these rules re-runs and, where the expected output moves, updates:
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def fc58bc8c488be1de970490a1d288a3518a4b48e7586ed35b32d994599f80fabe
+anchor-sha256: xisa/xi/ops.def f4931a7f30bafb366082e318ca32b025549e0cb3469a6027667da3a1dc476585
 anchor-sha256: src/ir/xi_tbaa.c 304e00919092f45875e76dc0d9e958bc706ecc8cf0f0b89ed80d51392276f6f4
 anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3f6f3a381d634c027
 anchor-sha256: src/ir/xi_opt_licm.c 06f7494501b87db38c4426987c7f8242451624d10686309e100f3ca66dac819f
@@ -111,4 +113,4 @@ anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a
 anchor-sha256: src/coro/xchannel.c 4ac92d6b0cc987bc5c2809812b6728843231f0c6887f0dde2595f532e474a943
 anchor-sha256: src/coro/xtask.c a58cd9d324c5919b8e60b2130523ee3c544ba600fe36be0fe3a93232faadb0ba
 anchor-sha256: src/coro/xtask_await.c 1d6026df35f12ff155091a2ee0e54ed46f094e34ee6af89df011382028bd9708
-anchor-sha256: src/frontend/canonical/xcanon.c 5dd98420dbf423f4f6ac53949d93e97b0f0fb838643d8e2a9541750c7fb419b2
+anchor-sha256: src/frontend/canonical/xcanon.c 88a782d74909fbe7459309fa1caf42d284ad10e37b7c68123db9a54c234784bb

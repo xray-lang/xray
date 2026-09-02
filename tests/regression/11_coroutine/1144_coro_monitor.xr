@@ -43,7 +43,7 @@ fn test_coro_monitor() {
 
     // Wait for exit notification
     var reason = match (ch.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> ""
     }
     print(reason)  // expect: normal
@@ -51,7 +51,7 @@ fn test_coro_monitor() {
     // ========== Test 3: monitor non-existent coroutine ==========
     const ch2 = Coro.monitor("does-not-exist")
     var reason2 = match (ch2.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> ""
     }
     print(reason2)  // expect: noproc
@@ -66,7 +66,7 @@ fn test_coro_monitor() {
     time.sleep(10)
     const ch3 = Coro.monitor("test-worker-3")
     var reason3 = match (ch3.recv()) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> ""
     }
     print(reason3)  // expect: noproc

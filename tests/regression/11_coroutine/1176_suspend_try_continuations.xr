@@ -38,7 +38,7 @@ fn blocked_inside_panic_handler(ready: Channel<i64>, blocked: Channel<i64>) -> i
     ready.send(1)
     try {
         match (blocked.recv()) {
-            Recv.Value(value) -> { return value }
+            Recv.Value { value } -> { return value }
             _ -> { return -1 }
         }
     } catch panic (p) {
@@ -56,13 +56,13 @@ fn test_suspend_try_continuations() {
     const blocked = Channel<i64>(0)
     var task = go blocked_inside_panic_handler(ready, blocked)
     match (ready.recv()) {
-        Recv.Value(value) -> { assertEqual(value, 1) }
+        Recv.Value { value } -> { assertEqual(value, 1) }
         _ -> { assert(false, "worker must reach the blocking receive") }
     }
     task.cancel()
     match (task.awaitResult()) {
         TaskResult.Cancelled -> {}
-        TaskResult.Success(value) -> {
+        TaskResult.Success { value } -> {
             assert(false, "cancel must not enter the panic handler: " + string(value))
         }
         _ -> { assert(false, "cancelled task must report cancellation") }

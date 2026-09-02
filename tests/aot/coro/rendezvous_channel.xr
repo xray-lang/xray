@@ -8,7 +8,7 @@ const task = go sender(ch)
 var v = ch.recv()
 var done = await task
 print(match (v) {
-    Recv.Value(value) -> value + done
+    Recv.Value { value } -> value + done
     _ -> -1
 })
 ch.close()

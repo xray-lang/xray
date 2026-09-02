@@ -353,7 +353,7 @@ static XrType direct_local_go_closure = {
 };
 
 static XrType module_namespace = {
-    .kind = XR_KIND_STRUCT_OBJECT,
+    .kind = XR_KIND_UNKNOWN,
     .id = 8,
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,

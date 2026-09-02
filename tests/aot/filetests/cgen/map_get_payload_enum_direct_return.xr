@@ -1,6 +1,6 @@
 enum Item {
     Missing,
-    Number(i64)
+    Number { value: i64 }
 }
 
 fn lookup(values: Map<string, Item>, key: string) -> Item? {
@@ -8,6 +8,6 @@ fn lookup(values: Map<string, Item>, key: string) -> Item? {
 }
 
 var values: Map<string, Item> = #{}
-values.set("answer", Item.Number(42))
+values.set("answer", Item.Number { value: 42 })
 var found = lookup(values, "answer")
 print(found != null)

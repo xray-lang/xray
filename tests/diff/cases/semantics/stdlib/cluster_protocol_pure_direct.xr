@@ -30,9 +30,9 @@ fn addressError(text: string) -> string {
         parseAddress(text)
     } catch (e: AddressError) {
         return match (e) {
-            AddressError.MissingPort(value) -> "missing:" + value,
-            AddressError.InvalidHost(value) -> "host:" + value,
-            AddressError.InvalidPort(value) -> "port:" + value
+            AddressError.MissingPort { address: value } -> "missing:" + value,
+            AddressError.InvalidHost { host: value } -> "host:" + value,
+            AddressError.InvalidPort { port: value } -> "port:" + value
         }
     }
     return "none"

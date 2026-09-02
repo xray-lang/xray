@@ -7,15 +7,15 @@ import { YamlValue } from yaml
 fn kindOf(v: YamlValue) -> string {
     return match (v) {
         YamlValue.Null          -> "null",
-        YamlValue.Boolean(b)    -> "bool",
-        YamlValue.Integer(n)    -> "int",
-        YamlValue.Float(f)      -> "float",
-        YamlValue.String(s)     -> "string",
-        YamlValue.Binary(bytes) -> "binary",
-        YamlValue.Sequence(xs)  -> "seq",
-        YamlValue.Mapping(m)    -> "map",
-        YamlValue.Tagged(t)     -> "tagged",
-        YamlValue.Alias(a)      -> "alias"
+        YamlValue.Boolean { value: b }    -> "bool",
+        YamlValue.Integer { value: n }    -> "int",
+        YamlValue.Float { value: f }      -> "float",
+        YamlValue.String { value: s }     -> "string",
+        YamlValue.Binary { bytes } -> "binary",
+        YamlValue.Sequence { items: xs }  -> "seq",
+        YamlValue.Mapping { mapping: m }    -> "map",
+        YamlValue.Tagged { tagged: t }     -> "tagged",
+        YamlValue.Alias { anchor: a }      -> "alias"
     }
 }
 

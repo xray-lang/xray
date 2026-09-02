@@ -3,12 +3,12 @@ import { XmlNode, XmlName, XmlAttribute } from xml
 
 fn nodeKind(node: XmlNode) -> string {
     return match (node) {
-        XmlNode.Document(kids)              -> "document",
-        XmlNode.Element(name, attrs, kids)  -> "element",
-        XmlNode.Text(s)                     -> "text",
-        XmlNode.Comment(s)                  -> "comment",
-        XmlNode.CData(s)                    -> "cdata",
-        XmlNode.ProcessingInstruction(t, d) -> "pi"
+        XmlNode.Document { children: kids }              -> "document",
+        XmlNode.Element { name, attributes: attrs, children: kids }  -> "element",
+        XmlNode.Text { content: s }                     -> "text",
+        XmlNode.Comment { content: s }                  -> "comment",
+        XmlNode.CData { content: s }                    -> "cdata",
+        XmlNode.ProcessingInstruction { target: t, data: d } -> "pi"
     }
 }
 

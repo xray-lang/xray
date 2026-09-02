@@ -103,6 +103,7 @@ struct AstNode {
         ClassDeclNode struct_decl;
         ClassDeclNode union_decl;
         StructLiteralNode struct_literal;
+        EnumConstructNode enum_construct;
         InterfaceDeclNode interface_decl;
         InterfaceMethodNode interface_method;
         InterfacePropertyNode interface_property;

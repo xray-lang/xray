@@ -10,10 +10,10 @@
 #include <string.h>
 
 int main(void) {
-    assert(XI_LOWERING_ENTRY_COUNT == 216);
+    assert(XI_LOWERING_ENTRY_COUNT == 219);
     assert(XI_LOWERING_PATTERNED_ENTRY_COUNT == 33);
-    assert(XI_LOWERING_CUSTOM_ENTRY_COUNT == 183);
-    assert(XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT == 202);
+    assert(XI_LOWERING_CUSTOM_ENTRY_COUNT == 186);
+    assert(XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT == 205);
     assert(XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT == 33);
     assert(XI_LOWERING_REJECTED_TARGET_COUNT == 0);
     assert(XI_LOWERING_REJECTED_ENTRY_COUNT == 0);
@@ -28,13 +28,13 @@ int main(void) {
     assert(XI_LOWERING_CONSUMER_ACTIVATION_EDGE_COUNT == 13);
     assert(XI_LOWERING_CONSUMER_ACTIVATION_CALL_COUNT == 15);
     assert(XI_LOWERING_CONSUMER_OUTPUT_SEQUENCE_COUNT == 3);
-    assert(XI_LOWERING_AOT_C_ENTRY_COUNT == 200);
+    assert(XI_LOWERING_AOT_C_ENTRY_COUNT == 203);
     assert(XI_LOWERING_AOT_C_PATTERNED_ENTRY_COUNT == 33);
     assert(XI_LOWERING_AOT_C_STMT_ENTRY_COUNT == 11);
     assert(XI_LOWERING_AOT_C_STMT_PATTERNED_ENTRY_COUNT == 0);
     assert(XI_LOWERING_AOT_VERIFY_ENTRY_COUNT == 0);
     assert(XI_LOWERING_AOT_VERIFY_PATTERNED_ENTRY_COUNT == 0);
-    assert(XI_LOWERING_VM_BYTECODE_ENTRY_COUNT == 208);
+    assert(XI_LOWERING_VM_BYTECODE_ENTRY_COUNT == 211);
     assert(XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT == 33);
     assert(xi_lowering_covered_targets(XI_CONST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_driver_targets(XI_CONST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
@@ -1786,6 +1786,33 @@ int main(void) {
     assert(xi_lowering_template_kind(XI_TUPLE_GET) == XI_LOWER_TEMPLATE_CUSTOM);
     assert(xi_lowering_is_patterned(XI_TUPLE_GET) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_TUPLE_GET) == false);
+    assert(xi_lowering_covered_targets(XI_VARIANT_CONSTRUCT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_driver_targets(XI_VARIANT_CONSTRUCT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_consumer_targets(XI_VARIANT_CONSTRUCT) == (0));
+    assert(xi_lowering_required_targets(XI_VARIANT_CONSTRUCT) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
+    assert(xi_lowering_rejected_targets(XI_VARIANT_CONSTRUCT) == (0));
+    assert(xi_lowering_op_backend_legal(XI_VARIANT_CONSTRUCT) == true);
+    assert(xi_lowering_template_kind(XI_VARIANT_CONSTRUCT) == XI_LOWER_TEMPLATE_CUSTOM);
+    assert(xi_lowering_is_patterned(XI_VARIANT_CONSTRUCT) == false);
+    assert(xi_emit_vm_requires_fresh_dst(XI_VARIANT_CONSTRUCT) == false);
+    assert(xi_lowering_covered_targets(XI_VARIANT_TEST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_driver_targets(XI_VARIANT_TEST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_consumer_targets(XI_VARIANT_TEST) == (0));
+    assert(xi_lowering_required_targets(XI_VARIANT_TEST) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
+    assert(xi_lowering_rejected_targets(XI_VARIANT_TEST) == (0));
+    assert(xi_lowering_op_backend_legal(XI_VARIANT_TEST) == true);
+    assert(xi_lowering_template_kind(XI_VARIANT_TEST) == XI_LOWER_TEMPLATE_CUSTOM);
+    assert(xi_lowering_is_patterned(XI_VARIANT_TEST) == false);
+    assert(xi_emit_vm_requires_fresh_dst(XI_VARIANT_TEST) == false);
+    assert(xi_lowering_covered_targets(XI_VARIANT_PROJECT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_driver_targets(XI_VARIANT_PROJECT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_consumer_targets(XI_VARIANT_PROJECT) == (0));
+    assert(xi_lowering_required_targets(XI_VARIANT_PROJECT) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
+    assert(xi_lowering_rejected_targets(XI_VARIANT_PROJECT) == (0));
+    assert(xi_lowering_op_backend_legal(XI_VARIANT_PROJECT) == true);
+    assert(xi_lowering_template_kind(XI_VARIANT_PROJECT) == XI_LOWER_TEMPLATE_CUSTOM);
+    assert(xi_lowering_is_patterned(XI_VARIANT_PROJECT) == false);
+    assert(xi_emit_vm_requires_fresh_dst(XI_VARIANT_PROJECT) == false);
     assert(xi_lowering_covered_targets(XI_BYTE_SLICE_LOAD_U16) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_driver_targets(XI_BYTE_SLICE_LOAD_U16) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_consumer_targets(XI_BYTE_SLICE_LOAD_U16) == (0));

@@ -1,5 +1,5 @@
 [package]
-name = "filetest-function-abi"
+name = "xray-tests/filetest-function-abi"
 version = "1.0.0"
 license = "MIT"
 main = "function_abi.xr"

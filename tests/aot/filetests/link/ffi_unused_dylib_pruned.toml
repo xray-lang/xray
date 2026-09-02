@@ -1,5 +1,5 @@
 [package]
-name = "filetest-ffi_unused_dylib_pruned"
+name = "xray-tests/filetest-ffi_unused_dylib_pruned"
 version = "1.0.0"
 license = "MIT"
 main = "ffi_unused_dylib_pruned.xr"

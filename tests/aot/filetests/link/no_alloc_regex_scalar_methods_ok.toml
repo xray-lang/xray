@@ -1,5 +1,5 @@
 [package]
-name = "filetest-no_alloc_regex_scalar_methods_ok"
+name = "xray-tests/filetest-no_alloc_regex_scalar_methods_ok"
 version = "1.0.0"
 license = "MIT"
 main = "no_alloc_regex_scalar_methods_ok.xr"

@@ -20,7 +20,7 @@ fn envelope(seed: u8) -> Buffer {
 
 fn receive_buffer(ch: Channel<Buffer>) -> Buffer {
     return match (ch.recv()) {
-        Recv.Value(value) -> value
+        Recv.Value { value } -> value
         _ -> mem.allocZeroed(0)
     }
 }

@@ -4,19 +4,19 @@
 ** The surrounding try-catch can still handle it.
 */
 
-enum ForceErr { Msg(string) }
+enum ForceErr { Msg { message: string } }
 type User = { id: i64, name: string }
 
 fn maybeFailInt(should_throw: bool) -> i64 {
     if (should_throw) {
-        throw ForceErr.Msg("force-try violation")
+        throw ForceErr.Msg { message: "force-try violation" }
     }
     return 42
 }
 
 fn maybeFailJson(should_throw: bool) -> User {
     if (should_throw) {
-        throw ForceErr.Msg("deeper failure")
+        throw ForceErr.Msg { message: "deeper failure" }
     }
     return { id: 99, name: "Bob" }
 }
@@ -47,7 +47,7 @@ fn test_propagation_throw_caught() {
         print("should not reach:", x)
     } catch (e) {
         saw_catch = true
-        match (e) { ForceErr.Msg(s) -> { assertEqual(s, "force-try violation") } }
+        match (e) { ForceErr.Msg { message: s } -> { assertEqual(s, "force-try violation") } }
     }
     assertEqual(saw_catch, true)
     print("   PASS")
@@ -65,7 +65,7 @@ fn test_propagation_nested_throw() {
         print("should not reach:", result)
     } catch (e) {
         saw_catch = true
-        match (e) { ForceErr.Msg(s) -> { assertEqual(s, "deeper failure") } }
+        match (e) { ForceErr.Msg { message: s } -> { assertEqual(s, "deeper failure") } }
     }
     assertEqual(saw_catch, true)
     print("   PASS")

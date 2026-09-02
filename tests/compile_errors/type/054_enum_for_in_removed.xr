@@ -1,6 +1,6 @@
 enum Result {
-    Ok(value: i64),
-    Error(message: string)
+    Ok { value: i64 },
+    Error { message: string }
 }
 
 for (value in Result) {

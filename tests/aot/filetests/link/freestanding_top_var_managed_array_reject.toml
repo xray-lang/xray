@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_top_var_managed_array_reject"
+name = "xray-tests/filetest-freestanding_top_var_managed_array_reject"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_top_var_managed_array_reject.xr"

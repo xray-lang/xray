@@ -1,5 +1,5 @@
 [package]
-name = "filetest-cast-then-unary-neg-native"
+name = "xray-tests/filetest-cast-then-unary-neg-native"
 version = "1.0.0"
 license = "MIT"
 main = "cast_then_unary_neg_native.xr"

@@ -187,6 +187,16 @@ typedef struct StructLiteralNode {
     int type_arg_count;
 } StructLiteralNode;
 
+/* Named payload enum construction. Field names and values retain source order;
+ * the analyzer owns the declaration-slot permutation. */
+typedef struct EnumConstructNode {
+    AstNode *variant_path;
+    char **field_names;
+    XrNameSpan *field_name_spans;
+    AstNode **field_values;
+    int field_count;
+} EnumConstructNode;
+
 /* ========== Other Operators ========== */
 
 // Ternary expression node

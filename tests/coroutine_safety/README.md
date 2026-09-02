@@ -92,7 +92,7 @@ match (ch.sendTimeout(value, 1000)) {
 
 // 非阻塞尝试
 match (ch.tryRecv()) {
-    Recv.Value(val) -> print("收到:", val)
+    Recv.Value { value: val } -> print("收到:", val)
     Recv.Empty -> print("Channel 为空")
     Recv.Closed -> print("Channel 已关闭")
     Recv.Timeout -> print("接收超时")

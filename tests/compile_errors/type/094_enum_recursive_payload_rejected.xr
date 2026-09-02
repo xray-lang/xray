@@ -1,6 +1,6 @@
 enum Expr {
-    Number(i64),
-    Binary(left: Expr, right: Expr)
+    Number { value: i64 },
+    Binary { left: Expr, right: Expr }
 }
 
 print(1)

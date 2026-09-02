@@ -1,7 +1,7 @@
-enum TaskResultErr { Msg(string) }
+enum TaskResultErr { Msg { message: string } }
 
 fn fail_with_enum() -> i64 {
-    throw TaskResultErr.Msg("task-error")
+    throw TaskResultErr.Msg { message: "task-error" }
     return 0
 }
 
@@ -9,10 +9,10 @@ var task = go fail_with_enum()
 var result = task.awaitResult()
 
 match (result) {
-    TaskResult.Failed(err) -> {
+    TaskResult.Failed { error: err } -> {
         print(typeName(err))
         match (err) {
-            TaskResultErr.Msg(message) -> print(message)
+            TaskResultErr.Msg { message } -> print(message)
             _ -> print("unexpected payload")
         }
     }

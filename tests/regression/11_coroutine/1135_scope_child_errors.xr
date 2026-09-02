@@ -3,7 +3,7 @@
 
 import time
 
-enum SvErr { Msg(string) }
+enum SvErr { Msg { message: string } }
 
 fn ok_report(ch: Channel<i64>, value: i64) -> i64 {
     ch.send(value)
@@ -12,7 +12,7 @@ fn ok_report(ch: Channel<i64>, value: i64) -> i64 {
 
 fn fail_report(ch: Channel<i64>, value: i64) -> i64 {
     ch.send(value)
-    throw SvErr.Msg("error_" + string(value))
+    throw SvErr.Msg { message: "error_" + string(value) }
     return 0
 }
 
@@ -25,7 +25,7 @@ fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
-            Recv.Value(v) -> { sum = sum + v }
+            Recv.Value { value: v } -> { sum = sum + v }
             _ -> {}
         }
     }
@@ -49,7 +49,7 @@ fn test_explicit_task_handle_observes_failure() {
         var task = go fail_report(ch, 5)
         var result = task.awaitResult()
         match (result) {
-            TaskResult.Failed(_) -> {}
+            TaskResult.Failed { error: _ } -> {}
             _ -> { assert(false, "failed task should be observed through TaskResult") }
         }
     }

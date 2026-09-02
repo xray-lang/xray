@@ -135,7 +135,7 @@ fn runConcurrentTest() -> i64 {
 
     for (var i = 0; i < CONCURRENT_CONNECTIONS; i = i + 1) {
         match (ch.recv()) {
-            Recv.Value(result) -> {
+            Recv.Value { value: result } -> {
                 if (result.connected) {
                     successConn = successConn + 1
                 }

@@ -1,5 +1,5 @@
-enum ProbeErr { Failed(string) }
+enum ProbeErr { Failed { message: string } }
 
 fn describe<T: Error>(e: T) -> string { return string(e) }
 
-print(describe(ProbeErr.Failed("probe")))
+print(describe(ProbeErr.Failed { message: "probe" }))

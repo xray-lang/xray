@@ -61,6 +61,37 @@ static void enum_layout_refresh_nominal_id(XrEnumLayout *layout) {
         layout->layout_id = xr_enum_layout_nominal_id(layout);
 }
 
+bool xr_enum_payload_names_are_exact(const char *const *payload_names, uint16_t payload_count) {
+    if (payload_count == 0)
+        return true;
+    if (!payload_names)
+        return false;
+    for (uint16_t i = 0; i < payload_count; i++) {
+        if (!payload_names[i] || payload_names[i][0] == '\0')
+            return false;
+        for (uint16_t prior = 0; prior < i; prior++) {
+            if (strcmp(payload_names[i], payload_names[prior]) == 0)
+                return false;
+        }
+    }
+    return true;
+}
+
+bool xr_enum_variant_payload_metadata_is_exact(const XrEnumVariantLayout *variant) {
+    if (!variant)
+        return false;
+    if (variant->payload_count == 0)
+        return variant->payload_names == NULL && variant->payload_type_ids == NULL;
+    if (!xr_enum_payload_names_are_exact(variant->payload_names, variant->payload_count) ||
+        !variant->payload_type_ids)
+        return false;
+    for (uint16_t i = 0; i < variant->payload_count; i++) {
+        if (variant->payload_type_ids[i] >= XR_TID_COUNT)
+            return false;
+    }
+    return true;
+}
+
 static uint32_t enum_align_up(uint32_t value, uint32_t align) {
     if (align <= 1)
         return value;
@@ -171,32 +202,51 @@ bool xr_enum_layout_set_variant_payload_metadata(XrEnumLayout *layout, uint32_t 
     XrEnumVariantLayout *variant = &layout->variants[tag];
     if (variant->payload_count != payload_count)
         return false;
+    if (payload_count == 0) {
+        if (variant->payload_names) {
+            xr_free(variant->payload_names);
+            variant->payload_names = NULL;
+        }
+        if (variant->payload_type_ids) {
+            xr_free(variant->payload_type_ids);
+            variant->payload_type_ids = NULL;
+        }
+        return true;
+    }
+    if (!xr_enum_payload_names_are_exact(payload_names, payload_count) || !payload_type_ids)
+        return false;
+    for (uint16_t i = 0; i < payload_count; i++) {
+        if (payload_type_ids[i] >= XR_TID_COUNT)
+            return false;
+    }
+
+    const char **new_names = (const char **) xr_calloc((size_t) payload_count, sizeof(*new_names));
+    uint8_t *new_type_ids = (uint8_t *) xr_malloc((size_t) payload_count);
+    if (!new_names || !new_type_ids) {
+        xr_free(new_names);
+        xr_free(new_type_ids);
+        return false;
+    }
+    for (uint16_t i = 0; i < payload_count; i++) {
+        new_names[i] = xr_strdup(payload_names[i]);
+        if (!new_names[i]) {
+            for (uint16_t copied = 0; copied < i; copied++)
+                xr_free((void *) new_names[copied]);
+            xr_free(new_names);
+            xr_free(new_type_ids);
+            return false;
+        }
+    }
+    memcpy(new_type_ids, payload_type_ids, (size_t) payload_count);
+
     if (variant->payload_names) {
         for (uint16_t i = 0; i < variant->payload_count; i++)
             xr_free((void *) variant->payload_names[i]);
         xr_free(variant->payload_names);
-        variant->payload_names = NULL;
     }
-    if (variant->payload_type_ids) {
-        xr_free(variant->payload_type_ids);
-        variant->payload_type_ids = NULL;
-    }
-    if (payload_count == 0)
-        return true;
-
-    variant->payload_names =
-        (const char **) xr_calloc((size_t) payload_count, sizeof(*variant->payload_names));
-    variant->payload_type_ids =
-        (uint8_t *) xr_calloc((size_t) payload_count, sizeof(*variant->payload_type_ids));
-    if (!variant->payload_names || !variant->payload_type_ids)
-        return false;
-    for (uint16_t i = 0; i < payload_count; i++) {
-        const char *name = payload_names && payload_names[i] ? payload_names[i] : "";
-        variant->payload_names[i] = xr_strdup(name);
-        variant->payload_type_ids[i] = payload_type_ids ? payload_type_ids[i] : 0;
-        if (!variant->payload_names[i])
-            return false;
-    }
+    xr_free(variant->payload_type_ids);
+    variant->payload_names = new_names;
+    variant->payload_type_ids = new_type_ids;
     return true;
 }
 

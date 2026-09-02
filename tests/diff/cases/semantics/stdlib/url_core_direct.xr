@@ -33,7 +33,7 @@ try {
     url.parseQuery("ok=1&bad=%GG")
 } catch (e: UrlError) {
     print(match (e) {
-        UrlError.InvalidPercentEncoding(offset) -> offset
+        UrlError.InvalidPercentEncoding { byteOffset: offset } -> offset
     })
 }
 print(url.resolve("https://example.com/a/b/c", "d.html"))

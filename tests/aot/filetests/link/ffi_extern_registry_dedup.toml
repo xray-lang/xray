@@ -1,5 +1,5 @@
 [package]
-name = "filetest-ffi-extern-registry-dedup"
+name = "xray-tests/filetest-ffi-extern-registry-dedup"
 version = "1.0.0"
 license = "MIT"
 main = "ffi_extern_registry_dedup.xr"

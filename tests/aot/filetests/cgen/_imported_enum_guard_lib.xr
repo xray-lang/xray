@@ -1,7 +1,7 @@
 export enum ImportedGuardError {
-    Failed(code: i64)
+    Failed { code: i64 }
 }
 
 export fn importedGuardError(code: i64) -> ImportedGuardError {
-    return ImportedGuardError.Failed(code)
+    return ImportedGuardError.Failed { code: code }
 }

@@ -16,11 +16,11 @@ fn test_channel_timeout() {
     ch1.send(42)
     var result1 = ch1.recvTimeout(1000)
     var result1_value = match (result1) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     }
     var result1_ok = match (result1) {
-        Recv.Value(_) -> true
+        Recv.Value { value: _ } -> true
         _ -> false
     }
     print("  result:", result1_value, "ok:", result1_ok)  // expect: 42, true
@@ -31,7 +31,7 @@ fn test_channel_timeout() {
     var result2 = ch2.recvTimeout(100)  // 100ms 超时
     match (result2) {
         Recv.Timeout -> print("  timeout")  // expect: timeout
-        Recv.Value(v) -> print("  got:", v)
+        Recv.Value { value: v } -> print("  got:", v)
         _ -> print("  no value")
     }
 
@@ -45,7 +45,7 @@ fn test_channel_timeout() {
     })  // expect: true
     var v3 = ch3.recv()
     print("  value:", match (v3) {
-        Recv.Value(v) -> v
+        Recv.Value { value: v } -> v
         _ -> -1
     })  // expect: 100
 
@@ -81,7 +81,7 @@ fn test_channel_timeout() {
         var count = 0
         while (true) {
             match (ch5.recvTimeout(200)) {
-                Recv.Value(val) -> {
+                Recv.Value { value: val } -> {
                     print("  consumed:", val)
                     count++
                 }

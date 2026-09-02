@@ -1015,6 +1015,28 @@ AstNode *xr_ast_struct_literal(XrCompilerSession *session, const char *name, cha
     return node;
 }
 
+AstNode *xr_ast_enum_construct(XrCompilerSession *session, AstNode *variant_path,
+                               char **field_names, const XrNameSpan *field_name_spans,
+                               AstNode **field_values, int field_count, int line) {
+    AstNode *node = alloc_node(session, AST_ENUM_CONSTRUCT, line);
+    node->as.enum_construct.variant_path = variant_path;
+    node->as.enum_construct.field_count = field_count;
+    if (field_count > 0) {
+        node->as.enum_construct.field_names =
+            (char **) ast_alloc_array(session, sizeof(char *), (size_t) field_count);
+        node->as.enum_construct.field_name_spans =
+            (XrNameSpan *) ast_alloc_array(session, sizeof(XrNameSpan), (size_t) field_count);
+        node->as.enum_construct.field_values =
+            (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) field_count);
+        for (int i = 0; i < field_count; i++) {
+            node->as.enum_construct.field_names[i] = ast_strdup(session, field_names[i]);
+            node->as.enum_construct.field_name_spans[i] = field_name_spans[i];
+            node->as.enum_construct.field_values[i] = field_values[i];
+        }
+    }
+    return node;
+}
+
 // Create interface declaration node
 AstNode *xr_ast_interface_decl(XrCompilerSession *session, const char *name, XrTypeRef **extends,
                                int extends_count, AstNode **methods, int method_count,
@@ -1090,6 +1112,7 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, XrPara
     node->as.method_decl.is_setter = is_setter;
     node->as.method_decl.is_static_constructor = false;  // Not a static constructor by default
     node->as.method_decl.is_variadic = false;
+    node->as.method_decl.receiver_mode = XR_PARAM_READ;
     node->as.method_decl.attributes = NULL;
     node->as.method_decl.attr_count = 0;
     node->as.method_decl.required_count = param_count;
@@ -1249,7 +1272,8 @@ AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, AstNode 
 // Create enum member node
 // Red  or  Ok(T)  or  Error(code: int, message: string)
 AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name, char **payload_names,
-                            XrTypeRef **payload_types, int payload_count, int line) {
+                            const XrNameSpan *payload_name_spans, XrTypeRef **payload_types,
+                            int payload_count, int line) {
     AstNode *node = alloc_node(session, AST_ENUM_MEMBER, line);
     node->as.enum_member.name = ast_strdup(session, name);
 
@@ -1259,14 +1283,17 @@ AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name, char *
             (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) payload_count);
         node->as.enum_member.payload_names =
             (char **) ast_alloc_array(session, sizeof(char *), (size_t) payload_count);
+        node->as.enum_member.payload_name_spans =
+            (XrNameSpan *) ast_alloc_array(session, sizeof(XrNameSpan), (size_t) payload_count);
         for (int i = 0; i < payload_count; i++) {
             node->as.enum_member.payload_types[i] = payload_types[i];
-            node->as.enum_member.payload_names[i] =
-                payload_names && payload_names[i] ? ast_strdup(session, payload_names[i]) : NULL;
+            node->as.enum_member.payload_names[i] = ast_strdup(session, payload_names[i]);
+            node->as.enum_member.payload_name_spans[i] = payload_name_spans[i];
         }
     } else {
         node->as.enum_member.payload_types = NULL;
         node->as.enum_member.payload_names = NULL;
+        node->as.enum_member.payload_name_spans = NULL;
     }
     node->as.enum_member.payload_count = payload_count;
 
@@ -1361,12 +1388,25 @@ AstNode *xr_ast_pattern_tuple(XrCompilerSession *session, AstNode **patterns, in
 }
 
 // Create ADT variant destructure pattern node
-AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant, AstNode **patterns,
-                            int count, int line) {
+AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant, char **field_names,
+                            const XrNameSpan *field_name_spans, AstNode **patterns, int count,
+                            int line) {
     AstNode *node = alloc_node(session, AST_PATTERN_ADT, line);
     node->as.pattern_adt.variant = variant;
-    node->as.pattern_adt.patterns = patterns;
     node->as.pattern_adt.count = count;
+    if (count > 0) {
+        node->as.pattern_adt.field_names =
+            (char **) ast_alloc_array(session, sizeof(char *), (size_t) count);
+        node->as.pattern_adt.field_name_spans =
+            (XrNameSpan *) ast_alloc_array(session, sizeof(XrNameSpan), (size_t) count);
+        node->as.pattern_adt.patterns =
+            (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
+        for (int i = 0; i < count; i++) {
+            node->as.pattern_adt.field_names[i] = ast_strdup(session, field_names[i]);
+            node->as.pattern_adt.field_name_spans[i] = field_name_spans[i];
+            node->as.pattern_adt.patterns[i] = patterns[i];
+        }
+    }
     return node;
 }
 
@@ -1574,6 +1614,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "UnionDecl";
         case AST_STRUCT_LITERAL:
             return "StructLiteral";
+        case AST_ENUM_CONSTRUCT:
+            return "EnumConstruct";
         case AST_INTERFACE_DECL:
             return "InterfaceDecl";
         case AST_INTERFACE_METHOD:

@@ -56,8 +56,6 @@ XR_FUNC void xr_ast_block_add(XrCompilerSession *session, AstNode *block, AstNod
 XR_FUNC AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, AstNode *initializer,
                                  bool is_const, int line);
 
-// Create binding declaration with storage mode (owned/shared)
-
 // Create variable reference node
 XR_FUNC AstNode *xr_ast_variable(XrCompilerSession *session, const char *name, int line);
 
@@ -211,6 +209,11 @@ XR_FUNC AstNode *xr_ast_struct_literal(XrCompilerSession *session, const char *n
                                        char **field_names, AstNode **field_values, int field_count,
                                        int line);
 
+// Create named payload enum construction: Shape.Circle { radius: value }
+XR_FUNC AstNode *xr_ast_enum_construct(XrCompilerSession *session, AstNode *variant_path,
+                                       char **field_names, const XrNameSpan *field_name_spans,
+                                       AstNode **field_values, int field_count, int line);
+
 // Create interface declaration node
 XR_FUNC AstNode *xr_ast_interface_decl(XrCompilerSession *session, const char *name,
                                        XrTypeRef **extends, int extends_count, AstNode **methods,
@@ -264,8 +267,8 @@ XR_FUNC AstNode *xr_ast_enum_decl(XrCompilerSession *session, const char *name, 
 
 // Create enum member node (ADT variant with optional payload)
 XR_FUNC AstNode *xr_ast_enum_member(XrCompilerSession *session, const char *name,
-                                    char **payload_names, XrTypeRef **payload_types,
-                                    int payload_count, int line);
+                                    char **payload_names, const XrNameSpan *payload_name_spans,
+                                    XrTypeRef **payload_types, int payload_count, int line);
 
 // Create enum access node
 XR_FUNC AstNode *xr_ast_enum_access(XrCompilerSession *session, const char *enum_name,
@@ -364,8 +367,9 @@ XR_FUNC AstNode *xr_ast_pattern_multi(XrCompilerSession *session, AstNode **patt
 XR_FUNC AstNode *xr_ast_pattern_tuple(XrCompilerSession *session, AstNode **patterns, int count,
                                       int line);
 
-// Create ADT variant destructure pattern node: Shape.Circle(r, ...)
+// Create named ADT variant destructure pattern node.
 XR_FUNC AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant,
+                                    char **field_names, const XrNameSpan *field_name_spans,
                                     AstNode **patterns, int count, int line);
 
 // Create object match pattern node: { x, y } / { x: sub }

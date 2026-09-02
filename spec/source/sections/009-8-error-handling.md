@@ -36,10 +36,10 @@ Xray 的错误处理分为两个严格分离的通道：
 `throw expr` 抛出一个枚举错误值。`expr` 必须是枚举类型的变体值：
 
 ```xray
-enum AppErr { NotFound, InvalidInput(string) }
+enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ 简单枚举变体
-throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
+throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚举变体
 ```
 
 抛出后行为：
@@ -55,14 +55,14 @@ throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
 #### 8.1.2 `try` / `catch`
 
 ```xray
-enum IOErr { Timeout, Refused(string) }
+enum IOErr { Timeout, Refused { reason: string } }
 
 try {
     connect(host)
 } catch (e) {
     match (e) {
         IOErr.Timeout -> log("timeout"),
-        IOErr.Refused(reason) -> log("refused: " + reason),
+        IOErr.Refused { reason } -> log("refused: " + reason),
     }
 }
 ```
@@ -79,7 +79,7 @@ try {
 
 ```xray
 enum NetErr { Timeout, Refused }
-enum DbErr { ConnLost, QueryFailed(string) }
+enum DbErr { ConnLost, QueryFailed { query: string } }
 
 try {
     riskyIO()
@@ -98,6 +98,11 @@ try {
 - 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
 - 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
 - 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
+
+`catch` 也可以直接使用 enum variant pattern。unit variant 写作
+`catch NetErr.Timeout { ... }`，其中唯一一对花括号是 catch 块体；payload variant 写作
+`catch DbErr.QueryFailed { query } { ... }`，第一对花括号是具名 pattern，第二对是块体。
+这个边界只由 brace-group 数量决定，不查询 variant schema，也不允许 unit pattern 写 `{}`。
 
 #### 8.1.3 重抛与错误转换
 
@@ -121,19 +126,19 @@ try {
 
 ```xray
 enum HttpErr {
-    NotFound(string),
-    ServerError(i64, string),
+    NotFound { message: string },
+    ServerError { code: i64, message: string },
     Timeout,
 }
 
 enum ParseErr {
     Empty,
-    InvalidChar(string, i64),
+    InvalidChar { value: string, offset: i64 },
     Overflow,
 }
 
 fn fetchUser(id: i64) -> User {
-    if (id <= 0) { throw HttpErr.NotFound("user not found") }
+    if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
     // ...
 }
 
@@ -141,8 +146,8 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound(msg) -> log("404:", msg),
-        HttpErr.ServerError(code, msg) -> log(string(code) + ":", msg),
+        HttpErr.NotFound { message: msg } -> log("404:", msg),
+        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
         HttpErr.Timeout -> log("timeout"),
     }
 }
@@ -162,7 +167,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 1. **Channel 显式传递**：
 
 ```xray
-enum WorkerErr { Failed(string) }
+enum WorkerErr { Failed { message: string } }
 const err_ch = Channel<string>(1)
 
 go fn() {
@@ -175,7 +180,7 @@ go fn() {
 }()
 
 var result = match (err_ch.recv()) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> "error"
 }
 if (result != "ok") { log("worker failed") }
@@ -430,10 +435,10 @@ main()
 #### 模式 2：throw + catch 用于库 API
 
 ```xray
-enum ConfigErr { Missing(string) }
+enum ConfigErr { Missing { field: string } }
 
 fn requirePort(cfg: JSON.Object) {
-    if (!cfg.containsKey("port")) { throw ConfigErr.Missing("port") }
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
     print("port:", cfg["port"])
 }
 
@@ -443,7 +448,7 @@ fn main() {
         requirePort(JSON.parseObject("{}"))                  // 抛出 ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
+            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
         }
     }
 }
@@ -477,11 +482,11 @@ fn safeDivide(a: i64, b: i64) -> string {
 #### 示例 1：`throw` / `catch` / `match`
 
 ```xray
-enum ParseErr { Empty, BadChar(string) }
+enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
-    if (s == "x") { throw ParseErr.BadChar(s) }
+    if (s == "x") { throw ParseErr.BadChar { value: s } }
     return 42
 }
 
@@ -491,7 +496,7 @@ fn main() {
     } catch (e: ParseErr) {
         match (e) {
             ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar(c) -> print("bad char:", c),
+            ParseErr.BadChar { value: c } -> print("bad char:", c),
         }
     }
 }
@@ -577,10 +582,10 @@ Design principles:
 `throw expr` raises an enum error value. `expr` must be a variant of an enum type:
 
 ```xray
-enum AppErr { NotFound, InvalidInput(string) }
+enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ simple enum variant
-throw AppErr.InvalidInput("bad format")     // ✅ ADT enum variant with payload
+throw AppErr.InvalidInput { message: "bad format" } // ✅ ADT enum variant with payload
 ```
 
 After a throw:
@@ -596,14 +601,14 @@ throw point → write to pending_error → return up the call stack → run stat
 #### 8.1.2 `try` / `catch`
 
 ```xray
-enum IOErr { Timeout, Refused(string) }
+enum IOErr { Timeout, Refused { reason: string } }
 
 try {
     connect(host)
 } catch (e) {
     match (e) {
         IOErr.Timeout -> log("timeout"),
-        IOErr.Refused(reason) -> log("refused: " + reason),
+        IOErr.Refused { reason } -> log("refused: " + reason),
     }
 }
 ```
@@ -620,7 +625,7 @@ A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test 
 
 ```xray
 enum NetErr { Timeout, Refused }
-enum DbErr { ConnLost, QueryFailed(string) }
+enum DbErr { ConnLost, QueryFailed { query: string } }
 
 try {
     riskyIO()
@@ -639,6 +644,12 @@ try {
 - Multiple `catch` clauses are tried in declaration order; the first match wins.
 - If every typed clause fails and there is no catch-all, the error continues propagating.
 - A `try` **must** be followed by at least one of `catch` or `catch panic`.
+
+`catch` may also use an enum variant pattern directly. A unit variant is written as
+`catch NetErr.Timeout { ... }`, where the only brace group is the catch body. A payload variant is
+written as `catch DbErr.QueryFailed { query } { ... }`: the first braces are the named pattern and
+the second braces are the body. Brace-group count alone determines this boundary; the parser does
+not query the variant schema, and a unit pattern still cannot use `{}`.
 
 #### 8.1.3 Rethrowing and error conversion
 
@@ -662,19 +673,19 @@ Define business errors as ADT enums with context-carrying payloads:
 
 ```xray
 enum HttpErr {
-    NotFound(string),
-    ServerError(i64, string),
+    NotFound { message: string },
+    ServerError { code: i64, message: string },
     Timeout,
 }
 
 enum ParseErr {
     Empty,
-    InvalidChar(string, i64),
+    InvalidChar { value: string, offset: i64 },
     Overflow,
 }
 
 fn fetchUser(id: i64) -> User {
-    if (id <= 0) { throw HttpErr.NotFound("user not found") }
+    if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
     // ...
 }
 
@@ -682,8 +693,8 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound(msg) -> log("404:", msg),
-        HttpErr.ServerError(code, msg) -> log(string(code) + ":", msg),
+        HttpErr.NotFound { message: msg } -> log("404:", msg),
+        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
         HttpErr.Timeout -> log("timeout"),
     }
 }
@@ -703,7 +714,7 @@ Ways to pass child coroutine errors:
 1. **Explicit Channel**:
 
 ```xray
-enum WorkerErr { Failed(string) }
+enum WorkerErr { Failed { message: string } }
 const err_ch = Channel<string>(1)
 
 go fn() {
@@ -716,7 +727,7 @@ go fn() {
 }()
 
 var result = match (err_ch.recv()) {
-    Recv.Value(v) -> v
+    Recv.Value { value: v } -> v
     _ -> "error"
 }
 if (result != "ok") { log("worker failed") }
@@ -983,10 +994,10 @@ main()
 #### Pattern 2: throw + catch for library APIs
 
 ```xray
-enum ConfigErr { Missing(string) }
+enum ConfigErr { Missing { field: string } }
 
 fn requirePort(cfg: JSON.Object) {
-    if (!cfg.containsKey("port")) { throw ConfigErr.Missing("port") }
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
     print("port:", cfg["port"])
 }
 
@@ -996,7 +1007,7 @@ fn main() {
         requirePort(JSON.parseObject("{}"))                  // throws ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
+            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
         }
     }
 }
@@ -1030,11 +1041,11 @@ These are self-contained programs that run as-is and pass `xray check` (comments
 #### Example 1: `throw` / `catch` / `match`
 
 ```xray
-enum ParseErr { Empty, BadChar(string) }
+enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
-    if (s == "x") { throw ParseErr.BadChar(s) }
+    if (s == "x") { throw ParseErr.BadChar { value: s } }
     return 42
 }
 
@@ -1044,7 +1055,7 @@ fn main() {
     } catch (e: ParseErr) {
         match (e) {
             ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar(c) -> print("bad char:", c),
+            ParseErr.BadChar { value: c } -> print("bad char:", c),
         }
     }
 }

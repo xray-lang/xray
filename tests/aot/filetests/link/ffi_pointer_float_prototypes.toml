@@ -1,5 +1,5 @@
 [package]
-name = "filetest-ffi_pointer_float_prototypes"
+name = "xray-tests/filetest-ffi_pointer_float_prototypes"
 version = "1.0.0"
 license = "MIT"
 main = "ffi_pointer_float_prototypes.xr"

@@ -15,10 +15,10 @@ export enum Base64PaddingPolicy {
 }
 
 export enum Base64Error {
-    InvalidLength(length: i64),
-    InvalidByte(byteOffset: i64, value: u8),
-    InvalidPadding(byteOffset: i64),
-    NonCanonicalTrailingBits(byteOffset: i64)
+    InvalidLength { length: i64 },
+    InvalidByte { byteOffset: i64, value: u8 },
+    InvalidPadding { byteOffset: i64 },
+    NonCanonicalTrailingBits { byteOffset: i64 }
 }
 
 export class Base64EncodeOptions {
@@ -188,10 +188,10 @@ fn _decodeValidated(src: Slice<u8>, end: i64, rem: i64, outLen: i64,
 
 fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<u8> {
     var scan = _scan(text, options)
-    if (scan.0 == 1) { throw Base64Error.InvalidLength(scan.1) }
-    if (scan.0 == 2) { throw Base64Error.InvalidByte(scan.1, scan.2) }
-    if (scan.0 == 3) { throw Base64Error.InvalidPadding(scan.1) }
-    if (scan.0 == 4) { throw Base64Error.NonCanonicalTrailingBits(scan.1) }
+    if (scan.0 == 1) { throw Base64Error.InvalidLength { length: scan.1 } }
+    if (scan.0 == 2) { throw Base64Error.InvalidByte { byteOffset: scan.1, value: scan.2 } }
+    if (scan.0 == 3) { throw Base64Error.InvalidPadding { byteOffset: scan.1 } }
+    if (scan.0 == 4) { throw Base64Error.NonCanonicalTrailingBits { byteOffset: scan.1 } }
 
     var src: Slice<u8> = text.bytes()
     return _decodeValidated(src, scan.3, scan.4, scan.5, options)

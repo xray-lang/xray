@@ -10,6 +10,7 @@
 
 #include "xanalyzer_symbol.h"
 #include "xanalyzer.h"
+#include "../parser/xast_nodes_common.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xintmap.h"
@@ -51,9 +52,100 @@ XaEnumInfo *xa_enum_info_new(const char *nominal_owner, const char *name, uint32
     return info;
 }
 
+bool xa_enum_variant_set_payload_names(XaEnumVariantInfo *variant, const char *const *payload_names,
+                                       uint16_t payload_count) {
+    if (!variant || variant->payload_names || variant->payload_count != payload_count ||
+        (payload_count > 0 && !payload_names))
+        return false;
+    if (payload_count == 0)
+        return true;
+
+    const char **names = xr_calloc((size_t) payload_count, sizeof(*names));
+    if (!names)
+        return false;
+    for (uint16_t i = 0; i < payload_count; i++) {
+        if (!payload_names[i] || !payload_names[i][0]) {
+            for (uint16_t j = 0; j < i; j++)
+                xr_free((void *) names[j]);
+            xr_free(names);
+            return false;
+        }
+        for (uint16_t j = 0; j < i; j++) {
+            if (strcmp(payload_names[i], payload_names[j]) == 0) {
+                for (uint16_t k = 0; k < i; k++)
+                    xr_free((void *) names[k]);
+                xr_free(names);
+                return false;
+            }
+        }
+        names[i] = xr_strdup(payload_names[i]);
+        if (!names[i]) {
+            for (uint16_t j = 0; j < i; j++)
+                xr_free((void *) names[j]);
+            xr_free(names);
+            return false;
+        }
+    }
+    variant->payload_names = names;
+    return true;
+}
+
+bool xa_enum_variant_set_payload_locations(XaEnumVariantInfo *variant, const char *file,
+                                           const XrNameSpan *payload_name_spans,
+                                           uint16_t payload_count) {
+    if (!variant || variant->payload_locations || variant->payload_count != payload_count ||
+        (payload_count > 0 && (!file || !file[0] || !payload_name_spans)))
+        return false;
+    if (payload_count == 0)
+        return true;
+
+    XrLocation *locations = xr_calloc((size_t) payload_count, sizeof(*locations));
+    if (!locations)
+        return false;
+    for (uint16_t i = 0; i < payload_count; i++) {
+        const XrNameSpan span = payload_name_spans[i];
+        if (span.line <= 0 || span.column <= 0) {
+            for (uint16_t j = 0; j < i; j++)
+                xr_free((void *) locations[j].file);
+            xr_free(locations);
+            return false;
+        }
+        locations[i].file = xr_strdup(file);
+        if (!locations[i].file) {
+            for (uint16_t j = 0; j < i; j++)
+                xr_free((void *) locations[j].file);
+            xr_free(locations);
+            return false;
+        }
+        locations[i].line = (uint32_t) span.line;
+        locations[i].column = (uint32_t) span.column;
+        locations[i].end_line = (uint32_t) span.line;
+        locations[i].end_column =
+            (uint32_t) span.column + (uint32_t) strlen(variant->payload_names[i]);
+    }
+    variant->payload_locations = locations;
+    return true;
+}
+
 bool xa_enum_info_finalize_layout(XaEnumInfo *info) {
     if (!info || !info->variants || info->variant_count == 0)
         return false;
+
+    for (uint32_t i = 0; i < info->variant_count; i++) {
+        const XaEnumVariantInfo *variant = &info->variants[i];
+        if (variant->payload_count == 0)
+            continue;
+        if (!variant->payload_names || !variant->payload_types)
+            return false;
+        for (uint16_t p = 0; p < variant->payload_count; p++) {
+            if (!variant->payload_names[p] || !variant->payload_names[p][0])
+                return false;
+            for (uint16_t q = 0; q < p; q++) {
+                if (strcmp(variant->payload_names[p], variant->payload_names[q]) == 0)
+                    return false;
+            }
+        }
+    }
 
     const char **names = (const char **) xr_malloc(sizeof(*names) * (size_t) info->variant_count);
     int *payload_counts = (int *) xr_calloc((size_t) info->variant_count, sizeof(int));
@@ -125,8 +217,30 @@ XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src) {
         dv->name = sv->name;
         dv->symbol = sv->symbol;
         dv->tag = sv->tag;
-        dv->payload_names = sv->payload_names;
         dv->payload_count = sv->payload_count;
+        if (!xa_enum_variant_set_payload_names(dv, (const char *const *) sv->payload_names,
+                                               sv->payload_count)) {
+            xa_enum_info_free(dst);
+            return NULL;
+        }
+        if (sv->payload_count > 0 && sv->payload_locations) {
+            XrNameSpan *spans = xr_malloc((size_t) sv->payload_count * sizeof(*spans));
+            if (!spans) {
+                xa_enum_info_free(dst);
+                return NULL;
+            }
+            for (uint16_t p = 0; p < sv->payload_count; p++) {
+                spans[p].line = (int) sv->payload_locations[p].line;
+                spans[p].column = (int) sv->payload_locations[p].column;
+            }
+            bool locations_ok = xa_enum_variant_set_payload_locations(
+                dv, sv->payload_locations[0].file, spans, sv->payload_count);
+            xr_free(spans);
+            if (!locations_ok) {
+                xa_enum_info_free(dst);
+                return NULL;
+            }
+        }
         if (sv->payload_count > 0 && sv->payload_types) {
             dv->payload_types =
                 (XrType **) xr_malloc((size_t) sv->payload_count * sizeof(XrType *));
@@ -152,6 +266,16 @@ void xa_enum_info_free(XaEnumInfo *info) {
         return;
     if (info->variants) {
         for (uint32_t i = 0; i < info->variant_count; i++) {
+            for (uint16_t p = 0; p < info->variants[i].payload_count; p++)
+                xr_free((void *) (info->variants[i].payload_names
+                                      ? info->variants[i].payload_names[p]
+                                      : NULL));
+            xr_free((void *) info->variants[i].payload_names);
+            if (info->variants[i].payload_locations) {
+                for (uint16_t p = 0; p < info->variants[i].payload_count; p++)
+                    xr_free((void *) info->variants[i].payload_locations[p].file);
+                xr_free(info->variants[i].payload_locations);
+            }
             if (info->variants[i].payload_types)
                 xr_free(info->variants[i].payload_types);
         }

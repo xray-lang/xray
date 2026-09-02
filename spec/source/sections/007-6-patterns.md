@@ -58,34 +58,33 @@ match (color) {
 
 #### 6.3.2 ADT 变体（带 payload）解构
 
-ADT 变体的模式可解构 payload 字段（按位置或按字段名）：
+ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
 
 ```xray
-// 位置解构
 match (event) {
-    NetEvent.Connected            -> print("connected"),
-    NetEvent.Disconnected(reason) -> print("by:", reason),
-    NetEvent.DataReceived(b)      -> process(b),
-    NetEvent.Error(code, msg)     -> log.error(code, msg),
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
 }
 
-// Option 模式（位置）
+// 同名 binding shorthand
 match (opt) {
-    Option.Some(v) -> print("got:", v),
+    Option.Some { value: v } -> print("got:", v),
     Option.None    -> print("nothing"),
 }
 
-// 通配符跳过 payload 中不关心的字段
+// 只列需要观察的字段
 match (event) {
-    NetEvent.Error(code, _) if (code >= 500) -> throw NetErr.ServerFault(code),
-    _                                         -> continue,
+    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
+    _                                        -> continue,
 }
 
 // 嵌套解构
 match (msg) {
-    Option.Some(NetEvent.DataReceived(bytes)) -> process(bytes),
-    Option.None                               -> skip(),
-    _                                         -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
+    Option.None                                           -> skip(),
+    _                                                     -> skip(),
 }
 ```
 
@@ -99,14 +98,14 @@ match (msg) {
 ```xray
 enum NetEvent {
     Connected,
-    Disconnected(reason: string),
-    DataReceived(bytes: Array<u8>),
-    Error(code: i64, message: string),
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
 }
 
 match (event) {
-    NetEvent.Connected            -> "ok",
-    NetEvent.Disconnected(r)      -> "down: ${r}",
+    NetEvent.Connected                     -> "ok",
+    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
     // ❌ E0371: 缺失变体 DataReceived 和 Error；可加 `_ -> ...` 兜底
 }
 ```
@@ -254,34 +253,33 @@ match (color) {
 
 #### 6.3.2 ADT variant (with payload) destructuring
 
-ADT variant patterns may destructure payload fields (positionally or by name):
+ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
 
 ```xray
-// Positional destructuring
 match (event) {
-    NetEvent.Connected            -> print("connected"),
-    NetEvent.Disconnected(reason) -> print("by:", reason),
-    NetEvent.DataReceived(b)      -> process(b),
-    NetEvent.Error(code, msg)     -> log.error(code, msg),
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
 }
 
-// Option patterns (positional)
+// Same-name binding shorthand
 match (opt) {
-    Option.Some(v) -> print("got:", v),
+    Option.Some { value: v } -> print("got:", v),
     Option.None    -> print("nothing"),
 }
 
-// Wildcards skip payload fields you don't care about
+// List only fields that are observed
 match (event) {
-    NetEvent.Error(code, _) if (code >= 500) -> throw NetErr.ServerFault(code),
-    _                                         -> continue,
+    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
+    _                                        -> continue,
 }
 
 // Nested destructuring
 match (msg) {
-    Option.Some(NetEvent.DataReceived(bytes)) -> process(bytes),
-    Option.None                               -> skip(),
-    _                                         -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
+    Option.None                                           -> skip(),
+    _                                                     -> skip(),
 }
 ```
 
@@ -295,14 +293,14 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 ```xray
 enum NetEvent {
     Connected,
-    Disconnected(reason: string),
-    DataReceived(bytes: Array<u8>),
-    Error(code: i64, message: string),
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
 }
 
 match (event) {
-    NetEvent.Connected            -> "ok",
-    NetEvent.Disconnected(r)      -> "down: ${r}",
+    NetEvent.Connected                     -> "ok",
+    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
     // ❌ E0371: missing variants DataReceived and Error; add `_ -> ...` as catch-all
 }
 ```

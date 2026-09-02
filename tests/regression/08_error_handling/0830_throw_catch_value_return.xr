@@ -1,7 +1,7 @@
 // Value-return error channel: throw enum + catch
 
 enum MathErr { DivByZero, Overflow }
-enum AppErr { NotFound(string), Timeout }
+enum AppErr { NotFound { key: string }, Timeout }
 enum IoErr { Closed, Timeout }
 enum ParseErr { Invalid }
 
@@ -75,7 +75,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
 @test fn catch_preserves_error_value() {
     fn lookup(key: string) -> string {
         if (key == "") {
-            throw AppErr.NotFound("empty key")
+            throw AppErr.NotFound { key: "empty key" }
         }
         return "value_${key}"
     }
@@ -84,7 +84,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
         msg = lookup("")
     } catch (e: AppErr) {
         msg = match (e) {
-            AppErr.NotFound(s) -> "not found: ${s}",
+            AppErr.NotFound { key: s } -> "not found: ${s}",
             AppErr.Timeout -> "timeout",
         }
     }

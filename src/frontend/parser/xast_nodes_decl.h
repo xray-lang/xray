@@ -162,6 +162,7 @@ typedef struct MethodDeclNode {
     bool is_setter;
     bool is_static_constructor;
     bool is_variadic;
+    XrParamMode receiver_mode;
     XrAttribute **attributes;
     int attr_count;
     int required_count;
@@ -225,8 +226,9 @@ typedef struct TypeAliasNode {
 
 typedef struct EnumMemberNode {
     char *name;
-    /* ADT variant payload fields (positional or named) */
-    char **payload_names;      /* field names; NULL entry = positional */
+    /* ADT variant payload fields are always named and declaration ordered. */
+    char **payload_names;
+    XrNameSpan *payload_name_spans;
     XrTypeRef **payload_types; /* type annotations per field */
     int payload_count;         /* 0 = no payload (simple variant) */
 } EnumMemberNode;

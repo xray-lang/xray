@@ -2603,8 +2603,7 @@ static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *typ
                            (unsigned) XR_SCALAR_REP_NONE);
     return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
            type->kind == XR_KIND_INSTANCE && type->builtin_type == XR_TID_STRINGBUILDER &&
-           type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
            type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            type->canonical_key && strcmp(type->canonical_key, expected_type_key) == 0;
@@ -3536,8 +3535,7 @@ static bool verifier_source_namespace_identity_copy_is_exact(
         operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
         operation->return_parameter != -1 || operation->return_complete != 1 ||
         type->kind != XR_KIND_UNKNOWN || type->scalar_rep != XR_SCALAR_REP_NONE ||
-        type->child_count != 0 ||
-        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->child_count != 0 || type->aggregate_extent != 0 || type->aggregate_align != 0 ||
         type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
         return false;
     const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
@@ -4074,7 +4072,10 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
             semantic_source_export_string_result_for_operation_is_exact_verify(plan, view, i) ||
             semantic_direct_local_array_result_is_exact_verify(semantic, i) ||
             semantic_direct_local_adt_enum_result_is_exact(semantic, i) ||
-            xr_semantic_adt_enum_constructor_is_exact(semantic, operation, NULL) ||
+            xr_semantic_adt_enum_shared_read_is_exact(
+                operation, xr_semantic_plan_type(semantic, operation->result_type),
+                xr_semantic_unique_value_definition(semantic, operation->result_value)) ||
+            xr_semantic_variant_construct_is_exact(semantic, operation, NULL) ||
             semantic_stringbuilder_constructor_is_exact(semantic, operation) ||
             /* The method families own their result type in their own right;
              * relying on the constructor to have marked StringBuilder would
@@ -4366,10 +4367,18 @@ static bool verify_value_binding(
           parameter->mode == XR_PARAM_READ && parameter->transfer_mode == XR_TRANSFER_SHARE) ||
          (operation && operation->result_value == semantic_value &&
           operation->result_type == semantic_type &&
-          (xr_semantic_adt_enum_constructor_is_exact(semantic, operation, NULL) ||
+          (xr_semantic_variant_construct_is_exact(semantic, operation, NULL) ||
+           xr_semantic_adt_enum_shared_read_is_exact(
+               operation, type,
+               xr_semantic_unique_value_definition(semantic, operation->result_value)) ||
            semantic_direct_local_adt_enum_result_is_exact(semantic, operation_index))));
     bool exact_adt_enum_borrowed =
-        exact_adt_enum && parameter && parameter->ownership == XI_OWN_BORROWED;
+        exact_adt_enum &&
+        ((parameter && parameter->ownership == XI_OWN_BORROWED) ||
+         (operation &&
+          xr_semantic_adt_enum_shared_read_is_exact(
+              operation, type,
+              xr_semantic_unique_value_definition(semantic, operation->result_value))));
     bool exact_string_byte_parameter = semantic_u8_slice_parameter_is_exact(semantic, parameter) &&
                                        parameter->type == semantic_type;
     uint8_t exact_tagged_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
@@ -6281,7 +6290,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             }
             expected_calls++;
         }
-        if (xr_semantic_adt_enum_constructor_is_exact(semantic, operation, NULL)) {
+        if (xr_semantic_variant_construct_is_exact(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
                 break;
@@ -6542,7 +6551,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         XrSemanticAdtEnumConstructorShape enum_constructor_shape = {0};
         bool adt_enum_constructor =
             !semantic_target &&
-            xr_semantic_adt_enum_constructor_is_exact(semantic, operation, &enum_constructor_shape);
+            xr_semantic_variant_construct_is_exact(semantic, operation, &enum_constructor_shape);
         uint8_t array_intrinsic_kind = XR_TARGET_ARRAY_INTRINSIC_NONE;
         uint8_t array_intrinsic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         bool array_intrinsic = !semantic_target && semantic_array_intrinsic_is_exact_verify(
@@ -7522,7 +7531,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             if (!valid)
                 break;
         } else if (adt_enum_constructor) {
-            valid = !suspends && operation->opcode == XI_CALL_METHOD &&
+            valid = !suspends && operation->opcode == XI_VARIANT_CONSTRUCT &&
                     reconstruct_call_identity(
                         "xray-target-adt-enum-constructor-v1", operation->id, result_type->id,
                         enum_constructor_shape.member_ordinal, &expected_identity) &&

@@ -9,8 +9,8 @@ const HEX = "0123456789abcdef"
 // ---- hex ----
 
 export enum HexError {
-    OddLength(length: i64),
-    InvalidDigit(byteOffset: i64, value: u8)
+    OddLength { length: i64 },
+    InvalidDigit { byteOffset: i64, value: u8 }
 }
 
 // Map a hex character's byte value to its nibble, or -1 if not a hex digit.
@@ -36,15 +36,15 @@ export fn hexEncode(data: Slice<u8>) -> string {
 export fn hexDecode(hex: string) -> Array<u8> {
     var src: Slice<u8> = hex.bytes()
     var n = len(src)
-    if (n % 2 != 0) { throw HexError.OddLength(n) }
+    if (n % 2 != 0) { throw HexError.OddLength { length: n } }
     var out = Array<u8>(n / 2)
     var oi = 0
     var i = 0
     while (i < n) {
         var hi = _hexVal(src[i] as i64)
-        if (hi < 0) { throw HexError.InvalidDigit(i, src[i]) }
+        if (hi < 0) { throw HexError.InvalidDigit { byteOffset: i, value: src[i] } }
         var lo = _hexVal(src[i + 1] as i64)
-        if (lo < 0) { throw HexError.InvalidDigit(i + 1, src[i + 1]) }
+        if (lo < 0) { throw HexError.InvalidDigit { byteOffset: i + 1, value: src[i + 1] } }
         out[oi] = ((hi << 4) | lo) as u8
         oi = oi + 1
         i = i + 2
@@ -124,10 +124,10 @@ export fn utf8Valid(data: Slice<u8>) -> bool {
 // ---- UTF-16 ----
 
 export enum Utf16Error {
-    OddByteLength(length: i64),
-    UnexpectedLowSurrogate(byteOffset: i64, value: i64),
-    MissingLowSurrogate(byteOffset: i64, value: i64),
-    InvalidLowSurrogate(byteOffset: i64, value: i64)
+    OddByteLength { length: i64 },
+    UnexpectedLowSurrogate { byteOffset: i64, value: i64 },
+    MissingLowSurrogate { byteOffset: i64, value: i64 },
+    InvalidLowSurrogate { byteOffset: i64, value: i64 }
 }
 
 export class Utf16DecodeOptions {
@@ -232,7 +232,7 @@ fn putUtf8(out: ref Array<u8>, oi: i64, cp: i64) -> i64 {
 // FF FE = LE); without a BOM the options byte order selects byte order.
 export fn utf16Decode(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()) -> string {
     var n = len(data)
-    if (n % 2 != 0) { throw Utf16Error.OddByteLength(n) }
+    if (n % 2 != 0) { throw Utf16Error.OddByteLength { length: n } }
 
     var opts = options
     var order = opts.order
@@ -257,17 +257,17 @@ export fn utf16Decode(data: Slice<u8>, options: Utf16DecodeOptions = Utf16Decode
         var byteOffset = i
         i = i + 2
         if (u >= 0xDC00 && u <= 0xDFFF) {
-            throw Utf16Error.UnexpectedLowSurrogate(byteOffset, u)
+            throw Utf16Error.UnexpectedLowSurrogate { byteOffset: byteOffset, value: u }
         }
         if (u >= 0xD800 && u <= 0xDBFF) {
-            if (i + 1 >= n) { throw Utf16Error.MissingLowSurrogate(byteOffset, u) }
+            if (i + 1 >= n) { throw Utf16Error.MissingLowSurrogate { byteOffset: byteOffset, value: u } }
             var u2 = getU16(data, i, order)
             if (u2 >= 0xDC00 && u2 <= 0xDFFF) {
                 cps.push(0x10000 + ((u - 0xD800) << 10) + (u2 - 0xDC00))
                 i = i + 2
                 continue
             }
-            throw Utf16Error.InvalidLowSurrogate(i, u2)
+            throw Utf16Error.InvalidLowSurrogate { byteOffset: i, value: u2 }
         }
         cps.push(u)
     }

@@ -104,15 +104,15 @@ export enum Http2Error {
     // A request this module refuses to put on the wire: a header name or
     // value outside the grammar, a connection-specific header, a method that
     // is not a token, or more headers than one HEADERS frame carries.
-    ProtocolError(reason: string),
+    ProtocolError { reason: string },
     // The peer could not be reached, or the connection failed before a
     // complete response arrived.
-    ConnectionFailed(target: string),
+    ConnectionFailed { target: string },
     // The peer spoke something other than HTTP/2.
-    FramingError(reason: string),
+    FramingError { reason: string },
     // The peer's HPACK block could not be decoded (RFC 7541 Section 4.2
     // makes this a connection error).
-    CompressionError(reason: string),
+    CompressionError { reason: string },
     // The build has no TLS provider, so no HTTP/2 connection is possible.
     TlsUnavailable
 }
@@ -213,24 +213,24 @@ fn _headerForbidden(lowerName: string, value: string) -> bool {
 // are the same length.
 fn _validateRequest(method: string, names: Array<string>, values: Array<string>) {
     if (!_methodValid(method)) {
-        throw Http2Error.ProtocolError("method is not a token: " + method)
+        throw Http2Error.ProtocolError { reason: "method is not a token: " + method }
     }
     if (len(names) != len(values)) {
-        throw Http2Error.ProtocolError("header names and values differ in length")
+        throw Http2Error.ProtocolError { reason: "header names and values differ in length" }
     }
     if (len(names) > MAX_REQUEST_HEADERS) {
-        throw Http2Error.ProtocolError("too many headers for one HEADERS frame")
+        throw Http2Error.ProtocolError { reason: "too many headers for one HEADERS frame" }
     }
     for (var i = 0; i < len(names); i++) {
         if (!_headerNameValid(names[i])) {
-            throw Http2Error.ProtocolError("invalid header name: " + names[i])
+            throw Http2Error.ProtocolError { reason: "invalid header name: " + names[i] }
         }
         if (!_headerValueValid(values[i])) {
-            throw Http2Error.ProtocolError("invalid header value for: " + names[i])
+            throw Http2Error.ProtocolError { reason: "invalid header value for: " + names[i] }
         }
         var lower = _asciiLower(names[i])
         if (_headerForbidden(lower, values[i])) {
-            throw Http2Error.ProtocolError("header not allowed in HTTP/2: " + lower)
+            throw Http2Error.ProtocolError { reason: "header not allowed in HTTP/2: " + lower }
         }
     }
 }
@@ -832,7 +832,7 @@ fn _readU32(src: Array<u8>, pos: i64) -> i64 {
 export fn writeFrameHeader(out: ref Array<u8>, length: i64, kind: i64, flags: i64,
                            streamId: i64) {
     if (length < 0 || length > MAX_ALLOWED_FRAME_SIZE) {
-        throw Http2Error.FramingError("frame length out of range: " + string(length))
+        throw Http2Error.FramingError { reason: "frame length out of range: " + string(length) }
     }
     out.push(((length >> 16) & 255) as u8)
     out.push(((length >> 8) & 255) as u8)
@@ -1082,18 +1082,18 @@ fn _sliceString(b: Slice<u8>, start: i64, end: i64) -> string {
 fn _parsePort(text: string) -> i64 {
     var b: Slice<u8> = text.bytes()
     if (len(b) == 0 || len(b) > 5) {
-        throw Http2Error.ProtocolError("invalid port: " + text)
+        throw Http2Error.ProtocolError { reason: "invalid port: " + text }
     }
     var port = 0
     for (var i = 0; i < len(b); i++) {
         var c = b[i] as i64
         if (c < 48 || c > 57) {
-            throw Http2Error.ProtocolError("invalid port: " + text)
+            throw Http2Error.ProtocolError { reason: "invalid port: " + text }
         }
         port = port * 10 + (c - 48)
     }
     if (port < 1 || port > 65535) {
-        throw Http2Error.ProtocolError("invalid port: " + text)
+        throw Http2Error.ProtocolError { reason: "invalid port: " + text }
     }
     return port
 }
@@ -1112,11 +1112,11 @@ fn _parseTarget(url: string) -> Target {
         }
     }
     if (schemeEnd < 0) {
-        throw Http2Error.ProtocolError("URL has no scheme: " + url)
+        throw Http2Error.ProtocolError { reason: "URL has no scheme: " + url }
     }
     var scheme = _asciiLower(_sliceString(b, 0, schemeEnd))
     if (scheme != "https") {
-        throw Http2Error.ProtocolError("HTTP/2 requires https, got: " + scheme)
+        throw Http2Error.ProtocolError { reason: "HTTP/2 requires https, got: " + scheme }
     }
 
     var authStart = schemeEnd + 3
@@ -1128,11 +1128,11 @@ fn _parseTarget(url: string) -> Target {
     var authority = _sliceString(b, authStart, authEnd)
     var ab: Slice<u8> = authority.bytes()
     if (len(ab) == 0) {
-        throw Http2Error.ProtocolError("URL has no authority: " + url)
+        throw Http2Error.ProtocolError { reason: "URL has no authority: " + url }
     }
     // Credentials in the authority are refused rather than forwarded.
     if (_indexOfByte(ab, 64, 0) >= 0) {
-        throw Http2Error.ProtocolError("URL must not carry userinfo: " + url)
+        throw Http2Error.ProtocolError { reason: "URL must not carry userinfo: " + url }
     }
 
     var host = authority
@@ -1141,12 +1141,12 @@ fn _parseTarget(url: string) -> Target {
         // IPv6 literal: the colon that separates the port comes after `]`.
         var closeAt = _indexOfByte(ab, 93, 0)
         if (closeAt < 0) {
-            throw Http2Error.ProtocolError("unterminated IPv6 literal: " + url)
+            throw Http2Error.ProtocolError { reason: "unterminated IPv6 literal: " + url }
         }
         host = _sliceString(ab, 1, closeAt)
         if (closeAt + 1 < len(ab)) {
             if ((ab[closeAt + 1] as i64) != 58) {
-                throw Http2Error.ProtocolError("bad authority: " + authority)
+                throw Http2Error.ProtocolError { reason: "bad authority: " + authority }
             }
             port = _parsePort(_sliceString(ab, closeAt + 2, len(ab)))
         }
@@ -1158,7 +1158,7 @@ fn _parseTarget(url: string) -> Target {
         }
     }
     if (len(host.bytes()) == 0) {
-        throw Http2Error.ProtocolError("URL has no host: " + url)
+        throw Http2Error.ProtocolError { reason: "URL has no host: " + url }
     }
 
     var path = "/"
@@ -1291,7 +1291,7 @@ final class Exchange {
         // headers plus four pseudo-headers, so CONTINUATION never arises on
         // the sending side.
         if (len(block) > this.peerSettings.get(SETTINGS_MAX_FRAME_SIZE)) {
-            throw Http2Error.ProtocolError("header block exceeds the peer's maximum frame size")
+            throw Http2Error.ProtocolError { reason: "header block exceeds the peer's maximum frame size" }
         }
         var flags = FLAG_END_HEADERS | (endStream ? FLAG_END_STREAM : 0)
         var out = Array<u8>()
@@ -1348,7 +1348,7 @@ final class Exchange {
     consumeOneFrame() {
         var header = readFrameHeader(this.buf, this.pos)
         if (header == null) {
-            throw Http2Error.FramingError("truncated frame header")
+            throw Http2Error.FramingError { reason: "truncated frame header" }
         }
         var h = header!
         // A peer may not send a frame larger than this endpoint advertised.
@@ -1356,7 +1356,7 @@ final class Exchange {
         // 16 MB, without ever comparing it to its own SETTINGS.
         if (h.length > this.settings.get(SETTINGS_MAX_FRAME_SIZE)) {
             this.queue(encodeGoaway(this.streamId, FRAME_SIZE_ERROR))
-            throw Http2Error.FramingError("peer frame exceeds the advertised maximum")
+            throw Http2Error.FramingError { reason: "peer frame exceeds the advertised maximum" }
         }
         var payloadStart = this.pos + FRAME_HEADER_SIZE
         this.pos = payloadStart + h.length
@@ -1364,7 +1364,7 @@ final class Exchange {
         var shapeError = validateFrameHeader(h)
         if (shapeError != NO_ERROR) {
             this.queue(encodeGoaway(this.streamId, shapeError))
-            throw Http2Error.FramingError("peer sent a malformed frame")
+            throw Http2Error.FramingError { reason: "peer sent a malformed frame" }
         }
         this.handleFrame(h, payloadStart)
     }
@@ -1375,12 +1375,12 @@ final class Exchange {
         var end = payloadStart + h.length
         if (!h.hasFlag(FLAG_PADDED)) { return (start, end) }
         if (h.length < 1) {
-            throw Http2Error.FramingError("padded frame has no pad length")
+            throw Http2Error.FramingError { reason: "padded frame has no pad length" }
         }
         var pad = this.buf[start] as i64
         start = start + 1
         if (pad > end - start) {
-            throw Http2Error.FramingError("frame padding exceeds the payload")
+            throw Http2Error.FramingError { reason: "frame padding exceeds the payload" }
         }
         return (start, end - pad)
     }
@@ -1392,7 +1392,7 @@ final class Exchange {
                                            h.length)
             if (err != NO_ERROR) {
                 this.queue(encodeGoaway(this.streamId, err))
-                throw Http2Error.FramingError("peer sent invalid SETTINGS")
+                throw Http2Error.FramingError { reason: "peer sent invalid SETTINGS" }
             }
             this.queue(encodeSettingsAck())
             return
@@ -1403,7 +1403,7 @@ final class Exchange {
             var blockEnd = bounds.1
             if (h.hasFlag(FLAG_PRIORITY)) {
                 if (blockEnd - blockStart < 5) {
-                    throw Http2Error.FramingError("HEADERS priority section is truncated")
+                    throw Http2Error.FramingError { reason: "HEADERS priority section is truncated" }
                 }
                 blockStart = blockStart + 5
             }
@@ -1411,7 +1411,7 @@ final class Exchange {
                 var block = this.decoder.decodeRange(this.buf, blockStart, blockEnd)
                 if (block == null) {
                     this.queue(encodeGoaway(this.streamId, COMPRESSION_ERROR))
-                    throw Http2Error.CompressionError("could not decode the peer's header block")
+                    throw Http2Error.CompressionError { reason: "could not decode the peer's header block" }
                 }
                 this.acceptHeaders(block!)
             }
@@ -1425,7 +1425,7 @@ final class Exchange {
             if (h.streamId == this.streamId && bounds.1 > bounds.0) {
                 if (len(this.responseBody) + (bounds.1 - bounds.0) > MAX_RESPONSE_BODY_BYTES) {
                     this.queue(encodeRstStream(this.streamId, ENHANCE_YOUR_CALM))
-                    throw Http2Error.ProtocolError("response body exceeds the size ceiling")
+                    throw Http2Error.ProtocolError { reason: "response body exceeds the size ceiling" }
                 }
                 this.responseBody.appendFrom(this.buf[bounds.0:bounds.1])
             }
@@ -1493,7 +1493,7 @@ final class Exchange {
         if (inc == 0) {
             if (h.streamId == 0) {
                 this.queue(encodeGoaway(this.streamId, PROTOCOL_ERROR))
-                throw Http2Error.FramingError("peer sent a zero connection window update")
+                throw Http2Error.FramingError { reason: "peer sent a zero connection window update" }
             }
             this.queue(encodeRstStream(h.streamId, PROTOCOL_ERROR))
             if (h.streamId == this.streamId) { this.state = StreamState.Closed }
@@ -1502,7 +1502,7 @@ final class Exchange {
         if (h.streamId == 0) {
             if (this.connWindow + inc > MAX_WINDOW) {
                 this.queue(encodeGoaway(this.streamId, FLOW_CONTROL_ERROR))
-                throw Http2Error.FramingError("connection window overflowed")
+                throw Http2Error.FramingError { reason: "connection window overflowed" }
             }
             this.connWindow = this.connWindow + inc
             return
@@ -1510,7 +1510,7 @@ final class Exchange {
         if (h.streamId == this.streamId) {
             if (this.sendWindow + inc > MAX_WINDOW) {
                 this.queue(encodeRstStream(this.streamId, FLOW_CONTROL_ERROR))
-                throw Http2Error.FramingError("stream window overflowed")
+                throw Http2Error.FramingError { reason: "stream window overflowed" }
             }
             this.sendWindow = this.sendWindow + inc
         }
@@ -1530,11 +1530,11 @@ final class Exchange {
             }
             if (len(name.bytes()) == 0 || _startsWithColon(name)) { continue }
             if (this.headers.count() >= MAX_RESPONSE_HEADERS) {
-                throw Http2Error.ProtocolError("response has too many headers")
+                throw Http2Error.ProtocolError { reason: "response has too many headers" }
             }
             var cost = len(name.bytes()) + len(value.bytes())
             if (this.headerBytes + cost > MAX_RESPONSE_HEADER_BYTES) {
-                throw Http2Error.ProtocolError("response headers exceed the size ceiling")
+                throw Http2Error.ProtocolError { reason: "response headers exceed the size ceiling" }
             }
             this.headerBytes = this.headerBytes + cost
             this.headers.add(name, value)
@@ -1575,7 +1575,7 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
         ex.pushBody(body)
         if (len(ex.outbox) > 0) {
             if (!__send(handle, ex.outbox)) {
-                throw Http2Error.ConnectionFailed("write failed")
+                throw Http2Error.ConnectionFailed { target: "write failed" }
             }
             ex.outbox = Array<u8>()
         }
@@ -1587,29 +1587,29 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
         while (ex.frameShortfall() > 0) {
             var chunk = __recv(handle, DEFAULT_MAX_FRAME_SIZE, timeoutMs)
             if (chunk == null) {
-                throw Http2Error.ConnectionFailed("read failed")
+                throw Http2Error.ConnectionFailed { target: "read failed" }
             }
             var got = chunk!
             if (len(got) == 0) {
-                throw Http2Error.ConnectionFailed("connection closed before the response ended")
+                throw Http2Error.ConnectionFailed { target: "connection closed before the response ended" }
             }
             ex.buf.appendFrom(got[:])
         }
         ex.consumeOneFrame()
         frames = frames + 1
         if (frames > MAX_FRAMES_PER_REQUEST) {
-            throw Http2Error.ConnectionFailed("peer never ended the response stream")
+            throw Http2Error.ConnectionFailed { target: "peer never ended the response stream" }
         }
     }
 
     if (ex.resetCode > 0) {
         // A reset stream has no response. The C client reported one anyway,
         // as HTTP 200 with an empty body.
-        throw Http2Error.ConnectionFailed("stream reset by peer with code " +
-                                          string(ex.resetCode))
+        throw Http2Error.ConnectionFailed { target: "stream reset by peer with code " +
+                                          string(ex.resetCode) }
     }
     if (ex.status == 0) {
-        throw Http2Error.ProtocolError("response carried no valid :status")
+        throw Http2Error.ProtocolError { reason: "response carried no valid :status" }
     }
     return (ex.status, ex.headers.names, ex.headers.values, ex.responseBody)
 }
@@ -1634,12 +1634,12 @@ export fn request(url: string, method: string, headerNames: Array<string>,
                   timeoutMs: i64) -> (i64, Array<string>, Array<string>, Array<u8>) {
     _validateRequest(method, headerNames, headerValues)
     if (timeoutMs <= 0) {
-        throw Http2Error.ProtocolError("timeout must be positive")
+        throw Http2Error.ProtocolError { reason: "timeout must be positive" }
     }
     var target = _parseTarget(url)
 
     var handle = __connect(target.host, target.port, timeoutMs)
-    if (handle < 0) { throw Http2Error.ConnectionFailed(url) }
+    if (handle < 0) { throw Http2Error.ConnectionFailed { target: url } }
     try {
         var answer = _exchange(handle, target, method, headerNames, headerValues, body,
                                timeoutMs)

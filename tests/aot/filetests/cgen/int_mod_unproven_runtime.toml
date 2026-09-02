@@ -1,5 +1,5 @@
 [package]
-name = "filetest-int-mod-unproven-runtime"
+name = "xray-tests/filetest-int-mod-unproven-runtime"
 version = "1.0.0"
 license = "MIT"
 main = "int_mod_unproven_runtime.xr"

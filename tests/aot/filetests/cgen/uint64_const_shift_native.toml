@@ -1,5 +1,5 @@
 [package]
-name = "filetest-uint64-const-shift-native"
+name = "xray-tests/filetest-uint64-const-shift-native"
 version = "1.0.0"
 license = "MIT"
 main = "uint64_const_shift_native.xr"

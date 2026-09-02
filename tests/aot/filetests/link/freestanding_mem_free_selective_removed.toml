@@ -1,5 +1,5 @@
 [package]
-name = "filetest-freestanding_mem_free_selective_removed"
+name = "xray-tests/filetest-freestanding_mem_free_selective_removed"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_mem_free_selective_removed.xr"

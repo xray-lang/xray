@@ -58,9 +58,9 @@ TEST(uncaught_enum_error_returns_nonzero) {
     /* In the new error model, throw writes to pending_error and returns.
      * Each caller sees the error and also returns (auto-propagation).
      * The error value ends up in pending_error at the top level. */
-    const char *src = "enum VmErr { Boom(string) }\n"
+    const char *src = "enum VmErr { Boom { message: string } }\n"
                       "fn deep() {\n"
-                      "    throw VmErr.Boom(\"boom\")\n"
+                      "    throw VmErr.Boom { message: \"boom\" }\n"
                       "}\n"
                       "fn level3() { deep() }\n"
                       "fn level2() { level3() }\n"
@@ -175,14 +175,12 @@ TEST(builtin_enum_error_kernel_is_typed_and_context_free) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
     ASSERT_NOT_NULL(core);
 
-    XrBuiltinEnumErrorResult result =
-        xr_builtin_enum_error_construct(NULL, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                                        XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    XrBuiltinEnumErrorResult result = xr_builtin_enum_error_construct(
+        NULL, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
     ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_INVALID_BUILTIN);
     ASSERT(XR_IS_NULL(result.value));
 
-    result = xr_builtin_enum_error_construct(core, -1,
-                                             XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    result = xr_builtin_enum_error_construct(core, -1, XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
     ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_INVALID_BUILTIN);
     result = xr_builtin_enum_error_construct(core, XR_USER_GLOBALS_START,
                                              XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
@@ -203,8 +201,7 @@ TEST(builtin_enum_error_kernel_is_typed_and_context_free) {
     XrEnumAggregateValue *error = xr_value_to_enum_aggregate(result.value);
     ASSERT_NOT_NULL(error);
     ASSERT_STR_EQ(xr_enum_aggregate_type(error)->name, XR_NUMBER_PARSE_ERROR_NAME);
-    ASSERT_STR_EQ(xr_enum_aggregate_member_name(error),
-                  XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME);
+    ASSERT_STR_EQ(xr_enum_aggregate_member_name(error), XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME);
 
     XrBuiltinEnumErrorResult repeated = xr_builtin_enum_error_construct(
         core, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
@@ -298,8 +295,8 @@ TEST(caught_error_rethrow_reaches_top_level) {
     XrVMRuntime *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
-    const char *src = "enum VmErr { Deep(string) }\n"
-                      "fn deep() { throw VmErr.Deep(\"deep\") }\n"
+    const char *src = "enum VmErr { Deep { message: string } }\n"
+                      "fn deep() { throw VmErr.Deep { message: \"deep\" } }\n"
                       "fn level2() { deep() }\n"
                       "fn level1() { level2() }\n"
                       "try { level1() } catch (e) { throw e }\n";

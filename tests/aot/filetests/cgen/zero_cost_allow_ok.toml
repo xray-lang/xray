@@ -1,5 +1,5 @@
 [package]
-name = "filetest-zero-cost-allow-ok"
+name = "xray-tests/filetest-zero-cost-allow-ok"
 version = "1.0.0"
 license = "MIT"
 main = "zero_cost_allow_ok.xr"
