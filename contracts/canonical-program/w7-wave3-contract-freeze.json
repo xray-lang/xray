@@ -8,6 +8,7 @@
   ],
   "scope": "ownership-ref-place-error-panic-cleanup",
   "compatibility": "none",
+  "wave_status": "COMPLETE_W7_WAVE3_CORE_ALGEBRA",
   "signature_contract": {
     "parameter_modes": [
       "READ",
@@ -162,6 +163,32 @@
       "physical_deletion_task": 302
     }
   ],
+  "closure": {
+    "canonical_dependency_status": "ZERO",
+    "precut_product_route": "single frozen route; physical deletion is atomic Task 302",
+    "compatibility_bridge": "forbidden",
+    "forbidden_canonical_tokens": [
+      "pending_error",
+      "pending_panic",
+      "cleanup_stack",
+      "XrSemanticPlan",
+      "XrTargetPlan",
+      "XrProto",
+      "XChunk",
+      "xr_semantic_plan",
+      "xr_target_plan",
+      "program_semantic_closure",
+      "CallDecision"
+    ],
+    "differential": "normal, typed business error, typed panic, hard trap and logical cleanup are compared as distinct outcomes",
+    "deferred_domain_contracts": {
+      "borrowed_result_origin": "Wave 4 callable/interface signature activation",
+      "external_alias_and_cross_execution": "Wave 5 concurrency activation",
+      "domain_specific_container_place": "Wave 6 specialized capability activation",
+      "precut_route_physical_deletion": "Task 302 atomic product cutover"
+    },
+    "next_wave": 4
+  },
   "slice_order": [
     "signature modes and value/place categories",
     "owner move/drop and direct-local REF",

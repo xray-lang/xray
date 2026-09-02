@@ -316,6 +316,7 @@ set(EXECUTIONCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_execution_contra
 set(PROGRAMVMCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_vm_contracts.py)
 set(PROGRAMAOTCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_contracts.py)
 set(PROGRAMSOURCECONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_source_contracts.py)
+set(PROGRAMWAVE3CLOSURECHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave3_closure.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -687,6 +688,25 @@ add_custom_target(check-xr-program-source-contracts
             ${CMAKE_SOURCE_DIR}/tests/unit/ir/test_xi_pipeline.c
             ${CMAKE_SOURCE_DIR}/contracts/canonical-program/operation-capability-matrix.json
     COMMENT "Checking the source-to-XrProgram authority boundary"
+    VERBATIM
+)
+
+add_custom_target(check-xr-program-wave3-closure
+    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE3CLOSURECHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${PROGRAMWAVE3CLOSURECHECK}
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave3-contract-freeze.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/registry.json
+            ${CMAKE_SOURCE_DIR}/xisa/core/kats.json
+            ${CMAKE_SOURCE_DIR}/xisa/program/xi-source-projection.json
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_from_xi.c
+            ${CMAKE_SOURCE_DIR}/src/program/xr_program_verify.c
+            ${CMAKE_SOURCE_DIR}/src/vm/xr_program_vm.c
+            ${CMAKE_SOURCE_DIR}/src/aot/program/xr_backend_ir_emit_c.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/program/test_xr_program_verify.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm.c
+            ${CMAKE_SOURCE_DIR}/tests/unit/aot/test_xr_program_aot.c
+    COMMENT "Checking W7 Wave 3 ownership/error/panic closure"
     VERBATIM
 )
 
@@ -4994,6 +5014,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(xr_program_source_contracts_self_test PROPERTIES
         LABELS "meta;contracts;canonical-program;source;mutation;task-301"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_wave3_closure
+        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE3CLOSURECHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_wave3_closure PROPERTIES
+        LABELS "meta;contracts;canonical-program;source;ownership;error;panic;task-301"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_wave3_closure_self_test
+        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE3CLOSURECHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_wave3_closure_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;source;ownership;error;panic;mutation;task-301"
         PROCESSORS 1
         TIMEOUT 30
     )
