@@ -5,6 +5,21 @@
 
 #include <stdatomic.h>
 
+typedef struct XrValidatedVariant {
+    uint16_t *payload_types;
+    uint32_t payload_count;
+} XrValidatedVariant;
+
+typedef struct XrValidatedType {
+    XrCoreIrKey key;
+    uint16_t type_id;
+    XrCoreIrTypeKind kind;
+    uint16_t *field_types;
+    uint32_t field_count;
+    XrValidatedVariant *variants;
+    uint32_t variant_count;
+} XrValidatedType;
+
 typedef struct XrValidatedConstant {
     uint16_t type_id;
     XrCoreIrConstantKind kind;
@@ -27,6 +42,12 @@ typedef struct XrValidatedInstruction {
         bool boolean;
         uint32_t constant_id;
         uint32_t function_id;
+        uint32_t field_ordinal;
+        uint32_t variant_ordinal;
+        struct {
+            uint32_t variant_ordinal;
+            uint32_t field_ordinal;
+        } variant_field;
     } immediate;
     uint32_t *successors;
     uint32_t successor_count;
@@ -62,6 +83,8 @@ struct XrValidatedProgram {
     size_t size;
     XrProgramId id;
     uint8_t semantic_profile_fingerprint[XR_PROGRAM_DIGEST_SIZE];
+    XrValidatedType *types;
+    uint32_t type_count;
     XrValidatedConstant *constants;
     uint32_t constant_count;
     XrValidatedFunction *functions;
@@ -69,5 +92,17 @@ struct XrValidatedProgram {
     uint32_t entry_function;
     uint64_t verifier_work;
 };
+
+static inline bool xr_program_type_id_is_dynamic(uint16_t type_id) {
+    return type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
+}
+
+static inline const XrValidatedType *xr_validated_program_type(const XrValidatedProgram *program,
+                                                               uint16_t type_id) {
+    if (!program || !xr_program_type_id_is_dynamic(type_id))
+        return NULL;
+    uint32_t index = (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
+    return index < program->type_count ? &program->types[index] : NULL;
+}
 
 #endif /* XR_VALIDATED_PROGRAM_INTERNAL_H */

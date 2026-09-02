@@ -1133,6 +1133,10 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_COMPARE},
         {XI_CALL, XR_CORE_TYPE_VOID, XR_CORE_OP_CORE_CALL_SEALED_DIRECT, 0u,
          XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL},
+        {XI_TUPLE_NEW, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT, 0u,
+         XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT},
+        {XI_TUPLE_GET, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_AGGREGATE_PROJECT, 0u,
+         XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT},
     };
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
         XrProgramXiProjection projection = {0};
@@ -1215,9 +1219,16 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  if (flag) { return 1 }\n"
                                          "  return 2\n"
                                          "}\n"
+                                         "fn make_pair(value: i64, flag: bool) -> (i64, bool) {\n"
+                                         "  return (value, flag)\n"
+                                         "}\n"
+                                         "fn pair_value() -> i64 {\n"
+                                         "  var pair = make_pair(40, true)\n"
+                                         "  return pair.0\n"
+                                         "}\n"
                                          "fn root() -> i64 {\n"
                                          "  return choose(10) + scalar_matrix(10, 2) + "
-                                         "choose_bool(true) + choose_bool(false)\n"
+                                         "choose_bool(true) + choose_bool(false) + pair_value()\n"
                                          "}\n";
     PIPELINE_TEST_REQUIRE(
         xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
@@ -1287,12 +1298,20 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                               &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
     PIPELINE_TEST_REQUIRE(validated != NULL);
     static const uint16_t required_source_operations[] = {
-        XR_CORE_OP_CORE_CONSTANT_I64, XR_CORE_OP_CORE_CONSTANT_BOOL,
-        XR_CORE_OP_CORE_ADD_I64,      XR_CORE_OP_CORE_SUB_I64,
-        XR_CORE_OP_CORE_MUL_I64,      XR_CORE_OP_CORE_DIV_I64,
-        XR_CORE_OP_CORE_COMPARE_I64,  XR_CORE_OP_CORE_BLOCK_ARGUMENT,
-        XR_CORE_OP_CORE_BRANCH,       XR_CORE_OP_CORE_CONDITIONAL_BRANCH,
-        XR_CORE_OP_CORE_RETURN,       XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+        XR_CORE_OP_CORE_CONSTANT_I64,
+        XR_CORE_OP_CORE_CONSTANT_BOOL,
+        XR_CORE_OP_CORE_ADD_I64,
+        XR_CORE_OP_CORE_SUB_I64,
+        XR_CORE_OP_CORE_MUL_I64,
+        XR_CORE_OP_CORE_DIV_I64,
+        XR_CORE_OP_CORE_COMPARE_I64,
+        XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+        XR_CORE_OP_CORE_BRANCH,
+        XR_CORE_OP_CORE_CONDITIONAL_BRANCH,
+        XR_CORE_OP_CORE_RETURN,
+        XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+        XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+        XR_CORE_OP_CORE_AGGREGATE_PROJECT,
     };
     for (size_t index = 0;
          index < sizeof(required_source_operations) / sizeof(required_source_operations[0]);
@@ -1304,7 +1323,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 71);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 111);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);

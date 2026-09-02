@@ -240,19 +240,42 @@ static uint32_t function_value_count(const XrCoreIrFunction *function) {
     return count;
 }
 
-static void encode_types(ByteBuffer *buffer) {
-    /* type-id, kind, capabilities, drop contract, copy contract */
+static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
+    /* type-id, kind, value capability, copy contract, then logical shape */
     static const uint8_t rows[][4] = {
         {XR_CORE_TYPE_VOID, 0u, 0u, 0u},  {XR_CORE_TYPE_BOOL, 1u, 1u, 1u},
         {XR_CORE_TYPE_I64, 2u, 1u, 1u},   {XR_CORE_TYPE_U32, 3u, 1u, 1u},
         {XR_CORE_TYPE_ERROR, 4u, 1u, 1u},
     };
-    buffer_put_uvar(buffer, sizeof(rows) / sizeof(rows[0]));
+    buffer_put_uvar(buffer, sizeof(rows) / sizeof(rows[0]) + program->type_count);
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
         buffer_put_uvar(buffer, rows[index][0]);
         buffer_put_uvar(buffer, rows[index][1]);
         buffer_put_uvar(buffer, rows[index][2]);
         buffer_put_uvar(buffer, rows[index][3]);
+    }
+    for (uint32_t index = 0; index < program->type_count; ++index) {
+        const XrCoreIrType *type = &program->types[index];
+        buffer_put_uvar(buffer, type->type_id);
+        buffer_put_uvar(buffer, type->kind == XR_CORE_IR_TYPE_AGGREGATE
+                                    ? XR_PROGRAM_TYPE_KIND_AGGREGATE
+                                    : XR_PROGRAM_TYPE_KIND_VARIANT);
+        buffer_put_uvar(buffer, 1u);
+        buffer_put_uvar(buffer, 1u);
+        buffer_put_bytes(buffer, type->key.bytes, sizeof(type->key.bytes));
+        if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
+            buffer_put_uvar(buffer, type->field_count);
+            for (uint32_t field = 0; field < type->field_count; ++field)
+                buffer_put_uvar(buffer, type->field_types[field]);
+        } else {
+            buffer_put_uvar(buffer, type->variant_count);
+            for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
+                const XrCoreIrVariant *row = &type->variants[variant];
+                buffer_put_uvar(buffer, row->payload_count);
+                for (uint32_t field = 0; field < row->payload_count; ++field)
+                    buffer_put_uvar(buffer, row->payload_types[field]);
+            }
+        }
     }
 }
 
@@ -333,6 +356,16 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrInstruction *in
         case XR_CORE_IR_IMMEDIATE_FUNCTION:
             (void) function_id(functions, function_count, instruction->immediate.key, &id);
             buffer_put_uvar(buffer, id);
+            break;
+        case XR_CORE_IR_IMMEDIATE_FIELD:
+            buffer_put_uvar(buffer, instruction->immediate.field_ordinal);
+            break;
+        case XR_CORE_IR_IMMEDIATE_VARIANT:
+            buffer_put_uvar(buffer, instruction->immediate.variant_ordinal);
+            break;
+        case XR_CORE_IR_IMMEDIATE_VARIANT_FIELD:
+            buffer_put_uvar(buffer, instruction->immediate.variant_field.variant_ordinal);
+            buffer_put_uvar(buffer, instruction->immediate.variant_field.field_ordinal);
             break;
         default:
             buffer->status = XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -427,7 +460,7 @@ XrProgramBuildStatus xr_program_write(const XrCoreIrProgram *program,
         goto cleanup;
     }
 
-    encode_types(&sections[0]);
+    encode_types(&sections[0], program);
     encode_constants(&sections[1], constants, constant_count);
     encode_functions(&sections[2], functions, function_count);
     encode_code(&sections[3], functions, function_count, constants, constant_count);

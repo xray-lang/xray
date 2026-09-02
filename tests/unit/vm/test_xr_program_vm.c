@@ -36,10 +36,10 @@ static XrCoreIrKey fixture_key(const char *text) {
     return xr_core_ir_key(text, strlen(text));
 }
 
-static XrValidatedProgram *validate_fixture(const XrCoreIrConstantInput *constants,
-                                            uint32_t constant_count,
-                                            const XrCoreIrFunctionInput *functions,
-                                            uint32_t function_count) {
+static XrValidatedProgram *
+validate_typed_fixture(const XrCoreIrTypeInput *types, uint32_t type_count,
+                       const XrCoreIrConstantInput *constants, uint32_t constant_count,
+                       const XrCoreIrFunctionInput *functions, uint32_t function_count) {
     XrCoreIrModuleInput module = {
         .key = fixture_key("task-299:module"),
         .constants = constants,
@@ -53,6 +53,8 @@ static XrValidatedProgram *validate_fixture(const XrCoreIrConstantInput *constan
         .semantic_profile_fingerprint = semantic_profile.bytes,
         .required_features = &feature,
         .required_feature_count = 1,
+        .types = types,
+        .type_count = type_count,
         .modules = &module,
         .module_count = 1,
     };
@@ -71,6 +73,157 @@ static XrValidatedProgram *validate_fixture(const XrCoreIrConstantInput *constan
     xr_core_ir_program_free(core_program);
     REQUIRE(program != NULL);
     return program;
+}
+
+static XrValidatedProgram *validate_fixture(const XrCoreIrConstantInput *constants,
+                                            uint32_t constant_count,
+                                            const XrCoreIrFunctionInput *functions,
+                                            uint32_t function_count) {
+    return validate_typed_fixture(NULL, 0u, constants, constant_count, functions, function_count);
+}
+
+static XrValidatedProgram *build_aggregate_variant_program(bool wrong_variant) {
+    enum {
+        AGGREGATE_TYPE = 101,
+        VARIANT_TYPE = 77,
+    };
+    uint16_t aggregate_fields[] = {XR_CORE_TYPE_I64, XR_CORE_TYPE_BOOL};
+    uint16_t variant_payload[] = {AGGREGATE_TYPE, XR_CORE_TYPE_BOOL};
+    XrCoreIrVariantInput variants[] = {
+        {0},
+        {.payload_types = variant_payload,
+         .payload_count = sizeof(variant_payload) / sizeof(variant_payload[0])},
+    };
+    XrCoreIrTypeInput types[] = {
+        {.key = fixture_key("aggregate:type:variant"),
+         .local_id = VARIANT_TYPE,
+         .kind = XR_CORE_IR_TYPE_VARIANT,
+         .variants = variants,
+         .variant_count = sizeof(variants) / sizeof(variants[0])},
+        {.key = fixture_key("aggregate:type:record"),
+         .local_id = AGGREGATE_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .field_types = aggregate_fields,
+         .field_count = sizeof(aggregate_fields) / sizeof(aggregate_fields[0])},
+    };
+    XrCoreIrConstantInput constants[] = {
+        {.key = fixture_key("aggregate:constant:40"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 40},
+        {.key = fixture_key("aggregate:constant:2"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 2},
+        {.key = fixture_key("aggregate:constant:true"),
+         .type_id = XR_CORE_TYPE_BOOL,
+         .kind = XR_CORE_IR_CONSTANT_BOOL,
+         .value.boolean = true},
+    };
+    XrCoreIrKey v40 = fixture_key("aggregate:value:40");
+    XrCoreIrKey v2 = fixture_key("aggregate:value:2");
+    XrCoreIrKey vtrue = fixture_key("aggregate:value:true");
+    XrCoreIrKey aggregate = fixture_key("aggregate:value:record");
+    XrCoreIrKey projected_40 = fixture_key("aggregate:value:projected-40");
+    XrCoreIrKey updated = fixture_key("aggregate:value:updated");
+    XrCoreIrKey variant = fixture_key("aggregate:value:variant");
+    XrCoreIrKey tested = fixture_key("aggregate:value:tested");
+    XrCoreIrKey projected_aggregate = fixture_key("aggregate:value:projected-record");
+    XrCoreIrKey projected_2 = fixture_key("aggregate:value:projected-2");
+    XrCoreIrKey construct_operands[] = {v40, vtrue};
+    XrCoreIrKey aggregate_operand[] = {aggregate};
+    XrCoreIrKey update_operands[] = {aggregate, v2};
+    XrCoreIrKey variant_operands[] = {updated, vtrue};
+    XrCoreIrKey variant_operand[] = {variant};
+    XrCoreIrKey projected_operand[] = {projected_aggregate};
+    XrCoreIrKey returned[] = {projected_2};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v2,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_BOOL,
+         .result = vtrue,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[2].key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = construct_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected_40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = aggregate_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_UPDATE,
+         .result = updated,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = update_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+         .result = variant,
+         .result_type_id = VARIANT_TYPE,
+         .operands = wrong_variant ? NULL : variant_operands,
+         .operand_count = wrong_variant ? 0u : 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
+         .immediate.variant_ordinal = wrong_variant ? 0u : 1u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_TEST,
+         .result = tested,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = variant_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
+         .immediate.variant_ordinal = 1u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_PROJECT,
+         .result = projected_aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = variant_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT_FIELD,
+         .immediate.variant_field = {.variant_ordinal = 1u, .field_ordinal = 0u}},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected_2,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = projected_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("aggregate:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("aggregate:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = UINT32_C(1),
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_typed_fixture(types, sizeof(types) / sizeof(types[0]), constants,
+                                  sizeof(constants) / sizeof(constants[0]), &function, 1u);
 }
 
 static XrValidatedProgram *build_scalar_program(void) {
@@ -564,6 +717,9 @@ static void compare_value(XrReferenceValue reference, XrVmValue vm) {
         case XR_REFERENCE_VALUE_ERROR:
             REQUIRE(reference.as.error == vm.as.error);
             break;
+        case XR_REFERENCE_VALUE_AGGREGATE:
+            REQUIRE(reference.kind != XR_REFERENCE_VALUE_AGGREGATE);
+            break;
         case XR_REFERENCE_VALUE_VOID:
             break;
     }
@@ -652,6 +808,32 @@ static void run_program(XrValidatedProgram *program, bool ilp32,
 }
 
 static void test_operation_semantics(void) {
+    XrValidatedProgram *aggregate = build_aggregate_variant_program(false);
+    run_program(aggregate, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 2u);
+    XrTargetProfile *aggregate_profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(aggregate_profile != NULL);
+    TestProviderBindings aggregate_bindings;
+    build_provider_bindings(aggregate_profile, &aggregate_bindings);
+    XrInstance *aggregate_instance =
+        create_instance(aggregate, aggregate_profile, &aggregate_bindings, 1u);
+    XrVmCodeOptions aggregate_budget = xr_vm_code_default_options();
+    aggregate_budget.max_value_cells = 1u;
+    XrVmCodeDiagnostic aggregate_diagnostic;
+    XrVmCode *aggregate_code = NULL;
+    REQUIRE(xr_vm_code_build(aggregate_instance, &aggregate_budget, &aggregate_code,
+                             &aggregate_diagnostic) == XR_VM_CODE_OK);
+    XrVmOutcome aggregate_limited = xr_vm_code_execute(
+        aggregate_code, aggregate_instance, xr_validated_program_entry_function(aggregate), NULL,
+        0u);
+    REQUIRE(aggregate_limited.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
+    xr_vm_code_free(aggregate_code);
+    retire_and_free(&aggregate_instance);
+    xr_target_profile_free(aggregate_profile);
+
+    XrValidatedProgram *variant_trap = build_aggregate_variant_program(true);
+    run_program(variant_trap, false, NULL, NULL, 0, XR_VM_OUTCOME_TRAP, XR_VM_VALUE_VOID, 0u);
+
     XrValidatedProgram *scalar = build_scalar_program();
     run_program(scalar, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_BOOL, 1u);
 
@@ -676,6 +858,8 @@ static void test_operation_semantics(void) {
     xr_validated_program_free(call);
     xr_validated_program_free(control);
     xr_validated_program_free(scalar);
+    xr_validated_program_free(variant_trap);
+    xr_validated_program_free(aggregate);
 }
 
 static void test_arithmetic_edges(void) {

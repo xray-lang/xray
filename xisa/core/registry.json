@@ -88,6 +88,11 @@
       "stable_id": 5,
       "name": "profile-unavailable",
       "description": "The required immutable target-profile field is absent or invalid."
+    },
+    {
+      "stable_id": 6,
+      "name": "variant-tag-mismatch",
+      "description": "A variant payload projection names a different variant than the value carries."
     }
   ],
   "features": [
@@ -1165,6 +1170,417 @@
         "allowed_trace": "one value from the immutable bound profile or profile-unavailable"
       },
       "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 80,
+      "spelling": "core.aggregate.construct",
+      "class": "aggregate",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T..."
+        ],
+        "result": "A",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "copy-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-aggregate",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one aggregate whose fields equal the ordered operands"
+      },
+      "kat_validator": "aggregate-construct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 81,
+      "spelling": "core.aggregate.project",
+      "class": "aggregate",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A"
+        ],
+        "result": "T",
+        "immediates": {
+          "field_ordinal": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "copied-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-field",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one field value selected by declaration ordinal"
+      },
+      "kat_validator": "aggregate-project",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 82,
+      "spelling": "core.aggregate.update",
+      "class": "aggregate",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "A",
+          "T"
+        ],
+        "result": "A",
+        "immediates": {
+          "field_ordinal": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "copy-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-aggregate",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one aggregate copy with exactly one declaration-ordinal field replaced"
+      },
+      "kat_validator": "aggregate-update",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 83,
+      "spelling": "core.variant.construct",
+      "class": "variant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "T..."
+        ],
+        "result": "V",
+        "immediates": {
+          "variant_ordinal": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "copy-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-variant",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one tagged value with ordered payload fields"
+      },
+      "kat_validator": "variant-construct",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 84,
+      "spelling": "core.variant.test",
+      "class": "variant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "V"
+        ],
+        "result": "bool",
+        "immediates": {
+          "variant_ordinal": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "tag-test",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one canonical bool comparing the stored and requested variant ordinals"
+      },
+      "kat_validator": "variant-test",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 85,
+      "spelling": "core.variant.project",
+      "class": "variant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "V"
+        ],
+        "result": "T",
+        "immediates": {
+          "field_ordinal": "u32",
+          "variant_ordinal": "u32"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "trap"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value"
+        ],
+        "result": "copied-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "logical-payload-field",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one payload field value or variant-tag-mismatch"
+      },
+      "kat_validator": "variant-project",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

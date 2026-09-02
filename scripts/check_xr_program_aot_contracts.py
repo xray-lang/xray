@@ -94,7 +94,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
             "vm": False,
             "compiler": False,
             "aot_toolchain": False,
-            "runtime_dependency": "libc-only-for-active-scalar-skeleton",
+            "runtime_dependency": "libc-only-for-active-value-skeleton",
         },
         "inactive_contracts": [
             "full-language-operation-families",
@@ -236,7 +236,8 @@ def main() -> int:
             print("XrProgram AOT contracts self-test: PASS")
         else:
             validate_sources(root)
-            print("XrProgram AOT contracts: PASS (15 operations, pure native closure)")
+            count = len(read_json(root / REGISTRY)["operations"])
+            print(f"XrProgram AOT contracts: PASS ({count} operations, pure native closure)")
     except (GateError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"XrProgram AOT contracts: FAIL: {exc}", file=sys.stderr)
         return 1

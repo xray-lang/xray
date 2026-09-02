@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 15u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 21u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -31,8 +31,8 @@ static void test_registry_identity_and_lookup(void) {
         CHECK(operation->decoder_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(operation->verifier_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(operation->evaluator_status == XR_CORE_COVERAGE_COMPLETE);
-        CHECK(operation->vm_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
-        CHECK(operation->aot_status == XR_CORE_COVERAGE_NOT_YET_ACTIVE);
+        CHECK(operation->vm_status == XR_CORE_COVERAGE_COMPLETE);
+        CHECK(operation->aot_status == XR_CORE_COVERAGE_COMPLETE);
         CHECK(xr_core_spec_operation_by_id(operation->stable_id) == operation);
         CHECK(xr_core_spec_operation_by_spelling(operation->spelling) == operation);
         if (index > 0u)
@@ -49,7 +49,7 @@ static void test_registry_identity_and_lookup(void) {
     CHECK(!xr_core_spec_feature_active(UINT16_MAX));
 }
 
-static void test_walking_skeleton_metadata(void) {
+static void test_operation_metadata(void) {
     const XrCoreOperationSpec *constant =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CONSTANT_I64);
     const XrCoreOperationSpec *add = xr_core_spec_operation_by_spelling("core.add.i64");
@@ -58,6 +58,10 @@ static void test_walking_skeleton_metadata(void) {
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_SEALED_DIRECT);
     const XrCoreOperationSpec *target =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_TARGET_POINTER_WIDTH);
+    const XrCoreOperationSpec *aggregate =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT);
+    const XrCoreOperationSpec *variant =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_VARIANT_PROJECT);
 
     CHECK(constant != NULL);
     CHECK(constant->operand_arity == 0u);
@@ -81,11 +85,20 @@ static void test_walking_skeleton_metadata(void) {
     CHECK(target->result_type == XR_CORE_TYPE_U32);
     CHECK(target->capability_mask == UINT32_C(1));
     CHECK(strcmp(target->profile_dependency, "pointer_width") == 0);
+
+    CHECK(aggregate != NULL);
+    CHECK(aggregate->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);
+    CHECK(aggregate->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
+
+    CHECK(variant != NULL);
+    CHECK(variant->operand_arity == 1u);
+    CHECK(variant->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
+    CHECK(variant->effect_mask == UINT32_C(1));
 }
 
 int main(void) {
     test_registry_identity_and_lookup();
-    test_walking_skeleton_metadata();
+    test_operation_metadata();
 
     if (failures != 0) {
         fprintf(stderr, "CoreSpec metadata tests failed: %d\n", failures);

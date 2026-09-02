@@ -114,6 +114,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
         "private_views": ["baseline-validated-graph", "fixed-instruction-rows"],
         "persistent_private_code": False,
         "quickening": "DISABLED_UNTIL_MEASURED",
+        "execution_budgets": ["steps", "call-depth", "aggregate-value-cells"],
         "private_qualification": [
             "ExecutionId",
             "generation",
@@ -180,7 +181,7 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
     require('#define XR_VM_BUILD_ID "xray-program-vm-v1"' in header,
             "VM build identity is missing")
     for token in ("XR_VM_DECODE_BASELINE_VIEW", "XR_VM_DECODE_FIXED_ROWS",
-                  "XR_VM_QUICKENING_NONE", "XrExecutionCacheKey"):
+                  "XR_VM_QUICKENING_NONE", "XrExecutionCacheKey", "max_value_cells"):
         require(token in header or token in vm, f"missing VM contract token {token}")
     for forbidden in FORBIDDEN_VM_TOKENS:
         require(forbidden not in vm, f"VM depends on forbidden semantic owner {forbidden}")
@@ -201,7 +202,8 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
         require(token in test, f"VM differential test omits {row['spelling']}")
 
     for token in ("xr_reference_evaluate", "XR_VM_DECODE_BASELINE_VIEW",
-                  "XR_VM_DECODE_FIXED_ROWS", "XR_VM_OUTCOME_STALE_CODE"):
+                  "XR_VM_DECODE_FIXED_ROWS", "XR_VM_OUTCOME_STALE_CODE",
+                  "max_value_cells"):
         require(token in test, f"VM test omits {token}")
     require("XR_TARGET_ARCH_WASM32" in sources[TARGET_FIXTURE] and
             "run_program(control, true" in test,
@@ -292,7 +294,8 @@ def main() -> int:
                 raise GateError("--archive and --executable must be provided together")
             if args.archive and args.executable:
                 validate_artifacts(args.archive.resolve(), args.executable.resolve())
-            print("XrProgram VM contracts: PASS (15 operations, runtime-only closure)")
+            count = len(read_json(root / REGISTRY)["operations"])
+            print(f"XrProgram VM contracts: PASS ({count} operations, runtime-only closure)")
     except (GateError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"XrProgram VM contracts: FAIL: {exc}", file=sys.stderr)
         return 1

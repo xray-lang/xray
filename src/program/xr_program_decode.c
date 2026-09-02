@@ -122,16 +122,25 @@ static bool section_done(Reader *section, Reader *artifact) {
     return true;
 }
 
-static bool decode_types(Reader *artifact, const XrProgramSectionView *view) {
+static bool encoded_type_id_is_valid(uint64_t type_id, uint64_t dynamic_count) {
+    return type_id <= XR_CORE_TYPE_ERROR ||
+           (type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+            type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < dynamic_count);
+}
+
+static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
+                         uint64_t *dynamic_count_out) {
     Reader section = section_reader(artifact, view);
     uint64_t count = take_uvar(&section);
-    if (count != 5u || !count_records(&section, count)) {
+    if (count < 5u || count > XR_PROGRAM_LIMIT_TYPES ||
+        count - 5u > UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u ||
+        !count_records(&section, count)) {
         section.status = section.status == XR_PROGRAM_DECODE_OK
                              ? XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT
                              : section.status;
         return section_done(&section, artifact);
     }
-    for (uint64_t id = 0; id < count && section.status == XR_PROGRAM_DECODE_OK; ++id) {
+    for (uint64_t id = 0; id < 5u && section.status == XR_PROGRAM_DECODE_OK; ++id) {
         uint64_t type_id = take_uvar(&section);
         uint64_t kind = take_uvar(&section);
         uint64_t capabilities = take_uvar(&section);
@@ -141,6 +150,52 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view) {
             (id != XR_CORE_TYPE_VOID && (capabilities != 1u || copy_contract != 1u)))
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
     }
+    uint64_t dynamic_count = count - 5u;
+    uint8_t previous_key[XR_CORE_IR_KEY_SIZE] = {0};
+    for (uint64_t index = 0; index < dynamic_count && section.status == XR_PROGRAM_DECODE_OK;
+         ++index) {
+        uint64_t type_id = take_uvar(&section);
+        uint64_t kind = take_uvar(&section);
+        uint64_t capabilities = take_uvar(&section);
+        uint64_t copy_contract = take_uvar(&section);
+        uint8_t key[XR_CORE_IR_KEY_SIZE] = {0};
+        take_bytes(&section, key, sizeof(key));
+        uint64_t member_count = take_uvar(&section);
+        if (type_id != XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index ||
+            (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT) ||
+            capabilities != 1u || copy_contract != 1u || member_count == 0u ||
+            member_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+            !count_records(&section, member_count) ||
+            (index != 0u && memcmp(previous_key, key, sizeof(key)) >= 0)) {
+            section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+            break;
+        }
+        memcpy(previous_key, key, sizeof(key));
+        if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
+            for (uint64_t field = 0; field < member_count; ++field) {
+                uint64_t field_type = take_uvar(&section);
+                if (!encoded_type_id_is_valid(field_type, dynamic_count) ||
+                    field_type == XR_CORE_TYPE_VOID)
+                    section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+            }
+        } else {
+            for (uint64_t variant = 0; variant < member_count; ++variant) {
+                uint64_t payload_count = take_uvar(&section);
+                if (payload_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                    !count_records(&section, payload_count)) {
+                    section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+                    break;
+                }
+                for (uint64_t field = 0; field < payload_count; ++field) {
+                    uint64_t field_type = take_uvar(&section);
+                    if (!encoded_type_id_is_valid(field_type, dynamic_count) ||
+                        field_type == XR_CORE_TYPE_VOID)
+                        section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                }
+            }
+        }
+    }
+    *dynamic_count_out = dynamic_count;
     return section_done(&section, artifact);
 }
 
@@ -195,7 +250,7 @@ static bool decode_constants(Reader *artifact, const XrProgramSectionView *view,
 }
 
 static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
-                             uint64_t *count_out) {
+                             uint64_t dynamic_type_count, uint64_t *count_out) {
     Reader section = section_reader(artifact, view);
     uint64_t count = take_uvar(&section);
     if (count == 0 || count > XR_PROGRAM_LIMIT_FUNCTIONS || !count_records(&section, count)) {
@@ -211,7 +266,7 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
             break;
         }
         for (uint64_t parameter = 0; parameter < parameter_count; ++parameter) {
-            if (take_uvar(&section) > XR_CORE_TYPE_ERROR)
+            if (!encoded_type_id_is_valid(take_uvar(&section), dynamic_type_count))
                 section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;
         }
         uint64_t result_type = take_uvar(&section);
@@ -221,9 +276,9 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
         uint64_t block_count = take_uvar(&section);
         uint64_t value_count = take_uvar(&section);
         (void) take_uvar(&section); /* flags */
-        if (encoded_id != id || result_type > XR_CORE_TYPE_ERROR || block_count == 0 ||
-            block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION || entry_block >= block_count ||
-            value_count > XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION)
+        if (encoded_id != id || !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
+            block_count == 0 || block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION ||
+            entry_block >= block_count || value_count > XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION)
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
     }
     *count_out = count;
@@ -231,7 +286,7 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
 }
 
 static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint64_t function_count,
-                        uint64_t constant_count) {
+                        uint64_t constant_count, uint64_t dynamic_type_count) {
     Reader section = section_reader(artifact, view);
     uint64_t count = take_uvar(&section);
     if (count != function_count || !count_records(&section, count)) {
@@ -259,7 +314,7 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
             }
             for (uint64_t argument = 0; argument < argument_count; ++argument) {
                 (void) take_uvar(&section);
-                if (take_uvar(&section) > XR_CORE_TYPE_ERROR)
+                if (!encoded_type_id_is_valid(take_uvar(&section), dynamic_type_count))
                     section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;
             }
             uint64_t instruction_count = take_uvar(&section);
@@ -276,7 +331,8 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 uint64_t result_type = take_uvar(&section);
                 uint64_t operand_count = take_uvar(&section);
                 if (!xr_core_spec_operation_by_id((uint16_t) operation_id) ||
-                    operation_id > UINT16_MAX || result_type > XR_CORE_TYPE_ERROR ||
+                    operation_id > UINT16_MAX ||
+                    !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
                     operand_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                     !count_records(&section, operand_count)) {
                     section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;
@@ -285,7 +341,7 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 for (uint64_t operand = 0; operand < operand_count; ++operand)
                     (void) take_uvar(&section);
                 uint64_t immediate_kind = take_uvar(&section);
-                if (immediate_kind > XR_CORE_IR_IMMEDIATE_FUNCTION) {
+                if (immediate_kind > XR_CORE_IR_IMMEDIATE_VARIANT_FIELD) {
                     section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                     break;
                 }
@@ -296,6 +352,16 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                          immediate >= constant_count) ||
                         (immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
                          immediate >= function_count))
+                        section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                    if (immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD) {
+                        uint64_t field = take_uvar(&section);
+                        if (field > UINT32_MAX)
+                            section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                    }
+                    if ((immediate_kind == XR_CORE_IR_IMMEDIATE_FIELD ||
+                         immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT ||
+                         immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD) &&
+                        immediate > UINT32_MAX)
                         section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                 }
                 uint64_t successor_count = take_uvar(&section);
@@ -430,10 +496,12 @@ XrProgramDecodeStatus xr_program_decode_structure(const uint8_t *bytes, size_t s
 
     uint64_t constant_count = 0;
     uint64_t function_count = 0;
-    if (!decode_types(&reader, &view.sections[0]) ||
+    uint64_t dynamic_type_count = 0;
+    if (!decode_types(&reader, &view.sections[0], &dynamic_type_count) ||
         !decode_constants(&reader, &view.sections[1], &constant_count) ||
-        !decode_functions(&reader, &view.sections[2], &function_count) ||
-        !decode_code(&reader, &view.sections[3], function_count, constant_count) ||
+        !decode_functions(&reader, &view.sections[2], dynamic_type_count, &function_count) ||
+        !decode_code(&reader, &view.sections[3], function_count, constant_count,
+                     dynamic_type_count) ||
         !decode_empty_section(&reader, &view.sections[4]) ||
         !decode_empty_section(&reader, &view.sections[5]) ||
         !decode_empty_section(&reader, &view.sections[6]))

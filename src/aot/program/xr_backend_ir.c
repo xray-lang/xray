@@ -33,6 +33,12 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_TRAP:
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
+        case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
+        case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
+        case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
+        case XR_CORE_OP_CORE_VARIANT_CONSTRUCT:
+        case XR_CORE_OP_CORE_VARIANT_TEST:
+        case XR_CORE_OP_CORE_VARIANT_PROJECT:
             return true;
         default:
             return false;
@@ -141,7 +147,10 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
             representation = XR_BACKEND_VALUE_ERROR_U32;
             break;
         default:
-            return false;
+            if (type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
+                return false;
+            representation = XR_BACKEND_VALUE_AGGREGATE;
+            break;
     }
     if (representation_out)
         *representation_out = representation;
@@ -286,6 +295,16 @@ static void hash_immediate(XrSHA256Context *context, const XrBackendInstruction 
             return;
         case XR_CORE_IR_IMMEDIATE_FUNCTION:
             hash_u32(context, instruction->immediate.function_id);
+            return;
+        case XR_CORE_IR_IMMEDIATE_FIELD:
+            hash_u32(context, instruction->immediate.field_ordinal);
+            return;
+        case XR_CORE_IR_IMMEDIATE_VARIANT:
+            hash_u32(context, instruction->immediate.variant_ordinal);
+            return;
+        case XR_CORE_IR_IMMEDIATE_VARIANT_FIELD:
+            hash_u32(context, instruction->immediate.variant_field.variant_ordinal);
+            hash_u32(context, instruction->immediate.variant_field.field_ordinal);
             return;
     }
 }

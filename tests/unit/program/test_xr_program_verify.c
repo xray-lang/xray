@@ -26,14 +26,18 @@ static XrCoreIrKey key(const char *text) {
     return xr_core_ir_key(text, strlen(text));
 }
 
-static XrProgramBuildStatus write_modules(const XrCoreIrModuleInput *modules, uint32_t module_count,
-                                          XrProgramArtifact *artifact) {
+static XrProgramBuildStatus write_typed_modules(const XrCoreIrTypeInput *types, uint32_t type_count,
+                                                const XrCoreIrModuleInput *modules,
+                                                uint32_t module_count,
+                                                XrProgramArtifact *artifact) {
     XrCoreIrKey profile = key("task-297:reference-profile");
     uint16_t features[] = {XR_CORE_FEATURE_CORE_BASE};
     XrCoreIrProgramInput input = {
         .semantic_profile_fingerprint = profile.bytes,
         .required_features = features,
         .required_feature_count = 1,
+        .types = types,
+        .type_count = type_count,
         .modules = modules,
         .module_count = module_count,
     };
@@ -47,6 +51,11 @@ static XrProgramBuildStatus write_modules(const XrCoreIrModuleInput *modules, ui
         fprintf(stderr, "fixture build failed: %s\n", diagnostic);
     xr_core_ir_program_free(program);
     return status;
+}
+
+static XrProgramBuildStatus write_modules(const XrCoreIrModuleInput *modules, uint32_t module_count,
+                                          XrProgramArtifact *artifact) {
+    return write_typed_modules(NULL, 0u, modules, module_count, artifact);
 }
 
 static XrProgramBuildStatus write_one_function(const XrCoreIrConstantInput *constants,
@@ -94,6 +103,260 @@ static void expect_semantic_reject(const XrProgramArtifact *artifact,
     CHECK(second_status == first_status);
     CHECK(memcmp(&first, &second, sizeof(first)) == 0);
     CHECK(program == NULL);
+}
+
+static XrProgramArtifact build_aggregate_variant_artifact(bool wrong_variant,
+                                                          bool reverse_type_inputs) {
+    enum {
+        AGGREGATE_TYPE = 101,
+        VARIANT_TYPE = 77,
+    };
+    uint16_t aggregate_fields[] = {XR_CORE_TYPE_I64};
+    uint16_t variant_payload[] = {AGGREGATE_TYPE};
+    XrCoreIrVariantInput variants[] = {
+        {0},
+        {.payload_types = variant_payload,
+         .payload_count = sizeof(variant_payload) / sizeof(variant_payload[0])},
+    };
+    XrCoreIrTypeInput types[] = {
+        {.key = key("aggregate:type:variant"),
+         .local_id = VARIANT_TYPE,
+         .kind = XR_CORE_IR_TYPE_VARIANT,
+         .variants = variants,
+         .variant_count = sizeof(variants) / sizeof(variants[0])},
+        {.key = key("aggregate:type:record"),
+         .local_id = AGGREGATE_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .field_types = aggregate_fields,
+         .field_count = sizeof(aggregate_fields) / sizeof(aggregate_fields[0])},
+    };
+    XrCoreIrTypeInput ordered_types[] = {types[0], types[1]};
+    if (reverse_type_inputs) {
+        ordered_types[0] = types[1];
+        ordered_types[1] = types[0];
+    }
+    XrCoreIrConstantInput constants[] = {
+        {.key = key("aggregate:constant:40"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 40},
+        {.key = key("aggregate:constant:2"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 2},
+    };
+    XrCoreIrKey v40 = key("aggregate:value:40");
+    XrCoreIrKey v2 = key("aggregate:value:2");
+    XrCoreIrKey aggregate = key("aggregate:value:record");
+    XrCoreIrKey projected_40 = key("aggregate:value:projected-40");
+    XrCoreIrKey updated = key("aggregate:value:updated");
+    XrCoreIrKey variant = key("aggregate:value:variant");
+    XrCoreIrKey tested = key("aggregate:value:tested");
+    XrCoreIrKey projected_aggregate = key("aggregate:value:projected-record");
+    XrCoreIrKey projected_2 = key("aggregate:value:projected-2");
+    XrCoreIrKey construct_operands[] = {v40};
+    XrCoreIrKey aggregate_operand[] = {aggregate};
+    XrCoreIrKey update_operands[] = {aggregate, v2};
+    XrCoreIrKey variant_operands[] = {updated};
+    XrCoreIrKey variant_operand[] = {variant};
+    XrCoreIrKey projected_operand[] = {projected_aggregate};
+    XrCoreIrKey returned[] = {projected_2};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v2,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = construct_operands,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected_40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = aggregate_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_UPDATE,
+         .result = updated,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = update_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+         .result = variant,
+         .result_type_id = VARIANT_TYPE,
+         .operands = wrong_variant ? NULL : variant_operands,
+         .operand_count = wrong_variant ? 0u : 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
+         .immediate.variant_ordinal = wrong_variant ? 0u : 1u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_TEST,
+         .result = tested,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = variant_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
+         .immediate.variant_ordinal = 1u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_PROJECT,
+         .result = projected_aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = variant_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT_FIELD,
+         .immediate.variant_field = {.variant_ordinal = 1u, .field_ordinal = 0u}},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected_2,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = projected_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = key("aggregate:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("aggregate:function"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = 1u,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("aggregate:module"),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
+        .functions = &function,
+        .function_count = 1u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(ordered_types, sizeof(ordered_types) / sizeof(ordered_types[0]),
+                              &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_aggregate_variant_operations(void) {
+    XrProgramArtifact artifact = build_aggregate_variant_artifact(false, false);
+    XrProgramArtifact reordered = build_aggregate_variant_artifact(false, true);
+    CHECK(artifact.size == reordered.size);
+    CHECK(artifact.size != 0u && memcmp(artifact.bytes, reordered.bytes, artifact.size) == 0);
+    CHECK(xr_program_id_equal(artifact.id, reordered.id));
+    xr_program_artifact_free(&reordered);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 2);
+        XrReferenceBudget cell_budget = xr_reference_default_budget();
+        cell_budget.max_value_cells = 1u;
+        result = xr_reference_evaluate(program, xr_validated_program_entry_function(program), NULL,
+                                       0u, NULL, &cell_budget);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    artifact = build_aggregate_variant_artifact(true, false);
+    program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_TRAP);
+        CHECK(result.trap == XR_REFERENCE_TRAP_VARIANT_TAG_MISMATCH);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+}
+
+static XrProgramBuildStatus build_with_type_graph(const XrCoreIrTypeInput *types,
+                                                  uint32_t type_count) {
+    XrCoreIrInstructionInput instruction = {
+        .operation_id = XR_CORE_OP_CORE_TRAP,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+        .immediate.u32 = XR_REFERENCE_TRAP_EXPLICIT,
+    };
+    XrCoreIrKey block_key = key("type-graph:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = &instruction,
+        .instruction_count = 1u,
+    };
+    XrCoreIrFunctionInput function = {
+        .key = key("type-graph:function"),
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .effect_mask = 1u,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("type-graph:module"),
+        .functions = &function,
+        .function_count = 1u,
+    };
+    XrCoreIrKey profile = key("type-graph:profile");
+    uint16_t features[] = {XR_CORE_FEATURE_CORE_BASE};
+    XrCoreIrProgramInput input = {
+        .semantic_profile_fingerprint = profile.bytes,
+        .required_features = features,
+        .required_feature_count = 1u,
+        .types = types,
+        .type_count = type_count,
+        .modules = &module,
+        .module_count = 1u,
+    };
+    XrCoreIrProgram *program = NULL;
+    char diagnostic[256] = {0};
+    XrProgramBuildStatus status =
+        xr_core_ir_program_build(&input, &program, diagnostic, sizeof(diagnostic));
+    xr_core_ir_program_free(program);
+    return status;
+}
+
+static void test_dynamic_type_graph_rejection(void) {
+    enum { SELF_TYPE = 41, MISSING_TYPE = 99 };
+    uint16_t self_field[] = {SELF_TYPE};
+    XrCoreIrTypeInput recursive = {
+        .key = key("type-graph:recursive"),
+        .local_id = SELF_TYPE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+        .field_types = self_field,
+        .field_count = 1u,
+    };
+    CHECK(build_with_type_graph(&recursive, 1u) == XR_PROGRAM_BUILD_INVALID_INPUT);
+
+    uint16_t missing_field[] = {MISSING_TYPE};
+    XrCoreIrTypeInput unresolved = {
+        .key = key("type-graph:unresolved"),
+        .local_id = SELF_TYPE,
+        .kind = XR_CORE_IR_TYPE_AGGREGATE,
+        .field_types = missing_field,
+        .field_count = 1u,
+    };
+    CHECK(build_with_type_graph(&unresolved, 1u) == XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE);
 }
 
 static void test_scalar_operations(void) {
@@ -752,7 +1015,11 @@ static void test_evaluator_traps_and_budget(void) {
         XrReferenceOutcome result = xr_reference_evaluate(program, 0, NULL, 0, NULL, NULL);
         CHECK(result.kind == XR_REFERENCE_OUTCOME_TRAP);
         CHECK(result.trap == XR_REFERENCE_TRAP_INTEGER_OVERFLOW);
-        XrReferenceBudget budget = {.max_steps = 2u, .max_call_depth = 8u};
+        XrReferenceBudget budget = {
+            .max_steps = 2u,
+            .max_value_cells = 8u,
+            .max_call_depth = 8u,
+        };
         result = xr_reference_evaluate(program, 0, NULL, 0, NULL, &budget);
         CHECK(result.kind == XR_REFERENCE_OUTCOME_RESOURCE_LIMIT);
         xr_validated_program_free(program);
@@ -921,6 +1188,8 @@ static void test_typed_random_and_linear_work(void) {
 }
 
 int main(void) {
+    test_aggregate_variant_operations();
+    test_dynamic_type_graph_rejection();
     test_scalar_operations();
     test_control_and_profile();
     test_direct_call();

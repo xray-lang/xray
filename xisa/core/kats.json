@@ -685,6 +685,234 @@
       "expect": {
         "trap": "profile-unavailable"
       }
+    },
+    {
+      "id": "aggregate-construct-valid",
+      "operation": "core.aggregate.construct",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "i64",
+          "bool"
+        ],
+        "field_types": [
+          "i64",
+          "bool"
+        ],
+        "result_type": "Point",
+        "aggregate_type": "Point"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "aggregate-construct-order-mismatch",
+      "operation": "core.aggregate.construct",
+      "kind": "contract",
+      "actual": {
+        "operand_types": [
+          "bool",
+          "i64"
+        ],
+        "field_types": [
+          "i64",
+          "bool"
+        ],
+        "result_type": "Point",
+        "aggregate_type": "Point"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "aggregate-project-valid",
+      "operation": "core.aggregate.project",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Point",
+        "aggregate_type": "Point",
+        "field_types": [
+          "i64",
+          "bool"
+        ],
+        "field_ordinal": 1,
+        "result_type": "bool"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "aggregate-project-ordinal-mismatch",
+      "operation": "core.aggregate.project",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Point",
+        "aggregate_type": "Point",
+        "field_types": [
+          "i64"
+        ],
+        "field_ordinal": 1,
+        "result_type": "i64"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "aggregate-update-valid",
+      "operation": "core.aggregate.update",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Point",
+        "aggregate_type": "Point",
+        "field_types": [
+          "i64",
+          "bool"
+        ],
+        "field_ordinal": 0,
+        "value_type": "i64",
+        "result_type": "Point"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "aggregate-update-value-mismatch",
+      "operation": "core.aggregate.update",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "Point",
+        "aggregate_type": "Point",
+        "field_types": [
+          "i64"
+        ],
+        "field_ordinal": 0,
+        "value_type": "bool",
+        "result_type": "Point"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "variant-construct-valid",
+      "operation": "core.variant.construct",
+      "kind": "contract",
+      "actual": {
+        "variant_payload_types": [
+          [],
+          [
+            "i64"
+          ]
+        ],
+        "variant_ordinal": 1,
+        "operand_types": [
+          "i64"
+        ],
+        "result_type": "OptionI64",
+        "variant_type": "OptionI64"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "variant-construct-payload-mismatch",
+      "operation": "core.variant.construct",
+      "kind": "contract",
+      "actual": {
+        "variant_payload_types": [
+          [],
+          [
+            "i64"
+          ]
+        ],
+        "variant_ordinal": 1,
+        "operand_types": [
+          "bool"
+        ],
+        "result_type": "OptionI64",
+        "variant_type": "OptionI64"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "variant-test-valid",
+      "operation": "core.variant.test",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "OptionI64",
+        "variant_type": "OptionI64",
+        "variant_count": 2,
+        "variant_ordinal": 0,
+        "result_type": "bool"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "variant-test-ordinal-mismatch",
+      "operation": "core.variant.test",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "OptionI64",
+        "variant_type": "OptionI64",
+        "variant_count": 2,
+        "variant_ordinal": 2,
+        "result_type": "bool"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "variant-project-valid",
+      "operation": "core.variant.project",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "OptionI64",
+        "variant_type": "OptionI64",
+        "variant_payload_types": [
+          [],
+          [
+            "i64"
+          ]
+        ],
+        "variant_ordinal": 1,
+        "field_ordinal": 0,
+        "result_type": "i64"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "variant-project-field-mismatch",
+      "operation": "core.variant.project",
+      "kind": "contract",
+      "actual": {
+        "operand_type": "OptionI64",
+        "variant_type": "OptionI64",
+        "variant_payload_types": [
+          [],
+          [
+            "i64"
+          ]
+        ],
+        "variant_ordinal": 1,
+        "field_ordinal": 1,
+        "result_type": "i64"
+      },
+      "expect": {
+        "valid": false
+      }
     }
   ]
 }

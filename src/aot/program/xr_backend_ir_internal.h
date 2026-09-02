@@ -20,6 +20,7 @@ typedef enum XrBackendValueRepresentation {
     XR_BACKEND_VALUE_I64,
     XR_BACKEND_VALUE_U32,
     XR_BACKEND_VALUE_ERROR_U32,
+    XR_BACKEND_VALUE_AGGREGATE,
 } XrBackendValueRepresentation;
 
 typedef struct XrBackendInstruction {
@@ -35,6 +36,12 @@ typedef struct XrBackendInstruction {
         bool boolean;
         uint32_t constant_id;
         uint32_t function_id;
+        uint32_t field_ordinal;
+        uint32_t variant_ordinal;
+        struct {
+            uint32_t variant_ordinal;
+            uint32_t field_ordinal;
+        } variant_field;
     } immediate;
     uint32_t *successors;
     uint32_t successor_count;

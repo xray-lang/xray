@@ -41,7 +41,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
             if (!retained || retained_size != size || memcmp(retained, data, size) != 0)
                 abort();
             XrReferenceProfile profile = {.pointer_width = 64u};
-            XrReferenceBudget eval_budget = {.max_steps = 1024u, .max_call_depth = 32u};
+            XrReferenceBudget eval_budget = {
+                .max_steps = 1024u,
+                .max_value_cells = 1024u,
+                .max_call_depth = 32u,
+            };
             (void) xr_reference_evaluate(program, xr_validated_program_entry_function(program),
                                          NULL, 0, &profile, &eval_budget);
             xr_validated_program_free(program);

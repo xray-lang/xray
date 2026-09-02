@@ -1,11 +1,16 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "62af5e1327587f50e4cde43170a3f640aac7ddaa5c2432cc7e877aeb5bd750f6",
-  "program_schema_sha256": "23465e5992450b0b949dbc23bf12f7168ed11fd7f3c242eae349a2933adbc413",
+  "core_spec_semantic_sha256": "7e8a674da712108d8b99b21ce61d17597730677c9f53ed9f303aab6f5dac1773",
+  "program_schema_sha256": "4d58853a480565d27d6ca489944ecc6a39fbf7ab33817853a52ba35df573eaf3",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
-  "operation_count": 15,
+  "execution_budgets": [
+    "steps",
+    "call-depth",
+    "aggregate-value-cells"
+  ],
+  "operation_count": 21,
   "operations": [
     {
       "stable_id": 1,
@@ -126,6 +131,54 @@
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",
       "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 80,
+      "spelling": "core.aggregate.construct",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 81,
+      "spelling": "core.aggregate.project",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 82,
+      "spelling": "core.aggregate.update",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 83,
+      "spelling": "core.variant.construct",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 84,
+      "spelling": "core.variant.test",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 85,
+      "spelling": "core.variant.project",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
     }
   ],
   "negative_mutations": [
@@ -146,9 +199,8 @@
     "standalone_hostile_lengths": 513
   },
   "inactive_contracts": [
-    "ownership obligations beyond copy scalars",
+    "managed ownership and cleanup",
     "coroutine state and cleanup",
-    "imports and materialized boundaries",
-    "AOT consumer"
+    "imports and materialized boundaries"
   ]
 }

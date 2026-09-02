@@ -22,7 +22,7 @@ SOURCE_PROJECTION_HEADER_PATH = Path("src/program/xr_program_xi_projection_gen.h
 SOURCE_PROJECTION_SOURCE_PATH = Path("src/program/xr_program_xi_projection_gen.c")
 SPEC_PATH = Path("contracts/canonical-program/xrprogram-format-v1.md")
 COVERAGE_PATH = Path("contracts/canonical-program/xrprogram-format-coverage.json")
-TOP_KEYS = {"schema", "format", "encoding", "sections", "limits"}
+TOP_KEYS = {"schema", "format", "encoding", "type_system", "sections", "limits"}
 FORMAT_KEYS = {"major", "minor", "magic_hex", "program_id_domain"}
 ENCODING_KEYS = {
     "fixed_integers",
@@ -44,6 +44,16 @@ LIMIT_KEYS = {
     "operations",
     "operands_per_operation",
     "successors_per_operation",
+}
+TYPE_SYSTEM_KEYS = {
+    "builtin_rows",
+    "dynamic_type_base",
+    "dynamic_kinds",
+    "identity_order",
+    "aggregate_shape",
+    "variant_shape",
+    "recursive_value_shape",
+    "physical_layout",
 }
 SOURCE_PROJECTION_KEYS = {
     "schema",
@@ -72,6 +82,8 @@ PROJECTION_KINDS = {
     "binary-arithmetic": "XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC",
     "compare": "XR_PROGRAM_XI_PROJECTION_COMPARE",
     "sealed-direct-call": "XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL",
+    "aggregate-construct": "XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT",
+    "aggregate-project": "XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT",
 }
 CORE_TYPE_NAMES = {
     "any": "XR_PROGRAM_XI_ANY_RESULT_TYPE",
@@ -152,6 +164,20 @@ def validate(schema: dict[str, Any]) -> None:
         "unknown_section_policy": "reject-until-declared-optional",
     }
     require(encoding == expected_encoding, "wire encoding policy drifted")
+
+    type_system = schema["type_system"]
+    require(isinstance(type_system, dict) and set(type_system) == TYPE_SYSTEM_KEYS,
+            "type-system contract fields drifted")
+    require(type_system == {
+        "builtin_rows": ["0:void", "1:bool", "2:i64", "3:u32", "4:error"],
+        "dynamic_type_base": 16,
+        "dynamic_kinds": ["aggregate", "variant"],
+        "identity_order": "ascending-semantic-key",
+        "aggregate_shape": "declaration-ordered-field-type-ids",
+        "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
+        "recursive_value_shape": "reject",
+        "physical_layout": "forbidden",
+    }, "type-system semantic policy drifted")
 
     sections = schema["sections"]
     require(isinstance(sections, list) and sections, "sections must be a non-empty array")
@@ -270,6 +296,8 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_BINARY_ARITHMETIC = 2,",
         "    XR_PROGRAM_XI_PROJECTION_COMPARE = 3,",
         "    XR_PROGRAM_XI_PROJECTION_SEALED_DIRECT_CALL = 4,",
+        "    XR_PROGRAM_XI_PROJECTION_AGGREGATE_CONSTRUCT = 5,",
+        "    XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT = 6,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef struct XrProgramXiProjection {",
@@ -410,6 +438,22 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
     ]
     for section in schema["sections"]:
         lines.append(f"| {section['stable_id']} | `{section['name']}` | {'yes' if section['required'] else 'no'} |")
+    type_system = schema["type_system"]
+    lines.extend([
+        "",
+        "## Logical type rows",
+        "",
+        "The type section starts with the five fixed builtin rows, followed by dynamic rows whose IDs start at `16`. Dynamic rows are sorted by semantic key and encode only logical declaration order.",
+        "",
+        f"- Builtins: `{', '.join(type_system['builtin_rows'])}`",
+        f"- Dynamic kinds: `{', '.join(type_system['dynamic_kinds'])}`",
+        f"- Aggregate shape: `{type_system['aggregate_shape']}`",
+        f"- Variant shape: `{type_system['variant_shape']}`",
+        f"- Recursive value shape: `{type_system['recursive_value_shape']}`",
+        f"- Physical layout: `{type_system['physical_layout']}`",
+        "",
+        "Offsets, alignment, register classes, VM slots, native C layout, and target ABI facts are not encodable in XrProgram. Executors derive private realizations after profile binding.",
+    ])
     lines.extend(["", "## Resource ceilings", ""])
     for name, value in schema["limits"].items():
         lines.append(f"- `{name}`: `{value}`")
@@ -425,8 +469,8 @@ def generate_coverage(schema: dict[str, Any], digest: str) -> str:
         "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
         "structural_decoder": "COMPLETE",
         "semantic_admission": "COMPLETE_TASK_297",
-        "vm_consumer": "NOT_YET_ACTIVE_TASK_299",
-        "aot_consumer": "NOT_YET_ACTIVE_TASK_300",
+        "vm_consumer": "COMPLETE_TASK_299",
+        "aot_consumer": "COMPLETE_TASK_300",
         "sections": [
             {
                 "stable_id": section["stable_id"],

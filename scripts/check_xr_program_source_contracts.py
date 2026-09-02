@@ -44,6 +44,8 @@ def validate(root: Path) -> None:
         "validate_input_value_identities",
         "xr_program_xi_projection",
         "xr_program_xi_value_is_materialized",
+        "map_type_recursive",
+        "logical_value_identity",
     ):
         require(token in producer, f"source producer lacks {token}")
     for token in ("program_semantic_closure", "psc_", "semantic_function"):
@@ -141,19 +143,43 @@ def validate(root: Path) -> None:
         "core.return",
         "core.call.sealed_direct",
     }
+    wave_two_complete = {
+        "core.aggregate.construct",
+        "core.aggregate.project",
+    }
+    wave_two_in_progress = {
+        "core.aggregate.update",
+        "core.variant.construct",
+        "core.variant.test",
+        "core.variant.project",
+    }
+    frozen = {
+        "core.trap",
+        "core.error.publish",
+        "core.target.pointer_width",
+    }
     rows = {row["id"]: row for row in matrix["operations"]}
-    for operation in wave_one:
-        require(rows[operation]["status"] == "COMPLETE_W7_WAVE1",
-                f"Wave 1 operation is not complete: {operation}")
+    expected_status = {
+        **{operation: "COMPLETE_W7_WAVE1" for operation in wave_one},
+        **{operation: "COMPLETE_W7_WAVE2" for operation in wave_two_complete},
+        **{operation: "IN_PROGRESS_W7_WAVE2" for operation in wave_two_in_progress},
+        **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
+    }
+    require(set(expected_status) == registry_ids,
+            "source gate status partition does not cover the CoreSpec registry")
+    for operation, status in expected_status.items():
+        require(rows[operation]["status"] == status,
+                f"operation has wrong source status: {operation}: "
+                f"expected {status}, got {rows[operation]['status']}")
         evidence = rows[operation].get("evidence")
+        if status == "FROZEN_WALKING_SKELETON":
+            require(evidence == [], f"frozen operation gained evidence: {operation}")
+            continue
         require(isinstance(evidence, list) and evidence,
-                f"Wave 1 operation has no evidence: {operation}")
+                f"active operation has no evidence: {operation}")
         for relative in evidence:
             require(isinstance(relative, str) and (root / relative).is_file(),
-                    f"Wave 1 operation has missing evidence: {operation}: {relative}")
-    for operation in registry_ids - wave_one:
-        require(rows[operation]["status"] == "FROZEN_WALKING_SKELETON",
-                f"later-wave operation activated early: {operation}")
+                    f"active operation has missing evidence: {operation}: {relative}")
 
 
 def self_test(root: Path) -> None:
@@ -165,6 +191,9 @@ def self_test(root: Path) -> None:
             "src/ir/xi_pipeline.h",
             "src/ir/xi_pipeline.c",
             "tests/unit/ir/test_xi_pipeline.c",
+            "tests/unit/program/test_xr_program_verify.c",
+            "tests/unit/vm/test_xr_program_vm.c",
+            "tests/unit/aot/test_xr_program_aot.c",
             "xisa/core/registry.json",
             "xisa/program/xi-source-projection.json",
             "src/program/xr_program_xi_projection_gen.h",

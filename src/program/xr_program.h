@@ -20,10 +20,45 @@
 #define XR_PROGRAM_DIGEST_SIZE 32u
 #define XR_CORE_IR_KEY_SIZE 32u
 #define XR_PROGRAM_FUNCTION_ENTRY UINT32_C(1)
+#define XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE UINT16_C(16)
+
+typedef enum XrProgramTypeKind {
+    XR_PROGRAM_TYPE_KIND_VOID = 0,
+    XR_PROGRAM_TYPE_KIND_BOOL = 1,
+    XR_PROGRAM_TYPE_KIND_I64 = 2,
+    XR_PROGRAM_TYPE_KIND_U32 = 3,
+    XR_PROGRAM_TYPE_KIND_ERROR = 4,
+    XR_PROGRAM_TYPE_KIND_AGGREGATE = 16,
+    XR_PROGRAM_TYPE_KIND_VARIANT = 17,
+} XrProgramTypeKind;
 
 typedef struct XrCoreIrKey {
     uint8_t bytes[XR_CORE_IR_KEY_SIZE];
 } XrCoreIrKey;
+
+typedef enum XrCoreIrTypeKind {
+    XR_CORE_IR_TYPE_AGGREGATE = 1,
+    XR_CORE_IR_TYPE_VARIANT = 2,
+} XrCoreIrTypeKind;
+
+typedef struct XrCoreIrVariantInput {
+    const uint16_t *payload_types;
+    uint32_t payload_count;
+} XrCoreIrVariantInput;
+
+/* Dynamic CoreIR type IDs are compiler-local labels. The builder canonicalizes
+ * them by semantic key and rewrites every reference before XrProgram encoding.
+ * Field order and variant order are semantic declaration order; no offset,
+ * alignment, slot, register, or target ABI fact is admitted here. */
+typedef struct XrCoreIrTypeInput {
+    XrCoreIrKey key;
+    uint16_t local_id;
+    XrCoreIrTypeKind kind;
+    const uint16_t *field_types;
+    uint32_t field_count;
+    const XrCoreIrVariantInput *variants;
+    uint32_t variant_count;
+} XrCoreIrTypeInput;
 
 typedef enum XrCoreIrConstantKind {
     XR_CORE_IR_CONSTANT_I64 = 1,
@@ -47,6 +82,9 @@ typedef enum XrCoreIrImmediateKind {
     XR_CORE_IR_IMMEDIATE_BOOL,
     XR_CORE_IR_IMMEDIATE_CONSTANT,
     XR_CORE_IR_IMMEDIATE_FUNCTION,
+    XR_CORE_IR_IMMEDIATE_FIELD,
+    XR_CORE_IR_IMMEDIATE_VARIANT,
+    XR_CORE_IR_IMMEDIATE_VARIANT_FIELD,
 } XrCoreIrImmediateKind;
 
 typedef struct XrCoreIrValueInput {
@@ -66,6 +104,12 @@ typedef struct XrCoreIrInstructionInput {
         uint32_t u32;
         bool boolean;
         XrCoreIrKey key;
+        uint32_t field_ordinal;
+        uint32_t variant_ordinal;
+        struct {
+            uint32_t variant_ordinal;
+            uint32_t field_ordinal;
+        } variant_field;
     } immediate;
     const XrCoreIrKey *successors;
     uint32_t successor_count;
@@ -104,6 +148,8 @@ typedef struct XrCoreIrProgramInput {
     const uint8_t *semantic_profile_fingerprint;
     const uint16_t *required_features;
     uint32_t required_feature_count;
+    const XrCoreIrTypeInput *types;
+    uint32_t type_count;
     const XrCoreIrModuleInput *modules;
     uint32_t module_count;
 } XrCoreIrProgramInput;

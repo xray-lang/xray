@@ -3,6 +3,21 @@
 
 #include "xr_program.h"
 
+typedef struct XrCoreIrVariant {
+    uint16_t *payload_types;
+    uint32_t payload_count;
+} XrCoreIrVariant;
+
+typedef struct XrCoreIrType {
+    XrCoreIrKey key;
+    uint16_t type_id;
+    XrCoreIrTypeKind kind;
+    uint16_t *field_types;
+    uint32_t field_count;
+    XrCoreIrVariant *variants;
+    uint32_t variant_count;
+} XrCoreIrType;
+
 typedef struct XrCoreIrInstruction {
     uint16_t operation_id;
     XrCoreIrKey result;
@@ -15,6 +30,12 @@ typedef struct XrCoreIrInstruction {
         uint32_t u32;
         bool boolean;
         XrCoreIrKey key;
+        uint32_t field_ordinal;
+        uint32_t variant_ordinal;
+        struct {
+            uint32_t variant_ordinal;
+            uint32_t field_ordinal;
+        } variant_field;
     } immediate;
     XrCoreIrKey *successors;
     uint32_t successor_count;
@@ -53,6 +74,8 @@ struct XrCoreIrProgram {
     uint8_t semantic_profile_fingerprint[XR_PROGRAM_DIGEST_SIZE];
     uint16_t *required_features;
     uint32_t required_feature_count;
+    XrCoreIrType *types;
+    uint32_t type_count;
     XrCoreIrModule *modules;
     uint32_t module_count;
 };

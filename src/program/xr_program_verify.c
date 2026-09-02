@@ -76,6 +76,17 @@ static uint64_t take_uvar(VerifyReader *reader) {
     return 0;
 }
 
+static bool take_bytes(VerifyReader *reader, void *output, size_t size) {
+    if (!reader->valid || reader->offset > reader->size || size > reader->size - reader->offset) {
+        reader->valid = false;
+        return false;
+    }
+    if (output)
+        memcpy(output, reader->bytes + reader->offset, size);
+    reader->offset += size;
+    return true;
+}
+
 static int64_t take_svar(VerifyReader *reader) {
     uint64_t value = take_uvar(reader);
     if ((value & 1u) == 0u)
@@ -97,8 +108,10 @@ static bool reader_done(const VerifyReader *reader) {
     return reader->valid && reader->offset == reader->size;
 }
 
-static bool type_is_runtime(uint64_t type_id) {
-    return type_id <= XR_CORE_TYPE_ERROR;
+static bool type_is_runtime(const XrValidatedProgram *program, uint64_t type_id) {
+    return type_id <= XR_CORE_TYPE_ERROR ||
+           (program && type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+            type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count);
 }
 
 static bool parse_current_core_spec_fingerprint(uint8_t output[XR_PROGRAM_DIGEST_SIZE]) {
@@ -118,6 +131,15 @@ static bool parse_current_core_spec_fingerprint(uint8_t output[XR_PROGRAM_DIGEST
 static void free_instruction(XrValidatedInstruction *instruction) {
     xr_free(instruction->operands);
     xr_free(instruction->successors);
+}
+
+static void free_type(XrValidatedType *type) {
+    if (!type)
+        return;
+    for (uint32_t variant = 0; variant < type->variant_count; ++variant)
+        xr_free(type->variants[variant].payload_types);
+    xr_free(type->variants);
+    xr_free(type->field_types);
 }
 
 static void free_function(XrValidatedFunction *function) {
@@ -145,6 +167,9 @@ void xr_validated_program_free(XrValidatedProgram *program) {
         return;
     for (uint32_t function = 0; function < program->function_count; ++function)
         free_function(&program->functions[function]);
+    for (uint32_t type = 0; type < program->type_count; ++type)
+        free_type(&program->types[type]);
+    xr_free(program->types);
     xr_free(program->functions);
     xr_free(program->constants);
     xr_free(program->bytes);
@@ -156,6 +181,160 @@ XrValidatedProgram *xr_validated_program_retain(const XrValidatedProgram *progra
     if (retained)
         atomic_fetch_add_explicit(&retained->references, 1u, memory_order_relaxed);
     return retained;
+}
+
+static bool validated_type_graph_visit(const XrValidatedProgram *program, uint32_t index,
+                                       uint8_t *state) {
+    if (state[index] == 1u)
+        return false;
+    if (state[index] == 2u)
+        return true;
+    state[index] = 1u;
+    const XrValidatedType *type = &program->types[index];
+    for (uint32_t field = 0; field < type->field_count; ++field) {
+        uint16_t child = type->field_types[field];
+        if (child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+            !validated_type_graph_visit(program, child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, state))
+            return false;
+    }
+    for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
+        const XrValidatedVariant *row = &type->variants[variant];
+        for (uint32_t field = 0; field < row->payload_count; ++field) {
+            uint16_t child = row->payload_types[field];
+            if (child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+                !validated_type_graph_visit(program, child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE,
+                                            state))
+                return false;
+        }
+    }
+    state[index] = 2u;
+    return true;
+}
+
+static bool parse_types(VerifyContext *context, const XrProgramView *view) {
+    VerifyReader reader = section_reader(view, XR_PROGRAM_SECTION_TYPES - 1u);
+    uint64_t total_count = take_uvar(&reader);
+    XrProgramSemanticLocation location = no_location();
+    location.section_id = XR_PROGRAM_SECTION_TYPES;
+    if (total_count < 5u || total_count > XR_PROGRAM_LIMIT_TYPES ||
+        total_count - 5u > UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u ||
+        !spend(context, total_count, location)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
+        return false;
+    }
+    for (uint32_t id = 0; id < 5u; ++id) {
+        uint64_t type_id = take_uvar(&reader);
+        uint64_t kind = take_uvar(&reader);
+        uint64_t capabilities = take_uvar(&reader);
+        uint64_t copy_contract = take_uvar(&reader);
+        if (type_id != id || kind != id || capabilities > 1u || copy_contract > 1u ||
+            (id == XR_CORE_TYPE_VOID && (capabilities != 0u || copy_contract != 0u)) ||
+            (id != XR_CORE_TYPE_VOID && (capabilities != 1u || copy_contract != 1u))) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+            return false;
+        }
+    }
+    context->program->type_count = (uint32_t) (total_count - 5u);
+    if (context->program->type_count != 0u) {
+        context->program->types = xr_calloc(context->program->type_count, sizeof(XrValidatedType));
+        if (!context->program->types) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+            return false;
+        }
+    }
+    uint8_t previous_key[XR_CORE_IR_KEY_SIZE] = {0};
+    for (uint32_t index = 0; index < context->program->type_count; ++index) {
+        XrValidatedType *type = &context->program->types[index];
+        uint64_t type_id = take_uvar(&reader);
+        uint64_t kind = take_uvar(&reader);
+        uint64_t capabilities = take_uvar(&reader);
+        uint64_t copy_contract = take_uvar(&reader);
+        take_bytes(&reader, type->key.bytes, sizeof(type->key.bytes));
+        uint64_t member_count = take_uvar(&reader);
+        location.value_id = type_id <= UINT32_MAX ? (uint32_t) type_id : XR_PROGRAM_LOCATION_NONE;
+        if (type_id != XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index ||
+            (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT) ||
+            capabilities != 1u || copy_contract != 1u || member_count == 0u ||
+            member_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+            (index != 0u && memcmp(previous_key, type->key.bytes, sizeof(previous_key)) >= 0) ||
+            !spend(context, member_count, location)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+            return false;
+        }
+        memcpy(previous_key, type->key.bytes, sizeof(previous_key));
+        type->type_id = (uint16_t) type_id;
+        type->kind = kind == XR_PROGRAM_TYPE_KIND_AGGREGATE ? XR_CORE_IR_TYPE_AGGREGATE
+                                                            : XR_CORE_IR_TYPE_VARIANT;
+        if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
+            type->field_count = (uint32_t) member_count;
+            type->field_types = xr_calloc(type->field_count, sizeof(uint16_t));
+            if (!type->field_types) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+                return false;
+            }
+            for (uint32_t field = 0; field < type->field_count; ++field) {
+                uint64_t field_type = take_uvar(&reader);
+                if (!type_is_runtime(context->program, field_type) ||
+                    field_type == XR_CORE_TYPE_VOID) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+                    return false;
+                }
+                type->field_types[field] = (uint16_t) field_type;
+            }
+        } else {
+            type->variant_count = (uint32_t) member_count;
+            type->variants = xr_calloc(type->variant_count, sizeof(XrValidatedVariant));
+            if (!type->variants) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+                return false;
+            }
+            for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
+                uint64_t payload_count = take_uvar(&reader);
+                if (payload_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                    !spend(context, payload_count, location)) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
+                    return false;
+                }
+                XrValidatedVariant *row = &type->variants[variant];
+                row->payload_count = (uint32_t) payload_count;
+                if (row->payload_count != 0u) {
+                    row->payload_types = xr_calloc(row->payload_count, sizeof(uint16_t));
+                    if (!row->payload_types) {
+                        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+                        return false;
+                    }
+                }
+                for (uint32_t field = 0; field < row->payload_count; ++field) {
+                    uint64_t field_type = take_uvar(&reader);
+                    if (!type_is_runtime(context->program, field_type) ||
+                        field_type == XR_CORE_TYPE_VOID) {
+                        reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+                        return false;
+                    }
+                    row->payload_types[field] = (uint16_t) field_type;
+                }
+            }
+        }
+    }
+    if (!reader_done(&reader)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_STRUCTURAL, location);
+        return false;
+    }
+    uint8_t *state = xr_calloc(context->program->type_count ? context->program->type_count : 1u,
+                               sizeof(uint8_t));
+    if (!state) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+        return false;
+    }
+    bool acyclic = true;
+    for (uint32_t index = 0; acyclic && index < context->program->type_count; ++index)
+        acyclic = validated_type_graph_visit(context->program, index, state);
+    xr_free(state);
+    if (!acyclic) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+        return false;
+    }
+    return true;
 }
 
 static bool parse_constants(VerifyContext *context, const XrProgramView *view) {
@@ -180,7 +359,7 @@ static bool parse_constants(VerifyContext *context, const XrProgramView *view) {
         uint64_t kind = take_uvar(&reader);
         XrValidatedConstant *constant = &context->program->constants[index];
         location.value_id = index;
-        if (id != index || !type_is_runtime(type_id) ||
+        if (id != index || !type_is_runtime(context->program, type_id) ||
             (kind != XR_CORE_IR_CONSTANT_I64 && kind != XR_CORE_IR_CONSTANT_BOOL)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
             return false;
@@ -246,7 +425,7 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         }
         for (uint32_t parameter = 0; parameter < (uint32_t) parameter_count; ++parameter) {
             uint64_t type_id = take_uvar(&reader);
-            if (!type_is_runtime(type_id) || type_id == XR_CORE_TYPE_VOID) {
+            if (!type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
                 return false;
             }
@@ -259,7 +438,7 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         uint64_t block_count = take_uvar(&reader);
         uint64_t value_count = take_uvar(&reader);
         uint64_t flags = take_uvar(&reader);
-        if (!type_is_runtime(result_type) || effect_mask > UINT32_MAX ||
+        if (!type_is_runtime(context->program, result_type) || effect_mask > UINT32_MAX ||
             capability_mask > UINT32_MAX || block_count == 0 ||
             block_count > context->budget.max_blocks_per_function || entry_block >= block_count ||
             value_count > context->budget.max_values_per_function || flags > UINT32_MAX ||
@@ -321,7 +500,7 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY, location);
         return false;
     }
-    if (result_plus_one > UINT32_MAX || !type_is_runtime(result_type)) {
+    if (result_plus_one > UINT32_MAX || !type_is_runtime(context->program, result_type)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
         return false;
     }
@@ -349,7 +528,7 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
         instruction->operands[operand] = (uint32_t) value;
     }
     uint64_t immediate_kind = take_uvar(reader);
-    if (immediate_kind > XR_CORE_IR_IMMEDIATE_FUNCTION) {
+    if (immediate_kind > XR_CORE_IR_IMMEDIATE_VARIANT_FIELD) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
         return false;
     }
@@ -394,6 +573,35 @@ static bool parse_instruction(VerifyContext *context, VerifyReader *reader,
                 return false;
             }
             instruction->immediate.function_id = (uint32_t) value;
+            break;
+        }
+        case XR_CORE_IR_IMMEDIATE_FIELD: {
+            uint64_t value = take_uvar(reader);
+            if (value > UINT32_MAX) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            instruction->immediate.field_ordinal = (uint32_t) value;
+            break;
+        }
+        case XR_CORE_IR_IMMEDIATE_VARIANT: {
+            uint64_t value = take_uvar(reader);
+            if (value > UINT32_MAX) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            instruction->immediate.variant_ordinal = (uint32_t) value;
+            break;
+        }
+        case XR_CORE_IR_IMMEDIATE_VARIANT_FIELD: {
+            uint64_t variant = take_uvar(reader);
+            uint64_t field = take_uvar(reader);
+            if (variant > UINT32_MAX || field > UINT32_MAX) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            instruction->immediate.variant_field.variant_ordinal = (uint32_t) variant;
+            instruction->immediate.variant_field.field_ordinal = (uint32_t) field;
             break;
         }
         default:
@@ -477,7 +685,7 @@ static bool parse_code(VerifyContext *context, const XrProgramView *view) {
                 uint64_t type_id = take_uvar(&reader);
                 location.value_id = (uint32_t) value_id;
                 if (value_id != next_value || value_id >= function->value_count ||
-                    !type_is_runtime(type_id) || type_id == XR_CORE_TYPE_VOID) {
+                    !type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID) {
                     reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_DEFINITION, location);
                     return false;
                 }
@@ -801,10 +1009,110 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
                                 XR_CORE_TYPE_U32, true);
+        case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
+            const XrValidatedType *type =
+                xr_validated_program_type(context->program, instruction->result_type_id);
+            if (!type || type->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+                instruction->operand_count != type->field_count ||
+                instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            for (uint32_t field = 0; field < type->field_count; ++field) {
+                if (!operand_type_is(function, instruction, field, type->field_types[field])) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                    return false;
+                }
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_AGGREGATE_PROJECT: {
+            if (instruction->operand_count != 1u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE)
+                goto aggregate_type_reject;
+            uint16_t aggregate_type_id = function->value_types[instruction->operands[0]];
+            const XrValidatedType *type =
+                xr_validated_program_type(context->program, aggregate_type_id);
+            if (!type || type->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+                instruction->immediate.field_ordinal >= type->field_count ||
+                instruction->result_type_id !=
+                    type->field_types[instruction->immediate.field_ordinal])
+                goto aggregate_type_reject;
+            return true;
+        }
+        case XR_CORE_OP_CORE_AGGREGATE_UPDATE: {
+            if (instruction->operand_count != 2u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FIELD ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE)
+                goto aggregate_type_reject;
+            uint16_t aggregate_type_id = function->value_types[instruction->operands[0]];
+            const XrValidatedType *type =
+                xr_validated_program_type(context->program, aggregate_type_id);
+            if (!type || type->kind != XR_CORE_IR_TYPE_AGGREGATE ||
+                instruction->immediate.field_ordinal >= type->field_count ||
+                instruction->result_type_id != aggregate_type_id ||
+                !operand_type_is(function, instruction, 1u,
+                                 type->field_types[instruction->immediate.field_ordinal]))
+                goto aggregate_type_reject;
+            return true;
+        }
+        case XR_CORE_OP_CORE_VARIANT_CONSTRUCT: {
+            const XrValidatedType *type =
+                xr_validated_program_type(context->program, instruction->result_type_id);
+            uint32_t variant = instruction->immediate.variant_ordinal;
+            if (!type || type->kind != XR_CORE_IR_TYPE_VARIANT ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_VARIANT ||
+                instruction->successor_count != 0u ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
+                variant >= type->variant_count ||
+                instruction->operand_count != type->variants[variant].payload_count)
+                goto aggregate_type_reject;
+            for (uint32_t field = 0; field < type->variants[variant].payload_count; ++field) {
+                if (!operand_type_is(function, instruction, field,
+                                     type->variants[variant].payload_types[field]))
+                    goto aggregate_type_reject;
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_VARIANT_TEST: {
+            if (instruction->operand_count != 1u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_VARIANT ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
+                instruction->result_type_id != XR_CORE_TYPE_BOOL)
+                goto aggregate_type_reject;
+            const XrValidatedType *type = xr_validated_program_type(
+                context->program, function->value_types[instruction->operands[0]]);
+            if (!type || type->kind != XR_CORE_IR_TYPE_VARIANT ||
+                instruction->immediate.variant_ordinal >= type->variant_count)
+                goto aggregate_type_reject;
+            return true;
+        }
+        case XR_CORE_OP_CORE_VARIANT_PROJECT: {
+            if (instruction->operand_count != 1u || instruction->successor_count != 0u ||
+                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_VARIANT_FIELD ||
+                instruction->result_id == XR_PROGRAM_LOCATION_NONE)
+                goto aggregate_type_reject;
+            const XrValidatedType *type = xr_validated_program_type(
+                context->program, function->value_types[instruction->operands[0]]);
+            uint32_t variant = instruction->immediate.variant_field.variant_ordinal;
+            uint32_t field = instruction->immediate.variant_field.field_ordinal;
+            if (!type || type->kind != XR_CORE_IR_TYPE_VARIANT || variant >= type->variant_count ||
+                field >= type->variants[variant].payload_count ||
+                instruction->result_type_id != type->variants[variant].payload_types[field])
+                goto aggregate_type_reject;
+            return true;
+        }
         default:
             reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY, location);
             return false;
     }
+
+aggregate_type_reject:
+    reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+    return false;
 }
 
 static bool verify_function(VerifyContext *context, uint32_t function_id) {
@@ -971,8 +1279,8 @@ XrProgramVerifyStatus xr_program_validate(const uint8_t *bytes, size_t size,
     context.program->id = view.id;
     memcpy(context.program->semantic_profile_fingerprint, view.semantic_profile_fingerprint,
            XR_PROGRAM_DIGEST_SIZE);
-    if (!parse_constants(&context, &view) || !parse_functions(&context, &view) ||
-        !parse_code(&context, &view))
+    if (!parse_types(&context, &view) || !parse_constants(&context, &view) ||
+        !parse_functions(&context, &view) || !parse_code(&context, &view))
         goto rejected;
 
     uint32_t entry_count = 0;

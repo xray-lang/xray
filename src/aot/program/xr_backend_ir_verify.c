@@ -66,6 +66,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
+        case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
         case XR_CORE_OP_CORE_TRAP:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
@@ -73,6 +74,14 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
                    instruction->immediate.function_id < ir->function_count;
+        case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
+        case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FIELD;
+        case XR_CORE_OP_CORE_VARIANT_CONSTRUCT:
+        case XR_CORE_OP_CORE_VARIANT_TEST:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT;
+        case XR_CORE_OP_CORE_VARIANT_PROJECT:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD;
         default:
             return false;
     }
@@ -193,6 +202,15 @@ static bool immediate_equal(const XrValidatedInstruction *source,
             return source->immediate.constant_id == lowered->immediate.constant_id;
         case XR_CORE_IR_IMMEDIATE_FUNCTION:
             return source->immediate.function_id == lowered->immediate.function_id;
+        case XR_CORE_IR_IMMEDIATE_FIELD:
+            return source->immediate.field_ordinal == lowered->immediate.field_ordinal;
+        case XR_CORE_IR_IMMEDIATE_VARIANT:
+            return source->immediate.variant_ordinal == lowered->immediate.variant_ordinal;
+        case XR_CORE_IR_IMMEDIATE_VARIANT_FIELD:
+            return source->immediate.variant_field.variant_ordinal ==
+                       lowered->immediate.variant_field.variant_ordinal &&
+                   source->immediate.variant_field.field_ordinal ==
+                       lowered->immediate.variant_field.field_ordinal;
     }
     return false;
 }

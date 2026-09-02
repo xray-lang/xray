@@ -31,6 +31,12 @@ typedef struct XrVmFixedInstruction {
         bool boolean;
         uint32_t constant_id;
         uint32_t function_id;
+        uint32_t field_ordinal;
+        uint32_t variant_ordinal;
+        struct {
+            uint32_t variant_ordinal;
+            uint32_t field_ordinal;
+        } variant_field;
     } immediate;
     const uint32_t *successors;
     uint32_t successor_count;
@@ -69,6 +75,12 @@ typedef struct XrVmInstructionView {
         bool boolean;
         uint32_t constant_id;
         uint32_t function_id;
+        uint32_t field_ordinal;
+        uint32_t variant_ordinal;
+        struct {
+            uint32_t variant_ordinal;
+            uint32_t field_ordinal;
+        } variant_field;
     } immediate;
     const uint32_t *successors;
     uint32_t successor_count;
@@ -77,8 +89,19 @@ typedef struct XrVmInstructionView {
 typedef struct XrVmContext {
     const XrVmCode *code;
     uint64_t steps;
+    uint64_t aggregate_cell_count;
     XrSHA256Context trace;
+    struct XrVmAggregateValue **aggregates;
+    uint32_t aggregate_count;
+    uint32_t aggregate_capacity;
 } XrVmContext;
+
+typedef struct XrVmAggregateValue {
+    uint16_t type_id;
+    uint32_t variant_ordinal;
+    XrVmValue *fields;
+    uint32_t field_count;
+} XrVmAggregateValue;
 
 static XrVmOutcome vm_outcome(XrVmOutcomeKind kind, const XrVmContext *context) {
     XrVmOutcome outcome = {.kind = kind, .steps = context ? context->steps : 0u};
@@ -96,21 +119,70 @@ static XrVmValue void_value(void) {
     return value;
 }
 
-static bool value_matches_type(XrVmValueKind kind, uint16_t type_id) {
+static bool value_matches_type(const XrValidatedProgram *program, XrVmValue value,
+                               uint16_t type_id) {
     switch (type_id) {
         case XR_CORE_TYPE_VOID:
-            return kind == XR_VM_VALUE_VOID;
+            return value.kind == XR_VM_VALUE_VOID;
         case XR_CORE_TYPE_BOOL:
-            return kind == XR_VM_VALUE_BOOL;
+            return value.kind == XR_VM_VALUE_BOOL;
         case XR_CORE_TYPE_I64:
-            return kind == XR_VM_VALUE_I64;
+            return value.kind == XR_VM_VALUE_I64;
         case XR_CORE_TYPE_U32:
-            return kind == XR_VM_VALUE_U32;
+            return value.kind == XR_VM_VALUE_U32;
         case XR_CORE_TYPE_ERROR:
-            return kind == XR_VM_VALUE_ERROR;
+            return value.kind == XR_VM_VALUE_ERROR;
         default:
-            return false;
+            return xr_validated_program_type(program, type_id) &&
+                   value.kind == XR_VM_VALUE_AGGREGATE && value.as.aggregate &&
+                   ((const XrVmAggregateValue *) value.as.aggregate)->type_id == type_id;
     }
+}
+
+static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t type_id,
+                                              uint32_t variant_ordinal, uint32_t field_count) {
+    if ((uint64_t) field_count >
+        (uint64_t) context->code->options.max_value_cells - context->aggregate_cell_count)
+        return NULL;
+    if (context->aggregate_count == context->aggregate_capacity) {
+        uint32_t capacity = context->aggregate_capacity ? context->aggregate_capacity * 2u : 8u;
+        if (capacity < context->aggregate_count)
+            return NULL;
+#if SIZE_MAX < UINT64_MAX
+        if ((size_t) capacity > SIZE_MAX / sizeof(*context->aggregates))
+            return NULL;
+#endif
+        XrVmAggregateValue **grown =
+            xr_realloc(context->aggregates, (size_t) capacity * sizeof(*context->aggregates));
+        if (!grown)
+            return NULL;
+        context->aggregates = grown;
+        context->aggregate_capacity = capacity;
+    }
+    XrVmAggregateValue *aggregate = xr_calloc(1u, sizeof(*aggregate));
+    if (!aggregate)
+        return NULL;
+    if (field_count != 0u) {
+        aggregate->fields = xr_calloc(field_count, sizeof(XrVmValue));
+        if (!aggregate->fields) {
+            xr_free(aggregate);
+            return NULL;
+        }
+    }
+    aggregate->type_id = type_id;
+    aggregate->variant_ordinal = variant_ordinal;
+    aggregate->field_count = field_count;
+    context->aggregates[context->aggregate_count++] = aggregate;
+    context->aggregate_cell_count += field_count;
+    return aggregate;
+}
+
+static void free_aggregates(XrVmContext *context) {
+    for (uint32_t index = 0; index < context->aggregate_count; ++index) {
+        xr_free(context->aggregates[index]->fields);
+        xr_free(context->aggregates[index]);
+    }
+    xr_free(context->aggregates);
 }
 
 static int64_t i64_from_bits(uint64_t bits) {
@@ -212,7 +284,8 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
     if (argument_count != function->parameter_count)
         return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
     for (uint32_t index = 0; index < argument_count; ++index) {
-        if (!value_matches_type(arguments[index].kind, function->parameter_types[index]))
+        if (!value_matches_type(context->code->program, arguments[index],
+                                function->parameter_types[index]))
             return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
     }
 
@@ -417,6 +490,74 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.kind = XR_VM_VALUE_U32;
                     produced.as.u32 = context->code->pointer_width;
                     break;
+                case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
+                    XrVmAggregateValue *aggregate = allocate_aggregate(
+                        context, instruction.result_type_id, UINT32_MAX, instruction.operand_count);
+                    if (!aggregate) {
+                        result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    for (uint32_t field = 0; field < instruction.operand_count; ++field)
+                        aggregate->fields[field] = values[instruction.operands[field]];
+                    produced.kind = XR_VM_VALUE_AGGREGATE;
+                    produced.as.aggregate = aggregate;
+                    break;
+                }
+                case XR_CORE_OP_CORE_AGGREGATE_PROJECT: {
+                    const XrVmAggregateValue *aggregate =
+                        values[instruction.operands[0]].as.aggregate;
+                    produced = aggregate->fields[instruction.immediate.field_ordinal];
+                    break;
+                }
+                case XR_CORE_OP_CORE_AGGREGATE_UPDATE: {
+                    const XrVmAggregateValue *source = values[instruction.operands[0]].as.aggregate;
+                    XrVmAggregateValue *aggregate = allocate_aggregate(
+                        context, instruction.result_type_id, UINT32_MAX, source->field_count);
+                    if (!aggregate) {
+                        result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    memcpy(aggregate->fields, source->fields,
+                           (size_t) source->field_count * sizeof(XrVmValue));
+                    aggregate->fields[instruction.immediate.field_ordinal] =
+                        values[instruction.operands[1]];
+                    produced.kind = XR_VM_VALUE_AGGREGATE;
+                    produced.as.aggregate = aggregate;
+                    break;
+                }
+                case XR_CORE_OP_CORE_VARIANT_CONSTRUCT: {
+                    XrVmAggregateValue *aggregate = allocate_aggregate(
+                        context, instruction.result_type_id, instruction.immediate.variant_ordinal,
+                        instruction.operand_count);
+                    if (!aggregate) {
+                        result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    for (uint32_t field = 0; field < instruction.operand_count; ++field)
+                        aggregate->fields[field] = values[instruction.operands[field]];
+                    produced.kind = XR_VM_VALUE_AGGREGATE;
+                    produced.as.aggregate = aggregate;
+                    break;
+                }
+                case XR_CORE_OP_CORE_VARIANT_TEST: {
+                    const XrVmAggregateValue *aggregate =
+                        values[instruction.operands[0]].as.aggregate;
+                    produced.kind = XR_VM_VALUE_BOOL;
+                    produced.as.boolean =
+                        aggregate->variant_ordinal == instruction.immediate.variant_ordinal;
+                    break;
+                }
+                case XR_CORE_OP_CORE_VARIANT_PROJECT: {
+                    const XrVmAggregateValue *aggregate =
+                        values[instruction.operands[0]].as.aggregate;
+                    if (aggregate->variant_ordinal !=
+                        instruction.immediate.variant_field.variant_ordinal) {
+                        result = vm_trap(XR_VM_TRAP_VARIANT_TAG_MISMATCH, context);
+                        goto done;
+                    }
+                    produced = aggregate->fields[instruction.immediate.variant_field.field_ordinal];
+                    break;
+                }
                 default:
                     goto done;
             }
@@ -517,6 +658,7 @@ XrVmCodeOptions xr_vm_code_default_options(void) {
         .decode_policy = XR_VM_DECODE_BASELINE_VIEW,
         .quickening_policy = XR_VM_QUICKENING_NONE,
         .max_steps = UINT64_C(1000000),
+        .max_value_cells = UINT32_C(1048576),
         .max_call_depth = 1024u,
     };
     return options;
@@ -530,7 +672,7 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
         memset(diagnostic_out, 0, sizeof(*diagnostic_out));
     XrVmCodeOptions selected = options ? *options : xr_vm_code_default_options();
     if (!instance || !code_out || selected.schema_version != XR_VM_CODE_OPTIONS_SCHEMA_VERSION ||
-        selected.reserved16 != 0u || selected.reserved32 != 0u || selected.max_steps == 0u ||
+        selected.reserved16 != 0u || selected.max_steps == 0u || selected.max_value_cells == 0u ||
         selected.max_call_depth == 0u) {
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_INVALID_INPUT;
@@ -630,11 +772,14 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
                      sizeof(code->cache_key.execution_id.bytes));
     hash_u32(&context.trace, function_id);
     XrVmOutcome outcome = execute_function(&context, function_id, arguments, argument_count, 1u);
+    if (outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_AGGREGATE)
+        outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     hash_u32(&context.trace, (uint32_t) outcome.kind);
     hash_u32(&context.trace, (uint32_t) outcome.trap);
     hash_u32(&context.trace, outcome.error);
     xr_sha256_final(&context.trace, outcome.logical_trace.bytes);
     outcome.steps = context.steps;
+    free_aggregates(&context);
     xr_execution_instance_unpin(instance);
     return outcome;
 }

@@ -5,7 +5,7 @@
   "execution_authority": "XrInstance",
   "private_realization": "XrBackendIR",
   "backend": "xray-c11-aot@1",
-  "operation_count": 15,
+  "operation_count": 21,
   "operations": [
     {
       "stable_id": 1,
@@ -126,6 +126,54 @@
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",
       "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 80,
+      "spelling": "core.aggregate.construct",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 81,
+      "spelling": "core.aggregate.project",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 82,
+      "spelling": "core.aggregate.update",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 83,
+      "spelling": "core.variant.construct",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 84,
+      "spelling": "core.variant.test",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 85,
+      "spelling": "core.variant.project",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
     }
   ],
   "pass_contract": {
@@ -155,7 +203,7 @@
     "vm": false,
     "compiler": false,
     "aot_toolchain": false,
-    "runtime_dependency": "libc-only-for-active-scalar-skeleton"
+    "runtime_dependency": "libc-only-for-active-value-skeleton"
   },
   "inactive_contracts": [
     "full-language-operation-families",

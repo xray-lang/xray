@@ -19,6 +19,7 @@ typedef enum XrReferenceValueKind {
     XR_REFERENCE_VALUE_I64,
     XR_REFERENCE_VALUE_U32,
     XR_REFERENCE_VALUE_ERROR,
+    XR_REFERENCE_VALUE_AGGREGATE,
 } XrReferenceValueKind;
 
 typedef struct XrReferenceValue {
@@ -28,6 +29,7 @@ typedef struct XrReferenceValue {
         int64_t i64;
         uint32_t u32;
         uint32_t error;
+        const void *aggregate;
     } as;
 } XrReferenceValue;
 
@@ -37,6 +39,7 @@ typedef struct XrReferenceProfile {
 
 typedef struct XrReferenceBudget {
     uint64_t max_steps;
+    uint64_t max_value_cells;
     uint32_t max_call_depth;
 } XrReferenceBudget;
 
@@ -55,6 +58,7 @@ typedef enum XrReferenceTrap {
     XR_REFERENCE_TRAP_INTEGER_DIVISION_OVERFLOW = 3,
     XR_REFERENCE_TRAP_EXPLICIT = 4,
     XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE = 5,
+    XR_REFERENCE_TRAP_VARIANT_TAG_MISMATCH = 6,
 } XrReferenceTrap;
 
 typedef struct XrReferenceOutcome {

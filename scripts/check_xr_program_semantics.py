@@ -78,6 +78,7 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
         ).hexdigest(),
         "type_state": "XrValidatedProgram",
         "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
+        "execution_budgets": ["steps", "call-depth", "aggregate-value-cells"],
         "operation_count": len(operations),
         "operations": operations,
         "negative_mutations": [
@@ -94,10 +95,9 @@ def expected_coverage(registry: dict[str, Any], program_schema: dict[str, Any],
             "standalone_hostile_lengths": 513,
         },
         "inactive_contracts": [
-            "ownership obligations beyond copy scalars",
+            "managed ownership and cleanup",
             "coroutine state and cleanup",
             "imports and materialized boundaries",
-            "AOT consumer",
         ],
     }
 
@@ -129,6 +129,8 @@ def validate_sources(registry: dict[str, Any], sources: dict[Path, str]) -> None
     require("XrValidatedProgram" in verifier, "verifier does not construct the typed state")
     require("XrProgramDiagnosticKind" in verifier, "verifier has no stable diagnostic kind")
     require("max_work" in verifier, "verifier has no explicit work budget")
+    require("max_value_cells" in evaluator and "max_value_cells" in test,
+            "aggregate evaluator allocation has no tested value-cell budget")
 
 
 def check(root: Path, source_override: dict[Path, str] | None = None) -> None:
@@ -174,13 +176,15 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
+    root = args.root.resolve()
     try:
         if args.self_test:
-            self_test(args.root.resolve())
+            self_test(root)
             print("XrProgram semantic coverage self-test: PASS")
         else:
-            check(args.root.resolve())
-            print("XrProgram semantic coverage: PASS (15 operations)")
+            check(root)
+            count = len(read_json(root / REGISTRY)["operations"])
+            print(f"XrProgram semantic coverage: PASS ({count} operations)")
     except (GateError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"XrProgram semantic coverage: FAIL: {exc}", file=sys.stderr)
         return 1

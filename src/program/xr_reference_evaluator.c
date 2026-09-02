@@ -22,7 +22,18 @@ typedef struct EvalContext {
     XrReferenceProfile profile;
     XrReferenceBudget budget;
     uint64_t steps;
+    uint64_t aggregate_cell_count;
+    struct XrReferenceAggregateValue **aggregates;
+    uint32_t aggregate_count;
+    uint32_t aggregate_capacity;
 } EvalContext;
+
+typedef struct XrReferenceAggregateValue {
+    uint16_t type_id;
+    uint32_t variant_ordinal;
+    XrReferenceValue *fields;
+    uint32_t field_count;
+} XrReferenceAggregateValue;
 
 static XrReferenceOutcome outcome(XrReferenceOutcomeKind kind, EvalContext *context) {
     XrReferenceOutcome result = {.kind = kind, .steps = context->steps};
@@ -40,21 +51,71 @@ static XrReferenceValue void_value(void) {
     return value;
 }
 
-static bool reference_kind_matches_type(XrReferenceValueKind kind, uint16_t type_id) {
+static bool reference_value_matches_type(const XrValidatedProgram *program, XrReferenceValue value,
+                                         uint16_t type_id) {
     switch (type_id) {
         case XR_CORE_TYPE_VOID:
-            return kind == XR_REFERENCE_VALUE_VOID;
+            return value.kind == XR_REFERENCE_VALUE_VOID;
         case XR_CORE_TYPE_BOOL:
-            return kind == XR_REFERENCE_VALUE_BOOL;
+            return value.kind == XR_REFERENCE_VALUE_BOOL;
         case XR_CORE_TYPE_I64:
-            return kind == XR_REFERENCE_VALUE_I64;
+            return value.kind == XR_REFERENCE_VALUE_I64;
         case XR_CORE_TYPE_U32:
-            return kind == XR_REFERENCE_VALUE_U32;
+            return value.kind == XR_REFERENCE_VALUE_U32;
         case XR_CORE_TYPE_ERROR:
-            return kind == XR_REFERENCE_VALUE_ERROR;
+            return value.kind == XR_REFERENCE_VALUE_ERROR;
         default:
-            return false;
+            return xr_validated_program_type(program, type_id) &&
+                   value.kind == XR_REFERENCE_VALUE_AGGREGATE && value.as.aggregate &&
+                   ((const XrReferenceAggregateValue *) value.as.aggregate)->type_id == type_id;
     }
+}
+
+static XrReferenceAggregateValue *allocate_aggregate(EvalContext *context, uint16_t type_id,
+                                                     uint32_t variant_ordinal,
+                                                     uint32_t field_count) {
+    if ((uint64_t) field_count >
+        context->budget.max_value_cells - context->aggregate_cell_count)
+        return NULL;
+    if (context->aggregate_count == context->aggregate_capacity) {
+        uint32_t capacity = context->aggregate_capacity ? context->aggregate_capacity * 2u : 8u;
+        if (capacity < context->aggregate_count)
+            return NULL;
+#if SIZE_MAX < UINT64_MAX
+        if ((size_t) capacity > SIZE_MAX / sizeof(*context->aggregates))
+            return NULL;
+#endif
+        XrReferenceAggregateValue **grown =
+            xr_realloc(context->aggregates, (size_t) capacity * sizeof(*context->aggregates));
+        if (!grown)
+            return NULL;
+        context->aggregates = grown;
+        context->aggregate_capacity = capacity;
+    }
+    XrReferenceAggregateValue *aggregate = xr_calloc(1u, sizeof(*aggregate));
+    if (!aggregate)
+        return NULL;
+    if (field_count != 0u) {
+        aggregate->fields = xr_calloc(field_count, sizeof(XrReferenceValue));
+        if (!aggregate->fields) {
+            xr_free(aggregate);
+            return NULL;
+        }
+    }
+    aggregate->type_id = type_id;
+    aggregate->variant_ordinal = variant_ordinal;
+    aggregate->field_count = field_count;
+    context->aggregates[context->aggregate_count++] = aggregate;
+    context->aggregate_cell_count += field_count;
+    return aggregate;
+}
+
+static void free_aggregates(EvalContext *context) {
+    for (uint32_t index = 0; index < context->aggregate_count; ++index) {
+        xr_free(context->aggregates[index]->fields);
+        xr_free(context->aggregates[index]);
+    }
+    xr_free(context->aggregates);
 }
 
 static int64_t i64_from_bits(uint64_t bits) {
@@ -104,7 +165,8 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
     if (argument_count != function->parameter_count)
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
     for (uint32_t index = 0; index < argument_count; ++index) {
-        if (!reference_kind_matches_type(arguments[index].kind, function->parameter_types[index]))
+        if (!reference_value_matches_type(context->program, arguments[index],
+                                          function->parameter_types[index]))
             return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
     }
 
@@ -313,6 +375,77 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     produced.kind = XR_REFERENCE_VALUE_U32;
                     produced.as.u32 = context->profile.pointer_width;
                     break;
+                case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
+                    XrReferenceAggregateValue *aggregate =
+                        allocate_aggregate(context, instruction->result_type_id, UINT32_MAX,
+                                           instruction->operand_count);
+                    if (!aggregate) {
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    for (uint32_t field = 0; field < instruction->operand_count; ++field)
+                        aggregate->fields[field] = values[instruction->operands[field]];
+                    produced.kind = XR_REFERENCE_VALUE_AGGREGATE;
+                    produced.as.aggregate = aggregate;
+                    break;
+                }
+                case XR_CORE_OP_CORE_AGGREGATE_PROJECT: {
+                    const XrReferenceAggregateValue *aggregate =
+                        values[instruction->operands[0]].as.aggregate;
+                    produced = aggregate->fields[instruction->immediate.field_ordinal];
+                    break;
+                }
+                case XR_CORE_OP_CORE_AGGREGATE_UPDATE: {
+                    const XrReferenceAggregateValue *source =
+                        values[instruction->operands[0]].as.aggregate;
+                    XrReferenceAggregateValue *aggregate = allocate_aggregate(
+                        context, instruction->result_type_id, UINT32_MAX, source->field_count);
+                    if (!aggregate) {
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    memcpy(aggregate->fields, source->fields,
+                           (size_t) source->field_count * sizeof(XrReferenceValue));
+                    aggregate->fields[instruction->immediate.field_ordinal] =
+                        values[instruction->operands[1]];
+                    produced.kind = XR_REFERENCE_VALUE_AGGREGATE;
+                    produced.as.aggregate = aggregate;
+                    break;
+                }
+                case XR_CORE_OP_CORE_VARIANT_CONSTRUCT: {
+                    XrReferenceAggregateValue *aggregate = allocate_aggregate(
+                        context, instruction->result_type_id,
+                        instruction->immediate.variant_ordinal, instruction->operand_count);
+                    if (!aggregate) {
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    for (uint32_t field = 0; field < instruction->operand_count; ++field)
+                        aggregate->fields[field] = values[instruction->operands[field]];
+                    produced.kind = XR_REFERENCE_VALUE_AGGREGATE;
+                    produced.as.aggregate = aggregate;
+                    break;
+                }
+                case XR_CORE_OP_CORE_VARIANT_TEST: {
+                    const XrReferenceAggregateValue *aggregate =
+                        values[instruction->operands[0]].as.aggregate;
+                    produced.kind = XR_REFERENCE_VALUE_BOOL;
+                    produced.as.boolean =
+                        aggregate->variant_ordinal == instruction->immediate.variant_ordinal;
+                    break;
+                }
+                case XR_CORE_OP_CORE_VARIANT_PROJECT: {
+                    const XrReferenceAggregateValue *aggregate =
+                        values[instruction->operands[0]].as.aggregate;
+                    if (aggregate->variant_ordinal !=
+                        instruction->immediate.variant_field.variant_ordinal) {
+                        result = trap_outcome(context, XR_REFERENCE_TRAP_VARIANT_TAG_MISMATCH);
+                        goto done;
+                    }
+                    produced =
+                        aggregate->fields[instruction->immediate.variant_field.field_ordinal];
+                    break;
+                }
                 default:
                     result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
                     goto done;
@@ -339,7 +472,11 @@ done:
 }
 
 XrReferenceBudget xr_reference_default_budget(void) {
-    XrReferenceBudget budget = {.max_steps = UINT64_C(1000000), .max_call_depth = 1024u};
+    XrReferenceBudget budget = {
+        .max_steps = UINT64_C(1000000),
+        .max_value_cells = UINT64_C(1048576),
+        .max_call_depth = 1024u,
+    };
     return budget;
 }
 
@@ -354,7 +491,14 @@ XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint
         .budget = selected,
     };
     if (!program || function_id >= program->function_count || (argument_count != 0 && !arguments) ||
-        selected.max_steps == 0 || selected.max_call_depth == 0)
+        selected.max_steps == 0 || selected.max_value_cells == 0 ||
+        selected.max_call_depth == 0)
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
-    return evaluate_function(&context, function_id, arguments, argument_count, 1u);
+    XrReferenceOutcome result =
+        evaluate_function(&context, function_id, arguments, argument_count, 1u);
+    if (result.kind == XR_REFERENCE_OUTCOME_RETURN &&
+        result.value.kind == XR_REFERENCE_VALUE_AGGREGATE)
+        result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
+    free_aggregates(&context);
+    return result;
 }

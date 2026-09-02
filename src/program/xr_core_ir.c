@@ -38,6 +38,11 @@ static int block_compare(const void *left, const void *right) {
                              ((const XrCoreIrBlock *) right)->key);
 }
 
+static int type_compare(const void *left, const void *right) {
+    return key_compare_value(((const XrCoreIrType *) left)->key,
+                             ((const XrCoreIrType *) right)->key);
+}
+
 XrCoreIrKey xr_core_ir_key(const void *semantic_bytes, size_t semantic_size) {
     static const uint8_t domain[] = "xray-core-ir-semantic-key-v1";
     XrCoreIrKey key = {{0}};
@@ -62,8 +67,16 @@ bool xr_core_ir_key_is_zero(XrCoreIrKey key) {
     return combined == 0;
 }
 
-static bool type_id_supported(uint16_t type_id) {
+static bool type_id_is_builtin(uint16_t type_id) {
     return type_id <= XR_CORE_TYPE_ERROR;
+}
+
+static bool type_id_supported(const XrCoreIrProgram *program, uint16_t type_id) {
+    if (type_id_is_builtin(type_id))
+        return true;
+    if (!program || type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
+        return false;
+    return (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count;
 }
 
 static bool copy_bytes(void **destination, const void *source, size_t count, size_t item_size) {
@@ -85,6 +98,15 @@ static void free_instruction(XrCoreIrInstruction *instruction) {
         return;
     xr_free(instruction->operands);
     xr_free(instruction->successors);
+}
+
+static void free_type(XrCoreIrType *type) {
+    if (!type)
+        return;
+    for (uint32_t variant = 0; variant < type->variant_count; ++variant)
+        xr_free(type->variants[variant].payload_types);
+    xr_free(type->variants);
+    xr_free(type->field_types);
 }
 
 static void free_block(XrCoreIrBlock *block) {
@@ -115,6 +137,9 @@ void xr_core_ir_program_free(XrCoreIrProgram *program) {
         xr_free(module->functions);
         xr_free(module->constants);
     }
+    for (uint32_t type = 0; type < program->type_count; ++type)
+        free_type(&program->types[type]);
+    xr_free(program->types);
     xr_free(program->modules);
     xr_free(program->required_features);
     xr_free(program);
@@ -144,6 +169,18 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
         case XR_CORE_IR_IMMEDIATE_CONSTANT:
         case XR_CORE_IR_IMMEDIATE_FUNCTION:
             output->immediate.key = input->immediate.key;
+            break;
+        case XR_CORE_IR_IMMEDIATE_FIELD:
+            output->immediate.field_ordinal = input->immediate.field_ordinal;
+            break;
+        case XR_CORE_IR_IMMEDIATE_VARIANT:
+            output->immediate.variant_ordinal = input->immediate.variant_ordinal;
+            break;
+        case XR_CORE_IR_IMMEDIATE_VARIANT_FIELD:
+            output->immediate.variant_field.variant_ordinal =
+                input->immediate.variant_field.variant_ordinal;
+            output->immediate.variant_field.field_ordinal =
+                input->immediate.variant_field.field_ordinal;
             break;
         default:
             return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -252,6 +289,116 @@ static XrProgramBuildStatus copy_module(const XrCoreIrModuleInput *input, XrCore
     return XR_PROGRAM_BUILD_OK;
 }
 
+static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrType *output) {
+    memset(output, 0, sizeof(*output));
+    output->key = input->key;
+    output->type_id = input->local_id;
+    output->kind = input->kind;
+    output->field_count = input->field_count;
+    output->variant_count = input->variant_count;
+    if (!copy_bytes((void **) &output->field_types, input->field_types, input->field_count,
+                    sizeof(uint16_t)))
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (input->variant_count != 0u) {
+        if (!input->variants) {
+            free_type(output);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        output->variants = xr_calloc(input->variant_count, sizeof(XrCoreIrVariant));
+        if (!output->variants) {
+            free_type(output);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+    } else if (input->variants) {
+        free_type(output);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    for (uint32_t variant = 0; variant < input->variant_count; ++variant) {
+        output->variants[variant].payload_count = input->variants[variant].payload_count;
+        if (!copy_bytes((void **) &output->variants[variant].payload_types,
+                        input->variants[variant].payload_types,
+                        input->variants[variant].payload_count, sizeof(uint16_t))) {
+            free_type(output);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static bool remap_type_id(const XrCoreIrType *types, uint32_t count, uint16_t old_id,
+                          uint16_t *new_id) {
+    if (type_id_is_builtin(old_id)) {
+        *new_id = old_id;
+        return true;
+    }
+    for (uint32_t index = 0; index < count; ++index) {
+        if (types[index].type_id == old_id) {
+            *new_id = (uint16_t) (XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index);
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool remap_program_types(XrCoreIrProgram *program) {
+    for (uint32_t index = 0; index < program->type_count; ++index) {
+        XrCoreIrType *type = &program->types[index];
+        for (uint32_t field = 0; field < type->field_count; ++field) {
+            if (!remap_type_id(program->types, program->type_count, type->field_types[field],
+                               &type->field_types[field]))
+                return false;
+        }
+        for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
+            XrCoreIrVariant *row = &type->variants[variant];
+            for (uint32_t field = 0; field < row->payload_count; ++field) {
+                if (!remap_type_id(program->types, program->type_count, row->payload_types[field],
+                                   &row->payload_types[field]))
+                    return false;
+            }
+        }
+    }
+    for (uint32_t module = 0; module < program->module_count; ++module) {
+        XrCoreIrModule *module_row = &program->modules[module];
+        for (uint32_t constant = 0; constant < module_row->constant_count; ++constant) {
+            if (!remap_type_id(program->types, program->type_count,
+                               module_row->constants[constant].type_id,
+                               &module_row->constants[constant].type_id))
+                return false;
+        }
+        for (uint32_t function = 0; function < module_row->function_count; ++function) {
+            XrCoreIrFunction *function_row = &module_row->functions[function];
+            if (!remap_type_id(program->types, program->type_count, function_row->result_type_id,
+                               &function_row->result_type_id))
+                return false;
+            for (uint32_t parameter = 0; parameter < function_row->parameter_count; ++parameter) {
+                if (!remap_type_id(program->types, program->type_count,
+                                   function_row->parameter_types[parameter],
+                                   &function_row->parameter_types[parameter]))
+                    return false;
+            }
+            for (uint32_t block = 0; block < function_row->block_count; ++block) {
+                XrCoreIrBlock *block_row = &function_row->blocks[block];
+                for (uint32_t argument = 0; argument < block_row->argument_count; ++argument) {
+                    if (!remap_type_id(program->types, program->type_count,
+                                       block_row->arguments[argument].type_id,
+                                       &block_row->arguments[argument].type_id))
+                        return false;
+                }
+                for (uint32_t instruction = 0; instruction < block_row->instruction_count;
+                     ++instruction) {
+                    if (!remap_type_id(program->types, program->type_count,
+                                       block_row->instructions[instruction].result_type_id,
+                                       &block_row->instructions[instruction].result_type_id))
+                        return false;
+                }
+            }
+        }
+    }
+    for (uint32_t index = 0; index < program->type_count; ++index)
+        program->types[index].type_id = (uint16_t) (XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index);
+    return true;
+}
+
 static const XrCoreIrFunction *find_function(const XrCoreIrProgram *program, XrCoreIrKey key) {
     for (uint32_t module_index = 0; module_index < program->module_count; ++module_index) {
         const XrCoreIrModule *module = &program->modules[module_index];
@@ -299,6 +446,68 @@ static bool function_has_value(const XrCoreIrFunction *function, XrCoreIrKey key
     return occurrences == 1u;
 }
 
+static bool type_graph_visit(const XrCoreIrProgram *program, uint32_t index, uint8_t *state) {
+    if (state[index] == 1u)
+        return false;
+    if (state[index] == 2u)
+        return true;
+    state[index] = 1u;
+    const XrCoreIrType *type = &program->types[index];
+    for (uint32_t field = 0; field < type->field_count; ++field) {
+        uint16_t child = type->field_types[field];
+        if (child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+            !type_graph_visit(program, child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, state))
+            return false;
+    }
+    for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
+        const XrCoreIrVariant *row = &type->variants[variant];
+        for (uint32_t field = 0; field < row->payload_count; ++field) {
+            uint16_t child = row->payload_types[field];
+            if (child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+                !type_graph_visit(program, child - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, state))
+                return false;
+        }
+    }
+    state[index] = 2u;
+    return true;
+}
+
+static bool validate_types(const XrCoreIrProgram *program) {
+    uint8_t *state = xr_calloc(program->type_count ? program->type_count : 1u, sizeof(uint8_t));
+    if (!state)
+        return false;
+    bool valid = true;
+    for (uint32_t index = 0; valid && index < program->type_count; ++index) {
+        const XrCoreIrType *type = &program->types[index];
+        valid = !xr_core_ir_key_is_zero(type->key) &&
+                type->type_id == XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index &&
+                (index == 0 || !xr_core_ir_key_equal(program->types[index - 1u].key, type->key));
+        if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
+            valid = valid && type->field_count != 0u && type->field_types &&
+                    type->variant_count == 0u && !type->variants;
+            for (uint32_t field = 0; valid && field < type->field_count; ++field)
+                valid = type_id_supported(program, type->field_types[field]) &&
+                        type->field_types[field] != XR_CORE_TYPE_VOID;
+        } else if (type->kind == XR_CORE_IR_TYPE_VARIANT) {
+            valid = valid && type->field_count == 0u && !type->field_types &&
+                    type->variant_count != 0u && type->variants;
+            for (uint32_t variant = 0; valid && variant < type->variant_count; ++variant) {
+                const XrCoreIrVariant *row = &type->variants[variant];
+                valid = row->payload_count == 0u || row->payload_types;
+                for (uint32_t field = 0; valid && field < row->payload_count; ++field)
+                    valid = type_id_supported(program, row->payload_types[field]) &&
+                            row->payload_types[field] != XR_CORE_TYPE_VOID;
+            }
+        } else {
+            valid = false;
+        }
+        if (valid)
+            valid = type_graph_visit(program, index, state);
+    }
+    xr_free(state);
+    return valid;
+}
+
 static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, char *diagnostic,
                                              size_t diagnostic_size) {
     uint64_t constant_count = 0;
@@ -322,6 +531,11 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "walking skeleton requires core.base");
         return XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE;
+    }
+    if (!validate_types(program)) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "dynamic type graph is malformed or recursive by value");
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     for (uint32_t left = 0; left < program->module_count; ++left) {
         const XrCoreIrModule *module = &program->modules[left];
@@ -368,7 +582,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
             const XrCoreIrFunction *function = &module->functions[function_index];
             if (xr_core_ir_key_is_zero(function->key) ||
                 find_function(program, function->key) != function ||
-                !type_id_supported(function->result_type_id) || function->block_count == 0 ||
+                !type_id_supported(program, function->result_type_id) ||
+                function->block_count == 0 ||
                 function->block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION ||
                 !find_block(function, function->entry_block)) {
                 xr_program_set_diagnostic(
@@ -377,7 +592,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                 return XR_PROGRAM_BUILD_INVALID_INPUT;
             }
             for (uint32_t index = 0; index < function->parameter_count; ++index) {
-                if (!type_id_supported(function->parameter_types[index])) {
+                if (!type_id_supported(program, function->parameter_types[index]) ||
+                    function->parameter_types[index] == XR_CORE_TYPE_VOID) {
                     xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                               "function parameter type is unsupported");
                     return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -395,7 +611,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                 value_count += block->argument_count;
                 for (uint32_t index = 0; index < block->argument_count; ++index) {
                     if (xr_core_ir_key_is_zero(block->arguments[index].key) ||
-                        !type_id_supported(block->arguments[index].type_id) ||
+                        !type_id_supported(program, block->arguments[index].type_id) ||
+                        block->arguments[index].type_id == XR_CORE_TYPE_VOID ||
                         !function_has_value(function, block->arguments[index].key)) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                   "block argument is invalid");
@@ -412,7 +629,8 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                         return XR_PROGRAM_BUILD_INVALID_INPUT;
                     }
                     if (!xr_core_ir_key_is_zero(instruction->result)) {
-                        if (!type_id_supported(instruction->result_type_id)) {
+                        if (!type_id_supported(program, instruction->result_type_id) ||
+                            instruction->result_type_id == XR_CORE_TYPE_VOID) {
                             xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                       "instruction result type is unsupported");
                             return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -477,7 +695,10 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
     if (!input || !program_out || !input->semantic_profile_fingerprint ||
         !input->required_features || input->required_feature_count == 0 ||
         input->required_feature_count > XR_PROGRAM_LIMIT_FEATURES || !input->modules ||
-        input->module_count == 0 || input->module_count > XR_PROGRAM_LIMIT_FUNCTIONS) {
+        input->module_count == 0 || input->module_count > XR_PROGRAM_LIMIT_FUNCTIONS ||
+        input->type_count > XR_PROGRAM_LIMIT_TYPES - 5u ||
+        input->type_count > UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u ||
+        (input->type_count == 0u) != (input->types == NULL)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR program input is incomplete");
         return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -488,6 +709,7 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
     memcpy(program->semantic_profile_fingerprint, input->semantic_profile_fingerprint,
            XR_PROGRAM_DIGEST_SIZE);
     program->required_feature_count = input->required_feature_count;
+    program->type_count = input->type_count;
     program->module_count = input->module_count;
     if (!copy_bytes((void **) &program->required_features, input->required_features,
                     input->required_feature_count, sizeof(uint16_t))) {
@@ -504,6 +726,32 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         }
         program->required_features[cursor] = value;
     }
+    if (input->type_count != 0u) {
+        program->types = xr_calloc(input->type_count, sizeof(XrCoreIrType));
+        if (!program->types) {
+            xr_core_ir_program_free(program);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+    }
+    for (uint32_t index = 0; index < input->type_count; ++index) {
+        if (input->types[index].local_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+            xr_core_ir_program_free(program);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        for (uint32_t previous = 0; previous < index; ++previous) {
+            if (input->types[previous].local_id == input->types[index].local_id) {
+                xr_core_ir_program_free(program);
+                return XR_PROGRAM_BUILD_DUPLICATE_IDENTITY;
+            }
+        }
+        XrProgramBuildStatus status = copy_type(&input->types[index], &program->types[index]);
+        if (status != XR_PROGRAM_BUILD_OK) {
+            xr_core_ir_program_free(program);
+            return status;
+        }
+    }
+    if (program->type_count != 0u)
+        qsort(program->types, program->type_count, sizeof(XrCoreIrType), type_compare);
     program->modules = xr_calloc(input->module_count, sizeof(XrCoreIrModule));
     if (!program->modules) {
         xr_core_ir_program_free(program);
@@ -517,6 +765,12 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         }
     }
     qsort(program->modules, program->module_count, sizeof(XrCoreIrModule), module_compare);
+    if (!remap_program_types(program)) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "CoreIR references an unresolved dynamic type label");
+        xr_core_ir_program_free(program);
+        return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
+    }
     XrProgramBuildStatus status = validate_program(program, diagnostic, diagnostic_size);
     if (status != XR_PROGRAM_BUILD_OK) {
         xr_core_ir_program_free(program);

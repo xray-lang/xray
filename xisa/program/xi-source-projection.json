@@ -100,6 +100,20 @@
       "projection_kind": "sealed-direct-call",
       "core_operation": "core.call.sealed_direct",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.tuple.new",
+      "result_type": "any",
+      "projection_kind": "aggregate-construct",
+      "core_operation": "core.aggregate.construct",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.tuple.get",
+      "result_type": "any",
+      "projection_kind": "aggregate-project",
+      "core_operation": "core.aggregate.project",
+      "immediate_u32": 0
     }
   ],
   "structural_mappings": [

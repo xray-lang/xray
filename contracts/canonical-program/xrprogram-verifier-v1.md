@@ -13,7 +13,7 @@ The v1 verifier is ordered and fail closed:
 
 1. canonical structural decode and resource admission;
 2. known CoreSpec semantic identity, computed from normative semantics only;
-3. constants, function signatures, entry point and bounded allocation;
+3. logical type graph, constants, function signatures, entry point and bounded allocation;
 4. canonical value definitions and block-local SSA use;
 5. block-parameter CFG, terminators, successor arity and reachability;
 6. per-operation result, operand, immediate and successor rules;
@@ -22,14 +22,21 @@ The v1 verifier is ordered and fail closed:
 
 Values cannot flow implicitly between blocks. A successor receives all cross-block values through
 typed block arguments. This makes dominance local and keeps verification work linear in records,
-operands and edges. Current CoreSpec types are copy scalars; ownership/coroutine/import/boundary rows
-remain inactive and must be rejected rather than treated as verified.
+operands and edges. Dynamic aggregate and variant rows are declaration-ordered logical value shapes:
+their IDs are canonical semantic-key order, every referenced type must exist, and recursive-by-value
+cycles are rejected. No offset, alignment, slot, register class or target ABI fact is admitted.
+Current aggregate values have an explicit pure-copy contract; ownership/coroutine/import/boundary
+rows remain inactive and must be rejected rather than treated as verified.
 
 Diagnostics have a stable kind plus section/function/block/instruction/value coordinates. They do
 not expose compiler pointers, source paths or backend implementation details. Every allocation,
-record, operation, operand, successor and work unit is bounded.
+record, operation, operand, successor and work unit is bounded. Reference and VM execution also
+bound aggregate value cells independently from instruction steps, so a small looping program cannot
+turn a wide logical aggregate into unbounded executor memory growth.
 
 The reference evaluator consumes only `XrValidatedProgram`. It implements checked and wrapping i64
-arithmetic without C signed overflow, explicit traps/errors, block arguments, branches, calls and
-the pointer-width profile query. It does not include or call compiler planners, VM handlers, AOT
-lowering or generated-C helpers.
+arithmetic without C signed overflow, explicit traps/errors, logical aggregate/variant values,
+block arguments, branches, calls and the pointer-width profile query. Aggregate update produces a
+fresh logical value, and variant projection publishes the named tag-mismatch trap before reading a
+payload. The evaluator does not include or call compiler planners, VM handlers, AOT lowering or
+generated-C helpers.

@@ -64,10 +64,11 @@ static XrCoreIrKey fixture_key(const char *text) {
     return xr_core_ir_key(text, strlen(text));
 }
 
-static XrValidatedProgram *validate_functions(const XrCoreIrConstantInput *constants,
-                                              uint32_t constant_count,
-                                              const XrCoreIrFunctionInput *functions,
-                                              uint32_t function_count) {
+static XrValidatedProgram *validate_program(const XrCoreIrTypeInput *types, uint32_t type_count,
+                                            const XrCoreIrConstantInput *constants,
+                                            uint32_t constant_count,
+                                            const XrCoreIrFunctionInput *functions,
+                                            uint32_t function_count) {
     XrCoreIrModuleInput module = {.key = fixture_key("aot:module"),
                                   .constants = constants,
                                   .constant_count = constant_count,
@@ -78,6 +79,8 @@ static XrValidatedProgram *validate_functions(const XrCoreIrConstantInput *const
     XrCoreIrProgramInput input = {.semantic_profile_fingerprint = semantic.bytes,
                                   .required_features = &feature,
                                   .required_feature_count = 1u,
+                                  .types = types,
+                                  .type_count = type_count,
                                   .modules = &module,
                                   .module_count = 1u};
     XrCoreIrProgram *core = NULL;
@@ -107,7 +110,37 @@ static XrValidatedProgram *validate_functions(const XrCoreIrConstantInput *const
     return program;
 }
 
+static XrValidatedProgram *validate_functions(const XrCoreIrConstantInput *constants,
+                                              uint32_t constant_count,
+                                              const XrCoreIrFunctionInput *functions,
+                                              uint32_t function_count) {
+    return validate_program(NULL, 0u, constants, constant_count, functions, function_count);
+}
+
 static XrValidatedProgram *build_full_program(void) {
+    enum {
+        AGGREGATE_TYPE = 101,
+        VARIANT_TYPE = 77,
+    };
+    uint16_t aggregate_fields[] = {XR_CORE_TYPE_I64, XR_CORE_TYPE_BOOL};
+    uint16_t variant_payload[] = {AGGREGATE_TYPE, XR_CORE_TYPE_BOOL};
+    XrCoreIrVariantInput variants[] = {
+        {0},
+        {.payload_types = variant_payload,
+         .payload_count = sizeof(variant_payload) / sizeof(variant_payload[0])},
+    };
+    XrCoreIrTypeInput types[] = {
+        {.key = fixture_key("aot:type:variant"),
+         .local_id = VARIANT_TYPE,
+         .kind = XR_CORE_IR_TYPE_VARIANT,
+         .variants = variants,
+         .variant_count = sizeof(variants) / sizeof(variants[0])},
+        {.key = fixture_key("aot:type:aggregate"),
+         .local_id = AGGREGATE_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .field_types = aggregate_fields,
+         .field_count = sizeof(aggregate_fields) / sizeof(aggregate_fields[0])},
+    };
     XrCoreIrConstantInput constants[] = {
         {.key = fixture_key("aot:constant:40"),
          .type_id = XR_CORE_TYPE_I64,
@@ -123,10 +156,12 @@ static XrValidatedProgram *build_full_program(void) {
          .value.boolean = true},
     };
     XrCoreIrKey helper_key = fixture_key("aot:function:helper");
+    XrCoreIrKey make_key = fixture_key("aot:function:make-aggregate");
     XrCoreIrKey entry_key = fixture_key("aot:function:entry");
     XrCoreIrKey trap_key = fixture_key("aot:function:trap");
     XrCoreIrKey error_key = fixture_key("aot:function:error");
     XrCoreIrKey helper_entry = fixture_key("aot:block:helper-entry");
+    XrCoreIrKey make_entry = fixture_key("aot:block:make-entry");
     XrCoreIrKey helper_true = fixture_key("aot:block:helper-true");
     XrCoreIrKey helper_false = fixture_key("aot:block:helper-false");
     XrCoreIrKey helper_merge = fixture_key("aot:block:helper-merge");
@@ -147,28 +182,86 @@ static XrValidatedProgram *build_full_program(void) {
     XrCoreIrKey merge_arg = fixture_key("aot:value:merge-arg");
     XrCoreIrKey call_result = fixture_key("aot:value:call");
     XrCoreIrKey error_arg = fixture_key("aot:value:error-arg");
-    XrCoreIrKey pair40_2[] = {v40, v2};
+    XrCoreIrKey aggregate_value = fixture_key("aot:value:aggregate");
+    XrCoreIrKey projected_40 = fixture_key("aot:value:projected-40");
+    XrCoreIrKey projected_true = fixture_key("aot:value:projected-true");
+    XrCoreIrKey updated_aggregate = fixture_key("aot:value:updated-aggregate");
+    XrCoreIrKey variant_value = fixture_key("aot:value:variant");
+    XrCoreIrKey variant_is_one = fixture_key("aot:value:variant-is-one");
+    XrCoreIrKey projected_aggregate = fixture_key("aot:value:projected-aggregate");
+    XrCoreIrKey projected_2 = fixture_key("aot:value:projected-2");
+    XrCoreIrKey construct_operands[] = {v40, vtrue};
+    XrCoreIrKey aggregate_operand[] = {aggregate_value};
+    XrCoreIrKey update_operands[] = {aggregate_value, v2};
+    XrCoreIrKey variant_operands[] = {updated_aggregate, projected_true};
+    XrCoreIrKey variant_operand[] = {variant_value};
+    XrCoreIrKey projected_aggregate_operand[] = {projected_aggregate};
+    XrCoreIrKey pair40_2[] = {projected_40, projected_2};
     XrCoreIrKey pair_add_2[] = {vadd, v2};
     XrCoreIrKey pair_sub_2[] = {vsub, v2};
     XrCoreIrKey pair_div_add[] = {vdiv, vadd};
-    XrCoreIrKey conditional_operands[] = {vcmp, vadd, vsub};
+    XrCoreIrKey conditional_operands[] = {variant_is_one, vadd, vsub};
     XrCoreIrKey conditional_successors[] = {helper_true, helper_false};
     XrCoreIrInstructionInput helper_entry_instructions[] = {
-        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
-         .result = v40,
-         .result_type_id = XR_CORE_TYPE_I64,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
-         .immediate.key = constants[0].key},
         {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
          .result = v2,
          .result_type_id = XR_CORE_TYPE_I64,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
          .immediate.key = constants[1].key},
-        {.operation_id = XR_CORE_OP_CORE_CONSTANT_BOOL,
-         .result = vtrue,
+        {.operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+         .result = aggregate_value,
+         .result_type_id = AGGREGATE_TYPE,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
+         .immediate.key = make_key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected_40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = aggregate_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected_true,
          .result_type_id = XR_CORE_TYPE_BOOL,
-         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
-         .immediate.key = constants[2].key},
+         .operands = aggregate_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 1u},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_UPDATE,
+         .result = updated_aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = update_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
+         .result = variant_value,
+         .result_type_id = VARIANT_TYPE,
+         .operands = variant_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
+         .immediate.variant_ordinal = 1u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_TEST,
+         .result = variant_is_one,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = variant_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT,
+         .immediate.variant_ordinal = 1u},
+        {.operation_id = XR_CORE_OP_CORE_VARIANT_PROJECT,
+         .result = projected_aggregate,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = variant_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_VARIANT_FIELD,
+         .immediate.variant_field = {.variant_ordinal = 1u, .field_ordinal = 0u}},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+         .result = projected_2,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = projected_aggregate_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD,
+         .immediate.field_ordinal = 0u},
         {.operation_id = XR_CORE_OP_CORE_ADD_I64,
          .result = vadd,
          .result_type_id = XR_CORE_TYPE_I64,
@@ -211,6 +304,35 @@ static XrValidatedProgram *build_full_program(void) {
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE,
          .successors = conditional_successors,
          .successor_count = 2u},
+    };
+    XrCoreIrKey constructed[] = {aggregate_value};
+    XrCoreIrInstructionInput make_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_BOOL,
+         .result = vtrue,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[2].key},
+        {.operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT,
+         .result = aggregate_value,
+         .result_type_id = AGGREGATE_TYPE,
+         .operands = construct_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = constructed,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput make_block = {
+        .key = make_entry,
+        .instructions = make_instructions,
+        .instruction_count = sizeof(make_instructions) / sizeof(make_instructions[0]),
     };
     XrCoreIrValueInput true_argument = {.key = true_arg, .type_id = XR_CORE_TYPE_I64};
     XrCoreIrKey true_arguments[] = {true_arg};
@@ -336,9 +458,15 @@ static XrValidatedProgram *build_full_program(void) {
     };
     uint16_t error_parameter = XR_CORE_TYPE_ERROR;
     XrCoreIrFunctionInput functions[] = {
+        {.key = make_key,
+         .result_type_id = AGGREGATE_TYPE,
+         .effect_mask = UINT32_C(1),
+         .entry_block = make_entry,
+         .blocks = &make_block,
+         .block_count = 1u},
         {.key = helper_key,
          .result_type_id = XR_CORE_TYPE_I64,
-         .effect_mask = UINT32_C(9),
+         .effect_mask = UINT32_C(13),
          .capability_mask = UINT32_C(1),
          .entry_block = helper_entry,
          .blocks = helper_blocks,
@@ -366,8 +494,9 @@ static XrValidatedProgram *build_full_program(void) {
          .blocks = &error_block,
          .block_count = 1u},
     };
-    return validate_functions(constants, sizeof(constants) / sizeof(constants[0]), functions,
-                              sizeof(functions) / sizeof(functions[0]));
+    return validate_program(types, sizeof(types) / sizeof(types[0]), constants,
+                            sizeof(constants) / sizeof(constants[0]), functions,
+                            sizeof(functions) / sizeof(functions[0]));
 }
 
 static XrValidatedProgram *build_pointer_width_program(void) {
@@ -563,7 +692,7 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstan
                                  xr_backend_ir_execution_id(portable)));
     REQUIRE(!xr_fingerprint_equal(xr_backend_ir_optimization_policy_id(none),
                                   xr_backend_ir_optimization_policy_id(portable)));
-    REQUIRE(xr_backend_ir_instruction_count(none) == 21u);
+    REQUIRE(xr_backend_ir_instruction_count(none) == 31u);
 
     XrGeneratedC generated_none = {0};
     XrGeneratedC generated_portable = {0};
@@ -572,6 +701,8 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstan
     REQUIRE(xr_backend_ir_emit_c(portable, true, &generated_portable, &diagnostic) ==
             XR_BACKEND_OK);
     REQUIRE(strstr(generated_none.bytes, "int64_t v0") != NULL);
+    REQUIRE(strstr(generated_none.bytes, "struct XrAotType") != NULL);
+    REQUIRE(strstr(generated_none.bytes, "payload.case_1.f0") != NULL);
     REQUIRE(strstr(generated_none.bytes, "XrVm") == NULL);
     REQUIRE(strstr(generated_none.bytes, "XrAotValue") == NULL);
     REQUIRE(strstr(generated_none.bytes, "TargetPlan") == NULL);

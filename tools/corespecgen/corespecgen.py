@@ -77,7 +77,8 @@ ARITHMETIC_KINDS = {
     "signed-integer-compare",
 }
 SUCCESSOR_KEYS = {"normal", "error", "panic", "cancel", "suspend"}
-GENERIC_TYPES = {"T...", "R?", "P..."}
+GENERIC_TYPES = {"A", "V", "T", "T...", "R?", "P..."}
+VARIADIC_TYPES = {"T...", "P..."}
 IMPLEMENTATION_KEYS = {
     "aot_handler",
     "c_spelling",
@@ -314,8 +315,10 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 and operation["determinism"]["allowed_trace"],
                 f"operation {spelling} lacks allowed trace")
         require(operation["kat_validator"] in {
+            "aggregate-construct", "aggregate-project", "aggregate-update",
             "block-arguments", "branch", "conditional-branch", "fixed-contract",
-            "return", "scalar-oracle", "sealed-call",
+            "return", "scalar-oracle", "sealed-call", "variant-construct",
+            "variant-project", "variant-test",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -464,6 +467,44 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         return (actual.get("callee_sealed") is True
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and actual.get("actual_result_type") == actual.get("declared_result_type"))
+    if validator == "aggregate-construct":
+        return (actual.get("operand_types") == actual.get("field_types")
+                and actual.get("result_type") == actual.get("aggregate_type"))
+    if validator == "aggregate-project":
+        fields = actual.get("field_types")
+        ordinal = actual.get("field_ordinal")
+        return (actual.get("operand_type") == actual.get("aggregate_type")
+                and isinstance(fields, list) and isinstance(ordinal, int)
+                and 0 <= ordinal < len(fields) and actual.get("result_type") == fields[ordinal])
+    if validator == "aggregate-update":
+        fields = actual.get("field_types")
+        ordinal = actual.get("field_ordinal")
+        return (actual.get("operand_type") == actual.get("aggregate_type")
+                and actual.get("result_type") == actual.get("aggregate_type")
+                and isinstance(fields, list) and isinstance(ordinal, int)
+                and 0 <= ordinal < len(fields) and actual.get("value_type") == fields[ordinal])
+    if validator == "variant-construct":
+        payloads = actual.get("variant_payload_types")
+        ordinal = actual.get("variant_ordinal")
+        return (isinstance(payloads, list) and isinstance(ordinal, int)
+                and 0 <= ordinal < len(payloads)
+                and actual.get("operand_types") == payloads[ordinal]
+                and actual.get("result_type") == actual.get("variant_type"))
+    if validator == "variant-test":
+        count = actual.get("variant_count")
+        ordinal = actual.get("variant_ordinal")
+        return (actual.get("operand_type") == actual.get("variant_type")
+                and actual.get("result_type") == "bool" and isinstance(count, int)
+                and isinstance(ordinal, int) and 0 <= ordinal < count)
+    if validator == "variant-project":
+        payloads = actual.get("variant_payload_types")
+        variant = actual.get("variant_ordinal")
+        field = actual.get("field_ordinal")
+        return (actual.get("operand_type") == actual.get("variant_type")
+                and isinstance(payloads, list) and isinstance(variant, int)
+                and 0 <= variant < len(payloads) and isinstance(payloads[variant], list)
+                and isinstance(field, int) and 0 <= field < len(payloads[variant])
+                and actual.get("result_type") == payloads[variant][field])
     if validator == "fixed-contract":
         return actual.get("operand_types") == ["error"]
     raise CoreSpecError(f"KAT {case['id']} has no contract oracle for {validator}")
@@ -510,7 +551,7 @@ def c_string(value: str) -> str:
 
 def operation_arity(operation: dict[str, Any]) -> int:
     operands = operation["type_rule"]["operands"]
-    return 255 if any(name in GENERIC_TYPES for name in operands) else len(operands)
+    return 255 if any(name in VARIADIC_TYPES for name in operands) else len(operands)
 
 
 def mask_for(names: list[str], registry_rows: list[dict[str, Any]]) -> int:

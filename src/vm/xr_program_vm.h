@@ -32,8 +32,8 @@ typedef struct XrVmCodeOptions {
     uint8_t quickening_policy;
     uint16_t reserved16;
     uint64_t max_steps;
+    uint32_t max_value_cells;
     uint32_t max_call_depth;
-    uint32_t reserved32;
 } XrVmCodeOptions;
 
 typedef enum XrVmValueKind {
@@ -42,6 +42,7 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_I64,
     XR_VM_VALUE_U32,
     XR_VM_VALUE_ERROR,
+    XR_VM_VALUE_AGGREGATE,
 } XrVmValueKind;
 
 typedef struct XrVmValue {
@@ -51,6 +52,7 @@ typedef struct XrVmValue {
         int64_t i64;
         uint32_t u32;
         uint32_t error;
+        const void *aggregate;
     } as;
 } XrVmValue;
 
@@ -70,6 +72,7 @@ typedef enum XrVmTrap {
     XR_VM_TRAP_INTEGER_DIVISION_OVERFLOW = 3,
     XR_VM_TRAP_EXPLICIT = 4,
     XR_VM_TRAP_PROFILE_UNAVAILABLE = 5,
+    XR_VM_TRAP_VARIANT_TAG_MISMATCH = 6,
 } XrVmTrap;
 
 typedef struct XrVmOutcome {

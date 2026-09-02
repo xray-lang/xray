@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; trap, error publication, and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project are COMPLETE_W7_WAVE2; the remaining aggregate/variant rows are active Wave 2 work; trap, error publication, and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 15 active walking-skeleton operations have bounded verification and independent reference evaluation. Inactive ownership, coroutine, import, boundary, and AOT surfaces fail closed until their owning slices activate them."
+    "note": "All 21 registered operations have bounded verification and independent reference evaluation. Inactive ownership, coroutine, import, and boundary surfaces fail closed until their owning slices activate them."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 15 walking-skeleton operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 21 registered operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 15 walking-skeleton operations lower through an independently verified BackendIR into portable C11. The pure native fixture links no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 21 registered operations lower through an independently verified BackendIR into portable C11. The pure native fixture links no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -274,6 +274,102 @@
       "old_owner_deletion": "delete host preprocessor and sizeof semantic inference in W7-profile",
       "status": "FROZEN_WALKING_SKELETON",
       "evidence": []
+    },
+    {
+      "id": "core.aggregate.construct",
+      "core_spec_contract": "construct one logical value aggregate from declaration-ordered operands matching the aggregate type row",
+      "program_encoding": "dynamic aggregate TypeId, ordered operand ids, and no layout or target immediate",
+      "decoder_verifier_evaluator": "type-row, arity, operand-type, acyclic-value-shape, and resource checks with independent value construction",
+      "vm_implementation": "private arena-backed aggregate carrier derived from the verified logical type",
+      "aot_lowering": "private portable-C11 struct construction with executor-owned field spelling",
+      "source_producer": "typed tuple construction projected by the generated Xi-to-CoreSpec table",
+      "old_owner_deletion": "canonical producer erases tuple heap/arity and RC representation facts; no SemanticPlan, TargetPlan, slot, or layout owner is reachable",
+      "status": "COMPLETE_W7_WAVE2",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.aggregate.project",
+      "core_spec_contract": "project one declaration-order field by explicit ordinal from a logical aggregate",
+      "program_encoding": "aggregate operand, field ordinal immediate, and exact field result TypeId",
+      "decoder_verifier_evaluator": "aggregate kind, ordinal range, field type, SSA use, and independent projection checks",
+      "vm_implementation": "private carrier field read after verifier-proven shape",
+      "aot_lowering": "direct native struct field read without dynamic lookup or boxing",
+      "source_producer": "typed tuple field projection projected by the generated Xi-to-CoreSpec table",
+      "old_owner_deletion": "canonical producer resolves the declaration ordinal once; executors do not infer tuple arity, slot, or source syntax",
+      "status": "COMPLETE_W7_WAVE2",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.aggregate.update",
+      "core_spec_contract": "produce a fresh logical aggregate equal to the input except for one explicitly replaced field",
+      "program_encoding": "source aggregate, replacement value, field ordinal, and unchanged aggregate TypeId",
+      "decoder_verifier_evaluator": "aggregate kind, ordinal, replacement field type, and pure copy-update checks",
+      "vm_implementation": "private carrier copy followed by one field replacement",
+      "aot_lowering": "native struct copy followed by one direct field assignment",
+      "source_producer": "pending the clean value-record update surface; no tuple/name/shape fallback is admitted",
+      "old_owner_deletion": "canonical executors contain no old aggregate plan dependency; source activation remains fail closed",
+      "status": "IN_PROGRESS_W7_WAVE2",
+      "evidence": [
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c"
+      ]
+    },
+    {
+      "id": "core.variant.construct",
+      "core_spec_contract": "construct one logical tagged variant from an explicit variant ordinal and declaration-ordered payload",
+      "program_encoding": "variant TypeId, variant ordinal, and exact payload operand vector",
+      "decoder_verifier_evaluator": "variant kind, ordinal, payload arity/type, and resource checks with independent construction",
+      "vm_implementation": "private tagged carrier with logical payload values",
+      "aot_lowering": "private C11 tag plus union case construction",
+      "source_producer": "pending named record-variant frontend and typed Xi projection; call-shape recognition is forbidden",
+      "old_owner_deletion": "canonical executors contain no old enum layout dependency; source activation remains fail closed",
+      "status": "IN_PROGRESS_W7_WAVE2",
+      "evidence": [
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c"
+      ]
+    },
+    {
+      "id": "core.variant.test",
+      "core_spec_contract": "compare one logical variant tag against an explicit variant ordinal and return canonical bool",
+      "program_encoding": "variant operand and variant ordinal immediate",
+      "decoder_verifier_evaluator": "variant kind and ordinal checks with independent tag comparison",
+      "vm_implementation": "private carrier tag comparison",
+      "aot_lowering": "direct native tag comparison",
+      "source_producer": "pending named variant-pattern plan projection; field-load/tag-compare recognition is forbidden",
+      "old_owner_deletion": "canonical executors contain no old tag inference dependency; source activation remains fail closed",
+      "status": "IN_PROGRESS_W7_WAVE2",
+      "evidence": [
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c"
+      ]
+    },
+    {
+      "id": "core.variant.project",
+      "core_spec_contract": "project one payload field only when the logical tag matches, otherwise publish variant-tag-mismatch",
+      "program_encoding": "variant operand plus explicit variant and payload-field ordinals",
+      "decoder_verifier_evaluator": "variant/field range, result type, and deterministic mismatched-tag trap checks",
+      "vm_implementation": "private carrier tag guard followed by payload projection",
+      "aot_lowering": "native tag guard followed by direct union-case field read",
+      "source_producer": "pending named selective-pattern plan projection; ADT field-shape recognition is forbidden",
+      "old_owner_deletion": "canonical executors contain no old payload slot dependency; source activation remains fail closed",
+      "status": "IN_PROGRESS_W7_WAVE2",
+      "evidence": [
+        "tests/unit/program/test_xr_program_verify.c",
+        "tests/unit/vm/test_xr_program_vm.c",
+        "tests/unit/aot/test_xr_program_aot.c"
+      ]
     }
   ],
   "capability_groups": [
