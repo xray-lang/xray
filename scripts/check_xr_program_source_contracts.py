@@ -33,6 +33,9 @@ def validate(root: Path) -> None:
     projection = json.loads(read(root, "xisa/program/xi-source-projection.json"))
     projection_header = read(root, "src/program/xr_program_xi_projection_gen.h")
     projection_source = read(root, "src/program/xr_program_xi_projection_gen.c")
+    wave_three = json.loads(
+        read(root, "contracts/canonical-program/w7-wave3-contract-freeze.json")
+    )
 
     for token in ("module_roots", "entry_function", "semantic_profile_fingerprint"):
         require(token in header, f"source producer input lacks {token}")
@@ -134,6 +137,55 @@ def validate(root: Path) -> None:
                   "xi_type_has_logical_value_identity"):
         require(token in producer, f"aggregate update producer closure lacks {token}")
 
+    require(wave_three.get("schema") == "xray-w7-wave3-contract-freeze/1",
+            "Wave 3 contract schema drifted")
+    require(wave_three.get("compatibility") == "none",
+            "Wave 3 contract regained compatibility")
+    signature = wave_three.get("signature_contract")
+    require(isinstance(signature, dict) and
+            signature.get("parameter_modes") == ["READ", "REF", "MOVE"] and
+            signature.get("receiver_modes") == ["READ", "REF", "MOVE"],
+            "Wave 3 signature mode set drifted")
+    require(signature.get("out_mode") ==
+            "forbidden; Xray has no fourth OUT parameter mode",
+            "Wave 3 regained an OUT parameter mode")
+    atoms = wave_three.get("operation_atoms")
+    require(isinstance(atoms, list), "Wave 3 operation atoms are absent")
+    atom_ids = [row.get("id") for row in atoms if isinstance(row, dict)]
+    require(atom_ids == [
+        "core.call.sealed_invoke",
+        "core.trap",
+        "core.error.publish",
+        "core.panic.publish",
+        "core.owner.copy",
+        "core.owner.move",
+        "core.owner.drop",
+        "core.place.local",
+        "core.place.load",
+        "core.place.store",
+    ], "Wave 3 operation atom order or set drifted")
+    stable_ids = [row.get("stable_id") for row in atoms if isinstance(row, dict)]
+    require(stable_ids == [37, 48, 49, 50, 96, 97, 98, 104, 105, 106] and
+            len(stable_ids) == len(set(stable_ids)),
+            "Wave 3 stable operation IDs drifted")
+    non_operations = wave_three.get("explicit_non_operations")
+    require(isinstance(non_operations, dict) and set(non_operations) == {
+        "borrow_begin_end",
+        "cleanup_enter_leave",
+        "error_check_pending_slot",
+        "generic_place_field_or_index",
+        "retain_release",
+        "out_parameter",
+    }, "Wave 3 explicit non-operation set drifted")
+    xi_projection = wave_three.get("xi_projection")
+    require(isinstance(xi_projection, dict) and
+            xi_projection.get("xi.retain") == "no canonical projection" and
+            xi_projection.get("xi.err.check") ==
+                "core.call.sealed_invoke plus explicit CFG" and
+            xi_projection.get("xi.cleanup.enter") == "no canonical projection" and
+            xi_projection.get("xi.cleanup.leave") == "no canonical projection",
+            "Wave 3 Xi projection policy drifted")
+
     registry = json.loads(read(root, "xisa/core/registry.json"))
     matrix = json.loads(
         read(root, "contracts/canonical-program/operation-capability-matrix.json")
@@ -219,6 +271,7 @@ def self_test(root: Path) -> None:
             "src/ir/xi_lower_misc.c",
             "src/vm/xr_program_vm.c",
             "contracts/canonical-program/operation-capability-matrix.json",
+            "contracts/canonical-program/w7-wave3-contract-freeze.json",
         ):
             destination = target / relative
             destination.parent.mkdir(parents=True, exist_ok=True)

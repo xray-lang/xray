@@ -1,0 +1,173 @@
+{
+  "schema": "xray-w7-wave3-contract-freeze/1",
+  "owner_tasks": [
+    281,
+    283,
+    284,
+    301
+  ],
+  "scope": "ownership-ref-place-error-panic-cleanup",
+  "compatibility": "none",
+  "signature_contract": {
+    "parameter_modes": [
+      "READ",
+      "REF",
+      "MOVE"
+    ],
+    "receiver_modes": [
+      "READ",
+      "REF",
+      "MOVE"
+    ],
+    "out_mode": "forbidden; Xray has no fourth OUT parameter mode",
+    "read": "call-bound non-retaining value borrow",
+    "ref": "call-bound exclusive mutable place loan",
+    "move": "exactly-once owner transfer",
+    "borrowed_result": "normalized signature-owned origin parameter ordinal set",
+    "body_inference": "forbidden as API authority"
+  },
+  "canonical_entities": {
+    "value": "typed SSA value with explicit ownership disposition",
+    "place": "verifier-confined SSA resource with pointee TypeId, origin and call-bound lifetime; not a language TypeId",
+    "loan": "function signature plus exact call/invoke interval; not a runtime object",
+    "ownership_domain": "logical transfer and drop obligation; never reconstructed from refcount or backend liveness",
+    "cleanup": "explicit CFG edges and owner.drop obligations; no ambient cleanup stack in XrProgram",
+    "error_channel": "explicit sealed invoke normal/error continuations and typed error block arguments; no implicit pending-error slot",
+    "panic_channel": "separate typed panic continuation/publication; never encoded as a business error"
+  },
+  "operation_atoms": [
+    {
+      "stable_id": 37,
+      "id": "core.call.sealed_invoke",
+      "law": "call one sealed function and transfer exactly once to either normal or typed-error continuation",
+      "source": "fallible sealed direct call",
+      "status": "FROZEN_W7_WAVE3"
+    },
+    {
+      "stable_id": 48,
+      "id": "core.trap",
+      "law": "terminate with one deterministic uncatchable execution trap",
+      "source": "compiler-internal hard trap",
+      "status": "FROZEN_WALKING_SKELETON"
+    },
+    {
+      "stable_id": 49,
+      "id": "core.error.publish",
+      "law": "consume one typed enum error value and terminate through the caller error continuation",
+      "source": "throw, rethrow or uncaught invoke error edge after cleanup",
+      "status": "FROZEN_W7_WAVE3"
+    },
+    {
+      "stable_id": 50,
+      "id": "core.panic.publish",
+      "law": "consume one typed PanicInfo value and terminate through the panic continuation",
+      "source": "catchable runtime panic after cleanup",
+      "status": "FROZEN_W7_WAVE3"
+    },
+    {
+      "stable_id": 96,
+      "id": "core.owner.copy",
+      "law": "produce one independent owner/domain according to the type copy capability",
+      "source": "explicit copy(value)",
+      "status": "FROZEN_W7_WAVE3"
+    },
+    {
+      "stable_id": 97,
+      "id": "core.owner.move",
+      "law": "consume one owner and produce the same logical value under a new SSA owner exactly once",
+      "source": "source move or compiler owner-forward",
+      "status": "FROZEN_W7_WAVE3"
+    },
+    {
+      "stable_id": 98,
+      "id": "core.owner.drop",
+      "law": "consume one owner and run its logical drop obligation exactly once",
+      "source": "source drop or cleanup edge",
+      "status": "FROZEN_W7_WAVE3"
+    },
+    {
+      "stable_id": 104,
+      "id": "core.place.local",
+      "law": "create a non-escaping call-bound place for one addressable local binding",
+      "source": "typed ref actual or ref parameter",
+      "status": "FROZEN_W7_WAVE3"
+    },
+    {
+      "stable_id": 105,
+      "id": "core.place.load",
+      "law": "read a value through one verified live place without transferring the place",
+      "source": "typed call-bound place read",
+      "status": "FROZEN_W7_WAVE3"
+    },
+    {
+      "stable_id": 106,
+      "id": "core.place.store",
+      "law": "write one exact pointee-typed value through one verified exclusive live place",
+      "source": "typed call-bound place write",
+      "status": "FROZEN_W7_WAVE3"
+    }
+  ],
+  "explicit_non_operations": {
+    "borrow_begin_end": "loan lifetime is structural signature and call-edge data",
+    "cleanup_enter_leave": "cleanup is explicit CFG plus owner.drop",
+    "error_check_pending_slot": "fallible calls use core.call.sealed_invoke continuations",
+    "generic_place_field_or_index": "value fields use aggregate.update; alias-visible and container projections require typed domain operations",
+    "retain_release": "physical RC is executor-private realization, not canonical semantics",
+    "out_parameter": "REF is the sole mutable place mode"
+  },
+  "xi_projection": {
+    "xi.source.move": "core.owner.move",
+    "xi.owner.forward": "core.owner.move",
+    "xi.local.addr": "core.place.local",
+    "xi.place.load": "core.place.load",
+    "xi.place.store": "core.place.store",
+    "xi.throw": "core.error.publish after explicit cleanup CFG",
+    "xi.copy:value-clone": "erased for Copy values or core.owner.copy for independent owner copy",
+    "xi.retain": "no canonical projection",
+    "xi.release": "no canonical projection unless source/cleanup owner.drop identity is explicit",
+    "xi.err.set": "no canonical projection",
+    "xi.err.check": "core.call.sealed_invoke plus explicit CFG",
+    "xi.cleanup.enter": "no canonical projection",
+    "xi.cleanup.leave": "no canonical projection"
+  },
+  "old_owner_inventory": [
+    {
+      "owner": "body-derived receiver and borrowed-return inference",
+      "canonical_replacement": "declaration signature modes and normalized origin set",
+      "physical_deletion_task": 301
+    },
+    {
+      "owner": "SemanticPlan and TargetPlan parameter, place, storage and ownership rows",
+      "canonical_replacement": "XrProgram signature, value/place categories and ownership operations",
+      "physical_deletion_task": 302
+    },
+    {
+      "owner": "XI_RETAIN and XI_RELEASE as observable semantics",
+      "canonical_replacement": "owner.copy/move/drop plus executor-private RC",
+      "physical_deletion_task": 302
+    },
+    {
+      "owner": "XI_ERR_SET, XI_ERR_CHECK and pending_error",
+      "canonical_replacement": "sealed_invoke continuations and typed error publication",
+      "physical_deletion_task": 302
+    },
+    {
+      "owner": "cleanup enter/leave runtime stack shape",
+      "canonical_replacement": "explicit CFG and exactly-once owner.drop obligations",
+      "physical_deletion_task": 302
+    },
+    {
+      "owner": "AOT direct-local storage and ownership inference",
+      "canonical_replacement": "validated signature/place/ownership facts and executor-private lowering",
+      "physical_deletion_task": 302
+    }
+  ],
+  "slice_order": [
+    "signature modes and value/place categories",
+    "owner move/drop and direct-local REF",
+    "explicit copy and monotone ownership-domain proof",
+    "sealed invoke, typed error publication and cleanup CFG",
+    "typed panic publication and panic cleanup",
+    "source contract deletion, differential and sanitizer closure"
+  ]
+}
