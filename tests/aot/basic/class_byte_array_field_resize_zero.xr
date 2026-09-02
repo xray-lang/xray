@@ -5,7 +5,7 @@ class ScratchByteArray {
         this.out = Array.withCapacity(4)
     }
 
-    resetThenWrite() -> i64 {
+    ref resetThenWrite() -> i64 {
         this.out.resize(0, 0)
         this.out.push(7)
         this.out.push(9)

@@ -2286,9 +2286,16 @@ static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
 }
 
 XR_FUNC XaSymbol *xa_read_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
-    if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+    if (!ctx || !ctx->analyzer || !expr)
         return NULL;
-    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, expr->as.variable.name);
+    XaSymbol *sym = NULL;
+    if (expr->type == AST_THIS_EXPR) {
+        sym = xa_scope_lookup(ctx->analyzer->current_scope, "this");
+    } else if (expr->type == AST_VARIABLE && expr->as.variable.name) {
+        sym = xa_scope_lookup(ctx->analyzer->current_scope, expr->as.variable.name);
+        if (sym && sym->borrowed_root_symbol_id != 0)
+            sym = xa_scope_lookup_by_id(ctx->analyzer->current_scope, sym->borrowed_root_symbol_id);
+    }
     if (sym && sym->kind == XA_SYM_PARAMETER && sym->passing_mode == XR_PARAM_READ)
         return sym;
     return NULL;
@@ -3282,7 +3289,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                     sym->is_protected = export_sym->is_protected;
                     sym->is_override = export_sym->is_override;
                     sym->is_builtin = export_sym->is_builtin;
-                    sym->mutates_receiver = export_sym->mutates_receiver;
+                    sym->receiver_mode = export_sym->receiver_mode;
                     sym->passing_mode = export_sym->passing_mode;
                     sym->alias_type = export_sym->alias_type;
                 }
@@ -3361,7 +3368,15 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     method_sym->location.line = method->line;
     method_sym->is_static = md->is_static;
     method_sym->is_private = md->is_private;
-    method_sym->mutates_receiver = false;
+    method_sym->receiver_mode = md->is_static ? XR_PARAM_READ : md->receiver_mode;
+    if (method_sym->receiver_mode == XR_PARAM_MOVE) {
+        XrLocation loc = {.file = ctx->file_path, .line = method->line, .column = method->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "enum methods cannot declare a MOVE receiver because enums are copy values without "
+            "an ownership root",
+            &loc);
+    }
     xa_visit_add_symbol_checked(ctx, method_sym, 0);
 
     XrType **param_types = NULL;
@@ -3393,6 +3408,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
                                                ret_type, md->is_variadic);
     if (method_type) {
         method_type->function.min_params = md->required_count;
+        method_type->function.receiver_mode = method_sym->receiver_mode;
         xr_type_function_set_throw_effect(method_type,
                                           md->body ? XR_FN_EFFECT_POLY : XR_FN_EFFECT_MAY_THROW);
     }
@@ -3429,6 +3445,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
         if (!md->is_static) {
             XaSymbol *this_sym = xa_symbol_new("this", XA_SYM_PARAMETER);
             this_sym->location.line = method->line;
+            this_sym->passing_mode = md->receiver_mode;
             xa_visit_add_symbol_checked(ctx, this_sym, 0);
             XaSymbolLinks *this_links = xa_analyzer_get_links(ctx->analyzer, this_sym);
             if (this_links) {
@@ -5704,6 +5721,73 @@ static XrType *xa_select_receive_element_type(XaAnalyzer *analyzer, XrType *chan
     return NULL;
 }
 
+static bool xa_expr_roots_at_receiver(XaInferContext *ctx, AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_THIS_EXPR:
+                return true;
+            case AST_VARIABLE: {
+                XaSymbol *alias =
+                    expr->as.variable.name
+                        ? xa_scope_lookup(ctx->analyzer->current_scope, expr->as.variable.name)
+                        : NULL;
+                if (!alias || alias->borrowed_root_symbol_id == 0)
+                    return false;
+                XaSymbol *root = xa_scope_lookup_by_id(ctx->analyzer->current_scope,
+                                                       alias->borrowed_root_symbol_id);
+                return root && root->kind == XA_SYM_PARAMETER && root->name &&
+                       strcmp(root->name, "this") == 0;
+            }
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                break;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                break;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            case AST_UNSAFE_EXPR:
+                expr = expr->as.unsafe_expr.operand;
+                break;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                break;
+            default:
+                return false;
+        }
+    }
+    return false;
+}
+
+void xa_check_receiver_write_authorization(XaInferContext *ctx, AstNode *operation_node,
+                                           AstNode *receiver_expr, const char *operation) {
+    if (!ctx || !ctx->analyzer || !operation_node || ctx->current_method_is_constructor ||
+        ctx->current_receiver_mode != XR_PARAM_READ ||
+        (receiver_expr && !xa_expr_roots_at_receiver(ctx, receiver_expr)))
+        return;
+    XrLocation loc = {
+        .file = ctx->file_path,
+        .line =
+            operation_node->line ? operation_node->line : (receiver_expr ? receiver_expr->line : 0),
+        .column = operation_node->column
+                      ? operation_node->column
+                      : (receiver_expr && receiver_expr->column ? receiver_expr->column : 1)};
+    char message[256];
+    snprintf(message, sizeof(message),
+             "READ method cannot %s through its receiver; declare it "
+             "with 'ref'",
+             operation ? operation : "write");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
+                               message, &loc);
+}
+
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -5747,6 +5831,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         }
         case AST_COMPOUND_ASSIGNMENT: {
             CompoundAssignmentNode *ca = &node->as.compound_assignment;
+            if (ca->object)
+                xa_check_receiver_write_authorization(ctx, node, ca->object, "modify a field");
             /* Resolve the assignment target *before* the right-hand side, so the
              * RHS is inferred with the target as its expected type.  `x += 1`
              * must type its literal exactly as `x = x + 1` does: canonicalization
@@ -5825,6 +5911,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_MEMBER_SET: {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
+            xa_check_receiver_write_authorization(ctx, node, ms->object, "modify a field");
             XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
             int constrained_field_index = -1;
             XrType *object_shape_type = obj_type;
@@ -6388,6 +6475,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     // function's type doesn't leak into method bodies.
                     XrType *saved_ret = ctx->expected_return_type;
                     bool saved_is_ctor = ctx->current_method_is_constructor;
+                    XrParamMode saved_receiver_mode = ctx->current_receiver_mode;
                     MethodDeclNode *md = &cls->methods[i]->as.method_decl;
                     XaSymbol *method_sym =
                         xa_scope_lookup_local(ctx->analyzer->current_scope->parent, md->name);
@@ -6395,6 +6483,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
                     xa_apply_param_storage_requirements_to_scope(ctx, method_links);
                     ctx->current_method_is_constructor = md->is_constructor;
+                    ctx->current_receiver_mode = md->is_static ? XR_PARAM_READ : md->receiver_mode;
                     if (md->return_type) {
                         ctx->expected_return_type =
                             xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type);
@@ -6404,6 +6493,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_visit_function_body_unified(ctx, md->body);
                     ctx->expected_return_type = saved_ret;
                     ctx->current_method_is_constructor = saved_is_ctor;
+                    ctx->current_receiver_mode = saved_receiver_mode;
                     xa_analyzer_exit_scope(ctx->analyzer);
                 }
             }
@@ -6977,6 +7067,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         }
         case AST_INDEX_SET: {
             IndexSetNode *is = &node->as.index_set;
+            xa_check_receiver_write_authorization(ctx, node, is->array, "modify an element");
             XrType *array_type = NULL;
             XrType *index_type = NULL;
             if (is->array)
@@ -7347,9 +7438,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             EnumDeclNode *ed = &node->as.enum_decl;
             XaSymbol *enum_sym =
                 ed->name ? xa_scope_lookup(ctx->analyzer->current_scope, ed->name) : NULL;
+            XrClassInfo *saved_class_info = ctx->current_class_info;
+            const char *saved_class_name = ctx->current_class_name;
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
-            if (enum_sym && enum_sym->kind == XA_SYM_ENUM)
+            if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
                 ctx->analyzer->current_scope->class_symbol = enum_sym;
+                ctx->current_class_info = enum_sym->links.class_info;
+                ctx->current_class_name = enum_sym->name;
+            }
             for (int i = 0; i < ed->method_count; i++) {
                 AstNode *method = ed->methods ? ed->methods[i] : NULL;
                 if (!method || method->type != AST_METHOD_DECL || !method->as.method_decl.body)
@@ -7362,14 +7458,22 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
                 xa_apply_param_storage_requirements_to_scope(ctx, method_links);
                 XrType *saved_ret = ctx->expected_return_type;
+                bool saved_is_ctor = ctx->current_method_is_constructor;
+                XrParamMode saved_receiver_mode = ctx->current_receiver_mode;
+                ctx->current_method_is_constructor = false;
+                ctx->current_receiver_mode = md->is_static ? XR_PARAM_READ : md->receiver_mode;
                 ctx->expected_return_type =
                     md->return_type ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type)
                                     : NULL;
                 xa_visit_function_body_unified(ctx, md->body);
                 ctx->expected_return_type = saved_ret;
+                ctx->current_method_is_constructor = saved_is_ctor;
+                ctx->current_receiver_mode = saved_receiver_mode;
                 xa_analyzer_exit_scope(ctx->analyzer);
             }
             xa_analyzer_exit_scope(ctx->analyzer);
+            ctx->current_class_info = saved_class_info;
+            ctx->current_class_name = saved_class_name;
             break;
         }
         case AST_YIELD_STMT: {
@@ -7925,11 +8029,7 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 1.5: Link class inheritance chains
     xa_link_class_inheritance(analyzer);
 
-    // Pass 1.5b: Recompute receiver mutation flags after inheritance is linked.
-    while (xa_propagate_receiver_mutations_for_ast(analyzer, ast)) {
-    }
-
-    // Pass 1.5c: Recompute parameter escape summaries after classes and wrappers are linked.
+    // Pass 1.5b: Recompute parameter escape summaries after classes and wrappers are linked.
     while (xa_propagate_param_escape_summaries_for_ast(ctx, ast)) {
     }
 

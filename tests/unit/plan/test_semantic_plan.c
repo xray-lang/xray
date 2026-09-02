@@ -1063,6 +1063,12 @@ static XrSemanticPlan *build_source_instance_method_local_plan(bool explicit_fin
     callee->params[0] = callee_this;
     caller->params[0] = caller_this;
     callee->nparams = caller->nparams = 1;
+    callee->has_receiver = true;
+    callee->receiver_mode = XR_PARAM_REF;
+    callee->receiver_borrowed = true;
+    caller->has_receiver = true;
+    caller->receiver_mode = XR_PARAM_READ;
+    caller->receiver_borrowed = true;
     XiValue *yield = xi_value_new(callee, callee_entry, XI_YIELD, &stub_unit, 0);
     REQUIRE(yield != NULL);
     xi_block_set_return(callee_entry, yield);
@@ -1071,6 +1077,17 @@ static XrSemanticPlan *build_source_instance_method_local_plan(bool explicit_fin
     call->args[0] = caller_this;
     call->aux = "wait";
     call->aux_int = 0;
+    XiCallPlan call_plan = {
+        .receiver =
+            {
+                .param_mode = XR_PARAM_REF,
+                .access = XR_CALL_ARG_PLAIN,
+                .origin_var_id = XI_NO_VAR_ID,
+            },
+        .has_receiver = true,
+        .verified = true,
+    };
+    call->call_plan = &call_plan;
     xi_block_set_return(caller_entry, call);
     xi_block_set_return(root_entry, NULL);
     XiCoroSuspendPoint callee_point = {.state_id = 1, .op = yield, .kind = XI_CORO_SUSP_YIELD};
@@ -2745,9 +2762,9 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "575fb0e396738a8348e557a89d4a5cf1b6776dd90d209eacc3f64310082de021") == 0);
+                   "dfd6db4f2d5fd4e6313bdc2fde1f56dca4d9b621690fd31dc421280cb6e73e3f") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "3593ec2325d8c2037b519b897ec010dce84407adae1068593b4eea6877989692") == 0);
+                   "75057d7a9a8a4b6b5a0a11bed5222e11eab00f4af3a0e1bb6cf4f2d6767348bf") == 0);
     /* Re-anchored because the SemanticPlan fingerprint covers the whole stdlib
      * metadata registry: xr_semantic_plan.c hashes plan->stdlib_registry_fingerprint,
      * which xr_stdlib_metadata_registry_fingerprint derives from every .def
@@ -2755,9 +2772,18 @@ static void test_immutable_owned_snapshot(void) {
      * rows with registry intrinsic identities changes that registry even though
      * the probe plan below imports nothing. The operation-owner registry digests
      * above remain independent.
-     * Old: 56e7d17e6f52451d5a90eb3e6bcad5fa101abf1cf280bffe786a2da9b84fd12e. */
+     * Old: 56e7d17e6f52451d5a90eb3e6bcad5fa101abf1cf280bffe786a2da9b84fd12e.
+     * The canonical-program ownership freeze subsequently changed both owner
+     * registries; the generated header is the reviewed machine-readable
+     * contract, and the probe plan intentionally fingerprints it.
+     * Old owner digest:
+     * 575fb0e396738a8348e557a89d4a5cf1b6776dd90d209eacc3f64310082de021.
+     * Old operation registry digest:
+     * 3593ec2325d8c2037b519b897ec010dce84407adae1068593b4eea6877989692.
+     * Old semantic digest:
+     * 57dd0bc1ba04a29a4b2bcccd26d8f8f317f17dc5e63b39ef0ad38a668991e005. */
     REQUIRE(strcmp(semantic_hex,
-                   "57dd0bc1ba04a29a4b2bcccd26d8f8f317f17dc5e63b39ef0ad38a668991e005") == 0);
+                   "44847e223b42ab7dd88aaae2e20444b434fbb2f0b14e81a50971ae02f84a9780") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -3821,10 +3847,14 @@ static void test_source_export_call_target_authority(void) {
      * target_id with it.  export_id is keyed off the export's own shape with no
      * fingerprint in the key, so it stays put.
      * Old dependency_id: 07d7615bf5acb1563714c7917d10c70b.
-     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4. */
-    REQUIRE(strcmp(dependency_id, "73c067c0bdf9576d461f634c30edcd4f") == 0);
+     * Old target_id:     1e2276f17fb709b095f4a66a0b087ba4.
+     * The canonical-program ownership registry freeze moved the dependency
+     * SemanticPlan fingerprint again without changing the export shape.
+     * Previous dependency_id: 73c067c0bdf9576d461f634c30edcd4f.
+     * Previous target_id:     1f90f19935ed47ff8261f69eaef3cf44. */
+    REQUIRE(strcmp(dependency_id, "9f8c98c148e046642c7b0aefef7549a4") == 0);
     REQUIRE(strcmp(export_id, "fda3c47f9afbb56bc6f54afe0f1f2516") == 0);
-    REQUIRE(strcmp(target_id, "1f90f19935ed47ff8261f69eaef3cf44") == 0);
+    REQUIRE(strcmp(target_id, "62dd0c02696c9089a81fc8e1b4527e0b") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -4577,6 +4607,18 @@ static void test_source_instance_method_local_authority(void) {
         linked_methods++;
     }
     REQUIRE(linked_methods == 2);
+
+    const XrSemanticFunctionRecord *wait = NULL;
+    const XrSemanticFunctionRecord *run = NULL;
+    for (uint32_t f = 0; f < plan->function_count; f++) {
+        if (strcmp(plan->functions[f].name, "wait") == 0)
+            wait = &plan->functions[f];
+        else if (strcmp(plan->functions[f].name, "run") == 0)
+            run = &plan->functions[f];
+    }
+    REQUIRE(wait != NULL && run != NULL);
+    REQUIRE(plan->parameters[wait->parameter_begin].mode == XR_PARAM_REF);
+    REQUIRE(plan->parameters[run->parameter_begin].mode == XR_PARAM_READ);
 
     REQUIRE(plan->call_target_count == 1);
     XrSemanticCallTargetRecord *target = &plan->call_targets[0];

@@ -17,7 +17,7 @@ class Cell<T> {
     value: T
     constructor(v: T) { this.value = v }
     map<U>(f: fn(T) -> U) -> U { return f(this.value) }
-    update(f: fn(T) -> T) -> T { this.value = f(this.value); return this.value }
+    ref update(f: fn(T) -> T) -> T { this.value = f(this.value); return this.value }
 }
 
 // inferred-return lambdas passed to free functions

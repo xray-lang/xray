@@ -6,7 +6,7 @@ class BoolIntMapBag {
         this.values = values
     }
 
-    fill() -> i64 {
+    ref fill() -> i64 {
         this.values.set(true, 21)
         this.values.set(false, 34)
         return len(this.values)

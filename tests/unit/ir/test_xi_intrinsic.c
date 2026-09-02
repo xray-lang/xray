@@ -51,10 +51,11 @@ static const char *g_method_sym_display_names[] = {
 
 static const char *g_builtin_receiver_method_names[] = {
 #define XB_RECEIVER_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count, min_params, \
-                           type_params, effect, allocation, unsafe_requirement, lowering)          \
+                           type_params, effect, receiver_mode, allocation, unsafe_requirement,     \
+                           lowering)                                                               \
     source_name,
 #define XB_RECEIVER_VARIADIC_METHOD(id, source_name, receiver, result, p0, p1, p2, param_count,    \
-                                    min_params, type_params, effect, allocation,                   \
+                                    min_params, type_params, effect, receiver_mode, allocation,    \
                                     unsafe_requirement, lowering)                                  \
     source_name,
 #include "../../src/frontend/analyzer/xbuiltin_receiver_method.def"
@@ -289,6 +290,9 @@ static void test_builtin_receiver_registry_metadata(void) {
         ASSERT_TRUE(xa_builtin_receiver_profile_availability_label(profile)[0] != '\0', msg);
         snprintf(msg, sizeof(msg), "receiver registry method '%s' missing effect label", spec->id);
         ASSERT_TRUE(xa_builtin_receiver_effect_label(spec->effect)[0] != '\0', msg);
+        snprintf(msg, sizeof(msg), "receiver registry method '%s' has invalid receiver mode",
+                 spec->id);
+        ASSERT_TRUE(xr_param_mode_is_valid(spec->receiver_mode), msg);
         snprintf(msg, sizeof(msg), "receiver registry method '%s' missing allocation label",
                  spec->id);
         ASSERT_TRUE(xa_builtin_receiver_allocation_label(spec->allocation)[0] != '\0', msg);
@@ -299,6 +303,12 @@ static void test_builtin_receiver_registry_metadata(void) {
 
     const XaBuiltinReceiverMethodSpec *append =
         xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM);
+    const XaBuiltinReceiverMethodSpec *popcount =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT);
+    ASSERT_TRUE(append && append->receiver_mode == XR_PARAM_REF,
+                "appendFrom must explicitly require a REF receiver");
+    ASSERT_TRUE(popcount && popcount->receiver_mode == XR_PARAM_READ,
+                "popcount must explicitly preserve a READ receiver");
     ASSERT_TRUE(append && xa_builtin_receiver_method_documentation_group(append) ==
                               XA_BUILTIN_DOC_GROUP_U8_ARRAY,
                 "appendFrom must document under Array<u8> byte bulk methods");

@@ -1808,6 +1808,8 @@ typedef struct XiFunc {
     uint8_t view_return_source; /* XrViewReturnSourceKind symbolic return template */
     int16_t view_return_param;  /* valid only for PARAM */
     uint8_t view_return_complete;
+    bool has_receiver;         /* declaration is an instance method, excluding constructors */
+    XrParamMode receiver_mode; /* declaration-owned READ / REF / MOVE contract */
 
     /* Function parameters as SSA values (in entry block).  Each param XiValue
      * carries its own XrParamMode in XiValue::param_mode, so the parameter

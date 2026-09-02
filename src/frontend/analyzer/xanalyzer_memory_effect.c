@@ -205,9 +205,9 @@ static bool memory_apply_root_effect(XaMemoryEffectSummary *target, XaMemoryRoot
     return true;
 }
 
-static bool memory_root_for_expr(XaMemoryFunctionRow *row, AstNode *expr,
+static bool memory_root_for_expr(XaMemoryPass *pass, XaMemoryFunctionRow *row, AstNode *expr,
                                  XaMemoryRootRef *out_root) {
-    if (!row || !expr || !out_root)
+    if (!pass || !row || !expr || !out_root)
         return false;
     for (;;) {
         switch (expr->type) {
@@ -237,10 +237,23 @@ static bool memory_root_for_expr(XaMemoryFunctionRow *row, AstNode *expr,
                 XrParamNode **params = NULL;
                 int count = 0;
                 memory_function_params(row->node, &params, &count);
+                XaSymbol *symbol =
+                    memory_symbol_by_id(pass->analyzer, expr->as.variable.symbol_id);
+                XaSymbol *root_symbol = symbol;
+                if (symbol && symbol->borrowed_root_symbol_id != 0)
+                    root_symbol =
+                        memory_symbol_by_id(pass->analyzer, symbol->borrowed_root_symbol_id);
+                if (root_symbol && root_symbol->kind == XA_SYM_PARAMETER && root_symbol->name &&
+                    strcmp(root_symbol->name, "this") == 0) {
+                    *out_root = (XaMemoryRootRef) {.kind = XA_MEMORY_ROOT_RECEIVER, .index = 0};
+                    return true;
+                }
                 for (int i = 0; i < count; i++) {
                     XrParamNode *param = params ? params[i] : NULL;
                     if (param &&
-                        ((param->symbol_id && param->symbol_id == expr->as.variable.symbol_id) ||
+                        ((param->symbol_id &&
+                          (param->symbol_id == expr->as.variable.symbol_id ||
+                           (root_symbol && param->symbol_id == root_symbol->id))) ||
                          (param->name && expr->as.variable.name &&
                           strcmp(param->name, expr->as.variable.name) == 0))) {
                         *out_root =
@@ -347,19 +360,19 @@ static void memory_instantiate_callee(XaMemoryScan *scan, const XaMemoryEffectSu
             has_mapping = true;
         }
         if (actual)
-            has_mapping = memory_root_for_expr(scan->row, actual, &mapped);
+            has_mapping = memory_root_for_expr(scan->pass, scan->row, actual, &mapped);
         if (has_mapping && !memory_apply_root_effect(scan->summary, mapped, effect))
             memory_mark_failure(scan);
     }
 }
 
 static bool memory_call_has_visible_root(XaMemoryFunctionRow *row, CallExprNode *call,
-                                         AstNode *receiver) {
+                                         AstNode *receiver, XaMemoryPass *pass) {
     XaMemoryRootRef ignored;
-    if (receiver && memory_root_for_expr(row, receiver, &ignored))
+    if (receiver && memory_root_for_expr(pass, row, receiver, &ignored))
         return true;
     for (int i = 0; call && i < call->arg_count; i++) {
-        if (memory_root_for_expr(row, call->arguments[i], &ignored))
+        if (memory_root_for_expr(pass, row, call->arguments[i], &ignored))
             return true;
     }
     return false;
@@ -412,7 +425,7 @@ static void memory_apply_mem_scalar_store(XaMemoryScan *scan, CallExprNode *call
         strcmp(name, "withSliceMut") != 0)
         return;
     XaMemoryRootRef root;
-    if (memory_root_for_expr(scan->row, call->arguments[0], &root) &&
+    if (memory_root_for_expr(scan->pass, scan->row, call->arguments[0], &root) &&
         !xa_memory_effect_summary_add_write(scan->summary, root, XA_MEMORY_PLACE_PATH_WILDCARD))
         memory_mark_failure(scan);
 }
@@ -440,12 +453,12 @@ static void memory_apply_unknown_call(XaMemoryScan *scan, CallExprNode *call, As
     if (!scan || !call)
         return;
     XaMemoryRootRef root;
-    if (receiver && memory_root_for_expr(scan->row, receiver, &root) &&
+    if (receiver && memory_root_for_expr(scan->pass, scan->row, receiver, &root) &&
         !xa_memory_effect_summary_mark_invalidation(scan->summary, root))
         memory_mark_failure(scan);
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
-        if (!arg || !memory_root_for_expr(scan->row, arg, &root) ||
+        if (!arg || !memory_root_for_expr(scan->pass, scan->row, arg, &root) ||
             memory_dynamic_arg_is_stable_slice_read(scan->pass, call, callee_symbol, i))
             continue;
         if (!xa_memory_effect_summary_mark_invalidation(scan->summary, root))
@@ -464,7 +477,7 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
         XrType *receiver_type = memory_expr_type(scan->pass, receiver);
         builtin = memory_builtin_method(receiver_type, call->callee->as.member_access.name);
         XaMemoryRootRef root;
-        if (builtin && memory_root_for_expr(scan->row, receiver, &root))
+        if (builtin && memory_root_for_expr(scan->pass, scan->row, receiver, &root))
             memory_apply_builtin(scan, root, builtin);
         if (!builtin) {
             XaBuiltinMethodMemoryEffectSet effects = XA_BUILTIN_MEMORY_STABLE_READ;
@@ -474,7 +487,8 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
                 xa_builtin_named_receiver_memory_effect(xr_type_get_class_name(receiver_type),
                                                         call->callee->as.member_access.name,
                                                         &effects);
-            if (named_contract && memory_root_for_expr(scan->row, receiver, &root))
+            if (named_contract &&
+                memory_root_for_expr(scan->pass, scan->row, receiver, &root))
                 memory_apply_effect_set(scan, root, effects);
         }
     }
@@ -498,7 +512,7 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
     if (callee) {
         memory_instantiate_callee(scan, callee, call, receiver);
     } else if (!builtin && !named_contract && !compiler_builtin_function &&
-               memory_call_has_visible_root(scan->row, call, receiver)) {
+               memory_call_has_visible_root(scan->row, call, receiver, scan->pass)) {
         /* Unknown dispatch is fail-closed per visible root.  A read Slice argument is the one
          * exception: the function type itself forbids descriptor/owner mutation, and safe Slice
          * values cannot be retained elsewhere.  Keeping this root-relative avoids poisoning an
@@ -520,6 +534,19 @@ static void memory_scan_pre(AstNode *node, void *userdata) {
         return;
     if (node->type == AST_CALL_EXPR) {
         memory_scan_call(scan, node);
+    } else if (node->type == AST_MEMBER_SET || node->type == AST_INDEX_SET ||
+               (node->type == AST_COMPOUND_ASSIGNMENT &&
+                node->as.compound_assignment.object)) {
+        AstNode *target = node->type == AST_MEMBER_SET
+                              ? node->as.member_set.object
+                          : node->type == AST_INDEX_SET
+                              ? node->as.index_set.array
+                              : node->as.compound_assignment.object;
+        XaMemoryRootRef root;
+        if (memory_root_for_expr(scan->pass, scan->row, target, &root) &&
+            !xa_memory_effect_summary_add_write(scan->summary, root,
+                                                XA_MEMORY_PLACE_PATH_WILDCARD))
+            memory_mark_failure(scan);
     } else if (node->type == AST_ASSIGNMENT) {
         XrParamNode **params = NULL;
         int count = 0;
@@ -530,7 +557,9 @@ static void memory_scan_pre(AstNode *node, void *userdata) {
                           (param->name && node->as.assignment.name &&
                            strcmp(param->name, node->as.assignment.name) == 0))) {
                 XaMemoryRootRef root = {.kind = XA_MEMORY_ROOT_PARAM, .index = (uint32_t) i};
-                if (!xa_memory_effect_summary_mark_descriptor_rebind(scan->summary, root))
+                if (!xa_memory_effect_summary_add_write(scan->summary, root,
+                                                        XA_MEMORY_PLACE_PATH_WILDCARD) ||
+                    !xa_memory_effect_summary_mark_descriptor_rebind(scan->summary, root))
                     memory_mark_failure(scan);
                 break;
             }
@@ -584,18 +613,11 @@ static bool memory_apply_native_contract(XaMemoryPass *pass, XaMemoryFunctionRow
 
 static void memory_build_direct(XaMemoryPass *pass, XaMemoryFunctionRow *row) {
     XaSymbolLinks *links = &row->symbol->links;
-    for (int i = 0; i < links->param_effect_count; i++) {
-        if (!xa_param_effect_mutates(&links->param_effects[i]))
-            continue;
-        XaMemoryRootRef root = {.kind = XA_MEMORY_ROOT_PARAM, .index = (uint32_t) i};
-        if (!xa_memory_effect_summary_add_write(&row->direct, root, XA_MEMORY_PLACE_PATH_WILDCARD))
-            pass->resource_failure = true;
-    }
-    if (row->node->type == AST_METHOD_DECL && row->symbol->mutates_receiver) {
-        XaMemoryRootRef root = {.kind = XA_MEMORY_ROOT_RECEIVER, .index = 0};
-        if (!xa_memory_effect_summary_add_write(&row->direct, root, XA_MEMORY_PLACE_PATH_WILDCARD))
-            pass->resource_failure = true;
-    }
+    /* Parameter/receiver access summaries are capability requirements, not
+     * observed behavior. Direct writes and transitive callee effects are
+     * collected from the typed body by memory_scan_pre; native declarations
+     * publish an explicit contract. Converting a REF permission into a write
+     * here would make a permission-only wrapper semantically effectful. */
     if (!memory_function_body(row->node) && links->is_extern &&
         !memory_apply_native_contract(pass, row))
         xa_memory_effect_summary_mark_incomplete(&row->direct, XA_UNKNOWN_NATIVE_CONTRACT_MISSING);

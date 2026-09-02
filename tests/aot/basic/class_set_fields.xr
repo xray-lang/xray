@@ -6,7 +6,7 @@ class SeenSet {
         this.values = values
     }
 
-    add(value: i64) -> i64 {
+    ref add(value: i64) -> i64 {
         this.values.add(value)
         return len(this.values)
     }
@@ -15,7 +15,7 @@ class SeenSet {
         return this.values.contains(value)
     }
 
-    remove(value: i64) -> bool {
+    ref remove(value: i64) -> bool {
         return this.values.delete(value)
     }
 

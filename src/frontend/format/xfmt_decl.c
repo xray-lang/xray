@@ -446,6 +446,10 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "protected ");
         if (m->is_static)
             xfmt_write_str(ctx, "static ");
+        else if (!m->is_constructor && m->receiver_mode == XR_PARAM_REF)
+            xfmt_write_str(ctx, "ref ");
+        else if (!m->is_constructor && m->receiver_mode == XR_PARAM_MOVE)
+            xfmt_write_str(ctx, "move ");
         if (m->is_constructor) {
             xfmt_write_str(ctx, XR_KEYWORD_CONSTRUCTOR);
         } else if (m->is_operator && m->op_type == OPTYPE_LEN) {
@@ -570,6 +574,10 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_leading_comments(ctx, method->leading_comments);
         xfmt_emit_attributes(ctx, m->attributes, m->attr_count);
         xfmt_write_indent(ctx);
+        if (m->receiver_mode == XR_PARAM_REF)
+            xfmt_write_str(ctx, "ref ");
+        else if (m->receiver_mode == XR_PARAM_MOVE)
+            xfmt_write_str(ctx, "move ");
         xfmt_write_str(ctx, m->name);
         xfmt_emit_generic_params(ctx, m->type_params, m->type_param_count);
         xfmt_write_char(ctx, '(');

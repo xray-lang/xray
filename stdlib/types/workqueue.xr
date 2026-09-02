@@ -2,15 +2,10 @@
 class WorkQueue<T> {
     shardCount: i64
     isClosed: bool
-    // @receiver_write
     push(value: T, shard?: i64) -> bool
     // WorkQueue<int> only: enqueue count consecutive integer jobs and return the accepted count.
-    // @receiver_write
     pushRange(start: i64, count: i64, shardStart?: i64) -> i64
-    // @receiver_write
     pop(workerId?: i64): T?
-    // @receiver_write
     tryPop(workerId?: i64): (T?, bool)
-    // @receiver_write
     close()
 }

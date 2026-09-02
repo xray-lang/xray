@@ -5,7 +5,7 @@ class Counter {
         this.value = v
     }
 
-    bump() {
+    ref bump() {
         this.value = this.value + 1
     }
 

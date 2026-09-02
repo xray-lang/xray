@@ -2382,9 +2382,13 @@ static void test_plan_snapshot_and_determinism(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679. */
+     * Old: 36ad5a6db538aeba86caa7d5c229a5c74fd0db34ce016c8cce964ed978d49679.
+     * The canonical-program ownership freeze subsequently re-anchored the
+     * SemanticPlan owner registries which this target fingerprint includes.
+     * Old ownership-freeze digest:
+     * 1b6fd4f3f7ab0f38a264f261835fd21ba56e79ef5f1da4efdc03a474b2298fce. */
     REQUIRE(strcmp(target_hex,
-                   "1b6fd4f3f7ab0f38a264f261835fd21ba56e79ef5f1da4efdc03a474b2298fce") == 0);
+                   "bce8574bb0aad9e5db7433dfc12f880f96295d64a969e5fa2b329209572e4b5f") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -4758,8 +4762,14 @@ static void test_channel_close_call_authority(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f. */
-    REQUIRE(strcmp(call_hex, "b46b26a760a8d76b5bb434fd8ed148a2202c348761be21518fe98e479a8e2d2f") ==
+     * Old: 24c5af5d48d07261f6b33e4cb8edbc4fa91bd3492e18213bae80b8e1b1ea579f.
+     * The declaration-owned receiver contract subsequently changed this
+     * fixture's `close` receiver from a physical READ carrier to its logical
+     * REF permission in SemanticPlan. That contract is part of the call
+     * fingerprint by design.
+     * Old receiver-contract digest:
+     * b46b26a760a8d76b5bb434fd8ed148a2202c348761be21518fe98e479a8e2d2f. */
+    REQUIRE(strcmp(call_hex, "638ac815ed74ef119cbafa71abf5cb88e276b4fed3ed0a0ba4e46e88bc0dc768") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -5595,8 +5605,12 @@ static void test_direct_local_call_adapter_family(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc. */
-    REQUIRE(strcmp(call_hex, "9e3078b2d60b479b8eab553d5e6a3421b107f303cbc7d0449064977f3b61bd6f") ==
+     * Old: 83a65b53740d1cac6db72bfea6bc4a2ed4dc25bbdba4e9d755bc61d1fa0417dc.
+     * The canonical-program ownership registry freeze subsequently moved the
+     * SemanticPlan fingerprint beneath this otherwise unchanged scalar call.
+     * Old ownership-freeze digest:
+     * 9e3078b2d60b479b8eab553d5e6a3421b107f303cbc7d0449064977f3b61bd6f. */
+    REQUIRE(strcmp(call_hex, "ba74699dd2e9f698355e27726f7f3b5b4160e810fed1479eb07f352ed731b40c") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -6197,8 +6211,12 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * xr_stdlib_metadata_registry_fingerprint derives from every .def entry.
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture imports nothing.
-     * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e. */
-    REQUIRE(strcmp(tail_hex, "6749158010ff69b1cd6d87630c9c7b0ab0acc4b37b8e7e6debd83ea53d4c9d7e") ==
+     * Old: ff35390197a3db0ae3f39e363c1d18700599a3b3ad555e353a3efa78fe945f1e.
+     * The canonical-program ownership registry freeze subsequently moved the
+     * SemanticPlan fingerprint beneath this unchanged tail-call contract.
+     * Old ownership-freeze digest:
+     * 6749158010ff69b1cd6d87630c9c7b0ab0acc4b37b8e7e6debd83ea53d4c9d7e. */
+    REQUIRE(strcmp(tail_hex, "3c7f77954bd9cef73cd13e3c755cacafb42a54a2ec5a66e84f4be8119240a62a") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

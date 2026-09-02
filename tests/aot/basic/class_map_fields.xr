@@ -6,7 +6,7 @@ class ScoreBag {
         this.scores = scores
     }
 
-    put(name: string, score: i64) -> i64 {
+    ref put(name: string, score: i64) -> i64 {
         this.scores.set(name, score)
         return score
     }
@@ -19,7 +19,7 @@ class ScoreBag {
         return this.scores.containsKey(name)
     }
 
-    remove(name: string) -> bool {
+    ref remove(name: string) -> bool {
         return this.scores.delete(name)
     }
 }

@@ -16,7 +16,7 @@ class Owner {
     holder: Holder
     value: i64
     constructor() { this.holder = Holder(); this.value = 0 }
-    bump() -> i64 { this.value = this.value + 1; return this.value }
+    ref bump() -> i64 { this.value = this.value + 1; return this.value }
 }
 
 fn indirect_closure_cycle() {

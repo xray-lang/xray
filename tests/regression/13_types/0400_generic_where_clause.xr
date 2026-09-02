@@ -18,7 +18,7 @@ fn bothForms<T: Comparable>(a: T, b: T) -> T where T: Stringable {
 class Registry<K, V> where K: Hashable {
     m: Map<K, V>
     constructor() { this.m = Map<K, V>() }
-    put(k: K, v: V) { this.m.set(k, v) }
+    ref put(k: K, v: V) { this.m.set(k, v) }
     count() -> i64 { return len(this.m) }
 }
 

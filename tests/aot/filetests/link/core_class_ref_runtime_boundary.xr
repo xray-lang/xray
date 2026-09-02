@@ -15,7 +15,7 @@ class Bag {
         return total
     }
 
-    replace(next: Array<i64>) -> i64 {
+    ref replace(next: Array<i64>) -> i64 {
         this.values = next
         return this.sum()
     }

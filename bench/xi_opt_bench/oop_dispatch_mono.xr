@@ -1,7 +1,7 @@
 class BenchCounter {
     value: i64 = 0
 
-    bump(x: i64) -> i64 {
+    ref bump(x: i64) -> i64 {
         this.value = this.value + x
         return this.value
     }

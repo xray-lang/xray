@@ -98,7 +98,7 @@ fn bench_field_ic(iters: i64) -> i64 {
 class Counter {
     n: i64 = 0
 
-    bump() -> i64 {
+    ref bump() -> i64 {
         this.n = this.n + 1
         return this.n
     }

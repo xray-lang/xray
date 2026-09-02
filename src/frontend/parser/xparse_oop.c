@@ -657,6 +657,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_const = false;
     bool is_flexible = false;
     bool is_weak = false;
+    XrParamMode receiver_mode = XR_PARAM_READ;
 
     if (current_is_removed_public_modifier(parser)) {
         return reject_removed_member_modifier(
@@ -694,7 +695,15 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         is_protected = true;
     }
 
+    if (xr_parser_match(parser, TK_REF) || xr_parser_match_name(parser, "ref")) {
+        receiver_mode = XR_PARAM_REF;
+    } else if (xr_parser_match(parser, TK_MOVE) || xr_parser_match_name(parser, "move")) {
+        receiver_mode = XR_PARAM_MOVE;
+    }
+
     if (xr_parser_match(parser, TK_STATIC)) {
+        if (receiver_mode != XR_PARAM_READ)
+            xr_parser_error_at_previous(parser, "static methods cannot declare a receiver mode");
         is_static = true;
 
         // Check for static constructor: static constructor()
@@ -734,6 +743,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         *is_method_out = true;
         AstNode *method = xr_parse_operator_method(parser, is_private, is_static);
         if (method) {
+            method->as.method_decl.receiver_mode = receiver_mode;
             method->as.method_decl.is_protected = is_protected;
             method->as.method_decl.attributes = attributes;
             method->as.method_decl.attr_count = attr_count;
@@ -782,6 +792,9 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         AstNode *method = xr_parse_method_declaration(parser, name, name_line, name_column,
                                                       is_private, is_static);
         if (method) {
+            if (method->as.method_decl.is_constructor && receiver_mode != XR_PARAM_READ)
+                xr_parser_error(parser, "constructors cannot declare a receiver mode");
+            method->as.method_decl.receiver_mode = receiver_mode;
             method->as.method_decl.is_protected = is_protected;
             if (method->as.method_decl.is_constructor && attr_count > 0) {
                 xr_parser_error(parser, "method attributes cannot annotate a constructor");
@@ -794,6 +807,11 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     } else {
         // Field: has type annotation or initializer
         *is_method_out = false;
+
+        if (receiver_mode != XR_PARAM_READ) {
+            xr_parser_error(parser, "receiver mode applies only to instance methods");
+            return NULL;
+        }
 
         // Parse type annotation (optional)
         XrTypeRef *field_type = NULL;
@@ -1560,6 +1578,8 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
         AstNode *method_node = xr_ast_method_decl(parser->compiler_session, method_name, params,
                                                   param_count, return_type, body, false, is_static,
                                                   is_private, is_getter, !is_getter, line);
+        method_node->as.method_decl.receiver_mode =
+            is_getter || is_static ? XR_PARAM_READ : XR_PARAM_REF;
 
         method_node->column = 1;  // property accessors are synthetic — column
                                   //   mirrors the declaration line (safe 1)
@@ -1748,6 +1768,13 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
         return NULL;
 
+    XrParamMode receiver_mode = XR_PARAM_READ;
+    if (xr_parser_match(parser, TK_REF) || xr_parser_match_name(parser, "ref")) {
+        receiver_mode = XR_PARAM_REF;
+    } else if (xr_parser_match(parser, TK_MOVE) || xr_parser_match_name(parser, "move")) {
+        receiver_mode = XR_PARAM_MOVE;
+    }
+
     if (xr_parser_match(parser, TK_OPERATOR)) {
         int member_line = parser->previous.line;
         xr_parser_consume(parser, TK_NAME, "expected named operator after 'operator'");
@@ -1765,6 +1792,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
             0, return_type, member_line);
         method->as.interface_method.attributes = attributes;
         method->as.interface_method.attr_count = attr_count;
+        method->as.interface_method.receiver_mode = receiver_mode;
         return method;
     }
 
@@ -1778,6 +1806,10 @@ AstNode *xr_parse_interface_member(Parser *parser) {
 
     // Property signature: `name: type`
     if (xr_parser_check(parser, TK_COLON)) {
+        if (receiver_mode != XR_PARAM_READ) {
+            xr_parser_error(parser, "receiver mode applies only to interface methods");
+            return NULL;
+        }
         if (attr_count > 0) {
             xr_parser_error(parser, "assertion attributes cannot annotate an interface property");
             return NULL;
@@ -1853,6 +1885,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     method->as.interface_method.attr_count = attr_count;
     method->as.interface_method.type_params = type_params;
     method->as.interface_method.type_param_count = type_param_count;
+    method->as.interface_method.receiver_mode = receiver_mode;
     parser->type_scope = saved_scope;
     xr_type_scope_free(generic_scope);
     return method;

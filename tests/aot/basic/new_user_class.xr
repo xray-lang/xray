@@ -14,7 +14,7 @@ class Point {
         return this.x + this.y
     }
 
-    shift(dx: i64) {
+    ref shift(dx: i64) {
         this.x = this.x + dx
     }
 }

@@ -5,7 +5,7 @@ class CountIter implements Iterator<i64> {
     i: i64
     constructor(n: i64) { this.i = n }
     hasNext() -> bool { return this.i > 0 }
-    next() -> i64 { this.i -= 1; return this.i + 1 }
+    ref next() -> i64 { this.i -= 1; return this.i + 1 }
     nth(index: i64) -> i64 { return this.i - index }
 }
 

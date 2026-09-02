@@ -83,6 +83,7 @@
   ],
   "receiver_contract": {
     "ast_field": "AstMethodDecl.receiver_mode",
+    "interface_ast_field": "AstInterfaceMethodDecl.receiver_mode",
     "type_field": "XrFunctionType.receiver_mode",
     "modes": [
       "READ",

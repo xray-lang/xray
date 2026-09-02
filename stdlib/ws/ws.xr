@@ -930,7 +930,7 @@ export final class WsConn {
     }
 
     // Pull more bytes into the read buffer; false at EOF or on error.
-    private _fill() -> bool {
+    private ref _fill() -> bool {
         if (this._conn == null) { return false }
         var chunk = Array<u8>(_WS_READ_CHUNK)
         var n = net.readInto(this._conn!, ref chunk, _WS_READ_CHUNK)
@@ -939,21 +939,21 @@ export final class WsConn {
         return true
     }
 
-    private _consume(count: i64) {
+    private ref _consume(count: i64) {
         if (count <= 0) { return }
         var rest = Array<u8>()
         for (var i = count; i < len(this._rbuf); i++) { rest.push(this._rbuf[i]) }
         this._rbuf = rest
     }
 
-    private _writeClose(code: i64, reason: string) {
+    private ref _writeClose(code: i64, reason: string) {
         if (this._conn == null) { return }
         var f = closeFrame(code, reason, !this._isServer)
         net.writeBytes(this._conn!, f)
     }
 
     // Close the transport after an error and surface it as a WsMessage.
-    private _fail(code: i64, reason: string) -> WsMessage {
+    private ref _fail(code: i64, reason: string) -> WsMessage {
         if (!this._closed) { this._writeClose(code, reason) }
         this._closed = true
         if (this._conn != null) {
@@ -967,7 +967,7 @@ export final class WsConn {
     // are handled inline and never surface. A returned message with a non-null
     // error marks a clean close or a fault; null means the read deadline
     // elapsed with no complete frame.
-    recv(timeout: i64 = -1) -> WsMessage? {
+    ref recv(timeout: i64 = -1) -> WsMessage? {
         if (this._conn == null) { return WsMessage(null, false, "closed") }
         net.setReadDeadline(this._conn!, timeout >= 0 ? time.monotonic() + timeout : 0)
         while (true) {
@@ -1056,7 +1056,7 @@ export final class WsConn {
 
     ping() -> bool { return this._sendFrame(Array<u8>(0), _OP_PING) }
 
-    close(code: i64 = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
+    ref close(code: i64 = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
         if (this._closed || this._conn == null) { return true }
         this._writeClose(code, reason)
         this._closed = true

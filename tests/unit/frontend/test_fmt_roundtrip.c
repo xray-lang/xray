@@ -753,11 +753,15 @@ TEST(parameter_modes_roundtrip) {
                       "var f = fn(a: i64, b: ref i64, c: move Buffer) -> i64 { return a }\n"
                       "class ParamModeBox {\n"
                       "    touch(a: i64, b: ref i64, c: move Buffer) { }\n"
+                      "    private ref mutate() { }\n"
+                      "    move consume() { }\n"
                       "    configure(limit: i64 = 4) { }\n"
                       "    collect(...values: i64) { }\n"
                       "}\n"
                       "interface ParamModeIface {\n"
                       "    touch(a: i64, b: ref i64, c: move Buffer) -> i64\n"
+                      "    ref mutate() -> ()\n"
+                      "    move consume() -> ()\n"
                       "}\n"
                       "type ComplexHandler = fn(Array<i64>, ref Slice<u8>?, "
                       "move Buffer, (i64, string), fn(ref i64) -> bool,) -> Array<string>\n";
@@ -766,6 +770,9 @@ TEST(parameter_modes_roundtrip) {
     ASSERT_TRUE(contains(fmt1, "fn param_modes(a: i64, b: ref i64, c: move Buffer)"));
     ASSERT_TRUE(contains(fmt1, "fn(a: i64, b: ref i64, c: move Buffer) -> i64"));
     ASSERT_TRUE(contains(fmt1, "touch(a: i64, b: ref i64, c: move Buffer)"));
+    ASSERT_TRUE(contains(fmt1, "private ref mutate()"));
+    ASSERT_TRUE(contains(fmt1, "move consume()"));
+    ASSERT_TRUE(contains(fmt1, "ref mutate() -> ()"));
     ASSERT_TRUE(contains(fmt1, "configure(limit: i64 = 4)"));
     ASSERT_TRUE(contains(fmt1, "collect(...values: i64)"));
     ASSERT_TRUE(contains(fmt1, "type ComplexHandler = fn(Array<i64>, ref Slice<u8>?, "

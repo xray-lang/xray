@@ -5,16 +5,10 @@ class ResultGroup {
     pendingCount: i64
     batchSize: i64
     isClosed: bool
-    // @receiver_write
     add(value: i64) -> bool
-    // @receiver_write
     flush()
-    // @receiver_write
     reset(count: i64) -> bool
-    // @receiver_write
     recv(): i64?
-    // @receiver_write
     tryRecv(): (i64?, bool)
-    // @receiver_write
     close()
 }

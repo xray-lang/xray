@@ -1,12 +1,9 @@
 // Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c
 class Set<T: Hashable> {
-    // @receiver_write
-    add(value: T)
+    ref add(value: T)
     contains(value: T) -> bool
-    // @receiver_write
-    delete(value: T) -> bool
-    // @receiver_write
-    clear()
+    ref delete(value: T) -> bool
+    ref clear()
     values() -> Array<T>
     forEach(fn: fn(value: T)) -> ()
     union(other: Set<T>) -> Set<T>

@@ -6,7 +6,7 @@ class ByteSetBag implements Lengthable {
         this.values = values
     }
 
-    fill(n: i64) -> i64 {
+    ref fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
             this.values.add(i as u8)
@@ -27,7 +27,7 @@ class ByteSetBag implements Lengthable {
         return hits
     }
 
-    prune(n: i64) -> i64 {
+    ref prune(n: i64) -> i64 {
         var i = 0
         var removed = 0
         while (i < n) {

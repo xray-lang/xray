@@ -56,9 +56,9 @@ class Stack<T> {
 
     constructor() { this.items = [] }
 
-    push(item: T) { this.items.push(item) }
+    ref push(item: T) { this.items.push(item) }
 
-    pop() -> T? {
+    ref pop() -> T? {
         if (len(this.items) == 0) { return null }
         return this.items.pop()
     }

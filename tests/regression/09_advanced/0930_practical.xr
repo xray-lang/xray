@@ -149,7 +149,7 @@ fn test_counter_class() {
     class Counter {
         value: i64
         constructor() { this.value = 0 }
-        inc() { this.value += 1 }        dec() { this.value -= 1 }        getValue() -> i64 { return this.value }    }
+        ref inc() { this.value += 1 }        ref dec() { this.value -= 1 }        getValue() -> i64 { return this.value }    }
     
     var c = Counter()
     c.inc()
@@ -166,8 +166,8 @@ fn test_stack() {
     class Stack implements Lengthable {
         items: Array<i64>
         constructor() { this.items = [] }
-        push(x: i64) { this.items.push(x) }
-        pop() -> i64? { return this.items.pop() }
+        ref push(x: i64) { this.items.push(x) }
+        ref pop() -> i64? { return this.items.pop() }
         peek() -> i64 { return this.items[len(this.items) - 1] }
         isEmpty() -> bool { return len(this.items) == 0 }
         operator len() -> i64 { return len(this.items) }

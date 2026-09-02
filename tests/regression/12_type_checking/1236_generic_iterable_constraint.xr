@@ -242,7 +242,7 @@ class StepIter {
         return this.current < this.end
     }
 
-    next() -> i64 {
+    ref next() -> i64 {
         var v = this.current
         this.current = this.current + 1
         return v

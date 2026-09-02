@@ -391,11 +391,20 @@ const char *xr_type_to_string(XrType *type) {
         bool ret_is_unit =
             !type->function.return_type || XR_TYPE_IS_UNIT(type->function.return_type);
         if (ret_is_unit) {
-            snprintf(ptr, remaining, ")%s", type->function.is_c_abi ? ">" : "");
+            n = snprintf(ptr, remaining, ")%s", type->function.is_c_abi ? ">" : "");
         } else {
             const char *ret_str = xr_type_to_string(type->function.return_type);
-            snprintf(ptr, remaining, ") -> %s%s", ret_str, type->function.is_c_abi ? ">" : "");
+            n = snprintf(ptr, remaining, ") -> %s%s", ret_str, type->function.is_c_abi ? ">" : "");
         }
+        if (n > 0 && (size_t) n < remaining) {
+            ptr += n;
+            remaining -= (size_t) n;
+        } else {
+            remaining = 0;
+        }
+        if (type->function.receiver_mode != XR_PARAM_READ && remaining > 1)
+            snprintf(ptr, remaining, " [receiver=%s]",
+                     xr_param_mode_label(type->function.receiver_mode));
         return xr_pool_strdup(pool, buf);
     }
 

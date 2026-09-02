@@ -7,7 +7,7 @@ class Counter {
         this.step = step
     }
 
-    bump(n: i64) -> i64 {
+    ref bump(n: i64) -> i64 {
         var i = 0
         var sum = 0
         while (i < n) {

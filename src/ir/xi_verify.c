@@ -72,6 +72,38 @@ static void verify_func(VerifyCtx *ctx, const XiFunc *f) {
         verr(ctx, "function has NULL name");
         return;
     }
+    if (!xr_param_mode_is_valid(f->receiver_mode) ||
+        (f->has_receiver && (!f->params || f->nparams == 0 || !f->params[0])) ||
+        (!f->has_receiver && f->receiver_mode != XR_PARAM_READ)) {
+        verr(ctx, "func '%s': invalid declaration-owned receiver contract", f->name);
+        return;
+    }
+    if (f->has_receiver) {
+        XrParamMode parameter_mode = xi_func_param_passing_mode(f, 0);
+        if (f->receiver_mode == XR_PARAM_MOVE) {
+            if (parameter_mode != XR_PARAM_MOVE || f->receiver_borrowed ||
+                f->receiver_call_place) {
+                verr(ctx, "func '%s': move receiver disagrees with its parameter ABI", f->name);
+                return;
+            }
+        } else if (f->receiver_call_place) {
+            /* Imported value structs can reach Xi with a nominal receiver type
+             * whose analyzer-local class_ref is intentionally absent.  The
+             * lowerer therefore publishes the place/value ABI explicitly;
+             * raw Xi verification checks that contract internally, while the
+             * detached program verifier re-derives representation from its
+             * canonical type and layout tables. */
+            if (parameter_mode != f->receiver_mode || !f->receiver_borrowed ||
+                f->receiver_mode == XR_PARAM_MOVE) {
+                verr(ctx, "func '%s': value receiver disagrees with its place ABI", f->name);
+                return;
+            }
+        } else if (parameter_mode != XR_PARAM_READ || !f->receiver_borrowed ||
+                   f->receiver_call_place) {
+            verr(ctx, "func '%s': reference receiver disagrees with its value ABI", f->name);
+            return;
+        }
+    }
     if (f->return_type && xr_type_contains_error(f->return_type)) {
         verr(ctx, "func '%s': return type is compiler-only ErrorType", f->name);
         return;
@@ -1367,10 +1399,56 @@ static bool verify_call_arg_has_source_move(const XiValue *value) {
 
 static bool verify_call_plan_receiver(VerifyCtx *ctx, const XiFunc *f, const XiValue *call,
                                       const XiCallArgPlan *receiver) {
+    if (!xr_param_mode_is_valid(receiver->param_mode) ||
+        !xr_call_arg_access_is_valid(receiver->access)) {
+        verr(ctx, "func '%s': call v%u receiver has invalid mode/access", f->name, call->id);
+        return false;
+    }
+    if (receiver->param_mode == XR_PARAM_MOVE) {
+        if (receiver->access != XR_CALL_ARG_PLAIN && receiver->access != XR_CALL_ARG_MOVE) {
+            verr(ctx, "func '%s': call v%u move receiver has incompatible access=%s", f->name,
+                 call->id, xr_call_arg_access_label(receiver->access));
+            return false;
+        }
+        if (receiver->place || receiver->addressable || receiver->origin != XI_PLACE_ORIGIN_NONE ||
+            receiver->lifetime != XI_PLACE_LIFETIME_NONE ||
+            receiver->escape != XI_PLACE_ESCAPE_NONE || receiver->origin_var_id != XI_NO_VAR_ID) {
+            verr(ctx, "func '%s': call v%u move receiver carries ref-place metadata", f->name,
+                 call->id);
+            return false;
+        }
+        if (receiver->access == XR_CALL_ARG_MOVE &&
+            !verify_call_arg_has_source_move(call->args[0])) {
+            verr(ctx, "func '%s': call v%u move receiver lacks source-move IR", f->name, call->id);
+            return false;
+        }
+        return true;
+    }
+    if (receiver->access != XR_CALL_ARG_PLAIN) {
+        verr(ctx, "func '%s': call v%u reference receiver has incompatible access=%s", f->name,
+             call->id, xr_call_arg_access_label(receiver->access));
+        return false;
+    }
+
     XiValue *place = receiver->place;
-    bool receiver_mode =
-        receiver->param_mode == XR_PARAM_READ || receiver->param_mode == XR_PARAM_REF;
-    if (!receiver_mode || receiver->access != XR_CALL_ARG_PLAIN || !receiver->addressable ||
+    if (!place) {
+        XiValue *receiver_value = call->nargs > 0 ? call->args[0] : NULL;
+        if (!receiver_value || !receiver_value->type || receiver_value->type->is_value_type ||
+            receiver_value->type->kind == XR_KIND_ENUM ||
+            receiver_value->type->kind == XR_KIND_FIXED_ARRAY ||
+            XR_TYPE_IS_TUPLE(receiver_value->type) || receiver->addressable ||
+            receiver->origin != XI_PLACE_ORIGIN_NONE ||
+            receiver->lifetime != XI_PLACE_LIFETIME_NONE ||
+            receiver->escape != XI_PLACE_ESCAPE_NONE ||
+            receiver->origin_var_id != XI_NO_VAR_ID) {
+            verr(ctx,
+                 "func '%s': call v%u reference receiver has invalid value-carried contract",
+                 f->name, call->id);
+            return false;
+        }
+        return true;
+    }
+    if (!receiver->addressable ||
         receiver->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
         receiver->escape != XI_PLACE_ESCAPE_NONE || !place || place != call->args[0] ||
         !verify_is_call_bound_place(place)) {

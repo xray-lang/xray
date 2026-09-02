@@ -847,6 +847,7 @@ XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_cou
     type->function.min_params = param_count;  // Default: all params required
     type->function.return_type = return_type;
     type->function.is_variadic = is_variadic;
+    type->function.receiver_mode = XR_PARAM_READ;
     // Fail-closed default (task 216): a function type is assumed to possibly
     // throw until the analyzer proves otherwise after the effect-DB fixpoint.
     type->function.throw_effect = XR_FN_EFFECT_MAY_THROW;
@@ -1341,6 +1342,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
             copy->function.return_type = type->function.return_type;
             copy->function.is_variadic = type->function.is_variadic;
             copy->function.is_c_abi = type->function.is_c_abi;
+            copy->function.receiver_mode = type->function.receiver_mode;
             copy->function.throw_effect = type->function.throw_effect;  // task 216
             copy->function.view_return_source = type->function.view_return_source;
             copy->function.view_return_param = type->function.view_return_param;
@@ -1949,6 +1951,8 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             target->function.view_return_param != source->function.view_return_param ||
             target->function.view_return_complete != source->function.view_return_complete)
             return false;
+        if (target->function.receiver_mode != source->function.receiver_mode)
+            return false;
         /* Effect covariance. POLY is an inference variable at this stage: a
          * target POLY accepts either concrete effect, while a source POLY is
          * provisionally accepted and resolved/rechecked after effect fixpoint. */
@@ -2208,6 +2212,7 @@ bool xr_type_function_signature_assignable(XrType *target, XrType *source) {
     if (target->function.param_count != source->function.param_count ||
         target->function.is_variadic != source->function.is_variadic ||
         target->function.is_c_abi != source->function.is_c_abi ||
+        target->function.receiver_mode != source->function.receiver_mode ||
         target->function.view_return_source != source->function.view_return_source ||
         target->function.view_return_param != source->function.view_return_param ||
         target->function.view_return_complete != source->function.view_return_complete ||
@@ -2313,6 +2318,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
         if (a->function.is_variadic != b->function.is_variadic)
             return false;
         if (a->function.is_c_abi != b->function.is_c_abi)
+            return false;
+        if (a->function.receiver_mode != b->function.receiver_mode)
             return false;
         if (a->function.throw_effect != b->function.throw_effect)
             return false;

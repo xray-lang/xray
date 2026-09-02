@@ -359,7 +359,14 @@ static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *
         return xr_type_new_error(ctx->analyzer->isolate);
     }
 
-    XrType *enum_type = xr_type_copy(ctx->analyzer->isolate, ctx->expected_type);
+    /* The expected type is used only to recover the nominal enum and its
+     * concrete type arguments. A constructor always produces a non-null
+     * member value; nullable widening belongs to the enclosing assignment or
+     * return boundary, not to the constructor's semantic operation. */
+    XrType *enum_type =
+        ctx->expected_type->is_nullable
+            ? xr_type_non_nullable(ctx->analyzer->isolate, ctx->expected_type)
+            : xr_type_copy(ctx->analyzer->isolate, ctx->expected_type);
     if (enum_type && info && info->layout) {
         enum_type->enum_type.layout = info->layout;
         enum_type->enum_type.layout_id = info->layout->layout_id;

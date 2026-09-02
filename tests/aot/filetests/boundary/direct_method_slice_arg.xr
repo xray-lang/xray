@@ -5,7 +5,7 @@ class Collector {
         this.total = 0
     }
 
-    add(data: Slice<u8>) -> i64 {
+    ref add(data: Slice<u8>) -> i64 {
         var i = 0
         while (i < len(data)) {
             this.total += data[i]

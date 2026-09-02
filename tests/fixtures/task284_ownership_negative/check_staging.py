@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate staged ownership source contracts and constructed negative oracles."""
+"""Validate ownership source contracts and constructed negative oracles."""
 
 from __future__ import annotations
 
@@ -1176,6 +1176,7 @@ EXPECTED_CASE_DETAILS = {
 REQUIRED_ROW_FIELDS = {
     "id", "current_owner", "replacement_owner", "deletion_phase", "deletion_boundary",
     "required_locks", "prerequisite_gates", "producers", "consumers", "residue", "witnesses",
+    "state",
 }
 REQUIRED_CASE_FIELDS = {
     "id", "oracle_kind", "fixture", "sha256", "baseline", "activation_reason", "diagnostic_site",
@@ -1191,7 +1192,7 @@ ALLOWED_LOCKS = {
     "LOCK-FRONTEND", "LOCK-SCHEMA", "LOCK-RUNTIME", "LOCK-BUILD-GEN", "LOCK-RESIDUE",
 }
 EXPECTED_STAGING_SHA256 = {
-    "typed_contract_staging.json": "35e77f9a78b4469f8075833436caafbadac9ee3cad597c68b68c61cc67d228ba",
+    "typed_contract_staging.json": "c42b9232dc2fa325d986e73a25fa32ce75b7d8f18756650ce1917ea9281a8d46",
     "atomic_cut_staging.json": "8d9675b268b8d8e1b7a4a9125b6fcac89276a7bb256f84cdde19d2cb21df68fb",
     "activation_gate_staging.json": "45bc7035433457b8b8a185dc709b0cd904e238756ff82821f42987a2da5bf431",
 }
@@ -1648,9 +1649,18 @@ def validate_anchor(record: object, label: str) -> None:
         )
 
 
-def validate_residue(record: object, label: str) -> None:
-    validate_anchor(record, label)
-    assert isinstance(record, dict)
+def validate_residue(record: object, label: str, state: str) -> None:
+    if not isinstance(record, dict):
+        raise ValidationError(f"{label} must be an object")
+    path_text = require_text(record, "path", label)
+    anchor = require_text(record, "anchor", label)
+    occurrences = record.get("occurrences")
+    if not isinstance(occurrences, int) or occurrences <= 0:
+        raise ValidationError(f"{label}.occurrences must preserve a positive baseline count")
+    path = ROOT / path_text
+    if not path.is_file():
+        raise ValidationError(f"{label} path does not exist: {path_text}")
+    actual = path.read_text(encoding="utf-8", errors="replace").count(anchor)
     disposition = require_text(record, "post_cut_disposition", label)
     if disposition not in {"delete-zero", "replace-with-new-owner", "retain-bounded"}:
         raise ValidationError(f"{label} has invalid post-cut disposition: {disposition}")
@@ -1662,6 +1672,12 @@ def validate_residue(record: object, label: str) -> None:
         }, label)
         if record.get("post_cut_occurrences") != 0:
             raise ValidationError(f"{label} must require zero old-anchor occurrences")
+        expected = occurrences if state == "STAGED" else 0
+        if actual != expected:
+            raise ValidationError(
+                f"{label} anchor count changed: {path_text}: expected={expected} "
+                f"actual={actual}: {anchor}"
+            )
     else:
         require_exact_keys(record, {
             "path", "anchor", "occurrences", "post_cut_disposition",
@@ -1670,6 +1686,16 @@ def validate_residue(record: object, label: str) -> None:
         bound = record.get("post_cut_occurrences_max")
         if not isinstance(bound, int) or bound < 0:
             raise ValidationError(f"{label} retained residue needs a non-negative bound")
+        if state == "STAGED" and actual != occurrences:
+            raise ValidationError(
+                f"{label} baseline anchor count changed: {path_text}: expected={occurrences} "
+                f"actual={actual}: {anchor}"
+            )
+        if state == "ACTIVE" and actual > bound:
+            raise ValidationError(
+                f"{label} retained anchor exceeds post-cut bound: {path_text}: "
+                f"maximum={bound} actual={actual}: {anchor}"
+            )
 
 
 def validate_witness(record: object, label: str) -> None:
@@ -1683,9 +1709,9 @@ def validate_witness(record: object, label: str) -> None:
 
 
 def validate_inventory(data: dict[str, object]) -> None:
-    if data.get("schema") != "ownership-source-contract-boundary/1":
+    if data.get("schema") != "ownership-source-contract-boundary/2":
         raise ValidationError("inventory schema is not exact")
-    if data.get("activation") != "staging-only-before-i1-r4":
+    if data.get("activation") != "incremental-clean-cut":
         raise ValidationError("inventory activation boundary changed")
     base = data.get("frozen_base")
     if not isinstance(base, dict) or base.get("commit") != FROZEN_COMMIT:
@@ -1718,6 +1744,9 @@ def validate_inventory(data: dict[str, object]) -> None:
     for row in rows:
         row_id = require_text(row, "id", "inventory row")
         require_exact_keys(row, REQUIRED_ROW_FIELDS, f"inventory row {row_id}")
+        state = row.get("state")
+        if state not in {"STAGED", "ACTIVE"}:
+            raise ValidationError(f"inventory row {row_id} has invalid state")
         phase, expected_locks = EXPECTED_ROWS[row_id]
         if row.get("deletion_phase") != phase:
             raise ValidationError(f"inventory row {row_id} deletion phase changed")
@@ -1740,7 +1769,7 @@ def validate_inventory(data: dict[str, object]) -> None:
         if not isinstance(residue, list) or not residue:
             raise ValidationError(f"inventory row {row_id} has no residue")
         for index, anchor in enumerate(residue):
-            validate_residue(anchor, f"inventory row {row_id}.residue[{index}]")
+            validate_residue(anchor, f"inventory row {row_id}.residue[{index}]", state)
         witnesses = row.get("witnesses")
         if not isinstance(witnesses, list) or not witnesses:
             raise ValidationError(f"inventory row {row_id} has no witnesses")
@@ -2018,12 +2047,14 @@ def validate_typed_contract(data: dict[str, object]) -> None:
     if not isinstance(receiver, dict) or receiver.get("modes") != ["READ", "REF", "MOVE"]:
         raise ValidationError("receiver contract modes changed")
     require_exact_keys(receiver, {
-        "ast_field", "type_field", "modes", "default_mode", "identity_owner", "body_role",
-        "fixed_forms", "identity_consumers", "override_rule", "move_invocation_rules",
-        "value_type_move_rule", "forbidden_authorities",
+        "ast_field", "interface_ast_field", "type_field", "modes", "default_mode",
+        "identity_owner", "body_role", "fixed_forms", "identity_consumers", "override_rule",
+        "move_invocation_rules", "value_type_move_rule", "forbidden_authorities",
     }, "receiver contract")
     if receiver.get("ast_field") != "AstMethodDecl.receiver_mode":
         raise ValidationError("receiver AST owner changed")
+    if receiver.get("interface_ast_field") != "AstInterfaceMethodDecl.receiver_mode":
+        raise ValidationError("interface receiver AST owner changed")
     if receiver.get("type_field") != "XrFunctionType.receiver_mode":
         raise ValidationError("receiver type owner changed")
     if receiver.get("default_mode") != "omitted receiver mode normalizes to READ":

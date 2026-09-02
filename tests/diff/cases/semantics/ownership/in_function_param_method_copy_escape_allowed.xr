@@ -5,7 +5,7 @@ class Holder {
         this.items = []
     }
 
-    store(value: Array<i64>) {
+    ref store(value: Array<i64>) {
         this.items.push(value)
     }
 }

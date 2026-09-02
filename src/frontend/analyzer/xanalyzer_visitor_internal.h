@@ -60,7 +60,6 @@ XR_FUNC void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstN
 XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, int line);
 XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNode *param,
                                                  int fallback_line);
-XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNode *node);
 XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_validate_interface_throw_effects(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx,
@@ -225,6 +224,8 @@ XR_FUNC XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC bool xa_boundary_transfer_type_needs_explicit(const XrType *type);
 XR_FUNC bool xa_expr_creates_fresh_root(XaInferContext *ctx, AstNode *value);
+XR_FUNC void xa_check_receiver_write_authorization(XaInferContext *ctx, AstNode *operation_node,
+                                                   AstNode *receiver_expr, const char *operation);
 /* Weak handles are stored in the current execution's heap.  These helpers
  * expose the corresponding type/root constraints to all ownership passes. */
 XR_FUNC bool xa_type_declares_weak_field(const XrType *type);

@@ -6,7 +6,7 @@ class IntBoolMapBag {
         this.values = values
     }
 
-    fill(n: i64) -> i64 {
+    ref fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
             this.values.set(i, i % 3 == 0)

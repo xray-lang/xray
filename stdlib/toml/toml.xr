@@ -59,7 +59,7 @@ export class TomlArray {
         this.values = []
     }
 
-    push(value: TomlValue) {
+    ref push(value: TomlValue) {
         this.values.push(value)
     }
 
@@ -84,7 +84,7 @@ export class TomlTable {
         return this.values.get(key)
     }
 
-    set(key: string, value: TomlValue) {
+    ref set(key: string, value: TomlValue) {
         this.values.set(key, value)
     }
 
@@ -358,7 +358,7 @@ class TomlParser {
         return this.data.slice(p, (p) + 1)
     }
 
-    advance() -> string {
+    ref advance() -> string {
         var c = this.peek()
         if (len(c) == 0) { return c }
         this.pos = this.pos + 1
@@ -371,11 +371,11 @@ class TomlParser {
         return c
     }
 
-    addError(kind: TomlErrorKind, message: string) {
+    ref addError(kind: TomlErrorKind, message: string) {
         this.errors.push(TomlDiagnostic(kind, this.line, this.column, message))
     }
 
-    addExpected(expected: string) {
+    ref addExpected(expected: string) {
         if (this.atEnd()) {
             this.addError(TomlErrorKind.SyntaxError, "Expected " + expected + " but reached end of input")
         } else {
@@ -383,13 +383,13 @@ class TomlParser {
         }
     }
 
-    skipWs() {
+    ref skipWs() {
         while (!this.atEnd() && (this.peek() == " " || this.peek() == "\t")) {
             this.advance()
         }
     }
 
-    skipWsAndNewlines() {
+    ref skipWsAndNewlines() {
         while (!this.atEnd()) {
             var c = this.peek()
             if (c == " " || c == "\t" || c == "\n") {
@@ -407,13 +407,13 @@ class TomlParser {
         }
     }
 
-    skipToEol() {
+    ref skipToEol() {
         while (!this.atEnd() && this.peek() != "\n" && this.peek() != "\r") {
             this.advance()
         }
     }
 
-    parseBareKey() -> string {
+    ref parseBareKey() -> string {
         var start = this.pos
         while (!this.atEnd() && _isBareKeyChar(this.peek())) {
             this.advance()
@@ -425,7 +425,7 @@ class TomlParser {
         return this.data.slice(start, this.pos)
     }
 
-    parseBasicString() -> string {
+    ref parseBasicString() -> string {
         if (this.peek() != "\"") { return "" }
         this.advance()
 
@@ -514,7 +514,7 @@ class TomlParser {
         return out.toString()
     }
 
-    parseLiteralString() -> string {
+    ref parseLiteralString() -> string {
         if (this.peek() != "'") { return "" }
         this.advance()
 
@@ -552,7 +552,7 @@ class TomlParser {
         return out.toString()
     }
 
-    parseKeyPath() -> Array<string> {
+    ref parseKeyPath() -> Array<string> {
         var keys: Array<string> = []
         while (!this.atEnd()) {
             this.skipWs()
@@ -572,7 +572,7 @@ class TomlParser {
         return keys
     }
 
-    scanLiteral() -> string {
+    ref scanLiteral() -> string {
         var start = this.pos
         while (!this.atEnd() && !_isValueTerminator(this.peek())) {
             this.advance()
@@ -603,7 +603,7 @@ class TomlParser {
         return sign * out
     }
 
-    parseNumberLiteral(raw: string) -> TomlValue {
+    ref parseNumberLiteral(raw: string) -> TomlValue {
         var s = _stripUnderscores(raw)
         if (s == "inf" || s == "+inf") { return TomlValue.Float(TomlFloat(1.0e308, "inf")) }
         if (s == "-inf") { return TomlValue.Float(TomlFloat(-1.0e308, "-inf")) }
@@ -630,11 +630,11 @@ class TomlParser {
         return TomlValue.Int(0)
     }
 
-    parseDateTimeLiteral(raw: string) -> TomlValue {
+    ref parseDateTimeLiteral(raw: string) -> TomlValue {
         return TomlValue.DateTime(TomlDateTime(raw))
     }
 
-    parseArray() -> TomlValue {
+    ref parseArray() -> TomlValue {
         this.advance()
         var arr = TomlArray()
         this.skipWsAndNewlines()
@@ -660,7 +660,7 @@ class TomlParser {
         return TomlValue.Array(arr)
     }
 
-    parseInlineTable() -> TomlValue {
+    ref parseInlineTable() -> TomlValue {
         this.advance()
         var obj = TomlTable()
         this.skipWs()
@@ -678,7 +678,7 @@ class TomlParser {
             }
             this.advance()
             this.skipWs()
-            this.setNestedValue(obj, keys, this.parseValue())
+            this.setNestedValue(ref obj, keys, this.parseValue())
             this.skipWs()
             if (this.peek() == "}") {
                 this.advance()
@@ -694,7 +694,7 @@ class TomlParser {
         return TomlValue.Table(obj)
     }
 
-    parseValue() -> TomlValue {
+    ref parseValue() -> TomlValue {
         this.skipWs()
         if (this.atEnd()) {
             this.addError(TomlErrorKind.SyntaxError, "Expected value")
@@ -729,7 +729,7 @@ class TomlParser {
         return TomlValue.String("")
     }
 
-    setNestedValue(rootObj: TomlTable, keys: Array<string>, value: TomlValue) {
+    ref setNestedValue(rootObj: ref TomlTable, keys: Array<string>, value: TomlValue) {
         var current = rootObj
         if (len(keys) == 0) { return }
         for (var i = 0; i < len(keys) - 1; i++) {
@@ -765,7 +765,7 @@ class TomlParser {
         return out.toString()
     }
 
-    getOrCreateTable(keys: Array<string>) -> TomlTable {
+    ref getOrCreateTable(keys: Array<string>) -> TomlTable {
         var path = this.tablePath(keys)
         if (this.definedTables.containsKey(path)) {
             this.addError(TomlErrorKind.DuplicateKey, "Table already defined")
@@ -790,7 +790,7 @@ class TomlParser {
         return current
     }
 
-    getOrCreateArrayTable(keys: Array<string>) -> TomlTable {
+    ref getOrCreateArrayTable(keys: Array<string>) -> TomlTable {
         var current = this.rootTable
         for (var i = 0; i < len(keys) - 1; i++) {
             var key = keys[i]
@@ -828,7 +828,7 @@ class TomlParser {
         return table
     }
 
-    parseDocument() -> TomlValue {
+    ref parseDocument() -> TomlValue {
         while (!this.atEnd()) {
             this.skipWsAndNewlines()
             if (this.atEnd()) { break }
@@ -875,7 +875,7 @@ class TomlParser {
             this.advance()
             this.skipWs()
             var value = this.parseValue()
-            this.setNestedValue(this.current, keys, value)
+            this.setNestedValue(ref this.current, keys, value)
             this.skipToEol()
         }
         return this.root

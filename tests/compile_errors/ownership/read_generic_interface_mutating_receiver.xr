@@ -1,5 +1,5 @@
 interface Mutator {
-    bump() -> i64
+    ref bump() -> i64
 }
 
 class Counter implements Mutator {
@@ -9,7 +9,7 @@ class Counter implements Mutator {
         this.value = value
     }
 
-    bump() -> i64 {
+    ref bump() -> i64 {
         this.value = this.value + 1
         return this.value
     }

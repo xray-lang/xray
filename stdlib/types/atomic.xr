@@ -1,21 +1,13 @@
 // Built-in Atomic<T> type; implemented by the runtime.
 class Atomic<T> {
     load(ordering?: Ordering) -> T
-    // @receiver_write
     store(value: T, ordering?: Ordering)
-    // @receiver_write
     add(delta: T, ordering?: Ordering)
-    // @receiver_write
     sub(delta: T, ordering?: Ordering)
-    // @receiver_write
     fetchAdd(delta: T, ordering?: Ordering) -> T
-    // @receiver_write
     fetchSub(delta: T, ordering?: Ordering) -> T
-    // @receiver_write
     swap(value: T, ordering?: Ordering) -> T
-    // @receiver_write
     compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, bool)
-    // @receiver_write
     toggle(ordering?: Ordering) -> bool
     toString() -> string
 }

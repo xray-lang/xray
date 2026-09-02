@@ -6,7 +6,7 @@ export class Counter {
     constructor(start: i64) {
         this.value = start
     }
-    bump(n: i64) -> i64 {
+    ref bump(n: i64) -> i64 {
         this.value = this.value + n
         return this.value
     }

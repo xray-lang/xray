@@ -14,7 +14,7 @@ class Box {
         return this
     }
 
-    tap() -> i64 {
+    ref tap() -> i64 {
         defer { this.n = this.n + 1 }
         return this.n
     }

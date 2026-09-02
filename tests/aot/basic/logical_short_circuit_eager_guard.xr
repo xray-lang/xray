@@ -5,7 +5,7 @@ class Probe {
         this.count = 0
     }
 
-    hit() -> bool {
+    ref hit() -> bool {
         this.count = this.count + 1
         return true
     }

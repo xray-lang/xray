@@ -37,6 +37,9 @@ static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 9, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 10, .frozen = true};
 static XrType stub_error = {.kind = XR_KIND_ERROR, .id = 12, .frozen = true};
 static XrType stub_unknown = {.kind = XR_KIND_UNKNOWN, .id = 17, .frozen = true};
+static XrType stub_class = {.kind = XR_KIND_INSTANCE, .id = 18, .frozen = true};
+static XrType stub_struct = {
+    .kind = XR_KIND_INSTANCE, .id = 19, .frozen = true, .is_value_type = true};
 static XrType stub_usize = {
     .kind = XR_KIND_INT, .id = 14, .frozen = true, .scalar_rep = XR_NATIVE_USIZE};
 static XrType stub_pointer = {
@@ -634,6 +637,60 @@ static XiValue *make_place_receiver_call(XiFunc *f, XiBlock *entry, XrParamMode 
     return call;
 }
 
+static XiValue *make_move_receiver_call(XiFunc *f, XiBlock *entry) {
+    XiValue *source = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *moved = xi_value_new(f, entry, XI_SOURCE_MOVE, &stub_int, 1);
+    XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD, &stub_int, 1);
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(f, sizeof(*plan));
+    if (!source || !moved || !call || !plan)
+        return NULL;
+    moved->args[0] = source;
+    call->args[0] = moved;
+    call->aux = (void *) "consume";
+    memset(plan, 0, sizeof(*plan));
+    plan->receiver.param_mode = XR_PARAM_MOVE;
+    plan->receiver.access = XR_CALL_ARG_MOVE;
+    plan->receiver.origin = XI_PLACE_ORIGIN_NONE;
+    plan->receiver.lifetime = XI_PLACE_LIFETIME_NONE;
+    plan->receiver.escape = XI_PLACE_ESCAPE_NONE;
+    plan->receiver.addressable = false;
+    plan->receiver.origin_var_id = XI_NO_VAR_ID;
+    plan->receiver.place = NULL;
+    plan->has_receiver = true;
+    plan->verified = true;
+    call->call_plan = plan;
+    return call;
+}
+
+static XiValue *make_reference_receiver_call(XiFunc *f, XiBlock *entry, XrParamMode mode,
+                                             XrType *receiver_type) {
+    f->nparams = 1;
+    f->params = (XiValue **) xr_calloc(1, sizeof(*f->params));
+    if (!f->params)
+        return NULL;
+    XiValue *receiver = xi_param(f, entry, 0, receiver_type);
+    XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD, &stub_int, 1);
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(f, sizeof(*plan));
+    if (!receiver || !call || !plan)
+        return NULL;
+    f->params[0] = receiver;
+    call->args[0] = receiver;
+    call->aux = (void *) "classMethod";
+    memset(plan, 0, sizeof(*plan));
+    plan->receiver.param_mode = mode;
+    plan->receiver.access = XR_CALL_ARG_PLAIN;
+    plan->receiver.origin = XI_PLACE_ORIGIN_NONE;
+    plan->receiver.lifetime = XI_PLACE_LIFETIME_NONE;
+    plan->receiver.escape = XI_PLACE_ESCAPE_NONE;
+    plan->receiver.addressable = false;
+    plan->receiver.origin_var_id = XI_NO_VAR_ID;
+    plan->receiver.place = NULL;
+    plan->has_receiver = true;
+    plan->verified = true;
+    call->call_plan = plan;
+    return call;
+}
+
 TEST(call_plan_valid_ref_local_place_passes) {
     XiFunc *f = make_func("call_plan_valid");
     ASSERT(f != NULL);
@@ -804,6 +861,91 @@ TEST(call_plan_rejects_method_receiver_place_mismatch) {
     call->call_plan->receiver.place = place->args[0];
     xi_block_set_return(f->entry, call);
 
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_valid_move_receiver_passes) {
+    XiFunc *f = make_func("call_plan_move_receiver");
+    ASSERT(f != NULL);
+    XiValue *call = make_move_receiver_call(f, f->entry);
+    ASSERT(call != NULL && call->call_plan != NULL);
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_move_receiver_requires_source_move) {
+    XiFunc *f = make_func("call_plan_move_receiver_without_source_move");
+    ASSERT(f != NULL);
+    XiValue *call = make_move_receiver_call(f, f->entry);
+    ASSERT(call != NULL && call->args[0] != NULL && call->args[0]->nargs == 1);
+    call->args[0] = call->args[0]->args[0];
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_valid_reference_receiver_without_value_place_passes) {
+    XiFunc *f = make_func("call_plan_reference_receiver");
+    ASSERT(f != NULL);
+    XiValue *call = make_reference_receiver_call(f, f->entry, XR_PARAM_REF, &stub_class);
+    ASSERT(call != NULL && call->call_plan != NULL);
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_ok(f));
+    FILE *dump = tmpfile();
+    ASSERT(dump != NULL);
+    xi_func_dump(f, dump);
+    fflush(dump);
+    rewind(dump);
+    char text[1024] = {0};
+    ASSERT(fread(text, 1, sizeof(text) - 1, dump) > 0);
+    fclose(dump);
+    ASSERT(strstr(text, "call_plan=verified receiver=ref:value") != NULL);
+    xi_func_free(f);
+}
+
+TEST(call_plan_value_receiver_without_place_fails) {
+    XiFunc *f = make_func("call_plan_value_receiver_without_place");
+    ASSERT(f != NULL);
+    XiValue *call = make_reference_receiver_call(f, f->entry, XR_PARAM_REF, &stub_struct);
+    ASSERT(call != NULL && call->call_plan != NULL);
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(function_receiver_contract_is_verified_and_dumped) {
+    XiFunc *f = make_func("reference_receiver_body");
+    ASSERT(f != NULL);
+    f->nparams = 1;
+    f->params = (XiValue **) xr_calloc(1, sizeof(*f->params));
+    ASSERT(f->params != NULL);
+    f->params[0] = xi_param(f, f->entry, 0, &stub_class);
+    ASSERT(f->params[0] != NULL);
+    f->has_receiver = true;
+    f->receiver_mode = XR_PARAM_REF;
+    f->receiver_borrowed = true;
+    XiValue *result = xi_const_int(f, f->entry, 0, &stub_int);
+    ASSERT(result != NULL);
+    xi_block_set_return(f->entry, result);
+
+    ASSERT(verify_ok(f));
+    FILE *dump = tmpfile();
+    ASSERT(dump != NULL);
+    xi_func_dump(f, dump);
+    fflush(dump);
+    rewind(dump);
+    char text[512] = {0};
+    ASSERT(fread(text, 1, sizeof(text) - 1, dump) > 0);
+    fclose(dump);
+    ASSERT(strstr(text, "[receiver=ref]") != NULL);
+
+    f->params[0]->param_mode = XR_PARAM_MOVE;
     ASSERT(verify_fail(f));
     xi_func_free(f);
 }
@@ -2744,6 +2886,11 @@ int main(void) {
     run_call_plan_suspendable_boundary_uses_frame_place();
     run_call_plan_valid_method_receiver_place_passes();
     run_call_plan_rejects_method_receiver_place_mismatch();
+    run_call_plan_valid_move_receiver_passes();
+    run_call_plan_move_receiver_requires_source_move();
+    run_call_plan_valid_reference_receiver_without_value_place_passes();
+    run_call_plan_value_receiver_without_place_fails();
+    run_function_receiver_contract_is_verified_and_dumped();
     run_tbaa_memory_op_requires_mem_group();
     run_tbaa_memory_op_with_group_passes();
     run_tbaa_store_requires_mem_group();

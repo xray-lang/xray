@@ -9,7 +9,7 @@ class Box {
         return this.value
     }
 
-    set(v: i64) {
+    ref set(v: i64) {
         this.value = v
     }
 }

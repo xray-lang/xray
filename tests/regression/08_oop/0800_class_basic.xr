@@ -40,11 +40,11 @@ class Counter {
         this.count = 0
     }
 
-    increment() {
+    ref increment() {
         this.count = this.count + 1
     }
 
-    decrement() {
+    ref decrement() {
         this.count = this.count - 1
     }
 
@@ -90,7 +90,7 @@ class Builder {
         this.value = ""
     }
 
-    append(s: string) -> Builder {
+    ref append(s: string) -> Builder {
         this.value += s
         return this
     }

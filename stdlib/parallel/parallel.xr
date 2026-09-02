@@ -81,7 +81,7 @@ export class Plan<S> {
         this._releasePending = false
     }
 
-    private _begin() {
+    private ref _begin() {
         if (this._closed) {
             throw ParallelError.ClosedPlan
         }
@@ -91,7 +91,7 @@ export class Plan<S> {
         this._active = true
     }
 
-    private _end() {
+    private ref _end() {
         this._active = false
         if (this._releasePending) {
             this._states.clear()
@@ -104,7 +104,7 @@ export class Plan<S> {
         var lane = offset % laneCount
         return this._states[lane]
     }
-    forEach(range: Range, body: fn(S, i64)) {
+    ref forEach(range: Range, body: fn(S, i64)) {
         this._begin()
         defer {
             this._end()
@@ -113,7 +113,7 @@ export class Plan<S> {
             body(this._stateFor(offset), range[offset])
         }
     }
-    map<T>(range: Range, body: fn(S, i64) -> T) -> Array<T> {
+    ref map<T>(range: Range, body: fn(S, i64) -> T) -> Array<T> {
         this._begin()
         defer {
             this._end()
@@ -124,7 +124,7 @@ export class Plan<S> {
         }
         return out
     }
-    mapInto<T>(range: Range, output: ref Array<T>, body: fn(S, i64) -> T) {
+    ref mapInto<T>(range: Range, output: ref Array<T>, body: fn(S, i64) -> T) {
         this._begin()
         defer {
             this._end()
@@ -134,7 +134,7 @@ export class Plan<S> {
             output.push(body(this._stateFor(offset), range[offset]))
         }
     }
-    reduce<A>(range: Range, initial: A, body: fn(S, i64) -> A, combine: fn(A, A) -> A) -> A {
+    ref reduce<A>(range: Range, initial: A, body: fn(S, i64) -> A, combine: fn(A, A) -> A) -> A {
         this._begin()
         defer {
             this._end()
@@ -146,7 +146,7 @@ export class Plan<S> {
         return acc
     }
 
-    close() {
+    ref close() {
         if (!this._closed) {
             this._closed = true
             if (this._active) {

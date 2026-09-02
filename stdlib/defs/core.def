@@ -2179,6 +2179,7 @@ module mem {
     receiver: "Buffer"
     doc: "Resize this buffer; returns false on allocation failure"
     allocation: "may_heap"
+    receiver_mode: "ref"
   }
 
 }

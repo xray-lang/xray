@@ -15,7 +15,7 @@ class IntBag {
         return total
     }
 
-    append(x: i64) -> i64 {
+    ref append(x: i64) -> i64 {
         this.values.push(x)
         return len(this.values)
     }

@@ -13,7 +13,7 @@ class CustomRangeIter {
         this.max = end
     }
     hasNext() -> bool { return this.val < this.max }
-    next() -> i64 {
+    ref next() -> i64 {
         var v = this.val
         this.val = this.val + 1
         return v
@@ -51,7 +51,7 @@ fn test_triple_nested_for_in() {
 class Accumulator {
     total: i64
     constructor() { this.total = 0 }
-    add(n: i64) { this.total = this.total + n }    get() -> i64 { return this.total }
+    ref add(n: i64) { this.total = this.total + n }    get() -> i64 { return this.total }
 }
 
 @test
@@ -115,7 +115,7 @@ class StepIter {
         if (this.step > 0) { return this.val < this.max }
         return this.val > this.max
     }
-    next() -> i64 {
+    ref next() -> i64 {
         var v = this.val
         this.val = this.val + this.step
         return v
@@ -237,7 +237,7 @@ class FlattenIter {
         this.outerIdx = 0
         this.innerIdx = 0
     }
-    hasNext() -> bool {
+    ref hasNext() -> bool {
         while (this.outerIdx < len(this.outer)) {
             if (this.innerIdx < len(this.outer[this.outerIdx])) {
                 return true
@@ -247,7 +247,7 @@ class FlattenIter {
         }
         return false
     }
-    next() -> i64 {
+    ref next() -> i64 {
         var val = this.outer[this.outerIdx][this.innerIdx]
         this.innerIdx = this.innerIdx + 1
         return val
@@ -306,7 +306,7 @@ class FilteredRangeIter {
         }
     }
     hasNext() -> bool { return this.val < this.max }
-    next() -> i64 {
+    ref next() -> i64 {
         var v = this.val
         this.val = this.val + 1
         while (this.val < this.max && this.val % this.divisor != 0) {

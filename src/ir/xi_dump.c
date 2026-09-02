@@ -262,6 +262,23 @@ static void dump_value(FILE *out, const XiValue *v) {
                 v->conversion.is_implicit ? ",implicit" : ",explicit",
                 v->conversion.is_compile_time ? ",compile-time" : "");
     }
+    if (v->call_plan) {
+        const XiCallPlan *plan = v->call_plan;
+        fprintf(out, " [call_plan=%s", plan->verified ? "verified" : "unverified");
+        if (plan->has_receiver) {
+            fprintf(out, " receiver=%s:%s", xr_param_mode_label(plan->receiver.param_mode),
+                    plan->receiver.place ? "place" : "value");
+        }
+        if (plan->nargs > 0) {
+            fprintf(out, " args=");
+            for (uint16_t i = 0; i < plan->nargs; i++) {
+                if (i > 0)
+                    fputc(',', out);
+                fprintf(out, "%s", xr_param_mode_label(plan->args[i].param_mode));
+            }
+        }
+        fputc(']', out);
+    }
 
     /* Type + rep annotation */
     fprintf(out, "  ; %s", xi_type_name(v->type));
@@ -363,8 +380,11 @@ void xi_func_dump(const XiFunc *f, void *stream) {
     FILE *out = stream ? (FILE *) stream : stdout;
 
     /* Header (includes stage and invariant mask for diagnostics) */
-    fprintf(out, "func %s [%s inv=0x%x](", f->name ? f->name : "<anonymous>",
+    fprintf(out, "func %s [%s inv=0x%x]", f->name ? f->name : "<anonymous>",
             xi_stage_name(f->stage), f->invariant_mask);
+    if (f->has_receiver)
+        fprintf(out, " [receiver=%s]", xr_param_mode_label(f->receiver_mode));
+    fputc('(', out);
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (i > 0)
             fprintf(out, ", ");

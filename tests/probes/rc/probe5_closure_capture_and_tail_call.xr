@@ -39,7 +39,7 @@ class Node {
         this.n = n
     }
 
-    bump() -> i64 {
+    ref bump() -> i64 {
         this.n = this.n + 1
         return this.n
     }

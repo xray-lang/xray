@@ -15,7 +15,7 @@ class Box {
         return this
     }
 
-    bump() -> i64 {
+    ref bump() -> i64 {
         defer { this.n = this.n + 100 }
         return this.n
     }
@@ -28,7 +28,7 @@ class Chain {
         this.v = v
     }
 
-    inc() -> Chain {
+    ref inc() -> Chain {
         this.v = this.v + 1
         return this
     }

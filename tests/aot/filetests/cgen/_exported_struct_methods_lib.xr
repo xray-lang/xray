@@ -6,7 +6,7 @@ export struct ByteState {
         return ByteState{data: [0; 4], total: seed}
     }
 
-    update(value: u8) {
+    ref update(value: u8) {
         this.data[0] = value
         this.total = this.total + (value as i64)
     }

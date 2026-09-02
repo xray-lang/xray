@@ -3,7 +3,7 @@
 // is escaped and can no longer be moved.
 class Node {
     v: i64
-    init(v: i64) { this.v = v }
+    ref init(v: i64) { this.v = v }
 }
 
 fn consume(n: move Node) -> i64 {

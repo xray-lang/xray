@@ -394,6 +394,9 @@ TEST(type_to_string) {
     ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(i32) -> i32>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(u8) -> u8") == 0);
     ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(i64, ref string, move bool)") == 0);
+    t_mode_fn->function.receiver_mode = XR_PARAM_REF;
+    ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(i64, ref string, move bool) [receiver=ref]") ==
+           0);
 }
 
 TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
@@ -870,6 +873,7 @@ TEST(type_function_copy_preserves_metadata) {
     ASSERT(xr_type_function_set_param_mode(fn, 0, XR_PARAM_READ));
     ASSERT(xr_type_function_set_param_mode(fn, 1, XR_PARAM_REF));
     fn->function.is_c_abi = true;
+    fn->function.receiver_mode = XR_PARAM_MOVE;
 
     XrType *copy = xr_type_copy(g_isolate, fn);
     ASSERT(copy != NULL);
@@ -882,11 +886,18 @@ TEST(type_function_copy_preserves_metadata) {
     ASSERT(xr_type_function_param_mode(copy, 0) == XR_PARAM_READ);
     ASSERT(xr_type_function_param_mode(copy, 1) == XR_PARAM_REF);
     ASSERT(copy->function.is_c_abi);
+    ASSERT(copy->function.receiver_mode == XR_PARAM_MOVE);
 
     XrType *normal = xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
     ASSERT(!xr_type_equals(fn, normal));
     ASSERT(!xr_type_assignable(fn, normal));
     ASSERT(!xr_type_assignable(normal, fn));
+
+    XrType *receiver_only = xr_type_copy(g_isolate, fn);
+    ASSERT(receiver_only != NULL);
+    receiver_only->function.receiver_mode = XR_PARAM_READ;
+    ASSERT(!xr_type_equals(fn, receiver_only));
+    ASSERT(!xr_type_function_signature_assignable(fn, receiver_only));
 
     XrType *mode_only =
         xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
@@ -1071,6 +1082,115 @@ static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
             return true;
     }
     return false;
+}
+
+TEST(analyzer_receiver_mode_is_declaration_owned_and_operation_checked) {
+    XaAnalyzer *valid = analyzer_run_source(
+        "receiver-valid.xr",
+        "interface OwnerContract { ref mutate() -> ()\n move consume() -> () }\n"
+        "class Owner implements OwnerContract { ref mutate() {} move consume() {} }\n");
+    ASSERT(valid != NULL);
+    XaSymbol *owner = xa_analyzer_lookup_deep(valid, "Owner");
+    ASSERT(owner != NULL);
+    ASSERT(owner->links.class_info != NULL);
+    XaSymbol *mutate = xa_class_info_lookup_member(owner->links.class_info, "mutate");
+    XaSymbol *consume = xa_class_info_lookup_member(owner->links.class_info, "consume");
+    ASSERT(mutate != NULL && consume != NULL);
+    ASSERT(mutate->receiver_mode == XR_PARAM_REF);
+    ASSERT(consume->receiver_mode == XR_PARAM_MOVE);
+    ASSERT(mutate->links.type != NULL);
+    ASSERT(consume->links.type != NULL);
+    ASSERT(mutate->links.type->function.receiver_mode == XR_PARAM_REF);
+    ASSERT(consume->links.type->function.receiver_mode == XR_PARAM_MOVE);
+    xa_analyzer_free(valid);
+
+    XaAnalyzer *read_write = analyzer_run_source(
+        "receiver-read-write.xr", "class Counter { value: i64\n constructor() { this.value = 0 }\n"
+                                  "  update() { this.value = 1 }\n }\n");
+    ASSERT(read_write != NULL);
+    ASSERT(analyzer_diag_contains(read_write, "declare it with 'ref'"));
+    xa_analyzer_free(read_write);
+
+    XaAnalyzer *read_alias = analyzer_run_source(
+        "receiver-read-alias.xr", "class Counter { value: i64\n constructor() { this.value = 0 }\n"
+                                  "  ref mutate() { this.value = 1 }\n"
+                                  "  probe() { var alias = this\n alias.mutate() }\n }\n");
+    ASSERT(read_alias != NULL);
+    ASSERT(analyzer_diag_contains(read_alias, "READ method cannot call a REF method"));
+    xa_analyzer_free(read_alias);
+
+    XaAnalyzer *ref_alias = analyzer_run_source(
+        "receiver-ref-alias.xr", "class Counter { value: i64\n constructor() { this.value = 0 }\n"
+                                 "  ref mutate() { this.value = 1 }\n"
+                                 "  ref forward() { var alias = this\n alias.mutate() }\n }\n");
+    ASSERT(ref_alias != NULL);
+    ASSERT(!analyzer_diag_contains(ref_alias, "READ method cannot"));
+    xa_analyzer_free(ref_alias);
+
+    XaAnalyzer *owned_projection = analyzer_run_source(
+        "receiver-owned-projection.xr",
+        "class Item {}\n"
+        "class Holder { item: Item\n constructor() { this.item = Item() }\n"
+        "  ref project() -> Item { return this.item }\n }\n");
+    ASSERT(owned_projection != NULL);
+    ASSERT(!analyzer_diag_contains(owned_projection, "cannot return borrowed 'ref' parameter"));
+    xa_analyzer_free(owned_projection);
+
+    XaAnalyzer *receiver_escape = analyzer_run_source(
+        "receiver-direct-escape.xr",
+        "class Holder { ref leak() -> Holder { return this } }\n");
+    ASSERT(receiver_escape != NULL);
+    ASSERT(analyzer_diag_contains(receiver_escape, "cannot return borrowed 'ref' parameter"));
+    xa_analyzer_free(receiver_escape);
+
+    XaAnalyzer *mismatch = analyzer_run_source(
+        "receiver-interface-mismatch.xr", "interface Writable { ref update() -> () }\n"
+                                          "class ReadOnly implements Writable { update() {} }\n");
+    ASSERT(mismatch != NULL);
+    ASSERT(analyzer_diag_contains(mismatch, "does not match signature required by interface"));
+    ASSERT(analyzer_diag_contains(mismatch, "with ref receiver"));
+    xa_analyzer_free(mismatch);
+
+    XaAnalyzer *read_existential = analyzer_run_source(
+        "receiver-read-existential.xr", "interface Mutator { ref mutate() -> () }\n"
+                                        "fn invoke(value: Mutator) { value.mutate() }\n");
+    ASSERT(read_existential != NULL);
+    ASSERT(analyzer_diag_contains(
+        read_existential, "Cannot call mutating method 'mutate' on read parameter 'value'"));
+    xa_analyzer_free(read_existential);
+
+    XaAnalyzer *plain_move = analyzer_run_source(
+        "receiver-move-plain.xr",
+        "class Resource { move finish() {} }\nvar resource = Resource()\nresource.finish()\n");
+    ASSERT(plain_move != NULL);
+    ASSERT(analyzer_diag_contains(plain_move, "OWN-E-RECEIVER-MOVE"));
+    xa_analyzer_free(plain_move);
+
+    XaAnalyzer *explicit_move =
+        analyzer_run_source("receiver-move-explicit.xr",
+                            "class Resource { move finish() {} }\nvar resource = Resource()\n"
+                            "(move resource).finish()\nResource().finish()\n");
+    ASSERT(explicit_move != NULL);
+    ASSERT(!analyzer_diag_contains(explicit_move, "OWN-E-RECEIVER-MOVE"));
+    xa_analyzer_free(explicit_move);
+
+    XaAnalyzer *copy_value =
+        analyzer_run_source("receiver-move-value.xr", "struct CopyValue { move finish() {} }\n");
+    ASSERT(copy_value != NULL);
+    ASSERT(analyzer_diag_contains(copy_value, "struct methods cannot declare a MOVE receiver"));
+    xa_analyzer_free(copy_value);
+
+    XaAnalyzer *ref_object_temporary = analyzer_run_source(
+        "receiver-ref-object-temporary.xr", "class Box { ref touch() {} }\nBox().touch()\n");
+    ASSERT(ref_object_temporary != NULL);
+    ASSERT(!analyzer_diag_contains(ref_object_temporary, "must be an addressable mutable place"));
+    xa_analyzer_free(ref_object_temporary);
+
+    XaAnalyzer *ref_value_temporary = analyzer_run_source(
+        "receiver-ref-value-temporary.xr", "struct Box { ref touch() {} }\nBox{}.touch()\n");
+    ASSERT(ref_value_temporary != NULL);
+    ASSERT(analyzer_diag_contains(ref_value_temporary, "must be an addressable mutable place"));
+    xa_analyzer_free(ref_value_temporary);
 }
 
 TEST(analyzer_ordinary_bool_control_has_no_branch_hint_builtins) {
@@ -1414,6 +1534,22 @@ static const XaMemoryEffectSummary *analyzer_function_memory_effect_summary(XaAn
     return xa_memory_effect_db_get(analyzer->memory_effect_db, sym->links.memory_effect_id);
 }
 
+static const XaMemoryEffectSummary *analyzer_method_memory_effect_summary(XaAnalyzer *analyzer,
+                                                                          const char *type_name,
+                                                                          const char *method_name) {
+    XaSymbol *type_symbol = xa_analyzer_lookup(analyzer, type_name);
+    if (!type_symbol)
+        type_symbol = xa_analyzer_lookup_in_scope(analyzer, type_name, analyzer->global_scope);
+    XaSymbolLinks *type_links = type_symbol ? xa_analyzer_get_links(analyzer, type_symbol) : NULL;
+    XaSymbol *method = type_links && type_links->class_info
+                           ? xa_class_info_lookup_member(type_links->class_info, method_name)
+                           : NULL;
+    XaSymbolLinks *method_links = method ? xa_analyzer_get_links(analyzer, method) : NULL;
+    if (!method_links || method_links->memory_effect_id == XA_MEMORY_EFFECT_NONE)
+        return NULL;
+    return xa_memory_effect_db_get(analyzer->memory_effect_db, method_links->memory_effect_id);
+}
+
 static const XaMemoryRootEffect *memory_effect_root(const XaMemoryEffectSummary *summary,
                                                     XaMemoryRootKind kind, uint32_t index) {
     if (!summary)
@@ -1550,6 +1686,44 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
     ASSERT(read_only->root_count == 0);
     ASSERT(xa_memory_effect_summary_is_complete(slice_len));
     ASSERT(slice_len->root_count == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_receiver_permission_is_independent_from_observed_memory_effect) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "class Counter {\n"
+                         "  value: i64\n"
+                         "  constructor() { this.value = 0 }\n"
+                         "  ref noOp() {}\n"
+                         "  ref writeDirect() { this.value = 1 }\n"
+                         "  ref writeViaAlias() { var alias = this\n alias.value = 2 }\n"
+                         "  ref writeViaCall() { this.writeDirect() }\n"
+                         "}\n"
+                         "fn permissionOnly(counter: ref Counter) { counter.noOp() }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "receiver_memory_effect.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+
+    const XaMemoryEffectSummary *no_op =
+        analyzer_method_memory_effect_summary(a, "Counter", "noOp");
+    const XaMemoryEffectSummary *direct =
+        analyzer_method_memory_effect_summary(a, "Counter", "writeDirect");
+    const XaMemoryEffectSummary *alias =
+        analyzer_method_memory_effect_summary(a, "Counter", "writeViaAlias");
+    const XaMemoryEffectSummary *transitive =
+        analyzer_method_memory_effect_summary(a, "Counter", "writeViaCall");
+    const XaMemoryEffectSummary *permission_only =
+        analyzer_function_memory_effect_summary(a, "permissionOnly");
+    ASSERT(no_op && direct && alias && transitive && permission_only);
+    ASSERT(no_op->root_count == 0);
+    ASSERT(permission_only->root_count == 0);
+    ASSERT(memory_effect_root(direct, XA_MEMORY_ROOT_RECEIVER, 0) != NULL);
+    ASSERT(memory_effect_root(alias, XA_MEMORY_ROOT_RECEIVER, 0) != NULL);
+    ASSERT(memory_effect_root(transitive, XA_MEMORY_ROOT_RECEIVER, 0) != NULL);
 
     xa_analyzer_free(a);
     setup_pool();
@@ -2431,6 +2605,39 @@ TEST(analyzer_generic_enum_construction_preserves_concrete_nested_payload) {
     ASSERT(payload->tuple.element_types[0]->scalar_rep == XR_NATIVE_I64);
     ASSERT(payload->tuple.element_types[1] != NULL);
     ASSERT(payload->tuple.element_types[1]->kind == XR_KIND_BOOL);
+
+    xa_analyzer_free(analyzer);
+    setup_pool();
+}
+
+TEST(analyzer_enum_constructor_stays_non_nullable_in_nullable_context) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT(analyzer != NULL);
+
+    const char *source = "enum OptionalPayload { Value { item: i64 } }\n"
+                         "fn makeOptional() -> OptionalPayload? {\n"
+                         "  return OptionalPayload.Value { item: 7 }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(analyzer, "enum_constructor_nullable_context.xr", program);
+
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+    AstNode *function = program->as.program.statements[1];
+    ASSERT(function != NULL && function->type == AST_FUNCTION_DECL);
+    AstNode *body = function->as.function_decl.body;
+    ASSERT(body != NULL && body->type == AST_BLOCK && body->as.block.count == 1);
+    AstNode *return_stmt = body->as.block.statements[0];
+    ASSERT(return_stmt != NULL && return_stmt->type == AST_RETURN_STMT);
+    AstNode *construct = return_stmt->as.return_stmt.values[0];
+    ASSERT(construct != NULL && construct->type == AST_ENUM_CONSTRUCT);
+
+    XrType *constructor_type = xa_analyzer_get_node_type(analyzer, construct);
+    ASSERT(constructor_type != NULL && constructor_type->kind == XR_KIND_ENUM);
+    ASSERT(!constructor_type->is_nullable);
+    ASSERT(constructor_type->enum_type.layout_id != 0);
 
     xa_analyzer_free(analyzer);
     setup_pool();
@@ -7062,6 +7269,7 @@ TEST(type_substitute_preserves_function_param_modes) {
     ASSERT(xr_type_function_set_param_mode(fn, 0, XR_PARAM_READ));
     ASSERT(xr_type_function_set_param_mode(fn, 1, XR_PARAM_REF));
     ASSERT(xr_type_function_set_param_mode(fn, 2, XR_PARAM_MOVE));
+    fn->function.receiver_mode = XR_PARAM_REF;
 
     const char *names[] = {"T", "U", "V"};
     XrType *actuals[] = {xr_type_new_int(NULL), xr_type_new_string(NULL), xr_type_new_bool(NULL)};
@@ -7076,6 +7284,7 @@ TEST(type_substitute_preserves_function_param_modes) {
     ASSERT(xr_type_function_param_mode(subst, 0) == XR_PARAM_READ);
     ASSERT(xr_type_function_param_mode(subst, 1) == XR_PARAM_REF);
     ASSERT(xr_type_function_param_mode(subst, 2) == XR_PARAM_MOVE);
+    ASSERT(subst->function.receiver_mode == XR_PARAM_REF);
 }
 
 // ============================================================================
@@ -7229,6 +7438,7 @@ int main(void) {
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
+    RUN_TEST(analyzer_receiver_mode_is_declaration_owned_and_operation_checked);
     RUN_TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match);
     RUN_TEST(analyzer_structural_width_is_generic_constraint_and_literal_stays_exact);
     RUN_TEST(analyzer_structural_constraint_limits_visible_fields_and_dynamic_indexing);
@@ -7236,6 +7446,7 @@ int main(void) {
     RUN_TEST(analyzer_inferred_unique_alias_nll_guards_move);
     RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
+    RUN_TEST(analyzer_receiver_permission_is_independent_from_observed_memory_effect);
     RUN_TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows);
     RUN_TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed);
     RUN_TEST(analyzer_ordinary_bool_control_has_no_branch_hint_builtins);
@@ -7256,6 +7467,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_enum_record_construction_publishes_slot_plan);
     RUN_TEST(analyzer_generic_enum_construction_preserves_concrete_nested_payload);
+    RUN_TEST(analyzer_enum_constructor_stays_non_nullable_in_nullable_context);
     RUN_TEST(analyzer_enum_record_construction_rejects_noncanonical_forms);
     RUN_TEST(analyzer_enum_record_pattern_publishes_slot_plan);
     RUN_TEST(analyzer_enum_record_pattern_rejects_noncanonical_forms);

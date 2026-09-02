@@ -50,7 +50,7 @@ class Builder {
         this.value = ""
     }
 
-    add(s: string) -> Builder {
+    ref add(s: string) -> Builder {
         this.value += s
         return this
     }

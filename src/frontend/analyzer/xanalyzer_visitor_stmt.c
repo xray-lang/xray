@@ -5709,6 +5709,7 @@ static XaSymbol *xa_borrowed_param_root_symbol_in_list(XaInferContext *ctx, AstN
 XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr) {
     if (!ctx || !ctx->analyzer)
         return NULL;
+    bool follows_borrowed_projection = false;
     while (expr) {
         /* Borrow provenance follows aliases and views, not scalar values read
          * from them.  In particular, indexing an `in Slice<T>` where T is a
@@ -5718,7 +5719,18 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
         if (expr_type && !xa_type_needs_borrow_escape_guard(expr_type) &&
             !XR_TYPE_IS_POINTER(expr_type))
             return NULL;
+        if (expr_type && (xa_type_contains_span_view(expr_type) || XR_TYPE_IS_POINTER(expr_type) ||
+                          XR_TYPE_IS_FUNCTION(expr_type)))
+            follows_borrowed_projection = true;
         switch (expr->type) {
+            case AST_THIS_EXPR: {
+                XaSymbol *receiver = xa_scope_lookup(ctx->analyzer->current_scope, "this");
+                return receiver && receiver->kind == XA_SYM_PARAMETER &&
+                               (receiver->passing_mode == XR_PARAM_READ ||
+                                receiver->passing_mode == XR_PARAM_REF)
+                           ? receiver
+                           : NULL;
+            }
             case AST_VARIABLE: {
                 const char *name = expr->as.variable.name;
                 if (!name)
@@ -5737,9 +5749,18 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
                 return NULL;
             }
             case AST_MEMBER_ACCESS:
+                /* Loading an owned field or container element produces an
+                 * independently retained value.  It does not borrow the
+                 * receiver merely because the receiver itself is borrowed.
+                 * Actual views, raw pointers and bound callables keep walking
+                 * to their backing root. */
+                if (!follows_borrowed_projection)
+                    return NULL;
                 expr = expr->as.member_access.object;
                 break;
             case AST_INDEX_GET:
+                if (!follows_borrowed_projection)
+                    return NULL;
                 expr = expr->as.index_get.array;
                 break;
             case AST_SLICE_EXPR:
@@ -6003,6 +6024,8 @@ XR_FUNC bool xa_type_can_own_span_view(XrType *type) {
 XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
     while (expr) {
         switch (expr->type) {
+            case AST_THIS_EXPR:
+                return xa_lookup_visible_symbol(ctx, "this");
             case AST_VARIABLE:
                 return expr->as.variable.name
                            ? xa_lookup_visible_symbol(ctx, expr->as.variable.name)
@@ -9048,6 +9071,8 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         return;
 
     AssignmentNode *assign = &node->as.assignment;
+    if (assign->name && strcmp(assign->name, "this") == 0)
+        xa_check_receiver_write_authorization(ctx, node, NULL, "reassign the receiver");
     XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, assign->name);
 
     if (!sym) {

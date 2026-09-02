@@ -1,7 +1,7 @@
 struct LargeState {
     lanes: [u64; 8]
 
-    bump(index: i64, delta: u64) {
+    ref bump(index: i64, delta: u64) {
         this.lanes[index] = this.lanes[index] + delta
     }
 

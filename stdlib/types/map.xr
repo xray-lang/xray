@@ -1,14 +1,11 @@
 // Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c
 class Map<K: Hashable, V> {
     get(key: K) -> V?
-    // @receiver_write
-    set(key: K, value: V)
+    ref set(key: K, value: V)
     containsKey(key: K) -> bool
     containsValue(value: V) -> bool
-    // @receiver_write
-    delete(key: K) -> bool
-    // @receiver_write
-    clear()
+    ref delete(key: K) -> bool
+    ref clear()
     keys() -> Array<K>
     values() -> Array<V>
     entries() -> Array<(K, V)>

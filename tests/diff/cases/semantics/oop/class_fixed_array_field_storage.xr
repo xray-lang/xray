@@ -7,12 +7,12 @@ class State {
                       value + 4, value + 5, value + 6, value + 7]
     }
 
-    copyFrom(other: State) {
+    ref copyFrom(other: State) {
         this.lanes = [other.lanes[0], other.lanes[1], other.lanes[2], other.lanes[3],
                       other.lanes[4], other.lanes[5], other.lanes[6], other.lanes[7]]
     }
 
-    set(index: i64, value: u64) {
+    ref set(index: i64, value: u64) {
         this.lanes[index] = value
     }
 

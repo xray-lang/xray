@@ -6,7 +6,7 @@ class BoolFloatMapBag {
         this.values = values
     }
 
-    fill() -> i64 {
+    ref fill() -> i64 {
         this.values.set(true, 1.5)
         this.values.set(false, 2.25)
         return len(this.values)

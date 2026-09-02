@@ -45,7 +45,7 @@ export class Mutex<T> {
         return body(this.value)
     }
 
-    replace(body: fn(T) -> T) -> T {
+    ref replace(body: fn(T) -> T) -> T {
         this._sem.acquire()
         defer { this._sem.release() }
         this.value = body(this.value)
@@ -80,7 +80,7 @@ export class RwLock<T> {
         }
     }
 
-    read<U>(body: fn(T) -> U) -> U {
+    ref read<U>(body: fn(T) -> U) -> U {
         this._entry.acquire()
         this._lockCounter()
         this._readers = this._readers + 1
@@ -106,7 +106,7 @@ export class RwLock<T> {
         return body(this.value)
     }
 
-    replace(body: fn(T) -> T) -> T {
+    ref replace(body: fn(T) -> T) -> T {
         this._entry.acquire()
         this._gate.acquire()
         this._entry.release()
@@ -126,7 +126,7 @@ export class Once {
         this._done = false
     }
 
-    call(body: fn()) {
+    ref call(body: fn()) {
         this._sem.acquire()
         defer { this._sem.release() }
         if (!this._done) {
@@ -178,7 +178,7 @@ export class Condvar {
     lock() { this._mutex.acquire() }
     unlock() { this._mutex.release() }
 
-    wait() {
+    ref wait() {
         this._lockWaiters()
         this._waiters = this._waiters + 1
         this._wlock.store(false, Ordering.Release)
@@ -187,7 +187,7 @@ export class Condvar {
         this._mutex.acquire()
     }
 
-    signal() {
+    ref signal() {
         this._lockWaiters()
         var wake = this._waiters > 0
         if (wake) { this._waiters = this._waiters - 1 }
@@ -195,7 +195,7 @@ export class Condvar {
         if (wake) { this._sem.release(1) }
     }
 
-    broadcast() {
+    ref broadcast() {
         this._lockWaiters()
         var n = this._waiters
         this._waiters = 0

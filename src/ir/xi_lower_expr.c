@@ -5160,10 +5160,12 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
     return plan;
 }
 
-static bool lower_method_receiver_mode(XiLower *l, const XaSelection *selection, XiValue *receiver,
-                                       XrParamMode *out_mode) {
+static bool lower_method_receiver_contract(XiLower *l, const XaSelection *selection,
+                                           XiValue *receiver, XrParamMode *out_mode,
+                                           bool *out_uses_place) {
     if (!l || !selection || !selection->target_symbol || !receiver || !out_mode ||
-        selection->target_symbol->kind != XA_SYM_METHOD || selection->target_symbol->is_static)
+        !out_uses_place || selection->target_symbol->kind != XA_SYM_METHOD ||
+        selection->target_symbol->is_static)
         return false;
     /* Selective imports from an embedded stdlib module can carry a nominal
      * receiver view whose value-type bit is not the same allocation as the
@@ -5176,23 +5178,70 @@ static bool lower_method_receiver_mode(XiLower *l, const XaSelection *selection,
     if (owner_links && ((owner_links->type && owner_links->type->is_value_type) ||
                         (owner_links->class_info && owner_links->class_info->struct_layout)))
         value_receiver = true;
-    if (!value_receiver)
-        return false;
-    *out_mode = selection->target_symbol->mutates_receiver ? XR_PARAM_REF : XR_PARAM_READ;
+    *out_mode = selection->target_symbol->receiver_mode;
+    *out_uses_place = value_receiver;
     return true;
 }
 
-static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call,
-                                                  AstNode *receiver_node, XiValue *receiver,
-                                                  int explicit_arg_count, XrParamMode mode,
-                                                  XiCallPlan **plan_io, XiCallWriteback *writeback,
-                                                  int line) {
-    if (!l || !receiver || !plan_io || !writeback ||
-        (mode != XR_PARAM_READ && mode != XR_PARAM_REF))
+static XiValue *lower_build_method_receiver_contract(XiLower *l, CallExprNode *call,
+                                                     AstNode *receiver_node, XiValue *receiver,
+                                                     int explicit_arg_count, XrParamMode mode,
+                                                     bool uses_place, XiCallPlan **plan_io,
+                                                     XiCallWriteback *writeback, int line) {
+    if (!l || !receiver || !plan_io || !writeback || !xr_param_mode_is_valid(mode))
         return NULL;
     memset(writeback, 0, sizeof(*writeback));
     writeback->var_id = -1;
     writeback->top_binding = (XiTopBinding) {.slot = -1, .name = NULL, .type = NULL};
+
+    XiCallPlan *plan = *plan_io;
+    if (!plan) {
+        plan = (XiCallPlan *) xi_func_arena_alloc(l->func, sizeof(*plan));
+        if (!plan)
+            return NULL;
+        memset(plan, 0, sizeof(*plan));
+        plan->nargs = (uint16_t) explicit_arg_count;
+        if (explicit_arg_count > 0) {
+            plan->args = (XiCallArgPlan *) xi_func_arena_alloc(
+                l->func, (uint32_t) ((size_t) explicit_arg_count * sizeof(*plan->args)));
+            if (!plan->args)
+                return NULL;
+            memset(plan->args, 0, (size_t) explicit_arg_count * sizeof(*plan->args));
+            for (int i = 0; i < explicit_arg_count; i++) {
+                plan->args[i].param_mode = XR_PARAM_READ;
+                plan->args[i].access = lower_call_arg_access(call, i);
+                plan->args[i].origin_var_id = XI_NO_VAR_ID;
+            }
+        }
+        plan->verified = true;
+        *plan_io = plan;
+    }
+    plan->has_receiver = true;
+    plan->receiver.param_mode = mode;
+    plan->receiver.escape = XI_PLACE_ESCAPE_NONE;
+    plan->receiver.origin_var_id = XI_NO_VAR_ID;
+
+    if (mode == XR_PARAM_MOVE) {
+        AstNode *source = receiver_node;
+        while (source && source->type == AST_GROUPING)
+            source = source->as.grouping;
+        plan->receiver.access =
+            source && source->type == AST_MOVE_EXPR ? XR_CALL_ARG_MOVE : XR_CALL_ARG_PLAIN;
+        plan->receiver.origin = XI_PLACE_ORIGIN_NONE;
+        plan->receiver.lifetime = XI_PLACE_LIFETIME_NONE;
+        plan->receiver.addressable = false;
+        plan->receiver.place = NULL;
+        return receiver;
+    }
+
+    if (!uses_place) {
+        plan->receiver.access = XR_CALL_ARG_PLAIN;
+        plan->receiver.origin = XI_PLACE_ORIGIN_NONE;
+        plan->receiver.lifetime = XI_PLACE_LIFETIME_NONE;
+        plan->receiver.addressable = false;
+        plan->receiver.place = NULL;
+        return receiver;
+    }
 
     AstNode *place_node = lower_call_unwrap_place(receiver_node);
     int var_id = -1;
@@ -5258,30 +5307,6 @@ static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call
         }
     }
 
-    XiCallPlan *plan = *plan_io;
-    if (!plan) {
-        plan = (XiCallPlan *) xi_func_arena_alloc(l->func, sizeof(*plan));
-        if (!plan)
-            return NULL;
-        memset(plan, 0, sizeof(*plan));
-        plan->nargs = (uint16_t) explicit_arg_count;
-        if (explicit_arg_count > 0) {
-            plan->args = (XiCallArgPlan *) xi_func_arena_alloc(
-                l->func, (uint32_t) ((size_t) explicit_arg_count * sizeof(*plan->args)));
-            if (!plan->args)
-                return NULL;
-            memset(plan->args, 0, (size_t) explicit_arg_count * sizeof(*plan->args));
-            for (int i = 0; i < explicit_arg_count; i++) {
-                plan->args[i].param_mode = XR_PARAM_READ;
-                plan->args[i].access = lower_call_arg_access(call, i);
-                plan->args[i].origin_var_id = XI_NO_VAR_ID;
-            }
-        }
-        plan->verified = true;
-        *plan_io = plan;
-    }
-    plan->has_receiver = true;
-    plan->receiver.param_mode = mode;
     plan->receiver.access = XR_CALL_ARG_PLAIN;
     plan->receiver.origin = (uint8_t) origin;
     plan->receiver.lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
@@ -7845,11 +7870,13 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         XiCallWriteback receiver_writeback;
         memset(&receiver_writeback, 0, sizeof(receiver_writeback));
         XrParamMode receiver_mode = XR_PARAM_READ;
+        bool receiver_uses_place = false;
         const XaSelection *method_selection = xa_analyzer_get_selection(l->analyzer, call->callee);
-        if (lower_method_receiver_mode(l, method_selection, recv, &receiver_mode)) {
-            XiValue *receiver_place = lower_build_method_receiver_place(
-                l, call, ma->object, recv, n, receiver_mode, &call_plan, &receiver_writeback,
-                (int) node->line);
+        if (lower_method_receiver_contract(l, method_selection, recv, &receiver_mode,
+                                           &receiver_uses_place)) {
+            XiValue *receiver_place = lower_build_method_receiver_contract(
+                l, call, ma->object, recv, n, receiver_mode, receiver_uses_place, &call_plan,
+                &receiver_writeback, (int) node->line);
             if (!receiver_place)
                 return NULL;
             recv = receiver_place;

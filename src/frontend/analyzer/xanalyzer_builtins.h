@@ -68,8 +68,8 @@ typedef struct XaBuiltinMember {
     bool is_yieldable;                 // true = VM binding may suspend/resume the current coroutine
     XaEffectContract effect_contract;  // bodyless error contract; zero means missing/incomplete
     XaAllocationContractKind allocation_contract;  // explicit bodyless allocation contract
-    bool mutates_receiver;  // native declaration manifest proof; never inferred from spelling
-    XaBuiltinReturnOwnership return_ownership;  // sealed caller ownership result contract
+    XrParamMode receiver_mode;                     // sealed declaration-owned receiver contract
+    XaBuiltinReturnOwnership return_ownership;     // sealed caller ownership result contract
 } XaBuiltinMember;
 
 // Built-in type info
@@ -218,7 +218,7 @@ XR_FUNC bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const 
 
 // Check if member is a method
 XR_FUNC bool xa_builtin_is_method(XrType *type, const char *member_name);
-XR_FUNC bool xa_builtin_member_mutates_receiver(XrType *type, const char *member_name);
+XR_FUNC XrParamMode xa_builtin_member_receiver_mode(XrType *type, const char *member_name);
 // True when the member's runtime binding returns its own receiver (`return
 // self`) rather than a fresh reference. See XA_BUILTIN_RETURN_RECEIVER.
 XR_FUNC bool xa_builtin_member_returns_receiver(XrType *type, const char *member_name);

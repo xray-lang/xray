@@ -25,7 +25,7 @@ class ByteMapBag {
         this.values = values
     }
 
-    fill(n: i64) -> i64 {
+    ref fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
             this.values.set(i as u8, (i * 2 + 1) as i32)
@@ -46,7 +46,7 @@ class ByteMapBag {
         return sum
     }
 
-    prune(n: i64) -> i64 {
+    ref prune(n: i64) -> i64 {
         var i = 0
         var removed = 0
         while (i < n) {

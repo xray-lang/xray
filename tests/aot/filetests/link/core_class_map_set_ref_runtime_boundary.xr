@@ -7,7 +7,7 @@ class Registry {
         this.seen = seen
     }
 
-    mark(key: i64, value: i64) -> i64 {
+    ref mark(key: i64, value: i64) -> i64 {
         this.scores.set(key, value)
         this.seen.add(key)
         if (this.seen.contains(key)) {
@@ -16,7 +16,7 @@ class Registry {
         return 0
     }
 
-    replace(scores: Map<i64, i64>, seen: Set<i64>) {
+    ref replace(scores: Map<i64, i64>, seen: Set<i64>) {
         this.scores = scores
         this.seen = seen
     }

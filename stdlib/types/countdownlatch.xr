@@ -2,14 +2,9 @@
 class CountdownLatch {
     remaining: i64
     isClosed: bool
-    // @receiver_write
     reset(count: i64) -> bool
-    // @receiver_write
     done(count?: i64) -> i64
-    // @receiver_write
     tryWait() -> bool
-    // @receiver_write
     wait() -> bool
-    // @receiver_write
     close()
 }

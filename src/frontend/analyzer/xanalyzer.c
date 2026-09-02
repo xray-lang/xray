@@ -1200,7 +1200,7 @@ XaSymbol *xa_analyzer_import_export_symbol(XaAnalyzer *analyzer, const XaSymbol 
     view->is_override = source->is_override;
     view->is_imported = true;
     view->is_builtin = source->is_builtin;
-    view->mutates_receiver = source->mutates_receiver;
+    view->receiver_mode = source->receiver_mode;
     view->has_declared_default = source->has_declared_default;
     view->passing_mode = source->passing_mode;
     view->type_alias_node = source->type_alias_node;

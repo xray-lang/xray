@@ -19,12 +19,8 @@ class Task<T> {
     done: bool
     status: TaskStatus
 
-    // @receiver_write
-    cancel()
-    // @receiver_write
-    poll() -> TaskResult<T>
-    // @receiver_write
-    awaitResult() -> TaskResult<T>
-    // @receiver_write
-    awaitTimeout(timeout: i64) -> TaskResult<T>
+    ref cancel()
+    ref poll() -> TaskResult<T>
+    ref awaitResult() -> TaskResult<T>
+    ref awaitTimeout(timeout: i64) -> TaskResult<T>
 }

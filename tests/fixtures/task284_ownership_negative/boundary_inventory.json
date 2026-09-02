@@ -1,5 +1,5 @@
 {
-  "schema": "ownership-source-contract-boundary/1",
+  "schema": "ownership-source-contract-boundary/2",
   "frozen_base": {
     "commit": "49f71d1ea0f8e12aa2af8e64fb5d8d1c6f3ee79c",
     "tree": "478e72a21e54ae5cc182caaa77cf9e526725a0a6"
@@ -8,7 +8,7 @@
     "commit": "eabe56cc986cf2147d02254ae1b1acaa1418663f",
     "tree": "45f708658f0945bf3f588be332859d3ecde58782"
   },
-  "activation": "staging-only-before-i1-r4",
+  "activation": "incremental-clean-cut",
   "owned_fact": "Source-backed ownership authority inventory and constructed negative oracles",
   "allowed_layers": [
     "read-only-source-inventory",
@@ -49,8 +49,8 @@
     },
     {
       "id": "receiver",
-      "current_owner": "body-inferred mutates_receiver",
-      "replacement_owner": "declaration-owned READ REF MOVE receiver contract",
+      "current_owner": "declaration-owned READ REF MOVE receiver contract",
+      "replacement_owner": "same canonical contract consumed without inference by all lower layers",
       "single_writer": "LOCK-FRONTEND and LOCK-SCHEMA",
       "activation_boundary": "I1/R4 plus train locks"
     },
@@ -156,6 +156,7 @@
   "rows": [
     {
       "id": "recoverable-root-alias",
+      "state": "STAGED",
       "current_owner": "XaRootAliasState stores root-wide LOCAL_ALIASED and future-use recovery can authorize a later move",
       "replacement_owner": "Monotone XaDomainTransferState with typed external-edge witnesses",
       "deletion_phase": "P3",
@@ -196,6 +197,7 @@
     },
     {
       "id": "source-view-last-use",
+      "state": "STAGED",
       "current_owner": "XaLoan.last_use plus backward future-use queries decide source view legality",
       "replacement_owner": "Forward XaViewValidityState with canonical origin sets and typed invalidation effects",
       "deletion_phase": "P4",
@@ -292,6 +294,7 @@
     },
     {
       "id": "closure-capture-authority",
+      "state": "STAGED",
       "current_owner": "Analyzer capture loans, retained-call escape summaries, go-capture checks, Xi capture storage heuristics, and an AOT capture planner/cache split closure legality",
       "replacement_owner": "One typed closure capture contract that classifies immediate READ borrows, retained external aliases, MOVE adoption, and cross-execution capability",
       "deletion_phase": "P4",
@@ -525,22 +528,29 @@
     },
     {
       "id": "body-inferred-receiver",
-      "current_owner": "Recursive method-body mutation scan, transitive fixed point, imported propagation, and mutates_receiver boolean",
+      "state": "ACTIVE",
+      "current_owner": "Declaration-owned receiver mode in AST, structural function identity, symbols and call plans",
       "replacement_owner": "Declaration-owned READ REF MOVE receiver mode in type identity and every plan",
       "deletion_phase": "P5",
-      "deletion_boundary": "Delete the recursive scanner, fixed point, imported boolean, and lowering inference after declaration validation and both executors consume receiver mode",
+      "deletion_boundary": "Completed: recursive scanner, fixed point, imported boolean, and lowering inference are absent",
       "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA", "LOCK-RESIDUE"],
       "prerequisite_gates": ["receiver-parser-kats", "override-identity", "vm-aot-receiver-differential"],
       "producers": [
-        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "static bool xa_method_body_mutates_receiver(", "occurrences": 1},
-        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "static bool xa_class_propagate_receiver_mutations(", "occurrences": 1},
-        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "bool mutates_receiver;", "occurrences": 1}
+        {"path": "src/frontend/parser/xparse_oop.c", "anchor": "method.receiver_mode = receiver_mode;", "occurrences": 2},
+        {"path": "src/frontend/parser/xast_walk.c", "anchor": "n->as.interface_method.receiver_mode", "occurrences": 1},
+        {"path": "src/runtime/value/xtype.h", "anchor": "XrParamMode receiver_mode;", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_symbol.h", "anchor": "XrParamMode receiver_mode;  // declaration-owned method receiver contract", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "method_sym->receiver_mode = md->is_static ? XR_PARAM_READ : md->receiver_mode;", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xbuiltin_receiver_registry.h", "anchor": "XrParamMode receiver_mode;", "occurrences": 1},
+        {"path": "stdlib/defs/core.def", "anchor": "receiver_mode: \"ref\"", "occurrences": 1}
       ],
       "consumers": [
-        {"path": "src/frontend/analyzer/xanalyzer_visitor.c", "anchor": "xa_propagate_receiver_mutations_for_ast(analyzer, ast)", "occurrences": 1},
-        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "method_sym->mutates_receiver", "occurrences": 1},
-        {"path": "src/ir/xi_lower_class.inc.c", "anchor": "method_sym->mutates_receiver ? XR_PARAM_REF : XR_PARAM_READ", "occurrences": 1},
-        {"path": "src/ir/xi_lower_expr.c", "anchor": "selection->target_symbol->mutates_receiver ? XR_PARAM_REF : XR_PARAM_READ", "occurrences": 1}
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_call.c", "anchor": "static XrParamMode xa_call_receiver_mode(", "occurrences": 1},
+        {"path": "src/ir/xi_lower_class.inc.c", "anchor": "method_sym ? method_sym->receiver_mode : XR_PARAM_READ;", "occurrences": 1},
+        {"path": "src/ir/xi_lower_expr.c", "anchor": "*out_mode = selection->target_symbol->receiver_mode;", "occurrences": 1},
+        {"path": "src/ir/xi_verify.c", "anchor": "receiver->param_mode == XR_PARAM_MOVE", "occurrences": 1},
+        {"path": "src/runtime/value/xtype_format.c", "anchor": "[receiver=%s]", "occurrences": 1},
+        {"path": "src/ir/xi_dump.c", "anchor": "[receiver=%s]", "occurrences": 1}
       ],
       "residue": [
         {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "xa_method_body_mutates_receiver", "occurrences": 53, "post_cut_disposition": "delete-zero", "post_cut_occurrences": 0, "post_cut_expectation": "No recursive body scan grants receiver permission"},
@@ -571,6 +581,7 @@
     },
     {
       "id": "body-inferred-borrow-origin",
+      "state": "STAGED",
       "current_owner": "Return-body summary publishes one source kind and one parameter index",
       "replacement_owner": "Signature-owned sorted and deduplicated BorrowOriginSet",
       "deletion_phase": "P5",
@@ -619,6 +630,7 @@
     },
     {
       "id": "read-retain-return-alias",
+      "state": "STAGED",
       "current_owner": "XA_RETAIN_LOCAL_ALIAS and XA_RETURN_PROVENANCE_ALIAS permit ordinary managed READ aliases to escape",
       "replacement_owner": "Strict call-bound READ plus only declared const Slice borrowed returns from eligible READ receiver, parameter, or static origins",
       "deletion_phase": "P2",
@@ -659,6 +671,7 @@
     },
     {
       "id": "read-ref-suspend-authority",
+      "state": "STAGED",
       "current_owner": "Suspend effect summaries and parameter ownership checks are separate authorities without a total READ REF crossing rule",
       "replacement_owner": "Declared parameter mode crossed with the canonical complete suspend effect row",
       "deletion_phase": "P2",
@@ -699,6 +712,7 @@
     },
     {
       "id": "typed-domain-edge-authority",
+      "state": "STAGED",
       "current_owner": "Storage domains, graph promotion, and boundary name checks classify edges without one canonical typed edge taxonomy",
       "replacement_owner": "SemanticPlan-owned internal-owned external-strong cross-domain const sync weak foreign and unknown edge rows",
       "deletion_phase": "P3",
@@ -739,6 +753,7 @@
     },
     {
       "id": "move-boundary-graph-retag",
+      "state": "STAGED",
       "current_owner": "Transfer callers recursively publish or retag reachable storage through xrt_value_set_storage_graph",
       "replacement_owner": "Creation-time transferable domain plan and O(1) root-token identity handoff",
       "deletion_phase": "P7",
@@ -791,6 +806,7 @@
     },
     {
       "id": "name-driven-ownership-permission",
+      "state": "STAGED",
       "current_owner": "Copy, container, channel, and boundary permissions contain source-spelling selectors beside typed registries",
       "replacement_owner": "Resolved stable identity plus generated typed NativeSymbolContract rows",
       "deletion_phase": "P6",

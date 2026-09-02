@@ -173,7 +173,6 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
 
     const char *p = source;
     bool next_member_lowered_only = false;
-    bool next_member_mutates_receiver = false;
 
     /* Find "class <Name>" line */
     while (*p) {
@@ -189,8 +188,6 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         if (line[0] == '/' && line[1] == '/') {
             if (strstr(line, "@lowered"))
                 next_member_lowered_only = true;
-            if (strstr(line, "@receiver_write"))
-                next_member_mutates_receiver = true;
             p = next_line(p);
             continue;
         }
@@ -230,8 +227,6 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         if (line[0] == '/' && line[1] == '/') {
             if (strstr(line, "@lowered"))
                 next_member_lowered_only = true;
-            if (strstr(line, "@receiver_write"))
-                next_member_mutates_receiver = true;
             p = next_line(p);
             continue;
         }
@@ -248,6 +243,16 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
             line += 7;
             line = skip_ws(line);
         }
+        XrParamMode receiver_mode = XR_PARAM_READ;
+        if (strncmp(line, "ref ", 4) == 0) {
+            receiver_mode = XR_PARAM_REF;
+            line = skip_ws(line + 4);
+        } else if (strncmp(line, "move ", 5) == 0) {
+            receiver_mode = XR_PARAM_MOVE;
+            line = skip_ws(line + 5);
+        }
+        XR_CHECK(!is_static || receiver_mode == XR_PARAM_READ,
+                 "native static method cannot declare a receiver mode");
 
         /* Read member name */
         int name_len = read_ident(line);
@@ -303,11 +308,10 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_static = is_static;
         members[count].is_internal = false;
         members[count].is_lowered_only = next_member_lowered_only;
-        members[count].mutates_receiver = next_member_mutates_receiver;
+        members[count].receiver_mode = receiver_mode;
         members[count].is_yieldable = false;
         native_member_apply_contract(*out_class_name, &members[count]);
         next_member_lowered_only = false;
-        next_member_mutates_receiver = false;
         count++;
 
         p = next_line(p);

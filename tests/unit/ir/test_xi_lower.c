@@ -3004,7 +3004,7 @@ TEST(struct_update_preserves_prior_value_snapshot) {
 TEST(struct_method_receivers_use_call_bound_places) {
     XiFunc *f = lower_source("struct Counter {\n"
                              "    value: i64\n"
-                             "    bump(delta: i64) {\n"
+                             "    ref bump(delta: i64) {\n"
                              "        this.value = this.value + delta\n"
                              "    }\n"
                              "    read() -> i64 {\n"
@@ -3035,10 +3035,80 @@ TEST(struct_method_receivers_use_call_bound_places) {
     xi_func_free(f);
 }
 
+TEST(class_receiver_modes_are_explicit_without_forging_value_places) {
+    XiFunc *f = lower_source("class Counter {\n"
+                             "    value: i64\n"
+                             "    constructor() { this.value = 0 }\n"
+                             "    ref bump() { this.value = this.value + 1 }\n"
+                             "    read() -> i64 { return this.value }\n"
+                             "}\n"
+                             "fn exercise() -> i64 {\n"
+                             "    var counter = Counter()\n"
+                             "    counter.bump()\n"
+                             "    return counter.read()\n"
+                             "}\n"
+                             "exercise()\n");
+    assert(f != NULL);
+
+    XiValue *bump = func_tree_find_method(f, "bump");
+    XiValue *read = func_tree_find_method(f, "read");
+    XiFunc *bump_body = func_tree_find_func_name(f, "bump");
+    XiFunc *read_body = func_tree_find_func_name(f, "read");
+    assert(bump_body && bump_body->has_receiver && bump_body->receiver_mode == XR_PARAM_REF &&
+           read_body && read_body->has_receiver && read_body->receiver_mode == XR_PARAM_READ &&
+           "method functions must retain the declaration-owned receiver contract");
+    assert(bump && bump->call_plan && bump->call_plan->verified && bump->call_plan->has_receiver &&
+           bump->call_plan->receiver.param_mode == XR_PARAM_REF &&
+           bump->call_plan->receiver.place == NULL && !bump->call_plan->receiver.addressable &&
+           bump->args[0]->op != XI_LOCAL_ADDR &&
+           "a class REF receiver must preserve its mode without inventing a value place");
+    assert(read && read->call_plan && read->call_plan->verified && read->call_plan->has_receiver &&
+           read->call_plan->receiver.param_mode == XR_PARAM_READ &&
+           read->call_plan->receiver.place == NULL && !read->call_plan->receiver.addressable &&
+           read->args[0]->op != XI_LOCAL_ADDR &&
+           "a class READ receiver must preserve its declaration-owned mode");
+
+    xi_func_free(f);
+}
+
+TEST(move_class_receiver_uses_value_transfer_plan) {
+    XiFunc *f = lower_source("class Resource {\n"
+                             "    move finish() {}\n"
+                             "}\n"
+                             "fn exercise() {\n"
+                             "    var resource = Resource()\n"
+                             "    (move resource).finish()\n"
+                             "}\n"
+                             "exercise()\n");
+    assert(f != NULL);
+
+    XiValue *finish_call = func_tree_find_method(f, "finish");
+    assert(finish_call && finish_call->nargs >= 1 && finish_call->args[0] &&
+           finish_call->args[0]->op == XI_SOURCE_MOVE &&
+           "an explicit MOVE receiver must remain a source-move value in Xi");
+    assert(finish_call->call_plan && finish_call->call_plan->verified &&
+           finish_call->call_plan->has_receiver &&
+           finish_call->call_plan->receiver.param_mode == XR_PARAM_MOVE &&
+           finish_call->call_plan->receiver.access == XR_CALL_ARG_MOVE &&
+           finish_call->call_plan->receiver.place == NULL &&
+           !finish_call->call_plan->receiver.addressable &&
+           finish_call->call_plan->receiver.origin == XI_PLACE_ORIGIN_NONE &&
+           finish_call->call_plan->receiver.lifetime == XI_PLACE_LIFETIME_NONE &&
+           "a MOVE receiver must carry value-transfer evidence without ref-place metadata");
+
+    XiFunc *finish = func_tree_find_func_name(f, "finish");
+    assert(finish && finish->nparams >= 1 &&
+           xi_func_param_passing_mode(finish, 0) == XR_PARAM_MOVE && !finish->receiver_borrowed &&
+           !finish->receiver_call_place &&
+           "the method body must receive ownership through a direct value parameter");
+
+    xi_func_free(f);
+}
+
 TEST(large_mutable_struct_local_reuses_stable_place) {
     XiFunc *f = lower_source("struct State {\n"
                              "    lanes: [u64; 8]\n"
-                             "    bump(index: i64, delta: u64) {\n"
+                             "    ref bump(index: i64, delta: u64) {\n"
                              "        this.lanes[index] = this.lanes[index] + delta\n"
                              "    }\n"
                              "    read(index: i64) -> u64 {\n"
@@ -3098,7 +3168,7 @@ TEST(large_readonly_struct_local_stays_in_ssa) {
 TEST(rawptr_struct_method_receivers_mark_native_borrow_shape) {
     XiFunc *f = lower_source("struct State {\n"
                              "    value: u64\n"
-                             "    reset(value: u64) { this.value = value }\n"
+                             "    ref reset(value: u64) { this.value = value }\n"
                              "    digest() -> u64 { return this.value }\n"
                              "}\n"
                              "fn mutate(state: MutPtr<State>, value: u64) {\n"
@@ -3669,6 +3739,8 @@ int main(void) {
     run_nested_struct_field_store_rebuilds_leaf_to_root();
     run_struct_update_preserves_prior_value_snapshot();
     run_struct_method_receivers_use_call_bound_places();
+    run_class_receiver_modes_are_explicit_without_forging_value_places();
+    run_move_class_receiver_uses_value_transfer_plan();
     run_large_mutable_struct_local_reuses_stable_place();
     run_large_readonly_struct_local_stays_in_ssa();
     run_rawptr_struct_method_receivers_mark_native_borrow_shape();

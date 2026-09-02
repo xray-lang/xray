@@ -32,7 +32,7 @@ class ArrayBag {
         return total
     }
 
-    refill(n: i64) -> i64 {
+    ref refill(n: i64) -> i64 {
         var next_values: Array<i64> = []
         this.values = next_values
 
@@ -124,7 +124,7 @@ class Bag {
         this.seen = #[]
     }
 
-    fill() -> i64 {
+    ref fill() -> i64 {
         this.values.set(1, 11)
         this.seen.add(1)
         if (this.values.containsKey(1)) {

@@ -41,7 +41,7 @@ class BoolFloatMapBag {
         this.values = values
     }
 
-    fill() -> i64 {
+    ref fill() -> i64 {
         this.values.set(true, 1.5)
         this.values.set(false, 2.25)
         return len(this.values)
@@ -62,7 +62,7 @@ class BoolFloatMapBag {
         return sum
     }
 
-    prune() -> i64 {
+    ref prune() -> i64 {
         var removed = 0
         if (this.values.delete(false)) {
             removed = removed + 1
@@ -85,7 +85,7 @@ class FloatMapBag {
         this.values = values
     }
 
-    fill(n: i64) -> i64 {
+    ref fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
             this.values.set((i as f32) + 0.5, (i as f32) * 0.25 + 1.0)
@@ -107,7 +107,7 @@ class FloatMapBag {
         return sum
     }
 
-    prune(n: i64) -> i64 {
+    ref prune(n: i64) -> i64 {
         var i = 0
         var removed = 0
         while (i < n) {

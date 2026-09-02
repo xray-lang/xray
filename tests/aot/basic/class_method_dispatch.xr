@@ -10,7 +10,7 @@ class Counter {
     get() -> i64 {
         return this.value
     }
-    increment() -> i64 {
+    ref increment() -> i64 {
         this.value = this.value + 1
         return this.value
     }

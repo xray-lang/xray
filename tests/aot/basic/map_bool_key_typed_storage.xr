@@ -25,7 +25,7 @@ class BoolKeyMapBag {
         this.values = values
     }
 
-    fill() -> i64 {
+    ref fill() -> i64 {
         this.values.set(true, 21)
         this.values.set(false, 34)
         return len(this.values)
@@ -46,7 +46,7 @@ class BoolKeyMapBag {
         return sum
     }
 
-    prune() -> i64 {
+    ref prune() -> i64 {
         if (this.values.delete(false)) {
             return len(this.values)
         }

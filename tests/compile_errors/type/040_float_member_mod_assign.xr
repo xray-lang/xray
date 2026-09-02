@@ -5,7 +5,7 @@ class Box {
         this.value = 5.0
     }
 
-    reduce() {
+    ref reduce() {
         this.value %= 2
     }
 }

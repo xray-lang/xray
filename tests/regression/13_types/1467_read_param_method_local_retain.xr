@@ -5,7 +5,7 @@ class Holder {
         this.items = []
     }
 
-    stash(value: Array<i64>) {
+    ref stash(value: Array<i64>) {
         this.items.push(value)
     }
 }

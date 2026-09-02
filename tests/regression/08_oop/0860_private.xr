@@ -11,10 +11,10 @@ class Account {
         this.balance = initial
     }
 
-    deposit(amount: i64) {        this.balance = this.balance + amount
+    ref deposit(amount: i64) {        this.balance = this.balance + amount
     }
 
-    withdraw(amount: i64) -> bool {        if (amount <= this.balance) {
+    ref withdraw(amount: i64) -> bool {        if (amount <= this.balance) {
             this.balance = this.balance - amount
             return true
         }
@@ -86,7 +86,7 @@ class BankAccount {
     getBalance() -> i64 {        return this.balance
     }
 
-    addAmount(amount: i64) {        this.balance = this.balance + amount
+    ref addAmount(amount: i64) {        this.balance = this.balance + amount
     }
 }
 
@@ -98,7 +98,7 @@ class SavingsAccount extends BankAccount {
         this.interestRate = rate
     }
 
-    applyInterest() {        var interest = ((this.getBalance() as f64) * this.interestRate).floor()
+    ref applyInterest() {        var interest = ((this.getBalance() as f64) * this.interestRate).floor()
         this.addAmount(interest)
     }
 }

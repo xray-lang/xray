@@ -1067,6 +1067,7 @@ AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name, X
     node->as.interface_method.attr_count = 0;
     node->as.interface_method.type_params = NULL;
     node->as.interface_method.type_param_count = 0;
+    node->as.interface_method.receiver_mode = XR_PARAM_READ;
     return node;
 }
 

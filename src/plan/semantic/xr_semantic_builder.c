@@ -1737,9 +1737,10 @@ static bool build_function_identity(XrSemanticBuildContext *ctx, uint32_t index,
         text_append_format(&key, ":params=%u", record->parameter_count);
     for (uint16_t p = 0; valid && p < record->parameter_count; p++) {
         uint32_t type_index;
+        XrParamMode mode =
+            p == 0 && source->has_receiver ? source->receiver_mode : source->params[p]->param_mode;
         valid = source->params[p] && add_type(ctx, source->params[p]->type, &type_index) &&
-                text_append_format(&key, ":p%u:mode=%u:type=", p,
-                                   (unsigned) source->params[p]->param_mode) &&
+                text_append_format(&key, ":p%u:mode=%u:type=", p, (unsigned) mode) &&
                 text_append_stable_id(&key, ctx->plan->types[type_index].id);
     }
     valid =
@@ -1856,12 +1857,14 @@ static bool append_parameter_records(XrSemanticBuildContext *ctx, uint32_t funct
         uint32_t type_index;
         if (!source->params[p] || !add_type(ctx, source->params[p]->type, &type_index))
             return fail(ctx, "XR_SEM_0013", "semantic function has a missing parameter");
+        XrParamMode mode =
+            p == 0 && source->has_receiver ? source->receiver_mode : source->params[p]->param_mode;
         XrTextBuilder key = {0};
         bool valid = text_append(&key, "parameter-v1:function=") &&
                      text_append_stable_id(&key, function->id) &&
                      text_append_format(&key, ":ordinal=%u:type=", p) &&
                      text_append_stable_id(&key, ctx->plan->types[type_index].id) &&
-                     text_append_format(&key, ":mode=%u", source->params[p]->param_mode);
+                     text_append_format(&key, ":mode=%u", mode);
         if (valid)
             record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
         text_dispose(&key);
@@ -1872,7 +1875,7 @@ static bool append_parameter_records(XrSemanticBuildContext *ctx, uint32_t funct
         record->type = type_index;
         record->value = function->value_begin + source->params[p]->id;
         record->ordinal = p;
-        record->mode = source->params[p]->param_mode;
+        record->mode = mode;
         record->ownership = xi_arc_parameter_ownership(source, source->params[p]);
         record->transfer_mode = source->params[p]->transfer_mode;
         bool program_leaf_value = source_is_program_leaf_aggregate(ctx, source->params[p]->type);
@@ -4812,6 +4815,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->result_ownership = xi_arc_value_result_ownership(function, value);
     record->transfer_mode = value->transfer_mode;
     record->parameter_mode = value->param_mode;
+    if (value->op == XI_PARAM && value->aux_int == 0 && function->has_receiver)
+        record->parameter_mode = function->receiver_mode;
     if (value->op == XI_PARAM)
         record->parameter_ownership = xi_arc_parameter_ownership(function, value);
     if (value->op == XI_PARAM && source_is_program_leaf_aggregate(ctx, value->type))

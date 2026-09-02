@@ -246,6 +246,7 @@ struct XrType {
             XrType *return_type;
             bool is_variadic;
             bool is_c_abi;  // C function pointer ABI (`CFn<...>`), no Xray closure header
+            XrParamMode receiver_mode;  // declaration-owned method receiver contract
             // Error-effect "may-throw" bit (task 216). Default is fail-closed
             // MAY_THROW; the analyzer proves NO_THROW after the effect-DB
             // fixpoint. POLY marks parameter-position (rethrows) function types.

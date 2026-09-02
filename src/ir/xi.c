@@ -109,7 +109,7 @@ bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
         return false;
     *plan = *src->call_plan;
     plan->args = NULL;
-    if (plan->has_receiver)
+    if (plan->has_receiver && src->call_plan->receiver.place)
         plan->receiver.place = dst->args[0];
     if (plan->nargs > 0) {
         plan->args = (XiCallArgPlan *) xi_func_arena_alloc(

@@ -878,6 +878,7 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             return true;
         case AST_INTERFACE_METHOD:
             sig_name(s, "name", n->as.interface_method.name);
+            sig_add(s, " recv=%u", (unsigned) n->as.interface_method.receiver_mode);
             sig_params(s, n->as.interface_method.params, n->as.interface_method.param_count);
             sig_generic_params(s, n->as.interface_method.type_params,
                                n->as.interface_method.type_param_count);

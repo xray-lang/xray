@@ -440,6 +440,7 @@ class StdlibTypeMethodEntry:
     signature: str
     doc: str
     allocation: str
+    receiver_mode: str
     visibility: str
 
     @property
@@ -1039,6 +1040,12 @@ def parse_def_metadata(
                     f"{path}:{line_no}: unsupported allocation contract for "
                     f"{current_module}.{current_name}: {allocation}"
                 )
+            receiver_mode = str(props.get("receiver_mode", "read"))
+            if receiver_mode not in {"read", "ref", "move"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported receiver mode for "
+                    f"{current_module}.{current_name}: {receiver_mode}"
+                )
             type_methods.append(
                 StdlibTypeMethodEntry(
                     module=current_module,
@@ -1047,6 +1054,7 @@ def parse_def_metadata(
                     signature=str(props["signature"]),
                     doc=str(props["doc"]),
                     allocation=allocation,
+                    receiver_mode=receiver_mode,
                     visibility=resolve_member_visibility(
                         props, f"{path}:{line_no}: {current_module}.{current_name}"
                     ),

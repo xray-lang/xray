@@ -320,11 +320,11 @@ bool xa_builtin_is_method(XrType *type, const char *member_name) {
     return m ? m->is_method : false;
 }
 
-bool xa_builtin_member_mutates_receiver(XrType *type, const char *member_name) {
+XrParamMode xa_builtin_member_receiver_mode(XrType *type, const char *member_name) {
     if (!type || !member_name)
-        return false;
+        return XR_PARAM_READ;
     const XaBuiltinMember *member = xa_builtin_find_instance_member(type, member_name);
-    return member && member->is_method && member->mutates_receiver;
+    return member && member->is_method ? member->receiver_mode : XR_PARAM_READ;
 }
 
 bool xa_builtin_member_returns_receiver(XrType *type, const char *member_name) {

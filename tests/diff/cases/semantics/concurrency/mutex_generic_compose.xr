@@ -24,7 +24,7 @@ class Mutex<T> {
         return body(this.value)
     }
 
-    replace(body: fn(T) -> T) -> T {
+    ref replace(body: fn(T) -> T) -> T {
         this._sem.acquire()
         defer { this._sem.release() }
         this.value = body(this.value)

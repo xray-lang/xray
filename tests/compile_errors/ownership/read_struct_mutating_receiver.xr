@@ -1,7 +1,7 @@
 struct Counter {
     value: i64
 
-    bump() {
+    ref bump() {
         this.value = this.value + 1
     }
 }

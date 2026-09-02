@@ -6,7 +6,7 @@ class SharedFillBag {
         this.values = values
     }
 
-    fill(n: i64, rounds: i64) -> i64 {
+    ref fill(n: i64, rounds: i64) -> i64 {
         var values: Array<i64> = []
         this.values = values
 

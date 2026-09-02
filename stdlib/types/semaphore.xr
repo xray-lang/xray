@@ -2,12 +2,8 @@
 class Semaphore {
     available: i64
     isClosed: bool
-    // @receiver_write
     release(count?: i64) -> i64
-    // @receiver_write
     tryAcquire() -> bool
-    // @receiver_write
     acquire() -> bool
-    // @receiver_write
     close()
 }

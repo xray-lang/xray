@@ -5,7 +5,7 @@ class Person {
         this.age = 0
     }
 
-    setBad() {
+    ref setBad() {
         this.age = "old"
     }
 }

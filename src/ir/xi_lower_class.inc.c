@@ -557,6 +557,9 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         (owner_is_value_aggregate ||
          ((this_type && this_type->is_value_type) ||
           (owner_links && owner_links->class_info && owner_links->class_info->struct_layout)));
+    XrParamMode declared_receiver_mode = method_sym ? method_sym->receiver_mode : XR_PARAM_READ;
+    ml.func->has_receiver = is_inst && !is_ctor;
+    ml.func->receiver_mode = ml.func->has_receiver ? declared_receiver_mode : XR_PARAM_READ;
 
     /* Value-aggregate receivers use the same call-bound place contract as
      * explicit `in`/`ref` parameters. Readonly methods borrow the place;
@@ -566,17 +569,21 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         XiValue *th = xi_param(ml.func, entry, 0, this_type);
         ml.func->params[0] = th;
         int this_var = xi_lower_var_create(&ml, 0, "this", this_type);
-        if (value_receiver) {
-            XrParamMode receiver_mode =
-                method_sym && method_sym->mutates_receiver ? XR_PARAM_REF : XR_PARAM_READ;
-            if (!xi_func_set_param_passing_mode(ml.func, 0, receiver_mode)) {
+        if (value_receiver && declared_receiver_mode != XR_PARAM_MOVE) {
+            if (!xi_func_set_param_passing_mode(ml.func, 0, declared_receiver_mode)) {
                 xi_func_free(ml.func);
                 xi_lower_cleanup(&ml);
                 return NULL;
             }
             ml.vars[this_var].call_place = th;
-            ml.vars[this_var].place_mode = receiver_mode;
+            ml.vars[this_var].place_mode = declared_receiver_mode;
         } else {
+            if (declared_receiver_mode == XR_PARAM_MOVE &&
+                !xi_func_set_param_passing_mode(ml.func, 0, declared_receiver_mode)) {
+                xi_func_free(ml.func);
+                xi_lower_cleanup(&ml);
+                return NULL;
+            }
             xi_lower_braun_write(&ml, this_var, entry, th);
         }
     }
@@ -635,8 +642,8 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
      * retains ownership and does not dup before the call, so xi_arc must not
      * drop param 0 here. Constructors own their freshly-allocated `this` and
      * move it out via the auto-return below, so they are NOT borrowed. */
-    ml.func->receiver_borrowed = (is_inst && !is_ctor);
-    ml.func->receiver_call_place = value_receiver;
+    ml.func->receiver_borrowed = is_inst && !is_ctor && declared_receiver_mode != XR_PARAM_MOVE;
+    ml.func->receiver_call_place = value_receiver && declared_receiver_mode != XR_PARAM_MOVE;
 
     /* Operator-overload methods receive ALL operands borrowed: the VM
      * operator dispatch (OP_ADD/OP_EQ/OP_INDEX/...) leaves the operands live

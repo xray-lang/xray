@@ -60,7 +60,7 @@ fn test_member_mod_assign_ignores_same_named_const() {
             this.value = 17
         }
 
-        reduce() {
+        ref reduce() {
             this.value %= 5
         }
 

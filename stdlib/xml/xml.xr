@@ -526,7 +526,7 @@ class XmlParser {
         return _startsWithAtIgnoreCase(this.data, this.pos, prefix)
     }
 
-    advance() -> string {
+    ref advance() -> string {
         var c = this.peek()
         if (len(c) == 0) { return c }
         this.pos = this.pos + 1
@@ -539,17 +539,17 @@ class XmlParser {
         return c
     }
 
-    addError(kind: XmlErrorKind, message: string) {
+    ref addError(kind: XmlErrorKind, message: string) {
         this.errors.push(XmlDiagnostic(kind, this.line, this.column, message))
     }
 
-    skipWhitespace() {
+    ref skipWhitespace() {
         while (!this.atEnd() && _isWhitespace(this.peek())) {
             this.advance()
         }
     }
 
-    parseName() -> string {
+    ref parseName() -> string {
         if (!_isNameStart(this.peek())) { return "" }
         var start = this.pos
         this.advance()
@@ -559,7 +559,7 @@ class XmlParser {
         return this.data.slice(start, this.pos)
     }
 
-    decodeEntity(name: string) -> string {
+    ref decodeEntity(name: string) -> string {
         var named = _namedEntity(name)
         if (named != null) { return named! }
         var numeric = _numericEntity(name)
@@ -570,7 +570,7 @@ class XmlParser {
         return "&" + name + ";"
     }
 
-    decodeEntities(value: string) -> string {
+    ref decodeEntities(value: string) -> string {
         var out = StringBuilder()
         var i = 0
         while (i < len(value)) {
@@ -593,7 +593,7 @@ class XmlParser {
         return out.toString()
     }
 
-    skipProcessingInstruction() {
+    ref skipProcessingInstruction() {
         if (!this.startsWith("<?")) { return }
         this.advance()
         this.advance()
@@ -608,7 +608,7 @@ class XmlParser {
         this.addError(XmlErrorKind.UnterminatedPI, "Unterminated processing instruction")
     }
 
-    skipDoctype() {
+    ref skipDoctype() {
         if (!this.startsWithIgnoreCase("<!DOCTYPE")) { return }
         this.advance()
         this.advance()
@@ -629,7 +629,7 @@ class XmlParser {
         this.addError(XmlErrorKind.UnterminatedDoctype, "Unterminated DOCTYPE")
     }
 
-    skipTopLevelComment() {
+    ref skipTopLevelComment() {
         if (!this.startsWith("<!--")) { return }
         for (var i = 0; i < 4; i++) { this.advance() }
         while (!this.atEnd()) {
@@ -644,7 +644,7 @@ class XmlParser {
         this.addError(XmlErrorKind.UnterminatedComment, "Unterminated comment")
     }
 
-    parseCommentNode() -> XmlNode? {
+    ref parseCommentNode() -> XmlNode? {
         if (!this.startsWith("<!--")) { return null }
         for (var i = 0; i < 4; i++) { this.advance() }
         var start = this.pos
@@ -662,7 +662,7 @@ class XmlParser {
         return XmlNode.Comment { content: this.data.slice(start, this.pos) }
     }
 
-    parseCDataNode() -> XmlNode? {
+    ref parseCDataNode() -> XmlNode? {
         if (!this.startsWith("<![CDATA[")) { return null }
         for (var i = 0; i < 9; i++) { this.advance() }
         var start = this.pos
@@ -683,7 +683,7 @@ class XmlParser {
         return XmlNode.Text { content: content }
     }
 
-    parseTextNode() -> XmlNode? {
+    ref parseTextNode() -> XmlNode? {
         var start = this.pos
         while (!this.atEnd() && this.peek() != "<") {
             this.advance()
@@ -694,7 +694,7 @@ class XmlParser {
         return XmlNode.Text { content: value }
     }
 
-    parseAttributeValue() -> string {
+    ref parseAttributeValue() -> string {
         var quote = this.peek()
         if (quote != "\"" && quote != "'") {
             this.addError(XmlErrorKind.InvalidAttr, "Expected quote after =")
@@ -714,7 +714,7 @@ class XmlParser {
         return this.decodeEntities(raw)
     }
 
-    parseElement(depth: i64) -> XmlNode? {
+    ref parseElement(depth: i64) -> XmlNode? {
         if (depth > XML_MAX_DEPTH) {
             this.addError(XmlErrorKind.MaxDepthExceeded, "Maximum nesting depth exceeded")
             return null
@@ -815,7 +815,7 @@ class XmlParser {
         return XmlNode.Element { name: _splitName(rawTag), attributes: attrs, children: children }
     }
 
-    parseDocument() {
+    ref parseDocument() {
         while (!this.atEnd()) {
             this.skipWhitespace()
             if (this.atEnd()) { break }

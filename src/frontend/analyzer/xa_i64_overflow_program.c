@@ -150,7 +150,7 @@ static bool builtin_contract_exact(const XrType *receiver, const char *name) {
            match->effect_contract.kind == XA_EFFECT_CONTRACT_NOTHROW &&
            !match->effect_contract.errors && match->effect_contract.error_count == 0 &&
            match->allocation_contract == XA_ALLOCATION_CONTRACT_NO_HEAP &&
-           !match->mutates_receiver &&
+           match->receiver_mode == XR_PARAM_READ &&
            match->return_ownership == XA_BUILTIN_RETURN_UNKNOWN;
 }
 

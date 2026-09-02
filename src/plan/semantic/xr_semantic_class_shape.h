@@ -232,17 +232,34 @@ static inline uint32_t xr_semantic_class_declared_receiver_source_class(const Xr
                                              ? XR_SEM_PARAMETER_RECEIVER_BORROWED
                                              : 0));
     if (!parameter || parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->ordinal != 0 ||
-        parameter->mode != XR_PARAM_READ || parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        !xr_param_mode_is_valid((XrParamMode) parameter->mode) ||
+        (source_kind == XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR ? parameter->mode != XR_PARAM_READ
+                                                           : false) ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
         (parameter->flags & ~receiver_flags) != 0 || parameter->reserved != 0 ||
         parameter->function >= (uint32_t) xr_semantic_plan_function_count(plan))
         return XR_SEMANTIC_INDEX_NONE;
     /* The receiver is bound by reference either way, but which of the two the
      * plan recorded is the plan's fact to state, not this judgement's to pick. */
-    if (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED)
-        return XR_SEMANTIC_INDEX_NONE;
-    if ((parameter->flags & XR_SEM_PARAMETER_RECEIVER_BORROWED) != 0 &&
-        parameter->ownership != XI_OWN_BORROWED)
-        return XR_SEMANTIC_INDEX_NONE;
+    bool borrowed = (parameter->flags & XR_SEM_PARAMETER_RECEIVER_BORROWED) != 0;
+    if (source_kind == XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD) {
+        if (parameter->mode == XR_PARAM_MOVE) {
+            if (borrowed || parameter->ownership != XI_OWN_OWNED)
+                return XR_SEMANTIC_INDEX_NONE;
+        } else if (!borrowed || parameter->ownership != XI_OWN_BORROWED) {
+            return XR_SEMANTIC_INDEX_NONE;
+        }
+    } else {
+        /* Constructor lowering does not publish a method receiver contract:
+         * parameter zero is the freshly allocated instance carrier. Depending
+         * on where allocation ownership is frozen, that carrier may already be
+         * borrowed or still owned. A borrowed marker, when present, must agree
+         * with the ownership row; otherwise either exact ownership is valid. */
+        if (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED)
+            return XR_SEMANTIC_INDEX_NONE;
+        if (borrowed && parameter->ownership != XI_OWN_BORROWED)
+            return XR_SEMANTIC_INDEX_NONE;
+    }
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, parameter->function);
     /* Parameter zero of the function is the one its range starts with. Trusting
      * the ordinal alone would let a parameter belonging to another function's
@@ -371,16 +388,29 @@ static inline uint32_t xr_semantic_class_instance_parameter_source_class(const X
 static inline bool xr_semantic_class_parameter_call_transfer_is_exact(
     const XrSemanticPlan *plan, uint32_t parameter_index, const XrSemanticOperandRecord *operand) {
     const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
-    return parameter && operand &&
-           xr_semantic_class_instance_parameter_source_class(plan, parameter_index) !=
-               XR_SEMANTIC_INDEX_NONE &&
-           parameter->mode == XR_PARAM_READ && operand->parameter_mode == XR_PARAM_READ &&
-           parameter->transfer_mode == XR_TRANSFER_SHARE &&
-           operand->transfer_mode == XR_TRANSFER_SHARE &&
-           ((parameter->ownership == XI_OWN_OWNED &&
-             operand->ownership_action == XR_SEM_OPERAND_CONSUME) ||
-            (parameter->ownership == XI_OWN_BORROWED &&
-             operand->ownership_action == XR_SEM_OPERAND_BORROW));
+    if (!parameter || !operand ||
+        xr_semantic_class_instance_parameter_source_class(plan, parameter_index) ==
+            XR_SEMANTIC_INDEX_NONE ||
+        parameter->mode != operand->parameter_mode ||
+        parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        operand->transfer_mode != XR_TRANSFER_SHARE || operand->origin != XI_PLACE_ORIGIN_NONE ||
+        operand->lifetime != XI_PLACE_LIFETIME_NONE || operand->escape != XI_PLACE_ESCAPE_NONE ||
+        operand->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+        return false;
+    bool method_receiver = xr_semantic_class_method_receiver_source_class(plan, parameter_index) !=
+                           XR_SEMANTIC_INDEX_NONE;
+    if (!method_receiver &&
+        (parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN))
+        return false;
+    if (method_receiver && parameter->mode != XR_PARAM_MOVE && operand->access != XR_CALL_ARG_PLAIN)
+        return false;
+    if (method_receiver && parameter->mode == XR_PARAM_MOVE &&
+        operand->access != XR_CALL_ARG_PLAIN && operand->access != XR_CALL_ARG_MOVE)
+        return false;
+    return (parameter->ownership == XI_OWN_OWNED &&
+            operand->ownership_action == XR_SEM_OPERAND_CONSUME) ||
+           (parameter->ownership == XI_OWN_BORROWED &&
+            operand->ownership_action == XR_SEM_OPERAND_BORROW);
 }
 
 /* The one function the plan records as the constructor of `source_class`, or

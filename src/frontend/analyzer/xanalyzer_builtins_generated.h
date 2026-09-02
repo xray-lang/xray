@@ -17,55 +17,55 @@
 
 // Buffer methods
 static const XaBuiltinMember g_gen_buffer_members[] = {
-    {"asBytes", "(): Slice<u8>", "Borrow this buffer as a readonly Slice<u8> view", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"asMutBytes", "(): Slice<u8>", "Borrow this buffer as a mutable Slice<u8> view", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"borrowPtr", "(): MutPtr<u8>", "Borrow the underlying mutable pointer; requires unsafe at the call site", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"resize", "(n: i64): bool", "Resize this buffer; returns false on allocation failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"asBytes", "(): Slice<u8>", "Borrow this buffer as a readonly Slice<u8> view", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"asMutBytes", "(): Slice<u8>", "Borrow this buffer as a mutable Slice<u8> view", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"borrowPtr", "(): MutPtr<u8>", "Borrow the underlying mutable pointer; requires unsafe at the call site", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"resize", "(n: i64): bool", "Resize this buffer; returns false on allocation failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_REF, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_BUFFER_MEMBER_COUNT 4
 
 // CoroLocal methods
 static const XaBuiltinMember g_gen_corolocal_members[] = {
-    {"set", "(value: T): ()", "Set this typed coroutine-local slot for the current coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"get", "(): T?", "Get this typed coroutine-local slot for the current coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"set", "(value: T): ()", "Set this typed coroutine-local slot for the current coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"get", "(): T?", "Get this typed coroutine-local slot for the current coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_COROLOCAL_MEMBER_COUNT 2
 
 // OsBarrier methods
 static const XaBuiltinMember g_gen_osbarrier_members[] = {
-    {"wait", "(): bool", "Wait until all parties have arrived", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"wait", "(): bool", "Wait until all parties have arrived", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_OSBARRIER_MEMBER_COUNT 1
 
 // OsCondvar methods
 static const XaBuiltinMember g_gen_oscondvar_members[] = {
-    {"wait", "(m: OsMutex): ()", "Wait on the condition variable with an already-locked mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"waitFor", "(m: OsMutex, timeoutNs: i64): bool", "Wait on the condition variable until signalled or timeout elapses", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"signal", "(): ()", "Wake one waiter", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"broadcast", "(): ()", "Wake all waiters", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"wait", "(m: OsMutex): ()", "Wait on the condition variable with an already-locked mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"waitFor", "(m: OsMutex, timeoutNs: i64): bool", "Wait on the condition variable until signalled or timeout elapses", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"signal", "(): ()", "Wake one waiter", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"broadcast", "(): ()", "Wake all waiters", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_OSCONDVAR_MEMBER_COUNT 4
 
 // OsMutex methods
 static const XaBuiltinMember g_gen_osmutex_members[] = {
-    {"lock", "(): ()", "Lock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"unlock", "(): ()", "Unlock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"tryLock", "(): bool", "Try to lock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"lock", "(): ()", "Lock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"unlock", "(): ()", "Unlock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"tryLock", "(): bool", "Try to lock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_OSMUTEX_MEMBER_COUNT 3
 
 // OsOnce methods
 static const XaBuiltinMember g_gen_osonce_members[] = {
-    {"call", "(body: fn(): ()): ()", "Run the closure exactly once", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"call", "(body: fn(): ()): ()", "Run the closure exactly once", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_OSONCE_MEMBER_COUNT 1
 
 // OsRwLock methods
 static const XaBuiltinMember g_gen_osrwlock_members[] = {
-    {"rdlock", "(): ()", "Acquire the read side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"rdunlock", "(): ()", "Release the read side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"wrlock", "(): ()", "Acquire the write side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"wrunlock", "(): ()", "Release the write side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"rdlock", "(): ()", "Acquire the read side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"rdunlock", "(): ()", "Release the read side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"wrlock", "(): ()", "Acquire the write side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"wrunlock", "(): ()", "Release the write side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_OSRWLOCK_MEMBER_COUNT 4
 
@@ -200,33 +200,33 @@ static const XaBuiltinEnum g_gen_cluster_enums[] = {
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
-    {"__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration and the heartbeat schedule cluster.xr decides", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__join", "(host: string, port: i64): bool", "Join cluster at a host and port cluster.xr already parsed, without blocking the scheduler worker", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__self", "(): string", "Get own node name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__nodes", "(): Array<string>?", "List cluster node names", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__discover", "(): ()", "Start LAN auto-discovery", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__info", "(): ClusterInfo?", "Get cluster status info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__send", "(topic: string, envelope: move Buffer, hopLimit: i64): ClusterDelivery", "Hand one canonical opaque service envelope, and the hop budget cluster.xr decides, to local and connected transports", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_BORROWED_STATIC},
-    {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__start", "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration and the heartbeat schedule cluster.xr decides", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__join", "(host: string, port: i64): bool", "Join cluster at a host and port cluster.xr already parsed, without blocking the scheduler worker", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__self", "(): string", "Get own node name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__nodes", "(): Array<string>?", "List cluster node names", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__discover", "(): ()", "Start LAN auto-discovery", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__info", "(): ClusterInfo?", "Get cluster status info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__send", "(topic: string, envelope: move Buffer, hopLimit: i64): ClusterDelivery", "Hand one canonical opaque service envelope, and the hop budget cluster.xr decides, to local and connected transports", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_BORROWED_STATIC},
+    {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_CLUSTER_FUNCTION_COUNT 10
 
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
-    {"__randomBytes", "(n: i64): Array<u8>", "Read n bytes from the platform CSPRNG", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__timingSafeEqualBytes", "(a: Array<u8>, b: Array<u8>): bool", "Compare two byte buffers in time independent of where they differ", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__randomBytes", "(n: i64): Array<u8>", "Read n bytes from the platform CSPRNG", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__timingSafeEqualBytes", "(a: Array<u8>, b: Array<u8>): bool", "Compare two byte buffers in time independent of where they differ", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_CRYPTO_FUNCTION_COUNT 2
 
 // http2 module functions
 static const XaBuiltinMember g_gen_http2_functions[] = {
-    {"__supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__connect", "(host: string, port: i64, timeoutMs: i64): i64", "Open one TLS connection that negotiated ALPN h2 and answer its handle, or -1", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__send", "(handle: i64, data: Array<u8>): bool", "Write one buffer to an open HTTP/2 connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes from an open HTTP/2 connection; null on error or EOF", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__close", "(handle: i64): bool", "Close an HTTP/2 connection and release its handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__connect", "(host: string, port: i64, timeoutMs: i64): i64", "Open one TLS connection that negotiated ALPN h2 and answer its handle, or -1", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__send", "(handle: i64, data: Array<u8>): bool", "Write one buffer to an open HTTP/2 connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes from an open HTTP/2 connection; null on error or EOF", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__close", "(handle: i64): bool", "Close an HTTP/2 connection and release its handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_HTTP2_FUNCTION_COUNT 5
 
@@ -251,70 +251,70 @@ static const XaBuiltinHandle g_gen_io_handles[] = {
 
 // io module functions
 static const XaBuiltinMember g_gen_io_functions[] = {
-    {"__chmod", "(path: Path, mode: i64): bool", "Change file permissions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__chdir", "(path: Path): bool", "Change working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cwd", "(): string", "Get current working directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__exists", "(path: Path): bool", "Check if path exists", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileClose", "(handle: i64): bool", "Close an owned file descriptor; 0, 1 and 2 are refused", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileFlush", "(handle: i64): bool", "Flush any C-runtime buffering behind a standard stream handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileOpen", "(path: Path): i64", "Open a file for binary reading and return a file descriptor", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileOpenWrite", "(path: Path, append: bool): i64", "Open a file for binary writing and return a file descriptor", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read at most maxBytes from a descriptor; an empty result means EOF", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__fileWrite", "(handle: i64, data: Array<u8>, offset: i64): i64", "Write bytes from offset once; returns how many the stream accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileWriteStr", "(handle: i64, data: string, offset: i64): i64", "Write string bytes from offset once; returns how many were accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fileSize", "(path: Path): i64", "Get file size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__isDir", "(path: Path): bool", "Check if path is a directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__isFile", "(path: Path): bool", "Check if path is a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__isSymlink", "(path: Path): bool", "Check if path is a symlink", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__mkdir", "(path: Path): bool", "Create directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__readDir", "(path: Path): Array<string>?", "List directory entries (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readFile", "(path: Path): string?", "Read entire file as string", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readFileBytes", "(path: Path): Array<u8>?", "Read entire file as byte array", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readStdin", "(): string?", "Read all data from standard input", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readStdinBytes", "(): Array<u8>?", "Read all standard input as binary bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readlink", "(path: Path): string?", "Read symlink target (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__realpath", "(path: Path): string?", "Resolve to absolute path (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__rmdir", "(path: Path): bool", "Remove an empty directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__remove", "(path: Path): bool", "Remove a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__rename", "(old: Path, new: Path): bool", "Rename a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__stat", "(path: Path): __FileStat?", "Get file stat info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__symlink", "(target: Path, link: Path): bool", "Create symbolic link", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__makeTempDir", "(root: string): string?", "Create a uniquely named directory inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__makeTempFile", "(root: string): string?", "Create a uniquely named file inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__chmod", "(path: Path, mode: i64): bool", "Change file permissions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__chdir", "(path: Path): bool", "Change working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cwd", "(): string", "Get current working directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__exists", "(path: Path): bool", "Check if path exists", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileClose", "(handle: i64): bool", "Close an owned file descriptor; 0, 1 and 2 are refused", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileFlush", "(handle: i64): bool", "Flush any C-runtime buffering behind a standard stream handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileOpen", "(path: Path): i64", "Open a file for binary reading and return a file descriptor", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileOpenWrite", "(path: Path, append: bool): i64", "Open a file for binary writing and return a file descriptor", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read at most maxBytes from a descriptor; an empty result means EOF", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__fileWrite", "(handle: i64, data: Array<u8>, offset: i64): i64", "Write bytes from offset once; returns how many the stream accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileWriteStr", "(handle: i64, data: string, offset: i64): i64", "Write string bytes from offset once; returns how many were accepted", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fileSize", "(path: Path): i64", "Get file size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__isDir", "(path: Path): bool", "Check if path is a directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__isFile", "(path: Path): bool", "Check if path is a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__isSymlink", "(path: Path): bool", "Check if path is a symlink", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__mkdir", "(path: Path): bool", "Create directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__readDir", "(path: Path): Array<string>?", "List directory entries (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__readFile", "(path: Path): string?", "Read entire file as string", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__readFileBytes", "(path: Path): Array<u8>?", "Read entire file as byte array", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__readStdin", "(): string?", "Read all data from standard input", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__readStdinBytes", "(): Array<u8>?", "Read all standard input as binary bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__readlink", "(path: Path): string?", "Read symlink target (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__realpath", "(path: Path): string?", "Resolve to absolute path (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__rmdir", "(path: Path): bool", "Remove an empty directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__remove", "(path: Path): bool", "Remove a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__rename", "(old: Path, new: Path): bool", "Rename a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__stat", "(path: Path): __FileStat?", "Get file stat info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__symlink", "(target: Path, link: Path): bool", "Create symbolic link", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__makeTempDir", "(root: string): string?", "Create a uniquely named directory inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__makeTempFile", "(root: string): string?", "Create a uniquely named file inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_IO_FUNCTION_COUNT 31
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {
-    {"__abs", "(x: f64): f64", "Absolute value", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__floor", "(x: f64): i64", "Floor to integer", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__ceil", "(x: f64): i64", "Ceiling to integer", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__round", "(x: f64): i64", "Round to nearest integer", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__sqrt", "(x: f64): f64", "Square root", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__pow", "(base: f64, exp: f64): f64", "Power", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__sin", "(x: f64): f64", "Sine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cos", "(x: f64): f64", "Cosine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__tan", "(x: f64): f64", "Tangent", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__asin", "(x: f64): f64", "Arc sine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__acos", "(x: f64): f64", "Arc cosine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__atan", "(x: f64): f64", "Arc tangent", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__atan2", "(y: f64, x: f64): f64", "Arc tangent of y/x", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__log", "(x: f64): f64", "Natural logarithm", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__log10", "(x: f64): f64", "Base-10 logarithm", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__log2", "(x: f64): f64", "Base-2 logarithm", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__exp", "(x: f64): f64", "Exponential e^x", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__random", "(): f64", "Random f64 in [0, 1)", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__randomInt", "(min: i64, max: i64): i64", "Random integer in [min, max]", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__sinh", "(x: f64): f64", "Hyperbolic sine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cosh", "(x: f64): f64", "Hyperbolic cosine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__tanh", "(x: f64): f64", "Hyperbolic tangent", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__hypot", "(x: f64, y: f64): f64", "Hypotenuse sqrt(x*x+y*y)", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cbrt", "(x: f64): f64", "Cube root", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__trunc", "(x: f64): i64", "Truncate toward zero", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fmod", "(x: f64, y: f64): f64", "Floating-point remainder", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__log1p", "(x: f64): f64", "log(1+x) accurate for small x", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__expm1", "(x: f64): f64", "exp(x)-1 accurate for small x", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__abs", "(x: f64): f64", "Absolute value", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__floor", "(x: f64): i64", "Floor to integer", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__ceil", "(x: f64): i64", "Ceiling to integer", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__round", "(x: f64): i64", "Round to nearest integer", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sqrt", "(x: f64): f64", "Square root", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pow", "(base: f64, exp: f64): f64", "Power", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sin", "(x: f64): f64", "Sine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cos", "(x: f64): f64", "Cosine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__tan", "(x: f64): f64", "Tangent", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__asin", "(x: f64): f64", "Arc sine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__acos", "(x: f64): f64", "Arc cosine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__atan", "(x: f64): f64", "Arc tangent", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__atan2", "(y: f64, x: f64): f64", "Arc tangent of y/x", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__log", "(x: f64): f64", "Natural logarithm", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__log10", "(x: f64): f64", "Base-10 logarithm", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__log2", "(x: f64): f64", "Base-2 logarithm", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__exp", "(x: f64): f64", "Exponential e^x", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__random", "(): f64", "Random f64 in [0, 1)", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__randomInt", "(min: i64, max: i64): i64", "Random integer in [min, max]", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sinh", "(x: f64): f64", "Hyperbolic sine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cosh", "(x: f64): f64", "Hyperbolic cosine", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__tanh", "(x: f64): f64", "Hyperbolic tangent", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__hypot", "(x: f64, y: f64): f64", "Hypotenuse sqrt(x*x+y*y)", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cbrt", "(x: f64): f64", "Cube root", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__trunc", "(x: f64): i64", "Truncate toward zero", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fmod", "(x: f64, y: f64): f64", "Floating-point remainder", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__log1p", "(x: f64): f64", "log(1+x) accurate for small x", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__expm1", "(x: f64): f64", "exp(x)-1 accurate for small x", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_MATH_FUNCTION_COUNT 28
 
@@ -325,24 +325,24 @@ static const XaBuiltinClass g_gen_mem_classes[] = {
 
 // mem module functions
 static const XaBuiltinMember g_gen_mem_functions[] = {
-    {"__fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__prefetch", "(ptr: Ptr<u8>, rw: i64): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cacheInvalidate", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cacheLineSize", "(): i64", "CPU cache line size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"pageAlloc", "(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__move", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__set", "(dst: MutPtr<u8>, u8: i64, n: i64): ()", "Fill n bytes at dst with byte (memset)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__compare", "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__volatileLoad", "(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__volatileStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fence", "(ordering: i64): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__prefetch", "(ptr: Ptr<u8>, rw: i64): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cacheFlush", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cacheInvalidate", "(ptr: Ptr<u8>, n: i64): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__nontemporalStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cacheLineSize", "(): i64", "CPU cache line size in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"pageAlloc", "(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__move", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__set", "(dst: MutPtr<u8>, u8: i64, n: i64): ()", "Fill n bytes at dst with byte (memset)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__compare", "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", "Compare n bytes at a and b (memcmp: <0, 0, >0)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__volatileLoad", "(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__volatileStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_MEM_FUNCTION_COUNT 18
 
@@ -396,33 +396,33 @@ static const char *g_gen_net___copybidirectional_8_errors[] = {
 
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
-    {"__resolveAll", "(host: string): Array<string>", "Resolve every address for a host, RFC 8305 interleaved; empty on failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__connectFd", "(addr: string, port: i64, timeoutMs: i64): NetConn?", "Connect one literal address; null on failure with the code on __lastConnectCode", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__nowMs", "(): i64", "Monotonic clock in milliseconds for net's own deadline arithmetic", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__lastConnectCode", "(): i64", "Portable error code from the most recent __connectFd on this worker; 0 when the last attempt connected", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__listenFd", "(port: i64, backlog: i64, forceV4: bool): NetListener?", "Bind and listen; dual-stack preferred unless forceV4", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readInto", "(conn: NetConn, buffer: Array<u8>, maxlen: i64): i64", "Read once into a caller buffer; 0 is EOF, -1 is a stored error", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__writeBytes", "(conn: NetConn, data: Array<u8>): i64", "Write the whole buffer; returns bytes written, -1 when nothing was sent", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__shutdown", "(conn: NetConn): bool", "Shut down both directions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__close", "(handle: NetConn | NetListener): ()", "Close a connection or listener; idempotent", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fd", "(handle: NetConn | NetListener): i64", "Raw fd of a handle, -1 when closed", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setReadDeadline", "(conn: NetConn, deadline: i64): bool", "Absolute monotonic read deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setWriteDeadline", "(conn: NetConn, deadline: i64): bool", "Absolute monotonic write deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setDeadline", "(conn: NetConn, deadline: i64): bool", "Set both read and write deadlines", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setAcceptDeadline", "(listener: NetListener, deadline: i64): bool", "Absolute monotonic accept deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__lastCode", "(handle: NetConn | NetListener): i64", "Portable error code of the last failed operation; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__lastErrno", "(handle: NetConn | NetListener): i64", "Raw errno captured for the last failed operation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__hasTLS", "(): bool", "Whether TLS support is compiled in", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__tlsHandshake", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__udpBind", "(port: i64, addr: string): NetConn?", "Bind a UDP socket; empty addr binds the wildcard address", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__udpSendTo", "(conn: NetConn, data: Array<u8>, addr: string, port: i64, timeoutMs: i64): i64", "Send one datagram to a literal address; bytes sent or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__udpRecvInto", "(conn: NetConn, buffer: Array<u8>, timeoutMs: i64): i64", "Receive one datagram into a caller buffer; bytes received, or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__resolveAll", "(host: string): Array<string>", "Resolve every address for a host, RFC 8305 interleaved; empty on failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__connectFd", "(addr: string, port: i64, timeoutMs: i64): NetConn?", "Connect one literal address; null on failure with the code on __lastConnectCode", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__nowMs", "(): i64", "Monotonic clock in milliseconds for net's own deadline arithmetic", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__lastConnectCode", "(): i64", "Portable error code from the most recent __connectFd on this worker; 0 when the last attempt connected", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__listenFd", "(port: i64, backlog: i64, forceV4: bool): NetListener?", "Bind and listen; dual-stack preferred unless forceV4", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__readInto", "(conn: NetConn, buffer: Array<u8>, maxlen: i64): i64", "Read once into a caller buffer; 0 is EOF, -1 is a stored error", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__writeBytes", "(conn: NetConn, data: Array<u8>): i64", "Write the whole buffer; returns bytes written, -1 when nothing was sent", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__shutdown", "(conn: NetConn): bool", "Shut down both directions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__close", "(handle: NetConn | NetListener): ()", "Close a connection or listener; idempotent", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fd", "(handle: NetConn | NetListener): i64", "Raw fd of a handle, -1 when closed", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setReadDeadline", "(conn: NetConn, deadline: i64): bool", "Absolute monotonic read deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setWriteDeadline", "(conn: NetConn, deadline: i64): bool", "Absolute monotonic write deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setDeadline", "(conn: NetConn, deadline: i64): bool", "Set both read and write deadlines", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setAcceptDeadline", "(listener: NetListener, deadline: i64): bool", "Absolute monotonic accept deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__lastCode", "(handle: NetConn | NetListener): i64", "Portable error code of the last failed operation; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__lastErrno", "(handle: NetConn | NetListener): i64", "Raw errno captured for the last failed operation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__hasTLS", "(): bool", "Whether TLS support is compiled in", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__tlsHandshake", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__udpBind", "(port: i64, addr: string): NetConn?", "Bind a UDP socket; empty addr binds the wildcard address", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__udpSendTo", "(conn: NetConn, data: Array<u8>, addr: string, port: i64, timeoutMs: i64): i64", "Send one datagram to a literal address; bytes sent or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__udpRecvInto", "(conn: NetConn, buffer: Array<u8>, timeoutMs: i64): i64", "Receive one datagram into a caller buffer; bytes received, or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_NET_FUNCTION_COUNT 27
 
@@ -440,31 +440,31 @@ static const XaBuiltinHandle g_gen_os_handles[] = {
 
 // os module functions
 static const XaBuiltinMember g_gen_os_functions[] = {
-    {"__platform", "(): string", "Host operating system name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__arch", "(): string", "Host CPU architecture name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__getenv", "(name: string): string?", "Get environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__setenv", "(name: string, value: string): bool", "Set environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__unsetenv", "(name: string): bool", "Unset environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__environBlock", "(): Array<string>", "Host environment block as raw NAME=VALUE entries", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__exit", "(code?: i64): ()", "Exit process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__getpid", "(): i64", "Get process ID", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__getcwd", "(): string", "Get current working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__hostname", "(): string", "Get hostname", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__systemUsername", "(): string?", "Get the host-reported current user name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__systemHomedir", "(): string?", "Get user home directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__uid", "(): i64", "Get user ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__gid", "(): i64", "Get group ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cpuCount", "(): i64", "Get number of CPU cores", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__ppid", "(): i64", "Get parent process ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__kill", "(pid: i64, signal?: i64): bool", "Send signal to process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__totalMemory", "(): i64", "Get total system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__freeMemory", "(): i64", "Get available system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__uptime", "(): f64", "Get system uptime in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__clock", "(): f64", "Get process CPU time in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__exec", "(cmd: string): __ExecResult?", "Execute shell command", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__spawn", "(program: string, args: Array<string>): __ExecResult?", "Execute a program without a shell (injection-safe argv)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__platform", "(): string", "Host operating system name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__arch", "(): string", "Host CPU architecture name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__getenv", "(name: string): string?", "Get environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__setenv", "(name: string, value: string): bool", "Set environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__unsetenv", "(name: string): bool", "Unset environment variable", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__environBlock", "(): Array<string>", "Host environment block as raw NAME=VALUE entries", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__exit", "(code?: i64): ()", "Exit process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__getpid", "(): i64", "Get process ID", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__getcwd", "(): string", "Get current working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__hostname", "(): string", "Get hostname", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__systemUsername", "(): string?", "Get the host-reported current user name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__systemHomedir", "(): string?", "Get user home directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__uid", "(): i64", "Get user ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__gid", "(): i64", "Get group ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cpuCount", "(): i64", "Get number of CPU cores", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__ppid", "(): i64", "Get parent process ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__kill", "(pid: i64, signal?: i64): bool", "Send signal to process", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__totalMemory", "(): i64", "Get total system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__freeMemory", "(): i64", "Get available system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__uptime", "(): f64", "Get system uptime in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__clock", "(): f64", "Get process CPU time in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__exec", "(cmd: string): __ExecResult?", "Execute shell command", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__spawn", "(program: string, args: Array<string>): __ExecResult?", "Execute a program without a shell (injection-safe argv)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_OS_FUNCTION_COUNT 25
 
@@ -476,11 +476,11 @@ static const XaBuiltinClass g_gen_regex_classes[] = {
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
-    {"__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__regexMatchNew", "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch", "Allocate a RegexMatch with its four fields set", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_FRESH},
-    {"__regexParseFlags", "(flags: string): i64", "Parse flag spelling for the VM representation adapter", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__regexMatchNew", "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch", "Allocate a RegexMatch with its four fields set", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__regexParseFlags", "(flags: string): i64", "Parse flag spelling for the VM representation adapter", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_REGEX_FUNCTION_COUNT 5
 
@@ -501,11 +501,11 @@ static const XaBuiltinObjectShape g_gen_runtime_object_shapes[] = {
 
 // runtime module functions
 static const XaBuiltinMember g_gen_runtime_functions[] = {
-    {"__stats", "(): __RuntimeStats", "Read the current execution-local reclamation domain counters", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__liveBytes", "(): i64", "Live memory bytes in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__liveObjects", "(): i64", "Live object count in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__sharedLiveBytes", "(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__staticAllocBytes", "(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__stats", "(): __RuntimeStats", "Read the current execution-local reclamation domain counters", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__liveBytes", "(): i64", "Live memory bytes in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__liveObjects", "(): i64", "Live object count in the current execution-local reclamation domain", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sharedLiveBytes", "(): i64", "Live bytes held by SYNC_SHARED system-heap objects (process-wide)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__staticAllocBytes", "(): i64", "Memory allocated into the MODULE_STATIC class/module arena (process-wide)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_RUNTIME_FUNCTION_COUNT 5
 
@@ -520,41 +520,41 @@ static const XaBuiltinClass g_gen_sys_classes[] = {
 
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {
-    {"OsMutex", "(): OsMutex", "Create an OS-domain mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__osMutexNew", "(): OsMutex", "Create an OS-domain mutex for sys module internals", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"OsRwLock", "(): OsRwLock", "Create an OS-domain read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"OsCondvar", "(): OsCondvar", "Create an OS-domain condition variable", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"OsBarrier", "(parties: i64): OsBarrier", "Create a reusable OS-domain barrier", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"OsOnce", "(): OsOnce", "Create an OS-domain once gate", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"cpuCount", "(): i64", "Return the number of CPUs available to OS-thread work", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"sleepMs", "(ms: i64): ()", "Block the current OS thread for at least ms milliseconds", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"pinToCpu", "(cpu: i64): bool", "Best-effort pin of the current OS thread to a CPU index", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__threadLocalId", "(): i64", "Return a stable token for the current OS thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__threadLocalAlive", "(id: i64): bool", "Return whether an internal sys.ThreadLocal OS-thread token is still live", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__onSignal", "(signal: i64, handler: fn(): ()): bool", "Register a VM-hosted safe-point handler for a portable process signal", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__dylibOpen", "(path: Path): i64", "Open a dynamic library and return an opaque handle token, or 0 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__dylibSymbol", "(handle: i64, name: string): Ptr<u8>?", "Resolve a dynamic-library symbol to a raw address, or null on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__dylibClose", "(handle: i64): bool", "Close a dynamic library handle token", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__dylibLastError", "(): string", "Return the platform dynamic-loader error message for the current thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__processSpawn", "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64", "Spawn a process and return an opaque process handle token, or -1 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__processWait", "(id: i64): i64", "Wait for a process handle token and return its exit code, or -1 on failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__processTryWait", "(id: i64): i64?", "Poll a process handle token; return null while running, exit code when finished, or -1 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__processKill", "(id: i64, signal: i64): bool", "Send a portable process signal to a process handle token", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__pipeOpen", "(): Array<i64>?", "Create an anonymous pipe and return read/write endpoint tokens", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__pipeRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read one chunk from a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"OsMutex", "(): OsMutex", "Create an OS-domain mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__osMutexNew", "(): OsMutex", "Create an OS-domain mutex for sys module internals", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"OsRwLock", "(): OsRwLock", "Create an OS-domain read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"OsCondvar", "(): OsCondvar", "Create an OS-domain condition variable", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"OsBarrier", "(parties: i64): OsBarrier", "Create a reusable OS-domain barrier", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"OsOnce", "(): OsOnce", "Create an OS-domain once gate", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"cpuCount", "(): i64", "Return the number of CPUs available to OS-thread work", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"sleepMs", "(ms: i64): ()", "Block the current OS thread for at least ms milliseconds", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"pinToCpu", "(cpu: i64): bool", "Best-effort pin of the current OS thread to a CPU index", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__threadLocalId", "(): i64", "Return a stable token for the current OS thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__threadLocalAlive", "(id: i64): bool", "Return whether an internal sys.ThreadLocal OS-thread token is still live", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__onSignal", "(signal: i64, handler: fn(): ()): bool", "Register a VM-hosted safe-point handler for a portable process signal", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__dylibOpen", "(path: Path): i64", "Open a dynamic library and return an opaque handle token, or 0 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__dylibSymbol", "(handle: i64, name: string): Ptr<u8>?", "Resolve a dynamic-library symbol to a raw address, or null on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__dylibClose", "(handle: i64): bool", "Close a dynamic library handle token", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__dylibLastError", "(): string", "Return the platform dynamic-loader error message for the current thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__processSpawn", "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64", "Spawn a process and return an opaque process handle token, or -1 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__processWait", "(id: i64): i64", "Wait for a process handle token and return its exit code, or -1 on failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__processTryWait", "(id: i64): i64?", "Poll a process handle token; return null while running, exit code when finished, or -1 on failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__processKill", "(id: i64, signal: i64): bool", "Send a portable process signal to a process handle token", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pipeOpen", "(): Array<i64>?", "Create an anonymous pipe and return read/write endpoint tokens", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__pipeRead", "(handle: i64, maxBytes: i64): Array<u8>?", "Read one chunk from a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_SYS_FUNCTION_COUNT 25
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {
-    {"__realtimeNanos", "(): i64", "Nanoseconds since the Unix epoch on the wall clock", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__utcOffsetAt", "(seconds: i64): i64", "Minutes east of UTC at a Unix timestamp in seconds", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__realtimeNanos", "(): i64", "Nanoseconds since the Unix epoch on the wall clock", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__utcOffsetAt", "(seconds: i64): i64", "Minutes east of UTC at a Unix timestamp in seconds", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_TIME_FUNCTION_COUNT 5
 

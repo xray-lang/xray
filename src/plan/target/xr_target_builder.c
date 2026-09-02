@@ -10780,7 +10780,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
              !exact_class_instance && !exact_tagged_ref && !exact_array_value &&
              !exact_string_value && !exact_managed_aggregate && !exact_leaf_aggregate_argument &&
              !exact_leaf_product_argument) ||
-            (!exact_reference &&
+            (!exact_reference && !exact_class_instance &&
              (parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
               (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0)) ||
             /* A String by value is absent from the table below because it does

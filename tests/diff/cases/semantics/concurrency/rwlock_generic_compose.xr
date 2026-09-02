@@ -29,7 +29,7 @@ class RwLock<T> {
         }
     }
 
-    read<U>(body: fn(T) -> U) -> U {
+    ref read<U>(body: fn(T) -> U) -> U {
         this._entry.acquire()
         this._lockCounter()
         this._readers = this._readers + 1
@@ -55,7 +55,7 @@ class RwLock<T> {
         return body(this.value)
     }
 
-    replace(body: fn(T) -> T) -> T {
+    ref replace(body: fn(T) -> T) -> T {
         this._entry.acquire()
         this._gate.acquire()
         this._entry.release()

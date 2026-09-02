@@ -2,12 +2,12 @@ export struct State {
     private value: u64
     private tail: [u8; 4]
 
-    reset(value: u64) {
+    ref reset(value: u64) {
         this.value = value
         this.tail = [1, 2, 3, 4]
     }
 
-    copyFrom(other: State) {
+    ref copyFrom(other: State) {
         this.value = other.value
         this.tail = other.tail
     }

@@ -5,11 +5,11 @@ struct Account {
     private _balance: f64 = 0.0
     name: string
 
-    deposit(amount: f64) {
+    ref deposit(amount: f64) {
         this._balance = this._balance + amount
     }
 
-    withdraw(amount: f64) -> bool {
+    ref withdraw(amount: f64) -> bool {
         if (amount > this._balance) {
             return false
         }
@@ -24,7 +24,7 @@ struct Account {
 struct Counter {
     private _count: i64 = 0
 
-    increment() {
+    ref increment() {
         this._count = this._count + 1
     }
 

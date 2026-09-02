@@ -545,7 +545,7 @@ final class HpackTable {
     count() -> i64 { return len(this.names) }
 
     // Drop the oldest entry. It lives at the end of the arrays.
-    evictOne() {
+    ref evictOne() {
         var last = len(this.names) - 1
         if (last < 0) { return }
         this.size = this.size - this.sizes[last]
@@ -556,7 +556,7 @@ final class HpackTable {
 
     // RFC 7541 Section 4.4: an entry larger than the whole table empties it
     // and is not inserted.
-    add(name: string, value: string) {
+    ref add(name: string, value: string) {
         var entrySize = len(name.bytes()) + len(value.bytes()) + 32
         while (this.size + entrySize > this.maxSize && len(this.names) > 0) {
             this.evictOne()
@@ -571,7 +571,7 @@ final class HpackTable {
         this.size = this.size + entrySize
     }
 
-    clear() {
+    ref clear() {
         this.names.clear()
         this.values.clear()
         this.sizes.clear()
@@ -581,7 +581,7 @@ final class HpackTable {
     // RFC 7541 Section 4.3: shrinking the table evicts until it fits. The C
     // decoder assigned the new maximum and evicted nothing, so a peer could
     // shrink the table and leave it over budget.
-    setMaxSize(newMax: i64) {
+    ref setMaxSize(newMax: i64) {
         this.maxSize = newMax
         while (this.size > this.maxSize && len(this.names) > 0) {
             this.evictOne()
@@ -603,7 +603,7 @@ export final class HeaderList {
 
     count() -> i64 { return len(this.names) }
 
-    add(name: string, value: string) {
+    ref add(name: string, value: string) {
         this.names.push(name)
         this.values.push(value)
     }
@@ -640,11 +640,11 @@ export final class HpackDecoder {
     // Decode one header block. Answers null on any error; RFC 7541 Section
     // 4.2 makes every HPACK failure a connection error, so there is no
     // partial result worth returning.
-    decode(block: Array<u8>) -> HeaderList? {
+    ref decode(block: Array<u8>) -> HeaderList? {
         return this.decodeRange(block, 0, len(block))
     }
 
-    decodeRange(block: Array<u8>, start: i64, limit: i64) -> HeaderList? {
+    ref decodeRange(block: Array<u8>, start: i64, limit: i64) -> HeaderList? {
         var out = HeaderList()
         var pos = start
         while (pos < limit) {
@@ -695,7 +695,7 @@ export final class HpackDecoder {
 
     // A literal's name comes either from an index or from an inline string;
     // its value is always inline.
-    readNameValue(block: Array<u8>, pos: i64, limit: i64, nameIndex: i64) -> _NameValue? {
+    ref readNameValue(block: Array<u8>, pos: i64, limit: i64, nameIndex: i64) -> _NameValue? {
         var at = pos
         var name = ""
         if (nameIndex == 0) {
@@ -766,7 +766,7 @@ export final class HpackEncoder {
     // Append one header. The name is lowercased first: RFC 7540 Section
     // 8.1.2 requires it, and a conformant peer answers a mixed-case name
     // with RST_STREAM(PROTOCOL_ERROR).
-    encodeHeader(out: ref Array<u8>, name: string, value: string) {
+    ref encodeHeader(out: ref Array<u8>, name: string, value: string) {
         var lower = _asciiLower(name)
         var full = this.staticFull(lower, value)
         if (full > 0) {
@@ -786,7 +786,7 @@ export final class HpackEncoder {
         _writeString(ref out, value)
     }
 
-    encode(names: Array<string>, values: Array<string>) -> Array<u8> {
+    ref encode(names: Array<string>, values: Array<string>) -> Array<u8> {
         var out = Array<u8>()
         for (var i = 0; i < len(names); i++) {
             this.encodeHeader(ref out, names[i], values[i])
@@ -910,7 +910,7 @@ export final class Settings {
         return this.values[id]
     }
 
-    set(id: i64, value: i64) {
+    ref set(id: i64, value: i64) {
         if (id < 1 || id > 6) { return }
         this.values[id] = value
     }
@@ -1239,7 +1239,7 @@ final class Exchange {
     // Queue bytes for the next flush. Nothing in this class writes to the
     // socket except `run`, which is what keeps every other method free of a
     // suspension point -- see the note on `run`.
-    queue(bytes: Array<u8>) {
+    ref queue(bytes: Array<u8>) {
         this.outbox.appendFrom(bytes[:])
     }
 
@@ -1247,7 +1247,7 @@ final class Exchange {
 
     // Drop the consumed prefix once it is worth the copy, so a long response
     // does not keep a growing dead prefix alive.
-    compact() {
+    ref compact() {
         if (this.pos == 0) { return }
         if (this.pos < DEFAULT_MAX_FRAME_SIZE && this.pos * 2 < len(this.buf)) { return }
         this.buf = copy(this.buf[this.pos:len(this.buf)])
@@ -1268,7 +1268,7 @@ final class Exchange {
 
     // RFC 7540 Section 3.5: the preface, then this endpoint's SETTINGS,
     // before any other frame.
-    start() {
+    ref start() {
         var opening = PREFACE.copyBytes()
         var settingsFrame = encodeClientSettings(this.settings)
         opening.appendFrom(settingsFrame[:])
@@ -1277,7 +1277,7 @@ final class Exchange {
 
     // Build and send the HEADERS frame. The four pseudo-headers come first
     // and in this order, as RFC 7540 Section 8.1.2.1 requires.
-    sendHeaders(target: Target, method: string, names: Array<string>,
+    ref sendHeaders(target: Target, method: string, names: Array<string>,
                 values: Array<string>, endStream: bool) {
         var block = Array<u8>()
         this.encoder.encodeHeader(ref block, ":method", method)
@@ -1309,7 +1309,7 @@ final class Exchange {
     // state for that call site in a multi-module program and refused with
     // XR_SEM_0019 (selector=pumpOneFrame). Draining and sending are now two
     // methods that never call each other, and `run` alternates between them.
-    pushBody(payload: Array<u8>) {
+    ref pushBody(payload: Array<u8>) {
         if (this.bodySent) { return }
         var total = len(payload)
         if (total == 0) {
@@ -1345,7 +1345,7 @@ final class Exchange {
     }
 
     // Act on exactly one buffered frame. Pure: the bytes are already here.
-    consumeOneFrame() {
+    ref consumeOneFrame() {
         var header = readFrameHeader(this.buf, this.pos)
         if (header == null) {
             throw Http2Error.FramingError { reason: "truncated frame header" }
@@ -1385,7 +1385,7 @@ final class Exchange {
         return (start, end - pad)
     }
 
-    handleFrame(h: FrameHeader, payloadStart: i64) {
+    ref handleFrame(h: FrameHeader, payloadStart: i64) {
         if (h.kind == FRAME_SETTINGS) {
             if (h.hasFlag(FLAG_ACK)) { return }
             var err = applySettingsPayload(ref this.peerSettings, this.buf, payloadStart,
@@ -1474,7 +1474,7 @@ final class Exchange {
     // Give the peer room again once half the window is gone. The C receiver
     // sent two WINDOW_UPDATE frames after every DATA frame no matter how
     // small, which is two extra writes per frame.
-    replenish() {
+    ref replenish() {
         if (this.connWindow < DEFAULT_INITIAL_WINDOW_SIZE / 2) {
             var bump = DEFAULT_INITIAL_WINDOW_SIZE - this.connWindow
             this.queue(encodeWindowUpdate(0, bump))
@@ -1488,7 +1488,7 @@ final class Exchange {
         }
     }
 
-    applyWindowUpdate(h: FrameHeader, payloadStart: i64) {
+    ref applyWindowUpdate(h: FrameHeader, payloadStart: i64) {
         var inc = _readU32(this.buf, payloadStart) & MAX_WINDOW
         if (inc == 0) {
             if (h.streamId == 0) {
@@ -1520,7 +1520,7 @@ final class Exchange {
     // status; the remaining pseudo-headers are not part of the header list a
     // caller sees. The ceilings bound what one response may cost regardless
     // of what the peer sends.
-    acceptHeaders(block: HeaderList) {
+    ref acceptHeaders(block: HeaderList) {
         for (var i = 0; i < block.count(); i++) {
             var name = block.names[i]
             var value = block.values[i]

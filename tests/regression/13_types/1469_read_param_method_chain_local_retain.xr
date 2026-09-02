@@ -5,15 +5,15 @@ class Holder {
         this.items = []
     }
 
-    outer(value: Array<i64>) {
+    ref outer(value: Array<i64>) {
         this.middle(value)
     }
 
-    middle(value: Array<i64>) {
+    ref middle(value: Array<i64>) {
         this.store(value)
     }
 
-    store(value: Array<i64>) {
+    ref store(value: Array<i64>) {
         this.items.push(value)
     }
 }

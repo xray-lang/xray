@@ -82,7 +82,6 @@ tests/diff/cases/basic/range_precedence.xr  # XR_TARGET_1003 call-shaped operati
 tests/diff/cases/basic/range_precedence_arithmetic.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
 tests/diff/cases/basic/ranges.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/basic/strings.xr  # XR_TARGET_1000 product TargetPlan requires one canonical program authority
-tests/diff/cases/limits/struct_literal_over_32.xr  # xi_cgen ICE W4_FORWARD_REF: temporary v72 used before it is defined
 tests/diff/cases/limits/upval_capture_over_254.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
 tests/diff/cases/match/adt_enum_nonpayload_variant.xr  # XR_TARGET_1003 call argument lacks exact caller/callee storage
 tests/diff/cases/match/adt_enum_payload_tostring.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
@@ -209,7 +208,6 @@ tests/diff/cases/semantics/exception/pattern_catch.xr  # XR_TARGET_1001 value re
 tests/diff/cases/semantics/exception/try_catch.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/exception/type_cast_panic_shape.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/exception/type_check_panic_shape.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
-tests/diff/cases/semantics/exception/uncaught_top_level_error.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
 tests/diff/cases/semantics/ffi/cfn_bsearch.xr  # XR_TARGET_1003 direct-local argument contract needs unsupported storage or ownership
 tests/diff/cases/semantics/ffi/cfn_optable.xr  # XR_TARGET_1003 call target has no consumable adapter authority
 tests/diff/cases/semantics/ffi/cfn_tail_thread.xr  # XR_TARGET_1003 call target has no consumable adapter authority

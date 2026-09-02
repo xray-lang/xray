@@ -20,7 +20,7 @@ class Rect extends Shape {
         return this.w * this.h
     }
 
-    score(n: i64) -> i64 {
+    ref score(n: i64) -> i64 {
         var i = 0
         var sum = 0
         while (i < n) {

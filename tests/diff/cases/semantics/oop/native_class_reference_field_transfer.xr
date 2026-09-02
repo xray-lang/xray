@@ -8,7 +8,7 @@ class Packet {
         this.payload = payload
     }
 
-    replace(first: Array<u8>, second: Array<u8>) {
+    ref replace(first: Array<u8>, second: Array<u8>) {
         this.payload = first
         this.payload = second
         this.payload = this.payload

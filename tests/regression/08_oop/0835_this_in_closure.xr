@@ -9,7 +9,7 @@ class Counter {
         this._count = 0
     }
 
-    getIncrementer() -> fn() -> i64 {        return fn() {
+    ref getIncrementer() -> fn() -> i64 {        return fn() {
             this._count = this._count + 1
             return this._count
         }

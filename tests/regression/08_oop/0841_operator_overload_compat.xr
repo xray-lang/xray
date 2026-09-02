@@ -219,7 +219,7 @@ class Matrix {
         return this.data[index]
     }
     
-    operator[]=(index: i64, value: i64) {
+    ref operator[]=(index: i64, value: i64) {
         this.data[index] = value
     }
 }

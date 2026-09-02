@@ -161,7 +161,7 @@ class Box {
         return this.value
     }
 
-    set(value: i64) {        this.value = value
+    ref set(value: i64) {        this.value = value
     }
 }
 

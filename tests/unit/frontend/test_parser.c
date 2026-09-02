@@ -596,6 +596,51 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     teardown();
 }
 
+TEST(parser_receiver_modes_are_explicit_method_contracts) {
+    setup();
+
+    AstNode *class_node = parse_first("class Owner {\n"
+                                      "  inspect() {}\n"
+                                      "  private ref mutate() {}\n"
+                                      "  move consume() {}\n"
+                                      "}");
+    ASSERT_EQ_INT(class_node->type, AST_CLASS_DECL);
+    ASSERT_EQ_INT(class_node->as.class_decl.method_count, 3);
+    ASSERT_EQ_INT(class_node->as.class_decl.methods[0]->as.method_decl.receiver_mode,
+                  XR_PARAM_READ);
+    ASSERT_EQ_INT(class_node->as.class_decl.methods[1]->as.method_decl.receiver_mode, XR_PARAM_REF);
+    ASSERT_EQ_INT(class_node->as.class_decl.methods[2]->as.method_decl.receiver_mode,
+                  XR_PARAM_MOVE);
+
+    AstNode *interface_node =
+        parse_first("interface OwnerContract { ref mutate() -> ()\n move consume() -> () }");
+    ASSERT_EQ_INT(interface_node->type, AST_INTERFACE_DECL);
+    ASSERT_EQ_INT(interface_node->as.interface_decl.method_count, 2);
+    ASSERT_EQ_INT(interface_node->as.interface_decl.methods[0]->as.interface_method.receiver_mode,
+                  XR_PARAM_REF);
+    ASSERT_EQ_INT(interface_node->as.interface_decl.methods[1]->as.interface_method.receiver_mode,
+                  XR_PARAM_MOVE);
+
+    AstNode *property_node = parse_first("class Meter {\n"
+                                         "  value: i64 {\n"
+                                         "    fn() -> i64 { return 0 }\n"
+                                         "    fn(v: i64) {}\n"
+                                         "  }\n"
+                                         "}");
+    ASSERT_EQ_INT(property_node->as.class_decl.method_count, 2);
+    ASSERT_EQ_INT(property_node->as.class_decl.methods[0]->as.method_decl.receiver_mode,
+                  XR_PARAM_READ);
+    ASSERT_EQ_INT(property_node->as.class_decl.methods[1]->as.method_decl.receiver_mode,
+                  XR_PARAM_REF);
+
+    ASSERT_NULL(xr_parse(X_session, "class Bad { ref field: i64 }"));
+    ASSERT_NULL(xr_parse(X_session, "class Bad { ref static method() {} }"));
+    ASSERT_NULL(xr_parse(X_session, "class Bad { ref constructor() {} }"));
+    ASSERT_NULL(xr_parse(X_session, "interface Bad { ref property: i64 }"));
+
+    teardown();
+}
+
 TEST(parser_function_type_param_modes) {
     setup();
 
@@ -1419,6 +1464,7 @@ int main(void) {
     RUN_TEST(parser_extern_block_rejects_layout_declarations);
     RUN_TEST(parser_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_oop_parameter_modes_share_annotation_parser);
+    RUN_TEST(parser_receiver_modes_are_explicit_method_contracts);
     RUN_TEST(parser_function_type_param_modes);
     RUN_TEST(parser_function_no_params);
     RUN_TEST(parser_return_stmt);

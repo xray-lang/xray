@@ -5,7 +5,7 @@ class Counter {
         this.value = value
     }
 
-    bump() -> i64 {
+    ref bump() -> i64 {
         this.value = this.value + 1
         return this.value
     }

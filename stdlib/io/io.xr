@@ -92,7 +92,7 @@ export final class File {
         return __fileFlush(this._handle)
     }
 
-    close() -> bool {
+    ref close() -> bool {
         if (!this._open) { return true }
         var ok = true
         if (this._owned) { ok = __fileClose(this._handle) }
@@ -123,7 +123,7 @@ export final class BufReader {
         return BufReader(file!, chunkSize)
     }
 
-    private fill() -> bool {
+    private ref fill() -> bool {
         if (this._eof) { return false }
         var chunk = this._file.read(this._chunkSize)
         if (chunk == null || len(chunk!) == 0) {
@@ -137,7 +137,7 @@ export final class BufReader {
         return true
     }
 
-    readLine() -> string? {
+    ref readLine() -> string? {
         var out = Array<u8>()
         while (true) {
             if (this._cursor >= len(this._buffer) && !this.fill()) {
@@ -155,7 +155,7 @@ export final class BufReader {
         return null
     }
 
-    close() -> bool {
+    ref close() -> bool {
         this._eof = true
         return this._file.close()
     }
@@ -173,7 +173,7 @@ export final class LineIterator {
         this.advance()
     }
 
-    private advance() {
+    private ref advance() {
         this._next = this._reader.readLine()
         if (this._next == null) {
             this._done = true
@@ -183,7 +183,7 @@ export final class LineIterator {
 
     hasNext() -> bool { return !this._done }
 
-    next() -> string? {
+    ref next() -> string? {
         if (this._done) { return null }
         var value = this._next
         this.advance()
@@ -269,14 +269,14 @@ export final class BufWriter {
         this._buffer.reserve(capacity)
     }
 
-    write(data: Slice<u8>) -> i64 {
+    ref write(data: Slice<u8>) -> i64 {
         for (var i = 0; i < len(data); i++) { this._buffer.push(data[i]) }
         return len(data)
     }
 
-    writeBytes(data: Array<u8>) -> i64 { return this.write(data[:]) }
+    ref writeBytes(data: Array<u8>) -> i64 { return this.write(data[:]) }
 
-    writeString(data: string) -> i64 {
+    ref writeString(data: string) -> i64 {
         var bytes = data.copyBytes()
         return this.write(bytes[:])
     }
@@ -285,7 +285,7 @@ export final class BufWriter {
 
     bytes() -> Array<u8> { return this._buffer }
 
-    reset() { this._buffer.clear() }
+    ref reset() { this._buffer.clear() }
 
     size() -> i64 { return len(this._buffer) }
 }

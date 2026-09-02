@@ -11,7 +11,7 @@ class Once {
         this._sem = Semaphore(1)
         this._done = false
     }
-    call(body: fn()) {
+    ref call(body: fn()) {
         this._sem.acquire()
         defer { this._sem.release() }
         if (!this._done) {

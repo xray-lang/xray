@@ -32,7 +32,7 @@ class Button {
         this.clicks = 0
     }
 
-    render() -> i64 {
+    ref render() -> i64 {
         this.clicks = this.clicks + 1
         return this.clicks
     }
@@ -59,7 +59,7 @@ class Widget {
         this.clicks = 0
     }
 
-    render() -> i64 {
+    ref render() -> i64 {
         this.clicks = this.clicks + 1
         return this.clicks
     }
@@ -91,7 +91,7 @@ class Owner {
         this.value = 0
     }
 
-    bump() -> i64 {
+    ref bump() -> i64 {
         this.value = this.value + 1
         return this.value
     }

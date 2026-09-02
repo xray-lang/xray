@@ -341,7 +341,7 @@ struct XaSymbol {
     bool is_override;           // analyzer-inferred exact-signature method override
     bool is_imported;           // selective import binding; kind remains the exported semantic kind
     bool is_builtin;            // built-in type member (Array.push, etc.)
-    bool mutates_receiver;      // method body writes through `this`
+    XrParamMode receiver_mode;  // declaration-owned method receiver contract
     bool has_declared_default;  // field declaration carries an initializer expression
     XrParamMode passing_mode;   // read / ref / move parameter contract
     uint32_t borrowed_root_symbol_id;  // local alias root for read/ref parameter borrowing

@@ -7,7 +7,7 @@ class Registry {
         this.seen = seen
     }
 
-    mark(value: i64) -> i64 {
+    ref mark(value: i64) -> i64 {
         this.scores.set(1, value)
         this.scores[2] = value
         this.seen.add(1)

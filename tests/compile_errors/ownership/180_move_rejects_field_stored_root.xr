@@ -2,12 +2,12 @@
 // container store does.
 class Node {
     v: i64
-    init(v: i64) { this.v = v }
+    ref init(v: i64) { this.v = v }
 }
 
 class Holder {
     n: Node?
-    init() { this.n = null }
+    ref init() { this.n = null }
 }
 
 fn consume(n: move Node) -> i64 {

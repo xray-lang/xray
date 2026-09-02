@@ -94,6 +94,7 @@ typedef struct XaInferContext {
     struct XrClassInfo *current_class_info;
     const char *current_class_name;
     bool current_method_is_constructor;
+    XrParamMode current_receiver_mode;
 
     // Collected return types (for inference)
     XrType **return_types;

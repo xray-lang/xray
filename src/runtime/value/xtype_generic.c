@@ -160,6 +160,7 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
                 xr_type_new_function(X, new_params, pc, ret, type->function.is_variadic);
             if (result) {
                 result->function.min_params = type->function.min_params;
+                result->function.receiver_mode = type->function.receiver_mode;
                 result->function.view_return_source = type->function.view_return_source;
                 result->function.view_return_param = type->function.view_return_param;
                 result->function.view_return_complete = type->function.view_return_complete;

@@ -56,21 +56,21 @@ export class Pipe {
         return __pipeWrite(this._writeHandle, data)
     }
 
-    closeRead() -> bool {
+    ref closeRead() -> bool {
         if (!this._readOpen) { return true }
         var ok = __pipeClose(this._readHandle)
         this._readOpen = false
         return ok
     }
 
-    closeWrite() -> bool {
+    ref closeWrite() -> bool {
         if (!this._writeOpen) { return true }
         var ok = __pipeClose(this._writeHandle)
         this._writeOpen = false
         return ok
     }
 
-    close() -> bool {
+    ref close() -> bool {
         var r = this.closeRead()
         var w = this.closeWrite()
         return r && w
@@ -113,14 +113,14 @@ export class Process {
 
     id: i64 { fn() { return this._id } }
 
-    wait() -> i64 {
+    ref wait() -> i64 {
         if (!this._open) { return -1 }
         var code = __processWait(this._id)
         this._open = false
         return code
     }
 
-    tryWait() -> i64? {
+    ref tryWait() -> i64? {
         if (!this._open) { return -1 }
         var code = __processTryWait(this._id)
         if (code != null) {
@@ -201,7 +201,7 @@ export class ThreadLocal<T> {
         this._init = init
     }
 
-    get() -> T {
+    ref get() -> T {
         var key = __threadLocalId()
         {
             this._lock.lock()
@@ -243,7 +243,7 @@ export class ThreadLocal<T> {
         }
     }
 
-    set(value: T) {
+    ref set(value: T) {
         var key = __threadLocalId()
         this._lock.lock()
         defer { this._lock.unlock() }
@@ -271,7 +271,7 @@ export class Dylib {
         return __dylibSymbol(this._handle, name)
     }
 
-    close() -> bool {
+    ref close() -> bool {
         if (!this._open) { return true }
         var ok = __dylibClose(this._handle)
         this._handle = 0

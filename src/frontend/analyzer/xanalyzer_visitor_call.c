@@ -4482,8 +4482,9 @@ static void xa_invalidate_narrowing_for_ref_arg(XaInferContext *ctx, AstNode *ar
 
 static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
                                          const char **reason) {
-    while (arg_node && arg_node->type == AST_GROUPING)
-        arg_node = arg_node->as.grouping;
+    while (arg_node && (arg_node->type == AST_GROUPING || arg_node->type == AST_FORCE_UNWRAP))
+        arg_node =
+            arg_node->type == AST_GROUPING ? arg_node->as.grouping : arg_node->as.unary.operand;
     if (!arg_node) {
         if (reason)
             *reason = "empty argument";
@@ -4514,6 +4515,90 @@ static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
         return false;
     }
     return true;
+}
+
+static bool xa_type_allows_interior_mutation(XaInferContext *ctx, XrType *type);
+
+static bool xa_method_receiver_is_mut_pointer_deref(XaInferContext *ctx, AstNode *receiver) {
+    AstNode *value = xa_call_unwrap_grouping(receiver);
+    if (!ctx || !value || value->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &value->as.call_expr;
+    if (call->arg_count != 0 || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *member = &call->callee->as.member_access;
+    if (!member->name || strcmp(member->name, "deref") != 0 || !member->object)
+        return false;
+    XrType *pointer_type = xa_analyzer_get_node_type(ctx->analyzer, member->object);
+    return pointer_type && XR_TYPE_IS_POINTER(pointer_type) && pointer_type->ptr_is_mut;
+}
+
+static bool xa_method_receiver_is_mutable_place(XaInferContext *ctx, AstNode *receiver,
+                                                XrType *receiver_type, const char **reason) {
+    /* Reference objects and capability-backed handles carry mutation through
+     * their object identity, not through the storage slot that held the
+     * reference.  The existing const/shared-provenance checks below enforce
+     * their write authority.  Only value receivers require an actual place. */
+    if (!receiver_type || !receiver_type->is_value_type ||
+        xa_type_allows_interior_mutation(ctx, receiver_type))
+        return true;
+    AstNode *value = xa_call_unwrap_grouping(receiver);
+    if (value && value->type == AST_THIS_EXPR)
+        return true;
+    if (xa_method_receiver_is_mut_pointer_deref(ctx, value))
+        return true;
+    return xa_call_arg_is_mutable_place(ctx, value, reason);
+}
+
+static void xa_check_method_receiver_authorization(XaInferContext *ctx, AstNode *call_node,
+                                                   AstNode *receiver, XrType *receiver_type,
+                                                   const char *method_name,
+                                                   XrParamMode receiver_mode) {
+    if (!ctx || !ctx->analyzer || !call_node || !receiver || receiver_mode == XR_PARAM_READ)
+        return;
+
+    xa_check_receiver_write_authorization(ctx, call_node, receiver,
+                                          receiver_mode == XR_PARAM_MOVE ? "consume the receiver"
+                                                                         : "call a REF method");
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = receiver->line ? receiver->line : call_node->line,
+                      .column = receiver->column ? receiver->column : call_node->column};
+    if (receiver_mode == XR_PARAM_REF) {
+        const char *reason = NULL;
+        if (!xa_method_receiver_is_mutable_place(ctx, receiver, receiver_type, &reason)) {
+            char message[256];
+            snprintf(message, sizeof(message),
+                     "REF receiver for method '%s' must be an addressable mutable place%s%s",
+                     method_name ? method_name : "?", reason ? ": " : "", reason ? reason : "");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       message, &loc);
+        }
+        return;
+    }
+
+    if (receiver_type &&
+        (receiver_type->is_value_type || receiver_type->kind == XR_KIND_ENUM ||
+         receiver_type->kind == XR_KIND_FIXED_ARRAY || XR_TYPE_IS_TUPLE(receiver_type))) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "MOVE receiver requires an ownership root, not a copy value",
+                                   &loc);
+        return;
+    }
+
+    AstNode *source = xa_call_unwrap_grouping(receiver);
+    if (source && source->type == AST_MOVE_EXPR)
+        return;
+    if (xa_expr_creates_fresh_root(ctx, source))
+        return;
+
+    char message[256];
+    snprintf(message, sizeof(message),
+             "OWN-E-RECEIVER-MOVE: MOVE receiver for method '%s' must consume an existing owner "
+             "with `move`, or use copy(...) or a fresh value",
+             method_name ? method_name : "?");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, message,
+                               &loc);
 }
 
 static const XaMemoryRootEffect *xa_call_memory_root_effect(const XaMemoryEffectSummary *summary,
@@ -5312,7 +5397,7 @@ static XaSymbol *xa_default_arg_import_export_symbol(XaDefaultArgBindCtx *bind,
     sym->is_protected = export_sym->is_protected;
     sym->is_override = export_sym->is_override;
     sym->is_builtin = export_sym->is_builtin;
-    sym->mutates_receiver = export_sym->mutates_receiver;
+    sym->receiver_mode = export_sym->receiver_mode;
     sym->passing_mode = export_sym->passing_mode;
     sym->alias_type = export_sym->alias_type;
     xa_scope_add_symbol(scope, sym);
@@ -5678,13 +5763,28 @@ static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *cal
     xa_check_boundary_transfer_arg(ctx, call_node, arg_node, arg_type, "channel send argument");
 }
 
+static const char *xa_receiver_nominal_name(const XrType *receiver_type) {
+    if (!receiver_type)
+        return NULL;
+    if (receiver_type->kind == XR_KIND_CLASS || receiver_type->kind == XR_KIND_INSTANCE ||
+        receiver_type->kind == XR_KIND_INTERFACE)
+        return receiver_type->instance.class_name;
+    return NULL;
+}
+
+static XrClassInfo *xa_receiver_nominal_info(const XrType *receiver_type) {
+    if (!receiver_type ||
+        (receiver_type->kind != XR_KIND_INSTANCE && receiver_type->kind != XR_KIND_INTERFACE))
+        return NULL;
+    return receiver_type->instance.class_ref;
+}
+
 static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrType *receiver_type,
                                                       const char *method_name) {
     if (!ctx || !receiver_type || !method_name)
         return NULL;
-    const char *class_name = xr_type_get_class_name(receiver_type);
-    XrClassInfo *class_info =
-        XR_TYPE_IS_INSTANCE(receiver_type) ? receiver_type->instance.class_ref : NULL;
+    const char *class_name = xa_receiver_nominal_name(receiver_type);
+    XrClassInfo *class_info = xa_receiver_nominal_info(receiver_type);
     XaSymbolLinks *class_links = NULL;
     if (class_name) {
         XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, class_name);
@@ -5702,35 +5802,29 @@ static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrTyp
     return method_links;
 }
 
-static bool xa_call_mutates_receiver(XaInferContext *ctx, XrType *receiver_type,
-                                     const char *method_name) {
+static XrParamMode xa_call_receiver_mode(XaInferContext *ctx, XrType *receiver_type,
+                                         const char *method_name) {
     if (!ctx || !receiver_type || !method_name)
-        return false;
+        return XR_PARAM_READ;
 
     if (XR_TYPE_IS_STRING(receiver_type))
-        return false;
+        return XR_PARAM_READ;
 
-    /* The sealed builtin registry is the canonical effect contract for
-     * language-provided receiver methods.  Builtin classes also have class
-     * metadata, but those symbols do not necessarily carry the inferred
-     * mutates_receiver bit; consult the registry before user-class metadata. */
+    /* The sealed builtin registry is the canonical receiver contract for
+     * language-provided methods. Consult it before user-class metadata because
+     * builtin classes can also expose synthetic class symbols. */
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
-        if (spec->effect == XA_BUILTIN_EFFECT_MUTATES_RECEIVER &&
-            xa_builtin_receiver_matches_type(receiver_type, spec->receiver) &&
+        if (xa_builtin_receiver_matches_type(receiver_type, spec->receiver) &&
             strcmp(spec->source_name, method_name) == 0)
-            return true;
+            return spec->receiver_mode;
     }
-    if (xa_builtin_member_mutates_receiver(receiver_type, method_name))
-        return true;
+    XrParamMode builtin_mode = xa_builtin_member_receiver_mode(receiver_type, method_name);
+    if (builtin_mode != XR_PARAM_READ)
+        return builtin_mode;
 
-    const char *class_name = xr_type_get_class_name(receiver_type);
-    XaBuiltinMethodMemoryEffectSet named_effects = XA_BUILTIN_MEMORY_STABLE_READ;
-    if (xa_builtin_named_receiver_memory_effect(class_name, method_name, &named_effects) &&
-        (named_effects & XA_BUILTIN_MEMORY_WRITE) != 0)
-        return true;
-    XrClassInfo *class_info =
-        XR_TYPE_IS_INSTANCE(receiver_type) ? receiver_type->instance.class_ref : NULL;
+    const char *class_name = xa_receiver_nominal_name(receiver_type);
+    XrClassInfo *class_info = xa_receiver_nominal_info(receiver_type);
     if (class_name) {
         XaSymbol *class_sym = xa_lookup_visible_class_symbol(ctx, class_name);
         XaSymbolLinks *class_links =
@@ -5739,11 +5833,12 @@ static bool xa_call_mutates_receiver(XaInferContext *ctx, XrType *receiver_type,
             class_info = class_links->class_info;
         if (class_info) {
             XaSymbol *method_sym = xa_class_info_lookup_instance_member(class_info, method_name);
-            return method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->mutates_receiver;
+            return method_sym && method_sym->kind == XA_SYM_METHOD ? method_sym->receiver_mode
+                                                                   : XR_PARAM_READ;
         }
     }
 
-    return false;
+    return XR_PARAM_READ;
 }
 
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base) {
@@ -6831,6 +6926,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
         if (fn_links)
             xa_ensure_function_return_ownership_prepass(ctx, fn_links);
+        XrParamMode receiver_mode = xa_call_receiver_mode(ctx, callee_obj_type, method_name);
+        xa_check_method_receiver_authorization(ctx, node, ma->object, callee_obj_type, method_name,
+                                               receiver_mode);
         // An instance method's links only become available here, after the
         // receiver has been inferred — run the type-argument checks the block
         // above could not reach, for both `obj.method<T>()` and the inferred
@@ -6863,7 +6961,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
         }
 
-        if (method_name && xa_call_mutates_receiver(ctx, callee_obj_type, method_name) &&
+        if (method_name && receiver_mode != XR_PARAM_READ &&
             xa_type_can_own_span_view(callee_obj_type)) {
             char owner_path[512] = {0};
             XaSymbol *owner = xa_span_borrow_owner_path_for_owner_expr(ctx, ma->object, owner_path,
@@ -6891,11 +6989,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
 
         XaSymbol *read_param = xa_read_param_symbol_for_expr(ctx, ma->object);
-        if (read_param && method_name) {
-            bool call_mutates_receiver =
-                xa_call_mutates_receiver(ctx, callee_obj_type, method_name);
+        if (read_param && method_name &&
+            (!read_param->name || strcmp(read_param->name, "this") != 0)) {
+            bool call_requires_writable_receiver = receiver_mode != XR_PARAM_READ;
             bool interior_mutation = xa_type_allows_interior_mutation(ctx, callee_obj_type);
-            if (call_mutates_receiver && !interior_mutation) {
+            if (call_requires_writable_receiver && !interior_mutation) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
@@ -6908,7 +7006,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
         }
         if (method_name && callee_obj_type && !XR_TYPE_IS_SLICE(callee_obj_type) &&
-            xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
+            receiver_mode != XR_PARAM_READ) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
             if (root)
                 root->links.value_mutated = true;
@@ -6934,7 +7032,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
         }
         if (method_name && callee_obj_type && XR_TYPE_IS_SLICE(callee_obj_type) &&
-            xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
+            receiver_mode != XR_PARAM_READ) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
             if (root && (root->is_const || root->is_readonly_binding ||
                          xa_symbol_has_shared_provenance(root))) {

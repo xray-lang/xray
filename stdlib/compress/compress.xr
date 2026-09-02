@@ -218,7 +218,7 @@ class BitWriter {
         this.bitCount = 0
     }
 
-    writeBits(value: i64, count: i64) {
+    ref writeBits(value: i64, count: i64) {
         this.bitBuf = this.bitBuf | ((value & ((1 << count) - 1)) << this.bitCount)
         this.bitCount = this.bitCount + count
         while (this.bitCount >= 8) {
@@ -229,7 +229,7 @@ class BitWriter {
     }
 
     // A canonical Huffman code is transmitted most significant bit first.
-    writeCode(code: i64, count: i64) {
+    ref writeCode(code: i64, count: i64) {
         var reversed = 0
         var i = 0
         while (i < count) {
@@ -239,7 +239,7 @@ class BitWriter {
         this.writeBits(reversed, count)
     }
 
-    alignByte() {
+    ref alignByte() {
         if (this.bitCount > 0) {
             this.out.push((this.bitBuf & 255) as u8)
             this.bitBuf = 0
@@ -247,7 +247,7 @@ class BitWriter {
         }
     }
 
-    finish() -> Array<u8> {
+    move finish() -> Array<u8> {
         this.alignByte()
         return this.out
     }
@@ -539,7 +539,7 @@ fn deflateFixed(src: Slice<u8>, level: i64) -> Array<u8> {
     }
 
     w.writeCode(litCodes[END_OF_BLOCK], litLengths[END_OF_BLOCK])
-    return w.finish()
+    return (move w).finish()
 }
 
 fn deflateRaw(src: Slice<u8>, level: i64) -> Array<u8> {
@@ -588,7 +588,7 @@ class Inflater {
 
     // Reads count bits, low bit first. Running past the end is a malformed
     // stream, not a zero fill.
-    readBits(count: i64) -> i64 {
+    ref readBits(count: i64) -> i64 {
         while (this.bitCount < count) {
             if (this.pos >= len(this.src)) { throw CompressionError.InvalidData }
             this.bitBuf = this.bitBuf | ((this.src[this.pos] as i64) << this.bitCount)
@@ -603,7 +603,7 @@ class Inflater {
 
     // Whatever is left in the bit buffer belongs to a byte already consumed, so
     // discarding it leaves pos on the next whole byte.
-    alignByte() {
+    ref alignByte() {
         this.bitBuf = 0
         this.bitCount = 0
     }
@@ -611,7 +611,7 @@ class Inflater {
     // Walks one bit at a time, comparing the code so far against the first code
     // of that length -- the shape puff.c uses, because it needs no table beyond
     // the two vectors buildHuffman produces.
-    decodeSymbol(tree: Huffman) -> i64 {
+    ref decodeSymbol(tree: Huffman) -> i64 {
         var code = 0
         var first = 0
         var index = 0
@@ -628,7 +628,7 @@ class Inflater {
 
     // A stored block restates its length twice, the second time complemented,
     // so a stream that lost its alignment is caught before any bytes are copied.
-    storedBlock() {
+    ref storedBlock() {
         this.alignByte()
         var total = len(this.src)
         if (this.pos + 4 > total) { throw CompressionError.InvalidData }
@@ -644,7 +644,7 @@ class Inflater {
     // The code lengths of a dynamic block are themselves Huffman coded, with
     // three symbols above the literal ones that repeat: 16 repeats the previous
     // length, 17 and 18 repeat zero over two different ranges.
-    readCodeLengths(tree: Huffman, count: i64, lengths: ref Array<i64>) {
+    ref readCodeLengths(tree: Huffman, count: i64, lengths: ref Array<i64>) {
         var i = 0
         while (i < count) {
             var symbol = this.decodeSymbol(tree)
@@ -685,7 +685,7 @@ class Inflater {
     // applied with repeatFrom, whose overlapping semantics are exactly the ones
     // deflate defines: a distance shorter than the length repeats what it just
     // wrote, byte by byte.
-    codedBlock(litTree: Huffman, distTree: Huffman) {
+    ref codedBlock(litTree: Huffman, distTree: Huffman) {
         while (true) {
             var symbol = this.decodeSymbol(litTree)
             if (symbol < 256) {
@@ -713,7 +713,7 @@ class Inflater {
         }
     }
 
-    dynamicBlock() {
+    ref dynamicBlock() {
         var hlit = this.readBits(5) + 257
         var hdist = this.readBits(5) + 1
         var hclen = this.readBits(4) + 4
@@ -736,7 +736,7 @@ class Inflater {
         this.codedBlock(buildHuffman(litLengths, hlit), buildHuffman(distLengths, hdist))
     }
 
-    run() -> Array<u8> {
+    move run() -> Array<u8> {
         while (true) {
             var isFinal = this.readBits(1)
             var blockType = this.readBits(2)
@@ -760,7 +760,7 @@ class Inflater {
 fn inflateRaw(src: Slice<u8>) -> Array<u8> {
     var owned = copy(src[0:len(src)])
     var decoder = Inflater(owned)
-    return decoder.run()
+    return (move decoder).run()
 }
 // ── Container framing ───────────────────────────────────────────────────────
 //

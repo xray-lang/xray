@@ -685,6 +685,7 @@ def load_def_type_methods():
             'signature': entry.signature,
             'doc': entry.doc,
             'allocation': getattr(entry, 'allocation', ''),
+            'receiver_mode': getattr(entry, 'receiver_mode', 'read'),
         })
     return types
 
@@ -1013,6 +1014,19 @@ def return_ownership_contract_init(member):
     return 'XA_BUILTIN_RETURN_UNKNOWN'
 
 
+def receiver_mode_contract_init(member):
+    value = (member.get('receiver_mode') or 'read').strip()
+    modes = {
+        'read': 'XR_PARAM_READ',
+        'ref': 'XR_PARAM_REF',
+        'move': 'XR_PARAM_MOVE',
+    }
+    try:
+        return modes[value]
+    except KeyError as exc:
+        raise SystemExit(f"unsupported builtin receiver mode: {value}") from exc
+
+
 def generate_header(type_results, module_results):
     """Generate the embedded header file content."""
     lines = [
@@ -1045,11 +1059,12 @@ def generate_header(type_results, module_results):
             for m in methods:
                 is_method = "true" if '(' in m['signature'] else "false"
                 allocation = allocation_contract_init(m)
+                receiver_mode = receiver_mode_contract_init(m)
                 return_ownership = return_ownership_contract_init(m)
                 lines.append(
                     f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                     f'"{c_string(m["doc"])}", {is_method}, false, false, false, false, '
-                    f'{{0}}, {allocation}, false, {return_ownership}}},')
+                    f'{{0}}, {allocation}, {receiver_mode}, {return_ownership}}},')
             lines.append("};")
             lines.append(f"#define GEN_{type_name.upper()}_MEMBER_COUNT {len(methods)}")
             lines.append("")
@@ -1197,13 +1212,14 @@ def generate_header(type_results, module_results):
                     else:
                         effect_init = effect_contract_init(m)
                     allocation = allocation_contract_init(m)
+                    receiver_mode = receiver_mode_contract_init(m)
                     return_ownership = return_ownership_contract_init(m)
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                         f'"{c_string(m["doc"])}", {is_method}, false, '
                         f'{"true" if m.get("is_internal") else "false"}, '
                         f'{"true" if m.get("semantic_intrinsic") else "false"}, '
-                        f'{is_yieldable}, {effect_init}, {allocation}, false, '
+                        f'{is_yieldable}, {effect_init}, {allocation}, {receiver_mode}, '
                         f'{return_ownership}}},')
                 if constant_entries:
                     lines.append(f"    // Module constants (is_method=false)")
@@ -1211,7 +1227,7 @@ def generate_header(type_results, module_results):
                         lines.append(
                             f'    {{"{c_string(c["name"])}", "{c_string(c["signature"])}", '
                             f'"{c_string(c["doc"])}", false, false, false, false, false, '
-                            f'{{0}}, XA_ALLOCATION_CONTRACT_MISSING, false, '
+                            f'{{0}}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, '
                             f'XA_BUILTIN_RETURN_UNKNOWN}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_macro}_FUNCTION_COUNT {total}")

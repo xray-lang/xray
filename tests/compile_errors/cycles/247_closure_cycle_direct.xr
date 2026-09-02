@@ -17,7 +17,7 @@ class Button {
         this.clicks = 0
     }
 
-    render() -> i64 {
+    ref render() -> i64 {
         this.clicks = this.clicks + 1
         return this.clicks
     }

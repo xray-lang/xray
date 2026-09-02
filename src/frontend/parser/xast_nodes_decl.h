@@ -106,6 +106,7 @@ typedef struct InterfaceMethodNode {
     int attr_count;
     XrGenericParam **type_params;  // Method-local generic type parameters (with constraints)
     int type_param_count;
+    XrParamMode receiver_mode;  // read / ref / move receiver contract
 } InterfaceMethodNode;
 
 // Property signature inside an interface body, e.g. `length: int` or

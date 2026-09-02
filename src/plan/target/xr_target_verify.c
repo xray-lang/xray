@@ -7043,7 +7043,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                      argument_adt_enum || argument_class_instance || argument_tagged_ref ||
                      argument_container_value || argument_leaf_aggregate ||
                      argument_managed_aggregate) &&
-                    (argument_reference ||
+                    (argument_reference || argument_class_instance ||
                      (parameter->mode == XR_PARAM_READ && operand->access == XR_CALL_ARG_PLAIN &&
                       (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0)) &&
                     /* A String by value is absent from this table because its

@@ -12,7 +12,7 @@
 class Counter {
     n: i64 = 7
     get() -> i64 { return this.n }
-    bump(d: i64) -> i64 { this.n = this.n + d
+    ref bump(d: i64) -> i64 { this.n = this.n + d
                           return this.n }
 }
 

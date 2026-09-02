@@ -6,7 +6,7 @@ class ByteMapBag {
         this.values = values
     }
 
-    fill(n: i64) -> i64 {
+    ref fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
             this.values.set(i as u8, (i * 5 + 7) as i32)
