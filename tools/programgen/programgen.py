@@ -94,6 +94,10 @@ PROJECTION_KINDS = {
     "variant-construct": "XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT",
     "variant-test": "XR_PROGRAM_XI_PROJECTION_VARIANT_TEST",
     "variant-project": "XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT",
+    "owner-move": "XR_PROGRAM_XI_PROJECTION_OWNER_MOVE",
+    "place-local": "XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL",
+    "place-load": "XR_PROGRAM_XI_PROJECTION_PLACE_LOAD",
+    "place-store": "XR_PROGRAM_XI_PROJECTION_PLACE_STORE",
 }
 CORE_TYPE_NAMES = {
     "any": "XR_PROGRAM_XI_ANY_RESULT_TYPE",
@@ -322,6 +326,10 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_VARIANT_CONSTRUCT = 8,",
         "    XR_PROGRAM_XI_PROJECTION_VARIANT_TEST = 9,",
         "    XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT = 10,",
+        "    XR_PROGRAM_XI_PROJECTION_OWNER_MOVE = 11,",
+        "    XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL = 12,",
+        "    XR_PROGRAM_XI_PROJECTION_PLACE_LOAD = 13,",
+        "    XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 14,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef struct XrProgramXiProjection {",

@@ -84,6 +84,11 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
+        case XR_CORE_OP_CORE_OWNER_MOVE:
+        case XR_CORE_OP_CORE_OWNER_DROP:
+        case XR_CORE_OP_CORE_PLACE_LOCAL:
+        case XR_CORE_OP_CORE_PLACE_LOAD:
+        case XR_CORE_OP_CORE_PLACE_STORE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
         case XR_CORE_OP_CORE_TRAP:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&

@@ -39,6 +39,11 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_VARIANT_CONSTRUCT:
         case XR_CORE_OP_CORE_VARIANT_TEST:
         case XR_CORE_OP_CORE_VARIANT_PROJECT:
+        case XR_CORE_OP_CORE_OWNER_MOVE:
+        case XR_CORE_OP_CORE_OWNER_DROP:
+        case XR_CORE_OP_CORE_PLACE_LOCAL:
+        case XR_CORE_OP_CORE_PLACE_LOAD:
+        case XR_CORE_OP_CORE_PLACE_STORE:
             return true;
         default:
             return false;

@@ -848,9 +848,29 @@ static bool verify_successor_arguments(VerifyContext *context, const XrValidated
     return true;
 }
 
+static bool operation_consumes_operand(const VerifyContext *context,
+                                       const XrValidatedInstruction *instruction,
+                                       uint32_t operand_index) {
+    if ((instruction->operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
+         instruction->operation_id == XR_CORE_OP_CORE_OWNER_DROP ||
+         instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL) &&
+        operand_index == 0u)
+        return true;
+    if (instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE && operand_index == 1u)
+        return true;
+    if (instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+        instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
+        instruction->immediate.function_id >= context->program->function_count)
+        return false;
+    const XrValidatedFunction *callee =
+        &context->program->functions[instruction->immediate.function_id];
+    return operand_index < callee->parameter_count &&
+           callee->parameter_modes[operand_index] == XR_PARAM_MOVE;
+}
+
 static bool verify_operation(VerifyContext *context, uint32_t function_id, uint32_t block_id,
                              uint32_t instruction_id, uint32_t *local_effects,
-                             uint32_t *local_capabilities) {
+                             uint32_t *local_capabilities, bool *consumed) {
     XrValidatedFunction *function = &context->program->functions[function_id];
     XrValidatedInstruction *instruction = &function->blocks[block_id].instructions[instruction_id];
     XrProgramSemanticLocation location = {
@@ -867,14 +887,20 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
     }
     *local_effects |= spec->effect_mask;
     *local_capabilities |= spec->capability_mask;
-    if (instruction->result_category != XR_CORE_IR_VALUE) {
+    XrCoreIrValueCategory expected_result_category =
+        instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ? XR_CORE_IR_PLACE
+                                                                 : XR_CORE_IR_VALUE;
+    if (instruction->result_category != expected_result_category) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
         return false;
     }
     bool category_polymorphic = instruction->operation_id == XR_CORE_OP_CORE_BLOCK_ARGUMENT ||
                                 instruction->operation_id == XR_CORE_OP_CORE_BRANCH ||
                                 instruction->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
-                                instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT;
+                                instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+                                instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
+                                instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
+                                instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE;
     for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
         location.value_id = instruction->operands[operand];
         if (!value_is_available(function, block_id, instruction_id,
@@ -882,6 +908,12 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
             return false;
         }
+        if (consumed[instruction->operands[operand]]) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_VALUE_USE, location);
+            return false;
+        }
+        if (operation_consumes_operand(context, instruction, operand))
+            consumed[instruction->operands[operand]] = true;
         if (!category_polymorphic &&
             !operand_category_is(function, instruction, operand, XR_CORE_IR_VALUE)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
@@ -1056,6 +1088,53 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_NONE,
                                 XR_CORE_TYPE_U32, true);
+        case XR_CORE_OP_CORE_OWNER_MOVE:
+            if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                              instruction->result_type_id, true) ||
+                !operand_type_is(function, instruction, 0, instruction->result_type_id) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        case XR_CORE_OP_CORE_OWNER_DROP:
+            if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                              XR_CORE_TYPE_VOID, false) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        case XR_CORE_OP_CORE_PLACE_LOCAL:
+            if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                              instruction->result_type_id, true) ||
+                instruction->result_category != XR_CORE_IR_PLACE ||
+                !operand_type_is(function, instruction, 0, instruction->result_type_id) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_VALUE)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        case XR_CORE_OP_CORE_PLACE_LOAD:
+            if (!expect_shape(context, instruction, location, 1, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                              instruction->result_type_id, true) ||
+                !operand_type_is(function, instruction, 0, instruction->result_type_id) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_PLACE)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
+        case XR_CORE_OP_CORE_PLACE_STORE:
+            if (!expect_shape(context, instruction, location, 2, 0, XR_CORE_IR_IMMEDIATE_NONE,
+                              XR_CORE_TYPE_VOID, false) ||
+                !operand_category_is(function, instruction, 0, XR_CORE_IR_PLACE) ||
+                !operand_category_is(function, instruction, 1, XR_CORE_IR_VALUE) ||
+                function->value_types[instruction->operands[0]] !=
+                    function->value_types[instruction->operands[1]]) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            return true;
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
             const XrValidatedType *type =
                 xr_validated_program_type(context->program, instruction->result_type_id);
@@ -1190,13 +1269,20 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
     }
     uint32_t local_effects = 0;
     uint32_t local_capabilities = 0;
+    bool *consumed = xr_calloc(function->value_count ? function->value_count : 1u, sizeof(bool));
+    if (!consumed) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+        return false;
+    }
     for (uint32_t block_id = 0; block_id < function->block_count; ++block_id) {
+        memset(consumed, 0, (size_t) function->value_count * sizeof(bool));
         XrValidatedBlock *block = &function->blocks[block_id];
         location.block_id = block_id;
         if (block->instruction_count == 0 ||
             !instruction_is_terminator(
                 block->instructions[block->instruction_count - 1u].operation_id)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
+            xr_free(consumed);
             return false;
         }
         for (uint32_t instruction_id = 0; instruction_id < block->instruction_count;
@@ -1205,13 +1291,17 @@ static bool verify_function(VerifyContext *context, uint32_t function_id) {
                 instruction_is_terminator(block->instructions[instruction_id].operation_id)) {
                 location.instruction_id = instruction_id;
                 reject(context, XR_PROGRAM_DIAGNOSTIC_CONTROL_FLOW, location);
+                xr_free(consumed);
                 return false;
             }
             if (!verify_operation(context, function_id, block_id, instruction_id, &local_effects,
-                                  &local_capabilities))
+                                  &local_capabilities, consumed)) {
+                xr_free(consumed);
                 return false;
+            }
         }
     }
+    xr_free(consumed);
     if ((function->effect_mask & local_effects) != local_effects) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_EFFECT, location);
         return false;

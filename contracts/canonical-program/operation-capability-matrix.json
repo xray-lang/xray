@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; trap, error publication, and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; trap, error publication, and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 21 registered operations have bounded verification and independent reference evaluation. Inactive ownership, coroutine, import, and boundary surfaces fail closed until their owning slices activate them."
+    "note": "All 26 registered operations have bounded verification and independent reference evaluation. Explicit owner copy, cleanup CFG, coroutine, import, and boundary surfaces fail closed until their owning slices activate them."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -370,6 +370,86 @@
       "evidence": [
         "src/frontend/analyzer/xa_enum_record_plan.c",
         "src/ir/xi_lower_misc.c",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.owner.move",
+      "core_spec_contract": "transfer one VALUE owner identity to a fresh VALUE and reject every later use of the consumed input",
+      "program_encoding": "same pointee-free TypeId on operand/result, VALUE categories, and no physical retain/release spelling",
+      "decoder_verifier_evaluator": "exact unary shape, category/type equality, and same-block consumed-value rejection",
+      "vm_implementation": "private value transfer with the verifier owning linear-use legality",
+      "aot_lowering": "direct typed native assignment with no runtime ownership inference",
+      "source_producer": "xi.source.move and xi.owner.forward project explicitly through the generated table",
+      "old_owner_deletion": "canonical execution never consumes Xi owner flags, ARC opcodes, or TargetPlan storage ownership",
+      "status": "COMPLETE_W7_WAVE3_SLICE2",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/program/test_xr_program_verify.c"
+      ]
+    },
+    {
+      "id": "core.owner.drop",
+      "core_spec_contract": "end one VALUE owner lifetime exactly once and reject every later use",
+      "program_encoding": "typed VALUE operand, void result, and no physical release spelling",
+      "decoder_verifier_evaluator": "exact unary shape, VALUE category, and consumed-value rejection",
+      "vm_implementation": "logical owner end; physical reclamation remains executor-private",
+      "aot_lowering": "typed lifetime end with physical destruction selected only by the private representation domain",
+      "source_producer": "explicit canonical cleanup atoms are accepted now; full source cleanup CFG is owned by the sealed-invoke slice",
+      "old_owner_deletion": "retain/release are explicitly not canonical operations",
+      "status": "COMPLETE_W7_WAVE3_SLICE2",
+      "evidence": [
+        "xisa/core/registry.json",
+        "src/program/xr_program_verify.c",
+        "tests/unit/program/test_xr_program_verify.c"
+      ]
+    },
+    {
+      "id": "core.place.local",
+      "core_spec_contract": "create one call-frame-confined PLACE initialized from a consumed VALUE",
+      "program_encoding": "pointee TypeId plus PLACE result category; PLACE is not a TypeId",
+      "decoder_verifier_evaluator": "exact VALUE-to-PLACE shape, pointee equality, dominance, and consumed initializer",
+      "vm_implementation": "private frame cell referenced across nested direct calls",
+      "aot_lowering": "typed C local plus pointer with no tagged runtime value",
+      "source_producer": "plain xi.local.addr projects through the generated table; projection and raw-deref address forms fail closed",
+      "old_owner_deletion": "no slot class, TargetPlan address class, or legacy VM opcode is semantic authority",
+      "status": "COMPLETE_W7_WAVE3_SLICE2",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.place.load",
+      "core_spec_contract": "snapshot the current contents of one typed PLACE as a VALUE",
+      "program_encoding": "PLACE operand and same-TypeId VALUE result",
+      "decoder_verifier_evaluator": "category/type equality and verifier-confined place use",
+      "vm_implementation": "read the private frame cell",
+      "aot_lowering": "one typed pointer dereference",
+      "source_producer": "xi.place.load projects through the generated table",
+      "old_owner_deletion": "no runtime value boxing or storage-plan inference participates",
+      "status": "COMPLETE_W7_WAVE3_SLICE2",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.place.store",
+      "core_spec_contract": "replace one typed PLACE contents with one consumed VALUE",
+      "program_encoding": "PLACE and VALUE operands with equal TypeIds and void result",
+      "decoder_verifier_evaluator": "mixed-category shape, pointee/value equality, and consumed stored value",
+      "vm_implementation": "write the private frame cell observed by the caller after return",
+      "aot_lowering": "one typed pointer store across the direct-local REF ABI",
+      "source_producer": "xi.place.store projects through the generated table",
+      "old_owner_deletion": "no pending mutation slot, boxed value, or TargetPlan write row remains in the canonical route",
+      "status": "COMPLETE_W7_WAVE3_SLICE2",
+      "evidence": [
+        "xisa/program/xi-source-projection.json",
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
       ]

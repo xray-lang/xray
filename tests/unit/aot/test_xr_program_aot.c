@@ -154,12 +154,17 @@ static XrValidatedProgram *build_full_program(void) {
          .type_id = XR_CORE_TYPE_BOOL,
          .kind = XR_CORE_IR_CONSTANT_BOOL,
          .value.boolean = true},
+        {.key = fixture_key("aot:constant:42"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 42},
     };
     XrCoreIrKey helper_key = fixture_key("aot:function:helper");
     XrCoreIrKey make_key = fixture_key("aot:function:make-aggregate");
     XrCoreIrKey entry_key = fixture_key("aot:function:entry");
     XrCoreIrKey trap_key = fixture_key("aot:function:trap");
     XrCoreIrKey error_key = fixture_key("aot:function:error");
+    XrCoreIrKey mutator_key = fixture_key("aot:function:mutator");
     XrCoreIrKey helper_entry = fixture_key("aot:block:helper-entry");
     XrCoreIrKey make_entry = fixture_key("aot:block:make-entry");
     XrCoreIrKey helper_true = fixture_key("aot:block:helper-true");
@@ -168,6 +173,7 @@ static XrValidatedProgram *build_full_program(void) {
     XrCoreIrKey entry_block_key = fixture_key("aot:block:entry");
     XrCoreIrKey trap_block_key = fixture_key("aot:block:trap");
     XrCoreIrKey error_block_key = fixture_key("aot:block:error");
+    XrCoreIrKey mutator_block_key = fixture_key("aot:block:mutator");
     XrCoreIrKey v40 = fixture_key("aot:value:40");
     XrCoreIrKey v2 = fixture_key("aot:value:2");
     XrCoreIrKey vtrue = fixture_key("aot:value:true");
@@ -190,6 +196,12 @@ static XrValidatedProgram *build_full_program(void) {
     XrCoreIrKey variant_is_one = fixture_key("aot:value:variant-is-one");
     XrCoreIrKey projected_aggregate = fixture_key("aot:value:projected-aggregate");
     XrCoreIrKey projected_2 = fixture_key("aot:value:projected-2");
+    XrCoreIrKey mutator_argument = fixture_key("aot:value:mutator-argument");
+    XrCoreIrKey mutator_42 = fixture_key("aot:value:mutator-42");
+    XrCoreIrKey moved_result = fixture_key("aot:value:moved-result");
+    XrCoreIrKey local_place = fixture_key("aot:value:local-place");
+    XrCoreIrKey loaded_result = fixture_key("aot:value:loaded-result");
+    XrCoreIrKey dropped_value = fixture_key("aot:value:dropped-value");
     XrCoreIrKey construct_operands[] = {v40, vtrue};
     XrCoreIrKey aggregate_operand[] = {aggregate_value};
     XrCoreIrKey update_operands[] = {aggregate_value, v2};
@@ -409,13 +421,52 @@ static XrValidatedProgram *build_full_program(void) {
          .instructions = merge_instructions,
          .instruction_count = sizeof(merge_instructions) / sizeof(merge_instructions[0])},
     };
-    XrCoreIrKey entry_returned[] = {call_result};
+    XrCoreIrKey move_operand[] = {call_result};
+    XrCoreIrKey moved_operand[] = {moved_result};
+    XrCoreIrKey place_operand[] = {local_place};
+    XrCoreIrKey dropped_operand[] = {dropped_value};
+    XrCoreIrKey entry_returned[] = {loaded_result};
     XrCoreIrInstructionInput entry_instructions[] = {
         {.operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
          .result = call_result,
          .result_type_id = XR_CORE_TYPE_I64,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
          .immediate.key = helper_key},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_MOVE,
+         .result = moved_result,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = move_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+         .result = local_place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = moved_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
+         .immediate.key = mutator_key},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+         .result = loaded_result,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = dropped_value,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = dropped_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
          .operands = entry_returned,
@@ -456,7 +507,43 @@ static XrValidatedProgram *build_full_program(void) {
         .instructions = error_instructions,
         .instruction_count = sizeof(error_instructions) / sizeof(error_instructions[0]),
     };
+    XrCoreIrValueInput mutator_block_argument = {
+        .key = mutator_argument,
+        .type_id = XR_CORE_TYPE_I64,
+        .category = XR_CORE_IR_PLACE,
+    };
+    XrCoreIrKey mutator_argument_operand[] = {mutator_argument};
+    XrCoreIrKey mutator_store_operands[] = {mutator_argument, mutator_42};
+    XrCoreIrInstructionInput mutator_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = mutator_argument_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = mutator_42,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[3].key},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_STORE,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = mutator_store_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput mutator_block = {
+        .key = mutator_block_key,
+        .arguments = &mutator_block_argument,
+        .argument_count = 1u,
+        .instructions = mutator_instructions,
+        .instruction_count = sizeof(mutator_instructions) / sizeof(mutator_instructions[0]),
+    };
     uint16_t error_parameter = XR_CORE_TYPE_ERROR;
+    uint16_t mutator_parameter = XR_CORE_TYPE_I64;
+    XrParamMode mutator_mode = XR_PARAM_REF;
     XrCoreIrFunctionInput functions[] = {
         {.key = make_key,
          .result_type_id = AGGREGATE_TYPE,
@@ -492,6 +579,14 @@ static XrValidatedProgram *build_full_program(void) {
          .effect_mask = UINT32_C(2),
          .entry_block = error_block_key,
          .blocks = &error_block,
+         .block_count = 1u},
+        {.key = mutator_key,
+         .parameter_types = &mutator_parameter,
+         .parameter_modes = &mutator_mode,
+         .parameter_count = 1u,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .entry_block = mutator_block_key,
+         .blocks = &mutator_block,
          .block_count = 1u},
     };
     return validate_program(types, sizeof(types) / sizeof(types[0]), constants,
@@ -692,7 +787,7 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstan
                                  xr_backend_ir_execution_id(portable)));
     REQUIRE(!xr_fingerprint_equal(xr_backend_ir_optimization_policy_id(none),
                                   xr_backend_ir_optimization_policy_id(portable)));
-    REQUIRE(xr_backend_ir_instruction_count(none) == 31u);
+    REQUIRE(xr_backend_ir_instruction_count(none) == 41u);
 
     XrGeneratedC generated_none = {0};
     XrGeneratedC generated_portable = {0};
@@ -703,6 +798,10 @@ static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstan
     REQUIRE(strstr(generated_none.bytes, "int64_t v0") != NULL);
     REQUIRE(strstr(generated_none.bytes, "struct XrAotType") != NULL);
     REQUIRE(strstr(generated_none.bytes, "payload.case_1.f0") != NULL);
+    REQUIRE(strstr(generated_none.bytes, "int64_t * p") != NULL);
+    REQUIRE(strstr(generated_none.bytes, " = &xr_place_") != NULL);
+    REQUIRE(strstr(generated_none.bytes, " = *v") != NULL);
+    REQUIRE(strstr(generated_none.bytes, "*v") != NULL);
     REQUIRE(strstr(generated_none.bytes, "XrVm") == NULL);
     REQUIRE(strstr(generated_none.bytes, "XrAotValue") == NULL);
     REQUIRE(strstr(generated_none.bytes, "TargetPlan") == NULL);

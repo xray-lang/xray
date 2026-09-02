@@ -153,6 +153,41 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         UINT32_C(0),
         XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT,
     },
+    {
+        XI_SOURCE_MOVE,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_OWNER_MOVE,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_OWNER_MOVE,
+    },
+    {
+        XI_OWNER_FORWARD,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_OWNER_MOVE,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_OWNER_MOVE,
+    },
+    {
+        XI_LOCAL_ADDR,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_PLACE_LOCAL,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL,
+    },
+    {
+        XI_PLACE_LOAD,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_PLACE_LOAD,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_PLACE_LOAD,
+    },
+    {
+        XI_PLACE_STORE,
+        XR_CORE_TYPE_VOID,
+        XR_CORE_OP_CORE_PLACE_STORE,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_PLACE_STORE,
+    },
 };
 
 bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,

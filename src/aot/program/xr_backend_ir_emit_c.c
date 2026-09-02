@@ -312,7 +312,9 @@ static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *fu
             const char *name = type_c_name(function->parameter_types[parameter], storage);
             if (!name)
                 return false;
-            if (!append_format(buffer, "%s%s p%u", parameter ? ", " : "", name, parameter))
+            const char *pointer = function->parameter_modes[parameter] == XR_PARAM_REF ? " *" : "";
+            if (!append_format(buffer, "%s%s%s p%u", parameter ? ", " : "", name, pointer,
+                               parameter))
                 return false;
         }
     }
@@ -345,8 +347,9 @@ static bool emit_parallel_edge(CBuffer *buffer, const XrBackendFunction *functio
         uint32_t source_value = instruction->operands[operand_start + argument];
         char storage[32];
         const char *type = type_c_name(target->argument_types[argument], storage);
-        if (!type ||
-            !append_format(buffer, "        %s edge_%u = v%u;\n", type, argument, source_value))
+        const char *pointer = target->argument_categories[argument] == XR_CORE_IR_PLACE ? " *" : "";
+        if (!type || !append_format(buffer, "        %s%s edge_%u = v%u;\n", type, pointer,
+                                    argument, source_value))
             return false;
     }
     for (uint32_t argument = 0; argument < target->argument_count; ++argument) {
@@ -497,6 +500,22 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return append_format(buffer, "        v%u = UINT32_C(%u);\n", instruction->result_id,
                                  ir->pointer_width);
+        case XR_CORE_OP_CORE_OWNER_MOVE:
+            return append_format(buffer, "        v%u = v%u;\n", instruction->result_id,
+                                 instruction->operands[0]);
+        case XR_CORE_OP_CORE_OWNER_DROP:
+            return append_format(buffer, "        (void)v%u;\n", instruction->operands[0]);
+        case XR_CORE_OP_CORE_PLACE_LOCAL:
+            return append_format(buffer,
+                                 "        xr_place_%u = v%u;\n        v%u = &xr_place_%u;\n",
+                                 instruction->result_id, instruction->operands[0],
+                                 instruction->result_id, instruction->result_id);
+        case XR_CORE_OP_CORE_PLACE_LOAD:
+            return append_format(buffer, "        v%u = *v%u;\n", instruction->result_id,
+                                 instruction->operands[0]);
+        case XR_CORE_OP_CORE_PLACE_STORE:
+            return append_format(buffer, "        *v%u = v%u;\n", instruction->operands[0],
+                                 instruction->operands[1]);
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
             char storage[32];
             const char *name = type_c_name(instruction->result_type_id, storage);
@@ -562,8 +581,17 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
         const char *type = type_c_name(function->value_types[value], storage);
         const char *initializer =
             function->value_types[value] >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ? "{0}" : "0";
-        if (!type || !append_format(buffer, "    %s v%u = %s;\n", type, value, initializer) ||
+        const char *pointer = function->value_categories[value] == XR_CORE_IR_PLACE ? " *" : "";
+        const char *value_initializer =
+            function->value_categories[value] == XR_CORE_IR_PLACE ? "0" : initializer;
+        if (!type ||
+            !append_format(buffer, "    %s%s v%u = %s;\n", type, pointer, value,
+                           value_initializer) ||
             !append_format(buffer, "    (void)v%u;\n", value))
+            return false;
+        if (function->value_categories[value] == XR_CORE_IR_PLACE &&
+            (!append_format(buffer, "    %s xr_place_%u = %s;\n", type, value, initializer) ||
+             !append_format(buffer, "    (void)xr_place_%u;\n", value)))
             return false;
     }
     const XrBackendBlock *entry = &function->blocks[function->entry_block];
@@ -616,21 +644,6 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     }
 }
 
-static bool uses_unrealized_place_contract(const XrBackendIR *ir) {
-    for (uint32_t function = 0; function < ir->function_count; ++function) {
-        const XrBackendFunction *row = &ir->functions[function];
-        for (uint32_t parameter = 0; parameter < row->parameter_count; ++parameter) {
-            if (row->parameter_modes[parameter] == XR_PARAM_REF)
-                return true;
-        }
-        for (uint32_t value = 0; value < row->value_count; ++value) {
-            if (row->value_categories[value] == XR_CORE_IR_PLACE)
-                return true;
-        }
-    }
-    return false;
-}
-
 XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main,
                                      XrGeneratedC *generated_out,
                                      XrBackendDiagnostic *diagnostic_out) {
@@ -642,10 +655,6 @@ XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main
         if (!diagnostic_out || diagnostic_out->status == XR_BACKEND_OK)
             xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_INVALID_INPUT, 0u, 0u, 0u, 0u);
         return diagnostic_out ? diagnostic_out->status : XR_BACKEND_INVALID_INPUT;
-    }
-    if (uses_unrealized_place_contract(ir)) {
-        xr_backend_set_diagnostic(diagnostic_out, XR_BACKEND_EMISSION_REJECTED, 0u, 0u, 0u, 0u);
-        return XR_BACKEND_EMISSION_REJECTED;
     }
     CBuffer buffer = {0};
     bool emitted = emit_prelude(&buffer, ir);

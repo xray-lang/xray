@@ -228,10 +228,18 @@ def validate(root: Path) -> None:
         "core.error.publish",
         "core.target.pointer_width",
     }
+    wave_three_slice_two = {
+        "core.owner.move",
+        "core.owner.drop",
+        "core.place.local",
+        "core.place.load",
+        "core.place.store",
+    }
     rows = {row["id"]: row for row in matrix["operations"]}
     expected_status = {
         **{operation: "COMPLETE_W7_WAVE1" for operation in wave_one},
         **{operation: "COMPLETE_W7_WAVE2" for operation in wave_two_complete},
+        **{operation: "COMPLETE_W7_WAVE3_SLICE2" for operation in wave_three_slice_two},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,
@@ -257,6 +265,7 @@ def self_test(root: Path) -> None:
         for relative in (
             "src/program/xr_program_from_xi.h",
             "src/program/xr_program_from_xi.c",
+            "src/program/xr_program_verify.c",
             "src/ir/xi_pipeline.h",
             "src/ir/xi_pipeline.c",
             "tests/unit/ir/test_xi_pipeline.c",

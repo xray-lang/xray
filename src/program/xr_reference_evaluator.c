@@ -35,6 +35,19 @@ typedef struct XrReferenceAggregateValue {
     uint32_t field_count;
 } XrReferenceAggregateValue;
 
+typedef struct EvalPlace {
+    XrReferenceValue value;
+    bool initialized;
+} EvalPlace;
+
+typedef struct EvalRuntimeValue {
+    XrCoreIrValueCategory category;
+    union {
+        XrReferenceValue value;
+        EvalPlace *place;
+    } as;
+} EvalRuntimeValue;
+
 static XrReferenceOutcome outcome(XrReferenceOutcomeKind kind, EvalContext *context) {
     XrReferenceOutcome result = {.kind = kind, .steps = context->steps};
     return result;
@@ -74,8 +87,7 @@ static bool reference_value_matches_type(const XrValidatedProgram *program, XrRe
 static XrReferenceAggregateValue *allocate_aggregate(EvalContext *context, uint16_t type_id,
                                                      uint32_t variant_ordinal,
                                                      uint32_t field_count) {
-    if ((uint64_t) field_count >
-        context->budget.max_value_cells - context->aggregate_cell_count)
+    if ((uint64_t) field_count > context->budget.max_value_cells - context->aggregate_cell_count)
         return NULL;
     if (context->aggregate_count == context->aggregate_capacity) {
         uint32_t capacity = context->aggregate_capacity ? context->aggregate_capacity * 2u : 8u;
@@ -157,7 +169,7 @@ static bool checked_mul(int64_t left, int64_t right, int64_t *result) {
 }
 
 static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t function_id,
-                                            const XrReferenceValue *arguments,
+                                            const EvalRuntimeValue *arguments,
                                             uint32_t argument_count, uint32_t depth) {
     if (depth > context->budget.max_call_depth)
         return outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
@@ -165,13 +177,25 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
     if (argument_count != function->parameter_count)
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
     for (uint32_t index = 0; index < argument_count; ++index) {
-        if (!reference_value_matches_type(context->program, arguments[index],
+        XrCoreIrValueCategory expected =
+            function->parameter_modes[index] == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
+        if (arguments[index].category != expected)
+            return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
+        if (expected == XR_CORE_IR_PLACE &&
+            (!arguments[index].as.place || !arguments[index].as.place->initialized))
+            return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
+        XrReferenceValue value = expected == XR_CORE_IR_PLACE && arguments[index].as.place
+                                     ? arguments[index].as.place->value
+                                     : arguments[index].as.value;
+        if (!reference_value_matches_type(context->program, value,
                                           function->parameter_types[index]))
             return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
     }
 
-    XrReferenceValue *values =
-        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(XrReferenceValue));
+    EvalRuntimeValue *values =
+        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(EvalRuntimeValue));
+    EvalPlace *places =
+        xr_calloc(function->value_count ? function->value_count : 1u, sizeof(EvalPlace));
     bool *initialized = xr_calloc(function->value_count ? function->value_count : 1u, sizeof(bool));
     uint32_t scratch_count = function->parameter_count;
     for (uint32_t block = 0; block < function->block_count; ++block) {
@@ -183,11 +207,12 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                 scratch_count = row->instructions[instruction].operand_count;
         }
     }
-    XrReferenceValue *scratch =
-        xr_calloc(scratch_count ? scratch_count : 1u, sizeof(XrReferenceValue));
-    if (!values || !initialized || !scratch) {
+    EvalRuntimeValue *scratch =
+        xr_calloc(scratch_count ? scratch_count : 1u, sizeof(EvalRuntimeValue));
+    if (!values || !places || !initialized || !scratch) {
         xr_free(scratch);
         xr_free(initialized);
+        xr_free(places);
         xr_free(values);
         return outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
     }
@@ -195,7 +220,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
     uint32_t block_id = function->entry_block;
     uint32_t incoming_count = argument_count;
     if (incoming_count != 0)
-        memcpy(scratch, arguments, (size_t) incoming_count * sizeof(XrReferenceValue));
+        memcpy(scratch, arguments, (size_t) incoming_count * sizeof(EvalRuntimeValue));
     XrReferenceOutcome result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
     for (;;) {
         const XrValidatedBlock *block = &function->blocks[block_id];
@@ -223,28 +248,31 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     goto done;
                 }
             }
-            XrReferenceValue produced = void_value();
+            EvalRuntimeValue produced = {
+                .category = XR_CORE_IR_VALUE,
+                .as.value = void_value(),
+            };
             bool has_result = instruction->result_id != XR_PROGRAM_LOCATION_NONE;
             switch (instruction->operation_id) {
                 case XR_CORE_OP_CORE_CONSTANT_I64: {
                     const XrValidatedConstant *constant =
                         &context->program->constants[instruction->immediate.constant_id];
-                    produced.kind = XR_REFERENCE_VALUE_I64;
-                    produced.as.i64 = constant->value.i64;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_I64;
+                    produced.as.value.as.i64 = constant->value.i64;
                     break;
                 }
                 case XR_CORE_OP_CORE_CONSTANT_BOOL: {
                     const XrValidatedConstant *constant =
                         &context->program->constants[instruction->immediate.constant_id];
-                    produced.kind = XR_REFERENCE_VALUE_BOOL;
-                    produced.as.boolean = constant->value.boolean;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_BOOL;
+                    produced.as.value.as.boolean = constant->value.boolean;
                     break;
                 }
                 case XR_CORE_OP_CORE_ADD_I64:
                 case XR_CORE_OP_CORE_SUB_I64:
                 case XR_CORE_OP_CORE_MUL_I64: {
-                    int64_t left = values[instruction->operands[0]].as.i64;
-                    int64_t right = values[instruction->operands[1]].as.i64;
+                    int64_t left = values[instruction->operands[0]].as.value.as.i64;
+                    int64_t right = values[instruction->operands[1]].as.value.as.i64;
                     int64_t exact = 0;
                     bool valid = instruction->operation_id == XR_CORE_OP_CORE_ADD_I64
                                      ? checked_add(left, right, &exact)
@@ -263,13 +291,13 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                                             : (uint64_t) left * (uint64_t) right;
                         exact = i64_from_bits(bits);
                     }
-                    produced.kind = XR_REFERENCE_VALUE_I64;
-                    produced.as.i64 = exact;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_I64;
+                    produced.as.value.as.i64 = exact;
                     break;
                 }
                 case XR_CORE_OP_CORE_DIV_I64: {
-                    int64_t left = values[instruction->operands[0]].as.i64;
-                    int64_t right = values[instruction->operands[1]].as.i64;
+                    int64_t left = values[instruction->operands[0]].as.value.as.i64;
+                    int64_t right = values[instruction->operands[1]].as.value.as.i64;
                     if (right == 0) {
                         result = trap_outcome(context, XR_REFERENCE_TRAP_INTEGER_DIVISION_BY_ZERO);
                         goto done;
@@ -278,13 +306,13 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         result = trap_outcome(context, XR_REFERENCE_TRAP_INTEGER_DIVISION_OVERFLOW);
                         goto done;
                     }
-                    produced.kind = XR_REFERENCE_VALUE_I64;
-                    produced.as.i64 = left / right;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_I64;
+                    produced.as.value.as.i64 = left / right;
                     break;
                 }
                 case XR_CORE_OP_CORE_COMPARE_I64: {
-                    int64_t left = values[instruction->operands[0]].as.i64;
-                    int64_t right = values[instruction->operands[1]].as.i64;
+                    int64_t left = values[instruction->operands[0]].as.value.as.i64;
+                    int64_t right = values[instruction->operands[1]].as.value.as.i64;
                     bool comparison = false;
                     switch (instruction->immediate.u32) {
                         case 0:
@@ -309,8 +337,8 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                             result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
                             goto done;
                     }
-                    produced.kind = XR_REFERENCE_VALUE_BOOL;
-                    produced.as.boolean = comparison;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_BOOL;
+                    produced.as.value.as.boolean = comparison;
                     break;
                 }
                 case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
@@ -325,7 +353,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     break;
                 }
                 case XR_CORE_OP_CORE_CONDITIONAL_BRANCH: {
-                    bool condition = values[instruction->operands[0]].as.boolean;
+                    bool condition = values[instruction->operands[0]].as.value.as.boolean;
                     uint32_t successor = condition ? 0u : 1u;
                     uint32_t operand =
                         condition
@@ -344,7 +372,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     result = outcome(XR_REFERENCE_OUTCOME_RETURN, context);
                     result.value = instruction->operand_count == 0
                                        ? void_value()
-                                       : values[instruction->operands[0]];
+                                       : values[instruction->operands[0]].as.value;
                     goto done;
                 case XR_CORE_OP_CORE_CALL_SEALED_DIRECT: {
                     for (uint32_t index = 0; index < instruction->operand_count; ++index)
@@ -356,7 +384,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         result = nested;
                         goto done;
                     }
-                    produced = nested.value;
+                    produced.as.value = nested.value;
                     break;
                 }
                 case XR_CORE_OP_CORE_TRAP:
@@ -364,7 +392,7 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     goto done;
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = outcome(XR_REFERENCE_OUTCOME_ERROR, context);
-                    result.error = values[instruction->operands[0]].as.error;
+                    result.error = values[instruction->operands[0]].as.value.as.error;
                     goto done;
                 case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
                     if (context->profile.pointer_width != 32u &&
@@ -372,8 +400,27 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         result = trap_outcome(context, XR_REFERENCE_TRAP_PROFILE_UNAVAILABLE);
                         goto done;
                     }
-                    produced.kind = XR_REFERENCE_VALUE_U32;
-                    produced.as.u32 = context->profile.pointer_width;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_U32;
+                    produced.as.value.as.u32 = context->profile.pointer_width;
+                    break;
+                case XR_CORE_OP_CORE_OWNER_MOVE:
+                    produced.as.value = values[instruction->operands[0]].as.value;
+                    break;
+                case XR_CORE_OP_CORE_OWNER_DROP:
+                    break;
+                case XR_CORE_OP_CORE_PLACE_LOCAL:
+                    places[instruction->result_id].value =
+                        values[instruction->operands[0]].as.value;
+                    places[instruction->result_id].initialized = true;
+                    produced.category = XR_CORE_IR_PLACE;
+                    produced.as.place = &places[instruction->result_id];
+                    break;
+                case XR_CORE_OP_CORE_PLACE_LOAD:
+                    produced.as.value = values[instruction->operands[0]].as.place->value;
+                    break;
+                case XR_CORE_OP_CORE_PLACE_STORE:
+                    values[instruction->operands[0]].as.place->value =
+                        values[instruction->operands[1]].as.value;
                     break;
                 case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
                     XrReferenceAggregateValue *aggregate =
@@ -384,20 +431,20 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         goto done;
                     }
                     for (uint32_t field = 0; field < instruction->operand_count; ++field)
-                        aggregate->fields[field] = values[instruction->operands[field]];
-                    produced.kind = XR_REFERENCE_VALUE_AGGREGATE;
-                    produced.as.aggregate = aggregate;
+                        aggregate->fields[field] = values[instruction->operands[field]].as.value;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = aggregate;
                     break;
                 }
                 case XR_CORE_OP_CORE_AGGREGATE_PROJECT: {
                     const XrReferenceAggregateValue *aggregate =
-                        values[instruction->operands[0]].as.aggregate;
-                    produced = aggregate->fields[instruction->immediate.field_ordinal];
+                        values[instruction->operands[0]].as.value.as.aggregate;
+                    produced.as.value = aggregate->fields[instruction->immediate.field_ordinal];
                     break;
                 }
                 case XR_CORE_OP_CORE_AGGREGATE_UPDATE: {
                     const XrReferenceAggregateValue *source =
-                        values[instruction->operands[0]].as.aggregate;
+                        values[instruction->operands[0]].as.value.as.aggregate;
                     XrReferenceAggregateValue *aggregate = allocate_aggregate(
                         context, instruction->result_type_id, UINT32_MAX, source->field_count);
                     if (!aggregate) {
@@ -407,9 +454,9 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                     memcpy(aggregate->fields, source->fields,
                            (size_t) source->field_count * sizeof(XrReferenceValue));
                     aggregate->fields[instruction->immediate.field_ordinal] =
-                        values[instruction->operands[1]];
-                    produced.kind = XR_REFERENCE_VALUE_AGGREGATE;
-                    produced.as.aggregate = aggregate;
+                        values[instruction->operands[1]].as.value;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = aggregate;
                     break;
                 }
                 case XR_CORE_OP_CORE_VARIANT_CONSTRUCT: {
@@ -421,28 +468,28 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         goto done;
                     }
                     for (uint32_t field = 0; field < instruction->operand_count; ++field)
-                        aggregate->fields[field] = values[instruction->operands[field]];
-                    produced.kind = XR_REFERENCE_VALUE_AGGREGATE;
-                    produced.as.aggregate = aggregate;
+                        aggregate->fields[field] = values[instruction->operands[field]].as.value;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = aggregate;
                     break;
                 }
                 case XR_CORE_OP_CORE_VARIANT_TEST: {
                     const XrReferenceAggregateValue *aggregate =
-                        values[instruction->operands[0]].as.aggregate;
-                    produced.kind = XR_REFERENCE_VALUE_BOOL;
-                    produced.as.boolean =
+                        values[instruction->operands[0]].as.value.as.aggregate;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_BOOL;
+                    produced.as.value.as.boolean =
                         aggregate->variant_ordinal == instruction->immediate.variant_ordinal;
                     break;
                 }
                 case XR_CORE_OP_CORE_VARIANT_PROJECT: {
                     const XrReferenceAggregateValue *aggregate =
-                        values[instruction->operands[0]].as.aggregate;
+                        values[instruction->operands[0]].as.value.as.aggregate;
                     if (aggregate->variant_ordinal !=
                         instruction->immediate.variant_field.variant_ordinal) {
                         result = trap_outcome(context, XR_REFERENCE_TRAP_VARIANT_TAG_MISMATCH);
                         goto done;
                     }
-                    produced =
+                    produced.as.value =
                         aggregate->fields[instruction->immediate.variant_field.field_ordinal];
                     break;
                 }
@@ -467,6 +514,7 @@ done:
     result.steps = context->steps;
     xr_free(scratch);
     xr_free(initialized);
+    xr_free(places);
     xr_free(values);
     return result;
 }
@@ -491,11 +539,25 @@ XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint
         .budget = selected,
     };
     if (!program || function_id >= program->function_count || (argument_count != 0 && !arguments) ||
-        selected.max_steps == 0 || selected.max_value_cells == 0 ||
-        selected.max_call_depth == 0)
+        selected.max_steps == 0 || selected.max_value_cells == 0 || selected.max_call_depth == 0)
         return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
+    const XrValidatedFunction *function = &program->functions[function_id];
+    EvalRuntimeValue *runtime_arguments =
+        xr_calloc(argument_count ? argument_count : 1u, sizeof(EvalRuntimeValue));
+    if (!runtime_arguments)
+        return outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, &context);
+    for (uint32_t index = 0; index < argument_count; ++index) {
+        if (index >= function->parameter_count ||
+            function->parameter_modes[index] == XR_PARAM_REF) {
+            xr_free(runtime_arguments);
+            return outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
+        }
+        runtime_arguments[index].category = XR_CORE_IR_VALUE;
+        runtime_arguments[index].as.value = arguments[index];
+    }
     XrReferenceOutcome result =
-        evaluate_function(&context, function_id, arguments, argument_count, 1u);
+        evaluate_function(&context, function_id, runtime_arguments, argument_count, 1u);
+    xr_free(runtime_arguments);
     if (result.kind == XR_REFERENCE_OUTCOME_RETURN &&
         result.value.kind == XR_REFERENCE_VALUE_AGGREGATE)
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);

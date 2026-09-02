@@ -105,6 +105,19 @@ typedef struct XrVmAggregateValue {
     uint32_t field_count;
 } XrVmAggregateValue;
 
+typedef struct XrVmPlace {
+    XrVmValue value;
+    bool initialized;
+} XrVmPlace;
+
+typedef struct XrVmRuntimeValue {
+    XrCoreIrValueCategory category;
+    union {
+        XrVmValue value;
+        XrVmPlace *place;
+    } as;
+} XrVmRuntimeValue;
+
 static XrVmOutcome vm_outcome(XrVmOutcomeKind kind, const XrVmContext *context) {
     XrVmOutcome outcome = {.kind = kind, .steps = context ? context->steps : 0u};
     return outcome;
@@ -280,7 +293,7 @@ static XrVmInstructionView instruction_view(const XrVmCode *code, uint32_t funct
 }
 
 static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
-                                    const XrVmValue *arguments, uint32_t argument_count,
+                                    const XrVmRuntimeValue *arguments, uint32_t argument_count,
                                     uint32_t depth) {
     if (depth > context->code->options.max_call_depth)
         return vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
@@ -288,13 +301,21 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
     if (argument_count != function->parameter_count)
         return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
     for (uint32_t index = 0; index < argument_count; ++index) {
-        if (!value_matches_type(context->code->program, arguments[index],
-                                function->parameter_types[index]))
+        XrCoreIrValueCategory expected =
+            function->parameter_modes[index] == XR_PARAM_REF ? XR_CORE_IR_PLACE : XR_CORE_IR_VALUE;
+        if (arguments[index].category != expected ||
+            (expected == XR_CORE_IR_PLACE &&
+             (!arguments[index].as.place || !arguments[index].as.place->initialized)))
+            return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
+        XrVmValue value = expected == XR_CORE_IR_PLACE ? arguments[index].as.place->value
+                                                       : arguments[index].as.value;
+        if (!value_matches_type(context->code->program, value, function->parameter_types[index]))
             return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
     }
 
     size_t value_count = function->value_count ? function->value_count : 1u;
-    XrVmValue *values = xr_calloc(value_count, sizeof(XrVmValue));
+    XrVmRuntimeValue *values = xr_calloc(value_count, sizeof(XrVmRuntimeValue));
+    XrVmPlace *places = xr_calloc(value_count, sizeof(XrVmPlace));
     bool *initialized = xr_calloc(value_count, sizeof(bool));
     uint32_t scratch_count = function->parameter_count;
     for (uint32_t block = 0; block < function->block_count; ++block) {
@@ -306,10 +327,12 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                 scratch_count = row->instructions[instruction].operand_count;
         }
     }
-    XrVmValue *scratch = xr_calloc(scratch_count ? scratch_count : 1u, sizeof(XrVmValue));
-    if (!values || !initialized || !scratch) {
+    XrVmRuntimeValue *scratch =
+        xr_calloc(scratch_count ? scratch_count : 1u, sizeof(XrVmRuntimeValue));
+    if (!values || !places || !initialized || !scratch) {
         xr_free(scratch);
         xr_free(initialized);
+        xr_free(places);
         xr_free(values);
         return vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
     }
@@ -317,7 +340,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
     uint32_t block_id = function->entry_block;
     uint32_t incoming_count = argument_count;
     if (incoming_count != 0u)
-        memcpy(scratch, arguments, (size_t) incoming_count * sizeof(XrVmValue));
+        memcpy(scratch, arguments, (size_t) incoming_count * sizeof(XrVmRuntimeValue));
     XrVmOutcome result = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, context);
     for (;;) {
         const XrValidatedBlock *block = &function->blocks[block_id];
@@ -344,28 +367,31 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                 if (!initialized[instruction.operands[operand]])
                     goto done;
             }
-            XrVmValue produced = void_value();
+            XrVmRuntimeValue produced = {
+                .category = XR_CORE_IR_VALUE,
+                .as.value = void_value(),
+            };
             bool has_result = instruction.result_id != XR_PROGRAM_LOCATION_NONE;
             switch (instruction.operation_id) {
                 case XR_CORE_OP_CORE_CONSTANT_I64: {
                     const XrValidatedConstant *constant =
                         &context->code->program->constants[instruction.immediate.constant_id];
-                    produced.kind = XR_VM_VALUE_I64;
-                    produced.as.i64 = constant->value.i64;
+                    produced.as.value.kind = XR_VM_VALUE_I64;
+                    produced.as.value.as.i64 = constant->value.i64;
                     break;
                 }
                 case XR_CORE_OP_CORE_CONSTANT_BOOL: {
                     const XrValidatedConstant *constant =
                         &context->code->program->constants[instruction.immediate.constant_id];
-                    produced.kind = XR_VM_VALUE_BOOL;
-                    produced.as.boolean = constant->value.boolean;
+                    produced.as.value.kind = XR_VM_VALUE_BOOL;
+                    produced.as.value.as.boolean = constant->value.boolean;
                     break;
                 }
                 case XR_CORE_OP_CORE_ADD_I64:
                 case XR_CORE_OP_CORE_SUB_I64:
                 case XR_CORE_OP_CORE_MUL_I64: {
-                    int64_t left = values[instruction.operands[0]].as.i64;
-                    int64_t right = values[instruction.operands[1]].as.i64;
+                    int64_t left = values[instruction.operands[0]].as.value.as.i64;
+                    int64_t right = values[instruction.operands[1]].as.value.as.i64;
                     int64_t exact = 0;
                     bool valid = instruction.operation_id == XR_CORE_OP_CORE_ADD_I64
                                      ? checked_add(left, right, &exact)
@@ -384,13 +410,13 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                                             : (uint64_t) left * (uint64_t) right;
                         exact = i64_from_bits(bits);
                     }
-                    produced.kind = XR_VM_VALUE_I64;
-                    produced.as.i64 = exact;
+                    produced.as.value.kind = XR_VM_VALUE_I64;
+                    produced.as.value.as.i64 = exact;
                     break;
                 }
                 case XR_CORE_OP_CORE_DIV_I64: {
-                    int64_t left = values[instruction.operands[0]].as.i64;
-                    int64_t right = values[instruction.operands[1]].as.i64;
+                    int64_t left = values[instruction.operands[0]].as.value.as.i64;
+                    int64_t right = values[instruction.operands[1]].as.value.as.i64;
                     if (right == 0) {
                         result = vm_trap(XR_VM_TRAP_INTEGER_DIVISION_BY_ZERO, context);
                         goto done;
@@ -399,13 +425,13 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         result = vm_trap(XR_VM_TRAP_INTEGER_DIVISION_OVERFLOW, context);
                         goto done;
                     }
-                    produced.kind = XR_VM_VALUE_I64;
-                    produced.as.i64 = left / right;
+                    produced.as.value.kind = XR_VM_VALUE_I64;
+                    produced.as.value.as.i64 = left / right;
                     break;
                 }
                 case XR_CORE_OP_CORE_COMPARE_I64: {
-                    int64_t left = values[instruction.operands[0]].as.i64;
-                    int64_t right = values[instruction.operands[1]].as.i64;
+                    int64_t left = values[instruction.operands[0]].as.value.as.i64;
+                    int64_t right = values[instruction.operands[1]].as.value.as.i64;
                     bool comparison = false;
                     switch (instruction.immediate.u32) {
                         case 0:
@@ -429,8 +455,8 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         default:
                             goto done;
                     }
-                    produced.kind = XR_VM_VALUE_BOOL;
-                    produced.as.boolean = comparison;
+                    produced.as.value.kind = XR_VM_VALUE_BOOL;
+                    produced.as.value.as.boolean = comparison;
                     break;
                 }
                 case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
@@ -445,7 +471,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     break;
                 }
                 case XR_CORE_OP_CORE_CONDITIONAL_BRANCH: {
-                    bool condition = values[instruction.operands[0]].as.boolean;
+                    bool condition = values[instruction.operands[0]].as.value.as.boolean;
                     uint32_t successor = condition ? 0u : 1u;
                     uint32_t operand =
                         condition ? 1u
@@ -463,7 +489,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     result = vm_outcome(XR_VM_OUTCOME_RETURN, context);
                     result.value = instruction.operand_count == 0u
                                        ? void_value()
-                                       : values[instruction.operands[0]];
+                                       : values[instruction.operands[0]].as.value;
                     goto done;
                 case XR_CORE_OP_CORE_CALL_SEALED_DIRECT: {
                     for (uint32_t index = 0; index < instruction.operand_count; ++index)
@@ -475,7 +501,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         result = nested;
                         goto done;
                     }
-                    produced = nested.value;
+                    produced.as.value = nested.value;
                     break;
                 }
                 case XR_CORE_OP_CORE_TRAP:
@@ -483,7 +509,7 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     goto done;
                 case XR_CORE_OP_CORE_ERROR_PUBLISH:
                     result = vm_outcome(XR_VM_OUTCOME_ERROR, context);
-                    result.error = values[instruction.operands[0]].as.error;
+                    result.error = values[instruction.operands[0]].as.value.as.error;
                     goto done;
                 case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
                     if (context->code->pointer_width != 32u &&
@@ -491,8 +517,26 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         result = vm_trap(XR_VM_TRAP_PROFILE_UNAVAILABLE, context);
                         goto done;
                     }
-                    produced.kind = XR_VM_VALUE_U32;
-                    produced.as.u32 = context->code->pointer_width;
+                    produced.as.value.kind = XR_VM_VALUE_U32;
+                    produced.as.value.as.u32 = context->code->pointer_width;
+                    break;
+                case XR_CORE_OP_CORE_OWNER_MOVE:
+                    produced.as.value = values[instruction.operands[0]].as.value;
+                    break;
+                case XR_CORE_OP_CORE_OWNER_DROP:
+                    break;
+                case XR_CORE_OP_CORE_PLACE_LOCAL:
+                    places[instruction.result_id].value = values[instruction.operands[0]].as.value;
+                    places[instruction.result_id].initialized = true;
+                    produced.category = XR_CORE_IR_PLACE;
+                    produced.as.place = &places[instruction.result_id];
+                    break;
+                case XR_CORE_OP_CORE_PLACE_LOAD:
+                    produced.as.value = values[instruction.operands[0]].as.place->value;
+                    break;
+                case XR_CORE_OP_CORE_PLACE_STORE:
+                    values[instruction.operands[0]].as.place->value =
+                        values[instruction.operands[1]].as.value;
                     break;
                 case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT: {
                     XrVmAggregateValue *aggregate = allocate_aggregate(
@@ -502,19 +546,20 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         goto done;
                     }
                     for (uint32_t field = 0; field < instruction.operand_count; ++field)
-                        aggregate->fields[field] = values[instruction.operands[field]];
-                    produced.kind = XR_VM_VALUE_AGGREGATE;
-                    produced.as.aggregate = aggregate;
+                        aggregate->fields[field] = values[instruction.operands[field]].as.value;
+                    produced.as.value.kind = XR_VM_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = aggregate;
                     break;
                 }
                 case XR_CORE_OP_CORE_AGGREGATE_PROJECT: {
                     const XrVmAggregateValue *aggregate =
-                        values[instruction.operands[0]].as.aggregate;
-                    produced = aggregate->fields[instruction.immediate.field_ordinal];
+                        values[instruction.operands[0]].as.value.as.aggregate;
+                    produced.as.value = aggregate->fields[instruction.immediate.field_ordinal];
                     break;
                 }
                 case XR_CORE_OP_CORE_AGGREGATE_UPDATE: {
-                    const XrVmAggregateValue *source = values[instruction.operands[0]].as.aggregate;
+                    const XrVmAggregateValue *source =
+                        values[instruction.operands[0]].as.value.as.aggregate;
                     XrVmAggregateValue *aggregate = allocate_aggregate(
                         context, instruction.result_type_id, UINT32_MAX, source->field_count);
                     if (!aggregate) {
@@ -524,9 +569,9 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     memcpy(aggregate->fields, source->fields,
                            (size_t) source->field_count * sizeof(XrVmValue));
                     aggregate->fields[instruction.immediate.field_ordinal] =
-                        values[instruction.operands[1]];
-                    produced.kind = XR_VM_VALUE_AGGREGATE;
-                    produced.as.aggregate = aggregate;
+                        values[instruction.operands[1]].as.value;
+                    produced.as.value.kind = XR_VM_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = aggregate;
                     break;
                 }
                 case XR_CORE_OP_CORE_VARIANT_CONSTRUCT: {
@@ -538,28 +583,29 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         goto done;
                     }
                     for (uint32_t field = 0; field < instruction.operand_count; ++field)
-                        aggregate->fields[field] = values[instruction.operands[field]];
-                    produced.kind = XR_VM_VALUE_AGGREGATE;
-                    produced.as.aggregate = aggregate;
+                        aggregate->fields[field] = values[instruction.operands[field]].as.value;
+                    produced.as.value.kind = XR_VM_VALUE_AGGREGATE;
+                    produced.as.value.as.aggregate = aggregate;
                     break;
                 }
                 case XR_CORE_OP_CORE_VARIANT_TEST: {
                     const XrVmAggregateValue *aggregate =
-                        values[instruction.operands[0]].as.aggregate;
-                    produced.kind = XR_VM_VALUE_BOOL;
-                    produced.as.boolean =
+                        values[instruction.operands[0]].as.value.as.aggregate;
+                    produced.as.value.kind = XR_VM_VALUE_BOOL;
+                    produced.as.value.as.boolean =
                         aggregate->variant_ordinal == instruction.immediate.variant_ordinal;
                     break;
                 }
                 case XR_CORE_OP_CORE_VARIANT_PROJECT: {
                     const XrVmAggregateValue *aggregate =
-                        values[instruction.operands[0]].as.aggregate;
+                        values[instruction.operands[0]].as.value.as.aggregate;
                     if (aggregate->variant_ordinal !=
                         instruction.immediate.variant_field.variant_ordinal) {
                         result = vm_trap(XR_VM_TRAP_VARIANT_TAG_MISMATCH, context);
                         goto done;
                     }
-                    produced = aggregate->fields[instruction.immediate.variant_field.field_ordinal];
+                    produced.as.value =
+                        aggregate->fields[instruction.immediate.variant_field.field_ordinal];
                     break;
                 }
                 default:
@@ -580,6 +626,7 @@ done:
     result.steps = context->steps;
     xr_free(scratch);
     xr_free(initialized);
+    xr_free(places);
     xr_free(values);
     return result;
 }
@@ -669,21 +716,6 @@ XrVmCodeOptions xr_vm_code_default_options(void) {
     return options;
 }
 
-static bool program_uses_unrealized_places(const XrValidatedProgram *program,
-                                           uint32_t *function_out) {
-    for (uint32_t function = 0; function < program->function_count; ++function) {
-        const XrValidatedFunction *row = &program->functions[function];
-        for (uint32_t value = 0; value < row->value_count; ++value) {
-            if (row->value_categories[value] == XR_CORE_IR_PLACE) {
-                if (function_out)
-                    *function_out = function;
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *options,
                                 XrVmCode **code_out, XrVmCodeDiagnostic *diagnostic_out) {
     if (code_out)
@@ -718,15 +750,6 @@ XrVmCodeStatus xr_vm_code_build(XrInstance *instance, const XrVmCodeOptions *opt
         if (diagnostic_out)
             diagnostic_out->status = XR_VM_CODE_INSTANCE_UNAVAILABLE;
         return XR_VM_CODE_INSTANCE_UNAVAILABLE;
-    }
-    uint32_t unsupported_function = 0u;
-    if (program_uses_unrealized_places(program, &unsupported_function)) {
-        xr_execution_instance_unpin(instance);
-        if (diagnostic_out) {
-            diagnostic_out->status = XR_VM_CODE_UNSUPPORTED_PROGRAM;
-            diagnostic_out->function_id = unsupported_function;
-        }
-        return XR_VM_CODE_UNSUPPORTED_PROGRAM;
     }
     XrVmCode *code = xr_calloc(1u, sizeof(XrVmCode));
     if (!code) {
@@ -800,7 +823,28 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     xr_sha256_update(&context.trace, code->cache_key.execution_id.bytes,
                      sizeof(code->cache_key.execution_id.bytes));
     hash_u32(&context.trace, function_id);
-    XrVmOutcome outcome = execute_function(&context, function_id, arguments, argument_count, 1u);
+    const XrValidatedFunction *function = &code->program->functions[function_id];
+    XrVmRuntimeValue *runtime_arguments =
+        xr_calloc(argument_count ? argument_count : 1u, sizeof(XrVmRuntimeValue));
+    if (!runtime_arguments) {
+        free_aggregates(&context);
+        xr_execution_instance_unpin(instance);
+        return vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, &context);
+    }
+    for (uint32_t index = 0; index < argument_count; ++index) {
+        if (index >= function->parameter_count ||
+            function->parameter_modes[index] == XR_PARAM_REF) {
+            xr_free(runtime_arguments);
+            free_aggregates(&context);
+            xr_execution_instance_unpin(instance);
+            return vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
+        }
+        runtime_arguments[index].category = XR_CORE_IR_VALUE;
+        runtime_arguments[index].as.value = arguments[index];
+    }
+    XrVmOutcome outcome =
+        execute_function(&context, function_id, runtime_arguments, argument_count, 1u);
+    xr_free(runtime_arguments);
     if (outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_AGGREGATE)
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     hash_u32(&context.trace, (uint32_t) outcome.kind);
@@ -823,8 +867,6 @@ const char *xr_vm_code_status_name(XrVmCodeStatus status) {
             return "instance-unavailable";
         case XR_VM_CODE_POLICY_REJECTED:
             return "policy-rejected";
-        case XR_VM_CODE_UNSUPPORTED_PROGRAM:
-            return "unsupported-program";
         case XR_VM_CODE_OUT_OF_MEMORY:
             return "out-of-memory";
         default:

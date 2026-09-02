@@ -317,6 +317,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
         require(operation["kat_validator"] in {
             "aggregate-construct", "aggregate-project", "aggregate-update",
             "block-arguments", "branch", "conditional-branch", "fixed-contract",
+            "owner-drop", "owner-move", "place-load", "place-local", "place-store",
             "return", "scalar-oracle", "sealed-call", "variant-construct",
             "variant-project", "variant-test",
         }, f"operation {spelling} has unknown KAT validator")
@@ -507,6 +508,26 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("result_type") == payloads[variant][field])
     if validator == "fixed-contract":
         return actual.get("operand_types") == ["error"]
+    if validator == "owner-move":
+        return (actual.get("operand_type") == actual.get("result_type")
+                and actual.get("operand_category") == "value"
+                and actual.get("result_category") == "value")
+    if validator == "owner-drop":
+        return (actual.get("operand_category") == "value"
+                and actual.get("result_type") == "void")
+    if validator == "place-local":
+        return (actual.get("operand_type") == actual.get("result_type")
+                and actual.get("operand_category") == "value"
+                and actual.get("result_category") == "place")
+    if validator == "place-load":
+        return (actual.get("operand_type") == actual.get("result_type")
+                and actual.get("operand_category") == "place"
+                and actual.get("result_category") == "value")
+    if validator == "place-store":
+        return (actual.get("place_type") == actual.get("value_type")
+                and actual.get("place_category") == "place"
+                and actual.get("value_category") == "value"
+                and actual.get("result_type") == "void")
     raise CoreSpecError(f"KAT {case['id']} has no contract oracle for {validator}")
 
 

@@ -149,6 +149,41 @@
       "projection_kind": "variant-project",
       "core_operation": "core.variant.project",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.source.move",
+      "result_type": "any",
+      "projection_kind": "owner-move",
+      "core_operation": "core.owner.move",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.owner.forward",
+      "result_type": "any",
+      "projection_kind": "owner-move",
+      "core_operation": "core.owner.move",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.local.addr",
+      "result_type": "any",
+      "projection_kind": "place-local",
+      "core_operation": "core.place.local",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.place.load",
+      "result_type": "any",
+      "projection_kind": "place-load",
+      "core_operation": "core.place.load",
+      "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.place.store",
+      "result_type": "void",
+      "projection_kind": "place-store",
+      "core_operation": "core.place.store",
+      "immediate_u32": 0
     }
   ],
   "structural_mappings": [

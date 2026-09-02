@@ -1147,6 +1147,16 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_VARIANT_TEST},
         {XI_VARIANT_PROJECT, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_VARIANT_PROJECT, 0u,
          XR_PROGRAM_XI_PROJECTION_VARIANT_PROJECT},
+        {XI_SOURCE_MOVE, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_OWNER_MOVE, 0u,
+         XR_PROGRAM_XI_PROJECTION_OWNER_MOVE},
+        {XI_OWNER_FORWARD, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_OWNER_MOVE, 0u,
+         XR_PROGRAM_XI_PROJECTION_OWNER_MOVE},
+        {XI_LOCAL_ADDR, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_PLACE_LOCAL, 0u,
+         XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL},
+        {XI_PLACE_LOAD, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_PLACE_LOAD, 0u,
+         XR_PROGRAM_XI_PROJECTION_PLACE_LOAD},
+        {XI_PLACE_STORE, XR_CORE_TYPE_VOID, XR_CORE_OP_CORE_PLACE_STORE, 0u,
+         XR_PROGRAM_XI_PROJECTION_PLACE_STORE},
     };
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
         XrProgramXiProjection projection = {0};
@@ -1268,10 +1278,19 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  point.x = point.x + 2\n"
                                          "  return point.x\n"
                                          "}\n"
+                                         "fn write_ref(value: ref i64) -> i64 {\n"
+                                         "  value = 42\n"
+                                         "  return value\n"
+                                         "}\n"
+                                         "fn ref_value() -> i64 {\n"
+                                         "  var value: i64 = 40\n"
+                                         "  write_ref(ref value)\n"
+                                         "  return value\n"
+                                         "}\n"
                                          "fn root() -> i64 {\n"
                                          "  return choose(10) + scalar_matrix(10, 2) + "
                                          "choose_bool(true) + choose_bool(false) + pair_value() + "
-                                         "packet_value()\n"
+                                         "packet_value() + ref_value()\n"
                                          "}\n";
     PIPELINE_TEST_REQUIRE(
         xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
@@ -1300,6 +1319,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     const XiFunc *entry = NULL;
     XiFunc *packet_function = NULL;
     XiFunc *update_function = NULL;
+    XiFunc *ref_function = NULL;
     for (uint16_t function = 0; function < result.ir->module->nfuncs; ++function) {
         XiFunc *candidate = result.ir->module->functions[function];
         if (candidate && candidate->name && strcmp(candidate->name, "root") == 0)
@@ -1308,13 +1328,17 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
             packet_function = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "update_point") == 0)
             update_function = candidate;
+        if (candidate && candidate->name && strcmp(candidate->name, "ref_value") == 0)
+            ref_function = candidate;
     }
     PIPELINE_TEST_REQUIRE(entry != NULL);
     PIPELINE_TEST_REQUIRE(packet_function != NULL);
     PIPELINE_TEST_REQUIRE(update_function != NULL);
+    PIPELINE_TEST_REQUIRE(ref_function != NULL);
     PIPELINE_TEST_REQUIRE(xi_function_has_operation(update_function, XI_AGG_GET));
     PIPELINE_TEST_REQUIRE(xi_function_has_operation(update_function, XI_AGG_UPDATE));
     PIPELINE_TEST_REQUIRE(!xi_function_has_operation(update_function, XI_AGG_SET));
+    PIPELINE_TEST_REQUIRE(xi_function_has_operation(ref_function, XI_LOCAL_ADDR));
     XrProgramFromXiInput producer_input = {
         .module_roots = module_roots,
         .module_count = 1u,
@@ -1494,10 +1518,16 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
         XR_CORE_OP_CORE_VARIANT_TEST,
         XR_CORE_OP_CORE_VARIANT_PROJECT,
+        XR_CORE_OP_CORE_PLACE_LOCAL,
+        XR_CORE_OP_CORE_PLACE_LOAD,
+        XR_CORE_OP_CORE_PLACE_STORE,
     };
     for (size_t index = 0;
          index < sizeof(required_source_operations) / sizeof(required_source_operations[0]);
          ++index) {
+        if (!validated_program_has_operation(validated, required_source_operations[index]))
+            fprintf(stderr, "canonical source fixture omitted CoreSpec operation %u\n",
+                    required_source_operations[index]);
         PIPELINE_TEST_REQUIRE(
             validated_program_has_operation(validated, required_source_operations[index]));
     }
@@ -1505,7 +1535,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 140);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 182);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);

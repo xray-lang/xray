@@ -174,10 +174,21 @@ def self_test(root: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--generate", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     root = args.root.resolve()
     try:
+        if args.generate:
+            registry = read_json(root / REGISTRY)
+            program_schema = read_json(root / PROGRAM_SCHEMA)
+            header = (root / CORE_SPEC_HEADER).read_text(encoding="utf-8", errors="strict")
+            (root / COVERAGE).write_text(
+                canonical_json(expected_coverage(registry, program_schema, semantic_digest(header))),
+                encoding="utf-8",
+            )
+            print(f"XrProgram semantic coverage: generated {COVERAGE}")
+            return 0
         if args.self_test:
             self_test(root)
             print("XrProgram semantic coverage self-test: PASS")

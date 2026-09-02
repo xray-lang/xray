@@ -281,9 +281,16 @@ def main() -> int:
     parser.add_argument("--executable", type=Path)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--print-coverage", action="store_true")
+    parser.add_argument("--generate", action="store_true")
     args = parser.parse_args()
     root = args.root.resolve()
     try:
+        if args.generate:
+            (root / COVERAGE).write_text(
+                canonical_json(expected_coverage(read_json(root / REGISTRY))), encoding="utf-8"
+            )
+            print(f"XrProgram VM contracts: generated {COVERAGE}")
+            return 0
         if args.print_coverage:
             print(canonical_json(expected_coverage(read_json(root / REGISTRY))), end="")
             return 0

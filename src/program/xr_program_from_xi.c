@@ -803,7 +803,8 @@ static bool xi_type_has_logical_value_identity(const XrType *type) {
 }
 
 static const XiValue *logical_value_identity(const XiValue *value) {
-    value = xi_value_trace_identity(value);
+    while (xi_copy_is_identity_alias(value) && value->nargs == 1u && value->args && value->args[0])
+        value = value->args[0];
     while (
         value && value->nargs == 1u && value->args && value->args[0] && value->type &&
         ((value->op == XI_RETAIN &&
@@ -812,15 +813,20 @@ static const XiValue *logical_value_identity(const XiValue *value) {
           (value->type->kind == XR_KIND_TUPLE ||
            ((value->type->kind == XR_KIND_INSTANCE || value->type->kind == XR_KIND_CLASS) &&
             value->type->instance.class_ref && value->type->instance.class_ref->struct_layout))))) {
-        value = xi_value_trace_identity(value->args[0]);
+        value = value->args[0];
+        while (xi_copy_is_identity_alias(value) && value->nargs == 1u && value->args &&
+               value->args[0])
+            value = value->args[0];
     }
     return value;
 }
 
 static XrCoreIrValueCategory logical_value_category(const XiValue *value) {
     value = logical_value_identity(value);
-    return value && value->op == XI_PARAM && value->param_mode == XR_PARAM_REF ? XR_CORE_IR_PLACE
-                                                                               : XR_CORE_IR_VALUE;
+    return value && ((value->op == XI_PARAM && value->param_mode == XR_PARAM_REF) ||
+                     value->op == XI_LOCAL_ADDR)
+               ? XR_CORE_IR_PLACE
+               : XR_CORE_IR_VALUE;
 }
 
 static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
@@ -1210,6 +1216,66 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             instruction->immediate.variant_field.variant_ordinal = variant;
             instruction->immediate.variant_field.field_ordinal = field;
             return set_operands(instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
+        }
+        case XR_PROGRAM_XI_PROJECTION_OWNER_MOVE: {
+            uint16_t operand_type = XR_CORE_TYPE_VOID;
+            if (value->nargs != 1u || result_type == XR_CORE_TYPE_VOID ||
+                !map_type(context, value->args[0]->type, &operand_type) ||
+                operand_type != result_type)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi owner transfer v%u has no exact logical value type", value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = result_type;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            return set_operands(instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
+        }
+        case XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL: {
+            uint16_t operand_type = XR_CORE_TYPE_VOID;
+            if (value->nargs != 1u || result_type == XR_CORE_TYPE_VOID ||
+                !map_type(context, value->args[0]->type, &operand_type) ||
+                operand_type != result_type || !xi_local_addr_names_operand_storage(value->aux_int))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi local address v%u is not an exact call-bound local place",
+                            value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = result_type;
+            instruction->result_category = XR_CORE_IR_PLACE;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            return set_operands(instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
+        }
+        case XR_PROGRAM_XI_PROJECTION_PLACE_LOAD: {
+            uint16_t place_type = XR_CORE_TYPE_VOID;
+            if (value->nargs != 1u || result_type == XR_CORE_TYPE_VOID ||
+                !map_type(context, value->args[0]->type, &place_type) ||
+                place_type != result_type ||
+                logical_value_category(value->args[0]) != XR_CORE_IR_PLACE)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi place load v%u has no exact pointee type", value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result = value_key(function, value);
+            instruction->result_type_id = result_type;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            return set_operands(instruction, function, block, value->args, 1u, diagnostic,
+                                diagnostic_size);
+        }
+        case XR_PROGRAM_XI_PROJECTION_PLACE_STORE: {
+            uint16_t place_type = XR_CORE_TYPE_VOID;
+            uint16_t value_type = XR_CORE_TYPE_VOID;
+            if (value->nargs != 2u || result_type != XR_CORE_TYPE_VOID ||
+                !map_type(context, value->args[0]->type, &place_type) ||
+                !map_type(context, value->args[1]->type, &value_type) || place_type != value_type ||
+                logical_value_category(value->args[0]) != XR_CORE_IR_PLACE)
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi place store v%u has no exact pointee/value contract", value->id);
+            instruction->operation_id = projection.core_operation_id;
+            instruction->result_type_id = XR_CORE_TYPE_VOID;
+            instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+            return set_operands(instruction, function, block, value->args, 2u, diagnostic,
                                 diagnostic_size);
         }
         default:

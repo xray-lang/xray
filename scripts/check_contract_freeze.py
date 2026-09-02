@@ -925,6 +925,46 @@ def verify_digests(root: Path, contracts_dir: Path, specs=CONTRACT_SPECS) -> lis
     return errors
 
 
+def refresh_digests(root: Path, contracts_dir: Path, specs=CONTRACT_SPECS) -> list[str]:
+    errors: list[str] = []
+    for spec in specs:
+        path = contracts_dir / spec.name
+        recorded, parse_errors = parse_contract(path)
+        errors.extend(parse_errors)
+        if parse_errors:
+            continue
+        expected_anchors = set(spec.anchors)
+        if set(recorded) != expected_anchors:
+            missing = sorted(expected_anchors - set(recorded))
+            extra = sorted(set(recorded) - expected_anchors)
+            if missing:
+                errors.append(f"{path}: missing anchors: {', '.join(missing)}")
+            if extra:
+                errors.append(f"{path}: unregistered anchors: {', '.join(extra)}")
+            continue
+
+        replacements: dict[str, str] = {}
+        for anchor in spec.anchors:
+            source = root / anchor
+            if not source.is_file():
+                errors.append(f"{path}: anchor does not exist: {anchor}")
+                continue
+            replacements[anchor] = digest(source)
+        if len(replacements) != len(spec.anchors):
+            continue
+
+        lines = path.read_text(encoding="utf-8").splitlines()
+        refreshed: list[str] = []
+        for line in lines:
+            match = ANCHOR_RE.match(line)
+            if match:
+                anchor, _ = match.groups()
+                line = f"anchor-sha256: {anchor} {replacements[anchor]}"
+            refreshed.append(line)
+        path.write_text("\n".join(refreshed) + "\n", encoding="utf-8")
+    return errors
+
+
 def self_test() -> int:
     with tempfile.TemporaryDirectory(prefix="xray-contract-freeze-") as tmp:
         root = Path(tmp)
@@ -942,6 +982,8 @@ def self_test() -> int:
         assert verify_digests(root, root / "contracts", (spec,)) == []
         anchor.write_text("v2\n", encoding="utf-8")
         assert any("digest drift" in error for error in verify_digests(root, root / "contracts", (spec,)))
+        assert refresh_digests(root, root / "contracts", (spec,)) == []
+        assert verify_digests(root, root / "contracts", (spec,)) == []
     print("contract freeze injection self-test: PASS")
     return 0
 
@@ -950,6 +992,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root")
     parser.add_argument("--contracts-dir", default="contracts", help="contract directory")
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="refresh digests after requiring the registered anchor sets to match exactly",
+    )
     parser.add_argument("--self-test", action="store_true", help="run injected drift checks")
     args = parser.parse_args()
 
@@ -958,9 +1005,16 @@ def main() -> int:
 
     root = Path(args.root).resolve()
     contracts_dir = (root / args.contracts_dir).resolve()
+    if args.refresh:
+        errors = refresh_digests(root, contracts_dir)
+        if errors:
+            print("task-220 contract freeze refresh failed:", file=sys.stderr)
+            for error in errors:
+                print(f"  - {error}", file=sys.stderr)
+            return 1
+        print(f"contract freeze: REFRESHED ({len(CONTRACT_SPECS)} contracts)")
+        return 0
     errors = verify_digests(root, contracts_dir)
-
-
     if errors:
         print("task-220 contract freeze gate failed:", file=sys.stderr)
         for error in errors:

@@ -960,6 +960,196 @@ static void test_direct_call(void) {
     xr_program_artifact_free(&artifact);
 }
 
+static void test_owner_and_local_place_operations(void) {
+    XrCoreIrConstantInput constants[] = {
+        {.key = key("place:constant:40"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 40},
+        {.key = key("place:constant:42"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 42},
+        {.key = key("place:constant:7"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 7},
+    };
+    XrCoreIrKey helper_key = key("place:function:helper");
+    XrCoreIrKey main_key = key("place:function:main");
+    XrCoreIrKey helper_block_key = key("place:block:helper");
+    XrCoreIrKey main_block_key = key("place:block:main");
+    XrCoreIrKey helper_argument = key("place:value:helper-argument");
+    XrCoreIrKey v40 = key("place:value:40");
+    XrCoreIrKey moved = key("place:value:moved");
+    XrCoreIrKey local = key("place:value:local");
+    XrCoreIrKey v42 = key("place:value:42");
+    XrCoreIrKey loaded = key("place:value:loaded");
+    XrCoreIrKey v7 = key("place:value:7");
+    XrCoreIrValueInput helper_arguments[] = {
+        {.key = helper_argument, .type_id = XR_CORE_TYPE_I64, .category = XR_CORE_IR_PLACE},
+    };
+    XrCoreIrKey helper_argument_operand[] = {helper_argument};
+    XrCoreIrKey store_operands[] = {helper_argument, v42};
+    XrCoreIrInstructionInput helper_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = helper_argument_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v42,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_STORE,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = store_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey v40_operand[] = {v40};
+    XrCoreIrKey moved_operand[] = {moved};
+    XrCoreIrKey local_operand[] = {local};
+    XrCoreIrKey v7_operand[] = {v7};
+    XrCoreIrKey loaded_operand[] = {loaded};
+    XrCoreIrInstructionInput main_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_MOVE,
+         .result = moved,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = v40_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+         .result = local,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = moved_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = local_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
+         .immediate.key = helper_key},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+         .result = loaded,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = local_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v7,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[2].key},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = v7_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = loaded_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput blocks[] = {
+        {.key = helper_block_key,
+         .arguments = helper_arguments,
+         .argument_count = 1u,
+         .instructions = helper_instructions,
+         .instruction_count = sizeof(helper_instructions) / sizeof(helper_instructions[0])},
+        {.key = main_block_key,
+         .instructions = main_instructions,
+         .instruction_count = sizeof(main_instructions) / sizeof(main_instructions[0])},
+    };
+    uint16_t parameter_type = XR_CORE_TYPE_I64;
+    XrParamMode parameter_mode = XR_PARAM_REF;
+    XrCoreIrFunctionInput functions[] = {
+        {.key = helper_key,
+         .parameter_types = &parameter_type,
+         .parameter_modes = &parameter_mode,
+         .parameter_count = 1u,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .entry_block = helper_block_key,
+         .blocks = &blocks[0],
+         .block_count = 1u},
+        {.key = main_key,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .effect_mask = 4u,
+         .entry_block = main_block_key,
+         .blocks = &blocks[1],
+         .block_count = 1u,
+         .flags = XR_PROGRAM_FUNCTION_ENTRY},
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("place:module"),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
+        .functions = functions,
+        .function_count = sizeof(functions) / sizeof(functions[0]),
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_modules(&module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, NULL, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 42);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    XrCoreIrKey bad_result = key("place:value:bad-result");
+    XrCoreIrKey bad_operands[] = {v40, moved};
+    XrCoreIrKey bad_return[] = {bad_result};
+    XrCoreIrInstructionInput bad_instructions[] = {
+        main_instructions[0],
+        main_instructions[1],
+        {.operation_id = XR_CORE_OP_CORE_ADD_I64,
+         .result = bad_result,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = bad_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = 0u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = bad_return,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput bad_block = {
+        .key = key("place:block:bad"),
+        .instructions = bad_instructions,
+        .instruction_count = sizeof(bad_instructions) / sizeof(bad_instructions[0]),
+    };
+    XrCoreIrFunctionInput bad_function = {
+        .key = key("place:function:bad"),
+        .result_type_id = XR_CORE_TYPE_I64,
+        .effect_mask = 1u,
+        .entry_block = bad_block.key,
+        .blocks = &bad_block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    CHECK(write_one_function(constants, 1u, &bad_function, &artifact) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_VALUE_USE);
+    xr_program_artifact_free(&artifact);
+}
+
 static void test_terminal_operations(void) {
     XrCoreIrKey trap_block_key = key("trap:block");
     XrCoreIrInstructionInput trap_instruction = {
@@ -1403,6 +1593,7 @@ int main(void) {
     test_scalar_operations();
     test_control_and_profile();
     test_direct_call();
+    test_owner_and_local_place_operations();
     test_parameter_modes_and_value_categories();
     test_terminal_operations();
     test_negative_diagnostics_and_budget();

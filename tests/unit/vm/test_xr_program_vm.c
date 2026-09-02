@@ -592,6 +592,143 @@ static XrValidatedProgram *build_call_program(void) {
     return validate_fixture(&constant, 1, functions, 2);
 }
 
+static XrValidatedProgram *build_local_ref_program(void) {
+    XrCoreIrConstantInput constants[] = {
+        {.key = fixture_key("local-ref:40"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 40},
+        {.key = fixture_key("local-ref:42"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 42},
+        {.key = fixture_key("local-ref:drop"),
+         .type_id = XR_CORE_TYPE_I64,
+         .kind = XR_CORE_IR_CONSTANT_I64,
+         .value.i64 = 7},
+    };
+    XrCoreIrKey helper = fixture_key("local-ref:helper");
+    XrCoreIrKey entry = fixture_key("local-ref:entry");
+    XrCoreIrKey helper_block_key = fixture_key("local-ref:helper-block");
+    XrCoreIrKey entry_block_key = fixture_key("local-ref:entry-block");
+    XrCoreIrKey ref_arg = fixture_key("local-ref:arg");
+    XrCoreIrKey v40 = fixture_key("local-ref:v40");
+    XrCoreIrKey moved = fixture_key("local-ref:moved");
+    XrCoreIrKey place = fixture_key("local-ref:place");
+    XrCoreIrKey v42 = fixture_key("local-ref:v42");
+    XrCoreIrKey loaded = fixture_key("local-ref:loaded");
+    XrCoreIrKey dropped = fixture_key("local-ref:dropped");
+    XrCoreIrValueInput helper_argument = {
+        .key = ref_arg, .type_id = XR_CORE_TYPE_I64, .category = XR_CORE_IR_PLACE};
+    XrCoreIrKey ref_operand[] = {ref_arg};
+    XrCoreIrKey store_operands[] = {ref_arg, v42};
+    XrCoreIrInstructionInput helper_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = ref_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v42,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[1].key},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_STORE,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = store_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey move_operand[] = {v40};
+    XrCoreIrKey local_operand[] = {moved};
+    XrCoreIrKey place_operand[] = {place};
+    XrCoreIrKey drop_operand[] = {dropped};
+    XrCoreIrKey return_operand[] = {loaded};
+    XrCoreIrInstructionInput entry_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = v40,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[0].key},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_MOVE,
+         .result = moved,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = move_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
+         .result = place,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .result_category = XR_CORE_IR_PLACE,
+         .operands = local_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
+         .immediate.key = helper},
+        {.operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
+         .result = loaded,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .operands = place_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
+         .result = dropped,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
+         .immediate.key = constants[2].key},
+        {.operation_id = XR_CORE_OP_CORE_OWNER_DROP,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = drop_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = return_operand,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrBlockInput helper_block = {
+        .key = helper_block_key,
+        .arguments = &helper_argument,
+        .argument_count = 1u,
+        .instructions = helper_instructions,
+        .instruction_count = sizeof(helper_instructions) / sizeof(helper_instructions[0]),
+    };
+    XrCoreIrBlockInput entry_block = {
+        .key = entry_block_key,
+        .instructions = entry_instructions,
+        .instruction_count = sizeof(entry_instructions) / sizeof(entry_instructions[0]),
+    };
+    uint16_t parameter_type = XR_CORE_TYPE_I64;
+    XrParamMode parameter_mode = XR_PARAM_REF;
+    XrCoreIrFunctionInput functions[] = {
+        {.key = helper,
+         .parameter_types = &parameter_type,
+         .parameter_modes = &parameter_mode,
+         .parameter_count = 1u,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .entry_block = helper_block_key,
+         .blocks = &helper_block,
+         .block_count = 1u},
+        {.key = entry,
+         .result_type_id = XR_CORE_TYPE_I64,
+         .effect_mask = 4u,
+         .entry_block = entry_block_key,
+         .blocks = &entry_block,
+         .block_count = 1u,
+         .flags = XR_PROGRAM_FUNCTION_ENTRY},
+    };
+    return validate_fixture(constants, sizeof(constants) / sizeof(constants[0]), functions,
+                            sizeof(functions) / sizeof(functions[0]));
+}
+
 static XrValidatedProgram *build_trap_program(void) {
     XrCoreIrInstructionInput instruction = {
         .operation_id = XR_CORE_OP_CORE_TRAP,
@@ -823,9 +960,9 @@ static void test_operation_semantics(void) {
     XrVmCode *aggregate_code = NULL;
     REQUIRE(xr_vm_code_build(aggregate_instance, &aggregate_budget, &aggregate_code,
                              &aggregate_diagnostic) == XR_VM_CODE_OK);
-    XrVmOutcome aggregate_limited = xr_vm_code_execute(
-        aggregate_code, aggregate_instance, xr_validated_program_entry_function(aggregate), NULL,
-        0u);
+    XrVmOutcome aggregate_limited =
+        xr_vm_code_execute(aggregate_code, aggregate_instance,
+                           xr_validated_program_entry_function(aggregate), NULL, 0u);
     REQUIRE(aggregate_limited.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
     xr_vm_code_free(aggregate_code);
     retire_and_free(&aggregate_instance);
@@ -844,6 +981,9 @@ static void test_operation_semantics(void) {
     XrValidatedProgram *call = build_call_program();
     run_program(call, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
 
+    XrValidatedProgram *local_ref = build_local_ref_program();
+    run_program(local_ref, false, NULL, NULL, 0, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
+
     XrValidatedProgram *trap = build_trap_program();
     run_program(trap, false, NULL, NULL, 0, XR_VM_OUTCOME_TRAP, XR_VM_VALUE_VOID, 0u);
 
@@ -855,6 +995,7 @@ static void test_operation_semantics(void) {
 
     xr_validated_program_free(error);
     xr_validated_program_free(trap);
+    xr_validated_program_free(local_ref);
     xr_validated_program_free(call);
     xr_validated_program_free(control);
     xr_validated_program_free(scalar);
