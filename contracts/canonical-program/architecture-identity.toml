@@ -23,7 +23,16 @@ instance = "one-live-execution"
 program = "ProgramId = hash(format-major, CoreSpecId, canonical-program-bytes)"
 profile = "ProfileId = hash(profile-schema-major, canonical-profile-bytes)"
 execution = "ExecutionId = hash(ProgramId, ProfileId, BoundaryAbiId, RuntimeKernelId)"
+boundary_type = "BoundaryTypeLayoutId = hash(ProgramId, BoundaryAbiId, BoundaryKind, TypeId, complete derived layout)"
+boundary_call = "BoundaryCallLayoutId = hash(ExecutionId, BoundaryAbiId, BoundaryKind, FunctionId, complete argument and result slot layouts)"
 native = "NativeArtifactId = hash(ExecutionId, BackendId, ToolchainId, OptimizationPolicyId, native bytes)"
+
+[materialization]
+input = "XrValidatedProgram plus XrTargetProfile through one XrInstance"
+output = "boundary-kind-specific type layouts and function call frames"
+active = "copy-value scalar, aggregate, and variant layouts with empty root rows and trivial cleanup"
+deferred = "nontrivial ownership, roots, cleanup, coroutine state, and concrete AOT, FFI, hybrid, and reloadable adapters"
+local_representation = "executor-private and never an input to BoundaryABI"
 
 [compatibility]
 pre_293 = "none"
@@ -47,5 +56,6 @@ items = [
   "No public Module name for the linked executable program.",
   "No target-specific storage layout, C type, register allocation, or instruction selection in XrProgram.",
   "No mandatory XrProgram loader in a pure-AOT deployment.",
+  "No generic place.field or place.index operation: aggregate value update is semantic, alias-visible places belong to parameter-mode ownership, and container indexing is domain-specific.",
   "No second semantic owner in VM, AOT, runtime providers, or generated C.",
 ]

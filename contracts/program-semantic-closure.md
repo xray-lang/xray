@@ -361,7 +361,7 @@ require the independently verified program authority frozen above.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 6ebe5ae5542fa71e0d2366e11b7d863aa9cb311500caa2f079449fab92d19f59
+anchor-sha256: CMakeLists.txt af8549125f9746d3915b0fff88e62c23eea9e818afc253822f4e3ba46e831083
 anchor-sha256: src/module/xmodule_identity.h c2c72acd24d5e67091caf9fd8e0b18a335d2421110519e0d5a6d7d48e87708ff
 anchor-sha256: src/module/xmodule_identity_view.c 606a358a19e891c66c9a41a22fa18880a9fcb401e0ce4229ca4dd59cd3e45fb1
 anchor-sha256: src/module/xmodule_graph.h 9eeade35f1bf2115b5c6c1b0d76453e9848f11a9916489085701f1c8319e42e1
@@ -424,7 +424,7 @@ anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515
 anchor-sha256: tests/unit/module/test_module_identity.c f74bca4ff121c2cdd470606892dac2b4cb5084c88f78f54e9dcbfa8dac364d20
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 618cd82e5acd711031f2d0bd1529582f7e157528a0589155a3379466a6cba1c8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 3948a625c32a99255c16569008b4d9e79ad77c6e5b64712db34dbeb5179537e2
-anchor-sha256: tests/unit/CMakeLists.txt 220175a3ed455c54b598fdf4373d4bd22f5590fb86bf17f404da7578aeae23f0
+anchor-sha256: tests/unit/CMakeLists.txt 4089786b4d2cc13bbdd6d5e7b96cbc73504daacca3feb49400b10fa23b3f81dc
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 3daef003af5b917e87a9978a5f6e7613305a8c57e84988b2e1f8d001d2f8d6dc
 anchor-sha256: src/aot/xaot_bundle.c 16a2e899a2c11b3c64dee5ed2fbc48d43ca967e8eba1487ffe6c9666004f55e1

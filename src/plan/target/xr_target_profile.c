@@ -140,7 +140,7 @@ static XrBoundaryValueAbi boundary_value(uint16_t type_id, uint8_t representatio
 }
 
 static void compute_boundary_abi(const XrTargetProfileDraft *facts, XrBoundaryAbi *boundary) {
-    static const uint8_t domain[] = "xray-boundary-abi-v1\0";
+    static const uint8_t domain[] = "xray-boundary-abi-v2\0";
     const XrTargetDataLayout *layout = &facts->machine.data_layout;
     memset(boundary, 0, sizeof(*boundary));
     boundary->schema_version = XR_BOUNDARY_ABI_SCHEMA_VERSION;
@@ -148,8 +148,13 @@ static void compute_boundary_abi(const XrTargetProfileDraft *facts, XrBoundaryAb
     boundary->pointer_size = (uint8_t) layout->pointer.size;
     boundary->pointer_alignment = (uint8_t) layout->pointer.align;
     boundary->value_count = XR_BOUNDARY_ABI_VALUE_COUNT;
-    boundary->call_convention = XR_BOUNDARY_CALL_CANONICAL;
+    boundary->call_convention = XR_BOUNDARY_CALL_FRAME_V1;
     boundary->error_model = XR_BOUNDARY_ERROR_TYPED_CODE;
+    boundary->aggregate_layout_model = XR_BOUNDARY_AGGREGATE_LAYOUT_DECLARATION_ORDER_NATURAL;
+    boundary->variant_layout_model = XR_BOUNDARY_VARIANT_LAYOUT_U32_TAG_NATURAL_PAYLOAD;
+    boundary->root_model = XR_BOUNDARY_ROOT_MODEL_EXPLICIT_OFFSETS;
+    boundary->cleanup_model = XR_BOUNDARY_CLEANUP_MODEL_EXPLICIT_ACTIONS;
+    boundary->variant_tag_type = XR_CORE_TYPE_U32;
     boundary->values[0] = boundary_value(XR_CORE_TYPE_VOID, XR_BOUNDARY_VALUE_VOID,
                                          XR_BOUNDARY_OWNERSHIP_NONE, (XrTargetTypeLayout) {0});
     boundary->values[1] = boundary_value(XR_CORE_TYPE_BOOL, XR_BOUNDARY_VALUE_CANONICAL_BOOL,
@@ -175,6 +180,12 @@ static void compute_boundary_abi(const XrTargetProfileDraft *facts, XrBoundaryAb
     hash_u64(&context, boundary->call_convention);
     hash_u64(&context, boundary->error_model);
     hash_u64(&context, boundary->coroutine_model);
+    hash_u64(&context, boundary->aggregate_layout_model);
+    hash_u64(&context, boundary->variant_layout_model);
+    hash_u64(&context, boundary->root_model);
+    hash_u64(&context, boundary->cleanup_model);
+    hash_u64(&context, boundary->variant_tag_type);
+    hash_u64(&context, boundary->reserved16);
     for (uint32_t index = 0; index < boundary->value_count; ++index) {
         const XrBoundaryValueAbi *value = &boundary->values[index];
         hash_u64(&context, value->type_id);

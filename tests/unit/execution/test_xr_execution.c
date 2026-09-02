@@ -9,6 +9,7 @@
  */
 
 #include "../../../src/core/xr_core_spec_gen.h"
+#include "../../../src/execution/xr_boundary_materialization.h"
 #include "../../../src/execution/xr_execution.h"
 #include "../../../src/os/os_thread.h"
 #include "../../../src/plan/semantic/xr_semantic_ids.h"
@@ -38,6 +39,8 @@ typedef struct TestProviderBindings {
 static void require_fingerprint(XrFingerprint fingerprint, const char *expected) {
     char hex[XR_FINGERPRINT_BYTES * 2u + 1u];
     xr_fingerprint_hex(fingerprint, hex);
+    if (strcmp(hex, expected) != 0)
+        fprintf(stderr, "fingerprint mismatch: expected %s, got %s\n", expected, hex);
     REQUIRE(strcmp(hex, expected) == 0);
 }
 
@@ -180,21 +183,21 @@ static void test_profile_partitions_and_foreign_authority(void) {
     REQUIRE(native && same && foreign);
 
     require_fingerprint(xr_target_profile_fingerprint(native),
-                        "604dec4cfc2f7a10dd2e9fd201162e4425bcb8a88acc709750e2079145825320");
+                        "996af3b1e0c6a0416f0ad66a7dfd1fc73ee77fdce7c2c7e864af7bf110a942cf");
     require_fingerprint(xr_target_profile_target_semantics_id(native),
                         "dd824775cc3c64949d9d8421f230fc506a1a5f7018479442e56eba9b7d638d72");
     require_fingerprint(xr_target_profile_boundary_abi(native)->id,
-                        "0a337867dc367582e0f739d2d1f3ea924c011bb5322482bb30e9aff489a37a82");
+                        "e32eb4398c14d6e4998cdc857710cfe4b858166f825063b7bc672198b53d0cf4");
     require_fingerprint(xr_target_profile_runtime_kernel(native)->id,
                         "fbebecd9114ba1ad75b8b121c9f6e09aac9d0725ac2c72b503f7ce60dec8cf4a");
     require_fingerprint(xr_target_profile_provider_contract_set_id(native),
                         "3142fbdb7105d9da1029f25f02cbd4c71c79a3ce2f0c9e870ebaff90f755812f");
     require_fingerprint(xr_target_profile_fingerprint(foreign),
-                        "f3bd24fb486d925d745edf92470e5e0f38a607c1a40081a3237d6cc492b6890d");
+                        "d8ce347d62b3d035a442528ad5d8f8d97acf2fbe2d563b5a8ea551540298f8df");
     require_fingerprint(xr_target_profile_target_semantics_id(foreign),
                         "1787c35ebce26c68f77df851158611abc6f72fb786cb714b58e11b67886f1ff6");
     require_fingerprint(xr_target_profile_boundary_abi(foreign)->id,
-                        "6e26614663923e4b10f2e9e6426658a2235cf856b5ea9c724fd8fa5ffaf0ef0c");
+                        "9396b084e428eb6515060056163900befef766e0cfdc5b5b0c155008188efd96");
     require_fingerprint(xr_target_profile_runtime_kernel(foreign)->id,
                         "65511a917abd83be9c24a1521e77eb9beca6fa3b3be6417ff176d7317e22471d");
     require_fingerprint(xr_target_profile_provider_contract_set_id(foreign),
@@ -225,8 +228,14 @@ static void test_profile_partitions_and_foreign_authority(void) {
     const XrBoundaryAbi *boundary = xr_target_profile_boundary_abi(foreign);
     REQUIRE(boundary->schema_version == XR_BOUNDARY_ABI_SCHEMA_VERSION);
     REQUIRE(boundary->value_count == XR_BOUNDARY_ABI_VALUE_COUNT);
-    REQUIRE(boundary->call_convention == XR_BOUNDARY_CALL_CANONICAL);
+    REQUIRE(boundary->call_convention == XR_BOUNDARY_CALL_FRAME_V1);
     REQUIRE(boundary->error_model == XR_BOUNDARY_ERROR_TYPED_CODE);
+    REQUIRE(boundary->aggregate_layout_model ==
+            XR_BOUNDARY_AGGREGATE_LAYOUT_DECLARATION_ORDER_NATURAL);
+    REQUIRE(boundary->variant_layout_model == XR_BOUNDARY_VARIANT_LAYOUT_U32_TAG_NATURAL_PAYLOAD);
+    REQUIRE(boundary->root_model == XR_BOUNDARY_ROOT_MODEL_EXPLICIT_OFFSETS);
+    REQUIRE(boundary->cleanup_model == XR_BOUNDARY_CLEANUP_MODEL_EXPLICIT_ACTIONS);
+    REQUIRE(boundary->variant_tag_type == XR_CORE_TYPE_U32);
     REQUIRE(boundary->values[0].type_id == XR_CORE_TYPE_VOID);
     REQUIRE(boundary->values[0].size == 0);
     REQUIRE(boundary->values[1].type_id == XR_CORE_TYPE_BOOL);
@@ -262,9 +271,9 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
     require_fingerprint(xr_execution_instance_id(first),
-                        "f1f7dab391089df61b957c95d85da66d4fcf4fe249ecca3a990e65c694573449");
+                        "0a9898620e574ae11a16db1e65550c264a7da163a5d7db295e8a19a1ba714fd4");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "35c4af0a6c642097dc8868377e5982f329e4a839765834b8849c39586853b0d6");
+                        "a2a4edb8e98e78cee7335297f8d1a03ec7bbd0d7d0d20ccd1f8ed31afe075f25");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));

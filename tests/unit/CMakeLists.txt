@@ -519,6 +519,11 @@ add_xray_unit_test(test_xr_execution execution/test_xr_execution.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 set_tests_properties(test_xr_execution PROPERTIES
     LABELS "unit;execution;target-machine;provider;generation;task-298")
+add_xray_unit_test(test_xr_boundary_materialization
+    execution/test_xr_boundary_materialization.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+set_tests_properties(test_xr_boundary_materialization PROPERTIES
+    LABELS "unit;execution;boundary-abi;aggregate;variant;task-298;task-301")
 add_xray_unit_test(test_xr_program_vm vm/test_xr_program_vm.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 set_tests_properties(test_xr_program_vm PROPERTIES

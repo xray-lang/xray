@@ -37,6 +37,7 @@ RUNTIME_SOURCES = (
     "src/program/xr_program_decode.c",
     "src/program/xr_program_verify.c",
     "src/execution/xr_execution.c",
+    "src/execution/xr_boundary_materialization.c",
     "src/vm/xr_program_vm.c",
 )
 
@@ -243,7 +244,8 @@ def validate_artifacts(archive: Path, executable: Path) -> None:
         require(re.search(pattern, executable_symbols, re.IGNORECASE) is None,
                 f"runtime embedder contains forbidden symbol pattern {pattern}")
     for required in ("xr_program_validate", "xr_execution_instance_create",
-                     "xr_vm_code_build", "xr_vm_code_execute"):
+                     "xr_execution_materialize_boundary_type", "xr_vm_code_build",
+                     "xr_vm_code_execute"):
         require(required in archive_symbols, f"runtime archive omits {required}")
 
 

@@ -636,6 +636,8 @@ add_custom_target(check-xr-execution-contracts
             ${CMAKE_SOURCE_DIR}/src/plan/target/xr_target_profile.c
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.h
             ${CMAKE_SOURCE_DIR}/src/execution/xr_execution.c
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_boundary_materialization.h
+            ${CMAKE_SOURCE_DIR}/src/execution/xr_boundary_materialization.c
     COMMENT "Checking exact target-profile and execution-binding contracts"
     VERBATIM
 )
@@ -1714,6 +1716,7 @@ set(XRAY_PROGRAM_VM_RUNTIME_SOURCES
     src/program/xr_program_decode.c
     src/program/xr_program_verify.c
     src/execution/xr_execution.c
+    src/execution/xr_boundary_materialization.c
     src/vm/xr_program_vm.c
 )
 add_library(xray_program_vm_runtime STATIC ${XRAY_PROGRAM_VM_RUNTIME_SOURCES})

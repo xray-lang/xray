@@ -1,6 +1,6 @@
 {
   "schema": "xray-execution-binding-coverage/1",
-  "profile_schema_version": 4,
+  "profile_schema_version": 5,
   "execution_binding_schema_version": 1,
   "profile_partitions": [
     {
@@ -11,7 +11,7 @@
     {
       "name": "boundary-abi",
       "identity": "XrBoundaryAbiId",
-      "status": "WALKING_SKELETON"
+      "status": "ACTIVE_COPY_VALUE"
     },
     {
       "name": "runtime-kernel",
@@ -29,7 +29,18 @@
     "bool",
     "i64",
     "u32",
-    "error"
+    "error",
+    "aggregate",
+    "variant"
+  ],
+  "active_boundary_contracts": [
+    "call-frame-v1",
+    "declaration-order-natural-aggregate",
+    "u32-tag-natural-payload-variant",
+    "program-profile-bound-type-layout",
+    "copy-value-function-signature",
+    "explicit-root-offsets",
+    "explicit-cleanup-actions"
   ],
   "provider_admission": [
     "stable-contract-id",
@@ -57,9 +68,8 @@
     "no-host-sizeof-or-preprocessor-probe"
   ],
   "inactive_boundary_contracts": [
-    "aggregate-carriers",
     "borrow-move-share-drop-transfer",
-    "root-and-cleanup-tables",
+    "nontrivial-root-and-cleanup-rows",
     "coroutine-continuation-state",
     "AOT-boundary-adapter",
     "FFI-and-hybrid-adapter"

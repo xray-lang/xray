@@ -29,10 +29,10 @@ the generated-C behavioral fixture; checked overflow, wrapping overflow, and div
 compile and execute as independent native cases. Full language operation families, high-risk
 optimizations, public loader ABI, and package publication remain inactive.
 
-anchor-sha256: CMakeLists.txt 6ebe5ae5542fa71e0d2366e11b7d863aa9cb311500caa2f079449fab92d19f59
-anchor-sha256: tests/unit/CMakeLists.txt 220175a3ed455c54b598fdf4373d4bd22f5590fb86bf17f404da7578aeae23f0
+anchor-sha256: CMakeLists.txt af8549125f9746d3915b0fff88e62c23eea9e818afc253822f4e3ba46e831083
+anchor-sha256: tests/unit/CMakeLists.txt 4089786b4d2cc13bbdd6d5e7b96cbc73504daacca3feb49400b10fa23b3f81dc
 anchor-sha256: xisa/core/registry.json 18fbbba56262869fecbba8e262aed7d2bceb9d80e04c04ef99b5e77a6675403d
-anchor-sha256: contracts/canonical-program/architecture-identity.toml e5a3d23489bd9f2669d9d65b6a5ff963584a9bf8a7929d341019abedb0e00d7f
+anchor-sha256: contracts/canonical-program/architecture-identity.toml 844f5e20d293d2b74efda9d1755c7da2d9da27b9acc985b346dcdc54e1917ccd
 anchor-sha256: contracts/canonical-program/operation-capability-matrix.json b910da115513d59fa0ae903470d895ec3772eed82aad94039796229f59cef8fe
 anchor-sha256: contracts/canonical-program/xrprogram-aot-coverage.json b557140133afc6bfcb44f7806692840d802bb3435f7eca8482df2a3d70146572
 anchor-sha256: src/aot/program/xr_backend_ir.h d0cafeda3702e5a406b09573adab96223942321f9dab06f4ef0ac32ed6a30349

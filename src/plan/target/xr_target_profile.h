@@ -25,9 +25,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(4)
+#define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(5)
 #define XR_TARGET_PLAN_SCHEMA_VERSION UINT32_C(57)
-#define XR_BOUNDARY_ABI_SCHEMA_VERSION UINT32_C(1)
+#define XR_BOUNDARY_ABI_SCHEMA_VERSION UINT32_C(2)
 #define XR_RUNTIME_KERNEL_SCHEMA_VERSION UINT32_C(1)
 #define XR_BOUNDARY_ABI_VALUE_COUNT UINT8_C(5)
 
@@ -53,13 +53,33 @@ typedef enum XrBoundaryOwnership {
 
 typedef enum XrBoundaryCallConvention {
     XR_BOUNDARY_CALL_INVALID = 0,
-    XR_BOUNDARY_CALL_CANONICAL,
+    XR_BOUNDARY_CALL_FRAME_V1,
 } XrBoundaryCallConvention;
 
 typedef enum XrBoundaryErrorModel {
     XR_BOUNDARY_ERROR_INVALID = 0,
     XR_BOUNDARY_ERROR_TYPED_CODE,
 } XrBoundaryErrorModel;
+
+typedef enum XrBoundaryAggregateLayoutModel {
+    XR_BOUNDARY_AGGREGATE_LAYOUT_INVALID = 0,
+    XR_BOUNDARY_AGGREGATE_LAYOUT_DECLARATION_ORDER_NATURAL,
+} XrBoundaryAggregateLayoutModel;
+
+typedef enum XrBoundaryVariantLayoutModel {
+    XR_BOUNDARY_VARIANT_LAYOUT_INVALID = 0,
+    XR_BOUNDARY_VARIANT_LAYOUT_U32_TAG_NATURAL_PAYLOAD,
+} XrBoundaryVariantLayoutModel;
+
+typedef enum XrBoundaryRootModel {
+    XR_BOUNDARY_ROOT_MODEL_INVALID = 0,
+    XR_BOUNDARY_ROOT_MODEL_EXPLICIT_OFFSETS,
+} XrBoundaryRootModel;
+
+typedef enum XrBoundaryCleanupModel {
+    XR_BOUNDARY_CLEANUP_MODEL_INVALID = 0,
+    XR_BOUNDARY_CLEANUP_MODEL_EXPLICIT_ACTIONS,
+} XrBoundaryCleanupModel;
 
 typedef struct XrBoundaryValueAbi {
     uint16_t type_id;
@@ -78,7 +98,12 @@ typedef struct XrBoundaryAbi {
     uint8_t call_convention;
     uint8_t error_model;
     uint8_t coroutine_model;
-    uint8_t reserved8;
+    uint8_t aggregate_layout_model;
+    uint8_t variant_layout_model;
+    uint8_t root_model;
+    uint8_t cleanup_model;
+    uint16_t variant_tag_type;
+    uint16_t reserved16;
     XrBoundaryValueAbi values[XR_BOUNDARY_ABI_VALUE_COUNT];
     XrFingerprint object_header_id;
     XrFingerprint string_object_id;

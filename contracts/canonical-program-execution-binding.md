@@ -23,18 +23,28 @@ execution authority owns retained program/profile references and copied provider
 pre-existing language object allocation type is named `XrObjectInstance`; `XrInstance` has one
 meaning only.
 
-BoundaryABI and runtime-kernel walking-skeleton rows currently cover the active scalar CoreSpec,
-object/string identity, RC/weak/panic/OOM policies, and generation protocol. The typed VM consumes
-those scalar rows. Aggregate ownership, cleanup/root, coroutine, AOT, FFI, and hybrid adapter rows
-remain explicitly inactive until their operation families are activated. No VM slot, native
-register, or common local physical plan is stored here.
+BoundaryABI is active for copy-value scalar, aggregate, and variant boundaries. From one exact
+`XrInstance`, the materializer deterministically derives boundary-kind-specific type layouts and
+function call frames. Aggregate fields use declaration order with natural target alignment;
+variants use a `u32` tag and naturally aligned union payload. Every materialized type identity binds
+ProgramId, BoundaryAbiId, BoundaryKind, TypeId, and the complete derived layout. Every call identity
+binds ExecutionId, BoundaryKind, FunctionId, and all argument/result slots. This contract is a
+public-boundary description, not an executor-local representation.
 
-anchor-sha256: src/plan/target/xr_target_profile.h ee595a78a40c2aafde42998009a077391c90f8a76ff617cbed0576b3066594e3
-anchor-sha256: src/plan/target/xr_target_profile.c ed1e163d875568280438d48caf01bc18415f68a1ebeda4f3e0f21b0ebb9cbec6
+The currently admitted types are copy values, so root tables are empty and cleanup is explicitly
+trivial. Nontrivial ownership transfer, root/cleanup rows, coroutine state, and concrete AOT, FFI,
+hybrid, or reloadable adapters remain inactive. Runtime-kernel policy remains a walking skeleton for
+the active object/string identity, RC/weak/panic/OOM policies, and generation protocol. No executor
+slot, native register, or common local physical plan is stored here.
+
+anchor-sha256: src/plan/target/xr_target_profile.h cc34ac187a3bc33cbf326e81d233a195227adfceeee6f80b8473175c5947a067
+anchor-sha256: src/plan/target/xr_target_profile.c 92c9a3f4a96329a25aa662a763e11bc5eb0fa0083d0bf0e69caac23442e82ea2
 anchor-sha256: src/plan/target/xr_target_profile_verify.c 4092adc2ff88ab03eccf6e9795b4c32efd7173a8acf96c94dba7932cc5e34ab7
 anchor-sha256: src/plan/target/xr_target_verify.c 3fc3839e6332ab12e08cc2200d722138970be76b09c52dfce7422f05dba0e358
 anchor-sha256: src/execution/xr_execution.h d9d777969c65f282ff70a7cc755f26d11b2ebf0a044e05d059fde0049c88d357
 anchor-sha256: src/execution/xr_execution.c abb49afef5a5a9233c0e471ad9d0bc71a22cc65726938a6ce613e337f43d06c9
+anchor-sha256: src/execution/xr_boundary_materialization.h bc2e27bdeaa0243a9fcab271c1b9f7735088bee46a751eade590b94bb846f45e
+anchor-sha256: src/execution/xr_boundary_materialization.c e43762a796276f490220a5d4700b370587bc5f6b650987d210c6cd6060d50fb8
 anchor-sha256: src/program/xr_program_verify.h 4deae77110a835e6bbdd4c83e76e875a706b68098bc78f87fd2f3f27d7bd97ea
 anchor-sha256: src/program/xr_program_verify.c 1c983267259338aa537927abdcd169ad52b2b696676f648a21879930a41b5d23
 anchor-sha256: src/program/xr_validated_program_internal.h ecffb3c6a094991a4fdf6a80004e92c230458a2300922a96b51277a098311d65
@@ -42,7 +52,8 @@ anchor-sha256: src/runtime/abi/xr_runtime_contract.h b786851747d2808668f714e668a
 anchor-sha256: src/runtime/abi/xr_runtime_contract.c abcdaf535396af094227cdaf2348d88760396d61ecdf8d2fa9f776d61b7edee7
 anchor-sha256: src/runtime/class/xinstance.h 42cfcf363dcc88dfe35d1d2fa0ccf7e581e4982bb05a11c12db2b2d20ca71462
 anchor-sha256: tests/unit/plan/test_target_profile.c ebcd1c0fef635f5e4997fd41523f47349b5c6ccaf868eaa491789993abaab8ac
-anchor-sha256: tests/unit/execution/test_xr_execution.c a2bd33b15d3c09fb82e0a9ed8b3763c2b2aee28db2466fbe9dd7f5cd4f3220ab
+anchor-sha256: tests/unit/execution/test_xr_execution.c 63c6117846984ec68edfba5dfc25fda0d2ce5ae11233fca9700c0bb5d32333c5
+anchor-sha256: tests/unit/execution/test_xr_boundary_materialization.c 4e622b1205ad122dfc07d2c354916c4915578fcd02cb1a76a10b4a166f82bed4
 anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 6252f7fc4712596c39a4dbc42b4633dbb144f6b2638f67040ff7642cd8f7ee61
-anchor-sha256: scripts/check_xr_execution_contracts.py 5646a4a05348790110427baa1374597459d1a61c2a05d4db1cc2f8e3dc911318
-anchor-sha256: contracts/canonical-program/execution-binding-coverage.json 185050ac3d5ecc19226619761a1e1c97940df85d85b8ac12f140b59dc702afc2
+anchor-sha256: scripts/check_xr_execution_contracts.py 9dd3608922e8ae89fe4f655769eaf33aad29538ed8320c651a331a4f0de285aa
+anchor-sha256: contracts/canonical-program/execution-binding-coverage.json 05e7bd91f8a5649e8fe46a246b663445c6211b480a569139bde3116be973753c

@@ -14,20 +14,31 @@ PROFILE_HEADER = Path("src/plan/target/xr_target_profile.h")
 PROFILE_SOURCE = Path("src/plan/target/xr_target_profile.c")
 EXECUTION_HEADER = Path("src/execution/xr_execution.h")
 EXECUTION_SOURCE = Path("src/execution/xr_execution.c")
+BOUNDARY_HEADER = Path("src/execution/xr_boundary_materialization.h")
+BOUNDARY_SOURCE = Path("src/execution/xr_boundary_materialization.c")
 OBJECT_INSTANCE_HEADER = Path("src/runtime/class/xinstance.h")
 COVERAGE = Path("contracts/canonical-program/execution-binding-coverage.json")
 
 EXPECTED_COVERAGE = {
     "schema": "xray-execution-binding-coverage/1",
-    "profile_schema_version": 4,
+    "profile_schema_version": 5,
     "execution_binding_schema_version": 1,
     "profile_partitions": [
         {"name": "target-semantics", "identity": "XrTargetSemanticsId", "status": "COMPLETE"},
-        {"name": "boundary-abi", "identity": "XrBoundaryAbiId", "status": "WALKING_SKELETON"},
+        {"name": "boundary-abi", "identity": "XrBoundaryAbiId", "status": "ACTIVE_COPY_VALUE"},
         {"name": "runtime-kernel", "identity": "XrRuntimeKernelId", "status": "WALKING_SKELETON"},
         {"name": "provider-contract-set", "identity": "XrProviderContractSetId", "status": "COMPLETE"},
     ],
-    "boundary_value_types": ["void", "bool", "i64", "u32", "error"],
+    "boundary_value_types": ["void", "bool", "i64", "u32", "error", "aggregate", "variant"],
+    "active_boundary_contracts": [
+        "call-frame-v1",
+        "declaration-order-natural-aggregate",
+        "u32-tag-natural-payload-variant",
+        "program-profile-bound-type-layout",
+        "copy-value-function-signature",
+        "explicit-root-offsets",
+        "explicit-cleanup-actions",
+    ],
     "provider_admission": [
         "stable-contract-id",
         "exact-contract-fingerprint",
@@ -50,9 +61,8 @@ EXPECTED_COVERAGE = {
         "no-host-sizeof-or-preprocessor-probe",
     ],
     "inactive_boundary_contracts": [
-        "aggregate-carriers",
         "borrow-move-share-drop-transfer",
-        "root-and-cleanup-tables",
+        "nontrivial-root-and-cleanup-rows",
         "coroutine-continuation-state",
         "AOT-boundary-adapter",
         "FFI-and-hybrid-adapter",
@@ -80,7 +90,7 @@ def canonical_json(value: object) -> str:
 
 def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     paths = (PROFILE_HEADER, PROFILE_SOURCE, EXECUTION_HEADER, EXECUTION_SOURCE,
-             OBJECT_INSTANCE_HEADER)
+             BOUNDARY_HEADER, BOUNDARY_SOURCE, OBJECT_INSTANCE_HEADER)
     sources = {
         path: (overrides or {}).get(path, (root / path).read_text(encoding="utf-8"))
         for path in paths
@@ -89,6 +99,8 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     profile_source = sources[PROFILE_SOURCE]
     execution_header = sources[EXECUTION_HEADER]
     execution_source = sources[EXECUTION_SOURCE]
+    boundary_header = sources[BOUNDARY_HEADER]
+    boundary_source = sources[BOUNDARY_SOURCE]
 
     for token in ("XrTargetSemanticsId", "XrBoundaryAbiId", "XrRuntimeKernelId",
                   "XrProviderContractSetId"):
@@ -96,17 +108,25 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
     for token in ("XrExecutionId", "XrInstance", "contract_fingerprint",
                   "XR_INSTANCE_ACTIVE", "XR_INSTANCE_DRAINING", "XR_INSTANCE_RETIRED"):
         require(token in execution_header, f"missing execution contract token {token}")
+    for token in ("XrBoundaryTypeLayout", "XrBoundaryCallLayout",
+                  "XrBoundaryMaterializationBudget", "XR_BOUNDARY_CALL_FRAME_V1"):
+        require(token in profile_header + boundary_header,
+                f"missing materialized boundary token {token}")
     require("xr_target_provider_contract_fingerprint" in execution_source,
             "provider admission does not compare the exact provider contract")
     require("xr_program_validate" not in execution_source,
             "execution binding must consume XrValidatedProgram, not re-run admission")
 
-    combined = profile_header + profile_source + execution_header + execution_source
+    for token in ("xr_validated_program_id", "builder->abi->id", "boundary_kind"):
+        require(token in boundary_source, f"boundary layout identity omits {token}")
+
+    combined = (profile_header + profile_source + execution_header + execution_source +
+                boundary_header + boundary_source)
     for forbidden in ("sizeof(void *)", "sizeof(void*)", "__APPLE__", "_WIN32",
                       "__linux__", "TARGET_OS_", "XrVmCode", "XrBackendIR",
                       "register allocation", "VM slot"):
         require(forbidden not in combined, f"host/local-representation leak: {forbidden}")
-    for line in (execution_header + execution_source).splitlines():
+    for line in (execution_header + execution_source + boundary_header + boundary_source).splitlines():
         if line.lstrip().startswith("#include"):
             require("/vm/" not in line and "/aot/" not in line,
                     f"execution binding depends on executor implementation: {line.strip()}")
