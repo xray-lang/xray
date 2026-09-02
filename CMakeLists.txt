@@ -317,6 +317,7 @@ set(PROGRAMVMCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_vm_contr
 set(PROGRAMAOTCONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_aot_contracts.py)
 set(PROGRAMSOURCECONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_source_contracts.py)
 set(PROGRAMWAVE3CLOSURECHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave3_closure.py)
+set(PROGRAMWAVE4CONTRACTCHECK ${CMAKE_SOURCE_DIR}/scripts/check_xr_program_wave4_contract.py)
 set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
 set(GEN_STDLIB_TYPES ${CMAKE_SOURCE_DIR}/scripts/gen_stdlib_types.py)
 set(NATIVE_TYPE_EMBEDDER ${CMAKE_SOURCE_DIR}/scripts/embed_native_types.py)
@@ -707,6 +708,15 @@ add_custom_target(check-xr-program-wave3-closure
             ${CMAKE_SOURCE_DIR}/tests/unit/vm/test_xr_program_vm.c
             ${CMAKE_SOURCE_DIR}/tests/unit/aot/test_xr_program_aot.c
     COMMENT "Checking W7 Wave 3 ownership/error/panic closure"
+    VERBATIM
+)
+
+add_custom_target(check-xr-program-wave4-contract
+    COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4CONTRACTCHECK}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${PROGRAMWAVE4CONTRACTCHECK}
+            ${CMAKE_SOURCE_DIR}/contracts/canonical-program/w7-wave4-contract-freeze.json
+    COMMENT "Checking W7 Wave 4 callable/interface contract freeze"
     VERBATIM
 )
 
@@ -5039,6 +5049,31 @@ if(BUILD_TESTS)
     )
     set_tests_properties(xr_program_wave3_closure_self_test PROPERTIES
         LABELS "meta;contracts;canonical-program;source;ownership;error;panic;mutation;task-301"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_wave4_contract
+        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4CONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_wave4_contract PROPERTIES
+        LABELS "meta;contracts;canonical-program;callable;interface;task-301"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME xr_program_wave4_contract_self_test
+        COMMAND ${XRAY_PYTHON} ${PROGRAMWAVE4CONTRACTCHECK}
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xr_program_wave4_contract_self_test PROPERTIES
+        LABELS "meta;contracts;canonical-program;callable;interface;mutation;task-301"
         PROCESSORS 1
         TIMEOUT 30
     )

@@ -1,0 +1,128 @@
+{
+  "schema": "xray-w7-wave4-contract-freeze/1",
+  "status": "FROZEN_W7_WAVE4_P0",
+  "owner_tasks": [
+    283,
+    284,
+    287,
+    291,
+    301
+  ],
+  "scope": "callable-interface-existential-dynamic-import",
+  "compatibility": "none",
+  "phase_erasure": {
+    "generic_constraint_call": "monomorphized to sealed direct or sealed invoke before XrProgram",
+    "source_import_call": "whole-program link resolves the imported declaration to one canonical FunctionId before XrProgram",
+    "interface_conformance_check": "verified compile-time fact; runtime operation exists only when an existential value is formed",
+    "devirtualized_existential_call": "optimization of a witness call, guarded by translation validation; canonical semantics remain witness dispatch"
+  },
+  "canonical_entities": {
+    "callable_signature": "ordered READ/REF/MOVE parameters, result ownership, typed error/panic channels, effects and borrowed-result origins",
+    "callable_value": "typed value containing one closed callable target identity and an optional typed capture aggregate",
+    "interface_declaration": "stable nominal interface identity plus ordered object-safe witness slots",
+    "conformance": "stable nominal implementor identity and kind plus an exact slot-to-function map",
+    "existential_value": "typed carrier intent containing one concrete value and one exact conformance identity",
+    "witness_call": "dispatch through one verified interface slot; selector, method name and body shape are not operands",
+    "borrowed_result": "sorted deduplicated PARAM, RECEIVER and STATIC origin rows owned by the callable signature"
+  },
+  "operation_atoms": [
+    {
+      "stable_id": 38,
+      "id": "core.call.indirect_direct",
+      "law": "call one typed callable value whose signature has no error or panic channel"
+    },
+    {
+      "stable_id": 39,
+      "id": "core.call.indirect_invoke",
+      "law": "call one typed callable value and transfer to normal, optional typed-error and optional typed-panic continuations"
+    },
+    {
+      "stable_id": 40,
+      "id": "core.call.witness_direct",
+      "law": "dispatch one existential receiver through one exact object-safe witness slot with no error or panic channel"
+    },
+    {
+      "stable_id": 41,
+      "id": "core.call.witness_invoke",
+      "law": "dispatch one existential receiver through one exact object-safe witness slot and explicit typed continuations"
+    },
+    {
+      "stable_id": 86,
+      "id": "core.existential.pack",
+      "law": "form one existential value from a concrete value and exact conformance identity"
+    },
+    {
+      "stable_id": 87,
+      "id": "core.existential.test",
+      "law": "test an existential value against one exact nominal implementor identity"
+    },
+    {
+      "stable_id": 88,
+      "id": "core.existential.project",
+      "law": "project the concrete value after a dominating successful exact nominal test"
+    },
+    {
+      "stable_id": 89,
+      "id": "core.callable.pack",
+      "law": "form one typed callable value from a closed target identity and optional capture aggregate"
+    }
+  ],
+  "explicit_non_operations": {
+    "generic_constraint": "compile-time admissibility and monomorphization fact",
+    "source_import": "whole-program symbol resolution and identity remap",
+    "interface_upcast": "existential.pack with a different verified conformance/view identity",
+    "devirtualized_call": "private VM/AOT optimization of a witness call",
+    "selector_or_name_lookup": "forbidden; dispatch uses stable interface and slot identity",
+    "class_only_itable": "forbidden as canonical semantics; carrier lowering is nominal-kind-neutral",
+    "borrow_lifetime": "signature-owned origin rows and Wave 3 call-bound loan facts",
+    "dynamic_unknown_call": "forbidden; an unknown target set or signature fails before XrProgram"
+  },
+  "nominal_implementor_kinds": [
+    "CLASS",
+    "STRUCT",
+    "ENUM"
+  ],
+  "interface_use_kinds": [
+    "CONSTRAINT_BOUND",
+    "EXISTENTIAL_READ",
+    "EXISTENTIAL_REF",
+    "EXISTENTIAL_MOVE",
+    "EXISTENTIAL_OWNED_STORAGE"
+  ],
+  "borrow_origin_kinds": [
+    "PARAM",
+    "RECEIVER",
+    "STATIC"
+  ],
+  "old_owner_inventory": [
+    {
+      "owner": "body-derived receiver permission and borrowed-return source",
+      "canonical_replacement": "declaration-owned receiver mode and normalized BorrowOriginSet"
+    },
+    {
+      "owner": "ScalarCallDecision and call shape/name dispatch",
+      "canonical_replacement": "sealed FunctionId, typed callable signature or interface witness slot"
+    },
+    {
+      "owner": "class-only interface assignability, itable and carrier ABI",
+      "canonical_replacement": "nominal-kind-neutral conformance and existential materialization"
+    },
+    {
+      "owner": "backend selector, method-name and implementor body inspection",
+      "canonical_replacement": "validated conformance slot map and private mechanical lowering"
+    },
+    {
+      "owner": "import sidecar call summary as runtime dispatch authority",
+      "canonical_replacement": "whole-program link identity plus exact callable signature"
+    }
+  ],
+  "slice_order": [
+    "declaration-owned receiver modes and borrowed-result origins",
+    "callable, interface, conformance and existential program tables",
+    "existential pack, test and project",
+    "witness direct and invoke dispatch",
+    "callable pack and indirect direct/invoke",
+    "source class, struct, enum, import and dynamic-target integration",
+    "old-owner dependency deletion, differential, sanitizer and residue closure"
+  ]
+}
