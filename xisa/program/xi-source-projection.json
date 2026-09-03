@@ -123,6 +123,13 @@
       "immediate_u32": 0
     },
     {
+      "xi_operation": "xi.load.upval",
+      "result_type": "any",
+      "projection_kind": "aggregate-project",
+      "core_operation": "core.aggregate.project",
+      "immediate_u32": 0
+    },
+    {
       "xi_operation": "xi.agg.update",
       "result_type": "any",
       "projection_kind": "aggregate-update",

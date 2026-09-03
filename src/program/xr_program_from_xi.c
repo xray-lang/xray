@@ -57,6 +57,8 @@ typedef struct XrXiBlockStorage {
 typedef struct XrXiFunctionStorage {
     const XiFunc *xi;
     XrCoreIrKey key;
+    XiValue capture_receiver;
+    uint16_t capture_type_id;
     uint16_t *parameter_types;
     XrParamMode *parameter_modes;
     XrCoreIrBlockInput *blocks;
@@ -161,7 +163,14 @@ static XrCoreIrKey block_key(const XrXiFunctionStorage *function, const XiBlock 
 }
 
 static XrCoreIrKey value_key(const XrXiFunctionStorage *function, const XiValue *value) {
+    if (function && value == &function->capture_receiver)
+        return key_from_key_and_u32(UINT8_C(0x55), function->key, 0u);
     return key_from_key_and_u32(UINT8_C(0x56), function->key, value->id);
+}
+
+static XrCoreIrKey closure_capture_key(const XrXiFunctionStorage *function,
+                                       const XiValue *closure) {
+    return key_from_key_and_u32(UINT8_C(0x45), function->key, closure->id);
 }
 
 static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
@@ -217,6 +226,8 @@ static bool map_type_recursive(XrXiBuildContext *context, const XrType *type, ui
                                const XrType *const *stack, uint32_t depth);
 static XrCoreIrOwnershipDisposition logical_ownership_for_type(const XrXiBuildContext *context,
                                                                uint16_t type_id);
+static XrCoreIrCopyContract logical_copy_contract_for_type(const XrXiBuildContext *context,
+                                                           uint16_t type_id);
 
 static const XiClassData *find_aggregate_schema(const XrXiBuildContext *context, const XrType *type,
                                                 const XiModule **owner_module) {
@@ -360,6 +371,76 @@ static XrXiTypeStorage *append_type_storage(XrXiBuildContext *context) {
     memset(storage, 0, sizeof(*storage));
     storage->input.local_id = (uint16_t) (XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + context->type_count);
     return storage;
+}
+
+/* A closure environment is a compiler-created logical product, not a VM/C
+ * layout.  Its canonical identity is the ordered capture TypeId sequence;
+ * every executor remains free to choose its own physical carrier.  This first
+ * source slice admits immutable by-copy captures of trivial values only. */
+static bool map_capture_type(XrXiBuildContext *context, const XiFunc *function, uint16_t *type_id) {
+    if (!context || !function || !type_id || function->ncaptures == 0u ||
+        function->ncaptures > XI_MAX_CAPTURES)
+        return false;
+    uint32_t field_count = function->ncaptures;
+    uint16_t *field_types = xr_calloc(field_count, sizeof(*field_types));
+    if (!field_types)
+        return false;
+    for (uint32_t field = 0; field < field_count; ++field) {
+        const XiCapture *capture = &function->captures[field];
+        if (!capture->type || capture->needs_cell || capture->capture_kind != XI_CAPTURE_BY_COPY ||
+            !map_type_recursive(context, capture->type, &field_types[field], NULL, 0u) ||
+            logical_ownership_for_type(context, field_types[field]) != XR_CORE_IR_NON_OWNER ||
+            logical_copy_contract_for_type(context, field_types[field]) !=
+                XR_CORE_IR_COPY_TRIVIAL) {
+            xr_free(field_types);
+            return false;
+        }
+    }
+
+    const size_t reference_size = 1u + XR_CORE_IR_KEY_SIZE;
+    if ((size_t) field_count > (SIZE_MAX - 5u) / reference_size) {
+        xr_free(field_types);
+        return false;
+    }
+    size_t material_size = 5u + (size_t) field_count * reference_size;
+    uint8_t *material = xr_calloc(material_size, 1u);
+    if (!material) {
+        xr_free(field_types);
+        return false;
+    }
+    size_t cursor = 0u;
+    material[cursor++] = UINT8_C(0x45);
+    put_u32_be(material + cursor, field_count);
+    cursor += 4u;
+    for (uint32_t field = 0; field < field_count; ++field) {
+        put_dynamic_type_reference(context, material + cursor, field_types[field]);
+        cursor += reference_size;
+    }
+    XrCoreIrKey semantic_key = xr_core_ir_key(material, material_size);
+    xr_free(material);
+    for (uint32_t index = 0; index < context->type_count; ++index) {
+        if (!xr_core_ir_key_equal(context->type_storage[index].input.key, semantic_key))
+            continue;
+        *type_id = context->type_storage[index].input.local_id;
+        xr_free(field_types);
+        return true;
+    }
+
+    XrXiTypeStorage *storage = append_type_storage(context);
+    if (!storage) {
+        xr_free(field_types);
+        return false;
+    }
+    storage->field_types = field_types;
+    storage->input.key = semantic_key;
+    storage->input.kind = XR_CORE_IR_TYPE_AGGREGATE;
+    storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    storage->input.copy_contract = XR_CORE_IR_COPY_EXPLICIT;
+    storage->input.field_types = field_types;
+    storage->input.field_count = field_count;
+    *type_id = storage->input.local_id;
+    ++context->type_count;
+    return true;
 }
 
 static bool map_callable_type_recursive(XrXiBuildContext *context, const XrType *type,
@@ -1177,7 +1258,8 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
                                                uint8_t implicit_invoke_kind, bool *changed,
                                                char *diagnostic, size_t diagnostic_size) {
     source = logical_value_identity(source);
-    if (!source || !source->type)
+    bool capture_receiver = function && source == &function->capture_receiver;
+    if (!source || (!source->type && !capture_receiver))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi block argument source is incomplete");
     if (find_block_argument(block, source))
@@ -1195,6 +1277,8 @@ static XrProgramBuildStatus add_block_argument(XrXiBuildContext *context,
         block->argument_capacity = capacity;
     }
     uint16_t type_id = type_override;
+    if (type_id == XR_CORE_TYPE_VOID && capture_receiver)
+        type_id = function->capture_type_id;
     if ((type_id == XR_CORE_TYPE_VOID && !map_type(context, source->type, &type_id)) ||
         type_id == XR_CORE_TYPE_VOID)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -1443,6 +1527,40 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
                         diagnostic, diagnostic_size);
 }
 
+static XrProgramBuildStatus translate_capture_construct(XrXiBuildContext *context,
+                                                        XrXiFunctionStorage *function,
+                                                        const XiValue *closure,
+                                                        const XrXiBlockStorage *block,
+                                                        XrCoreIrInstructionInput *instruction,
+                                                        char *diagnostic, size_t diagnostic_size) {
+    const XiFunc *target = resolved_callable_target(function->xi, closure);
+    uint16_t capture_type_id = XR_CORE_TYPE_VOID;
+    if (!target || target->ncaptures == 0u || closure->nargs != target->ncaptures ||
+        !map_capture_type(context, target, &capture_type_id))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi callable pack v%u has no canonical capture aggregate", closure->id);
+    const XrXiTypeStorage *capture = find_dynamic_type_by_id(context, capture_type_id);
+    if (!capture || capture->input.kind != XR_CORE_IR_TYPE_AGGREGATE ||
+        capture->input.field_count != closure->nargs)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi callable pack v%u capture aggregate is inconsistent", closure->id);
+    for (uint32_t field = 0; field < closure->nargs; ++field) {
+        uint16_t field_type = XR_CORE_TYPE_VOID;
+        if (!closure->args[field] || !map_type(context, closure->args[field]->type, &field_type) ||
+            field_type != capture->input.field_types[field])
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi callable pack v%u capture %u has an invalid type", closure->id, field);
+    }
+    memset(instruction, 0, sizeof(*instruction));
+    instruction->operation_id = XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT;
+    instruction->result = closure_capture_key(function, closure);
+    instruction->result_type_id = capture_type_id;
+    instruction->result_ownership = XR_CORE_IR_OWNER;
+    instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+    return set_operands(instruction, function, block, closure->args, closure->nargs, diagnostic,
+                        diagnostic_size);
+}
+
 static XrProgramBuildStatus translate_callable_pack(XrXiBuildContext *context,
                                                     XrXiFunctionStorage *function,
                                                     const XiValue *value,
@@ -1456,15 +1574,23 @@ static XrProgramBuildStatus translate_callable_pack(XrXiBuildContext *context,
                     "Xi callable pack v%u has no exact target or signature", value->id);
     const XrXiTypeStorage *callable = find_dynamic_type_by_id(context, callable_type_id);
     if (!callable || callable->input.kind != XR_CORE_IR_TYPE_CALLABLE ||
-        !callable->callable_signature || value->nargs != 0u)
+        !callable->callable_signature || value->nargs != (target ? target->ncaptures : 0u))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi callable pack v%u is not captureless", value->id);
+                    "Xi callable pack v%u has an inconsistent capture shape", value->id);
     instruction->operation_id = XR_CORE_OP_CORE_CALLABLE_PACK;
     instruction->result = value_key(function, value);
     instruction->result_type_id = callable_type_id;
     instruction->result_ownership = XR_CORE_IR_OWNER;
     instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
     instruction->immediate.key = target_storage->key;
+    if (value->nargs != 0u) {
+        XrCoreIrKey *capture = xr_calloc(1u, sizeof(*capture));
+        if (!capture)
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        *capture = closure_capture_key(function, value);
+        instruction->operands = capture;
+        instruction->operand_count = 1u;
+    }
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -1546,6 +1672,25 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                                 diagnostic_size);
         }
         case XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT: {
+            if (value->op == XI_LOAD_UPVAL) {
+                uint32_t ordinal = value->aux_int >= 0 ? (uint32_t) value->aux_int : UINT32_MAX;
+                const XrXiTypeStorage *capture =
+                    find_dynamic_type_by_id(context, function->capture_type_id);
+                if (!capture || capture->input.kind != XR_CORE_IR_TYPE_AGGREGATE ||
+                    ordinal >= capture->input.field_count ||
+                    capture->input.field_types[ordinal] != result_type)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi upvalue load v%u has an invalid capture ordinal or type",
+                                value->id);
+                instruction->operation_id = projection.core_operation_id;
+                instruction->result = value_key(function, value);
+                instruction->result_type_id = result_type;
+                instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FIELD;
+                instruction->immediate.field_ordinal = ordinal;
+                XiValue *receiver[] = {&function->capture_receiver};
+                return set_operands(instruction, function, block, receiver, 1u, diagnostic,
+                                    diagnostic_size);
+            }
             uint16_t aggregate_type_id = XR_CORE_TYPE_VOID;
             if (value->nargs != 1u || value->aux_int < 0 ||
                 !map_type(context, value->args[0]->type, &aggregate_type_id))
@@ -1769,8 +1914,7 @@ static const XiValue *logical_callable_owner_ending_after(const XiFunc *function
         !consumer->args)
         return NULL;
     const XiValue *owner = logical_value_identity(consumer->args[0]);
-    if (!owner || owner->op != XI_CLOSURE_NEW || owner->nargs != 0u ||
-        owner->block != consumer->block)
+    if (!owner || owner->op != XI_CLOSURE_NEW || owner->block != consumer->block)
         return NULL;
     uint32_t semantic_uses = 0u;
     for (uint32_t block_index = 0; block_index < function->nblocks; ++block_index) {
@@ -1841,6 +1985,17 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
                                                    XrXiBlockStorage *block, const XiValue *value,
                                                    bool *changed, char *diagnostic,
                                                    size_t diagnostic_size) {
+    if (value->op == XI_LOAD_UPVAL) {
+        if (value->aux_int < 0 || value->aux_int >= function->xi->ncaptures ||
+            function->capture_type_id == XR_CORE_TYPE_VOID)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi upvalue load v%u has no canonical capture receiver", value->id);
+        XrProgramBuildStatus status =
+            require_value_available(context, function, block, &function->capture_receiver, changed,
+                                    diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
     uint16_t begin = value->op == XI_VARIANT_CONSTRUCT ||
                              (value->op == XI_CALL &&
                               resolved_direct_callee(context, function->xi, value) != NULL)
@@ -1940,6 +2095,13 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
     if (!entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi function entry block is absent");
+    if (function->capture_type_id != XR_CORE_TYPE_VOID) {
+        XrProgramBuildStatus status = add_block_argument(
+            context, function, entry, &function->capture_receiver, NULL, function->capture_type_id,
+            XR_XI_INVOKE_ARGUMENT_NONE, NULL, diagnostic, diagnostic_size);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
     for (uint16_t parameter = 0; parameter < function->xi->nparams; ++parameter) {
         XrProgramBuildStatus status = add_block_argument(
             context, function, entry, function->xi->params[parameter], NULL, XR_CORE_TYPE_VOID,
@@ -2008,7 +2170,9 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi block-parameter closure did not converge");
     }
-    if (entry->argument_count != function->xi->nparams)
+    uint32_t expected_entry_arguments =
+        function->xi->nparams + (function->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u);
+    if (entry->argument_count != expected_entry_arguments)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi entry block acquired non-parameter live-ins");
 
@@ -2130,8 +2294,19 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
         !xi->entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi function %u is not an Optimized program input", function_index);
+    if (xi->ncaptures != 0u) {
+        if (xi->has_receiver || !map_capture_type(context, xi, &storage->capture_type_id))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi function %u has an unsupported capture contract", function_index);
+        memset(&storage->capture_receiver, 0, sizeof(storage->capture_receiver));
+        storage->capture_receiver.op = XI_PARAM;
+        storage->capture_receiver.id = UINT32_MAX;
+        storage->capture_receiver.block = xi->entry;
+        storage->capture_receiver.param_mode = XR_PARAM_READ;
+    }
     output->key = storage->key;
-    output->parameter_count = xi->nparams;
+    uint32_t parameter_offset = storage->capture_type_id != XR_CORE_TYPE_VOID ? 1u : 0u;
+    output->parameter_count = (uint32_t) xi->nparams + parameter_offset;
     if (!map_type(context, xi->return_type, &output->result_type_id))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi function %u result type is not active in CoreSpec", function_index);
@@ -2144,19 +2319,25 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
     if (signature_status != XR_PROGRAM_BUILD_OK)
         return signature_status;
     output->result_ownership = logical_ownership_for_type(context, output->result_type_id);
-    output->has_receiver = xi->has_receiver;
+    output->has_receiver = xi->has_receiver || parameter_offset != 0u;
     output->receiver_mode = xi->has_receiver ? xi->receiver_mode : XR_PARAM_READ;
-    if (xi->nparams != 0) {
-        storage->parameter_types = xr_calloc(xi->nparams, sizeof(*storage->parameter_types));
-        storage->parameter_modes = xr_calloc(xi->nparams, sizeof(*storage->parameter_modes));
+    if (output->parameter_count != 0u) {
+        storage->parameter_types =
+            xr_calloc(output->parameter_count, sizeof(*storage->parameter_types));
+        storage->parameter_modes =
+            xr_calloc(output->parameter_count, sizeof(*storage->parameter_modes));
         if (!storage->parameter_types || !storage->parameter_modes)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        if (parameter_offset != 0u) {
+            storage->parameter_types[0] = storage->capture_type_id;
+            storage->parameter_modes[0] = XR_PARAM_READ;
+        }
         for (uint16_t parameter = 0; parameter < xi->nparams; ++parameter) {
             if (!xi->params || !xi->params[parameter] || xi->params[parameter]->op != XI_PARAM ||
                 xi->params[parameter]->aux_int != parameter ||
                 !map_type(context, xi->params[parameter]->type,
-                          &storage->parameter_types[parameter]) ||
-                storage->parameter_types[parameter] == XR_CORE_TYPE_VOID)
+                          &storage->parameter_types[parameter + parameter_offset]) ||
+                storage->parameter_types[parameter + parameter_offset] == XR_CORE_TYPE_VOID)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                             "Xi function %u parameter %u is not a CoreSpec value", function_index,
                             parameter);
@@ -2164,7 +2345,8 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi function %u parameter %u has an invalid mode", function_index,
                             parameter);
-            storage->parameter_modes[parameter] = (XrParamMode) xi->params[parameter]->param_mode;
+            storage->parameter_modes[parameter + parameter_offset] =
+                (XrParamMode) xi->params[parameter]->param_mode;
         }
         output->parameter_types = storage->parameter_types;
         output->parameter_modes = storage->parameter_modes;
@@ -2194,6 +2376,8 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
         uint32_t emitted = block_storage->argument_count != 0u ? 1u : 0u;
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
             const XiValue *value = xi_block->values[value_index];
+            if (value->op == XI_CLOSURE_NEW && value->nargs != 0u)
+                ++emitted;
             if (!value_is_skipped(context, xi, value))
                 ++emitted;
             if (logical_callable_owner_ending_after(xi, value))
@@ -2224,6 +2408,16 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
             const XiValue *value = xi_block->values[value_index];
             if (value_is_skipped(context, xi, value))
                 continue;
+            if (value->op == XI_CLOSURE_NEW && value->nargs != 0u) {
+                XrCoreIrInstructionInput *capture =
+                    &block_storage->instructions[instruction_index++];
+                status = translate_capture_construct(context, storage, value, block_storage,
+                                                     capture, diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+                storage->local_effect_mask |=
+                    xr_core_spec_operation_by_id(capture->operation_id)->effect_mask;
+            }
             XrCoreIrInstructionInput *instruction =
                 &block_storage->instructions[instruction_index++];
             status = translate_value(context, module, storage, value, block_storage, instruction,

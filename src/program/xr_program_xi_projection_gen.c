@@ -126,6 +126,13 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT,
     },
     {
+        XI_LOAD_UPVAL,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_AGGREGATE_PROJECT,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT,
+    },
+    {
         XI_AGG_UPDATE,
         XR_PROGRAM_XI_ANY_RESULT_TYPE,
         XR_CORE_OP_CORE_AGGREGATE_UPDATE,

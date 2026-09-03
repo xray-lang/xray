@@ -1342,7 +1342,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  return value\n"
                                          "}\n"
                                          "fn callable_value() -> i64 {\n"
-                                         "  var action = fn() -> i64 { return 42 }\n"
+                                         "  var captured = 47\n"
+                                         "  var action = fn() -> i64 { return captured }\n"
                                          "  return action()\n"
                                          "}\n"
                                          "fn root() -> i64 {\n"
@@ -1599,12 +1600,18 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(validated != NULL);
     bool found_nested_generic_variant = false;
     bool found_point_aggregate = false;
+    bool found_capture_aggregate = false;
     for (uint32_t type_index = 0; type_index < validated->type_count; ++type_index) {
         const XrValidatedType *variant = &validated->types[type_index];
         if (variant->kind == XR_CORE_IR_TYPE_AGGREGATE && variant->field_count == 2u &&
             variant->field_types && variant->field_types[0] == XR_CORE_TYPE_I64 &&
             variant->field_types[1] == XR_CORE_TYPE_I64)
             found_point_aggregate = true;
+        if (variant->kind == XR_CORE_IR_TYPE_AGGREGATE && variant->field_count == 1u &&
+            variant->field_types && variant->field_types[0] == XR_CORE_TYPE_I64 &&
+            variant->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+            variant->copy_contract == XR_CORE_IR_COPY_EXPLICIT)
+            found_capture_aggregate = true;
         if (variant->kind != XR_CORE_IR_TYPE_VARIANT || variant->variant_count != 2u ||
             !variant->variants || variant->variants[0].payload_count != 1u ||
             !variant->variants[0].payload_types)
@@ -1626,6 +1633,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     }
     PIPELINE_TEST_REQUIRE(found_nested_generic_variant);
     PIPELINE_TEST_REQUIRE(found_point_aggregate);
+    PIPELINE_TEST_REQUIRE(found_capture_aggregate);
     static const uint16_t required_source_operations[] = {
         XR_CORE_OP_CORE_CONSTANT_I64,
         XR_CORE_OP_CORE_CONSTANT_BOOL,
@@ -1668,7 +1676,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 229);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 234);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);
