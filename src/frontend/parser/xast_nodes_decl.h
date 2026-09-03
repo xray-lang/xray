@@ -17,6 +17,7 @@
 
 #include "xast_nodes_common.h"
 #include "../../shared/xr_param_mode.h"
+#include "../../shared/xr_view_origin.h"
 
 /* ========== Generic / Function Param Helpers ========== */
 
@@ -48,6 +49,9 @@ typedef struct FunctionDeclNode {
     int param_count;
     int required_count;  // Number of required params (without defaults)
     XrTypeRef *return_type;
+    XrBorrowOriginSyntaxState borrow_origin_syntax;
+    AstBorrowOriginRef *borrow_origins;
+    int borrow_origin_count;
     AstNode *body;
     bool is_generator;
     bool is_extern;          // bodyless declaration from an extern "C" block
@@ -102,6 +106,9 @@ typedef struct InterfaceMethodNode {
     XrParamNode **params;
     int param_count;
     XrTypeRef *return_type;
+    XrBorrowOriginSyntaxState borrow_origin_syntax;
+    AstBorrowOriginRef *borrow_origins;
+    int borrow_origin_count;
     XrAttribute **attributes;
     int attr_count;
     XrGenericParam **type_params;  // Method-local generic type parameters (with constraints)
@@ -154,6 +161,9 @@ typedef struct MethodDeclNode {
     XrParamNode **params;
     int param_count;
     XrTypeRef *return_type;
+    XrBorrowOriginSyntaxState borrow_origin_syntax;
+    AstBorrowOriginRef *borrow_origins;
+    int borrow_origin_count;
     AstNode *body;
     bool is_constructor;
     bool is_static;

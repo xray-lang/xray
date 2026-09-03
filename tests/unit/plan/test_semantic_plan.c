@@ -228,6 +228,14 @@ static XrType stub_u8_slice = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_u8},
 };
+static XrType stub_const_u8_slice = {
+    .kind = XR_KIND_SLICE,
+    .id = 36,
+    .frozen = true,
+    .is_const = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_u8},
+};
 
 XrSemanticPlan *test_build_unit_enum_semantic(XrEnumLayout **out_layout) {
     static const char *members[] = {"Standard", "UrlSafe"};
@@ -451,20 +459,17 @@ static XrSemanticPlan *build_string_byte_slice_view_plan(void) {
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *source = xi_const_str(function, entry, "semantic-view", &stub_view_string);
-    XiValue *view = xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_u8_slice, 1);
+    XiValue *view = xi_value_new(function, entry, XI_CALL_BUILTIN, &stub_const_u8_slice, 1);
     REQUIRE(source && view);
     view->args[0] = source;
     view->xa_intrinsic_id = XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
-    view->view_evidence = (XiViewEvidence) {
-        .root_value_id = source->id,
-        .element_type_id = stub_u8.id,
+    XiViewSourceEvidence origin = {
         .source_operand = 0,
         .source_param = -1,
         .origin = XI_VIEW_ORIGIN_RECEIVER,
-        .capability = 1,
         .lifetime = 1,
-        .complete = 1,
     };
+    REQUIRE(xi_value_set_view_evidence(function, view, &origin, 1, stub_u8.id, 0, 1));
     XiValue *result = xi_const_int(function, entry, 0, &stub_int);
     REQUIRE(result != NULL);
     xi_block_set_return(entry, result);
@@ -2217,6 +2222,30 @@ static void test_incomplete_debug_span_fails_closed(void) {
     xi_func_free(function);
 }
 
+static void test_non_singleton_borrow_origin_set_fails_scalar_projection(void) {
+    XiFunc *function = xi_func_new("multi_origin_view", &stub_u8_slice);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    function->stage = XI_STAGE_OPTIMIZED;
+    function->view_origin_set = (XrViewOrigin *) xi_func_arena_alloc(
+        function, (uint32_t) (2 * sizeof(*function->view_origin_set)));
+    REQUIRE(function->view_origin_set != NULL);
+    function->view_origin_set[0] =
+        (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 0};
+    function->view_origin_set[1] =
+        (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 1};
+    function->view_origin_count = 2;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    REQUIRE(!xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    REQUIRE(plan == NULL);
+    REQUIRE(strcmp(error, "XR_SEM_0019: legacy SemanticPlan cannot project a non-singleton "
+                          "BorrowOriginSet") == 0);
+    xi_func_free(function);
+}
+
 static XrSemanticPlan *build_signed_extreme_plan(void) {
     XiFunc *function = xi_func_new("signed_extreme_probe", &stub_int);
     REQUIRE(function != NULL);
@@ -2969,6 +2998,10 @@ static void test_string_byte_slice_view_authority(void) {
     view->reserved_view[0] = 1;
     expect_verify_failure(plan, "XR_SEM_0019");
     view->reserved_view[0] = 0;
+    uint32_t saved_result_flags = plan->types[view->result_type].flags;
+    plan->types[view->result_type].flags &= ~XR_SEM_TYPE_CONST;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->types[view->result_type].flags = saved_result_flags;
     REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
     xr_semantic_plan_free(plan);
 }
@@ -3715,7 +3748,7 @@ static void test_indirect_callable_state_authority(void) {
     REQUIRE(strstr(target->canonical_key, ":kind=4") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "b2978243255e51cc82e3cafc251c7cf2") == 0);
+    REQUIRE(strcmp(target_id_hex, "ab0c52c8cff5fe4ca7cb0e1f4cfd70a4") == 0);
     uint32_t state_count = 0;
     for (uint32_t index = 0; index < plan->entity_count; index++)
         state_count += plan->entities[index].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
@@ -3851,10 +3884,14 @@ static void test_source_export_call_target_authority(void) {
      * The canonical-program ownership registry freeze moved the dependency
      * SemanticPlan fingerprint again without changing the export shape.
      * Previous dependency_id: 73c067c0bdf9576d461f634c30edcd4f.
-     * Previous target_id:     1f90f19935ed47ff8261f69eaef3cf44. */
-    REQUIRE(strcmp(dependency_id, "9f8c98c148e046642c7b0aefef7549a4") == 0);
+     * Previous target_id:     1f90f19935ed47ff8261f69eaef3cf44.
+     * BorrowOriginSet became part of function type identity, moving the
+     * dependency fingerprint and the target that embeds it.
+     * Previous dependency_id: 9f8c98c148e046642c7b0aefef7549a4.
+     * Previous target_id:     62dd0c02696c9089a81fc8e1b4527e0b. */
+    REQUIRE(strcmp(dependency_id, "904d9b9e2e484fe691d4a0ab86983d0c") == 0);
     REQUIRE(strcmp(export_id, "fda3c47f9afbb56bc6f54afe0f1f2516") == 0);
-    REQUIRE(strcmp(target_id, "62dd0c02696c9089a81fc8e1b4527e0b") == 0);
+    REQUIRE(strcmp(target_id, "3b660a4be90a4865ddb2d67ebd94e846") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -6433,6 +6470,7 @@ int main(int argc, char **argv) {
     test_source_enum_identity_and_mutations();
     test_typed_entity_identity_table();
     test_incomplete_debug_span_fails_closed();
+    test_non_singleton_borrow_origin_set_fails_scalar_projection();
     test_operation_registry();
     test_immutable_owned_snapshot();
     test_string_builder_constructor_allocation_authority();

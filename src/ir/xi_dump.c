@@ -20,6 +20,7 @@
 #include "../runtime/value/xtype.h" /* XrTypeKind, XR_KIND_* */
 #include "../runtime/value/xstruct_layout.h"
 #include "../shared/xr_exact_scalar_registry.h"
+#include "../base/xmalloc.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -104,32 +105,30 @@ static const char *xi_block_kind_name(uint16_t kind) {
 static void dump_view_evidence(FILE *out, const XiValue *v) {
     if (!v->view_evidence.complete)
         return;
-    const char *origin = "unknown";
-    switch (v->view_evidence.origin) {
-        case XR_VIEW_RETURN_PARAM:
-            origin = "param";
-            break;
-        case XR_VIEW_RETURN_RECEIVER:
-            origin = "receiver";
-            break;
-        case XR_VIEW_RETURN_STATIC:
-            origin = "static";
-            break;
-        case XI_VIEW_ORIGIN_FOREIGN:
-            origin = "foreign";
-            break;
-        case XI_VIEW_ORIGIN_ALLOCATION:
-            origin = "allocation";
-            break;
-        default:
-            origin = "invalid";
+    XiViewOriginEvidence *origins = NULL;
+    uint16_t origin_count = 0;
+    if (!xi_value_materialize_view_origins(v, &origins, &origin_count))
+        return;
+    fprintf(out, " view:{");
+    for (uint16_t i = 0; i < origin_count; i++) {
+        const XiViewOriginEvidence *evidence = &origins[i];
+        const char *origin = evidence->origin == XI_VIEW_ORIGIN_PARAM        ? "param"
+                             : evidence->origin == XI_VIEW_ORIGIN_RECEIVER   ? "receiver"
+                             : evidence->origin == XI_VIEW_ORIGIN_STATIC     ? "static"
+                             : evidence->origin == XI_VIEW_ORIGIN_FOREIGN    ? "foreign"
+                             : evidence->origin == XI_VIEW_ORIGIN_ALLOCATION ? "allocation"
+                                                                             : "invalid";
+        if (i > 0)
+            fprintf(out, ",");
+        fprintf(out, "%s", origin);
+        if (evidence->source_param >= 0)
+            fprintf(out, "(%d)", (int) evidence->source_param);
+        if (evidence->source_operand >= 0)
+            fprintf(out, " operand=%d root=v%u", (int) evidence->source_operand,
+                    evidence->root_value_id);
     }
-    fprintf(out, " view:%s", origin);
-    if (v->view_evidence.source_param >= 0)
-        fprintf(out, "(%d)", (int) v->view_evidence.source_param);
-    if (v->view_evidence.source_operand >= 0)
-        fprintf(out, " operand=%d root=v%u", (int) v->view_evidence.source_operand,
-                v->view_evidence.root_value_id);
+    fprintf(out, "}");
+    xr_free(origins);
 }
 
 static void dump_value(FILE *out, const XiValue *v) {
@@ -394,13 +393,19 @@ void xi_func_dump(const XiFunc *f, void *stream) {
             fprintf(out, "?: ?");
     }
     fprintf(out, ") -> %s", xi_type_name(f->return_type));
-    if (f->view_return_complete) {
-        if (f->view_return_source == XR_VIEW_RETURN_PARAM)
-            fprintf(out, " [view_return=param(%d)]", (int) f->view_return_param);
-        else if (f->view_return_source == XR_VIEW_RETURN_RECEIVER)
-            fprintf(out, " [view_return=receiver]");
-        else if (f->view_return_source == XR_VIEW_RETURN_STATIC)
-            fprintf(out, " [view_return=static]");
+    if (f->view_origin_count > 0 && f->view_origin_set) {
+        fprintf(out, " [view_return={");
+        for (uint16_t i = 0; i < f->view_origin_count; i++) {
+            if (i > 0)
+                fprintf(out, ",");
+            if (f->view_origin_set[i].kind == XR_VIEW_ORIGIN_PARAM)
+                fprintf(out, "param(%d)", (int) f->view_origin_set[i].param_ordinal);
+            else if (f->view_origin_set[i].kind == XR_VIEW_ORIGIN_RECEIVER)
+                fprintf(out, "receiver");
+            else
+                fprintf(out, "static");
+        }
+        fprintf(out, "}]");
     }
     fprintf(out, " {\n");
 

@@ -116,6 +116,7 @@ static XrType byte_slice_type = {
     .id = 9,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .frozen = true,
+    .is_const = true,
     .container = {.element_type = &byte_type},
 };
 static XrType dynamic_any = {
@@ -2191,16 +2192,13 @@ static void test_string_byte_slice_view_c_emission_recipe_is_exact(void) {
     REQUIRE(source && view);
     view->args[0] = source;
     view->xa_intrinsic_id = XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
-    view->view_evidence = (XiViewEvidence) {
-        .root_value_id = source->id,
-        .element_type_id = byte_type.id,
+    XiViewSourceEvidence origin = {
         .source_operand = 0,
         .source_param = -1,
         .origin = XI_VIEW_ORIGIN_RECEIVER,
-        .capability = 1,
         .lifetime = 1,
-        .complete = 1,
     };
+    REQUIRE(xi_value_set_view_evidence(root, view, &origin, 1, byte_type.id, 0, 1));
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
@@ -2358,6 +2356,11 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "rune-to-string-emission") == 0) {
         test_rune_to_string_c_emission_recipe_is_exact();
         printf("rune.toString C emission authority tests passed\n");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "string-byte-slice-view-emission") == 0) {
+        test_string_byte_slice_view_c_emission_recipe_is_exact();
+        printf("String byte-slice view C emission authority tests passed\n");
         return 0;
     }
     test_scalar_plan_and_emission_view();

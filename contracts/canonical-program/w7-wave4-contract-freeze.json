@@ -10,6 +10,16 @@
   ],
   "scope": "callable-interface-existential-dynamic-import",
   "compatibility": "none",
+  "implementation_state": {
+    "declaration_receiver_contract": "COMPLETE",
+    "borrow_origin_set": "COMPLETE",
+    "program_tables": "PENDING",
+    "existential_operations": "PENDING",
+    "witness_dispatch": "PENDING",
+    "callable_dispatch": "PENDING",
+    "source_integration": "PENDING",
+    "wave_closure": "PENDING"
+  },
   "phase_erasure": {
     "generic_constraint_call": "monomorphized to sealed direct or sealed invoke before XrProgram",
     "source_import_call": "whole-program link resolves the imported declaration to one canonical FunctionId before XrProgram",
@@ -94,6 +104,25 @@
     "RECEIVER",
     "STATIC"
   ],
+  "borrow_origin_contract": {
+    "source_syntax": "returning direct const Slice<T> declares 'from' PARAM, RECEIVER or STATIC origins",
+    "type_identity": "sorted and deduplicated (kind, parameter ordinal) set; names, source order, duplicates and elision are excluded",
+    "body_role": "verify every actual return root belongs to the signature set; never infer signature authority",
+    "call_mapping": "map every formal origin to caller RootIds, recursively expand view actuals, then sort and deduplicate",
+    "xi_evidence": "retain only a normalized source recipe; consumers recursively materialize the complete caller-local root set from current SSA operands, with no mutable root cache, and the verifier rejects empty, cyclic or invalid recipes",
+    "semantic_plan_boundary": "legacy scalar SemanticPlan projection fails XR_SEM_0019 for every non-singleton set until program tables land",
+    "compatibility": "no scalar origin fields, body-derived fallback, old reader or dual path",
+    "positive_fixtures": [
+      "tests/fixtures/task284_ownership_positive/borrow_origin_set.xr",
+      "tests/fixtures/task284_ownership_positive/borrow_origin_static.xr"
+    ],
+    "negative_fixtures": [
+      "tests/fixtures/task284_ownership_negative/borrow_origin_ambiguous.xr",
+      "tests/fixtures/task284_ownership_negative/borrow_origin_invalid.xr",
+      "tests/fixtures/task284_ownership_negative/borrow_origin_outside_set.xr",
+      "tests/fixtures/task284_ownership_negative/borrow_origin_ref.xr"
+    ]
+  },
   "old_owner_inventory": [
     {
       "owner": "body-derived receiver permission and borrowed-return source",

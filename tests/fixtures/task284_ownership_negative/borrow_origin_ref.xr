@@ -1,0 +1,7 @@
+fn wrong(source: ref Slice<u8>) -> const Slice<u8> from source {
+    return source
+}
+
+fn main() {}
+
+main()

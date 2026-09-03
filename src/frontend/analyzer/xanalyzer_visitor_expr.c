@@ -594,9 +594,9 @@ static XrType *xa_builtin_receiver_method_type_from_spec(XaInferContext *ctx, Xr
     if (fn)
         fn->function.min_params = spec->min_params;
     if (fn && fn->function.return_type && XR_TYPE_IS_SLICE(fn->function.return_type)) {
-        fn->function.view_return_source = XR_VIEW_RETURN_RECEIVER;
-        fn->function.view_return_param = -1;
-        fn->function.view_return_complete = true;
+        fn->function.return_type = xr_type_make_const(X, fn->function.return_type);
+        XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
+        (void) xr_type_function_set_view_origins(X, fn, &origin, 1, false);
     }
     return fn;
 }
@@ -631,11 +631,11 @@ static XrType *xa_string_view_method_type(XaInferContext *ctx, XrType *receiver,
         return xr_type_new_error(ctx->analyzer->isolate);
     }
     XrVMRuntime *X = ctx->analyzer->isolate;
-    XrType *fn = xr_type_new_function(X, NULL, 0, xr_type_new_u8_slice(X), false);
+    XrType *fn =
+        xr_type_new_function(X, NULL, 0, xr_type_make_const(X, xr_type_new_u8_slice(X)), false);
     if (fn) {
-        fn->function.view_return_source = XR_VIEW_RETURN_RECEIVER;
-        fn->function.view_return_param = -1;
-        fn->function.view_return_complete = true;
+        XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
+        (void) xr_type_function_set_view_origins(X, fn, &origin, 1, false);
     }
     return fn;
 }
@@ -2736,10 +2736,12 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 }
                 if (fn_type->function.return_type &&
                     XR_TYPE_IS_SLICE(fn_type->function.return_type) &&
-                    !fn_type->function.view_return_complete) {
-                    fn_type->function.view_return_source = XR_VIEW_RETURN_RECEIVER;
-                    fn_type->function.view_return_param = -1;
-                    fn_type->function.view_return_complete = true;
+                    fn_type->function.view_origin_count == 0) {
+                    fn_type->function.return_type =
+                        xr_type_make_const(ctx->analyzer->isolate, fn_type->function.return_type);
+                    XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
+                    (void) xr_type_function_set_view_origins(ctx->analyzer->isolate, fn_type,
+                                                             &origin, 1, false);
                 }
                 return fn_type;
             }
@@ -2750,9 +2752,10 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         if (return_type) {
             XrType *fn = xr_type_new_function(ctx->analyzer->isolate, NULL, 0, return_type, false);
             if (fn && XR_TYPE_IS_SLICE(return_type)) {
-                fn->function.view_return_source = XR_VIEW_RETURN_RECEIVER;
-                fn->function.view_return_param = -1;
-                fn->function.view_return_complete = true;
+                fn->function.return_type = xr_type_make_const(ctx->analyzer->isolate, return_type);
+                XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
+                (void) xr_type_function_set_view_origins(ctx->analyzer->isolate, fn, &origin, 1,
+                                                         false);
             }
             return fn;
         }

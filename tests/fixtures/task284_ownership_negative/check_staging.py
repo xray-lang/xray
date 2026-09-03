@@ -853,6 +853,14 @@ EXPECTED_CASES = {
         "source", "borrow_origin_invalid.xr", "OWN-E-VIEW-ORIGIN-INVALID",
         {"LOCK-FRONTEND", "LOCK-SCHEMA"},
     ),
+    "borrow-origin-outside-set": (
+        "source", "borrow_origin_outside_set.xr", "OWN-E-VIEW-ORIGIN-INVALID",
+        {"LOCK-FRONTEND", "LOCK-SCHEMA"},
+    ),
+    "borrow-origin-ref": (
+        "source", "borrow_origin_ref.xr", "OWN-E-VIEW-ORIGIN-INVALID",
+        {"LOCK-FRONTEND", "LOCK-SCHEMA"},
+    ),
     "read-escape": (
         "source", "read_escape.xr", "OWN-E-READ-ESCAPE", {"LOCK-FRONTEND", "LOCK-SCHEMA"}
     ),
@@ -922,7 +930,9 @@ EXPECTED_HARNESSES = {
 
 EXPECTED_FIXTURE_SHA256 = {
     "borrow_origin_ambiguous.xr": "d5a33d60c7d41e1e0fbc1a31117d19c51a73e6734ef70db652d43081ca566ca5",
-    "borrow_origin_invalid.xr": "0432334f4d2383338cbd089c0978ba888e36f4100737c9fb2de3274347f1f713",
+    "borrow_origin_invalid.xr": "1c00c38a701222e426a0974742b079396f202f8213869ac9dae23674ee216799",
+    "borrow_origin_outside_set.xr": "e412d2630cc6d9626e6c6de2ba913c7d51a42f4b38d24428998aa3b353989031",
+    "borrow_origin_ref.xr": "185f32fe35952f8f3e13f452f985d749dbdefcbbfbf3266f160c80fb0bf31978",
     "domain_edge.mutation.json": "6af7508e525cefc04da64dc64abac255257599e20184e7d45e1cb1943836812b",
     "external_alias_after_scope.xr": "a51654da5e778a2e58370b5753155bfaf939a55728fcf2fa0e55726d949d3072",
     "read_escape.xr": "ad3da40171848dbadfcc61ee49d772125a3f96babc2e94fe28ab233ca0805e87",
@@ -943,6 +953,12 @@ EXPECTED_FIXTURE_SHA256 = {
     "view_mutable_return.xr": "0d8013c86b2d99a50ca2ff8bc06d8237a320dc9cc1bd78999eb05544585bd9bf",
 }
 EXPECTED_POSITIVE_FIXTURE_SHA256 = {
+    "borrow_origin_set.xr": (
+        "86e2f0b6ec2d4635fc18fd8736e3c82b0541c5e5bf6e1a96ece89b0163d3c328"
+    ),
+    "borrow_origin_static.xr": (
+        "0b6f39f9e18bb44f2b7efe6bf90ad527e92079ce05e288fb38640f7e8f12018e"
+    ),
     "closure_immediate_read_borrow.xr": (
         "71240f3b2e67684f6777d1818511370a6cd4a1a2b40156e3a81c7505fc2abbb8"
     ),
@@ -1006,6 +1022,14 @@ EXPECTED_DIAGNOSTIC_EVIDENCE = {
     ),
     "borrow-origin-invalid": (
         "bind a borrowed return to an unknown origin", "unresolved origin name",
+        "borrowed return signature",
+    ),
+    "borrow-origin-outside-set": (
+        "return a borrowed view whose root is outside the declared origin set",
+        "first return path with an undeclared origin", "borrowed return signature and body",
+    ),
+    "borrow-origin-ref": (
+        "declare a REF input as a borrowed-result origin", "first ineligible REF origin",
         "borrowed return signature",
     ),
     "read-escape": (
@@ -1092,6 +1116,16 @@ EXPECTED_CASE_DETAILS = {
         "borrow-origin-syntax-not-owned-by-parser",
         "unknown origin name in the return declaration",
         "name an eligible READ input or return an owned copy",
+    ),
+    "borrow-origin-outside-set": (
+        "body-return-provenance-not-checked-against-a-declared-set",
+        "return path whose provenance is outside the declared origin set",
+        "add the returned input to the from set or return a declared origin",
+    ),
+    "borrow-origin-ref": (
+        "ref-input-could-be-misclassified-as-a-borrowed-result-origin",
+        "REF input named by the borrowed return declaration",
+        "use an eligible READ input or return an owned copy",
     ),
     "read-escape": (
         "accepted-by-read-local-alias-retain-summary",

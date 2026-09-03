@@ -40,7 +40,7 @@ slot, native register, or common local physical plan is stored here.
 anchor-sha256: src/plan/target/xr_target_profile.h cc34ac187a3bc33cbf326e81d233a195227adfceeee6f80b8473175c5947a067
 anchor-sha256: src/plan/target/xr_target_profile.c 92c9a3f4a96329a25aa662a763e11bc5eb0fa0083d0bf0e69caac23442e82ea2
 anchor-sha256: src/plan/target/xr_target_profile_verify.c 4092adc2ff88ab03eccf6e9795b4c32efd7173a8acf96c94dba7932cc5e34ab7
-anchor-sha256: src/plan/target/xr_target_verify.c 50f752eb34c7c1ebb9920017f27ac9b7ccc5c864acf495b4d9658171b4618554
+anchor-sha256: src/plan/target/xr_target_verify.c 60cf29ff49511e8a0e00aff7f43d8b227d8eb6e2da1db7c205bbea8f3abc9431
 anchor-sha256: src/execution/xr_execution.h d9d777969c65f282ff70a7cc755f26d11b2ebf0a044e05d059fde0049c88d357
 anchor-sha256: src/execution/xr_execution.c abb49afef5a5a9233c0e471ad9d0bc71a22cc65726938a6ce613e337f43d06c9
 anchor-sha256: src/execution/xr_boundary_materialization.h bc2e27bdeaa0243a9fcab271c1b9f7735088bee46a751eade590b94bb846f45e

@@ -200,6 +200,8 @@ XR_FUNC AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const);
 XR_FUNC AstNode *xr_parse_function_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_type_alias_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_enum_declaration(Parser *parser);
+XR_FUNC void xr_parse_borrow_origin_set(Parser *parser, XrBorrowOriginSyntaxState *out_syntax,
+                                        AstBorrowOriginRef **out_origins, int *out_count);
 
 /* ========== OOP Parsing ========== */
 

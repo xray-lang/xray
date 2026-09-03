@@ -820,6 +820,336 @@ XrType *xr_type_new_enum_metadata(XrVMRuntime *X, const char *metadata_name, XrT
 }
 
 // Function type
+static int view_origin_compare(const XrViewOrigin *a, const XrViewOrigin *b) {
+    if (a->kind != b->kind)
+        return a->kind < b->kind ? -1 : 1;
+    if (a->param_ordinal == b->param_ordinal)
+        return 0;
+    return a->param_ordinal < b->param_ordinal ? -1 : 1;
+}
+
+bool xr_type_function_set_view_origins(XrVMRuntime *X, XrType *type, const XrViewOrigin *origins,
+                                       int count, bool was_elided) {
+    if (!type || type->kind != XR_KIND_FUNCTION || count < 0 || (count > 0 && !origins))
+        return false;
+    X = resolve_isolate(X);
+    XrTypePool *pool = resolve_type_pool(X);
+    XrViewOrigin *normalized = NULL;
+    if (count > 0) {
+        normalized = (XrViewOrigin *) xr_malloc(sizeof(XrViewOrigin) * (size_t) count);
+        if (!normalized)
+            return false;
+        memcpy(normalized, origins, sizeof(XrViewOrigin) * (size_t) count);
+        for (int i = 1; i < count; i++) {
+            XrViewOrigin key = normalized[i];
+            int j = i - 1;
+            while (j >= 0 && view_origin_compare(&normalized[j], &key) > 0) {
+                normalized[j + 1] = normalized[j];
+                j--;
+            }
+            normalized[j + 1] = key;
+        }
+        int unique = 0;
+        for (int i = 0; i < count; i++) {
+            XrViewOrigin origin = normalized[i];
+            if (origin.kind == XR_VIEW_ORIGIN_PARAM) {
+                if (origin.param_ordinal < 0 ||
+                    origin.param_ordinal >= type->function.param_count ||
+                    xr_type_function_param_mode(type, origin.param_ordinal) != XR_PARAM_READ) {
+                    xr_free(normalized);
+                    return false;
+                }
+            } else if (origin.kind == XR_VIEW_ORIGIN_RECEIVER) {
+                if (origin.param_ordinal != -1 || type->function.receiver_mode != XR_PARAM_READ) {
+                    xr_free(normalized);
+                    return false;
+                }
+            } else if (origin.kind == XR_VIEW_ORIGIN_STATIC) {
+                if (origin.param_ordinal != -1) {
+                    xr_free(normalized);
+                    return false;
+                }
+            } else {
+                xr_free(normalized);
+                return false;
+            }
+            if (unique == 0 || view_origin_compare(&normalized[unique - 1], &origin) != 0)
+                normalized[unique++] = origin;
+        }
+        count = unique;
+    }
+
+    XrViewOrigin *stored = NULL;
+    if (count > 0) {
+        stored = (XrViewOrigin *) type_alloc_array(pool, sizeof(XrViewOrigin), count, NULL);
+        if (!stored) {
+            xr_free(normalized);
+            return false;
+        }
+        memcpy(stored, normalized, sizeof(XrViewOrigin) * (size_t) count);
+    }
+    xr_free(normalized);
+    type->function.view_origin_set = stored;
+    type->function.view_origin_count = count;
+    type->function.view_origin_was_elided = was_elided;
+    return true;
+}
+
+bool xr_type_function_view_origins_equal(const XrType *a, const XrType *b) {
+    if (!a || !b || a->kind != XR_KIND_FUNCTION || b->kind != XR_KIND_FUNCTION ||
+        a->function.view_origin_count != b->function.view_origin_count)
+        return false;
+    for (int i = 0; i < a->function.view_origin_count; i++) {
+        if (view_origin_compare(&a->function.view_origin_set[i], &b->function.view_origin_set[i]) !=
+            0)
+            return false;
+    }
+    return true;
+}
+
+typedef enum TypeContainsSliceResult {
+    TYPE_CONTAINS_SLICE_NO = 0,
+    TYPE_CONTAINS_SLICE_YES,
+    TYPE_CONTAINS_SLICE_OUT_OF_MEMORY,
+} TypeContainsSliceResult;
+
+typedef struct TypeContainsSliceTraversal {
+    const XrType **visited;
+    size_t count;
+    size_t capacity;
+} TypeContainsSliceTraversal;
+
+static TypeContainsSliceResult type_contains_slice_impl(const XrType *type,
+                                                        TypeContainsSliceTraversal *traversal) {
+    if (!type)
+        return TYPE_CONTAINS_SLICE_NO;
+    if (XR_TYPE_IS_SLICE(type))
+        return TYPE_CONTAINS_SLICE_YES;
+
+    for (size_t i = 0; i < traversal->count; i++) {
+        if (traversal->visited[i] == type)
+            return TYPE_CONTAINS_SLICE_NO;
+    }
+    if (traversal->count == traversal->capacity) {
+        if (traversal->capacity > SIZE_MAX / 2)
+            return TYPE_CONTAINS_SLICE_OUT_OF_MEMORY;
+        size_t capacity = traversal->capacity > 0 ? traversal->capacity * 2 : 16;
+        if (capacity > SIZE_MAX / sizeof(*traversal->visited))
+            return TYPE_CONTAINS_SLICE_OUT_OF_MEMORY;
+        const XrType **grown =
+            (const XrType **) xr_realloc(traversal->visited, capacity * sizeof(*grown));
+        if (!grown)
+            return TYPE_CONTAINS_SLICE_OUT_OF_MEMORY;
+        traversal->visited = grown;
+        traversal->capacity = capacity;
+    }
+    traversal->visited[traversal->count++] = type;
+
+#define VISIT_SLICE_CHILD(child_)                                                                  \
+    do {                                                                                           \
+        TypeContainsSliceResult result_ = type_contains_slice_impl((child_), traversal);           \
+        if (result_ != TYPE_CONTAINS_SLICE_NO)                                                     \
+            return result_;                                                                        \
+    } while (0)
+
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_POINTER:
+            VISIT_SLICE_CHILD(type->container.element_type);
+            break;
+        case XR_KIND_FIXED_ARRAY:
+            VISIT_SLICE_CHILD(type->fixed_array.element_type);
+            break;
+        case XR_KIND_MAP:
+            VISIT_SLICE_CHILD(type->map.key_type);
+            VISIT_SLICE_CHILD(type->map.value_type);
+            break;
+        case XR_KIND_JSON:
+        case XR_KIND_STRUCT_OBJECT:
+            for (int i = 0; i < type->object.field_count; i++) {
+                VISIT_SLICE_CHILD(type->object.field_types ? type->object.field_types[i] : NULL);
+            }
+            break;
+        case XR_KIND_INSTANCE:
+        case XR_KIND_CLASS:
+        case XR_KIND_INTERFACE:
+            VISIT_SLICE_CHILD(type->instance.superclass);
+            for (int i = 0; i < type->instance.type_arg_count; i++) {
+                VISIT_SLICE_CHILD(type->instance.type_args ? type->instance.type_args[i] : NULL);
+            }
+            break;
+        case XR_KIND_FUNCTION:
+            for (int i = 0; i < type->function.param_count; i++) {
+                VISIT_SLICE_CHILD(type->function.params ? type->function.params[i].type : NULL);
+            }
+            VISIT_SLICE_CHILD(type->function.return_type);
+            for (int i = 0; i < type->function.type_param_count; i++) {
+                int constraint_count = type->function.type_param_constraint_counts
+                                           ? type->function.type_param_constraint_counts[i]
+                                           : 0;
+                XrType **constraints = type->function.type_param_constraints
+                                           ? type->function.type_param_constraints[i]
+                                           : NULL;
+                for (int j = 0; j < constraint_count; j++)
+                    VISIT_SLICE_CHILD(constraints ? constraints[j] : NULL);
+            }
+            break;
+        case XR_KIND_TYPE_PARAM:
+            VISIT_SLICE_CHILD(type->type_param.constraint);
+            break;
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                VISIT_SLICE_CHILD(type->tuple.element_types ? type->tuple.element_types[i] : NULL);
+            }
+            break;
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                VISIT_SLICE_CHILD(type->union_type.members ? type->union_type.members[i] : NULL);
+            }
+            break;
+        case XR_KIND_ENUM:
+            for (int i = 0; i < type->enum_type.type_arg_count; i++) {
+                VISIT_SLICE_CHILD(type->enum_type.type_args ? type->enum_type.type_args[i] : NULL);
+            }
+            break;
+        case XR_KIND_SLICE:
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_STRING:
+        case XR_KIND_BOOL:
+        case XR_KIND_NULL:
+        case XR_KIND_UNKNOWN:
+        case XR_KIND_ERROR:
+        case XR_KIND_NEVER:
+        case XR_KIND_UNIT:
+        case XR_KIND_RUNE:
+        case XR_KIND_COUNT:
+            break;
+    }
+
+#undef VISIT_SLICE_CHILD
+    return TYPE_CONTAINS_SLICE_NO;
+}
+
+static TypeContainsSliceResult type_contains_slice(const XrType *type) {
+    TypeContainsSliceTraversal traversal = {0};
+    TypeContainsSliceResult result = type_contains_slice_impl(type, &traversal);
+    xr_free(traversal.visited);
+    return result;
+}
+
+static bool view_origin_param_is_eligible(const XrType *function, int ordinal) {
+    if (!function || function->kind != XR_KIND_FUNCTION || ordinal < 0 ||
+        ordinal >= function->function.param_count ||
+        xr_type_function_param_mode(function, ordinal) != XR_PARAM_READ)
+        return false;
+    const XrType *return_type = function->function.return_type;
+    const XrType *input = xr_type_function_param_type(function, ordinal);
+    const XrType *return_element = return_type ? return_type->container.element_type : NULL;
+    const XrType *input_element = xr_type_contiguous_element_type(input);
+    return return_element && input_element &&
+           xr_type_equals((XrType *) return_element, (XrType *) input_element);
+}
+
+XrViewOriginBindStatus xr_type_function_bind_view_origins(XrVMRuntime *X, XrType *type,
+                                                          const char **param_names,
+                                                          XrBorrowOriginSyntaxState syntax,
+                                                          const AstBorrowOriginRef *origins,
+                                                          int origin_count, bool has_receiver) {
+    if (!type || type->kind != XR_KIND_FUNCTION || origin_count < 0 ||
+        (origin_count > 0 && !origins))
+        return XR_VIEW_ORIGIN_BIND_INVALID;
+    XrType *return_type = type->function.return_type;
+    if (!XR_TYPE_IS_SLICE(return_type)) {
+        TypeContainsSliceResult contains_slice = type_contains_slice(return_type);
+        if (contains_slice == TYPE_CONTAINS_SLICE_OUT_OF_MEMORY)
+            return XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
+        if (contains_slice == TYPE_CONTAINS_SLICE_YES)
+            return XR_VIEW_ORIGIN_BIND_HIDDEN_RETURN;
+        if (syntax == XR_BORROW_ORIGIN_EXPLICIT_SET)
+            return XR_VIEW_ORIGIN_BIND_NOT_VIEW;
+        return xr_type_function_set_view_origins(X, type, NULL, 0, false)
+                   ? XR_VIEW_ORIGIN_BIND_OK
+                   : XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
+    }
+    if (!return_type->is_const)
+        return XR_VIEW_ORIGIN_BIND_MUTABLE_RETURN;
+
+    int max_origins = type->function.param_count + 2;
+    XrViewOrigin *normalized =
+        (XrViewOrigin *) xr_malloc(sizeof(XrViewOrigin) * (size_t) max_origins);
+    if (!normalized)
+        return XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
+    int count = 0;
+    if (syntax == XR_BORROW_ORIGIN_EXPLICIT_SET) {
+        if (origin_count == 0) {
+            xr_free(normalized);
+            return XR_VIEW_ORIGIN_BIND_INVALID;
+        }
+        for (int i = 0; i < origin_count; i++) {
+            XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = -1};
+            if (origins[i].kind == AST_BORROW_ORIGIN_PARAM_NAME) {
+                int ordinal = -1;
+                for (int j = 0; j < type->function.param_count; j++) {
+                    if (param_names && param_names[j] && origins[i].name &&
+                        strcmp(param_names[j], origins[i].name) == 0) {
+                        ordinal = j;
+                        break;
+                    }
+                }
+                if (ordinal < 0) {
+                    xr_free(normalized);
+                    return XR_VIEW_ORIGIN_BIND_UNKNOWN_NAME;
+                }
+                if (!view_origin_param_is_eligible(type, ordinal)) {
+                    xr_free(normalized);
+                    return XR_VIEW_ORIGIN_BIND_INELIGIBLE;
+                }
+                origin.param_ordinal = (int16_t) ordinal;
+            } else if (origins[i].kind == AST_BORROW_ORIGIN_RECEIVER) {
+                if (!has_receiver || type->function.receiver_mode != XR_PARAM_READ) {
+                    xr_free(normalized);
+                    return XR_VIEW_ORIGIN_BIND_INELIGIBLE;
+                }
+                origin.kind = XR_VIEW_ORIGIN_RECEIVER;
+            } else if (origins[i].kind == AST_BORROW_ORIGIN_STATIC) {
+                origin.kind = XR_VIEW_ORIGIN_STATIC;
+            } else {
+                xr_free(normalized);
+                return XR_VIEW_ORIGIN_BIND_INVALID;
+            }
+            if (count >= max_origins) {
+                xr_free(normalized);
+                return XR_VIEW_ORIGIN_BIND_INVALID;
+            }
+            normalized[count++] = origin;
+        }
+    } else {
+        for (int i = 0; i < type->function.param_count; i++) {
+            if (view_origin_param_is_eligible(type, i))
+                normalized[count++] =
+                    (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = (int16_t) i};
+        }
+        if (has_receiver && type->function.receiver_mode == XR_PARAM_READ)
+            normalized[count++] =
+                (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
+        if (count > 1) {
+            xr_free(normalized);
+            return XR_VIEW_ORIGIN_BIND_AMBIGUOUS;
+        }
+        if (count == 0) {
+            xr_free(normalized);
+            return XR_VIEW_ORIGIN_BIND_INVALID;
+        }
+    }
+    bool stored = xr_type_function_set_view_origins(X, type, normalized, count,
+                                                    syntax == XR_BORROW_ORIGIN_OMITTED);
+    xr_free(normalized);
+    return stored ? XR_VIEW_ORIGIN_BIND_OK : XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
+}
+
 XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_count,
                              XrType *return_type, bool is_variadic) {
     if (param_count < 0)
@@ -851,33 +1181,9 @@ XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_cou
     // Fail-closed default (task 216): a function type is assumed to possibly
     // throw until the analyzer proves otherwise after the effect-DB fixpoint.
     type->function.throw_effect = XR_FN_EFFECT_MAY_THROW;
-    type->function.view_return_source = XR_VIEW_RETURN_NONE;
-    type->function.view_return_param = -1;
-    type->function.view_return_complete = true;
-    if (return_type && XR_TYPE_IS_SLICE(return_type)) {
-        int borrowed_candidate = -1;
-        bool multiple = false;
-        for (int i = 0; i < param_count; i++) {
-            XrType *param = param_types ? param_types[i] : NULL;
-            if (!param || !XR_TYPE_IS_SLICE(param))
-                continue;
-            if (borrowed_candidate >= 0) {
-                multiple = true;
-                break;
-            }
-            borrowed_candidate = i;
-        }
-        if (multiple) {
-            type->function.view_return_source = XR_VIEW_RETURN_MULTI;
-            type->function.view_return_complete = false;
-        } else if (borrowed_candidate >= 0) {
-            type->function.view_return_source = XR_VIEW_RETURN_PARAM;
-            type->function.view_return_param = (int16_t) borrowed_candidate;
-        } else {
-            type->function.view_return_source = XR_VIEW_RETURN_UNKNOWN;
-            type->function.view_return_complete = false;
-        }
-    }
+    type->function.view_origin_set = NULL;
+    type->function.view_origin_count = 0;
+    type->function.view_origin_was_elided = false;
     return type;
 }
 
@@ -1344,9 +1650,10 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
             copy->function.is_c_abi = type->function.is_c_abi;
             copy->function.receiver_mode = type->function.receiver_mode;
             copy->function.throw_effect = type->function.throw_effect;  // task 216
-            copy->function.view_return_source = type->function.view_return_source;
-            copy->function.view_return_param = type->function.view_return_param;
-            copy->function.view_return_complete = type->function.view_return_complete;
+            if (!xr_type_function_set_view_origins(X, copy, type->function.view_origin_set,
+                                                   type->function.view_origin_count,
+                                                   type->function.view_origin_was_elided))
+                return NULL;
             if (type->function.type_param_count > 0 && type->function.type_param_names) {
                 xr_type_set_function_type_params(
                     X, copy, type->function.type_param_names, type->function.type_param_constraints,
@@ -1947,9 +2254,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         /* A borrowed Slice return is only sound when callers and callees agree
          * on the unique backing source.  This contract is invariant: ordinary
          * callback arity/return covariance must not erase or rewrite it. */
-        if (target->function.view_return_source != source->function.view_return_source ||
-            target->function.view_return_param != source->function.view_return_param ||
-            target->function.view_return_complete != source->function.view_return_complete)
+        if (!xr_type_function_view_origins_equal(target, source))
             return false;
         if (target->function.receiver_mode != source->function.receiver_mode)
             return false;
@@ -2213,9 +2518,7 @@ bool xr_type_function_signature_assignable(XrType *target, XrType *source) {
         target->function.is_variadic != source->function.is_variadic ||
         target->function.is_c_abi != source->function.is_c_abi ||
         target->function.receiver_mode != source->function.receiver_mode ||
-        target->function.view_return_source != source->function.view_return_source ||
-        target->function.view_return_param != source->function.view_return_param ||
-        target->function.view_return_complete != source->function.view_return_complete ||
+        !xr_type_function_view_origins_equal(target, source) ||
         !function_type_params_equal(target, source))
         return false;
     if (target->function.throw_effect == XR_FN_EFFECT_NO_THROW &&
@@ -2323,9 +2626,7 @@ bool xr_type_equals(XrType *a, XrType *b) {
             return false;
         if (a->function.throw_effect != b->function.throw_effect)
             return false;
-        if (a->function.view_return_source != b->function.view_return_source ||
-            a->function.view_return_param != b->function.view_return_param ||
-            a->function.view_return_complete != b->function.view_return_complete)
+        if (!xr_type_function_view_origins_equal(a, b))
             return false;
         if (!function_type_params_equal(a, b))
             return false;

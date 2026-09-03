@@ -54,6 +54,10 @@ XR_FUNC bool xa_type_is_default_initializable(XaInferContext *ctx, XrType *type)
 // because no caller outside src/frontend/analyzer/
 // needs them.
 XR_FUNC void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node);
+XR_FUNC void xa_bind_declared_view_origins(XaInferContext *ctx, AstNode *node, XaSymbolLinks *links,
+                                           const char **param_names, bool has_receiver);
+XR_FUNC void xa_validate_declared_view_origin_returns(XaInferContext *ctx, XaSymbolLinks *links,
+                                                      AstNode *body, XrClassInfo *receiver_info);
 XR_FUNC void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts,
                                                        int count);

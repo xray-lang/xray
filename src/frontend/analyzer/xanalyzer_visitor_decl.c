@@ -599,9 +599,9 @@ typedef struct XaParamEscapeSummary {
     int alias_count;
     XaInferContext *ctx;
     XrClassInfo *receiver_info;
-    XrViewReturnSourceKind view_return_source;
-    int view_return_param;
-    bool view_return_seen;
+    const XrViewOrigin *declared_view_origins;
+    int declared_view_origin_count;
+    bool validate_view_origins;
 } XaParamEscapeSummary;
 
 static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, AstNode *callee);
@@ -692,31 +692,23 @@ static XrType *xa_summary_known_expr_type(XaParamEscapeSummary *summary, AstNode
     return NULL;
 }
 
-static bool xa_summary_view_return_contract(XaParamEscapeSummary *summary, AstNode *callee,
-                                            XaSymbolLinks *links,
-                                            XrViewReturnSourceKind *out_source, int *out_param) {
-    if (out_source)
-        *out_source = XR_VIEW_RETURN_UNKNOWN;
-    if (out_param)
-        *out_param = -1;
-    if (links && links->return_view.complete &&
-        (links->return_view.origin == XR_VIEW_RETURN_PARAM ||
-         links->return_view.origin == XR_VIEW_RETURN_RECEIVER ||
-         links->return_view.origin == XR_VIEW_RETURN_STATIC)) {
-        if (out_source)
-            *out_source = links->return_view.origin;
-        if (out_param)
-            *out_param = links->return_view.param_index;
-        return true;
+static const XrViewOrigin *xa_summary_view_return_contract(XaParamEscapeSummary *summary,
+                                                           AstNode *callee, XaSymbolLinks *links,
+                                                           int *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (links && links->return_view.origin_count > 0 && links->return_view.origins) {
+        if (out_count)
+            *out_count = links->return_view.origin_count;
+        return links->return_view.origins;
     }
     XrType *type = xa_summary_expr_type(summary, callee);
-    if (!type || !XR_TYPE_IS_FUNCTION(type) || !type->function.view_return_complete)
-        return false;
-    if (out_source)
-        *out_source = type->function.view_return_source;
-    if (out_param)
-        *out_param = type->function.view_return_param;
-    return true;
+    if (!type || !XR_TYPE_IS_FUNCTION(type) || type->function.view_origin_count <= 0 ||
+        !type->function.view_origin_set)
+        return NULL;
+    if (out_count)
+        *out_count = type->function.view_origin_count;
+    return type->function.view_origin_set;
 }
 
 static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNode *expr) {
@@ -762,17 +754,17 @@ static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNod
                 XaSymbolLinks *callee = xa_summary_function_links(summary, call->callee);
                 if (!callee)
                     callee = xa_summary_receiver_method_links(summary, call->callee);
-                XrViewReturnSourceKind source = XR_VIEW_RETURN_UNKNOWN;
-                int source_param = -1;
-                if (!xa_summary_view_return_contract(summary, call->callee, callee, &source,
-                                                     &source_param))
+                int origin_count = 0;
+                const XrViewOrigin *origins =
+                    xa_summary_view_return_contract(summary, call->callee, callee, &origin_count);
+                if (!origins || origin_count != 1)
                     return -1;
-                if (source == XR_VIEW_RETURN_PARAM && source_param >= 0 &&
-                    source_param < call->arg_count && call->arguments) {
-                    expr = call->arguments[source_param];
+                if (origins[0].kind == XR_VIEW_ORIGIN_PARAM && origins[0].param_ordinal >= 0 &&
+                    origins[0].param_ordinal < call->arg_count && call->arguments) {
+                    expr = call->arguments[origins[0].param_ordinal];
                     break;
                 }
-                if (source == XR_VIEW_RETURN_RECEIVER && call->callee &&
+                if (origins[0].kind == XR_VIEW_ORIGIN_RECEIVER && call->callee &&
                     call->callee->type == AST_MEMBER_ACCESS) {
                     expr = call->callee->as.member_access.object;
                     break;
@@ -1054,52 +1046,155 @@ static void xa_summary_mark_mutation(XaParamEscapeSummary *summary, AstNode *exp
     }
 }
 
+static bool xa_summary_origin_append(XrViewOrigin *origins, int *count, int capacity,
+                                     XrViewOrigin origin) {
+    if (!origins || !count || *count < 0 || *count > capacity)
+        return false;
+    for (int i = 0; i < *count; i++) {
+        if (origins[i].kind == origin.kind && origins[i].param_ordinal == origin.param_ordinal)
+            return true;
+    }
+    if (*count >= capacity)
+        return false;
+    origins[(*count)++] = origin;
+    return true;
+}
+
+static int xa_summary_collect_return_origins(XaParamEscapeSummary *summary, AstNode *expr,
+                                             XrViewOrigin *origins, int capacity) {
+    if (!summary || !expr || !origins || capacity <= 0)
+        return -1;
+    if (expr->type == AST_CALL_EXPR) {
+        CallExprNode *call = &expr->as.call_expr;
+        XaSymbolLinks *callee = xa_summary_function_links(summary, call->callee);
+        if (!callee)
+            callee = xa_summary_receiver_method_links(summary, call->callee);
+        int contract_count = 0;
+        const XrViewOrigin *contract =
+            xa_summary_view_return_contract(summary, call->callee, callee, &contract_count);
+        if (!contract || contract_count <= 0)
+            return -1;
+        int count = 0;
+        for (int i = 0; i < contract_count; i++) {
+            if (contract[i].kind == XR_VIEW_ORIGIN_STATIC) {
+                if (!xa_summary_origin_append(
+                        origins, &count, capacity,
+                        (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_STATIC, .param_ordinal = -1}))
+                    return -1;
+                continue;
+            }
+            AstNode *source = NULL;
+            if (contract[i].kind == XR_VIEW_ORIGIN_PARAM && contract[i].param_ordinal >= 0 &&
+                contract[i].param_ordinal < call->arg_count && call->arguments) {
+                source = call->arguments[contract[i].param_ordinal];
+            } else if (contract[i].kind == XR_VIEW_ORIGIN_RECEIVER && call->callee &&
+                       call->callee->type == AST_MEMBER_ACCESS) {
+                source = call->callee->as.member_access.object;
+            }
+            if (!source)
+                return -1;
+            XrViewOrigin nested[130];
+            int nested_count = xa_summary_collect_return_origins(
+                summary, source, nested, (int) (sizeof(nested) / sizeof(nested[0])));
+            if (nested_count <= 0)
+                return -1;
+            for (int j = 0; j < nested_count; j++) {
+                if (!xa_summary_origin_append(origins, &count, capacity, nested[j]))
+                    return -1;
+            }
+        }
+        return count;
+    }
+
+    int slot = xa_summary_expr_root_param_slot(summary, expr);
+    if (slot >= 0 && slot < summary->param_count) {
+        origins[0] = (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = (int16_t) slot};
+        return 1;
+    }
+    AstNode *root = expr;
+    while (root && (root->type == AST_MEMBER_ACCESS || root->type == AST_INDEX_GET ||
+                    root->type == AST_SLICE_EXPR || root->type == AST_GROUPING ||
+                    root->type == AST_FORCE_UNWRAP || root->type == AST_AS_EXPR)) {
+        if (root->type == AST_MEMBER_ACCESS)
+            root = root->as.member_access.object;
+        else if (root->type == AST_INDEX_GET)
+            root = root->as.index_get.array;
+        else if (root->type == AST_SLICE_EXPR)
+            root = root->as.slice_expr.source;
+        else if (root->type == AST_GROUPING)
+            root = root->as.grouping;
+        else if (root->type == AST_AS_EXPR)
+            root = root->as.as_expr.expr;
+        else
+            root = root->as.unary.operand;
+    }
+    if (xa_expr_is_this(root)) {
+        origins[0] = (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
+        return 1;
+    }
+    if (root && root->type == AST_VARIABLE && summary->ctx) {
+        XaSymbol *symbol =
+            root->as.variable.symbol_id
+                ? xa_analyzer_symbol_by_id(summary->ctx->analyzer, root->as.variable.symbol_id)
+                : xa_scope_lookup(summary->ctx->analyzer->current_scope, root->as.variable.name);
+        XaSymbolLinks *links =
+            symbol ? xa_analyzer_get_links(summary->ctx->analyzer, symbol) : NULL;
+        if (symbol && symbol->is_const && links &&
+            links->storage_domain == XR_STORAGE_MODULE_STATIC) {
+            origins[0] = (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_STATIC, .param_ordinal = -1};
+            return 1;
+        }
+    }
+    return -1;
+}
+
+static bool xa_summary_declares_origin(const XaParamEscapeSummary *summary, XrViewOrigin origin) {
+    if (!summary)
+        return false;
+    for (int i = 0; i < summary->declared_view_origin_count; i++) {
+        const XrViewOrigin *declared = &summary->declared_view_origins[i];
+        if (declared->kind == origin.kind && declared->param_ordinal == origin.param_ordinal)
+            return true;
+    }
+    return false;
+}
+
 static void xa_summary_mark_return(XaParamEscapeSummary *summary, AstNode *expr) {
     if (!summary || !expr)
         return;
-    int slot = xa_summary_expr_root_param_slot(summary, expr);
-    if (summary->effects && slot >= 0 && slot < summary->param_count) {
-        summary->effects[slot].returns |= expr->type == AST_SLICE_EXPR
-                                              ? XA_RETURN_PROVENANCE_BORROWED_PROJECTION
-                                              : XA_RETURN_PROVENANCE_ALIAS;
-        summary->effects[slot].retain = XA_RETAIN_LOCAL_ALIAS;
+    XrViewOrigin actual[130];
+    int actual_count = xa_summary_collect_return_origins(
+        summary, expr, actual, (int) (sizeof(actual) / sizeof(actual[0])));
+    if (actual_count <= 0 && summary->validate_view_origins &&
+        summary->declared_view_origin_count > 0) {
+        XrLocation loc = {.file = summary->ctx ? summary->ctx->file_path : NULL,
+                          .line = expr->line,
+                          .column = expr->column};
+        xa_analyzer_add_diagnostic(
+            summary->ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE,
+            "OWN-E-VIEW-ORIGIN-INVALID: return path uses local, temporary, or unknown storage",
+            &loc);
     }
-    XrViewReturnSourceKind source = XR_VIEW_RETURN_LOCAL;
-    int source_param = -1;
-    if (slot >= 0 && slot < summary->param_count) {
-        source = XR_VIEW_RETURN_PARAM;
-        source_param = slot;
-    } else {
-        AstNode *root = expr;
-        while (root && (root->type == AST_MEMBER_ACCESS || root->type == AST_INDEX_GET ||
-                        root->type == AST_SLICE_EXPR || root->type == AST_GROUPING ||
-                        root->type == AST_FORCE_UNWRAP || root->type == AST_AS_EXPR)) {
-            if (root->type == AST_MEMBER_ACCESS)
-                root = root->as.member_access.object;
-            else if (root->type == AST_INDEX_GET)
-                root = root->as.index_get.array;
-            else if (root->type == AST_SLICE_EXPR)
-                root = root->as.slice_expr.source;
-            else if (root->type == AST_GROUPING)
-                root = root->as.grouping;
-            else if (root->type == AST_AS_EXPR)
-                root = root->as.as_expr.expr;
-            else
-                root = root->as.unary.operand;
+    for (int i = 0; i < actual_count; i++) {
+        if (summary->validate_view_origins && summary->declared_view_origin_count > 0 &&
+            !xa_summary_declares_origin(summary, actual[i])) {
+            XrLocation loc = {.file = summary->ctx ? summary->ctx->file_path : NULL,
+                              .line = expr->line,
+                              .column = expr->column};
+            xa_analyzer_add_diagnostic(
+                summary->ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE,
+                "OWN-E-VIEW-ORIGIN-INVALID: return path origin is outside the declared 'from' set",
+                &loc);
+            continue;
         }
-        if (root &&
-            (root->type == AST_THIS_EXPR || (root->type == AST_VARIABLE && root->as.variable.name &&
-                                             strcmp(root->as.variable.name, "this") == 0)))
-            source = XR_VIEW_RETURN_RECEIVER;
-    }
-    if (!summary->view_return_seen) {
-        summary->view_return_seen = true;
-        summary->view_return_source = source;
-        summary->view_return_param = source_param;
-    } else if (summary->view_return_source != source ||
-               (source == XR_VIEW_RETURN_PARAM && summary->view_return_param != source_param)) {
-        summary->view_return_source = XR_VIEW_RETURN_MULTI;
-        summary->view_return_param = -1;
+        if (summary->effects && actual[i].kind == XR_VIEW_ORIGIN_PARAM &&
+            actual[i].param_ordinal >= 0 && actual[i].param_ordinal < summary->param_count) {
+            int slot = actual[i].param_ordinal;
+            summary->effects[slot].returns |= expr->type == AST_SLICE_EXPR
+                                                  ? XA_RETURN_PROVENANCE_BORROWED_PROJECTION
+                                                  : XA_RETURN_PROVENANCE_ALIAS;
+            summary->effects[slot].retain = XA_RETAIN_LOCAL_ALIAS;
+        }
     }
     xa_summary_mark_expr(summary, expr);
 }
@@ -1224,10 +1319,9 @@ static void xa_summary_mark_unknown_function_value_args(XaParamEscapeSummary *su
     XrType *callee_type = xa_summary_expr_type(summary, call->callee);
     if (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type))
         return;
-    XrViewReturnSourceKind return_source = XR_VIEW_RETURN_UNKNOWN;
-    int return_param = -1;
-    bool has_view_contract =
-        xa_summary_view_return_contract(summary, call->callee, NULL, &return_source, &return_param);
+    int view_origin_count = 0;
+    const XrViewOrigin *view_origins =
+        xa_summary_view_return_contract(summary, call->callee, NULL, &view_origin_count);
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
         XrCallArgAccess access = call->arg_accesses ? call->arg_accesses[i] : XR_CALL_ARG_PLAIN;
@@ -1251,8 +1345,15 @@ static void xa_summary_mark_unknown_function_value_args(XaParamEscapeSummary *su
          * arbitrary escape. Slice values cannot otherwise be retained by safe code, so the
          * designated source remains a caller-scoped alias and is accounted for by the return
          * expression itself. */
-        if (has_view_contract && return_source == XR_VIEW_RETURN_PARAM && return_param == i &&
-            xa_type_contains_span_view(arg_type))
+        bool is_return_origin = false;
+        for (int origin_index = 0; origin_index < view_origin_count; origin_index++) {
+            if (view_origins[origin_index].kind == XR_VIEW_ORIGIN_PARAM &&
+                view_origins[origin_index].param_ordinal == i) {
+                is_return_origin = true;
+                break;
+            }
+        }
+        if (is_return_origin && xa_type_contains_span_view(arg_type))
             continue;
         int root_slot = xa_summary_expr_root_param_slot(summary, arg);
         if (root_slot >= 0 && root_slot < summary->param_count) {
@@ -1486,34 +1587,84 @@ static bool xa_summary_return_type_escapes_borrowed_value(XrType *return_type) {
            xa_type_needs_borrow_escape_guard(return_type);
 }
 
-static void xa_report_return_type_contains_span_view(XaInferContext *ctx, AstNode *node,
-                                                     const char *kind, const char *name,
-                                                     XrType *return_type,
-                                                     const XaSymbolLinks *links) {
-    if (!ctx || !ctx->analyzer || !node || !xa_type_contains_span_view(return_type))
+void xa_bind_declared_view_origins(XaInferContext *ctx, AstNode *node, XaSymbolLinks *links,
+                                   const char **param_names, bool has_receiver) {
+    if (!ctx || !ctx->analyzer || !node || !links || !links->type ||
+        !XR_TYPE_IS_FUNCTION(links->type))
         return;
-    if (links && links->return_view.complete)
-        return;
-    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-    char msg[320];
-    if (links && links->return_view.origin == XR_VIEW_RETURN_MULTI) {
-        snprintf(msg, sizeof(msg),
-                 "cannot declare %s '%s' returning Slice view from multiple sources; Xray "
-                 "requires one inferred parameter or receiver source",
-                 kind ? kind : "function", name ? name : "?");
-    } else if (links && links->return_view.origin == XR_VIEW_RETURN_LOCAL) {
-        snprintf(msg, sizeof(msg),
-                 "cannot declare %s '%s' returning Slice view borrowed from a local value; "
-                 "return an owner container or copy into an Array",
-                 kind ? kind : "function", name ? name : "?");
+    XrBorrowOriginSyntaxState syntax = XR_BORROW_ORIGIN_OMITTED;
+    const AstBorrowOriginRef *origins = NULL;
+    int origin_count = 0;
+    const char *kind = "function";
+    const char *name = "?";
+    if (node->type == AST_FUNCTION_DECL) {
+        FunctionDeclNode *decl = &node->as.function_decl;
+        syntax = decl->borrow_origin_syntax;
+        origins = decl->borrow_origins;
+        origin_count = decl->borrow_origin_count;
+        name = decl->name ? decl->name : "?";
+    } else if (node->type == AST_METHOD_DECL) {
+        MethodDeclNode *decl = &node->as.method_decl;
+        syntax = decl->borrow_origin_syntax;
+        origins = decl->borrow_origins;
+        origin_count = decl->borrow_origin_count;
+        kind = "method";
+        name = decl->name ? decl->name : "?";
+    } else if (node->type == AST_INTERFACE_METHOD) {
+        InterfaceMethodNode *decl = &node->as.interface_method;
+        syntax = decl->borrow_origin_syntax;
+        origins = decl->borrow_origins;
+        origin_count = decl->borrow_origin_count;
+        kind = "interface method";
+        name = decl->name ? decl->name : "?";
     } else {
-        snprintf(msg, sizeof(msg),
-                 "cannot declare %s '%s' returning Slice view without a unique inferred source; "
-                 "return an owner container or an owned Array value",
-                 kind ? kind : "function", name ? name : "?");
+        return;
     }
-    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE, msg,
-                               &loc);
+
+    XrViewOriginBindStatus status =
+        xr_type_function_bind_view_origins(ctx->analyzer->isolate, links->type, param_names, syntax,
+                                           origins, origin_count, has_receiver);
+    links->return_view.checked = true;
+    links->return_view.valid = status == XR_VIEW_ORIGIN_BIND_OK;
+    if (status == XR_VIEW_ORIGIN_BIND_OK) {
+        int count = links->type->function.view_origin_count;
+        if (count > 0) {
+            links->return_view.origins =
+                (XrViewOrigin *) xr_malloc(sizeof(XrViewOrigin) * (size_t) count);
+            if (!links->return_view.origins)
+                return;
+            memcpy(links->return_view.origins, links->type->function.view_origin_set,
+                   sizeof(XrViewOrigin) * (size_t) count);
+        }
+        links->return_view.origin_count = count;
+        links->return_view.was_elided = links->type->function.view_origin_was_elided;
+        return;
+    }
+
+    const char *code = "OWN-E-VIEW-ORIGIN-INVALID";
+    const char *reason = "has an invalid borrowed-result origin set";
+    if (status == XR_VIEW_ORIGIN_BIND_AMBIGUOUS) {
+        code = "OWN-E-VIEW-ORIGIN-AMBIGUOUS";
+        reason = "has multiple eligible signature origins; declare an explicit 'from' set";
+    } else if (status == XR_VIEW_ORIGIN_BIND_MUTABLE_RETURN) {
+        code = "OWN-E-VIEW-MUTABLE";
+        reason = "returns a writable Slice; borrowed returns must be 'const Slice<T>'";
+    } else if (status == XR_VIEW_ORIGIN_BIND_HIDDEN_RETURN) {
+        reason = "contains a borrowed Slice in a non-direct return type";
+    } else if (status == XR_VIEW_ORIGIN_BIND_UNKNOWN_NAME) {
+        reason = "names an origin that is not a formal parameter";
+    } else if (status == XR_VIEW_ORIGIN_BIND_INELIGIBLE) {
+        reason = "names an origin that is not an eligible READ input";
+    } else if (status == XR_VIEW_ORIGIN_BIND_NOT_VIEW) {
+        reason = "declares 'from' for a return type that is not a borrowed Slice";
+    } else if (status == XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY) {
+        reason = "could not allocate its borrowed-result origin set";
+    }
+    char message[384];
+    snprintf(message, sizeof(message), "%s: %s '%s' %s", code, kind, name, reason);
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE,
+                               message, &loc);
 }
 
 static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
@@ -1733,30 +1884,21 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
         effects[i].memory_effects = links->memory_effect_id;
         effects[i].complete = true;
     }
-    XaParamEscapeSummary summary = {.param_types = param_types,
-                                    .param_names = param_names,
-                                    .param_count = param_count,
-                                    .effects = effects,
-                                    .return_type = return_type,
-                                    .ctx = ctx,
-                                    .receiver_info = receiver_info,
-                                    .view_return_source = XR_VIEW_RETURN_UNKNOWN,
-                                    .view_return_param = -1};
+    XaParamEscapeSummary summary = {
+        .param_types = param_types,
+        .param_names = param_names,
+        .param_count = param_count,
+        .effects = effects,
+        .return_type = return_type,
+        .ctx = ctx,
+        .receiver_info = receiver_info,
+        .declared_view_origins = links->type && XR_TYPE_IS_FUNCTION(links->type)
+                                     ? links->type->function.view_origin_set
+                                     : NULL,
+        .declared_view_origin_count = links->type && XR_TYPE_IS_FUNCTION(links->type)
+                                          ? links->type->function.view_origin_count
+                                          : 0};
     xa_summary_walk(&summary, body);
-
-    if (xa_type_contains_span_view(return_type)) {
-        links->return_view.origin =
-            summary.view_return_seen ? summary.view_return_source : XR_VIEW_RETURN_UNKNOWN;
-        links->return_view.param_index = (int16_t) summary.view_return_param;
-        links->return_view.complete = links->return_view.origin == XR_VIEW_RETURN_PARAM ||
-                                      links->return_view.origin == XR_VIEW_RETURN_RECEIVER ||
-                                      links->return_view.origin == XR_VIEW_RETURN_STATIC;
-        if (links->type && XR_TYPE_IS_FUNCTION(links->type)) {
-            links->type->function.view_return_source = links->return_view.origin;
-            links->type->function.view_return_param = links->return_view.param_index;
-            links->type->function.view_return_complete = links->return_view.complete;
-        }
-    }
 
     bool changed =
         links->param_effect_count != param_count ||
@@ -1768,6 +1910,32 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
     links->param_effects = effects;
     links->param_effect_count = param_count;
     return changed;
+}
+
+void xa_validate_declared_view_origin_returns(XaInferContext *ctx, XaSymbolLinks *links,
+                                              AstNode *body, XrClassInfo *receiver_info) {
+    if (!ctx || !links || !body || !links->return_view.checked || !links->return_view.valid ||
+        links->return_view.origin_count <= 0)
+        return;
+    int param_count = links->param_count;
+    XaParamEffectSummary *effects =
+        param_count > 0 ? xr_calloc((size_t) param_count, sizeof(*effects)) : NULL;
+    if (param_count > 0 && !effects)
+        return;
+    XaParamEscapeSummary summary = {
+        .param_types = links->param_types,
+        .param_names = links->param_names,
+        .param_count = param_count,
+        .effects = effects,
+        .return_type = links->return_type,
+        .ctx = ctx,
+        .receiver_info = receiver_info,
+        .declared_view_origins = links->return_view.origins,
+        .declared_view_origin_count = links->return_view.origin_count,
+        .validate_view_origins = true,
+    };
+    xa_summary_walk(&summary, body);
+    xr_free(effects);
 }
 
 bool xa_function_expr_param_mutates(XaInferContext *ctx, XrType *function_type,
@@ -2311,9 +2479,9 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     }
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
+    xa_bind_declared_view_origins(ctx, node, links, param_names, false);
     xa_symbol_links_set_param_escape_summary(ctx, links, param_types, param_names, fn->param_count,
                                              return_type, fn->body, NULL);
-    xa_report_return_type_contains_span_view(ctx, node, "function", fn->name, return_type, links);
 
     // Record per-parameter default expressions for caller-side default filling.
     if (fn->param_count > 0) {
@@ -2531,6 +2699,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
         xa_symbol_links_set_param_escape_summary(ctx, links, links->param_types, links->param_names,
                                                  links->param_count, links->return_type, fn->body,
                                                  NULL);
+        xa_validate_declared_view_origin_returns(ctx, links, fn->body, NULL);
     }
 
     // Infer return type for unannotated functions that always return same-shape objects.
@@ -2985,24 +3154,6 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
                                             ret_type, false);
         if (mlinks->type)
             mlinks->type->function.receiver_mode = im->receiver_mode;
-        if (mlinks->type && ret_type && XR_TYPE_IS_SLICE(ret_type) &&
-            !mlinks->type->function.view_return_complete) {
-            XrLocation loc = {.file = ctx->file_path, .line = m->line, .column = m->column};
-            char message[320];
-            if (mlinks->type->function.view_return_source == XR_VIEW_RETURN_MULTI) {
-                snprintf(message, sizeof(message),
-                         "interface method '%s' has multiple possible Slice return sources; use "
-                         "a single Slice parameter or return an owned value",
-                         im->name);
-            } else {
-                snprintf(message, sizeof(message),
-                         "interface method '%s' has no unique Slice return source; add one Slice "
-                         "parameter or return an owned value",
-                         im->name);
-            }
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, message, &loc);
-        }
         if (mlinks->type && im->params) {
             for (int j = 0; j < im->param_count; j++) {
                 XrParamNode *param = im->params[j];
@@ -3010,6 +3161,20 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
                                                 param ? param->passing_mode : XR_PARAM_READ);
             }
         }
+        const char **origin_param_names = NULL;
+        if (im->param_count > 0) {
+            origin_param_names =
+                (const char **) xr_malloc(sizeof(const char *) * (size_t) im->param_count);
+            if (origin_param_names) {
+                for (int j = 0; j < im->param_count; j++)
+                    origin_param_names[j] =
+                        im->params && im->params[j] ? im->params[j]->name : NULL;
+            }
+        }
+        xa_symbol_links_set_function_sig(mlinks, param_types, origin_param_names, im->param_count,
+                                         ret_type);
+        xa_bind_declared_view_origins(ctx, m, mlinks, origin_param_names, true);
+        xr_free(origin_param_names);
         if (param_types)
             xr_free(param_types);
         xa_class_info_add_method(info, msym);
@@ -3336,34 +3501,12 @@ static void xa_validate_class_interface_throw_effects(XaInferContext *ctx, AstNo
                 continue;
             if (required_signature->function.return_type &&
                 XR_TYPE_IS_SLICE(required_signature->function.return_type) &&
-                (required_signature->function.view_return_source !=
-                     found_signature->function.view_return_source ||
-                 required_signature->function.view_return_param !=
-                     found_signature->function.view_return_param ||
-                 required_signature->function.view_return_complete !=
-                     found_signature->function.view_return_complete)) {
-                const char *actual =
-                    found_signature->function.view_return_source == XR_VIEW_RETURN_RECEIVER
-                        ? "receiver"
-                    : found_signature->function.view_return_source == XR_VIEW_RETURN_PARAM
-                        ? "a parameter"
-                        : "an unproven source";
-                char expected[64];
-                if (required_signature->function.view_return_source == XR_VIEW_RETURN_PARAM) {
-                    snprintf(expected, sizeof(expected), "parameter %d",
-                             required_signature->function.view_return_param + 1);
-                } else if (required_signature->function.view_return_source ==
-                           XR_VIEW_RETURN_RECEIVER) {
-                    snprintf(expected, sizeof(expected), "receiver");
-                } else {
-                    snprintf(expected, sizeof(expected), "a unique proven source");
-                }
+                !xr_type_function_view_origins_equal(required_signature, found_signature)) {
                 char message[512];
                 snprintf(message, sizeof(message),
-                         "Class '%s' method '%s' returns Slice borrowed from %s, but interface "
-                         "'%s' requires %s",
-                         class_info->name ? class_info->name : "?", required->name, actual,
-                         interface_name, expected);
+                         "Class '%s' method '%s' borrowed-result origin set does not match "
+                         "interface '%s'",
+                         class_info->name ? class_info->name : "?", required->name, interface_name);
                 XrLocation location = {.file = ctx->file_path, .line = found->location.line};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, message,
@@ -4159,11 +4302,10 @@ skip_layout:
             // Store parameter info for LSP
             xa_symbol_links_set_function_sig(method_links, param_types, param_names,
                                              md->param_count, ret_type);
+            xa_bind_declared_view_origins(ctx, method, method_links, param_names,
+                                          !md->is_static && !md->is_constructor);
             xa_symbol_links_set_param_escape_summary(ctx, method_links, param_types, param_names,
                                                      md->param_count, ret_type, md->body, info);
-            if (!md->is_constructor)
-                xa_report_return_type_contains_span_view(ctx, method, "method", md->name, ret_type,
-                                                         method_links);
             // Record method/constructor default expressions for caller-side default filling.
             if (md->param_count > 0) {
                 AstNode **defs = (AstNode **) xr_calloc(md->param_count, sizeof(AstNode *));
@@ -4296,6 +4438,7 @@ skip_layout:
             xa_symbol_links_set_param_escape_summary(ctx, mlinks, mlinks->param_types,
                                                      mlinks->param_names, mlinks->param_count,
                                                      mlinks->return_type, md->body, info);
+            xa_validate_declared_view_origin_returns(ctx, mlinks, md->body, info);
         }
 
         /* Publish return ownership here, while the method's own scope is still

@@ -169,10 +169,15 @@ XR_FUNC void xr_tref_set_source_position(XrTypeRef *tref, int line, int column) 
     tref->column = column;
 }
 
-XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session,
-                                               XrTypeRef **params, const XrParamMode *param_modes,
-                                               int nparam, XrTypeRef *ret) {
+XR_FUNC XrTypeRef *xr_tref_function_signature(struct XrCompilerSession *session, XrTypeRef **params,
+                                              const XrParamMode *param_modes,
+                                              const char **param_names, int nparam, XrTypeRef *ret,
+                                              XrBorrowOriginSyntaxState borrow_origin_syntax,
+                                              const AstBorrowOriginRef *borrow_origins,
+                                              int borrow_origin_count) {
     XR_DCHECK(ret != NULL, "xr_tref_function: NULL return type");
+    XR_DCHECK(nparam >= 0, "xr_tref_function: negative parameter count");
+    XR_DCHECK(borrow_origin_count >= 0, "xr_tref_function: negative origin count");
     int total = nparam + 1; /* params + return type at the end */
     XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_FUNCTION;
@@ -181,14 +186,36 @@ XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session
     if (nparam > 0) {
         t->function_param_modes =
             (XrParamMode *) ast_alloc_array(session, sizeof(XrParamMode), (size_t) nparam);
+        t->function_param_names =
+            (const char **) ast_alloc_array(session, sizeof(const char *), (size_t) nparam);
     }
     for (int i = 0; i < nparam; i++) {
         t->children[i] = params[i];
         XrParamMode mode = param_modes ? param_modes[i] : XR_PARAM_READ;
         t->function_param_modes[i] = xr_param_mode_is_valid(mode) ? mode : XR_PARAM_READ;
+        t->function_param_names[i] =
+            param_names && param_names[i] ? tref_strdup(session, param_names[i]) : NULL;
     }
     t->children[nparam] = ret;
+    t->borrow_origin_syntax = borrow_origin_syntax;
+    t->borrow_origin_count = borrow_origin_count;
+    if (borrow_origin_count > 0) {
+        t->borrow_origins = (AstBorrowOriginRef *) ast_alloc_array(
+            session, sizeof(AstBorrowOriginRef), (size_t) borrow_origin_count);
+        for (int i = 0; i < borrow_origin_count; i++) {
+            t->borrow_origins[i] = borrow_origins[i];
+            if (borrow_origins[i].name)
+                t->borrow_origins[i].name = tref_strdup(session, borrow_origins[i].name);
+        }
+    }
     return t;
+}
+
+XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session,
+                                               XrTypeRef **params, const XrParamMode *param_modes,
+                                               int nparam, XrTypeRef *ret) {
+    return xr_tref_function_signature(session, params, param_modes, NULL, nparam, ret,
+                                      XR_BORROW_ORIGIN_OMITTED, NULL, 0);
 }
 
 XR_FUNC XrTypeRef *xr_tref_function(struct XrCompilerSession *session, XrTypeRef **params,
@@ -343,6 +370,10 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
                     tref_append(buf, pos, cap, ", ");
                 XrParamMode mode =
                     t->function_param_modes ? t->function_param_modes[i] : XR_PARAM_READ;
+                if (t->function_param_names && t->function_param_names[i]) {
+                    tref_append(buf, pos, cap, t->function_param_names[i]);
+                    tref_append(buf, pos, cap, ": ");
+                }
                 if (mode != XR_PARAM_READ) {
                     tref_append(buf, pos, cap, xr_param_mode_label(mode));
                     tref_append(buf, pos, cap, " ");
@@ -355,6 +386,21 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             if (fn_ret && fn_ret->kind != XR_TREF_UNIT) {
                 tref_append(buf, pos, cap, " -> ");
                 tref_to_str_impl(fn_ret, buf, pos, cap);
+                if (t->borrow_origin_syntax == XR_BORROW_ORIGIN_EXPLICIT_SET &&
+                    t->borrow_origin_count > 0) {
+                    tref_append(buf, pos, cap, " from ");
+                    for (int i = 0; i < t->borrow_origin_count; i++) {
+                        if (i > 0)
+                            tref_append(buf, pos, cap, " | ");
+                        const AstBorrowOriginRef *origin = &t->borrow_origins[i];
+                        if (origin->kind == AST_BORROW_ORIGIN_RECEIVER)
+                            tref_append(buf, pos, cap, "this");
+                        else if (origin->kind == AST_BORROW_ORIGIN_STATIC)
+                            tref_append(buf, pos, cap, "static");
+                        else
+                            tref_append(buf, pos, cap, origin->name ? origin->name : "<error>");
+                    }
+                }
             }
             break;
         }

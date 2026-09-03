@@ -139,9 +139,17 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
             func->arc_return_ownership.kind != XI_RETURN_OWNERSHIP_UNKNOWN;
     }
     if (links) {
-        func->view_return_source = (uint8_t) links->return_view.origin;
-        func->view_return_param = links->return_view.param_index;
-        func->view_return_complete = links->return_view.complete ? 1u : 0u;
+        func->view_origin_count = (uint16_t) links->return_view.origin_count;
+        func->view_origin_was_elided = links->return_view.was_elided;
+        if (links->return_view.origin_count > 0 && links->return_view.origins) {
+            func->view_origin_set = (XrViewOrigin *) xi_func_arena_alloc(
+                func, (uint32_t) (sizeof(XrViewOrigin) * (size_t) links->return_view.origin_count));
+            if (func->view_origin_set)
+                memcpy(func->view_origin_set, links->return_view.origins,
+                       sizeof(XrViewOrigin) * (size_t) links->return_view.origin_count);
+            else
+                func->view_origin_count = 0;
+        }
     }
 }
 
@@ -563,15 +571,10 @@ static void braun_replace_all_uses(XiLower *l, XiValue *old_val, XiValue *new_va
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
-            bool args_changed = false;
             for (uint16_t a = 0; a < v->nargs; a++) {
-                if (v->args[a] == old_val) {
+                if (v->args[a] == old_val)
                     v->args[a] = new_val;
-                    args_changed = true;
-                }
             }
-            if (args_changed)
-                xi_value_rebase_view_evidence(v);
         }
         for (XiPhi *other = blk->phis; other; other = other->next) {
             if (&other->value == old_val)
@@ -2374,8 +2377,7 @@ static XiImportRef *prescan_import_ref(XiLower *l, const AstNode *node, const ch
                                        const char *member_name) {
     if (!l || !l->func || !node || node->type != AST_IMPORT_STMT || !module_name)
         return NULL;
-    XiImportRef *ref =
-        (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
+    XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
     if (!ref)
         return NULL;
     memset(ref, 0, sizeof(*ref));
@@ -2469,13 +2471,12 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     XR_DCHECK(vid >= 0 && vid < l->var_cap,
                               "prescan_top_level_bindings: var_id overflow (import member)");
                     l->shared_map[vid] = (int16_t) next_shared;
-                    bool runtime_builtin =
-                        s->as.import_stmt.module_name &&
-                        strcmp(s->as.import_stmt.module_name, "sync") == 0 &&
-                        xi_lower_sync_runtime_class_global_index(m->name) >= 0;
+                    bool runtime_builtin = s->as.import_stmt.module_name &&
+                                           strcmp(s->as.import_stmt.module_name, "sync") == 0 &&
+                                           xi_lower_sync_runtime_class_global_index(m->name) >= 0;
                     if (!runtime_builtin) {
-                        XiImportRef *ref = prescan_import_ref(
-                            l, s, s->as.import_stmt.module_name, m->name);
+                        XiImportRef *ref =
+                            prescan_import_ref(l, s, s->as.import_stmt.module_name, m->name);
                         if (!ref || next_shared >= (uint16_t) l->var_cap) {
                             l->had_error = true;
                             prescan_slot_meta_free(&slot_meta);

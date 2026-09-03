@@ -251,8 +251,9 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             }
             XrTypeRef *ret =
                 clone_subst_type_ref(parser, src->children[total - 1], subst_alias, type_args);
-            return xr_tref_function_with_modes(parser->compiler_session, params, modes, nparam,
-                                               ret);
+            return xr_tref_function_signature(
+                parser->compiler_session, params, modes, src->function_param_names, nparam, ret,
+                src->borrow_origin_syntax, src->borrow_origins, src->borrow_origin_count);
         }
         case XR_TREF_TUPLE: {
             XrTypeRef *elems[256];
@@ -678,6 +679,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
      * the function returns unit; an explicit `-> ()` is rejected, since a unit
      * return is spelled by omitting the arrow. */
     if (xr_parser_match(parser, TK_FN)) {
+        Token function_token = parser->previous;
         if (xr_parser_check(parser, TK_LT)) {
             /* fn<T>(...) is a diagnostics-only rendering: a generic function is
              * not a first-class value, so it cannot be written in source. */
@@ -687,11 +689,14 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         int cap = 8;
         XrTypeRef **elems = (XrTypeRef **) xr_malloc((size_t) cap * sizeof(XrTypeRef *));
         XrParamMode *param_modes = (XrParamMode *) xr_malloc((size_t) cap * sizeof(XrParamMode));
-        if (!elems || !param_modes) {
+        const char **param_names = (const char **) xr_malloc((size_t) cap * sizeof(const char *));
+        if (!elems || !param_modes || !param_names) {
             if (elems)
                 xr_free(elems);
             if (param_modes)
                 xr_free(param_modes);
+            if (param_names)
+                xr_free(param_names);
             xr_parser_error(parser, "out of memory while parsing function type");
             return xr_tref_error(parser->compiler_session);
         }
@@ -709,41 +714,79 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 int new_cap = cap * 2;
                 XrTypeRef **resized =
                     (XrTypeRef **) xr_realloc(elems, (size_t) new_cap * sizeof(XrTypeRef *));
-                XrParamMode *resized_modes =
-                    (XrParamMode *) xr_realloc(param_modes, (size_t) new_cap * sizeof(XrParamMode));
-                if (!resized || !resized_modes) {
-                    if (resized)
-                        elems = resized;
-                    if (resized_modes)
-                        param_modes = resized_modes;
+                if (!resized) {
                     xr_free(elems);
                     xr_free(param_modes);
+                    xr_free(param_names);
                     xr_parser_error(parser, "out of memory while growing function type");
                     return xr_tref_error(parser->compiler_session);
                 }
                 elems = resized;
+                XrParamMode *resized_modes =
+                    (XrParamMode *) xr_realloc(param_modes, (size_t) new_cap * sizeof(XrParamMode));
+                if (!resized_modes) {
+                    xr_free(elems);
+                    xr_free(param_modes);
+                    xr_free(param_names);
+                    xr_parser_error(parser, "out of memory while growing function type");
+                    return xr_tref_error(parser->compiler_session);
+                }
                 param_modes = resized_modes;
+                const char **resized_names = (const char **) xr_realloc(
+                    param_names, (size_t) new_cap * sizeof(const char *));
+                if (!resized_names) {
+                    xr_free(elems);
+                    xr_free(param_modes);
+                    xr_free(param_names);
+                    xr_parser_error(parser, "out of memory while growing function type");
+                    return xr_tref_error(parser->compiler_session);
+                }
+                param_names = resized_names;
                 cap = new_cap;
             }
             param_modes[count] = XR_PARAM_READ;
             xr_parse_optional_param_mode(parser, true, &param_modes[count]);
+            param_names[count] = NULL;
+            if (xr_parser_check(parser, TK_NAME)) {
+                Scanner lookahead = parser->scanner;
+                Token next = xr_scanner_scan(&lookahead);
+                if (next.type == TK_COLON) {
+                    Token name = parser->current;
+                    char *copy =
+                        (char *) ast_alloc(parser->compiler_session, (size_t) name.length + 1);
+                    memcpy(copy, name.start, (size_t) name.length);
+                    copy[name.length] = '\0';
+                    param_names[count] = copy;
+                    xr_parser_advance(parser);
+                    xr_parser_consume(parser, TK_COLON,
+                                      "expected ':' after function type parameter name");
+                }
+            }
             elems[count] = xr_parse_type_annotation(parser);
             xr_parse_reject_move_const_parameter(parser, param_modes[count], elems[count]);
             count++;
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close the function parameter list");
         XrTypeRef *ret;
+        XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
+        AstBorrowOriginRef *borrow_origins = NULL;
+        int borrow_origin_count = 0;
         if (xr_parser_match(parser, TK_ARROW)) {
             ret = xr_parse_type_annotation(parser);
+            xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
+                                       &borrow_origin_count);
             if (ret && ret->kind == XR_TREF_UNIT)
                 xr_parser_error(parser, "a unit return is written by omitting `->`, not `-> ()`");
         } else {
             ret = xr_tref_unit(parser->compiler_session);
         }
-        XrTypeRef *result =
-            xr_tref_function_with_modes(parser->compiler_session, elems, param_modes, count, ret);
+        XrTypeRef *result = xr_tref_function_signature(
+            parser->compiler_session, elems, param_modes, param_names, count, ret,
+            borrow_origin_syntax, borrow_origins, borrow_origin_count);
+        xr_tref_set_source_position(result, function_token.line, function_token.column);
         xr_free(elems);
         xr_free(param_modes);
+        xr_free(param_names);
         return result;
     }
 
@@ -1076,4 +1119,40 @@ void xr_parse_where_clause(Parser *parser, XrGenericParam **params, int param_co
         target->constraint_count = merged_count;
 
     } while (xr_parser_match(parser, TK_COMMA));
+}
+void xr_parse_borrow_origin_set(Parser *parser, XrBorrowOriginSyntaxState *out_syntax,
+                                AstBorrowOriginRef **out_origins, int *out_count) {
+    XR_DCHECK(parser != NULL, "parse_borrow_origin_set: NULL parser");
+    XR_DCHECK(out_syntax != NULL && out_origins != NULL && out_count != NULL,
+              "parse_borrow_origin_set: NULL output");
+    *out_syntax = XR_BORROW_ORIGIN_OMITTED;
+    *out_origins = NULL;
+    *out_count = 0;
+    if (!xr_parser_match_name(parser, "from") && !xr_parser_match(parser, TK_FROM))
+        return;
+
+    *out_syntax = XR_BORROW_ORIGIN_EXPLICIT_SET;
+    int capacity = 0;
+    do {
+        AstBorrowOriginRef origin = {0};
+        Token token = parser->current;
+        origin.line = token.line;
+        origin.column = token.column;
+        if (xr_parser_match(parser, TK_THIS)) {
+            origin.kind = AST_BORROW_ORIGIN_RECEIVER;
+        } else if (xr_parser_match(parser, TK_STATIC)) {
+            origin.kind = AST_BORROW_ORIGIN_STATIC;
+        } else if (xr_parser_match(parser, TK_NAME)) {
+            origin.kind = AST_BORROW_ORIGIN_PARAM_NAME;
+            char *name = (char *) ast_alloc(parser->compiler_session, (size_t) token.length + 1);
+            memcpy(name, token.start, (size_t) token.length);
+            name[token.length] = '\0';
+            origin.name = name;
+        } else {
+            xr_parser_error_at_current(
+                parser, "expected a parameter name, 'this', or 'static' after 'from'");
+            return;
+        }
+        XR_PARSE_PUSH(parser, *out_origins, *out_count, capacity, origin);
+    } while (xr_parser_match(parser, TK_PIPE));
 }

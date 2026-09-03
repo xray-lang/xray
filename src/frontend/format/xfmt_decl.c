@@ -148,6 +148,23 @@ void xfmt_emit_param(XrFmtContext *ctx, const XrParamNode *param) {
     }
 }
 
+static void xfmt_emit_borrow_origins(XrFmtContext *ctx, XrBorrowOriginSyntaxState syntax,
+                                     const AstBorrowOriginRef *origins, int count) {
+    if (syntax != XR_BORROW_ORIGIN_EXPLICIT_SET || !origins || count <= 0)
+        return;
+    xfmt_write_str(ctx, " from ");
+    for (int i = 0; i < count; i++) {
+        if (i > 0)
+            xfmt_write_str(ctx, " | ");
+        if (origins[i].kind == AST_BORROW_ORIGIN_RECEIVER)
+            xfmt_write_str(ctx, "this");
+        else if (origins[i].kind == AST_BORROW_ORIGIN_STATIC)
+            xfmt_write_str(ctx, "static");
+        else
+            xfmt_write_str(ctx, origins[i].name ? origins[i].name : "<error>");
+    }
+}
+
 void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     FunctionDeclNode *fn = &node->as.function_decl;
     if (fn->is_extern) {
@@ -182,6 +199,8 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     if (fn->return_type) {
         xfmt_write_str(ctx, " -> ");
         xfmt_emit_type(ctx, fn->return_type);
+        xfmt_emit_borrow_origins(ctx, fn->borrow_origin_syntax, fn->borrow_origins,
+                                 fn->borrow_origin_count);
     }
 
     if (fn->body) {
@@ -477,6 +496,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         if (m->return_type) {
             xfmt_write_str(ctx, " -> ");
             xfmt_emit_type(ctx, m->return_type);
+            xfmt_emit_borrow_origins(ctx, m->borrow_origin_syntax, m->borrow_origins,
+                                     m->borrow_origin_count);
         }
 
         if (m->body) {
@@ -590,6 +611,8 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
         if (m->return_type) {
             xfmt_write_str(ctx, " -> ");
             xfmt_emit_type(ctx, m->return_type);
+            xfmt_emit_borrow_origins(ctx, m->borrow_origin_syntax, m->borrow_origins,
+                                     m->borrow_origin_count);
         }
         xfmt_write_newline(ctx);
         if (method->trailing_comments)
@@ -668,6 +691,8 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
         if (m->return_type) {
             xfmt_write_str(ctx, " -> ");
             xfmt_emit_type(ctx, m->return_type);
+            xfmt_emit_borrow_origins(ctx, m->borrow_origin_syntax, m->borrow_origins,
+                                     m->borrow_origin_count);
         }
         xfmt_write_char(ctx, ' ');
         xfmt_emit_block(ctx, m->body);

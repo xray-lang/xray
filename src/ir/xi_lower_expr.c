@@ -654,47 +654,64 @@ static XiFunc *lower_resolve_static_callee_func(XiLower *l, XiValue *callee) {
     return lower_resolve_static_callee_func_in_scope(l ? l->func : NULL, callee);
 }
 
-static void lower_instantiate_call_view_evidence(XiValue *call, const XiFunc *static_callee,
+static void lower_instantiate_call_view_evidence(XiFunc *function, XiValue *call,
+                                                 const XiFunc *static_callee,
                                                  const struct XrType *callee_type,
                                                  bool has_receiver) {
-    if (!call || !XR_TYPE_IS_SLICE(call->type))
+    if (!function || !call || !XR_TYPE_IS_SLICE(call->type))
         return;
 
-    XrViewReturnSourceKind origin = XR_VIEW_RETURN_NONE;
-    int source_param = -1;
-    bool complete = false;
-    if (static_callee && static_callee->view_return_complete) {
-        origin = (XrViewReturnSourceKind) static_callee->view_return_source;
-        source_param = static_callee->view_return_param;
-        complete = true;
-    } else if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
-        origin = callee_type->function.view_return_source;
-        source_param = callee_type->function.view_return_param;
-        complete = callee_type->function.view_return_complete;
+    const XrViewOrigin *contract = NULL;
+    int contract_count = 0;
+    if (static_callee && static_callee->view_origin_count > 0) {
+        contract = static_callee->view_origin_set;
+        contract_count = static_callee->view_origin_count;
+    } else if (callee_type && callee_type->kind == XR_KIND_FUNCTION &&
+               callee_type->function.view_origin_count > 0) {
+        contract = callee_type->function.view_origin_set;
+        contract_count = callee_type->function.view_origin_count;
     }
-    if (!complete)
+    if (!contract || contract_count <= 0 || contract_count > UINT16_MAX)
         return;
 
-    int source_operand = -1;
-    if (origin == XR_VIEW_RETURN_PARAM)
-        source_operand = source_param + 1; /* callee/receiver occupies args[0] */
-    else if (origin == XR_VIEW_RETURN_RECEIVER && has_receiver)
-        source_operand = 0;
-    else if (origin != XR_VIEW_RETURN_STATIC)
+    XiViewSourceEvidence *sources =
+        (XiViewSourceEvidence *) xr_malloc(sizeof(XiViewSourceEvidence) * (size_t) contract_count);
+    if (!sources)
         return;
-    if (source_operand >= (int) call->nargs)
-        return;
-
-    call->view_evidence.origin = (uint8_t) origin;
-    call->view_evidence.source_param = (int16_t) source_param;
-    call->view_evidence.source_operand = (int16_t) source_operand;
-    call->view_evidence.complete = 1;
-    call->view_evidence.capability = 1; /* borrowed returns are readonly by default */
-    call->view_evidence.lifetime = origin == XR_VIEW_RETURN_STATIC ? 2 : 1;
-    if (source_operand >= 0 && call->args[source_operand])
-        call->view_evidence.root_value_id = call->args[source_operand]->id;
-    if (call->type->container.element_type)
-        call->view_evidence.element_type_id = call->type->container.element_type->semantic_type_id;
+    for (int i = 0; i < contract_count; i++) {
+        int source_operand = -1;
+        uint8_t origin = XI_VIEW_ORIGIN_NONE;
+        if (contract[i].kind == XR_VIEW_ORIGIN_PARAM) {
+            origin = XI_VIEW_ORIGIN_PARAM;
+            source_operand = contract[i].param_ordinal + 1;
+        } else if (contract[i].kind == XR_VIEW_ORIGIN_RECEIVER && has_receiver) {
+            origin = XI_VIEW_ORIGIN_RECEIVER;
+            source_operand = 0;
+        } else if (contract[i].kind == XR_VIEW_ORIGIN_STATIC) {
+            origin = XI_VIEW_ORIGIN_STATIC;
+        } else {
+            xr_free(sources);
+            return;
+        }
+        if (source_operand > INT16_MAX || source_operand >= (int) call->nargs ||
+            (source_operand >= 0 && !call->args[source_operand])) {
+            xr_free(sources);
+            return;
+        }
+        sources[i] = (XiViewSourceEvidence) {
+            .source_operand = (int16_t) source_operand,
+            .source_param =
+                contract[i].kind == XR_VIEW_ORIGIN_PARAM ? contract[i].param_ordinal : -1,
+            .origin = origin,
+            .lifetime = origin == XI_VIEW_ORIGIN_STATIC ? 2 : 1,
+        };
+    }
+    uint32_t element_type_id = call->type->container.element_type
+                                   ? call->type->container.element_type->semantic_type_id
+                                   : 0;
+    (void) xi_value_set_view_evidence(function, call, sources, (uint16_t) contract_count,
+                                      element_type_id, 0, 1);
+    xr_free(sources);
 }
 
 /* Post-lowering rewrite: a direct call to a generator function does not run the
@@ -1837,14 +1854,10 @@ static XiValue *lower_mem_slice_call(XiLower *l, AstNode *node, CallExprNode *ca
      * validity; owner remains explicit lifetime evidence. */
     v->flags = XI_FLAG_READS_MEM;
     v->line = (uint32_t) node->line;
-    v->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
-    v->view_evidence.source_operand = 2;
-    v->view_evidence.source_param = -1;
-    v->view_evidence.root_value_id = owner->id;
-    v->view_evidence.element_type_id = elem_type ? elem_type->semantic_type_id : 0;
-    v->view_evidence.capability = 1;
-    v->view_evidence.lifetime = 1;
-    v->view_evidence.complete = 1;
+    XiViewSourceEvidence source = {
+        .source_operand = 2, .source_param = -1, .origin = XI_VIEW_ORIGIN_FOREIGN, .lifetime = 1};
+    (void) xi_value_set_view_evidence(l->func, v, &source, 1,
+                                      elem_type ? elem_type->semantic_type_id : 0, 0, 1);
     return v;
 }
 
@@ -1914,14 +1927,10 @@ static XiValue *lower_mem_with_slice_mut_call(XiLower *l, AstNode *node, CallExp
     slice->aux = xi_lower_type_struct_layout(l, elem_type);
     slice->flags = XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     slice->line = (uint32_t) node->line;
-    slice->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
-    slice->view_evidence.source_operand = 2;
-    slice->view_evidence.source_param = -1;
-    slice->view_evidence.root_value_id = guard->id;
-    slice->view_evidence.element_type_id = elem_type ? elem_type->semantic_type_id : 0;
-    slice->view_evidence.capability = 2;
-    slice->view_evidence.lifetime = 1;
-    slice->view_evidence.complete = 1;
+    XiViewSourceEvidence source = {
+        .source_operand = 2, .source_param = -1, .origin = XI_VIEW_ORIGIN_FOREIGN, .lifetime = 1};
+    (void) xi_value_set_view_evidence(l->func, slice, &source, 1,
+                                      elem_type ? elem_type->semantic_type_id : 0, 0, 2);
 
     XiValue *place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, slice_type, 1);
     if (!place)
@@ -5751,7 +5760,7 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
         v->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     v->call_plan = call_plan;
     v->call_return_ownership = lower_call_return_ownership(l, call, callee_val);
-    lower_instantiate_call_view_evidence(v, static_callee, callee_type, false);
+    lower_instantiate_call_view_evidence(l->func, v, static_callee, callee_type, false);
 
     xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
     lower_call_emit_err_check(l, v, node, call, callee_type);
@@ -6768,17 +6777,14 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
             l->had_error = true;
             return NULL;
         }
-        value->view_evidence.root_value_id = receiver->id;
-        value->view_evidence.element_type_id =
-            result_type->container.element_type
-                ? result_type->container.element_type->semantic_type_id
-                : 0;
-        value->view_evidence.source_operand = 0;
-        value->view_evidence.source_param = -1;
-        value->view_evidence.origin = XI_VIEW_ORIGIN_RECEIVER;
-        value->view_evidence.capability = 1;
-        value->view_evidence.lifetime = 1;
-        value->view_evidence.complete = 1;
+        XiViewSourceEvidence source = {.source_operand = 0,
+                                       .source_param = -1,
+                                       .origin = XI_VIEW_ORIGIN_RECEIVER,
+                                       .lifetime = 1};
+        uint32_t element_type_id = result_type->container.element_type
+                                       ? result_type->container.element_type->semantic_type_id
+                                       : 0;
+        (void) xi_value_set_view_evidence(l->func, value, &source, 1, element_type_id, 0, 1);
     } else if (desc->id == XA_INTRINSIC_ARRAY_RESERVE) {
         value->result_alias_operand = 0;
         XiSequenceEvidenceIds sequence_ids;
@@ -7942,7 +7948,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
         if (is_time_sleep)
             v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
-        lower_instantiate_call_view_evidence(v, NULL, method_type, true);
+        lower_instantiate_call_view_evidence(l->func, v, NULL, method_type, true);
         v->flags |= XI_FLAG_SIDE_EFFECT;
         if (lower_call_resumes_by_netpoll_retry(l, call, recv)) {
             v->flags |= XI_FLAG_MAY_SUSPEND;
@@ -8060,7 +8066,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             mcall->aux_int = (int64_t) xi_lower_method_symbol(l, oc->name) << 1;
             XrType *optional_method_type =
                 xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
-            lower_instantiate_call_view_evidence(mcall, NULL, optional_method_type, true);
+            lower_instantiate_call_view_evidence(l->func, mcall, NULL, optional_method_type, true);
             mcall->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
             mcall->line = (uint32_t) node->line;
             xi_lower_bind_callsite_id(l, mcall, xi_lower_source_node_id(l, node));

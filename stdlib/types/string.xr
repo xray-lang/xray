@@ -34,6 +34,6 @@ class string {
     copyBytes() -> Array<u8>
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
     // @lowered
-    bytes() -> Slice<u8>
+    bytes() -> const Slice<u8>
     runes() -> Iterator<rune>
 }

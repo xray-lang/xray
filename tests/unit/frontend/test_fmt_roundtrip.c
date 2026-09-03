@@ -789,6 +789,34 @@ TEST(parameter_modes_roundtrip) {
     teardown();
 }
 
+TEST(borrow_origin_sets_roundtrip) {
+    setup();
+    const char *src =
+        "type Selector = fn(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> "
+        "from right | left | right\n"
+        "fn choose(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> "
+        "from right | left | right { return left }\n"
+        "class ViewOwner {\n"
+        "    view(data: Slice<u8>) -> const Slice<u8> from this | data { return data }\n"
+        "}\n"
+        "interface ViewSource {\n"
+        "    view(data: Slice<u8>) -> const Slice<u8> from data | this\n"
+        "}\n";
+    char *fmt1 = parse_and_format(src, "<test>");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1,
+                         "fn(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> from right | "
+                         "left | right"));
+    ASSERT_TRUE(contains(fmt1, "from this | data"));
+    ASSERT_TRUE(contains(fmt1, "from data | this"));
+    char *fmt2 = parse_and_format(fmt1, "<test>");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 TEST(unknown_effect_attribute_rejected) {
     setup();
     const char *src = "@effect_claim\nfn pure(value: i64) -> i64 { return value }\n";
@@ -1314,6 +1342,7 @@ RUN_TEST(explicit_numeric_conversions_roundtrip);
 RUN_TEST(deprecated_message_roundtrip);
 RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
+RUN_TEST(borrow_origin_sets_roundtrip);
 RUN_TEST(unknown_effect_attribute_rejected);
 RUN_TEST(extern_block_roundtrip);
 RUN_TEST(optional_chain_implicit_link_roundtrip);

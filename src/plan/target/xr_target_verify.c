@@ -2718,7 +2718,10 @@ static bool semantic_string_byte_slice_view_is_exact(const XrSemanticPlan *seman
             * element and the operation's own record is checked separately. */
            semantic_u8_slice_type_is_exact(semantic, operation->result_type) && result_type &&
            result_type->child_begin < child_count &&
-           children[result_type->child_begin] == operation->view_element_type && element != NULL;
+           children[result_type->child_begin] == operation->view_element_type &&
+           result_type->flags ==
+               (XR_SEM_TYPE_CONST | XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW) &&
+           element != NULL;
 }
 
 static bool semantic_u8_slice_type_is_exact(const XrSemanticPlan *semantic, uint32_t type_index) {

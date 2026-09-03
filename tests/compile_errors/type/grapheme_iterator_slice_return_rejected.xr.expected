@@ -1,2 +1,2 @@
 --> 1:4 E0384
-cannot declare function 'graphemes' returning Slice view
+function 'graphemes' contains a borrowed Slice in a non-direct return type

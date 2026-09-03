@@ -2304,7 +2304,8 @@ static bool build_exact_string_byte_slice_view_recipe(const XrTargetPlan *target
         children[view_type->child_begin] != operation->view_element_type ||
         view_type->aggregate_extent != 0 || view_type->aggregate_align != 0 ||
         view_type->scalar_rep != XR_SCALAR_REP_NONE ||
-        view_type->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW))
+        view_type->flags !=
+            (XR_SEM_TYPE_CONST | XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW))
         return false;
     uint32_t semantic_operation = slots[binding->slot].semantic_operation;
     XrStableId expected_identity;
@@ -2383,7 +2384,8 @@ static bool verify_exact_string_byte_slice_view_recipe(const XrTargetPlan *targe
         view->child_count != 1 || view->child_begin >= child_count ||
         children[view->child_begin] != op->view_element_type || view->aggregate_extent != 0 ||
         view->aggregate_align != 0 || view->scalar_rep != XR_SCALAR_REP_NONE ||
-        view->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW))
+        view->flags !=
+            (XR_SEM_TYPE_CONST | XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW))
         return false;
     uint32_t slot_count = 0;
     const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);

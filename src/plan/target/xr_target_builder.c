@@ -3650,6 +3650,8 @@ static bool semantic_string_byte_slice_view_is_exact(const XrSemanticPlan *plan,
            semantic_u8_slice_type_is_exact(plan, operation->result_type) && result_type &&
            result_type->child_begin < child_count &&
            children[result_type->child_begin] == operation->view_element_type &&
+           result_type->flags ==
+               (XR_SEM_TYPE_CONST | XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW) &&
            element_type != NULL;
 }
 

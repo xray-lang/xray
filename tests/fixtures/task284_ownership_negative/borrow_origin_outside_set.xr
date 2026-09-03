@@ -1,0 +1,7 @@
+fn wrong(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> from left {
+    return right
+}
+
+fn main() {}
+
+main()

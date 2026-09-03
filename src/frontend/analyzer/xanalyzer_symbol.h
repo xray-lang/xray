@@ -127,15 +127,14 @@ typedef struct XaParamEffectSummary {
     XaUnknownReasonSet incomplete_reason;
 } XaParamEffectSummary;
 
-/* Compiler-owned Slice<T> return contract: which owner a function's returned
- * view borrows from.  `complete` means the origin is a uniquely inferable
- * parameter / receiver / static root, which is the precondition for the
- * caller to keep accounting for the borrow (§2.4.2).  Not constructible from
- * source code. */
+/* Compiler-owned borrowed-result contract. The array is copied into analyzer
+ * storage and matches the normalized function-type identity row. */
 typedef struct XaViewReturnContract {
-    XrViewReturnSourceKind origin;
-    int16_t param_index;
-    bool complete;
+    XrViewOrigin *origins;
+    int origin_count;
+    bool was_elided;
+    bool checked;
+    bool valid;
 } XaViewReturnContract;
 
 // Forward declarations (XrLocation/XrClassInfo/XaMethodSlot live in base/runtime layers)

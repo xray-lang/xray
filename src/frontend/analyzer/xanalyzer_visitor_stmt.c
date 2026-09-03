@@ -7127,6 +7127,18 @@ static void xa_update_ownership_from_value(XaInferContext *ctx, XaSymbol *target
     target_links->allocation_plan.complete = false;
 }
 
+static XaSymbolLinks *xa_current_function_links(XaInferContext *ctx) {
+    if (!ctx || !ctx->analyzer)
+        return NULL;
+    XaSymbol *function_symbol = ctx->current_function;
+    for (XaScope *scope = ctx->analyzer->current_scope; !function_symbol && scope;
+         scope = scope->parent) {
+        if (scope->function_symbol)
+            function_symbol = scope->function_symbol;
+    }
+    return function_symbol ? xa_analyzer_get_links(ctx->analyzer, function_symbol) : NULL;
+}
+
 static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return_node,
                                             AstNode *value, XrType *value_type) {
     if (!ctx || !return_node || !value || !xa_type_needs_borrow_escape_guard(value_type))
@@ -7136,6 +7148,10 @@ static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return
         return;
 
     if (root->passing_mode != XR_PARAM_REF)
+        return;
+    XaSymbolLinks *function_links = xa_current_function_links(ctx);
+    if (xa_type_contains_span_view(value_type) && function_links &&
+        function_links->return_view.checked)
         return;
 
     XrLocation loc = {.file = ctx->file_path,
@@ -7154,15 +7170,8 @@ static void xa_check_span_return_escape(XaInferContext *ctx, AstNode *return_nod
     if (!ctx || !return_node || !xa_type_contains_span_view(value_type))
         return;
 
-    XaSymbol *function_symbol = ctx->current_function;
-    for (XaScope *scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
-         !function_symbol && scope; scope = scope->parent) {
-        if (scope->function_symbol)
-            function_symbol = scope->function_symbol;
-    }
-    XaSymbolLinks *function_links =
-        function_symbol ? xa_analyzer_get_links(ctx->analyzer, function_symbol) : NULL;
-    if (function_links && function_links->return_view.complete)
+    XaSymbolLinks *function_links = xa_current_function_links(ctx);
+    if (function_links && function_links->return_view.checked)
         return;
 
     XrLocation loc = {

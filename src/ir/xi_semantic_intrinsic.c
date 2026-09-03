@@ -233,9 +233,9 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
     bool backend_static_arity = stage >= XI_STAGE_BACKEND &&
                                 (desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0 &&
                                 value->nargs >= desc->min_arity && value->nargs <= desc->max_arity;
-    bool lowered_scalar_parse_arity =
-        desc->lowering == XA_INTRINSIC_LOWERING_SCALAR_PARSE &&
-        value->nargs >= desc->min_arity && value->nargs <= desc->max_arity;
+    bool lowered_scalar_parse_arity = desc->lowering == XA_INTRINSIC_LOWERING_SCALAR_PARSE &&
+                                      value->nargs >= desc->min_arity &&
+                                      value->nargs <= desc->max_arity;
     bool backend_encoded_shuffle = stage >= XI_STAGE_BACKEND &&
                                    (desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) != 0 &&
                                    value->nargs == 1;
@@ -244,8 +244,8 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
     bool lowered_codegen_arity = desc->family == XA_INTRINSIC_FAMILY_CODEGEN &&
                                  value->nargs >= desc->min_arity && value->nargs <= desc->max_arity;
     if (!backend_static_arity && !lowered_scalar_parse_arity && !backend_encoded_shuffle &&
-        !lowered_parallel_arity &&
-        !lowered_codegen_arity && (value->nargs < min_nargs || value->nargs > max_nargs))
+        !lowered_parallel_arity && !lowered_codegen_arity &&
+        (value->nargs < min_nargs || value->nargs > max_nargs))
         return set_error(error, error_size, "canonical intrinsic id %u has invalid Xi arity %u",
                          value->xa_intrinsic_id, value->nargs);
 
@@ -327,23 +327,22 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                              value->xa_intrinsic_id);
     } else if (desc->family == XA_INTRINSIC_FAMILY_CORE) {
         if (desc->id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
+            const XiViewSourceEvidence *view =
+                xi_view_evidence_single_source(&value->view_evidence);
             if (value->op != XI_CALL_BUILTIN || value->nargs != 1 || !value->args ||
                 !value->args[0] || !value->args[0]->type ||
-                value->args[0]->type->kind != XR_KIND_STRING ||
-                !xr_type_is_u8_slice(value->type) || value->aux || value->aux_int != 0 ||
-                !value->view_evidence.complete ||
-                value->view_evidence.origin != XI_VIEW_ORIGIN_RECEIVER ||
-                value->view_evidence.source_operand != 0 ||
-                value->view_evidence.source_param != -1 ||
-                value->view_evidence.root_value_id != value->args[0]->id ||
-                value->view_evidence.capability != 1 || value->view_evidence.lifetime != 1)
+                value->args[0]->type->kind != XR_KIND_STRING || !xr_type_is_u8_slice(value->type) ||
+                value->aux || value->aux_int != 0 || !view ||
+                view->origin != XI_VIEW_ORIGIN_RECEIVER || view->source_operand != 0 ||
+                view->source_param != -1 || value->view_evidence.capability != 1 ||
+                view->lifetime != 1)
                 return set_error(
                     error, error_size,
                     "canonical string byte-slice intrinsic id %u has invalid view proof "
                     "(recv=%u root=%u u8slice=%u elem_kind=%u elem_rep=%u element_id=%u)",
                     value->xa_intrinsic_id,
                     value->args && value->args[0] ? value->args[0]->id : UINT32_MAX,
-                    value->view_evidence.root_value_id,
+                    value->args && value->args[0] ? value->args[0]->id : 0,
                     xr_type_is_u8_slice(value->type) ? 1u : 0u,
                     value->type && value->type->container.element_type
                         ? (unsigned) value->type->container.element_type->kind
@@ -379,22 +378,21 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                                  "receiver contract",
                                  value->xa_intrinsic_id);
         } else if (desc->lowering == XA_INTRINSIC_LOWERING_SCALAR_PARSE) {
-            bool integer = desc->id == XA_INTRINSIC_I64_PARSE ||
-                           desc->id == XA_INTRINSIC_I64_TRY_PARSE;
-            bool required = desc->id == XA_INTRINSIC_I64_PARSE ||
-                            desc->id == XA_INTRINSIC_F64_PARSE;
+            bool integer =
+                desc->id == XA_INTRINSIC_I64_PARSE || desc->id == XA_INTRINSIC_I64_TRY_PARSE;
+            bool required =
+                desc->id == XA_INTRINSIC_I64_PARSE || desc->id == XA_INTRINSIC_F64_PARSE;
             uint32_t expected_flags = required ? XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW : 0;
-            if (value->op != XI_CONVERT || value->nargs != 1 || !value->args ||
-                !value->args[0] || !value->args[0]->type ||
-                value->args[0]->type->kind != XR_KIND_STRING || !value->type ||
-                (integer ? value->type->kind != XR_KIND_INT
-                         : value->type->kind != XR_KIND_FLOAT) ||
-                value->aux || value->aux_int != 0 ||
-                value->conversion.kind != XR_CONVERSION_NONE ||
+            if (value->op != XI_CONVERT || value->nargs != 1 || !value->args || !value->args[0] ||
+                !value->args[0]->type || value->args[0]->type->kind != XR_KIND_STRING ||
+                !value->type ||
+                (integer ? value->type->kind != XR_KIND_INT : value->type->kind != XR_KIND_FLOAT) ||
+                value->aux || value->aux_int != 0 || value->conversion.kind != XR_CONVERSION_NONE ||
                 value->flags != expected_flags)
-                return set_error(error, error_size,
-                                 "canonical scalar parse intrinsic id %u has invalid typed contract",
-                                 value->xa_intrinsic_id);
+                return set_error(
+                    error, error_size,
+                    "canonical scalar parse intrinsic id %u has invalid typed contract",
+                    value->xa_intrinsic_id);
         } else {
             return set_error(error, error_size,
                              "canonical intrinsic id %u has unsupported core contract",

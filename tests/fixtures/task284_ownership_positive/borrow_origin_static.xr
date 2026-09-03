@@ -1,0 +1,9 @@
+const bytes: Array<u8> = [1, 2, 3]
+
+fn staticView() -> const Slice<u8> from static {
+    return bytes[:]
+}
+
+fn main() {}
+
+main()

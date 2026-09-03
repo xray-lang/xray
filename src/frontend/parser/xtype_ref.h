@@ -25,6 +25,7 @@
 #include <stddef.h>
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
+#include "../../shared/xr_view_origin.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 
 struct XrCompilerSession;
@@ -80,6 +81,10 @@ typedef struct XrTypeRef {
     const char **field_names;          /* OBJECT: per-field names         */
     bool *field_readonly;
     XrParamMode *function_param_modes; /* FUNCTION: per-param modes       */
+    const char **function_param_names; /* FUNCTION: optional source names */
+    XrBorrowOriginSyntaxState borrow_origin_syntax;
+    AstBorrowOriginRef *borrow_origins;
+    int borrow_origin_count;
     struct XrTypeRef **children;       /* child type refs (arena array)   */
 } XrTypeRef;
 
@@ -128,6 +133,12 @@ XR_FUNC XrTypeRef *xr_tref_function(struct XrCompilerSession *session, XrTypeRef
 XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session,
                                                XrTypeRef **params, const XrParamMode *param_modes,
                                                int nparam, XrTypeRef *ret);
+XR_FUNC XrTypeRef *xr_tref_function_signature(struct XrCompilerSession *session, XrTypeRef **params,
+                                              const XrParamMode *param_modes,
+                                              const char **param_names, int nparam, XrTypeRef *ret,
+                                              XrBorrowOriginSyntaxState borrow_origin_syntax,
+                                              const AstBorrowOriginRef *borrow_origins,
+                                              int borrow_origin_count);
 
 /* Tuple: (T1, T2, ...) */
 XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **elems, int count);

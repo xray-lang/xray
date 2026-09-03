@@ -1,5 +1,5 @@
 interface AmbiguousBorrow {
-    choose(left: Slice<u8>, right: Slice<u8>) -> Slice<u8>
+    choose(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8>
 }
 
 fn main() {}

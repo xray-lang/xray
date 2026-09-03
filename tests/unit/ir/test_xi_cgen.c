@@ -122,6 +122,15 @@ static void set_single_param_ownership_contract(XiFunc *function, uint8_t parame
     function->arc_return_ownership.complete = true;
 }
 
+static void set_single_param_view_origin_contract(XiFunc *function, int16_t parameter) {
+    function->view_origin_set = (XrViewOrigin *) xi_func_arena_alloc(
+        function, (uint32_t) sizeof(*function->view_origin_set));
+    TEST_REQUIRE(function->view_origin_set != NULL, "manual view-origin contract allocated");
+    function->view_origin_set[0] =
+        (XrViewOrigin) {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = parameter};
+    function->view_origin_count = 1;
+}
+
 static void setup(void) {
     if (!g_iso) {
         XrVMConfig p = {0};
@@ -2260,9 +2269,7 @@ TEST(cgen_trivial_span_value_clone_shares_immutable_c_local) {
     TEST_REQUIRE(source != NULL, "manual C-span-clone source allocated");
     ir->params[0] = source;
     set_single_param_ownership_contract(ir, XI_OWN_BORROWED, XI_RETURN_OWNERSHIP_BORROWED_PARAM, 0);
-    ir->view_return_source = XR_VIEW_RETURN_PARAM;
-    ir->view_return_param = 0;
-    ir->view_return_complete = true;
+    set_single_param_view_origin_contract(ir, 0);
     XiValue *clone = xi_value_new(ir, entry, XI_COPY, &span_type, 1);
     TEST_REQUIRE(clone != NULL, "manual C-span-clone boundary allocated");
     clone->args[0] = source;
@@ -2305,9 +2312,7 @@ TEST(cgen_rep_identical_span_box_shares_immutable_c_local) {
     TEST_REQUIRE(source != NULL, "manual C-span-box source allocated");
     ir->params[0] = source;
     set_single_param_ownership_contract(ir, XI_OWN_BORROWED, XI_RETURN_OWNERSHIP_BORROWED_PARAM, 0);
-    ir->view_return_source = XR_VIEW_RETURN_PARAM;
-    ir->view_return_param = 0;
-    ir->view_return_complete = true;
+    set_single_param_view_origin_contract(ir, 0);
     XiValue *box = xi_value_new(ir, entry, XI_BOX, &span_type, 1);
     TEST_REQUIRE(box != NULL, "manual C-span-box boundary allocated");
     box->args[0] = source;
@@ -2766,12 +2771,14 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
      * Publishing http2, compress, mem, regex and io from .xr bodies renames their
      * entries, so this digest moves even though the fixture below imports
      * nothing. Adding the pure xi.agg.update semantic owner changed the prior
-     * frozen digest e9f8680dc4223e208a8a396edb9b1bb510f81d8a099f7839cf431a091cc70b93. */
-    if (strcmp(semantic_hex, "41c1845ba21e097d334d9f9e5273e8de5ba35030edd17605c8c0f9ae9a174f99") !=
+     * frozen digest e9f8680dc4223e208a8a396edb9b1bb510f81d8a099f7839cf431a091cc70b93.
+     * BorrowOriginSet then made the normalized borrowed-result origin set part
+     * of function type identity and changed String.bytes to a const view. */
+    if (strcmp(semantic_hex, "e0c47d6929ecf85920c8d6c9d4ae097854b6134e5a2927bb0ba20134834991dc") !=
         0)
         fprintf(stderr, "  SemanticPlan KAT drift: actual=%s\n", semantic_hex);
     TEST_REQUIRE(strcmp(semantic_hex,
-                        "41c1845ba21e097d334d9f9e5273e8de5ba35030edd17605c8c0f9ae9a174f99") == 0,
+                        "e0c47d6929ecf85920c8d6c9d4ae097854b6134e5a2927bb0ba20134834991dc") == 0,
                  "native unsigned interpolation preserves the frozen SemanticPlan KAT");
 
     XiFunc *label = NULL;

@@ -110,13 +110,16 @@ static void test_use_policy(void) {
     ASSERT_EQ(xi_own_value_arg_is_consuming(&string_byte_slice, 0), true,
               "string bytes view without typed evidence fails closed");
     string_byte_slice.xa_intrinsic_id = XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
-    string_byte_slice.view_evidence = (XiViewEvidence) {
+    XiViewSourceEvidence string_byte_slice_source = {
         .origin = XI_VIEW_ORIGIN_RECEIVER,
         .source_operand = 0,
         .source_param = -1,
-        .root_value_id = string_value.id,
-        .capability = 1,
         .lifetime = 1,
+    };
+    string_byte_slice.view_evidence = (XiViewEvidence) {
+        .sources = &string_byte_slice_source,
+        .source_count = 1,
+        .capability = 1,
         .complete = 1,
     };
     ASSERT_EQ(xi_own_value_arg_is_consuming(&string_byte_slice, 0), false,

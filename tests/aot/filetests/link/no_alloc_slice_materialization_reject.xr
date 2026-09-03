@@ -1,4 +1,4 @@
-fn xray_no_alloc_view_slice_reject(values: Array<i64>) -> Slice<i64> {
+fn xray_no_alloc_view_slice_reject(values: Array<i64>) -> const Slice<i64> {
     var view: Slice<i64> = values[0:2]
     return view
 }

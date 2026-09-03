@@ -49,6 +49,7 @@
 #include "../shared/xr_copy_core.h"
 #include "../shared/xr_param_mode.h"
 #include "../shared/xr_elem_type.h"
+#include "../shared/xr_view_origin.h"
 #include "../runtime/value/xtransfer_mode.h"
 
 /* Forward declarations for types defined in other modules */
@@ -1123,11 +1124,8 @@ typedef enum XiViewOrigin {
     XI_VIEW_ORIGIN_PARAM = 1,
     XI_VIEW_ORIGIN_RECEIVER = 2,
     XI_VIEW_ORIGIN_STATIC = 3,
-    XI_VIEW_ORIGIN_LOCAL = 4,
-    XI_VIEW_ORIGIN_MULTI = 5,
-    XI_VIEW_ORIGIN_UNKNOWN = 6,
-    XI_VIEW_ORIGIN_FOREIGN = 7,
-    XI_VIEW_ORIGIN_ALLOCATION = 8,
+    XI_VIEW_ORIGIN_FOREIGN = 4,
+    XI_VIEW_ORIGIN_ALLOCATION = 5,
 } XiViewOrigin;
 
 /* Per-callee ownership of a returned RC reference.  UNKNOWN is deliberately
@@ -1146,22 +1144,90 @@ typedef struct XiReturnOwnership {
     bool complete;       /* every reachable return has the same provenance */
 } XiReturnOwnership;
 
-/* Compiler-only proof attached to a Slice-producing Xi value.  Function
- * summaries publish a symbolic PARAM/RECEIVER/STATIC template; lowering
- * instantiates it at a call site by recording the actual Xi operand that is
- * the backing root.  Backends and ARC consume this fact instead of recovering
- * provenance from source syntax or callee names. */
+/* Stable recipe used to materialize caller-local roots from current SSA
+ * operands.  It is intentionally the only stored Xi authority: caching an
+ * expanded root set would require transitive invalidation whenever an inner
+ * Slice changes.  The immutable XrProgram tables own that expansion after the
+ * optimizer boundary. */
+typedef struct XiViewSourceEvidence {
+    int16_t source_operand; /* operand in producer args[], -1 for direct STATIC */
+    int16_t source_param;   /* symbolic source parameter, -1 if not PARAM */
+    uint8_t origin;         /* XiViewOrigin used when the operand is a direct root */
+    uint8_t lifetime;       /* 1 = caller source, 2 = direct static */
+} XiViewSourceEvidence;
+
+/* Materialized root returned by xi_value_materialize_view_origins(). */
+typedef struct XiViewOriginEvidence {
+    uint32_t root_value_id; /* caller-local XiValue id; 0 for STATIC/unknown */
+    int16_t source_operand; /* operand in producer args[], -1 for STATIC */
+    int16_t source_param;   /* symbolic source parameter, -1 if not PARAM */
+    uint8_t origin;         /* XiViewOrigin */
+    uint8_t lifetime;       /* 1 = caller source, 2 = static */
+} XiViewOriginEvidence;
+
 typedef struct XiViewEvidence {
-    uint32_t root_value_id;       /* caller-local XiValue id; 0 for STATIC/unknown */
+    XiViewSourceEvidence *sources; /* normalized materialization recipe */
+    uint16_t source_count;
     uint32_t element_type_id;     /* canonical semantic element type, when known */
     uint32_t invalidation_set_id; /* root-relative memory-effect set, 0 if absent */
-    int16_t source_operand;       /* operand in producer args[], -1 for STATIC */
-    int16_t source_param;         /* symbolic source parameter, -1 if not PARAM */
-    uint8_t origin;               /* XiViewOrigin */
     uint8_t capability;           /* 1 = read, 2 = write-exclusive */
-    uint8_t lifetime;             /* 1 = caller source, 2 = static */
     uint8_t complete;             /* proof is sufficient for safe consumption */
 } XiViewEvidence;
+
+static inline const XiViewSourceEvidence *
+xi_view_evidence_single_source(const XiViewEvidence *evidence) {
+    return evidence && evidence->complete && evidence->source_count == 1 && evidence->sources
+               ? &evidence->sources[0]
+               : NULL;
+}
+
+static inline int xi_view_origin_evidence_compare(const XiViewOriginEvidence *a,
+                                                  const XiViewOriginEvidence *b) {
+    bool a_static = a->origin == XI_VIEW_ORIGIN_STATIC;
+    bool b_static = b->origin == XI_VIEW_ORIGIN_STATIC;
+    if (a_static != b_static)
+        return a_static ? -1 : 1;
+    if (a->root_value_id != b->root_value_id)
+        return a->root_value_id < b->root_value_id ? -1 : 1;
+    if (a->origin != b->origin)
+        return a->origin < b->origin ? -1 : 1;
+    if (a->source_operand != b->source_operand)
+        return a->source_operand < b->source_operand ? -1 : 1;
+    if (a->source_param != b->source_param)
+        return a->source_param < b->source_param ? -1 : 1;
+    if (a->lifetime != b->lifetime)
+        return a->lifetime < b->lifetime ? -1 : 1;
+    return 0;
+}
+
+static inline bool xi_view_origin_evidence_same_root(const XiViewOriginEvidence *a,
+                                                     const XiViewOriginEvidence *b) {
+    bool a_static = a->origin == XI_VIEW_ORIGIN_STATIC;
+    bool b_static = b->origin == XI_VIEW_ORIGIN_STATIC;
+    return a_static && b_static ? true
+                                : !a_static && !b_static && a->root_value_id == b->root_value_id;
+}
+
+static inline uint16_t xi_view_origin_evidence_normalize(XiViewOriginEvidence *origins,
+                                                         uint16_t count) {
+    if (!origins || count == 0)
+        return 0;
+    for (uint16_t i = 1; i < count; i++) {
+        XiViewOriginEvidence key = origins[i];
+        uint16_t j = i;
+        while (j > 0 && xi_view_origin_evidence_compare(&origins[j - 1], &key) > 0) {
+            origins[j] = origins[j - 1];
+            j--;
+        }
+        origins[j] = key;
+    }
+    uint16_t unique = 0;
+    for (uint16_t i = 0; i < count; i++) {
+        if (unique == 0 || !xi_view_origin_evidence_same_root(&origins[unique - 1], &origins[i]))
+            origins[unique++] = origins[i];
+    }
+    return unique;
+}
 
 /* Closure metadata: env layout and capture table for a single closure.
  * Built by xi_pass_close from XiFunc.captures[]; replaces ad-hoc
@@ -1337,7 +1403,6 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux_int = src->aux_int;
     dst->aux = src->aux;
     dst->conversion = src->conversion;
-    dst->view_evidence = src->view_evidence;
     dst->error_region = src->error_region;
     dst->call_return_ownership = src->call_return_ownership;
     dst->result_alias_operand = src->result_alias_operand;
@@ -1379,20 +1444,6 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->json_decode_target_type = src->json_decode_target_type;
     dst->enum_metadata_field = src->enum_metadata_field;
     dst->enum_metadata_kind = src->enum_metadata_kind;
-}
-
-/* Clone passes remap a Slice producer's operands into a new SSA namespace.
- * Rebase the subject-local ViewEvidence root after that remap so a callee or
- * loop-local value id cannot leak into the cloned proof. */
-static inline void xi_value_rebase_view_evidence(XiValue *value) {
-    if (!value || !value->view_evidence.complete ||
-        value->view_evidence.origin == XI_VIEW_ORIGIN_STATIC)
-        return;
-    int16_t source_operand = value->view_evidence.source_operand;
-    if (source_operand < 0 || source_operand >= (int16_t) value->nargs ||
-        !value->args[source_operand])
-        return;
-    value->view_evidence.root_value_id = value->args[source_operand]->id;
 }
 
 typedef struct XiMapLiteralData {
@@ -1804,10 +1855,10 @@ typedef struct XiFunc {
     uint32_t psc_return_type_index;          /* frozen PSC return type row, or XI_PSC_ROW_NONE */
     XiSourceLocator psc_declaration_locator; /* exact pointer-free declaration locator */
     struct XrType *return_type;              /* return type (from analyzer) */
-    uint32_t xg_body_func_id;   /* stable global-evidence XgFuncId for this body (0 = none) */
-    uint8_t view_return_source; /* XrViewReturnSourceKind symbolic return template */
-    int16_t view_return_param;  /* valid only for PARAM */
-    uint8_t view_return_complete;
+    uint32_t xg_body_func_id;      /* stable global-evidence XgFuncId for this body (0 = none) */
+    XrViewOrigin *view_origin_set; /* normalized symbolic return template */
+    uint16_t view_origin_count;
+    bool view_origin_was_elided;
     bool has_receiver;         /* declaration is an instance method, excluding constructors */
     XrParamMode receiver_mode; /* declaration-owned READ / REF / MOVE contract */
 

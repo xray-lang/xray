@@ -25,6 +25,7 @@
 #include "xenum_layout.h"
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
+#include "../../shared/xr_view_origin.h"
 #include "../../shared/xr_json_type.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include "../../shared/xr_conversion.h"
@@ -183,20 +184,17 @@ typedef enum XrFnThrowEffect {
                                  // effect of the actual argument)
 } XrFnThrowEffect;
 
-/* Borrowed Slice return provenance is part of a function signature even
- * though Xray deliberately has no lifetime-annotation syntax.  A definition
- * may publish one parameter or the receiver as the unique backing source;
- * UNKNOWN/MULTI are fail-closed states and are never usable as a safe return
- * contract. */
-typedef enum XrViewReturnSourceKind {
-    XR_VIEW_RETURN_NONE = 0,
-    XR_VIEW_RETURN_PARAM,
-    XR_VIEW_RETURN_RECEIVER,
-    XR_VIEW_RETURN_STATIC,
-    XR_VIEW_RETURN_LOCAL,
-    XR_VIEW_RETURN_MULTI,
-    XR_VIEW_RETURN_UNKNOWN,
-} XrViewReturnSourceKind;
+typedef enum XrViewOriginBindStatus {
+    XR_VIEW_ORIGIN_BIND_OK = 0,
+    XR_VIEW_ORIGIN_BIND_NOT_VIEW,
+    XR_VIEW_ORIGIN_BIND_MUTABLE_RETURN,
+    XR_VIEW_ORIGIN_BIND_HIDDEN_RETURN,
+    XR_VIEW_ORIGIN_BIND_UNKNOWN_NAME,
+    XR_VIEW_ORIGIN_BIND_INELIGIBLE,
+    XR_VIEW_ORIGIN_BIND_AMBIGUOUS,
+    XR_VIEW_ORIGIN_BIND_INVALID,
+    XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY,
+} XrViewOriginBindStatus;
 
 // Compile-time metadata for exact structural object types.
 typedef struct XrObjectType {
@@ -251,9 +249,9 @@ struct XrType {
             // MAY_THROW; the analyzer proves NO_THROW after the effect-DB
             // fixpoint. POLY marks parameter-position (rethrows) function types.
             XrFnThrowEffect throw_effect;
-            XrViewReturnSourceKind view_return_source;
-            int16_t view_return_param;  // valid only for XR_VIEW_RETURN_PARAM
-            bool view_return_complete;
+            XrViewOrigin *view_origin_set;
+            int view_origin_count;
+            bool view_origin_was_elided;
             const char **type_param_names;
             XrType ***type_param_constraints;
             int *type_param_constraint_counts;
@@ -997,6 +995,13 @@ XR_FUNC XrType *xr_type_numeric_common_type(XrType *left, XrType *right);
 /* Exact function signature compatibility with covariant throw effect:
  * NO_THROW implements/overrides MAY_THROW, never the reverse. */
 XR_FUNC bool xr_type_function_signature_assignable(XrType *target, XrType *source);
+XR_FUNC bool xr_type_function_set_view_origins(XrVMRuntime *X, XrType *type,
+                                               const XrViewOrigin *origins, int count,
+                                               bool was_elided);
+XR_FUNC bool xr_type_function_view_origins_equal(const XrType *a, const XrType *b);
+XR_FUNC XrViewOriginBindStatus xr_type_function_bind_view_origins(
+    XrVMRuntime *X, XrType *type, const char **param_names, XrBorrowOriginSyntaxState syntax,
+    const AstBorrowOriginRef *origins, int origin_count, bool has_receiver);
 
 // API: Nullable operations (safe for singletons - copies if frozen)
 XR_FUNC XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type);

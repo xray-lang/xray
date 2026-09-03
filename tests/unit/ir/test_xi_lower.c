@@ -7,6 +7,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_lower.h"
 #include "../../../src/ir/xi_module.h"
@@ -517,6 +518,14 @@ static int func_tree_has_builtin_name(XiFunc *f, const char *name) {
     }                                                                                              \
     static void test_##name(void)
 
+#define TEST_REQUIRE(cond, msg)                                                                    \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "xi_lower: %s\n", (msg));                                              \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
 /* ========== Tests ========== */
 
 TEST(simple_arithmetic) {
@@ -925,11 +934,58 @@ TEST(mem_slice_is_caller_proven_nothrow_raw_view) {
            "unsafe mem.slice is caller-proven and must not contaminate error effects");
     assert((slice->flags & XI_FLAG_READS_MEM) != 0 &&
            "mem.slice must retain its raw-memory aliasing effect");
-    assert(slice->view_evidence.complete && slice->view_evidence.source_operand == 2 &&
+    const XiViewSourceEvidence *view = xi_view_evidence_single_source(&slice->view_evidence);
+    assert(view && view->source_operand == 2 &&
            "mem.slice must retain owner-rooted borrow evidence");
     assert(!func_tree_find_op(f, XI_ERR_CHECK) &&
            "caller-proven mem.slice must not generate a pending-error poll");
     xi_func_free(f);
+}
+
+TEST(borrow_origin_set_expands_nested_call_roots) {
+    XiFunc *root = lower_source(
+        "fn choose(left: Slice<u8>, right: Slice<u8>, useLeft: bool) -> const Slice<u8> "
+        "from right | left | right {\n"
+        "  if (useLeft) { return left }\n"
+        "  return right\n"
+        "}\n"
+        "fn forward(value: Slice<u8>) -> const Slice<u8> from value { return value }\n"
+        "fn exercise(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> from left | right {\n"
+        "  return forward(choose(left, right, true))\n"
+        "}\n");
+    TEST_REQUIRE(root != NULL, "BorrowOriginSet source should lower");
+    XiFunc *exercise = func_tree_find_func_name(root, "exercise");
+    TEST_REQUIRE(exercise != NULL, "exercise function should exist");
+
+    XiValue *outer = NULL;
+    for (uint32_t b = 0; b < exercise->nblocks && !outer; b++) {
+        XiBlock *block = exercise->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (value && value->op == XI_CALL && value->nargs == 2 && value->args[1] &&
+                value->args[1]->op == XI_CALL) {
+                outer = value;
+                break;
+            }
+        }
+    }
+    TEST_REQUIRE(outer != NULL, "nested Slice-returning call should exist");
+    XiViewOriginEvidence *origins = NULL;
+    uint16_t origin_count = 0;
+    TEST_REQUIRE(outer->view_evidence.complete &&
+                     xi_value_materialize_view_origins(outer, &origins, &origin_count) &&
+                     origin_count == 2,
+                 "outer call should carry both normalized roots");
+    TEST_REQUIRE(origins[0].root_value_id == exercise->params[0]->id &&
+                     origins[1].root_value_id == exercise->params[1]->id,
+                 "nested call evidence should expand to the caller parameter roots");
+    TEST_REQUIRE(origins[0].source_operand == 1 && origins[1].source_operand == 1,
+                 "expanded roots should remain linked to the outer actual operand");
+    xr_free(origins);
+    char error[512] = {0};
+    TEST_REQUIRE(xi_verify(exercise, error, sizeof(error)),
+                 "expanded BorrowOriginSet evidence should verify");
+    xi_func_free(root);
 }
 
 TEST(scalar_parse_lowering_separates_typed_error_and_optional_flows) {
@@ -1779,14 +1835,6 @@ static void invalidate_json_codec_source_nodes(XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->njson_codecs; i++)
         evidence->json_codecs[i].source_node_id += UINT32_C(1000000);
 }
-
-#define TEST_REQUIRE(cond, msg)                                                                    \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "json_codec_source_identity: %s\n", (msg));                            \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
 
 TEST(json_codec_calls_bind_exact_source_node_evidence_ids) {
     XgGlobalEvidence ev = {0};
@@ -3679,6 +3727,7 @@ int main(void) {
     run_bytes_new_low_level_methods_lower_to_semantic_ops();
     run_unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access();
     run_mem_slice_is_caller_proven_nothrow_raw_view();
+    run_borrow_origin_set_expands_nested_call_roots();
     run_scalar_parse_lowering_separates_typed_error_and_optional_flows();
     run_atomic_methods_lower_to_nothrow_canonical_ops();
     run_user_method_named_fetch_add_remains_ordinary_call();

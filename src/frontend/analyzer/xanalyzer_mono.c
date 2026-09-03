@@ -376,6 +376,19 @@ static XrCallArgAccess *clone_call_arg_accesses(XrCallArgAccess *arr, int count)
     return result;
 }
 
+static AstBorrowOriginRef *clone_borrow_origins(const AstBorrowOriginRef *origins, int count) {
+    if (!origins || count <= 0)
+        return NULL;
+    AstBorrowOriginRef *result = (AstBorrowOriginRef *) xr_calloc((size_t) count, sizeof(*result));
+    if (!result)
+        return NULL;
+    for (int i = 0; i < count; i++) {
+        result[i] = origins[i];
+        result[i].name = clone_str(origins[i].name);
+    }
+    return result;
+}
+
 /* Substitute type parameters in an XrTypeRef tree.
  * Returns a new XrTypeRef if substitution occurred,
  * or the original pointer unchanged. */
@@ -641,6 +654,10 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->param_count = src->param_count;
             dst->required_count = src->required_count;
             dst->return_type = sub_tref(src->return_type, map, mc);
+            dst->borrow_origin_syntax = src->borrow_origin_syntax;
+            dst->borrow_origin_count = src->borrow_origin_count;
+            dst->borrow_origins =
+                clone_borrow_origins(src->borrow_origins, src->borrow_origin_count);
             dst->body = xr_ast_clone_ctx(src->body, map, mc, clone_ctx);
             dst->is_generator = src->is_generator;
             dst->is_extern = src->is_extern;
@@ -1033,6 +1050,10 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->is_variadic = src->is_variadic;
             dst->params = clone_params(src->params, src->param_count, map, mc, clone_ctx);
             dst->return_type = sub_tref(src->return_type, map, mc);
+            dst->borrow_origin_syntax = src->borrow_origin_syntax;
+            dst->borrow_origin_count = src->borrow_origin_count;
+            dst->borrow_origins =
+                clone_borrow_origins(src->borrow_origins, src->borrow_origin_count);
             dst->body = xr_ast_clone_ctx(src->body, map, mc, clone_ctx);
             dst->is_constructor = src->is_constructor;
             dst->is_static = src->is_static;

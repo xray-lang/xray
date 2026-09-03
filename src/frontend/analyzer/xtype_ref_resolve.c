@@ -1333,6 +1333,11 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
                 for (int i = 0; i < nparam; i++)
                     xr_type_function_set_param_mode(result, i, t->function_param_modes[i]);
             }
+            if (result) {
+                (void) xr_type_function_bind_view_origins(
+                    X, result, t->function_param_names, t->borrow_origin_syntax, t->borrow_origins,
+                    t->borrow_origin_count, false);
+            }
             if (params != stack_params)
                 xr_free(params);
             return result;
@@ -1986,6 +1991,27 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         if (result && tref->function_param_modes) {
             for (int i = 0; i < nparam; i++)
                 xr_type_function_set_param_mode(result, i, tref->function_param_modes[i]);
+        }
+        if (result) {
+            XrViewOriginBindStatus status = xr_type_function_bind_view_origins(
+                analyzer->isolate, result, tref->function_param_names, tref->borrow_origin_syntax,
+                tref->borrow_origins, tref->borrow_origin_count, false);
+            if (status != XR_VIEW_ORIGIN_BIND_OK) {
+                const char *message =
+                    status == XR_VIEW_ORIGIN_BIND_AMBIGUOUS
+                        ? "OWN-E-VIEW-ORIGIN-AMBIGUOUS: function type has multiple eligible "
+                          "borrowed-result inputs; name parameters and declare 'from'"
+                    : status == XR_VIEW_ORIGIN_BIND_MUTABLE_RETURN
+                        ? "OWN-E-VIEW-MUTABLE: a borrowed Slice return must be 'const Slice<T>'"
+                    : status == XR_VIEW_ORIGIN_BIND_HIDDEN_RETURN
+                        ? "OWN-E-VIEW-ORIGIN-INVALID: a borrowed Slice cannot occur in a "
+                          "non-direct function return type"
+                        : "OWN-E-VIEW-ORIGIN-INVALID: invalid borrowed-result origin set";
+                XrLocation loc = {
+                    .file = analyzer->current_file, .line = tref->line, .column = tref->column};
+                xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_BORROW_SOURCE, message, &loc);
+            }
         }
         if (params != stack_params)
             xr_free(params);

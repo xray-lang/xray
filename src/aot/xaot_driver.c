@@ -200,16 +200,10 @@ static const char *xaot_view_origin_name(uint8_t origin) {
             return "receiver";
         case XI_VIEW_ORIGIN_STATIC:
             return "static";
-        case XI_VIEW_ORIGIN_LOCAL:
-            return "local";
-        case XI_VIEW_ORIGIN_MULTI:
-            return "multi";
         case XI_VIEW_ORIGIN_FOREIGN:
             return "foreign";
         case XI_VIEW_ORIGIN_ALLOCATION:
             return "allocation";
-        case XI_VIEW_ORIGIN_UNKNOWN:
-            return "unknown";
         case XI_VIEW_ORIGIN_NONE:
         default:
             return "none";
@@ -221,15 +215,23 @@ static void xaot_dump_value_view_evidence(FILE *out, const XiFunc *func, const X
     if (!out || !func || !value || !value->view_evidence.complete)
         return;
     view = &value->view_evidence;
-    fprintf(out,
-            "view-evidence function=%s value=v%u op=%s origin=%s source-param=%d "
-            "source-operand=%d root=v%u element=%u capability=%s lifetime=%s "
-            "invalidation=%u complete=yes\n",
-            func->name ? func->name : "<anonymous>", value->id, xi_op_name(value->op),
-            xaot_view_origin_name(view->origin), (int) view->source_param,
-            (int) view->source_operand, view->root_value_id, view->element_type_id,
-            view->capability == 2 ? "write" : "read", view->lifetime == 2 ? "static" : "caller",
-            view->invalidation_set_id);
+    XiViewOriginEvidence *origins = NULL;
+    uint16_t origin_count = 0;
+    if (!xi_value_materialize_view_origins(value, &origins, &origin_count))
+        return;
+    for (uint16_t i = 0; i < origin_count; i++) {
+        const XiViewOriginEvidence *origin = &origins[i];
+        fprintf(out,
+                "view-evidence function=%s value=v%u op=%s origin-index=%u origin=%s "
+                "source-param=%d source-operand=%d root=v%u element=%u capability=%s "
+                "lifetime=%s invalidation=%u complete=yes\n",
+                func->name ? func->name : "<anonymous>", value->id, xi_op_name(value->op),
+                (unsigned) i, xaot_view_origin_name(origin->origin), (int) origin->source_param,
+                (int) origin->source_operand, origin->root_value_id, view->element_type_id,
+                view->capability == 2 ? "write" : "read",
+                origin->lifetime == 2 ? "static" : "caller", view->invalidation_set_id);
+    }
+    xr_free(origins);
 }
 
 static void xaot_dump_func_view_evidence(FILE *out, const XiFunc *func) {
@@ -248,10 +250,16 @@ static void xaot_dump_func_view_evidence(FILE *out, const XiFunc *func) {
                     : 0,
                 param->param_mode == XR_PARAM_REF ? "write" : "read");
     }
-    if (func->view_return_complete) {
-        fprintf(out, "view-return function=%s origin=%s source-param=%d complete=yes\n",
-                func->name ? func->name : "<anonymous>",
-                xaot_view_origin_name(func->view_return_source), (int) func->view_return_param);
+    for (uint16_t i = 0; i < func->view_origin_count; i++) {
+        const XrViewOrigin *origin = &func->view_origin_set[i];
+        const char *name = origin->kind == XR_VIEW_ORIGIN_PARAM      ? "param"
+                           : origin->kind == XR_VIEW_ORIGIN_RECEIVER ? "receiver"
+                                                                     : "static";
+        fprintf(out,
+                "view-return function=%s origin-index=%u origin=%s source-param=%d "
+                "complete=yes\n",
+                func->name ? func->name : "<anonymous>", (unsigned) i, name,
+                (int) origin->param_ordinal);
     }
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *block = func->blocks[bi];

@@ -42,6 +42,18 @@
       "related_declaration_or_scope": "borrowed return signature"
     },
     {
+      "case": "borrow-origin-outside-set",
+      "rejected_action": "return a borrowed view whose root is outside the declared origin set",
+      "first_witness": "first return path with an undeclared origin",
+      "related_declaration_or_scope": "borrowed return signature and body"
+    },
+    {
+      "case": "borrow-origin-ref",
+      "rejected_action": "declare a REF input as a borrowed-result origin",
+      "first_witness": "first ineligible REF origin",
+      "related_declaration_or_scope": "borrowed return signature"
+    },
+    {
       "case": "read-escape",
       "rejected_action": "store a READ mutable input into an escaping field",
       "first_witness": "field assignment that retains the input",
@@ -176,11 +188,33 @@
       "id": "borrow-origin-invalid",
       "oracle_kind": "source",
       "fixture": "borrow_origin_invalid.xr",
-      "sha256": "0432334f4d2383338cbd089c0978ba888e36f4100737c9fb2de3274347f1f713",
+      "sha256": "1c00c38a701222e426a0974742b079396f202f8213869ac9dae23674ee216799",
       "baseline": "borrow-origin-syntax-not-owned-by-parser",
       "activation_reason": "OWN-E-VIEW-ORIGIN-INVALID",
       "diagnostic_site": "unknown origin name in the return declaration",
       "help": "name an eligible READ input or return an owned copy",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "borrow-origin-outside-set",
+      "oracle_kind": "source",
+      "fixture": "borrow_origin_outside_set.xr",
+      "sha256": "e412d2630cc6d9626e6c6de2ba913c7d51a42f4b38d24428998aa3b353989031",
+      "baseline": "body-return-provenance-not-checked-against-a-declared-set",
+      "activation_reason": "OWN-E-VIEW-ORIGIN-INVALID",
+      "diagnostic_site": "return path whose provenance is outside the declared origin set",
+      "help": "add the returned input to the from set or return a declared origin",
+      "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
+    },
+    {
+      "id": "borrow-origin-ref",
+      "oracle_kind": "source",
+      "fixture": "borrow_origin_ref.xr",
+      "sha256": "185f32fe35952f8f3e13f452f985d749dbdefcbbfbf3266f160c80fb0bf31978",
+      "baseline": "ref-input-could-be-misclassified-as-a-borrowed-result-origin",
+      "activation_reason": "OWN-E-VIEW-ORIGIN-INVALID",
+      "diagnostic_site": "REF input named by the borrowed return declaration",
+      "help": "use an eligible READ input or return an owned copy",
       "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA"]
     },
     {

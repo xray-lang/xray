@@ -1,4 +1,3 @@
 --> 8:1 E0367
 misplaced 8:5
-method 'view' returns Slice borrowed from receiver
-interface 'SourceView' requires parameter 1
+borrowed-result origin set does not match interface 'SourceView'

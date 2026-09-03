@@ -17,11 +17,11 @@
 // The shortcut now applies only at the builtin's own arity, so a two-argument
 // `copy` is summarised like any other function.
 
-fn copy(s: Slice<i64>, extra: i64) -> Slice<i64> {
+fn copy(s: Slice<i64>, extra: i64) -> const Slice<i64> {
     return s
 }
 
-fn viewOf(v: Slice<i64>) -> Slice<i64> {
+fn viewOf(v: Slice<i64>) -> const Slice<i64> {
     return copy(v, 1)
 }
 
@@ -29,7 +29,7 @@ fn viewOf(v: Slice<i64>) -> Slice<i64> {
 fn test_view_return_provenance_survives_user_copy() {
     var owner = [1, 2, 3, 4]
     var view: Slice<i64> = owner[1:3]
-    var out: Slice<i64> = viewOf(view)
+    var out: const Slice<i64> = viewOf(view)
     assertEqual(out[0], 2)
     assertEqual(out[1], 3)
     assertEqual(len(out), 2)

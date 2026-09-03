@@ -296,15 +296,10 @@ static void replace_all_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
         /* Scan instructions */
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            bool args_changed = false;
             for (uint16_t a = 0; a < v->nargs; a++) {
-                if (v->args[a] == old_val) {
+                if (v->args[a] == old_val)
                     v->args[a] = new_val;
-                    args_changed = true;
-                }
             }
-            if (args_changed)
-                xi_value_rebase_view_evidence(v);
         }
 
         /* Scan phi nodes */
@@ -879,17 +874,13 @@ XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f) {
         /* Rewrite args of each value */
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            bool args_changed = false;
             for (uint16_t a = 0; a < v->nargs; a++) {
                 XiValue *resolved = resolve_copy(v->args[a]);
                 if (resolved && resolved != v->args[a]) {
                     v->args[a] = resolved;
-                    args_changed = true;
                     chg.values_changed = true;
                 }
             }
-            if (args_changed)
-                xi_value_rebase_view_evidence(v);
         }
 
         /* Rewrite phi operands — but preserve variable-boundary copies.
@@ -2742,15 +2733,14 @@ static bool sr_def_rep_enum_op(const XiValue *value, XrRep *out) {
  * after verification in the normal pipeline, but keeping this predicate here
  * makes the optimizer fail closed for direct callers and post-verify edits. */
 static bool sr_enum_ordinal_shape(const XiValue *value) {
-    return value && value->op == XI_CONVERT && value->nargs == 1 && value->args &&
-           value->args[0] && value->args[0]->type && value->type &&
-           value->args[0]->type->kind == XR_KIND_ENUM &&
+    return value && value->op == XI_CONVERT && value->nargs == 1 && value->args && value->args[0] &&
+           value->args[0]->type && value->type && value->args[0]->type->kind == XR_KIND_ENUM &&
            value->type->kind == XR_KIND_INT;
 }
 
 static bool sr_enum_ordinal_owner_or_shape(const XiValue *value) {
-    return value && (value->conversion.kind == XR_CONVERSION_ENUM_ORDINAL ||
-                     sr_enum_ordinal_shape(value));
+    return value &&
+           (value->conversion.kind == XR_CONVERSION_ENUM_ORDINAL || sr_enum_ordinal_shape(value));
 }
 
 static bool sr_enum_ordinal_native_exact(const XiValue *value) {
@@ -2764,8 +2754,7 @@ static bool sr_enum_ordinal_native_exact(const XiValue *value) {
            value->conversion.source_scalar_rep == XR_SCALAR_REP_NONE &&
            value->conversion.target_scalar_rep == target->scalar_rep &&
            !value->conversion.is_implicit && !value->conversion.is_compile_time &&
-           value->xa_intrinsic_id == XA_INTRINSIC_NONE &&
-           (value->flags & XI_FLAG_MAY_THROW) == 0;
+           value->xa_intrinsic_id == XA_INTRINSIC_NONE && (value->flags & XI_FLAG_MAY_THROW) == 0;
 }
 
 static bool sr_op_has_arith_native_result(uint16_t op) {
@@ -3886,19 +3875,14 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
             XiValue *v = blk->values[vi];
             if (!v)
                 continue;
-            bool args_changed = false;
             for (uint16_t ai = 0; ai < v->nargs; ai++) {
-                XiValue *before = v->args[ai];
                 XrRep use_r = sr_use_rep(v, ai, &local_policy);
                 bool erase_descriptor = false;
                 if ((v->op == XI_COPY || xi_op_is_identity_forward(v->op)) && ai == 0)
                     erase_descriptor = sr_conversion_erases_enum_metadata(v->args[ai], v->type);
                 sr_rewrite_arg(f, &v->args[ai], use_r, box_of, erased_box_of, unbox_of, max_id,
                                &local_policy, erase_descriptor);
-                args_changed = args_changed || before != v->args[ai];
             }
-            if (args_changed)
-                xi_value_rebase_view_evidence(v);
         }
 
         /* Phi args follow the selected backend policy.  VM-style consumers keep

@@ -3426,6 +3426,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     method_links->file_path = ctx->file_path;
     xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
                                      ret_type);
+    xa_bind_declared_view_origins(ctx, method, method_links, param_names, !md->is_static);
     if (md->param_count > 0) {
         AstNode **defs = (AstNode **) xr_calloc(md->param_count, sizeof(AstNode *));
         if (defs) {
@@ -3476,6 +3477,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
         }
 
         xa_visit_collect(ctx, md->body);
+        xa_validate_declared_view_origin_returns(ctx, method_links, md->body, info);
         xa_analyzer_exit_scope(ctx->analyzer);
     }
 
@@ -3733,20 +3735,6 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         : NULL;
                 if (resolved) {
                     xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
-                }
-                if (resolved && XR_TYPE_IS_FUNCTION(resolved) && resolved->function.return_type &&
-                    XR_TYPE_IS_SLICE(resolved->function.return_type) &&
-                    !resolved->function.view_return_complete) {
-                    XrLocation loc = {
-                        .file = ctx->file_path, .line = node->line, .column = node->column};
-                    const char *reason =
-                        resolved->function.view_return_source == XR_VIEW_RETURN_MULTI
-                            ? "borrow-return function type has multiple possible Slice sources; "
-                              "use a single Slice parameter or return an owned value"
-                            : "borrow-return function type has no unique Slice source; use one "
-                              "Slice parameter or return an owned value";
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                               XR_ERR_ANALYZE_MISSING_TYPE, reason, &loc);
                 }
                 sym->alias_type = resolved;
 

@@ -1,3 +1,3 @@
---> 1:1 E0365
-borrow-return function type has multiple possible Slice sources
-use a single Slice parameter or return an owned value
+--> 1:24 E0384
+OWN-E-VIEW-ORIGIN-AMBIGUOUS
+name parameters and declare 'from'

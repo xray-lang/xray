@@ -554,7 +554,7 @@ TEST(multiple_functions) {
 TEST(class_method_this) {
     assert(check_bindings("class Foo {\n"
                           "    x: i64\n"
-                          "    init(val: i64) {\n"
+                          "    ref init(val: i64) {\n"
                           "        this.x = val\n"
                           "    }\n"
                           "    get() -> i64 {\n"

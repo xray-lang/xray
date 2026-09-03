@@ -553,6 +553,17 @@ static void sig_generic_params(SigBuf *s, XrGenericParam **tps, int count) {
     }
 }
 
+static void sig_borrow_origins(SigBuf *s, XrBorrowOriginSyntaxState syntax,
+                               const AstBorrowOriginRef *origins, int count) {
+    sig_add(s, " origins[%u,%d]", (unsigned) syntax, count);
+    for (int i = 0; i < count; i++) {
+        const AstBorrowOriginRef *origin = origins ? &origins[i] : NULL;
+        sig_add(s, " (k%u,", (unsigned) (origin ? origin->kind : 0));
+        sig_name(s, "name", origin ? origin->name : NULL);
+        sig_add(s, ")");
+    }
+}
+
 static void sig_destructure(SigBuf *s, const XrDestructurePattern *p) {
     if (!p) {
         sig_add(s, "<null>");
@@ -832,6 +843,9 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_params(s, n->as.function_decl.params, n->as.function_decl.param_count);
             sig_generic_params(s, n->as.function_decl.type_params,
                                n->as.function_decl.type_param_count);
+            sig_borrow_origins(s, n->as.function_decl.borrow_origin_syntax,
+                               n->as.function_decl.borrow_origins,
+                               n->as.function_decl.borrow_origin_count);
             sig_attributes(s, n->as.function_decl.attributes, n->as.function_decl.attr_count);
             return true;
         case AST_CLASS_DECL:
@@ -868,6 +882,9 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_params(s, n->as.method_decl.params, n->as.method_decl.param_count);
             sig_generic_params(s, n->as.method_decl.type_params,
                                n->as.method_decl.type_param_count);
+            sig_borrow_origins(s, n->as.method_decl.borrow_origin_syntax,
+                               n->as.method_decl.borrow_origins,
+                               n->as.method_decl.borrow_origin_count);
             sig_attributes(s, n->as.method_decl.attributes, n->as.method_decl.attr_count);
             return true;
         case AST_INTERFACE_DECL:
@@ -882,6 +899,9 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_params(s, n->as.interface_method.params, n->as.interface_method.param_count);
             sig_generic_params(s, n->as.interface_method.type_params,
                                n->as.interface_method.type_param_count);
+            sig_borrow_origins(s, n->as.interface_method.borrow_origin_syntax,
+                               n->as.interface_method.borrow_origins,
+                               n->as.interface_method.borrow_origin_count);
             sig_attributes(s, n->as.interface_method.attributes, n->as.interface_method.attr_count);
             return true;
         case AST_INTERFACE_PROPERTY:

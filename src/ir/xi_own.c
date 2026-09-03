@@ -120,8 +120,7 @@ static bool xi_own_type_is_pointer_free_program_leaf(const XiFunc *function, con
            row->flags == required && row->reserved == 0;
 }
 
-static bool xi_own_type_is_pointer_free_program_product(const XiFunc *function,
-                                                        const XrType *type,
+static bool xi_own_type_is_pointer_free_program_product(const XiFunc *function, const XrType *type,
                                                         uint32_t program_row) {
     const XiModule *module = xi_own_function_module(function);
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
@@ -130,12 +129,11 @@ static bool xi_own_type_is_pointer_free_program_product(const XiFunc *function,
             ? xr_program_semantic_closure_type(closure, program_row)
             : NULL;
     const uint8_t required = XR_PROGRAM_SEMANTIC_TYPE_NONNULLABLE |
-                             XR_PROGRAM_SEMANTIC_TYPE_NONGENERIC |
-                             XR_PROGRAM_SEMANTIC_TYPE_VALUE |
+                             XR_PROGRAM_SEMANTIC_TYPE_NONGENERIC | XR_PROGRAM_SEMANTIC_TYPE_VALUE |
                              XR_PROGRAM_SEMANTIC_TYPE_POINTER_FREE;
-    if (!closure || !type || type->kind != XR_KIND_TUPLE || type->is_nullable ||
-        type->is_const || type->is_literal || type->tuple.element_count != 6 ||
-        !type->tuple.element_types || !xr_program_semantic_closure_is_frozen(closure) ||
+    if (!closure || !type || type->kind != XR_KIND_TUPLE || type->is_nullable || type->is_const ||
+        type->is_literal || type->tuple.element_count != 6 || !type->tuple.element_types ||
+        !xr_program_semantic_closure_is_frozen(closure) ||
         !xr_program_semantic_closure_is_verified(closure) ||
         xr_program_semantic_closure_family(closure) !=
             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
@@ -156,10 +154,9 @@ static bool xi_own_type_is_pointer_free_program_product(const XiFunc *function,
 
 XR_FUNC bool xi_own_value_is_psc_leaf_aggregate(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
-    return value &&
-           (xi_own_type_is_pointer_free_program_leaf(function, value->type) ||
-            xi_own_type_is_pointer_free_program_product(function, value->type,
-                                                        value->psc_type_index));
+    return value && (xi_own_type_is_pointer_free_program_leaf(function, value->type) ||
+                     xi_own_type_is_pointer_free_program_product(function, value->type,
+                                                                 value->psc_type_index));
 }
 
 XR_FUNC bool xi_own_value_is_rc(const XiValue *value) {
@@ -167,8 +164,7 @@ XR_FUNC bool xi_own_value_is_rc(const XiValue *value) {
 }
 
 XR_FUNC bool xi_own_function_return_is_rc(const XiFunc *function) {
-    return function &&
-           !xi_own_type_is_pointer_free_program_leaf(function, function->return_type) &&
+    return function && !xi_own_type_is_pointer_free_program_leaf(function, function->return_type) &&
            !xi_own_type_is_pointer_free_program_product(function, function->return_type,
                                                         function->psc_return_type_index) &&
            xi_own_type_is_rc(function->return_type);
@@ -299,8 +295,9 @@ static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) 
     if (!user || user->op != XI_CALL_BUILTIN)
         return false;
 
-    if (user->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
-        user->view_evidence.complete && user->view_evidence.source_operand == 0)
+    const XiViewSourceEvidence *view = xi_view_evidence_single_source(&user->view_evidence);
+    if (user->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW && view &&
+        view->source_operand == 0)
         return arg_idx == 0;
 
     if (user->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE)

@@ -471,13 +471,13 @@ TEST(raw_slice_accepts_complete_view_evidence) {
     slice->args[1] = xi_const_int(f, f->entry, 1, &stub_int);
     slice->args[2] = owner;
     slice->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
-    slice->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
-    slice->view_evidence.source_operand = 2;
-    slice->view_evidence.source_param = -1;
-    slice->view_evidence.root_value_id = owner->id;
-    slice->view_evidence.capability = 1;
-    slice->view_evidence.lifetime = 1;
-    slice->view_evidence.complete = 1;
+    XiViewSourceEvidence origin = {
+        .origin = XI_VIEW_ORIGIN_FOREIGN,
+        .source_operand = 2,
+        .source_param = -1,
+        .lifetime = 1,
+    };
+    ASSERT(xi_value_set_view_evidence(f, slice, &origin, 1, 0, 0, 1));
     xi_block_set_return(f->entry, slice);
     ASSERT(verify_ok(f));
     xi_func_free(f);
@@ -493,6 +493,147 @@ TEST(slice_call_requires_view_evidence) {
     call->args[0] = callee;
     call->flags |= XI_FLAG_SIDE_EFFECT;
     xi_block_set_return(f->entry, call);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(slice_call_rejects_non_normalized_view_sources) {
+    XiFunc *f = make_func("slice_call_non_normalized_sources");
+    ASSERT(f != NULL);
+    f->return_type = &stub_slice_i8;
+    XiValue *callee = xi_const_null(f, f->entry, &stub_func);
+    XiValue *first = make_pointer_const(f);
+    XiValue *second = make_pointer_const(f);
+    XiValue *call = xi_value_new(f, f->entry, XI_CALL, &stub_slice_i8, 3);
+    ASSERT(callee && first && second && call);
+    call->args[0] = callee;
+    call->args[1] = first;
+    call->args[2] = second;
+    XiViewSourceEvidence sources[2] = {
+        {.source_operand = 2, .source_param = 1, .origin = XI_VIEW_ORIGIN_PARAM, .lifetime = 1},
+        {.source_operand = 1, .source_param = 0, .origin = XI_VIEW_ORIGIN_PARAM, .lifetime = 1},
+    };
+    call->view_evidence = (XiViewEvidence) {
+        .sources = sources,
+        .source_count = 2,
+        .capability = 1,
+        .complete = 1,
+    };
+    xi_block_set_return(f->entry, call);
+    ASSERT(verify_error_prefix(f, "func 'slice_call_non_normalized_sources': Slice"));
+    xi_func_free(f);
+}
+
+TEST(view_evidence_materialization_tracks_current_nested_sources) {
+    XiFunc *f = make_func("view_evidence_materialize_sources");
+    ASSERT(f != NULL);
+
+    XiValue *callee = xi_const_null(f, f->entry, &stub_func);
+    XiValue *root_a = make_pointer_const(f);
+    XiValue *root_b = make_pointer_const(f);
+    XiValue *left = xi_value_new(f, f->entry, XI_CALL, &stub_slice_i8, 2);
+    XiValue *right = xi_value_new(f, f->entry, XI_CALL, &stub_slice_i8, 2);
+    ASSERT(callee && root_a && root_b && left && right);
+    left->args[0] = callee;
+    left->args[1] = root_a;
+    right->args[0] = callee;
+    right->args[1] = root_a;
+    XiViewSourceEvidence nested_source = {
+        .source_operand = 1,
+        .source_param = 0,
+        .origin = XI_VIEW_ORIGIN_PARAM,
+        .lifetime = 1,
+    };
+    XiViewSourceEvidence left_sources[2] = {
+        {.source_operand = -1, .source_param = -1, .origin = XI_VIEW_ORIGIN_STATIC, .lifetime = 2},
+        nested_source,
+    };
+    ASSERT(xi_value_set_view_evidence(f, left, left_sources, 2, 0, 0, 1));
+    ASSERT(xi_value_set_view_evidence(f, right, &nested_source, 1, 0, 0, 1));
+
+    XiValue *outer = xi_value_new(f, f->entry, XI_CALL, &stub_slice_i8, 3);
+    ASSERT(outer != NULL);
+    outer->args[0] = callee;
+    outer->args[1] = left;
+    outer->args[2] = right;
+    XiViewSourceEvidence outer_sources[2] = {
+        {.source_operand = 1, .source_param = 0, .origin = XI_VIEW_ORIGIN_PARAM, .lifetime = 1},
+        {.source_operand = 2, .source_param = 1, .origin = XI_VIEW_ORIGIN_PARAM, .lifetime = 1},
+    };
+    ASSERT(xi_value_set_view_evidence(f, outer, outer_sources, 2, 0, 0, 1));
+    ASSERT(outer->view_evidence.source_count == 2);
+    XiViewOriginEvidence *origins = NULL;
+    uint16_t origin_count = 0;
+    ASSERT(xi_value_materialize_view_origins(outer, &origins, &origin_count));
+    ASSERT(origin_count == 2);
+    ASSERT(origins[0].origin == XI_VIEW_ORIGIN_STATIC);
+    ASSERT(origins[1].root_value_id == root_a->id);
+    xr_free(origins);
+
+    right->args[1] = root_b;
+    origins = NULL;
+    ASSERT(xi_value_materialize_view_origins(outer, &origins, &origin_count));
+    ASSERT(origin_count == 3);
+    ASSERT(origins[0].origin == XI_VIEW_ORIGIN_STATIC);
+    ASSERT(origins[1].root_value_id == root_a->id);
+    ASSERT(origins[2].root_value_id == root_b->id);
+    xr_free(origins);
+
+    outer->args[1] = right;
+    origins = NULL;
+    ASSERT(xi_value_materialize_view_origins(outer, &origins, &origin_count));
+    ASSERT(origin_count == 1);
+    ASSERT(origins[0].origin != XI_VIEW_ORIGIN_STATIC);
+    ASSERT(origins[0].root_value_id == root_b->id);
+    xr_free(origins);
+
+    XiValue *clone = xi_value_new(f, f->entry, XI_CALL, &stub_slice_i8, 3);
+    ASSERT(clone != NULL);
+    ASSERT(xi_value_clone_metadata(f, clone, outer));
+    clone->args[0] = callee;
+    clone->args[1] = left;
+    clone->args[2] = right;
+    origins = NULL;
+    ASSERT(xi_value_materialize_view_origins(clone, &origins, &origin_count));
+    ASSERT(origin_count == 3);
+    ASSERT(origins[0].origin == XI_VIEW_ORIGIN_STATIC);
+    ASSERT(origins[1].root_value_id == root_a->id);
+    ASSERT(origins[2].root_value_id == root_b->id);
+    xr_free(origins);
+
+    xi_func_free(f);
+}
+
+TEST(view_evidence_materialization_rejects_cycles) {
+    XiFunc *f = make_func("view_evidence_cycle");
+    ASSERT(f != NULL);
+    f->return_type = &stub_slice_i8;
+    XiValue *callee = xi_const_null(f, f->entry, &stub_func);
+    XiValue *left = xi_value_new(f, f->entry, XI_CALL, &stub_slice_i8, 2);
+    XiValue *right = xi_value_new(f, f->entry, XI_CALL, &stub_slice_i8, 2);
+    ASSERT(callee && left && right);
+    left->args[0] = callee;
+    left->args[1] = right;
+    right->args[0] = callee;
+    right->args[1] = left;
+    XiViewSourceEvidence source = {
+        .source_operand = 1,
+        .source_param = 0,
+        .origin = XI_VIEW_ORIGIN_PARAM,
+        .lifetime = 1,
+    };
+    left->view_evidence = (XiViewEvidence) {
+        .sources = &source,
+        .source_count = 1,
+        .capability = 1,
+        .complete = 1,
+    };
+    right->view_evidence = left->view_evidence;
+    XiViewOriginEvidence *origins = NULL;
+    uint16_t origin_count = 0;
+    ASSERT(!xi_value_materialize_view_origins(left, &origins, &origin_count));
+    ASSERT(origins == NULL && origin_count == 0);
+    xi_block_set_return(f->entry, left);
     ASSERT(verify_fail(f));
     xi_func_free(f);
 }
@@ -2871,6 +3012,9 @@ int main(void) {
     run_raw_slice_requires_view_evidence();
     run_raw_slice_accepts_complete_view_evidence();
     run_slice_call_requires_view_evidence();
+    run_slice_call_rejects_non_normalized_view_sources();
+    run_view_evidence_materialization_tracks_current_nested_sources();
+    run_view_evidence_materialization_rejects_cycles();
 
     run_tail_flag_on_non_call_fails();
     run_tail_call_with_non_function_callee_fails();

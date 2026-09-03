@@ -161,9 +161,13 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
             if (result) {
                 result->function.min_params = type->function.min_params;
                 result->function.receiver_mode = type->function.receiver_mode;
-                result->function.view_return_source = type->function.view_return_source;
-                result->function.view_return_param = type->function.view_return_param;
-                result->function.view_return_complete = type->function.view_return_complete;
+                if (!xr_type_function_set_view_origins(X, result, type->function.view_origin_set,
+                                                       type->function.view_origin_count,
+                                                       type->function.view_origin_was_elided)) {
+                    if (new_params != stack_params)
+                        xr_free(new_params);
+                    return type;
+                }
                 for (int i = 0; i < pc; i++)
                     xr_type_function_set_param_mode(result, i,
                                                     xr_type_function_param_mode(type, i));

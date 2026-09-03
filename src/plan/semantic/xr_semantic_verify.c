@@ -1676,7 +1676,8 @@ static bool semantic_type_is_exact_u8_slice(const XrSemanticPlan *plan, uint32_t
            type->child_count == 1 && type->child_begin < plan->type_child_count &&
            plan->type_children[type->child_begin] == element_type && type->aggregate_extent == 0 &&
            type->aggregate_align == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW);
+           type->flags ==
+               (XR_SEM_TYPE_CONST | XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_BORROW_VIEW);
 }
 
 static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,

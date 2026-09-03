@@ -627,18 +627,23 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
     if (user->op == XI_SLICE && arc_type_is_span_view(user->type) && user->nargs >= 1 &&
         user->args[0] == member)
         return true;
+    const XiViewSourceEvidence *single = xi_view_evidence_single_source(&user->view_evidence);
     if (user->op == XI_CALL_BUILTIN && arc_type_is_span_view(user->type) && user->nargs >= 1 &&
         user->args[0] == member && user->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW &&
-        user->view_evidence.complete && user->view_evidence.source_operand == 0)
+        single && single->source_operand == 0)
         return true;
     if (!arc_value_is_span_view_carrier(member))
         return false;
     if (!arc_type_is_span_view(user->type))
         return false;
     if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
-        user->view_evidence.complete && user->view_evidence.source_operand >= 0 &&
-        user->view_evidence.source_operand < (int16_t) user->nargs)
-        return user->args[user->view_evidence.source_operand] == member;
+        user->view_evidence.complete && user->view_evidence.sources) {
+        for (uint16_t i = 0; i < user->view_evidence.source_count; i++) {
+            int16_t operand = user->view_evidence.sources[i].source_operand;
+            if (operand >= 0 && (uint16_t) operand < user->nargs && user->args[operand] == member)
+                return true;
+        }
+    }
     switch (user->op) {
         case XI_SLICE_AS_BYTES:
         case XI_SLICE_REINTERPRET:

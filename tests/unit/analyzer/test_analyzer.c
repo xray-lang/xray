@@ -909,6 +909,88 @@ TEST(type_function_copy_preserves_metadata) {
     ASSERT(!xr_type_assignable(normal, mode_only));
 }
 
+TEST(type_function_borrow_origin_identity_is_normalized) {
+    XrType *slice = xr_type_new_slice(g_isolate, xr_type_new_int_width(NULL, XR_NATIVE_U8));
+    XrType *return_slice = xr_type_copy(g_isolate, slice);
+    ASSERT(slice != NULL && return_slice != NULL);
+    return_slice->is_const = true;
+    XrType *params[] = {slice, slice};
+    XrType *left = xr_type_new_function(g_isolate, params, 2, return_slice, false);
+    XrType *same = xr_type_new_function(g_isolate, params, 2, return_slice, false);
+    XrType *different = xr_type_new_function(g_isolate, params, 2, return_slice, false);
+    ASSERT(left != NULL && same != NULL && different != NULL);
+    ASSERT(xr_type_function_set_param_mode(left, 0, XR_PARAM_READ));
+    ASSERT(xr_type_function_set_param_mode(left, 1, XR_PARAM_READ));
+    ASSERT(xr_type_function_set_param_mode(same, 0, XR_PARAM_READ));
+    ASSERT(xr_type_function_set_param_mode(same, 1, XR_PARAM_READ));
+    ASSERT(xr_type_function_set_param_mode(different, 0, XR_PARAM_READ));
+    ASSERT(xr_type_function_set_param_mode(different, 1, XR_PARAM_READ));
+
+    XrViewOrigin unsorted[] = {
+        {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 1},
+        {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 0},
+        {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 1},
+    };
+    XrViewOrigin canonical[] = {
+        {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 0},
+        {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 1},
+    };
+    XrViewOrigin singleton = {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 0};
+    ASSERT(xr_type_function_set_view_origins(g_isolate, left, unsorted, 3, false));
+    ASSERT(xr_type_function_set_view_origins(g_isolate, same, canonical, 2, true));
+    ASSERT(xr_type_function_set_view_origins(g_isolate, different, &singleton, 1, false));
+
+    ASSERT(left->function.view_origin_count == 2);
+    ASSERT(left->function.view_origin_set[0].param_ordinal == 0);
+    ASSERT(left->function.view_origin_set[1].param_ordinal == 1);
+    ASSERT(xr_type_equals(left, same));
+    ASSERT(xr_type_function_view_origins_equal(left, same));
+    ASSERT(left->function.view_origin_was_elided != same->function.view_origin_was_elided);
+    ASSERT(!xr_type_equals(left, different));
+    ASSERT(!xr_type_function_signature_assignable(left, different));
+
+    XrType *copy = xr_type_copy(g_isolate, same);
+    ASSERT(copy != NULL && xr_type_equals(copy, same));
+    ASSERT(copy->function.view_origin_count == 2);
+    ASSERT(copy->function.view_origin_was_elided);
+}
+
+TEST(type_function_borrow_origin_rejects_every_hidden_slice_shape) {
+    XrType *u8 = xr_type_new_int_width(NULL, XR_NATIVE_U8);
+    XrType *slice = xr_type_new_slice(g_isolate, u8);
+    XrType *const_slice = xr_type_copy(g_isolate, slice);
+    ASSERT(u8 != NULL && slice != NULL && const_slice != NULL);
+    const_slice->is_const = true;
+
+    XrType *iterator_args[] = {const_slice};
+    XrType *iterator = xr_type_new_generic_instance(g_isolate, "Iterator", NULL, iterator_args, 1);
+    XrType *map = xr_type_new_map(g_isolate, xr_type_new_string(NULL), iterator);
+    XrType *callback_params[] = {const_slice};
+    XrType *callback =
+        xr_type_new_function(g_isolate, callback_params, 1, xr_type_new_unit(NULL), false);
+    XrType *tuple_fields[] = {map, callback};
+    XrType *tuple = xr_type_new_tuple(g_isolate, tuple_fields, 2);
+    ASSERT(iterator != NULL && map != NULL && callback != NULL && tuple != NULL);
+
+    XrType *hidden_returns[] = {iterator, map, callback, tuple};
+    for (size_t i = 0; i < sizeof(hidden_returns) / sizeof(hidden_returns[0]); i++) {
+        XrType *function = xr_type_new_function(g_isolate, NULL, 0, hidden_returns[i], false);
+        ASSERT(function != NULL);
+        ASSERT(xr_type_function_bind_view_origins(g_isolate, function, NULL,
+                                                  XR_BORROW_ORIGIN_OMITTED, NULL, 0,
+                                                  false) == XR_VIEW_ORIGIN_BIND_HIDDEN_RETURN);
+    }
+
+    XrType *cyclic = xr_type_new_class(g_isolate, "Cyclic");
+    ASSERT(cyclic != NULL);
+    cyclic->instance.superclass = cyclic;
+    XrType *cycle_function = xr_type_new_function(g_isolate, NULL, 0, cyclic, false);
+    ASSERT(cycle_function != NULL);
+    ASSERT(xr_type_function_bind_view_origins(g_isolate, cycle_function, NULL,
+                                              XR_BORROW_ORIGIN_OMITTED, NULL, 0,
+                                              false) == XR_VIEW_ORIGIN_BIND_OK);
+}
+
 // ============================================================================
 // Inference context tests
 // ============================================================================
@@ -1127,18 +1209,17 @@ TEST(analyzer_receiver_mode_is_declaration_owned_and_operation_checked) {
     ASSERT(!analyzer_diag_contains(ref_alias, "READ method cannot"));
     xa_analyzer_free(ref_alias);
 
-    XaAnalyzer *owned_projection = analyzer_run_source(
-        "receiver-owned-projection.xr",
-        "class Item {}\n"
-        "class Holder { item: Item\n constructor() { this.item = Item() }\n"
-        "  ref project() -> Item { return this.item }\n }\n");
+    XaAnalyzer *owned_projection =
+        analyzer_run_source("receiver-owned-projection.xr",
+                            "class Item {}\n"
+                            "class Holder { item: Item\n constructor() { this.item = Item() }\n"
+                            "  ref project() -> Item { return this.item }\n }\n");
     ASSERT(owned_projection != NULL);
     ASSERT(!analyzer_diag_contains(owned_projection, "cannot return borrowed 'ref' parameter"));
     xa_analyzer_free(owned_projection);
 
     XaAnalyzer *receiver_escape = analyzer_run_source(
-        "receiver-direct-escape.xr",
-        "class Holder { ref leak() -> Holder { return this } }\n");
+        "receiver-direct-escape.xr", "class Holder { ref leak() -> Holder { return this } }\n");
     ASSERT(receiver_escape != NULL);
     ASSERT(analyzer_diag_contains(receiver_escape, "cannot return borrowed 'ref' parameter"));
     xa_analyzer_free(receiver_escape);
@@ -7511,6 +7592,8 @@ int main(void) {
     RUN_TEST(type_void_never);
     RUN_TEST(type_rejects_invalid_counts);
     RUN_TEST(type_function_copy_preserves_metadata);
+    RUN_TEST(type_function_borrow_origin_identity_is_normalized);
+    RUN_TEST(type_function_borrow_origin_rejects_every_hidden_slice_shape);
     RUN_TEST(type_string_parser_uses_error_recovery_for_invalid_types);
 
     printf("\nInference context tests:\n");

@@ -499,7 +499,6 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         else
             cloned->args[a] = orig_arg; /* external reference (e.g. caller value) */
     }
-    xi_value_rebase_view_evidence(cloned);
     if (!xi_value_clone_call_plan(caller, cloned, src))
         return NULL;
     inline_remap_call_place_origins(caller, cloned, outer_call);

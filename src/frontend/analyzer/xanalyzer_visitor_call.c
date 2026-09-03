@@ -5932,11 +5932,14 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
         XaEscapeDestinationSet nonlocal_escape =
             effect ? (XaEscapeDestinationSet) (effect->escapes & ~XA_ESCAPE_LOCAL_STORAGE)
                    : XA_ESCAPE_NONE;
-        if (callee_links && callee_links->return_view.complete &&
-            callee_links->return_view.origin == XR_VIEW_RETURN_PARAM &&
-            callee_links->return_view.param_index == slot && effect &&
-            effect->returns != XA_RETURN_PROVENANCE_NONE && nonlocal_escape == XA_ESCAPE_NONE)
-            return;
+        if (callee_links && effect && effect->returns != XA_RETURN_PROVENANCE_NONE &&
+            nonlocal_escape == XA_ESCAPE_NONE) {
+            for (int i = 0; i < callee_links->return_view.origin_count; i++) {
+                if (callee_links->return_view.origins[i].kind == XR_VIEW_ORIGIN_PARAM &&
+                    callee_links->return_view.origins[i].param_ordinal == slot)
+                    return;
+            }
+        }
         char context[160];
         snprintf(context, sizeof(context), "pass Slice view to escaping parameter %d of '%s'",
                  slot + 1, callee_name ? callee_name : "callee");

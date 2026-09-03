@@ -445,11 +445,17 @@ static bool type_key_function(const XrType *type, XrTextBuilder *key, const XrTy
             !type_key(type->function.params[i].type, key, stack, depth, ctx))
             return false;
     }
-    return text_append(key, ";ret:") &&
-           type_key(type->function.return_type, key, stack, depth, ctx) &&
-           text_append_format(key, ";view:%u:%d:%u", (unsigned) type->function.view_return_source,
-                              (int) type->function.view_return_param,
-                              type->function.view_return_complete ? 1u : 0u);
+    if (!text_append(key, ";ret:") ||
+        !type_key(type->function.return_type, key, stack, depth, ctx) ||
+        !text_append_format(key, ";view-count:%d", type->function.view_origin_count))
+        return false;
+    for (int i = 0; i < type->function.view_origin_count; i++) {
+        if (!text_append_format(key, ";view:%u:%d",
+                                (unsigned) type->function.view_origin_set[i].kind,
+                                (int) type->function.view_origin_set[i].param_ordinal))
+            return false;
+    }
+    return true;
 }
 
 static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stack, uint32_t depth,
@@ -1380,6 +1386,20 @@ static bool collect_functions(XrSemanticBuildContext *ctx, const XiFunc *functio
     return true;
 }
 
+static bool validate_scalar_view_return_projection(XrSemanticBuildContext *ctx) {
+    if (!ctx)
+        return false;
+    for (uint32_t i = 0; i < ctx->function_count; i++) {
+        const XiFunc *function = ctx->functions[i].source;
+        if (!function || !XR_TYPE_IS_SLICE(function->return_type))
+            continue;
+        if (function->view_origin_count != 1 || !function->view_origin_set)
+            return fail(ctx, "XR_SEM_0019",
+                        "legacy SemanticPlan cannot project a non-singleton BorrowOriginSet");
+    }
+    return true;
+}
+
 typedef struct XrCanonicalTypeEntry {
     XrSemanticTypeRecord record;
     uint32_t old_index;
@@ -1826,15 +1846,16 @@ static void set_function_return_contract(const XiFunc *source, XrSemanticFunctio
     if (source->return_type && source->return_type->kind == XR_KIND_SLICE) {
         record->return_parameter = -1;
         record->return_provenance = XR_SEM_RETURN_NONE;
-        if (source->view_return_complete && source->view_return_source == XR_VIEW_RETURN_PARAM) {
+        if (source->view_origin_count != 1 || !source->view_origin_set)
+            return;
+        const XrViewOrigin *origin = &source->view_origin_set[0];
+        if (origin->kind == XR_VIEW_ORIGIN_PARAM) {
             record->return_provenance = XR_SEM_RETURN_BORROWED_PARAM;
-            record->return_parameter = source->view_return_param;
-        } else if (source->view_return_complete &&
-                   source->view_return_source == XR_VIEW_RETURN_RECEIVER) {
+            record->return_parameter = origin->param_ordinal;
+        } else if (origin->kind == XR_VIEW_ORIGIN_RECEIVER) {
             record->return_provenance = XR_SEM_RETURN_BORROWED_PARAM;
             record->return_parameter = 0;
-        } else if (source->view_return_complete &&
-                   source->view_return_source == XR_VIEW_RETURN_STATIC) {
+        } else if (origin->kind == XR_VIEW_ORIGIN_STATIC) {
             record->return_provenance = XR_SEM_RETURN_BORROWED_STATIC;
         }
     } else if (source->entry_type == 2 && xi_own_type_is_rc(source->return_type)) {
@@ -4889,23 +4910,24 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     }
     if (value->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
         const XiViewEvidence *view = &value->view_evidence;
+        const XiViewSourceEvidence *source = xi_view_evidence_single_source(view);
         XrType *element = value->type && XR_TYPE_IS_SLICE(value->type)
                               ? value->type->container.element_type
                               : NULL;
-        if (!view->complete || view->origin != XI_VIEW_ORIGIN_RECEIVER ||
-            view->source_operand != 0 || view->source_param != -1 || value->nargs != 1 ||
-            !value->args[0] || view->root_value_id != value->args[0]->id || view->capability != 1 ||
-            view->lifetime != 1 || !element || !add_type(ctx, element, &record->view_element_type))
+        if (!source || source->origin != XI_VIEW_ORIGIN_RECEIVER || source->source_operand != 0 ||
+            source->source_param != -1 || value->nargs != 1 || !value->args[0] ||
+            view->capability != 1 || source->lifetime != 1 || !element ||
+            !add_type(ctx, element, &record->view_element_type))
             return fail(ctx, "XR_SEM_0019", "string byte-slice view authority is incomplete");
         record->view_source_value = value_ref(ctx, function, value->args[0]);
         if (record->view_source_value == XR_SEMANTIC_INDEX_NONE)
             return fail(ctx, "XR_SEM_0019", "string byte-slice view source is invalid");
-        record->view_source_operand = view->source_operand;
-        record->view_source_parameter = view->source_param;
+        record->view_source_operand = source->source_operand;
+        record->view_source_parameter = source->source_param;
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW;
-        record->view_origin = view->origin;
+        record->view_origin = source->origin;
         record->view_capability = view->capability;
-        record->view_lifetime = view->lifetime;
+        record->view_lifetime = source->lifetime;
         record->view_complete = 1;
     }
     for (uint16_t i = 0; i < value->nargs; i++) {
@@ -6399,13 +6421,13 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
     ctx.plan = xr_semantic_plan_create();
     if (!ctx.plan || !prepare_program_authority(&ctx, root) ||
         !collect_functions(&ctx, root, XR_SEMANTIC_INDEX_NONE, 0) ||
-        !build_source_classes(&ctx, root) || !verify_program_type_annotations(&ctx) ||
-        !collect_semantic_types(&ctx) || !refine_value_aggregate_types(&ctx) ||
-        !canonicalize_type_table(&ctx) || !build_function_records(&ctx) ||
-        !build_source_methods(&ctx) || !build_capture_records(&ctx) ||
-        !prepare_root_shared_store_index(&ctx, root) || !build_source_exports(&ctx, root) ||
-        !build_blocks_and_operations(&ctx) || !build_program_binding_rows(&ctx) ||
-        !build_semantic_edges(&ctx))
+        !validate_scalar_view_return_projection(&ctx) || !build_source_classes(&ctx, root) ||
+        !verify_program_type_annotations(&ctx) || !collect_semantic_types(&ctx) ||
+        !refine_value_aggregate_types(&ctx) || !canonicalize_type_table(&ctx) ||
+        !build_function_records(&ctx) || !build_source_methods(&ctx) ||
+        !build_capture_records(&ctx) || !prepare_root_shared_store_index(&ctx, root) ||
+        !build_source_exports(&ctx, root) || !build_blocks_and_operations(&ctx) ||
+        !build_program_binding_rows(&ctx) || !build_semantic_edges(&ctx))
         goto failure;
     XrOwnershipCertificate *ownership = NULL;
     if (!xr_ownership_certificate_build(ctx.plan, &ownership, error, error_size))

@@ -694,6 +694,58 @@ TEST(parser_function_type_param_modes) {
     teardown();
 }
 
+TEST(parser_borrow_origin_sets_are_explicit_source_contracts) {
+    setup();
+
+    AstNode *function =
+        parse_first("fn choose(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> "
+                    "from right | left | right { return left }");
+    FunctionDeclNode *decl = &function->as.function_decl;
+    ASSERT_EQ_INT(decl->borrow_origin_syntax, XR_BORROW_ORIGIN_EXPLICIT_SET);
+    ASSERT_EQ_INT(decl->borrow_origin_count, 3);
+    ASSERT_EQ_INT(decl->borrow_origins[0].kind, AST_BORROW_ORIGIN_PARAM_NAME);
+    ASSERT_STR_EQ(decl->borrow_origins[0].name, "right");
+    ASSERT_STR_EQ(decl->borrow_origins[1].name, "left");
+    ASSERT_STR_EQ(decl->borrow_origins[2].name, "right");
+
+    AstNode *owner = parse_first("class Owner {\n"
+                                 "  view(data: Slice<u8>) -> const Slice<u8> "
+                                 "from this | data { return data }\n"
+                                 "}");
+    MethodDeclNode *method = &owner->as.class_decl.methods[0]->as.method_decl;
+    ASSERT_EQ_INT(method->borrow_origin_syntax, XR_BORROW_ORIGIN_EXPLICIT_SET);
+    ASSERT_EQ_INT(method->borrow_origin_count, 2);
+    ASSERT_EQ_INT(method->borrow_origins[0].kind, AST_BORROW_ORIGIN_RECEIVER);
+    ASSERT_EQ_INT(method->borrow_origins[1].kind, AST_BORROW_ORIGIN_PARAM_NAME);
+    ASSERT_STR_EQ(method->borrow_origins[1].name, "data");
+
+    AstNode *interface = parse_first("interface ViewSource {\n"
+                                     "  view(data: Slice<u8>) -> const Slice<u8> "
+                                     "from data | this\n"
+                                     "}");
+    InterfaceMethodNode *required = &interface->as.interface_decl.methods[0]->as.interface_method;
+    ASSERT_EQ_INT(required->borrow_origin_syntax, XR_BORROW_ORIGIN_EXPLICIT_SET);
+    ASSERT_EQ_INT(required->borrow_origin_count, 2);
+    ASSERT_EQ_INT(required->borrow_origins[0].kind, AST_BORROW_ORIGIN_PARAM_NAME);
+    ASSERT_EQ_INT(required->borrow_origins[1].kind, AST_BORROW_ORIGIN_RECEIVER);
+
+    AstNode *alias =
+        parse_first("type Selector = fn(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> "
+                    "from right | left");
+    XrTypeRef *type = alias->as.type_alias.resolved_type;
+    ASSERT_EQ_INT(type->kind, XR_TREF_FUNCTION);
+    ASSERT_STR_EQ(type->function_param_names[0], "left");
+    ASSERT_STR_EQ(type->function_param_names[1], "right");
+    ASSERT_EQ_INT(type->borrow_origin_syntax, XR_BORROW_ORIGIN_EXPLICIT_SET);
+    ASSERT_EQ_INT(type->borrow_origin_count, 2);
+    char text[256];
+    xr_tref_to_string_buf(type, text, sizeof(text));
+    ASSERT_STR_EQ(text, "fn(left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> from right | "
+                        "left");
+
+    teardown();
+}
+
 TEST(parser_function_no_params) {
     setup();
     AstNode *stmt = parse_first("fn greet() {\n  print(\"hi\")\n}");
@@ -1466,6 +1518,7 @@ int main(void) {
     RUN_TEST(parser_oop_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_receiver_modes_are_explicit_method_contracts);
     RUN_TEST(parser_function_type_param_modes);
+    RUN_TEST(parser_borrow_origin_sets_are_explicit_source_contracts);
     RUN_TEST(parser_function_no_params);
     RUN_TEST(parser_return_stmt);
 

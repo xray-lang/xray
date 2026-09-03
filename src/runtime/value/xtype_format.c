@@ -391,16 +391,51 @@ const char *xr_type_to_string(XrType *type) {
         bool ret_is_unit =
             !type->function.return_type || XR_TYPE_IS_UNIT(type->function.return_type);
         if (ret_is_unit) {
-            n = snprintf(ptr, remaining, ")%s", type->function.is_c_abi ? ">" : "");
+            n = snprintf(ptr, remaining, ")");
         } else {
             const char *ret_str = xr_type_to_string(type->function.return_type);
-            n = snprintf(ptr, remaining, ") -> %s%s", ret_str, type->function.is_c_abi ? ">" : "");
+            n = snprintf(ptr, remaining, ") -> %s", ret_str);
         }
         if (n > 0 && (size_t) n < remaining) {
             ptr += n;
             remaining -= (size_t) n;
         } else {
             remaining = 0;
+        }
+        if (type->function.view_origin_count > 0 && type->function.view_origin_set &&
+            remaining > 1) {
+            n = snprintf(ptr, remaining, " from ");
+            if (n > 0 && (size_t) n < remaining) {
+                ptr += n;
+                remaining -= (size_t) n;
+            } else {
+                remaining = 0;
+            }
+            for (int i = 0; i < type->function.view_origin_count && remaining > 1; i++) {
+                const XrViewOrigin *origin = &type->function.view_origin_set[i];
+                const char *separator = i == 0 ? "" : " | ";
+                if (origin->kind == XR_VIEW_ORIGIN_PARAM)
+                    n = snprintf(ptr, remaining, "%s#%d", separator, (int) origin->param_ordinal);
+                else if (origin->kind == XR_VIEW_ORIGIN_RECEIVER)
+                    n = snprintf(ptr, remaining, "%sthis", separator);
+                else
+                    n = snprintf(ptr, remaining, "%sstatic", separator);
+                if (n > 0 && (size_t) n < remaining) {
+                    ptr += n;
+                    remaining -= (size_t) n;
+                } else {
+                    remaining = 0;
+                }
+            }
+        }
+        if (type->function.is_c_abi && remaining > 1) {
+            n = snprintf(ptr, remaining, ">");
+            if (n > 0 && (size_t) n < remaining) {
+                ptr += n;
+                remaining -= (size_t) n;
+            } else {
+                remaining = 0;
+            }
         }
         if (type->function.receiver_mode != XR_PARAM_READ && remaining > 1)
             snprintf(ptr, remaining, " [receiver=%s]",

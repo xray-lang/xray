@@ -4605,6 +4605,10 @@ static bool oracle_dynamic_closure_storage(const VerifyAuthority *ctx, uint32_t 
         binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
     uint32_t layout_count = 0;
     const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    /* Semantic type ordinals are local to one module.  The program TargetPlan
+     * may therefore contain the same ordinal in several partitions; consume
+     * the partition-scoped index built for this module instead of scanning the
+     * global layout table. */
     uint32_t layout_index = operation->result_type < ctx->type_count
                                 ? ctx->layout_by_type[operation->result_type]
                                 : XR_SEMANTIC_INDEX_NONE;
@@ -4827,14 +4831,11 @@ static bool oracle_dynamic_panic_catch_storage(const VerifyAuthority *ctx, uint3
         binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
     uint32_t layout_count = 0;
     const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(ctx->target_plan, &layout_count);
-    const XrTargetLayoutRecord *layout = NULL;
-    for (uint32_t i = 0; i < layout_count; i++) {
-        if (layouts[i].semantic_type != operation->result_type)
-            continue;
-        if (layout)
-            return false;
-        layout = &layouts[i];
-    }
+    uint32_t layout_index = operation->result_type < ctx->type_count
+                                ? ctx->layout_by_type[operation->result_type]
+                                : XR_SEMANTIC_INDEX_NONE;
+    const XrTargetLayoutRecord *layout =
+        layouts && layout_index < layout_count ? &layouts[layout_index] : NULL;
     if (!binding || !register_rep || !memory_rep || !slot || !layout ||
         binding->semantic_value != semantic_value ||
         register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
@@ -4846,7 +4847,7 @@ static bool oracle_dynamic_panic_catch_storage(const VerifyAuthority *ctx, uint3
         register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
         memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
         register_rep->memory_size != memory_rep->memory_size ||
-        register_rep->memory_align != memory_rep->memory_align ||
+        register_rep->memory_align != memory_rep->memory_align || layout->id != layout_index ||
         layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
         layout->root_field_count != 0 || layout->fixed_prefix_size != memory_rep->memory_size ||
         layout->align != memory_rep->memory_align || slot->semantic_value != semantic_value ||

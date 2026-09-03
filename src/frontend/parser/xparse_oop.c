@@ -988,8 +988,13 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
 
     // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
+    XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
+    AstBorrowOriginRef *borrow_origins = NULL;
+    int borrow_origin_count = 0;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
+        xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
+                                   &borrow_origin_count);
     } else if (xr_parser_check(parser, TK_COLON)) {
         xr_parser_advance(parser);
         xr_parser_error(parser, "use '->' instead of ':' for method return type");
@@ -1014,6 +1019,9 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
 
     method_node->as.method_decl.is_variadic = is_variadic;
     method_node->as.method_decl.required_count = required_count;
+    method_node->as.method_decl.borrow_origin_syntax = borrow_origin_syntax;
+    method_node->as.method_decl.borrow_origins = borrow_origins;
+    method_node->as.method_decl.borrow_origin_count = borrow_origin_count;
 
     // Set generic type parameters
     method_node->as.method_decl.type_params = type_params;
@@ -1458,8 +1466,13 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
 
     // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
+    XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
+    AstBorrowOriginRef *borrow_origins = NULL;
+    int borrow_origin_count = 0;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
+        xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
+                                   &borrow_origin_count);
     } else if (xr_parser_check(parser, TK_COLON)) {
         xr_parser_advance(parser);
         xr_parser_error(parser, "use '->' instead of ':' for method return type");
@@ -1492,6 +1505,9 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     // Set operator flags
     method->as.method_decl.is_operator = true;     // mark as operator method
     method->as.method_decl.op_type = op_type_val;  // set specific operator type
+    method->as.method_decl.borrow_origin_syntax = borrow_origin_syntax;
+    method->as.method_decl.borrow_origins = borrow_origins;
+    method->as.method_decl.borrow_origin_count = borrow_origin_count;
     return method;
 
 fail:
@@ -1786,6 +1802,11 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         xr_parser_consume(parser, TK_RPAREN, "operator len does not accept parameters");
         xr_parser_consume(parser, TK_ARROW, "expected '->' after 'operator len()'");
         XrTypeRef *return_type = xr_parse_type_annotation(parser);
+        XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
+        AstBorrowOriginRef *borrow_origins = NULL;
+        int borrow_origin_count = 0;
+        xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
+                                   &borrow_origin_count);
         xr_parser_match(parser, TK_SEMICOLON);
         AstNode *method = xr_ast_interface_method(
             parser->compiler_session, ast_strdup(parser->compiler_session, "__operator_len"), NULL,
@@ -1793,6 +1814,9 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         method->as.interface_method.attributes = attributes;
         method->as.interface_method.attr_count = attr_count;
         method->as.interface_method.receiver_mode = receiver_mode;
+        method->as.interface_method.borrow_origin_syntax = borrow_origin_syntax;
+        method->as.interface_method.borrow_origins = borrow_origins;
+        method->as.interface_method.borrow_origin_count = borrow_origin_count;
         return method;
     }
 
@@ -1867,8 +1891,13 @@ AstNode *xr_parse_interface_member(Parser *parser) {
 
     // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
+    XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
+    AstBorrowOriginRef *borrow_origins = NULL;
+    int borrow_origin_count = 0;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
+        xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
+                                   &borrow_origin_count);
     } else if (xr_parser_check(parser, TK_COLON)) {
         xr_parser_advance(parser);
         xr_parser_error(parser, "use '->' instead of ':' for interface method return type");
@@ -1886,6 +1915,9 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     method->as.interface_method.type_params = type_params;
     method->as.interface_method.type_param_count = type_param_count;
     method->as.interface_method.receiver_mode = receiver_mode;
+    method->as.interface_method.borrow_origin_syntax = borrow_origin_syntax;
+    method->as.interface_method.borrow_origins = borrow_origins;
+    method->as.interface_method.borrow_origin_count = borrow_origin_count;
     parser->type_scope = saved_scope;
     xr_type_scope_free(generic_scope);
     return method;

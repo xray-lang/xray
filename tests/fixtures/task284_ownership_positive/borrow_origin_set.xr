@@ -1,0 +1,16 @@
+fn choose(left: Slice<u8>, right: Slice<u8>, useLeft: bool) -> const Slice<u8> from right | left | right {
+    if (useLeft) {
+        return left
+    }
+    return right
+}
+
+type ChooseView = fn(left: Slice<u8>, right: Slice<u8>, useLeft: bool) -> const Slice<u8> from left | right
+
+fn accept(callback: ChooseView, left: Slice<u8>, right: Slice<u8>) -> const Slice<u8> from left | right {
+    return callback(left, right, true)
+}
+
+fn main() {}
+
+main()

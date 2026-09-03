@@ -721,8 +721,13 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     // Parse optional return type annotation: `fn foo(...) -> T { ... }`.
     // The unified arrow `->` is the only legal separator.
     XrTypeRef *return_type = NULL;
+    XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
+    AstBorrowOriginRef *borrow_origins = NULL;
+    int borrow_origin_count = 0;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
+        xr_parse_borrow_origin_set(parser, &borrow_origin_syntax, &borrow_origins,
+                                   &borrow_origin_count);
     } else if (xr_parser_check(parser, TK_COLON)) {
         // Legacy syntax `fn foo(): T` is no longer accepted. Emit a clear
         // migration hint and recover by parsing the type so the rest of
@@ -796,6 +801,9 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     }
 
     func_decl->as.function_decl.return_type = return_type;
+    func_decl->as.function_decl.borrow_origin_syntax = borrow_origin_syntax;
+    func_decl->as.function_decl.borrow_origins = borrow_origins;
+    func_decl->as.function_decl.borrow_origin_count = borrow_origin_count;
     func_decl->as.function_decl.required_count = required_count;
     func_decl->as.function_decl.type_params = type_params;
     func_decl->as.function_decl.type_param_count = type_param_count;

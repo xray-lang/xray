@@ -966,6 +966,8 @@ add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_test(NAME test_xr_aot_iterator_rune_nth_emission
     COMMAND $<TARGET_FILE:test_xr_aot_scalar_plan> iterator-rune-nth-emission)
+add_test(NAME test_xr_aot_string_byte_slice_view_emission
+    COMMAND $<TARGET_FILE:test_xr_aot_scalar_plan> string-byte-slice-view-emission)
 add_xray_unit_test(test_xaot_scalar_target_cutover aot/test_xaot_scalar_target_cutover.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c

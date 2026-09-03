@@ -1,4 +1,4 @@
-type AmbiguousBorrow = fn(Slice<u8>, Slice<u8>) -> Slice<u8>
+type AmbiguousBorrow = fn(Slice<u8>, Slice<u8>) -> const Slice<u8>
 
 fn main() {}
 

@@ -1,3 +1,3 @@
---> 6:1 E0383
-misplaced 6:12
-cannot return Slice view
+--> 1:4 E0384
+OWN-E-VIEW-MUTABLE
+borrowed returns must be 'const Slice<T>'

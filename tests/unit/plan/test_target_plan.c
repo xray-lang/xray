@@ -347,6 +347,7 @@ static XrType stub_target_u8_slice = {
     .kind = XR_KIND_SLICE,
     .id = 118,
     .frozen = true,
+    .is_const = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_target_u8},
 };
@@ -1381,16 +1382,13 @@ static XrSemanticPlan *build_string_byte_slice_view_semantic(void) {
     REQUIRE(source && view);
     view->args[0] = source;
     view->xa_intrinsic_id = XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
-    view->view_evidence = (XiViewEvidence) {
-        .root_value_id = source->id,
-        .element_type_id = stub_target_u8.id,
+    XiViewSourceEvidence origin = {
         .source_operand = 0,
         .source_param = -1,
         .origin = XI_VIEW_ORIGIN_RECEIVER,
-        .capability = 1,
         .lifetime = 1,
-        .complete = 1,
     };
+    REQUIRE(xi_value_set_view_evidence(function, view, &origin, 1, stub_target_u8.id, 0, 1));
     XiValue *result = xi_const_int(function, entry, 0, &stub_int);
     REQUIRE(result != NULL);
     xi_block_set_return(entry, result);
@@ -5609,8 +5607,12 @@ static void test_direct_local_call_adapter_family(void) {
      * The canonical-program ownership registry freeze subsequently moved the
      * SemanticPlan fingerprint beneath this otherwise unchanged scalar call.
      * Old ownership-freeze digest:
-     * 9e3078b2d60b479b8eab553d5e6a3421b107f303cbc7d0449064977f3b61bd6f. */
-    REQUIRE(strcmp(call_hex, "ba74699dd2e9f698355e27726f7f3b5b4160e810fed1479eb07f352ed731b40c") ==
+     * 9e3078b2d60b479b8eab553d5e6a3421b107f303cbc7d0449064977f3b61bd6f.
+     * BorrowOriginSet then made normalized borrowed-result origins part of
+     * function type identity and changed the stdlib registry fingerprint. */
+    if (strcmp(call_hex, "94bdd31a214392344cd369fc2fe4379f6541a3649d0c7f5e017b16c55e9b3874") != 0)
+        fprintf(stderr, "direct-local call fingerprint drift: actual=%s\n", call_hex);
+    REQUIRE(strcmp(call_hex, "94bdd31a214392344cd369fc2fe4379f6541a3649d0c7f5e017b16c55e9b3874") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -6215,8 +6217,12 @@ static void test_tail_coroutine_chain_fingerprint(void) {
      * The canonical-program ownership registry freeze subsequently moved the
      * SemanticPlan fingerprint beneath this unchanged tail-call contract.
      * Old ownership-freeze digest:
-     * 6749158010ff69b1cd6d87630c9c7b0ab0acc4b37b8e7e6debd83ea53d4c9d7e. */
-    REQUIRE(strcmp(tail_hex, "3c7f77954bd9cef73cd13e3c755cacafb42a54a2ec5a66e84f4be8119240a62a") ==
+     * 6749158010ff69b1cd6d87630c9c7b0ab0acc4b37b8e7e6debd83ea53d4c9d7e.
+     * BorrowOriginSet then changed the function-type and stdlib identities
+     * hashed into the enclosing SemanticPlan. */
+    if (strcmp(tail_hex, "3e537461fb50b52a558dd45fb726b46ffbc103fa962a32c821dbacf1757195b8") != 0)
+        fprintf(stderr, "tail-call fingerprint drift: actual=%s\n", tail_hex);
+    REQUIRE(strcmp(tail_hex, "3e537461fb50b52a558dd45fb726b46ffbc103fa962a32c821dbacf1757195b8") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

@@ -362,6 +362,8 @@ static void links_release_dynamic(XaSymbolLinks *links) {
     }
     if (links->param_effects)
         xr_free(links->param_effects);
+    if (links->return_view.origins)
+        xr_free(links->return_view.origins);
     if (links->return_fn_param_effects)
         xr_free(links->return_fn_param_effects);
     if (links->inferred_param_types)
@@ -816,6 +818,14 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         links->param_effects = NULL;
         links->param_effect_count = 0;
     }
+    if (links->return_view.origins) {
+        xr_free(links->return_view.origins);
+        links->return_view.origins = NULL;
+    }
+    links->return_view.origin_count = 0;
+    links->return_view.was_elided = false;
+    links->return_view.checked = false;
+    links->return_view.valid = false;
     xa_symbol_links_clear_return_function_effect_summary(links);
     links->return_fn_effect_scanned = false;
     links->return_fn_effect_scan_in_progress = false;
@@ -1105,7 +1115,18 @@ void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLink
     dst->return_ownership = src->return_ownership;
     dst->return_ownership_scanned = src->return_ownership_scanned;
     dst->return_ownership_scan_in_progress = false;
-    dst->return_view = src->return_view;
+    dst->return_view.was_elided = src->return_view.was_elided;
+    dst->return_view.checked = src->return_view.checked;
+    dst->return_view.valid = src->return_view.valid;
+    if (src->return_view.origin_count > 0 && src->return_view.origins) {
+        dst->return_view.origins = (XrViewOrigin *) xr_malloc(
+            sizeof(XrViewOrigin) * (size_t) src->return_view.origin_count);
+        if (dst->return_view.origins) {
+            memcpy(dst->return_view.origins, src->return_view.origins,
+                   sizeof(XrViewOrigin) * (size_t) src->return_view.origin_count);
+            dst->return_view.origin_count = src->return_view.origin_count;
+        }
+    }
     xa_symbol_links_copy_return_function_effect_summary(dst, src);
     dst->function_decl_node = src->function_decl_node;
     dst->is_deprecated = src->is_deprecated;

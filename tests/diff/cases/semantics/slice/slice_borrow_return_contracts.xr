@@ -1,22 +1,22 @@
-fn tail(data: Slice<u8>) -> Slice<u8> {
+fn tail(data: Slice<u8>) -> const Slice<u8> {
     return data[1:]
 }
 
-fn throughValue(transform: fn(Slice<u8>) -> Slice<u8>, data: Slice<u8>) -> Slice<u8> {
+fn throughValue(transform: fn(data: Slice<u8>) -> const Slice<u8>, data: Slice<u8>) -> const Slice<u8> {
     return transform(data)
 }
 
 interface TailView {
-    tail(data: Slice<u8>) -> Slice<u8>
+    tail(data: Slice<u8>) -> const Slice<u8> from data
 }
 
 class TailImpl implements TailView {
-    tail(data: Slice<u8>) -> Slice<u8> {
+    tail(data: Slice<u8>) -> const Slice<u8> from data {
         return data[2:]
     }
 }
 
-fn throughInterface(provider: TailView, data: Slice<u8>) -> Slice<u8> {
+fn throughInterface(provider: TailView, data: Slice<u8>) -> const Slice<u8> {
     return provider.tail(data)
 }
 

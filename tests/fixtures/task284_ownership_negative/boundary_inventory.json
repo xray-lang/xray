@@ -35,10 +35,10 @@
   "boundary_surfaces": [
     {
       "id": "parser-ast",
-      "current_owner": "frontend parser and AST declarations",
+      "current_owner": "canonical receiver mode and BorrowOriginSet syntax nodes",
       "replacement_owner": "canonical receiver mode and BorrowOriginSet syntax nodes",
       "single_writer": "LOCK-FRONTEND",
-      "activation_boundary": "I1/R4 plus train lock"
+      "activation_boundary": "receiver modes and BorrowOriginSet are active"
     },
     {
       "id": "parameter-function-type",
@@ -56,10 +56,10 @@
     },
     {
       "id": "view-return",
-      "current_owner": "body-derived scalar view source",
+      "current_owner": "signature-owned normalized BorrowOriginSet",
       "replacement_owner": "signature-owned normalized BorrowOriginSet",
       "single_writer": "LOCK-FRONTEND and LOCK-SCHEMA",
-      "activation_boundary": "I1/R4 plus train locks"
+      "activation_boundary": "BorrowOriginSet source and Xi contracts are active; plan-table lift remains staged"
     },
     {
       "id": "alias-loan",
@@ -581,23 +581,23 @@
     },
     {
       "id": "body-inferred-borrow-origin",
-      "state": "STAGED",
-      "current_owner": "Return-body summary publishes one source kind and one parameter index",
+      "state": "ACTIVE",
+      "current_owner": "Signature-owned sorted and deduplicated BorrowOriginSet",
       "replacement_owner": "Signature-owned sorted and deduplicated BorrowOriginSet",
       "deletion_phase": "P5",
       "deletion_boundary": "Delete body-derived origin authority and scalar source-plus-parameter fields after parser, type identity, imports, plans, and calls carry the canonical set",
       "required_locks": ["LOCK-FRONTEND", "LOCK-SCHEMA", "LOCK-RESIDUE"],
       "prerequisite_gates": ["origin-parser-kats", "origin-set-normalization", "import-plan-roundtrip"],
       "producers": [
-        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "static void xa_summary_mark_return(", "occurrences": 2},
-        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "summary->view_return_source = source;", "occurrences": 1},
-        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "summary->view_return_source = XR_VIEW_RETURN_MULTI;", "occurrences": 1}
+        {"path": "src/frontend/parser/xast_nodes_decl.h", "anchor": "XrBorrowOriginSyntaxState borrow_origin_syntax;", "occurrences": 3},
+        {"path": "src/runtime/value/xtype.h", "anchor": "XrViewOrigin *view_origin_set;", "occurrences": 1},
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "void xa_bind_declared_view_origins(", "occurrences": 1}
       ],
       "consumers": [
-        {"path": "src/ir/xi.h", "anchor": "uint8_t view_return_source;", "occurrences": 1},
-        {"path": "src/ir/xi_lower.c", "anchor": "func->view_return_source", "occurrences": 1},
-        {"path": "src/ir/xi_lower_expr.c", "anchor": "callee_type->function.view_return_source", "occurrences": 1},
-        {"path": "src/plan/semantic/xr_semantic_builder.c", "anchor": ";view:%u:%d:%u", "occurrences": 1}
+        {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "!xr_type_function_view_origins_equal(required_signature, found_signature)", "occurrences": 1},
+        {"path": "src/ir/xi_lower.c", "anchor": "func->view_origin_count = (uint16_t) links->return_view.origin_count;", "occurrences": 1},
+        {"path": "src/ir/xi_lower_expr.c", "anchor": "static void lower_instantiate_call_view_evidence(", "occurrences": 1},
+        {"path": "src/plan/semantic/xr_semantic_builder.c", "anchor": ";view-count:%d", "occurrences": 1}
       ],
       "residue": [
         {"path": "src/frontend/analyzer/xanalyzer_visitor_decl.c", "anchor": "view_return_source", "occurrences": 15, "post_cut_disposition": "replace-with-new-owner", "post_cut_occurrences": 0, "post_cut_expectation": "Declaration validation consumes normalized BorrowOriginSet"},

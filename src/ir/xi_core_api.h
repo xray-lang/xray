@@ -10,6 +10,15 @@
 XR_FUNC XiFunc *xi_func_new(const char *name, struct XrType *return_type);
 XR_FUNC void xi_func_free(XiFunc *f);
 XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
+XR_FUNC bool xi_value_set_view_evidence(XiFunc *f, XiValue *value,
+                                        const XiViewSourceEvidence *sources, uint16_t source_count,
+                                        uint32_t element_type_id, uint32_t invalidation_set_id,
+                                        uint8_t capability);
+/* Materialize a normalized, caller-local root set from current args[].  The
+ * caller owns *out_origins and releases it with xr_free(). */
+XR_FUNC bool xi_value_materialize_view_origins(const XiValue *value,
+                                               XiViewOriginEvidence **out_origins,
+                                               uint16_t *out_count);
 XR_FUNC void xi_func_compute_effects(XiFunc *f);
 XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMode mode);
 XR_FUNC XrParamMode xi_func_param_passing_mode(const XiFunc *f, uint16_t index);

@@ -1,5 +1,5 @@
 --> 1:4 E0384
-cannot declare function 'chunks' returning Slice view
+function 'chunks' contains a borrowed Slice in a non-direct return type
 
 --> 3:11 E0383
 cannot yield Slice view from generator

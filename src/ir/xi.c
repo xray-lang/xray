@@ -92,6 +92,218 @@ void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
 }
 
+static void xi_value_clear_view_evidence(XiValue *value) {
+    if (value)
+        value->view_evidence = (XiViewEvidence) {0};
+}
+
+static int xi_view_source_compare(const XiViewSourceEvidence *left,
+                                  const XiViewSourceEvidence *right) {
+    if (left->source_operand != right->source_operand)
+        return left->source_operand < right->source_operand ? -1 : 1;
+    if (left->origin != right->origin)
+        return left->origin < right->origin ? -1 : 1;
+    if (left->source_param != right->source_param)
+        return left->source_param < right->source_param ? -1 : 1;
+    if (left->lifetime != right->lifetime)
+        return left->lifetime < right->lifetime ? -1 : 1;
+    return 0;
+}
+
+static uint16_t xi_view_source_normalize(XiViewSourceEvidence *sources, uint16_t count) {
+    if (!sources || count == 0)
+        return 0;
+    for (uint16_t i = 1; i < count; i++) {
+        XiViewSourceEvidence key = sources[i];
+        uint16_t j = i;
+        while (j > 0 && xi_view_source_compare(&sources[j - 1], &key) > 0) {
+            sources[j] = sources[j - 1];
+            j--;
+        }
+        sources[j] = key;
+    }
+    uint16_t unique = 0;
+    for (uint16_t i = 0; i < count; i++) {
+        if (unique > 0 && sources[unique - 1].source_operand == sources[i].source_operand) {
+            if (xi_view_source_compare(&sources[unique - 1], &sources[i]) != 0)
+                return 0;
+            continue;
+        }
+        sources[unique++] = sources[i];
+    }
+    return unique;
+}
+
+static bool xi_view_source_set_is_valid(const XiValue *value, const XiViewSourceEvidence *sources,
+                                        uint16_t count) {
+    if (!value || !sources || count == 0)
+        return false;
+    for (uint16_t i = 0; i < count; i++) {
+        const XiViewSourceEvidence *source = &sources[i];
+        if (i > 0 && xi_view_source_compare(&sources[i - 1], source) >= 0)
+            return false;
+        if (source->origin == XI_VIEW_ORIGIN_NONE || source->origin > XI_VIEW_ORIGIN_ALLOCATION)
+            return false;
+        if (source->origin == XI_VIEW_ORIGIN_STATIC) {
+            if (source->source_operand != -1 || source->source_param != -1 || source->lifetime != 2)
+                return false;
+            continue;
+        }
+        if (source->source_operand < 0 || (uint16_t) source->source_operand >= value->nargs ||
+            !value->args[source->source_operand] || source->lifetime != 1)
+            return false;
+        if ((source->origin == XI_VIEW_ORIGIN_PARAM) != (source->source_param >= 0))
+            return false;
+        if (source->origin == XI_VIEW_ORIGIN_PARAM &&
+            source->source_operand != source->source_param + 1)
+            return false;
+    }
+    return true;
+}
+
+typedef struct XiViewOriginBuilder {
+    XiViewOriginEvidence *origins;
+    size_t count;
+    size_t capacity;
+    const XiValue **path;
+    size_t depth;
+    size_t path_capacity;
+} XiViewOriginBuilder;
+
+static bool xi_view_origin_builder_append(XiViewOriginBuilder *builder,
+                                          XiViewOriginEvidence origin) {
+    if (!builder || builder->count >= UINT16_MAX)
+        return false;
+    if (builder->count == builder->capacity) {
+        size_t next = builder->capacity ? builder->capacity * 2u : 8u;
+        if (next > UINT16_MAX)
+            next = UINT16_MAX;
+        XiViewOriginEvidence *grown = (XiViewOriginEvidence *) xr_realloc(
+            builder->origins, sizeof(XiViewOriginEvidence) * next);
+        if (!grown)
+            return false;
+        builder->origins = grown;
+        builder->capacity = next;
+    }
+    builder->origins[builder->count++] = origin;
+    return true;
+}
+
+static bool xi_view_origin_builder_enter(XiViewOriginBuilder *builder, const XiValue *value) {
+    if (!builder || !value)
+        return false;
+    for (size_t i = 0; i < builder->depth; i++) {
+        if (builder->path[i] == value)
+            return false;
+    }
+    if (builder->depth == builder->path_capacity) {
+        size_t next = builder->path_capacity ? builder->path_capacity * 2u : 8u;
+        if (next < builder->path_capacity || next > SIZE_MAX / sizeof(const XiValue *))
+            return false;
+        const XiValue **grown =
+            (const XiValue **) xr_realloc(builder->path, sizeof(const XiValue *) * next);
+        if (!grown)
+            return false;
+        builder->path = grown;
+        builder->path_capacity = next;
+    }
+    builder->path[builder->depth++] = value;
+    return true;
+}
+
+static bool xi_view_materialize_value(XiViewOriginBuilder *builder, const XiValue *value,
+                                      int16_t enclosing_operand) {
+    const XiViewEvidence *view = value ? &value->view_evidence : NULL;
+    if (!view || !view->complete ||
+        !xi_view_source_set_is_valid(value, view->sources, view->source_count) ||
+        !xi_view_origin_builder_enter(builder, value))
+        return false;
+
+    bool ok = true;
+    for (uint16_t i = 0; ok && i < view->source_count; i++) {
+        const XiViewSourceEvidence *source = &view->sources[i];
+        if (source->origin == XI_VIEW_ORIGIN_STATIC) {
+            ok = xi_view_origin_builder_append(builder, (XiViewOriginEvidence) {
+                                                            .root_value_id = 0,
+                                                            .source_operand = -1,
+                                                            .source_param = -1,
+                                                            .origin = XI_VIEW_ORIGIN_STATIC,
+                                                            .lifetime = 2,
+                                                        });
+            continue;
+        }
+        const XiValue *argument = value->args[source->source_operand];
+        int16_t root_operand = enclosing_operand >= 0 ? enclosing_operand : source->source_operand;
+        if (argument->view_evidence.complete) {
+            ok = xi_view_materialize_value(builder, argument, root_operand);
+            continue;
+        }
+        ok = xi_view_origin_builder_append(builder, (XiViewOriginEvidence) {
+                                                        .root_value_id = argument->id,
+                                                        .source_operand = root_operand,
+                                                        .source_param = source->source_param,
+                                                        .origin = source->origin,
+                                                        .lifetime = source->lifetime,
+                                                    });
+    }
+    builder->depth--;
+    return ok;
+}
+
+bool xi_value_materialize_view_origins(const XiValue *value, XiViewOriginEvidence **out_origins,
+                                       uint16_t *out_count) {
+    if (!out_origins || !out_count)
+        return false;
+    *out_origins = NULL;
+    *out_count = 0;
+    XiViewOriginBuilder builder = {0};
+    bool ok = xi_view_materialize_value(&builder, value, -1);
+    xr_free(builder.path);
+    if (!ok || builder.count == 0 || builder.count > UINT16_MAX) {
+        xr_free(builder.origins);
+        return false;
+    }
+    uint16_t count = xi_view_origin_evidence_normalize(builder.origins, (uint16_t) builder.count);
+    if (count == 0) {
+        xr_free(builder.origins);
+        return false;
+    }
+    *out_origins = builder.origins;
+    *out_count = count;
+    return true;
+}
+
+bool xi_value_set_view_evidence(XiFunc *f, XiValue *value, const XiViewSourceEvidence *sources,
+                                uint16_t source_count, uint32_t element_type_id,
+                                uint32_t invalidation_set_id, uint8_t capability) {
+    if (!f || !value || !XR_TYPE_IS_SLICE(value->type) || source_count == 0 || !sources ||
+        (capability != 1 && capability != 2))
+        return false;
+    xi_value_clear_view_evidence(value);
+    XiViewSourceEvidence *copy = (XiViewSourceEvidence *) xi_func_arena_alloc(
+        f, (uint32_t) (sizeof(XiViewSourceEvidence) * source_count));
+    if (!copy)
+        return false;
+    memcpy(copy, sources, sizeof(XiViewSourceEvidence) * source_count);
+    source_count = xi_view_source_normalize(copy, source_count);
+    if (!xi_view_source_set_is_valid(value, copy, source_count))
+        return false;
+    value->view_evidence.sources = copy;
+    value->view_evidence.source_count = source_count;
+    value->view_evidence.element_type_id = element_type_id;
+    value->view_evidence.invalidation_set_id = invalidation_set_id;
+    value->view_evidence.capability = capability;
+    value->view_evidence.complete = 1;
+    XiViewOriginEvidence *roots = NULL;
+    uint16_t root_count = 0;
+    bool complete = xi_value_materialize_view_origins(value, &roots, &root_count);
+    xr_free(roots);
+    if (complete)
+        return true;
+    xi_value_clear_view_evidence(value);
+    return false;
+}
+
 bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
     if (!f || !dst || !src)
         return false;
@@ -222,6 +434,29 @@ bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src) {
     if (!f || !dst || !src || dst->op != src->op)
         return false;
     xi_value_copy_metadata(dst, src);
+    dst->view_evidence = (XiViewEvidence) {0};
+    if (src->view_evidence.complete) {
+        XiViewOriginEvidence *roots = NULL;
+        uint16_t root_count = 0;
+        bool valid = xi_value_materialize_view_origins(src, &roots, &root_count);
+        xr_free(roots);
+        if (!valid)
+            return false;
+        XiViewSourceEvidence *sources = (XiViewSourceEvidence *) xi_func_arena_alloc(
+            f, (uint32_t) (sizeof(XiViewSourceEvidence) * src->view_evidence.source_count));
+        if (!sources)
+            return false;
+        memcpy(sources, src->view_evidence.sources,
+               sizeof(XiViewSourceEvidence) * src->view_evidence.source_count);
+        dst->view_evidence = (XiViewEvidence) {
+            .sources = sources,
+            .source_count = src->view_evidence.source_count,
+            .element_type_id = src->view_evidence.element_type_id,
+            .invalidation_set_id = src->view_evidence.invalidation_set_id,
+            .capability = src->view_evidence.capability,
+            .complete = 1,
+        };
+    }
     if (src->aux_kind == XI_AUX_KIND_ASSERTION_PLAN)
         return xi_value_clone_assertion_plan(f, dst, src);
     if (src->aux_kind == XI_AUX_KIND_PRINT_PLAN)
@@ -321,7 +556,6 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
         return NULL;
 
     f->return_type = return_type;
-    f->view_return_param = -1;
     f->arc_return_ownership.param_index = -1;
     f->semantic_plan_function_index = XR_SEMANTIC_INDEX_NONE;
     f->psc_function_index = XI_PSC_ROW_NONE;
