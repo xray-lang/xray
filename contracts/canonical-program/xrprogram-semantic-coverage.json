@@ -1,8 +1,8 @@
 {
   "schema": "xray-program-semantic-coverage/1",
   "verifier_version": 1,
-  "core_spec_semantic_sha256": "58b8f9de29dd80691dc241d9defea65e30c105c0878f989bf5940d5f24ea5914",
-  "program_schema_sha256": "e319bdeb76b8ce7b1491c4e005e5bb7843e706f9ab015d9cad08acd500c6e4b7",
+  "core_spec_semantic_sha256": "487e3271836d0ecd5f4db8d07511b66c8135092fac69f66a8566a2b3df9edca0",
+  "program_schema_sha256": "8bada1f8db225d54e0520e8dea4bb05cae92b36774f9160ebbbeee7ad8715e13",
   "type_state": "XrValidatedProgram",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "execution_budgets": [
@@ -10,7 +10,7 @@
     "call-depth",
     "aggregate-value-cells"
   ],
-  "operation_count": 34,
+  "operation_count": 37,
   "operations": [
     {
       "stable_id": 1,
@@ -111,6 +111,22 @@
     {
       "stable_id": 37,
       "spelling": "core.call.sealed_invoke",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 38,
+      "spelling": "core.call.indirect_direct",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 39,
+      "spelling": "core.call.indirect_invoke",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",
@@ -231,6 +247,14 @@
     {
       "stable_id": 88,
       "spelling": "core.existential.project",
+      "decoder": "COMPLETE",
+      "verifier": "COMPLETE",
+      "evaluator": "COMPLETE",
+      "positive_kat": "tests/unit/program/test_xr_program_verify.c"
+    },
+    {
+      "stable_id": 89,
+      "spelling": "core.callable.pack",
       "decoder": "COMPLETE",
       "verifier": "COMPLETE",
       "evaluator": "COMPLETE",

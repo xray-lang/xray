@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; existential pack/test/project and witness direct/invoke have complete executor slices but remain IN_PROGRESS until source integration and old-owner deletion; trap and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; existential pack/test/project, witness direct/invoke, and callable pack/indirect direct/invoke have complete executor slices but remain IN_PROGRESS until source integration and old-owner deletion; trap and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 34 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; coroutine, import, callable-value dispatch, and boundary surfaces remain fail closed until their owning slices activate them."
+    "note": "All 37 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; coroutine, import, and boundary surfaces remain fail closed until their owning slices activate them."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 34 registered operations execute in the independent typed VM and match the reference evaluator. Private existential carriers, witness dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 37 registered operations execute in the independent typed VM and match the reference evaluator. Private existential/callable carriers, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 34 registered operations lower through an independently verified BackendIR into portable C11. Existential carriers remain backend-private; witness calls become closed typed direct-call switches, and the pure native fixture links no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 37 registered operations lower through an independently verified BackendIR into portable C11. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixture links no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -254,6 +254,46 @@
         "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c",
         "tests/unit/program/xr_program_invoke_fixture.h"
+      ]
+    },
+    {
+      "id": "core.call.indirect_direct",
+      "core_spec_contract": "call one typed callable value whose canonical SignatureId has no error or panic channel",
+      "program_encoding": "callable operand followed by ordered visible arguments and an optional typed result; no selector, symbol name, erased argument pack or runtime signature",
+      "decoder_verifier_evaluator": "the callable TypeId owns the exact SignatureId; every closed target matches the visible signature exactly or differs only by one private typed capture receiver; argument modes, ownership, roots, effects and capabilities are verified independently",
+      "vm_implementation": "a private callable carrier selects one validated FunctionId and invokes a typed frame, prepending its optional capture without exposing a universal call ABI",
+      "aot_lowering": "a closed FunctionId switch emits exact typed direct calls and prepends a typed boxed capture only for captured targets",
+      "source_producer": "pending Wave 4 function-value, closure and resolved dynamic-target integration",
+      "old_owner_deletion": "pending removal of name/shape dispatch, erased closure invocation and backend-owned callable signature recovery from the product route",
+      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/schema.json",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/xr_program_callable_fixture.h"
+      ]
+    },
+    {
+      "id": "core.call.indirect_invoke",
+      "core_spec_contract": "call one typed callable value and transfer exactly once to normal, typed-error or typed-panic continuations",
+      "program_encoding": "callable operand, ordered visible call and edge operands, and explicit successor blocks with implicit typed channel prefixes",
+      "decoder_verifier_evaluator": "the callable SignatureId owns result/error/panic channels, continuation shape, handled effects, capabilities, roots and ownership; the private target identity cannot override those facts",
+      "vm_implementation": "a private callable carrier invokes one typed frame and transfers through the verified normal, error or panic edge without ambient pending state",
+      "aot_lowering": "the same closed typed FunctionId switch feeds explicit result/error/panic locals and direct C control transfer",
+      "source_producer": "pending Wave 4 fallible function-value, closure and resolved dynamic-target integration",
+      "old_owner_deletion": "pending removal of erased closure invocation, inferred post-call checks and implicit pending error/panic state from the product route",
+      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/schema.json",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/xr_program_callable_fixture.h"
       ]
     },
     {
@@ -516,6 +556,26 @@
       ]
     },
     {
+      "id": "core.callable.pack",
+      "core_spec_contract": "form one typed callable value from a closed FunctionId target and zero or one typed capture aggregate",
+      "program_encoding": "FunctionId immediate, optional capture operand and callable-typed result whose TypeId owns the visible SignatureId",
+      "decoder_verifier_evaluator": "captureless targets match the visible signature exactly; captured targets add exactly one READ receiver of the capture aggregate type; captures are affine explicit-copy owners and borrowed receiver results are rejected",
+      "vm_implementation": "allocate one private callable carrier and recursively clone its typed capture only through explicit owner.copy",
+      "aot_lowering": "materialize a private function identity plus arena-owned typed capture box; carrier representation is absent from canonical bytes and BoundaryABI",
+      "source_producer": "pending Wave 4 function-value, closure and capture-environment integration",
+      "old_owner_deletion": "pending removal of erased closure records, implicit environment copying and backend-inferred capture shape from the product route",
+      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/schema.json",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/xr_program_callable_fixture.h"
+      ]
+    },
+    {
       "id": "core.owner.copy",
       "core_spec_contract": "borrow one VALUE and produce one independent logical value plus ownership domain exactly when the TypeId copy contract permits it",
       "program_encoding": "type rows carry TRIVIAL/AFFINE ownership and TRIVIAL/EXPLICIT/FORBIDDEN copy contracts; every SSA definition carries NON_OWNER/OWNER disposition",
@@ -682,7 +742,7 @@
         "call.indirect_direct",
         "call.indirect_invoke"
       ],
-      "status": "EXECUTOR_SLICE_IN_PROGRESS"
+      "status": "EXECUTOR_COMPLETE_SOURCE_PENDING"
     },
     {
       "id": "ownership",

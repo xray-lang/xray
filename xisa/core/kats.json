@@ -1270,6 +1270,172 @@
       }
     },
     {
+      "id": "indirect-call-valid",
+      "operation": "core.call.indirect_direct",
+      "kind": "contract",
+      "actual": {
+        "operand_kind": "callable",
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callable_error_type": "void",
+        "callable_panic_type": "void"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "indirect-call-rejects-fallible-signature",
+      "operation": "core.call.indirect_direct",
+      "kind": "contract",
+      "actual": {
+        "operand_kind": "callable",
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callable_error_type": "ErrorCode",
+        "callable_panic_type": "void"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "indirect-invoke-valid",
+      "operation": "core.call.indirect_invoke",
+      "kind": "contract",
+      "actual": {
+        "operand_kind": "callable",
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "normal_result_type": "i64",
+        "callable_result_type": "i64",
+        "callable_error_type": "ErrorCode",
+        "callable_panic_type": "void",
+        "error_argument_type": "ErrorCode",
+        "panic_argument_type": "void"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "indirect-invoke-rejects-infallible-signature",
+      "operation": "core.call.indirect_invoke",
+      "kind": "contract",
+      "actual": {
+        "operand_kind": "callable",
+        "argument_types": [
+          "i64"
+        ],
+        "parameter_types": [
+          "i64"
+        ],
+        "normal_result_type": "i64",
+        "callable_result_type": "i64",
+        "callable_error_type": "void",
+        "callable_panic_type": "void",
+        "error_argument_type": "void",
+        "panic_argument_type": "void"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "callable-pack-captureless-valid",
+      "operation": "core.callable.pack",
+      "kind": "contract",
+      "actual": {
+        "target_identity_closed": true,
+        "callable_signature": "fn(i64)->i64",
+        "target_visible_signature": "fn(i64)->i64",
+        "result_ownership": "owner",
+        "capture_type": "none",
+        "target_has_receiver": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "callable-pack-captured-valid",
+      "operation": "core.callable.pack",
+      "kind": "contract",
+      "actual": {
+        "target_identity_closed": true,
+        "callable_signature": "fn(i64)->i64",
+        "target_visible_signature": "fn(i64)->i64",
+        "result_ownership": "owner",
+        "capture_type": "Capture",
+        "capture_kind": "aggregate",
+        "capture_type_ownership": "affine",
+        "capture_copy_contract": "explicit",
+        "capture_value_ownership": "owner",
+        "target_has_receiver": true,
+        "target_receiver_mode": "read",
+        "target_receiver_type": "Capture",
+        "result_borrows_receiver": false
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "callable-pack-rejects-signature-mismatch",
+      "operation": "core.callable.pack",
+      "kind": "contract",
+      "actual": {
+        "target_identity_closed": true,
+        "callable_signature": "fn(i64)->i64",
+        "target_visible_signature": "fn(bool)->i64",
+        "result_ownership": "owner",
+        "capture_type": "none",
+        "target_has_receiver": false
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "callable-pack-rejects-capture-borrow-result",
+      "operation": "core.callable.pack",
+      "kind": "contract",
+      "actual": {
+        "target_identity_closed": true,
+        "callable_signature": "fn()->View",
+        "target_visible_signature": "fn()->View",
+        "result_ownership": "non-owner",
+        "capture_type": "Capture",
+        "capture_kind": "aggregate",
+        "capture_type_ownership": "affine",
+        "capture_copy_contract": "explicit",
+        "capture_value_ownership": "owner",
+        "target_has_receiver": true,
+        "target_receiver_mode": "read",
+        "target_receiver_type": "Capture",
+        "result_borrows_receiver": true
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "owner-copy-valid",
       "operation": "core.owner.copy",
       "kind": "contract",

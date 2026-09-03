@@ -12,6 +12,7 @@
 #include "../plan/target_profile_test_fixture.h"
 #include "../program/xr_program_invoke_fixture.h"
 #include "../program/xr_program_existential_fixture.h"
+#include "../program/xr_program_callable_fixture.h"
 #include "../program/xr_program_panic_fixture.h"
 
 #include <stdatomic.h>
@@ -21,12 +22,15 @@
 #include <time.h>
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT == 38, "indirect direct stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE == 39, "indirect invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE == 41, "witness invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -968,6 +972,7 @@ static void compare_value(XrReferenceValue reference, XrVmValue vm) {
             break;
         case XR_REFERENCE_VALUE_AGGREGATE:
         case XR_REFERENCE_VALUE_EXISTENTIAL:
+        case XR_REFERENCE_VALUE_CALLABLE:
             REQUIRE(false);
             break;
         case XR_REFERENCE_VALUE_VOID:
@@ -1097,6 +1102,20 @@ static void test_existential_pack_test_project(void) {
     XrProgramArtifact artifact = {0};
     char diagnostic[256] = {0};
     REQUIRE(xr_program_existential_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    run_program(program, false, NULL, NULL, 0u, XR_VM_OUTCOME_RETURN, XR_VM_VALUE_I64, 42u);
+    xr_validated_program_free(program);
+}
+
+static void test_callable_pack_and_indirect_calls(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_callable_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
             XR_PROGRAM_BUILD_OK);
     XrValidatedProgram *program = NULL;
     XrProgramDiagnostic verify_diagnostic;
@@ -1386,6 +1405,7 @@ int main(void) {
     test_sealed_invoke_and_cleanup_cfg();
     test_typed_panic_invoke_and_cleanup_cfg();
     test_existential_pack_test_project();
+    test_callable_pack_and_indirect_calls();
     test_arithmetic_edges();
     test_concurrent_execution_and_drain();
     test_policy_budget_generation_and_smoke_benchmark();

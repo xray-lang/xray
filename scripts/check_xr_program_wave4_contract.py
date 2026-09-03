@@ -45,7 +45,7 @@ def validate(root: Path) -> None:
         "program_tables": "COMPLETE",
         "existential_operations": "EXECUTOR_COMPLETE_SOURCE_PENDING",
         "witness_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
-        "callable_dispatch": "PENDING",
+        "callable_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
         "source_integration": "PENDING",
         "wave_closure": "PENDING",
     }, "Wave 4 implementation state drifted")
@@ -180,6 +180,26 @@ def validate(root: Path) -> None:
             "no selector lookup, erased universal call ABI, class-only itable, backend semantic inference, old reader or dual operation spelling",
             "Wave 4 witness operations regained a legacy path")
 
+    callable_contract = data.get("callable_operation_contract")
+    require(isinstance(callable_contract, dict) and set(callable_contract) == {
+        "signature_authority",
+        "target_identity",
+        "capture_shape",
+        "capture_ownership",
+        "direct",
+        "invoke",
+        "executor_realization",
+        "boundary",
+        "source_status",
+        "compatibility",
+    }, "Wave 4 callable-operation contract drifted")
+    require(callable_contract.get("source_status") ==
+            "pending function-value, closure, import and resolved dynamic-target producer integration",
+            "Wave 4 callable source work was completed without source evidence")
+    require(callable_contract.get("compatibility") ==
+            "no erased argument vector, universal closure ABI, name/selector lookup, backend semantic inference, old reader or dual operation spelling",
+            "Wave 4 callable operations regained a legacy path")
+
     required_anchors = {
         "src/shared/xr_view_origin.h": ["typedef struct XrViewOrigin"],
         "src/runtime/value/xtype.h": ["XrViewOrigin *view_origin_set;"],
@@ -216,14 +236,30 @@ def validate(root: Path) -> None:
             "static bool type_is_existential_ref(",
             "static bool existential_receiver_mode_supported(",
             "static bool verify_existential_projection_guards(",
+            "static bool callable_target_matches(",
+            "static bool verify_callable_invoke(",
             "static bool verify_witness_invoke(",
         ],
-        "src/program/xr_reference_evaluator.c": ["static uint32_t witness_function_id("],
-        "src/vm/xr_program_vm.c": ["static uint32_t witness_function_id("],
-        "src/program/xr_reference_evaluator.h": ["XR_REFERENCE_VALUE_EXISTENTIAL"],
-        "src/vm/xr_program_vm.h": ["XR_VM_VALUE_EXISTENTIAL"],
+        "src/program/xr_reference_evaluator.c": [
+            "static uint32_t callable_function_id(",
+            "static uint32_t witness_function_id(",
+        ],
+        "src/vm/xr_program_vm.c": [
+            "static uint32_t callable_function_id(",
+            "static uint32_t witness_function_id(",
+        ],
+        "src/program/xr_reference_evaluator.h": [
+            "XR_REFERENCE_VALUE_EXISTENTIAL",
+            "XR_REFERENCE_VALUE_CALLABLE",
+        ],
+        "src/vm/xr_program_vm.h": [
+            "XR_VM_VALUE_EXISTENTIAL",
+            "XR_VM_VALUE_CALLABLE",
+        ],
         "src/aot/program/xr_backend_ir_emit_c.c": [
             "static inline void *xr_aot_alloc",
+            "static bool emit_callable_call(",
+            "static bool emit_callable_invoke(",
             "static bool emit_witness_call(",
             "static bool emit_witness_invoke(",
         ],
@@ -232,7 +268,13 @@ def validate(root: Path) -> None:
             "XR_CORE_OP_CORE_CALL_WITNESS_INVOKE",
             "XR_EXISTENTIAL_FIXTURE_REF_RESULT_ESCAPE,",
         ],
+        "tests/unit/program/xr_program_callable_fixture.h": [
+            "#define XR_PROGRAM_CALLABLE_FIXTURE_H",
+            "typedef enum XrProgramCallableFixtureMutation",
+            "XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,",
+        ],
         "tests/unit/program/test_xr_program_verify.c": [
+            "static void test_callable_pack_and_indirect_calls(",
             "static void test_existential_ref_non_escape_admission("
         ],
     }
@@ -248,6 +290,12 @@ def validate(root: Path) -> None:
             existential_fixture.count("XR_CORE_OP_CORE_CALL_WITNESS_DIRECT") == 2 and
             existential_fixture.count("XR_CORE_OP_CORE_CALL_WITNESS_INVOKE") == 1,
             "Wave 4 READ/REF existential witness evidence drifted")
+    callable_fixture = (root / "tests/unit/program/xr_program_callable_fixture.h").read_text(
+        encoding="utf-8", errors="strict")
+    require(callable_fixture.count("XR_CORE_OP_CORE_CALLABLE_PACK") == 3 and
+            callable_fixture.count("XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT") == 2 and
+            callable_fixture.count("XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE") == 1,
+            "Wave 4 callable pack/direct/invoke evidence drifted")
     retired = {
         "src/frontend/analyzer/xanalyzer_visitor_decl.c": ["view_return_source"],
         "src/runtime/value/xtype.h": ["view_return_source", "view_return_param"],
@@ -295,6 +343,7 @@ def self_test(root: Path) -> None:
         Path("src/vm/xr_program_vm.h"),
         Path("src/vm/xr_program_vm.c"),
         Path("src/aot/program/xr_backend_ir_emit_c.c"),
+        Path("tests/unit/program/xr_program_callable_fixture.h"),
         Path("tests/unit/program/xr_program_existential_fixture.h"),
         Path("tests/unit/program/test_xr_program_verify.c"),
         Path("tests/fixtures/task284_ownership_positive/borrow_origin_set.xr"),

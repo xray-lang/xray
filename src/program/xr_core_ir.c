@@ -1139,9 +1139,10 @@ static bool validate_types(const XrCoreIrProgram *program) {
             valid = valid && type->field_count == 0u && !type->field_types &&
                     type->variant_count == 0u && !type->variants &&
                     type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
-                    type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
-                    type->copy_contract == XR_CORE_IR_COPY_TRIVIAL &&
-                    signature_is_valid(program, &type->callable_signature);
+                    type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+                    type->copy_contract == XR_CORE_IR_COPY_EXPLICIT &&
+                    signature_is_valid(program, &type->callable_signature) &&
+                    !type->callable_signature.has_receiver;
         } else if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
             bool trivial = type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_READ;
             bool affine =

@@ -17,7 +17,7 @@
     "program_tables": "COMPLETE",
     "existential_operations": "EXECUTOR_COMPLETE_SOURCE_PENDING",
     "witness_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
-    "callable_dispatch": "PENDING",
+    "callable_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
     "source_integration": "PENDING",
     "wave_closure": "PENDING"
   },
@@ -157,6 +157,18 @@
     "executor_realization": "reference evaluator and VM resolve the validated FunctionId; portable-C AOT emits a closed ConformanceId switch whose cases directly call the exact typed implementation after unwrapping the receiver",
     "source_status": "pending class, struct, enum, import and dynamic-target producer integration",
     "compatibility": "no selector lookup, erased universal call ABI, class-only itable, backend semantic inference, old reader or dual operation spelling"
+  },
+  "callable_operation_contract": {
+    "signature_authority": "the callable TypeId owns one canonical SignatureId containing visible parameter modes, result ownership, borrowed-result origins, typed error and panic channels, effects and capabilities",
+    "target_identity": "callable.pack records one closed FunctionId; no symbol name, selector, source expression or backend address is canonical data",
+    "capture_shape": "a captureless target matches the visible signature exactly; a captured target adds exactly one READ receiver whose TypeId is the optional aggregate capture operand",
+    "capture_ownership": "capture aggregates are affine explicit-copy owners; callable values are affine explicit-copy owners and cloning recursively copies the typed capture only through core.owner.copy",
+    "direct": "indirect_direct is admitted only for a callable signature without error or panic and returns through its exact typed result",
+    "invoke": "indirect_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments",
+    "executor_realization": "reference evaluator and VM resolve the validated FunctionId from a private carrier; portable-C AOT emits a closed FunctionId switch whose cases directly call the exact typed target and prepend a typed capture receiver only when required",
+    "boundary": "callable carrier layout is backend-private and callable values cannot escape as public reference-evaluator or VM outcomes",
+    "source_status": "pending function-value, closure, import and resolved dynamic-target producer integration",
+    "compatibility": "no erased argument vector, universal closure ABI, name/selector lookup, backend semantic inference, old reader or dual operation spelling"
   },
   "old_owner_inventory": [
     {

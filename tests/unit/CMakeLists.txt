@@ -655,6 +655,7 @@ add_xr_program_aot_native_case(checked_overflow checked-overflow 211)
 add_xr_program_aot_native_case(wrapping_overflow wrapping-overflow 0)
 add_xr_program_aot_native_case(division_zero division-zero 212)
 add_xr_program_aot_native_case(existential existential 42)
+add_xr_program_aot_native_case(callable callable 42)
 
 set(XR_PROGRAM_AOT_INVOKE_C
     ${XR_PROGRAM_AOT_FIXTURE_DIR}/xr_program_aot_sealed_invoke.c)

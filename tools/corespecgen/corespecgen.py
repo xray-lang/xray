@@ -78,7 +78,7 @@ ARITHMETIC_KINDS = {
 }
 SUCCESSOR_KEYS = {"normal", "error", "panic", "cancel", "suspend"}
 GENERIC_TYPES = {
-    "A", "E", "V", "T", "T...", "R?", "P...",
+    "A", "C", "Capture?", "E", "V", "T", "T...", "R?", "P...",
     "normal-edge-values...", "error-edge-values...", "panic-edge-values...",
 }
 VARIADIC_TYPES = {
@@ -324,7 +324,8 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "block-arguments", "branch", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
             "place-local", "place-store", "return", "scalar-oracle", "sealed-call",
-            "sealed-invoke", "witness-call", "witness-invoke", "variant-construct",
+            "sealed-invoke", "indirect-call", "indirect-invoke", "witness-call",
+            "witness-invoke", "callable-pack", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-test",
         }, f"operation {spelling} has unknown KAT validator")
@@ -490,6 +491,25 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("panic_argument_type") == panic_type
                 and (not has_error or error_type != "panic-info")
                 and (not has_panic or panic_type == "panic-info"))
+    if validator == "indirect-call":
+        return (actual.get("operand_kind") == "callable"
+                and actual.get("argument_types") == actual.get("parameter_types")
+                and actual.get("actual_result_type") == actual.get("declared_result_type")
+                and actual.get("callable_error_type") == "void"
+                and actual.get("callable_panic_type") == "void")
+    if validator == "indirect-invoke":
+        error_type = actual.get("callable_error_type")
+        panic_type = actual.get("callable_panic_type")
+        has_error = error_type not in {None, "void"}
+        has_panic = panic_type not in {None, "void"}
+        return (actual.get("operand_kind") == "callable"
+                and actual.get("argument_types") == actual.get("parameter_types")
+                and (has_error or has_panic)
+                and actual.get("normal_result_type") == actual.get("callable_result_type")
+                and actual.get("error_argument_type") == error_type
+                and actual.get("panic_argument_type") == panic_type
+                and (not has_error or error_type != "panic-info")
+                and (not has_panic or panic_type == "panic-info"))
     if validator == "witness-call":
         ordinal = actual.get("slot_ordinal")
         count = actual.get("slot_count")
@@ -579,6 +599,21 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and actual.get("result_type") == actual.get("requested_type")
                 and actual.get("result_category") == expected_category
                 and actual.get("result_ownership") == expected_ownership)
+    if validator == "callable-pack":
+        capture_type = actual.get("capture_type")
+        shared = (actual.get("target_identity_closed") is True
+                  and actual.get("callable_signature") == actual.get("target_visible_signature")
+                  and actual.get("result_ownership") == "owner")
+        if capture_type == "none":
+            return shared and actual.get("target_has_receiver") is False
+        return (shared and actual.get("capture_kind") == "aggregate"
+                and actual.get("capture_type_ownership") == "affine"
+                and actual.get("capture_copy_contract") == "explicit"
+                and actual.get("capture_value_ownership") == "owner"
+                and actual.get("target_has_receiver") is True
+                and actual.get("target_receiver_mode") == "read"
+                and actual.get("target_receiver_type") == capture_type
+                and actual.get("result_borrows_receiver") is False)
     if validator == "error-publish":
         return (actual.get("function_error_type") not in {None, "void", "panic-info"}
                 and actual.get("operand_types") == [actual.get("function_error_type")])

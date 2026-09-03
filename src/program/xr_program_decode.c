@@ -227,8 +227,8 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
                  capability != XR_CORE_IR_VIEW_WRITE_EXCLUSIVE))
                 section.status = XR_PROGRAM_DECODE_NONCANONICAL;
         } else if (kind == XR_PROGRAM_TYPE_KIND_CALLABLE) {
-            if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
-                copy_contract != XR_CORE_IR_COPY_TRIVIAL)
+            if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                copy_contract != XR_CORE_IR_COPY_EXPLICIT)
                 section.status = XR_PROGRAM_DECODE_NONCANONICAL;
             if (shape_head == UINT64_MAX)
                 section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;

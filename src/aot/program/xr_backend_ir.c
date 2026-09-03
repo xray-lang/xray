@@ -31,6 +31,8 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_RETURN:
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
+        case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
+        case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
         case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
         case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
         case XR_CORE_OP_CORE_TRAP:
@@ -46,6 +48,7 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_EXISTENTIAL_PACK:
         case XR_CORE_OP_CORE_EXISTENTIAL_TEST:
         case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT:
+        case XR_CORE_OP_CORE_CALLABLE_PACK:
         case XR_CORE_OP_CORE_OWNER_COPY:
         case XR_CORE_OP_CORE_OWNER_MOVE:
         case XR_CORE_OP_CORE_OWNER_DROP:

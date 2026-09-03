@@ -1085,6 +1085,152 @@
       }
     },
     {
+      "stable_id": 38,
+      "spelling": "core.call.indirect_direct",
+      "class": "call",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "C",
+          "P..."
+        ],
+        "result": "R?",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-callable",
+          "parameter-mode..."
+        ],
+        "result": "callable-signature-result-mode"
+      },
+      "profile_dependency": "none",
+      "materialization": "executor-private-callable-dispatch",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "the packed closed target trace under the callable signature"
+      },
+      "kat_validator": "indirect-call",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 39,
+      "spelling": "core.call.indirect_invoke",
+      "class": "call-terminator",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "C",
+          "P...",
+          "normal-edge-values...",
+          "error-edge-values...",
+          "panic-edge-values..."
+        ],
+        "result": "void",
+        "immediates": {}
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": true,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-callable",
+          "parameter-mode...",
+          "normal-edge-transfer...",
+          "error-edge-transfer...",
+          "panic-edge-transfer..."
+        ],
+        "result": "normal-result-and-present-error/panic-values-are-successor-block-arguments"
+      },
+      "profile_dependency": "none",
+      "materialization": "executor-private-callable-dispatch-terminator",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "the packed closed target selects one normal, typed-error, or typed-panic continuation"
+      },
+      "kat_validator": "indirect-invoke",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
       "stable_id": 40,
       "spelling": "core.call.witness_direct",
       "class": "call",
@@ -2091,6 +2237,74 @@
         "allowed_trace": "one exact concrete value after a dominating successful nominal test"
       },
       "kat_validator": "existential-project",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 89,
+      "spelling": "core.callable.pack",
+      "class": "callable",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "Capture?"
+        ],
+        "result": "C",
+        "immediates": {
+          "target_id": "program-function-id"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "consume-capture-owner?"
+        ],
+        "result": "callable-owner"
+      },
+      "profile_dependency": "none",
+      "materialization": "executor-private-callable-carrier",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one callable carrier with the exact closed target and optional capture owner"
+      },
+      "kat_validator": "callable-pack",
       "coverage": {
         "spec_oracle": {
           "status": "COMPLETE",

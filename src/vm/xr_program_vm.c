@@ -19,6 +19,7 @@
 #include <string.h>
 
 typedef struct XrVmExistentialValue XrVmExistentialValue;
+typedef struct XrVmCallableValue XrVmCallableValue;
 
 typedef struct XrVmFixedInstruction {
     uint16_t operation_id;
@@ -103,6 +104,9 @@ typedef struct XrVmContext {
     XrVmExistentialValue **existentials;
     uint32_t existential_count;
     uint32_t existential_capacity;
+    XrVmCallableValue **callables;
+    uint32_t callable_count;
+    uint32_t callable_capacity;
 } XrVmContext;
 
 typedef struct XrVmAggregateValue {
@@ -131,6 +135,14 @@ struct XrVmExistentialValue {
     uint32_t conformance_id;
     XrVmRuntimeValue payload;
     XrVmPlace owned_storage;
+};
+
+struct XrVmCallableValue {
+    uint16_t callable_type_id;
+    uint16_t capture_type_id;
+    uint32_t function_id;
+    bool has_capture;
+    XrVmValue capture;
 };
 
 static XrVmOutcome vm_outcome(XrVmOutcomeKind kind, const XrVmContext *context) {
@@ -172,6 +184,9 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
                 return value.kind == XR_VM_VALUE_EXISTENTIAL && value.as.existential &&
                        ((const XrVmExistentialValue *) value.as.existential)->existential_type_id ==
                            type_id;
+            if (type->kind == XR_CORE_IR_TYPE_CALLABLE)
+                return value.kind == XR_VM_VALUE_CALLABLE && value.as.callable &&
+                       ((const XrVmCallableValue *) value.as.callable)->callable_type_id == type_id;
             return (type->kind == XR_CORE_IR_TYPE_AGGREGATE ||
                     type->kind == XR_CORE_IR_TYPE_VARIANT) &&
                    value.kind == XR_VM_VALUE_AGGREGATE && value.as.aggregate &&
@@ -244,6 +259,48 @@ static XrVmExistentialValue *allocate_existential(XrVmContext *context) {
     return value;
 }
 
+static XrVmCallableValue *allocate_callable(XrVmContext *context) {
+    if (context->aggregate_cell_count == context->code->options.max_value_cells)
+        return NULL;
+    if (context->callable_count == context->callable_capacity) {
+        uint32_t capacity = context->callable_capacity ? context->callable_capacity * 2u : 8u;
+        if (capacity < context->callable_count)
+            return NULL;
+#if SIZE_MAX < UINT64_MAX
+        if ((size_t) capacity > SIZE_MAX / sizeof(*context->callables))
+            return NULL;
+#endif
+        XrVmCallableValue **grown =
+            xr_realloc(context->callables, (size_t) capacity * sizeof(*context->callables));
+        if (!grown)
+            return NULL;
+        context->callables = grown;
+        context->callable_capacity = capacity;
+    }
+    XrVmCallableValue *value = xr_calloc(1u, sizeof(*value));
+    if (!value)
+        return NULL;
+    context->callables[context->callable_count++] = value;
+    ++context->aggregate_cell_count;
+    return value;
+}
+
+static uint32_t callable_function_id(const XrValidatedProgram *program,
+                                     const XrVmCallableValue *carrier) {
+    if (!program || !carrier || carrier->function_id >= program->function_count)
+        return XR_PROGRAM_LOCATION_NONE;
+    const XrValidatedType *callable = xr_validated_program_type(program, carrier->callable_type_id);
+    const XrValidatedFunction *target = &program->functions[carrier->function_id];
+    if (!callable || callable->kind != XR_CORE_IR_TYPE_CALLABLE ||
+        callable->signature_id >= program->signature_count ||
+        target->has_receiver != carrier->has_capture ||
+        (carrier->has_capture &&
+         (target->receiver_mode != XR_PARAM_READ || target->parameter_count == 0u ||
+          target->parameter_types[0] != carrier->capture_type_id)))
+        return XR_PROGRAM_LOCATION_NONE;
+    return carrier->function_id;
+}
+
 static uint32_t conformance_id(const XrValidatedProgram *program, uint16_t concrete_type_id,
                                uint32_t interface_id) {
     for (uint32_t index = 0; index < program->conformance_count; ++index)
@@ -304,6 +361,21 @@ static bool clone_vm_value(XrVmContext *context, XrVmValue source, uint16_t type
         *output = source;
         return true;
     }
+    if (type->kind == XR_CORE_IR_TYPE_CALLABLE) {
+        if (source.kind != XR_VM_VALUE_CALLABLE || !source.as.callable)
+            return false;
+        const XrVmCallableValue *source_callable = source.as.callable;
+        XrVmCallableValue *copy = allocate_callable(context);
+        if (!copy)
+            return false;
+        *copy = *source_callable;
+        if (copy->has_capture && !clone_vm_value(context, source_callable->capture,
+                                                 source_callable->capture_type_id, &copy->capture))
+            return false;
+        output->kind = XR_VM_VALUE_CALLABLE;
+        output->as.callable = copy;
+        return true;
+    }
     if (type->kind != XR_CORE_IR_TYPE_AGGREGATE && type->kind != XR_CORE_IR_TYPE_VARIANT)
         return false;
     const XrVmAggregateValue *source_aggregate = source.as.aggregate;
@@ -343,6 +415,9 @@ static void free_aggregates(XrVmContext *context) {
     for (uint32_t index = 0; index < context->existential_count; ++index)
         xr_free(context->existentials[index]);
     xr_free(context->existentials);
+    for (uint32_t index = 0; index < context->callable_count; ++index)
+        xr_free(context->callables[index]);
+    xr_free(context->callables);
 }
 
 static int64_t i64_from_bits(uint64_t bits) {
@@ -637,12 +712,14 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                                        : values[instruction.operands[0]].as.value;
                     goto done;
                 case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
+                case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
                 case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT: {
                     uint32_t target_function =
                         instruction.operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT
                             ? instruction.immediate.function_id
                             : XR_PROGRAM_LOCATION_NONE;
-                    uint32_t first_argument = 0u;
+                    uint32_t source_argument = 0u;
+                    uint32_t target_argument = 0u;
                     if (instruction.operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT) {
                         const XrVmExistentialValue *carrier =
                             values[instruction.operands[0]].as.value.as.existential;
@@ -655,13 +732,30 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                                 context->code->program->functions[target_function].receiver_mode,
                                 &scratch[0]))
                             goto done;
-                        first_argument = 1u;
+                        source_argument = 1u;
+                        target_argument = 1u;
+                    } else if (instruction.operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT) {
+                        const XrVmCallableValue *carrier =
+                            values[instruction.operands[0]].as.value.as.callable;
+                        target_function = callable_function_id(context->code->program, carrier);
+                        if (target_function == XR_PROGRAM_LOCATION_NONE)
+                            goto done;
+                        source_argument = 1u;
+                        if (carrier->has_capture) {
+                            scratch[0] = (XrVmRuntimeValue) {
+                                .category = XR_CORE_IR_VALUE,
+                                .as.value = carrier->capture,
+                            };
+                            target_argument = 1u;
+                        }
                     }
-                    for (uint32_t index = first_argument; index < instruction.operand_count;
-                         ++index)
-                        scratch[index] = values[instruction.operands[index]];
+                    for (; source_argument < instruction.operand_count;
+                         ++source_argument, ++target_argument)
+                        scratch[target_argument] = values[instruction.operands[source_argument]];
+                    const XrValidatedFunction *callee =
+                        &context->code->program->functions[target_function];
                     XrVmOutcome nested = execute_function(context, target_function, scratch,
-                                                          instruction.operand_count, depth + 1u);
+                                                          callee->parameter_count, depth + 1u);
                     if (nested.kind != XR_VM_OUTCOME_RETURN) {
                         result = nested;
                         goto done;
@@ -670,12 +764,14 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     break;
                 }
                 case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
+                case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
                 case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE: {
                     uint32_t target_function =
                         instruction.operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE
                             ? instruction.immediate.function_id
                             : XR_PROGRAM_LOCATION_NONE;
-                    uint32_t first_argument = 0u;
+                    uint32_t source_argument = 0u;
+                    uint32_t target_argument = 0u;
                     if (instruction.operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
                         const XrVmExistentialValue *carrier =
                             values[instruction.operands[0]].as.value.as.existential;
@@ -688,17 +784,36 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                                 context->code->program->functions[target_function].receiver_mode,
                                 &scratch[0]))
                             goto done;
-                        first_argument = 1u;
+                        source_argument = 1u;
+                        target_argument = 1u;
+                    } else if (instruction.operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE) {
+                        const XrVmCallableValue *carrier =
+                            values[instruction.operands[0]].as.value.as.callable;
+                        target_function = callable_function_id(context->code->program, carrier);
+                        if (target_function == XR_PROGRAM_LOCATION_NONE)
+                            goto done;
+                        source_argument = 1u;
+                        if (carrier->has_capture) {
+                            scratch[0] = (XrVmRuntimeValue) {
+                                .category = XR_CORE_IR_VALUE,
+                                .as.value = carrier->capture,
+                            };
+                            target_argument = 1u;
+                        }
                     }
                     const XrValidatedFunction *callee =
                         &context->code->program->functions[target_function];
-                    for (uint32_t index = first_argument; index < callee->parameter_count; ++index)
-                        scratch[index] = values[instruction.operands[index]];
+                    for (; target_argument < callee->parameter_count;
+                         ++source_argument, ++target_argument)
+                        scratch[target_argument] = values[instruction.operands[source_argument]];
                     XrVmOutcome nested = execute_function(context, target_function, scratch,
                                                           callee->parameter_count, depth + 1u);
                     uint32_t successor = 0u;
                     uint32_t implicit = 0u;
                     uint32_t operand = callee->parameter_count;
+                    if (instruction.operation_id == XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE &&
+                        !callee->has_receiver)
+                        ++operand;
                     if (nested.kind == XR_VM_OUTCOME_RETURN) {
                         if (callee->result_type_id != XR_CORE_TYPE_VOID) {
                             scratch[0] = (XrVmRuntimeValue) {
@@ -761,6 +876,24 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value.kind = XR_VM_VALUE_U32;
                     produced.as.value.as.u32 = context->code->pointer_width;
                     break;
+                case XR_CORE_OP_CORE_CALLABLE_PACK: {
+                    XrVmCallableValue *carrier = allocate_callable(context);
+                    if (!carrier) {
+                        result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    carrier->callable_type_id = instruction.result_type_id;
+                    carrier->function_id = instruction.immediate.function_id;
+                    carrier->has_capture = instruction.operand_count != 0u;
+                    if (carrier->has_capture) {
+                        uint32_t capture_value = instruction.operands[0];
+                        carrier->capture_type_id = function->value_types[capture_value];
+                        carrier->capture = values[capture_value].as.value;
+                    }
+                    produced.as.value.kind = XR_VM_VALUE_CALLABLE;
+                    produced.as.value.as.callable = carrier;
+                    break;
+                }
                 case XR_CORE_OP_CORE_OWNER_COPY:
                     if (!clone_vm_value(context, values[instruction.operands[0]].as.value,
                                         instruction.result_type_id, &produced.as.value)) {
@@ -1145,11 +1278,13 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
         execute_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
     if (outcome.kind == XR_VM_OUTCOME_RETURN && (outcome.value.kind == XR_VM_VALUE_AGGREGATE ||
-                                                 outcome.value.kind == XR_VM_VALUE_EXISTENTIAL))
+                                                 outcome.value.kind == XR_VM_VALUE_EXISTENTIAL ||
+                                                 outcome.value.kind == XR_VM_VALUE_CALLABLE))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_ERROR &&
         (outcome.error_value.kind == XR_VM_VALUE_AGGREGATE ||
-         outcome.error_value.kind == XR_VM_VALUE_EXISTENTIAL))
+         outcome.error_value.kind == XR_VM_VALUE_EXISTENTIAL ||
+         outcome.error_value.kind == XR_VM_VALUE_CALLABLE))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_PANIC && outcome.panic_value.kind != XR_VM_VALUE_PANIC_INFO)
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);

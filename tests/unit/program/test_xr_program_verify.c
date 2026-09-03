@@ -7,6 +7,7 @@
 #include "program/xr_program_verify.h"
 #include "program/xr_reference_evaluator.h"
 #include "xr_program_existential_fixture.h"
+#include "xr_program_callable_fixture.h"
 #include "xr_program_invoke_fixture.h"
 #include "xr_program_panic_fixture.h"
 
@@ -89,11 +90,12 @@ static XrValidatedProgram *validate_ok(const XrProgramArtifact *artifact) {
     XrProgramVerifyStatus status =
         xr_program_validate(artifact->bytes, artifact->size, NULL, &program, &diagnostic);
     if (status != XR_PROGRAM_VERIFY_OK)
-        fprintf(stderr, "unexpected verify reject: %s/%s at f=%u b=%u i=%u v=%u\n",
+        fprintf(stderr, "unexpected verify reject: %s/%s decode=%s at f=%u b=%u i=%u v=%u\n",
                 xr_program_verify_status_name(status),
-                xr_program_diagnostic_kind_name(diagnostic.kind), diagnostic.location.function_id,
-                diagnostic.location.block_id, diagnostic.location.instruction_id,
-                diagnostic.location.value_id);
+                xr_program_diagnostic_kind_name(diagnostic.kind),
+                xr_program_decode_status_name(diagnostic.decode_status),
+                diagnostic.location.function_id, diagnostic.location.block_id,
+                diagnostic.location.instruction_id, diagnostic.location.value_id);
     CHECK(status == XR_PROGRAM_VERIFY_OK);
     CHECK(program != NULL);
     return program;
@@ -2458,6 +2460,9 @@ static XrProgramBuildStatus build_program_table_artifact(bool reverse_inputs, bo
     slot_b.parameter_types = &interface_b_receiver;
     if (bad_slot)
         slot_b.result_type_id = XR_CORE_TYPE_I64;
+    XrCoreIrCallableSignatureInput callable_signature = {
+        .result_type_id = XR_CORE_TYPE_VOID,
+    };
     uint16_t implementor_fields[] = {XR_CORE_TYPE_I64};
     XrCoreIrTypeInput types[] = {
         {.key = key("program-table:type:implementor"),
@@ -2479,7 +2484,9 @@ static XrProgramBuildStatus build_program_table_artifact(bool reverse_inputs, bo
         {.key = key("program-table:type:callable"),
          .local_id = CALLABLE_TYPE,
          .kind = XR_CORE_IR_TYPE_CALLABLE,
-         .callable_signature = &slot_a},
+         .ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE,
+         .copy_contract = XR_CORE_IR_COPY_EXPLICIT,
+         .callable_signature = &callable_signature},
     };
     XrCoreIrTypeInput ordered_types[4] = {types[0], types[1], types[2], types[3]};
     if (reverse_inputs) {
@@ -2797,6 +2804,42 @@ static void test_existential_pack_test_project(void) {
     }
 }
 
+static void test_callable_pack_and_indirect_calls(void) {
+    _Static_assert(XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT == 38, "indirect direct stable id drifted");
+    _Static_assert(XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE == 39, "indirect invoke stable id drifted");
+    _Static_assert(XR_CORE_OP_CORE_CALLABLE_PACK == 89, "callable pack stable id drifted");
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_callable_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    if (program) {
+        XrReferenceProfile profile = {.pointer_width = 64u};
+        XrReferenceOutcome result = xr_reference_evaluate(
+            program, xr_validated_program_entry_function(program), NULL, 0u, &profile, NULL);
+        CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+        CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+        CHECK(result.value.as.i64 == 42);
+        xr_validated_program_free(program);
+    }
+    xr_program_artifact_free(&artifact);
+
+    const XrProgramCallableFixtureMutation rejected[] = {
+        XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,
+        XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,
+        XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
+    };
+    for (size_t index = 0; index < sizeof(rejected) / sizeof(rejected[0]); ++index) {
+        memset(&artifact, 0, sizeof(artifact));
+        CHECK(xr_program_callable_fixture_write_mutated(rejected[index], &artifact, diagnostic,
+                                                        sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, rejected[index] == XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE
+                                              ? XR_PROGRAM_DIAGNOSTIC_VALUE_USE
+                                              : XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 int main(void) {
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
@@ -2815,6 +2858,7 @@ int main(void) {
     test_immutable_view_root_tables();
     test_callable_interface_conformance_tables();
     test_existential_pack_test_project();
+    test_callable_pack_and_indirect_calls();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

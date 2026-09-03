@@ -45,6 +45,7 @@ typedef enum XrVmValueKind {
     XR_VM_VALUE_PANIC_INFO,
     XR_VM_VALUE_AGGREGATE,
     XR_VM_VALUE_EXISTENTIAL,
+    XR_VM_VALUE_CALLABLE,
 } XrVmValueKind;
 
 typedef struct XrVmValue {
@@ -57,6 +58,7 @@ typedef struct XrVmValue {
         uint32_t panic_info;
         const void *aggregate;
         const void *existential;
+        const void *callable;
     } as;
 } XrVmValue;
 

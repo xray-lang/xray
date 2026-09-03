@@ -265,8 +265,11 @@ def validate(root: Path) -> None:
     wave_three_slice_four = {"core.error.publish"}
     wave_three_slice_five = {"core.call.sealed_invoke", "core.panic.publish"}
     wave_four_executor = {
+        "core.call.indirect_direct",
+        "core.call.indirect_invoke",
         "core.call.witness_direct",
         "core.call.witness_invoke",
+        "core.callable.pack",
         "core.existential.pack",
         "core.existential.test",
         "core.existential.project",
@@ -313,6 +316,7 @@ def self_test(root: Path) -> None:
             "tests/unit/program/test_xr_program_verify.c",
             "tests/unit/program/xr_program_invoke_fixture.h",
             "tests/unit/program/xr_program_panic_fixture.h",
+            "tests/unit/program/xr_program_callable_fixture.h",
             "tests/unit/program/xr_program_existential_fixture.h",
             "tests/unit/vm/test_xr_program_vm.c",
             "tests/unit/aot/test_xr_program_aot.c",

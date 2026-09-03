@@ -100,12 +100,15 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_PLACE_LOCAL:
         case XR_CORE_OP_CORE_PLACE_LOAD:
         case XR_CORE_OP_CORE_PLACE_STORE:
+        case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
+        case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
         case XR_CORE_OP_CORE_TRAP:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 == 4u;
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
+        case XR_CORE_OP_CORE_CALLABLE_PACK:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
                    instruction->immediate.function_id < ir->function_count;
         case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
