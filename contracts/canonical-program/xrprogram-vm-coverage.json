@@ -24,7 +24,7 @@
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 32,
+  "operation_count": 34,
   "operations": [
     {
       "stable_id": 1,
@@ -125,6 +125,22 @@
     {
       "stable_id": 37,
       "spelling": "core.call.sealed_invoke",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 40,
+      "spelling": "core.call.witness_direct",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 41,
+      "spelling": "core.call.witness_invoke",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",

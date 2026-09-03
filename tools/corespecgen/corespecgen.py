@@ -324,7 +324,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "block-arguments", "branch", "conditional-branch", "error-publish",
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
             "place-local", "place-store", "return", "scalar-oracle", "sealed-call",
-            "sealed-invoke", "variant-construct",
+            "sealed-invoke", "witness-call", "witness-invoke", "variant-construct",
             "variant-project", "variant-test", "existential-pack",
             "existential-project", "existential-test",
         }, f"operation {spelling} has unknown KAT validator")
@@ -483,6 +483,33 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
         has_error = error_type not in {None, "void"}
         has_panic = panic_type not in {None, "void"}
         return (actual.get("callee_sealed") is True
+                and actual.get("argument_types") == actual.get("parameter_types")
+                and (has_error or has_panic)
+                and actual.get("normal_result_type") == actual.get("callee_result_type")
+                and actual.get("error_argument_type") == error_type
+                and actual.get("panic_argument_type") == panic_type
+                and (not has_error or error_type != "panic-info")
+                and (not has_panic or panic_type == "panic-info"))
+    if validator == "witness-call":
+        ordinal = actual.get("slot_ordinal")
+        count = actual.get("slot_count")
+        return (actual.get("receiver_interface") == actual.get("slot_interface")
+                and isinstance(ordinal, int) and isinstance(count, int)
+                and 0 <= ordinal < count
+                and actual.get("argument_types") == actual.get("parameter_types")
+                and actual.get("actual_result_type") == actual.get("declared_result_type")
+                and actual.get("callee_error_type") == "void"
+                and actual.get("callee_panic_type") == "void")
+    if validator == "witness-invoke":
+        ordinal = actual.get("slot_ordinal")
+        count = actual.get("slot_count")
+        error_type = actual.get("callee_error_type")
+        panic_type = actual.get("callee_panic_type")
+        has_error = error_type not in {None, "void"}
+        has_panic = panic_type not in {None, "void"}
+        return (actual.get("receiver_interface") == actual.get("slot_interface")
+                and isinstance(ordinal, int) and isinstance(count, int)
+                and 0 <= ordinal < count
                 and actual.get("argument_types") == actual.get("parameter_types")
                 and (has_error or has_panic)
                 and actual.get("normal_result_type") == actual.get("callee_result_type")

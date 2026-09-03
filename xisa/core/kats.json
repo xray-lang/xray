@@ -730,6 +730,108 @@
       }
     },
     {
+      "id": "witness-direct-valid",
+      "operation": "core.call.witness_direct",
+      "kind": "contract",
+      "actual": {
+        "receiver_interface": "Shape",
+        "slot_interface": "Shape",
+        "slot_ordinal": 0,
+        "slot_count": 2,
+        "argument_types": [
+          "Shape",
+          "i64"
+        ],
+        "parameter_types": [
+          "Shape",
+          "i64"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callee_error_type": "void",
+        "callee_panic_type": "void"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "witness-direct-rejects-slot-interface-mismatch",
+      "operation": "core.call.witness_direct",
+      "kind": "contract",
+      "actual": {
+        "receiver_interface": "Shape",
+        "slot_interface": "Drawable",
+        "slot_ordinal": 0,
+        "slot_count": 1,
+        "argument_types": [
+          "Shape"
+        ],
+        "parameter_types": [
+          "Shape"
+        ],
+        "actual_result_type": "i64",
+        "declared_result_type": "i64",
+        "callee_error_type": "void",
+        "callee_panic_type": "void"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "witness-invoke-valid",
+      "operation": "core.call.witness_invoke",
+      "kind": "contract",
+      "actual": {
+        "receiver_interface": "Shape",
+        "slot_interface": "Shape",
+        "slot_ordinal": 1,
+        "slot_count": 2,
+        "argument_types": [
+          "Shape"
+        ],
+        "parameter_types": [
+          "Shape"
+        ],
+        "callee_result_type": "i64",
+        "normal_result_type": "i64",
+        "callee_error_type": "ParseError",
+        "error_argument_type": "ParseError",
+        "callee_panic_type": "void",
+        "panic_argument_type": "void"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "witness-invoke-rejects-out-of-range-slot",
+      "operation": "core.call.witness_invoke",
+      "kind": "contract",
+      "actual": {
+        "receiver_interface": "Shape",
+        "slot_interface": "Shape",
+        "slot_ordinal": 2,
+        "slot_count": 2,
+        "argument_types": [
+          "Shape"
+        ],
+        "parameter_types": [
+          "Shape"
+        ],
+        "callee_result_type": "i64",
+        "normal_result_type": "i64",
+        "callee_error_type": "ParseError",
+        "error_argument_type": "ParseError",
+        "callee_panic_type": "void",
+        "panic_argument_type": "void"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "explicit-trap",
       "operation": "core.trap",
       "kind": "scalar",

@@ -1085,6 +1085,156 @@
       }
     },
     {
+      "stable_id": 40,
+      "spelling": "core.call.witness_direct",
+      "class": "call",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "E",
+          "P..."
+        ],
+        "result": "R?",
+        "immediates": {
+          "slot_ordinal": "interface-slot-ordinal"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "existential-receiver-mode",
+          "parameter-mode..."
+        ],
+        "result": "slot-result-mode"
+      },
+      "profile_dependency": "none",
+      "materialization": "executor-private-witness-dispatch",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "the exact conformance slot target trace under the same CoreSpec"
+      },
+      "kat_validator": "witness-call",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 41,
+      "spelling": "core.call.witness_invoke",
+      "class": "call-terminator",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "E",
+          "P...",
+          "normal-edge-values...",
+          "error-edge-values...",
+          "panic-edge-values..."
+        ],
+        "result": "void",
+        "immediates": {
+          "slot_ordinal": "interface-slot-ordinal"
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": true,
+        "panic": true,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "call"
+      ],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "existential-receiver-mode",
+          "parameter-mode...",
+          "normal-edge-transfer...",
+          "error-edge-transfer...",
+          "panic-edge-transfer..."
+        ],
+        "result": "normal-result-and-present-error/panic-values-are-successor-block-arguments"
+      },
+      "profile_dependency": "none",
+      "materialization": "executor-private-witness-dispatch-terminator",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "the exact conformance slot target selects one normal, typed-error, or typed-panic continuation"
+      },
+      "kat_validator": "witness-invoke",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
       "stable_id": 48,
       "spelling": "core.trap",
       "class": "termination",

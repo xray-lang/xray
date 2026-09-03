@@ -489,6 +489,110 @@ static bool emit_call(CBuffer *buffer, const XrBackendIR *ir,
     return true;
 }
 
+static const XrValidatedSignature *witness_signature(const XrBackendIR *ir,
+                                                     const XrBackendFunction *function,
+                                                     const XrBackendInstruction *instruction,
+                                                     uint32_t *interface_id_out) {
+    if (!ir || !function || !instruction || !interface_id_out || instruction->operand_count == 0u)
+        return NULL;
+    uint32_t receiver_value = instruction->operands[0];
+    if (receiver_value >= function->value_count)
+        return NULL;
+    const XrValidatedType *receiver =
+        xr_validated_program_type(ir->program, function->value_types[receiver_value]);
+    if (!receiver || receiver->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+        receiver->interface_id >= ir->program->interface_count)
+        return NULL;
+    const XrValidatedInterface *interface = &ir->program->interfaces[receiver->interface_id];
+    uint32_t slot = instruction->immediate.u32;
+    if (slot >= interface->slot_count ||
+        interface->slot_signature_ids[slot] >= ir->program->signature_count)
+        return NULL;
+    *interface_id_out = receiver->interface_id;
+    return &ir->program->signatures[interface->slot_signature_ids[slot]];
+}
+
+static bool emit_witness_call_cases(CBuffer *buffer, const XrBackendIR *ir,
+                                    const XrBackendInstruction *instruction,
+                                    const XrValidatedSignature *signature, uint32_t interface_id,
+                                    uint32_t instruction_id, const char *result_expression,
+                                    const char *error_expression, const char *panic_expression) {
+    uint32_t receiver_value = instruction->operands[0];
+    uint32_t slot = instruction->immediate.u32;
+    for (uint32_t conformance_id = 0; conformance_id < ir->program->conformance_count;
+         ++conformance_id) {
+        const XrValidatedConformance *conformance = &ir->program->conformances[conformance_id];
+        if (conformance->interface_id != interface_id)
+            continue;
+        if (slot >= conformance->slot_count ||
+            conformance->slot_function_ids[slot] >= ir->function_count)
+            return false;
+        uint32_t callee_id = conformance->slot_function_ids[slot];
+        const XrBackendFunction *callee = &ir->functions[callee_id];
+        if (callee->parameter_count != signature->parameter_count || callee->parameter_count == 0u)
+            return false;
+        char storage[32];
+        const char *receiver_type = type_c_name(conformance->implementor_type_id, storage);
+        if (!receiver_type ||
+            !append_format(buffer,
+                           "            case UINT32_C(%u):\n"
+                           "                if (v%u.concrete_type_id != UINT16_C(%u)) break;\n"
+                           "                call_%u = xr_aot_fn_%u(xr_ctx, ",
+                           conformance_id, receiver_value, conformance->implementor_type_id,
+                           instruction_id, callee_id))
+            return false;
+        if (callee->parameter_modes[0] == XR_PARAM_REF) {
+            if (!append_format(buffer, "(%s *)v%u.data", receiver_type, receiver_value))
+                return false;
+        } else if (!append_format(buffer, "*(const %s *)v%u.data", receiver_type, receiver_value)) {
+            return false;
+        }
+        for (uint32_t parameter = 1u; parameter < callee->parameter_count; ++parameter)
+            if (!append_format(buffer, ", v%u", instruction->operands[parameter]))
+                return false;
+        if (result_expression && !append_format(buffer, ", %s", result_expression))
+            return false;
+        if (error_expression && !append_format(buffer, ", %s", error_expression))
+            return false;
+        if (panic_expression && !append_format(buffer, ", %s", panic_expression))
+            return false;
+        if (!append_text(buffer, ");\n                break;\n"))
+            return false;
+    }
+    return append_text(buffer, "            default:\n                break;\n        }\n");
+}
+
+static bool emit_witness_call(CBuffer *buffer, const XrBackendIR *ir,
+                              const XrBackendFunction *function,
+                              const XrBackendInstruction *instruction, uint32_t instruction_id) {
+    uint32_t interface_id = 0u;
+    const XrValidatedSignature *signature =
+        witness_signature(ir, function, instruction, &interface_id);
+    if (!signature || !append_format(buffer,
+                                     "        XrAotOutcome call_%u = xr_aot_make(4, 0, 0);\n"
+                                     "        switch (v%u.conformance_id) {\n",
+                                     instruction_id, instruction->operands[0]))
+        return false;
+    char result_expression[64];
+    const char *result = NULL;
+    if (signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+        (void) snprintf(result_expression, sizeof(result_expression), "&v%u",
+                        instruction->result_id);
+        result = result_expression;
+    }
+    if (!emit_witness_call_cases(buffer, ir, instruction, signature, interface_id, instruction_id,
+                                 result, NULL, NULL) ||
+        !append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n", instruction_id,
+                       instruction_id))
+        return false;
+    if (instruction->result_id == XR_PROGRAM_LOCATION_NONE ||
+        signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
+        return true;
+    const char *field = outcome_field(signature->result_type_id);
+    return field && append_format(buffer, "        v%u = call_%u.%s;\n", instruction->result_id,
+                                  instruction_id, field);
+}
+
 static bool emit_invoke_edge(CBuffer *buffer, const XrBackendFunction *function,
                              const XrBackendInstruction *instruction, uint32_t successor_index,
                              uint32_t target_start, uint32_t operand_start, uint32_t function_id,
@@ -597,6 +701,102 @@ static bool emit_invoke(CBuffer *buffer, const XrBackendIR *ir, const XrBackendF
     return append_format(buffer, "        return call_%u;\n", instruction_id);
 }
 
+static bool emit_witness_invoke(CBuffer *buffer, const XrBackendIR *ir,
+                                const XrBackendFunction *function,
+                                const XrBackendInstruction *instruction, uint32_t function_id,
+                                uint32_t instruction_id) {
+    uint32_t interface_id = 0u;
+    const XrValidatedSignature *signature =
+        witness_signature(ir, function, instruction, &interface_id);
+    if (!signature)
+        return false;
+    const XrBackendBlock *normal = &function->blocks[instruction->successors[0]];
+    uint32_t normal_implicit = signature->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+    bool has_error = signature->error_type_id != XR_CORE_TYPE_VOID;
+    bool has_panic = signature->panic_type_id != XR_CORE_TYPE_VOID;
+    if (has_error) {
+        char storage[32];
+        const char *type = type_c_name(signature->error_type_id, storage);
+        const char *initializer =
+            signature->error_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ? "{0}" : "0";
+        if (!type || !append_format(buffer, "        %s invoke_error_%u = %s;\n", type,
+                                    instruction_id, initializer))
+            return false;
+    }
+    if (has_panic &&
+        !append_format(buffer, "        uint32_t invoke_panic_%u = 0;\n", instruction_id))
+        return false;
+    if (!append_format(buffer,
+                       "        XrAotOutcome call_%u = xr_aot_make(4, 0, 0);\n"
+                       "        switch (v%u.conformance_id) {\n",
+                       instruction_id, instruction->operands[0]))
+        return false;
+    char result_expression[64];
+    char error_expression[64];
+    char panic_expression[64];
+    const char *result = NULL;
+    const char *error = NULL;
+    const char *panic = NULL;
+    if (signature->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+        (void) snprintf(result_expression, sizeof(result_expression), "&v%u",
+                        normal->argument_ids[0]);
+        result = result_expression;
+    }
+    if (has_error) {
+        (void) snprintf(error_expression, sizeof(error_expression), "&invoke_error_%u",
+                        instruction_id);
+        error = error_expression;
+    }
+    if (has_panic) {
+        (void) snprintf(panic_expression, sizeof(panic_expression), "&invoke_panic_%u",
+                        instruction_id);
+        panic = panic_expression;
+    }
+    if (!emit_witness_call_cases(buffer, ir, instruction, signature, interface_id, instruction_id,
+                                 result, error, panic))
+        return false;
+
+    char normal_expression[64];
+    const char *normal_value = NULL;
+    if (normal_implicit != 0u && signature->result_type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
+        const char *field = outcome_field(signature->result_type_id);
+        if (!field)
+            return false;
+        (void) snprintf(normal_expression, sizeof(normal_expression), "call_%u.%s", instruction_id,
+                        field);
+        normal_value = normal_expression;
+    } else if (normal_implicit != 0u) {
+        (void) snprintf(normal_expression, sizeof(normal_expression), "v%u",
+                        normal->argument_ids[0]);
+        normal_value = normal_expression;
+    }
+    if (!append_format(buffer, "        if (call_%u.kind == 0) ", instruction_id) ||
+        !emit_invoke_edge(buffer, function, instruction, 0u, normal_implicit,
+                          signature->parameter_count, function_id, normal_value))
+        return false;
+    uint32_t operand = signature->parameter_count + normal->argument_count - normal_implicit;
+    uint32_t successor = 1u;
+    if (has_error) {
+        char expression[64];
+        (void) snprintf(expression, sizeof(expression), "invoke_error_%u", instruction_id);
+        if (!append_format(buffer, "        if (call_%u.kind == 2) ", instruction_id) ||
+            !emit_invoke_edge(buffer, function, instruction, successor, 1u, operand, function_id,
+                              expression))
+            return false;
+        operand += function->blocks[instruction->successors[successor]].argument_count - 1u;
+        ++successor;
+    }
+    if (has_panic) {
+        char expression[64];
+        (void) snprintf(expression, sizeof(expression), "invoke_panic_%u", instruction_id);
+        if (!append_format(buffer, "        if (call_%u.kind == 3) ", instruction_id) ||
+            !emit_invoke_edge(buffer, function, instruction, successor, 1u, operand, function_id,
+                              expression))
+            return false;
+    }
+    return append_format(buffer, "        return call_%u;\n", instruction_id);
+}
+
 static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                              const XrBackendFunction *function,
                              const XrBackendInstruction *instruction, uint32_t function_id,
@@ -671,6 +871,11 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return emit_call(buffer, ir, instruction, instruction_id);
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
             return emit_invoke(buffer, ir, function, instruction, function_id, instruction_id);
+        case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
+            return emit_witness_call(buffer, ir, function, instruction, instruction_id);
+        case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
+            return emit_witness_invoke(buffer, ir, function, instruction, function_id,
+                                       instruction_id);
         case XR_CORE_OP_CORE_TRAP:
             return append_text(buffer, "        return xr_aot_make(1, 0, 4);\n");
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
@@ -852,13 +1057,15 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
     }
     if (!append_format(buffer, "    goto xr_f%u_b%u;\n", function_id, function->entry_block))
         return false;
+    uint32_t instruction_serial = 0u;
     for (uint32_t block_id = 0; block_id < function->block_count; ++block_id) {
         const XrBackendBlock *block = &function->blocks[block_id];
         if (!append_format(buffer, "xr_f%u_b%u:\n    ;\n", function_id, block_id))
             return false;
-        for (uint32_t instruction = 0; instruction < block->instruction_count; ++instruction) {
+        for (uint32_t instruction = 0; instruction < block->instruction_count;
+             ++instruction, ++instruction_serial) {
             if (!emit_instruction(buffer, ir, function, &block->instructions[instruction],
-                                  function_id, instruction))
+                                  function_id, instruction_serial))
                 return false;
         }
     }

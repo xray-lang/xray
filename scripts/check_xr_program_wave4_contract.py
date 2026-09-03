@@ -43,8 +43,8 @@ def validate(root: Path) -> None:
         "borrow_origin_set": "COMPLETE",
         "borrow_root_tables": "COMPLETE",
         "program_tables": "COMPLETE",
-        "existential_operations": "IN_PROGRESS_EXECUTOR_SLICE",
-        "witness_dispatch": "PENDING",
+        "existential_operations": "EXECUTOR_COMPLETE_SOURCE_PENDING",
+        "witness_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
         "callable_dispatch": "PENDING",
         "source_integration": "PENDING",
         "wave_closure": "PENDING",
@@ -160,6 +160,26 @@ def validate(root: Path) -> None:
             "no old reader, erased-object fallback, selector lookup, backend semantic inference or dual operation spelling",
             "Wave 4 existential operations regained a legacy path")
 
+    witness = data.get("witness_operation_contract")
+    require(isinstance(witness, dict) and set(witness) == {
+        "slot_immediate",
+        "signature_authority",
+        "receiver_capability",
+        "receiver_substitution",
+        "dispatch",
+        "direct",
+        "invoke",
+        "executor_realization",
+        "source_status",
+        "compatibility",
+    }, "Wave 4 witness-operation contract drifted")
+    require(witness.get("source_status") ==
+            "pending class, struct, enum, import and dynamic-target producer integration",
+            "Wave 4 witness source work was completed without source evidence")
+    require(witness.get("compatibility") ==
+            "no selector lookup, erased universal call ABI, class-only itable, backend semantic inference, old reader or dual operation spelling",
+            "Wave 4 witness operations regained a legacy path")
+
     required_anchors = {
         "src/shared/xr_view_origin.h": ["typedef struct XrViewOrigin"],
         "src/runtime/value/xtype.h": ["XrViewOrigin *view_origin_set;"],
@@ -185,20 +205,31 @@ def validate(root: Path) -> None:
             "XR_CORE_IR_IMMEDIATE_TYPE",
         ],
         "src/program/xr_program_encode.c": ["static SignatureRef *collect_signatures("],
-        "src/program/xr_core_ir.c": ["static bool type_is_existential_ref("],
+        "src/program/xr_core_ir.c": [
+            "static bool type_is_existential_ref(",
+            "static bool existential_receiver_mode_supported(",
+        ],
         "src/program/xr_program_verify.c": [
             "static bool parse_semantic_metadata(",
             "static bool mapped_call_result_roots_match(",
             "static bool validated_signature_satisfies_interface(",
             "static bool type_is_existential_ref(",
+            "static bool existential_receiver_mode_supported(",
             "static bool verify_existential_projection_guards(",
+            "static bool verify_witness_invoke(",
         ],
+        "src/program/xr_reference_evaluator.c": ["static uint32_t witness_function_id("],
+        "src/vm/xr_program_vm.c": ["static uint32_t witness_function_id("],
         "src/program/xr_reference_evaluator.h": ["XR_REFERENCE_VALUE_EXISTENTIAL"],
         "src/vm/xr_program_vm.h": ["XR_VM_VALUE_EXISTENTIAL"],
-        "src/aot/program/xr_backend_ir_emit_c.c": ["static inline void *xr_aot_alloc"],
+        "src/aot/program/xr_backend_ir_emit_c.c": [
+            "static inline void *xr_aot_alloc",
+            "static bool emit_witness_call(",
+            "static bool emit_witness_invoke(",
+        ],
         "tests/unit/program/xr_program_existential_fixture.h": [
-            "XR_CORE_OP_CORE_EXISTENTIAL_PACK",
             "XR_CORE_OP_CORE_EXISTENTIAL_TEST",
+            "XR_CORE_OP_CORE_CALL_WITNESS_INVOKE",
             "XR_EXISTENTIAL_FIXTURE_REF_RESULT_ESCAPE,",
         ],
         "tests/unit/program/test_xr_program_verify.c": [
@@ -213,6 +244,10 @@ def validate(root: Path) -> None:
         encoding="utf-8", errors="strict")
     require(existential_fixture.count("XR_CORE_OP_CORE_EXISTENTIAL_PROJECT") == 2,
             "Wave 4 existential projection positive/negative evidence drifted")
+    require(existential_fixture.count("XR_CORE_OP_CORE_EXISTENTIAL_PACK") == 2 and
+            existential_fixture.count("XR_CORE_OP_CORE_CALL_WITNESS_DIRECT") == 2 and
+            existential_fixture.count("XR_CORE_OP_CORE_CALL_WITNESS_INVOKE") == 1,
+            "Wave 4 READ/REF existential witness evidence drifted")
     retired = {
         "src/frontend/analyzer/xanalyzer_visitor_decl.c": ["view_return_source"],
         "src/runtime/value/xtype.h": ["view_return_source", "view_return_param"],
@@ -255,8 +290,10 @@ def self_test(root: Path) -> None:
         Path("src/program/xr_core_ir.c"),
         Path("src/program/xr_program_encode.c"),
         Path("src/program/xr_program_verify.c"),
+        Path("src/program/xr_reference_evaluator.c"),
         Path("src/program/xr_reference_evaluator.h"),
         Path("src/vm/xr_program_vm.h"),
+        Path("src/vm/xr_program_vm.c"),
         Path("src/aot/program/xr_backend_ir_emit_c.c"),
         Path("tests/unit/program/xr_program_existential_fixture.h"),
         Path("tests/unit/program/test_xr_program_verify.c"),

@@ -125,6 +125,23 @@ static bool type_is_existential_ref(const XrValidatedProgram *program, uint16_t 
            type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_REF;
 }
 
+static bool existential_receiver_mode_supported(const XrValidatedType *type, XrParamMode mode) {
+    if (!type || type->kind != XR_CORE_IR_TYPE_EXISTENTIAL)
+        return false;
+    switch (type->interface_use_kind) {
+        case XR_CORE_IR_INTERFACE_EXISTENTIAL_READ:
+            return mode == XR_PARAM_READ;
+        case XR_CORE_IR_INTERFACE_EXISTENTIAL_REF:
+            return mode == XR_PARAM_READ || mode == XR_PARAM_REF;
+        case XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE:
+            return mode == XR_PARAM_READ || mode == XR_PARAM_MOVE;
+        case XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static const XrValidatedConformance *find_conformance(const XrValidatedProgram *program,
                                                       uint16_t implementor_type_id,
                                                       uint32_t interface_id) {
@@ -1231,7 +1248,16 @@ static bool parse_semantic_metadata(VerifyContext *context, const XrProgramView 
         }
         for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
             uint64_t signature_id = take_uvar(&reader);
-            if (signature_id >= context->program->signature_count) {
+            const XrValidatedSignature *signature =
+                signature_id < context->program->signature_count
+                    ? &context->program->signatures[signature_id]
+                    : NULL;
+            const XrValidatedType *receiver =
+                signature && signature->has_receiver && signature->parameter_count != 0u
+                    ? xr_validated_program_type(context->program, signature->parameter_types[0])
+                    : NULL;
+            if (!signature || !receiver || receiver->interface_id != interface ||
+                !existential_receiver_mode_supported(receiver, signature->receiver_mode)) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
                 return false;
             }
@@ -1497,6 +1523,7 @@ static bool instruction_is_terminator(uint16_t operation_id) {
     return operation_id == XR_CORE_OP_CORE_BRANCH ||
            operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
            operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+           operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
            operation_id == XR_CORE_OP_CORE_RETURN || operation_id == XR_CORE_OP_CORE_TRAP ||
            operation_id == XR_CORE_OP_CORE_ERROR_PUBLISH ||
            operation_id == XR_CORE_OP_CORE_PANIC_PUBLISH;
@@ -1622,7 +1649,7 @@ static uint32_t root_for_source_value(const XrValidatedFunction *function, uint3
 
 static bool mapped_call_result_roots_match(const XrValidatedProgram *program,
                                            const XrValidatedFunction *caller,
-                                           const XrValidatedFunction *callee,
+                                           const XrValidatedSignature *callee,
                                            const XrValidatedInstruction *instruction,
                                            uint32_t result_value_id) {
     if (!type_is_view(program, callee->result_type_id))
@@ -1684,6 +1711,50 @@ static bool mapped_call_result_roots_match(const XrValidatedProgram *program,
         valid = actual->root_ids[index] < caller->root_count && expected[actual->root_ids[index]];
     xr_free(expected);
     return valid;
+}
+
+static const XrValidatedSignature *
+witness_call_signature(const XrValidatedProgram *program, const XrValidatedFunction *caller,
+                       const XrValidatedInstruction *instruction) {
+    if (!program || !caller || !instruction || instruction->operand_count == 0u ||
+        instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_U32)
+        return NULL;
+    uint32_t receiver_value = instruction->operands[0];
+    if (receiver_value >= caller->value_count)
+        return NULL;
+    uint16_t receiver_type_id = caller->value_types[receiver_value];
+    const XrValidatedType *receiver = xr_validated_program_type(program, receiver_type_id);
+    if (!receiver || receiver->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+        receiver->interface_id >= program->interface_count)
+        return NULL;
+    const XrValidatedInterface *interface = &program->interfaces[receiver->interface_id];
+    if (instruction->immediate.u32 >= interface->slot_count)
+        return NULL;
+    uint32_t signature_id = interface->slot_signature_ids[instruction->immediate.u32];
+    if (signature_id >= program->signature_count)
+        return NULL;
+    const XrValidatedSignature *signature = &program->signatures[signature_id];
+    if (!signature->has_receiver || signature->parameter_count == 0u ||
+        signature->parameter_types[0] != receiver_type_id)
+        return NULL;
+    return signature;
+}
+
+static const XrValidatedSignature *
+operation_call_signature(const XrValidatedProgram *program, const XrValidatedFunction *caller,
+                         const XrValidatedInstruction *instruction) {
+    if (instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
+        instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE)
+        return witness_call_signature(program, caller, instruction);
+    if ((instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT &&
+         instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_INVOKE) ||
+        instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
+        instruction->immediate.function_id >= program->function_count)
+        return NULL;
+    const XrValidatedFunction *callee = &program->functions[instruction->immediate.function_id];
+    return callee->signature_id < program->signature_count
+               ? &program->signatures[callee->signature_id]
+               : NULL;
 }
 
 static bool verify_successor_arguments(VerifyContext *context, const XrValidatedFunction *function,
@@ -1762,6 +1833,137 @@ static bool verify_successor_argument_suffix(VerifyContext *context,
     return true;
 }
 
+static bool witness_arguments_match(const XrValidatedProgram *program,
+                                    const XrValidatedFunction *caller,
+                                    const XrValidatedInstruction *instruction,
+                                    const XrValidatedSignature *signature) {
+    if (!signature || instruction->operand_count < signature->parameter_count)
+        return false;
+    for (uint32_t argument = 0; argument < signature->parameter_count; ++argument) {
+        XrCoreIrValueCategory expected_category =
+            argument == 0u
+                ? XR_CORE_IR_VALUE
+                : (signature->parameter_modes[argument] == XR_PARAM_REF ? XR_CORE_IR_PLACE
+                                                                        : XR_CORE_IR_VALUE);
+        bool ownership_matches =
+            argument == 0u
+                ? call_operand_ownership_is(program, caller, instruction, argument,
+                                            signature->parameter_modes[argument] == XR_PARAM_MOVE
+                                                ? XR_PARAM_MOVE
+                                                : XR_PARAM_READ,
+                                            signature->parameter_types[argument])
+                : call_operand_ownership_is(program, caller, instruction, argument,
+                                            signature->parameter_modes[argument],
+                                            signature->parameter_types[argument]);
+        if (!operand_type_is(caller, instruction, argument, signature->parameter_types[argument]) ||
+            !operand_category_is(caller, instruction, argument, expected_category) ||
+            !ownership_matches)
+            return false;
+    }
+    return true;
+}
+
+static bool verify_witness_invoke(VerifyContext *context, XrValidatedFunction *function,
+                                  XrValidatedInstruction *instruction,
+                                  XrProgramSemanticLocation location, uint32_t *local_effects) {
+    const XrValidatedSignature *callee =
+        witness_call_signature(context->program, function, instruction);
+    if (!callee || instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
+        instruction->result_type_id != XR_CORE_TYPE_VOID) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+        return false;
+    }
+    bool has_error = callee->error_type_id != XR_CORE_TYPE_VOID;
+    bool has_panic = callee->panic_type_id != XR_CORE_TYPE_VOID;
+    uint32_t expected_successors = 1u + (has_error ? 1u : 0u) + (has_panic ? 1u : 0u);
+    if ((!has_error && !has_panic) || instruction->successor_count != expected_successors ||
+        !witness_arguments_match(context->program, function, instruction, callee)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+        return false;
+    }
+    for (uint32_t successor = 0u; successor < expected_successors; ++successor) {
+        if (instruction->successors[successor] >= function->block_count) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+            return false;
+        }
+    }
+    const XrValidatedBlock *normal = &function->blocks[instruction->successors[0]];
+    uint32_t normal_implicit = callee->result_type_id == XR_CORE_TYPE_VOID ? 0u : 1u;
+    if (normal->argument_count < normal_implicit ||
+        (normal_implicit != 0u && (normal->argument_types[0] != callee->result_type_id ||
+                                   normal->argument_categories[0] != XR_CORE_IR_VALUE ||
+                                   normal->argument_ownerships[0] != callee->result_ownership))) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+        return false;
+    }
+    uint32_t error_successor = has_error ? 1u : UINT32_MAX;
+    uint32_t panic_successor = has_panic ? 1u + (has_error ? 1u : 0u) : UINT32_MAX;
+    if (has_error) {
+        const XrValidatedBlock *error = &function->blocks[instruction->successors[error_successor]];
+        if (error->argument_count == 0u || error->argument_types[0] != callee->error_type_id ||
+            error->argument_categories[0] != XR_CORE_IR_VALUE ||
+            error->argument_ownerships[0] !=
+                ownership_for_type(context->program, callee->error_type_id)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+            return false;
+        }
+    }
+    if (has_panic) {
+        const XrValidatedBlock *panic = &function->blocks[instruction->successors[panic_successor]];
+        if (panic->argument_count == 0u || panic->argument_types[0] != callee->panic_type_id ||
+            panic->argument_categories[0] != XR_CORE_IR_VALUE ||
+            panic->argument_ownerships[0] !=
+                ownership_for_type(context->program, callee->panic_type_id)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+            return false;
+        }
+    }
+    if (normal_implicit != 0u &&
+        !mapped_call_result_roots_match(context->program, function, callee, instruction,
+                                        normal->argument_ids[0])) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+        return false;
+    }
+    uint32_t operand = callee->parameter_count;
+    if (!verify_successor_argument_suffix(context, function, instruction, 0u, normal_implicit,
+                                          operand, location))
+        return false;
+    operand += normal->argument_count - normal_implicit;
+    if (has_error) {
+        const XrValidatedBlock *error = &function->blocks[instruction->successors[error_successor]];
+        if (!verify_successor_argument_suffix(context, function, instruction, error_successor, 1u,
+                                              operand, location))
+            return false;
+        operand += error->argument_count - 1u;
+    }
+    if (has_panic) {
+        const XrValidatedBlock *panic = &function->blocks[instruction->successors[panic_successor]];
+        if (!verify_successor_argument_suffix(context, function, instruction, panic_successor, 1u,
+                                              operand, location))
+            return false;
+        operand += panic->argument_count - 1u;
+    }
+    if (instruction->operand_count != operand) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+        return false;
+    }
+    uint32_t escaping_effects = callee->effect_mask;
+    if (has_error)
+        escaping_effects &= ~XR_CORE_EFFECT_ERROR;
+    if (has_panic)
+        escaping_effects &= ~XR_CORE_EFFECT_PANIC;
+    *local_effects |= escaping_effects;
+    if ((function->effect_mask & escaping_effects) != escaping_effects) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_EFFECT, location);
+        return false;
+    }
+    if ((function->capability_mask & callee->capability_mask) != callee->capability_mask) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_CAPABILITY, location);
+        return false;
+    }
+    return true;
+}
+
 static bool operation_consumes_operand(const VerifyContext *context,
                                        const XrValidatedFunction *function,
                                        const XrValidatedInstruction *instruction,
@@ -1789,13 +1991,10 @@ static bool operation_consumes_operand(const VerifyContext *context,
     }
     if (instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PROJECT && operand_index == 0u)
         return function->value_ownerships[instruction->operands[0]] == XR_CORE_IR_OWNER;
-    if ((instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_DIRECT &&
-         instruction->operation_id != XR_CORE_OP_CORE_CALL_SEALED_INVOKE) ||
-        instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_FUNCTION ||
-        instruction->immediate.function_id >= context->program->function_count)
+    const XrValidatedSignature *callee =
+        operation_call_signature(context->program, function, instruction);
+    if (!callee)
         return false;
-    const XrValidatedFunction *callee =
-        &context->program->functions[instruction->immediate.function_id];
     return operand_index < callee->parameter_count &&
            callee->parameter_modes[operand_index] == XR_PARAM_MOVE;
 }
@@ -1809,9 +2008,12 @@ static uint32_t owner_occurrences_on_successor_edge(const VerifyContext *context
         start = 1u;
         if (successor_index != 0u)
             start += function->blocks[terminator->successors[0]].argument_count;
-    } else if (terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE) {
-        const XrValidatedFunction *callee =
-            &context->program->functions[terminator->immediate.function_id];
+    } else if (terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+               terminator->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
+        const XrValidatedSignature *callee =
+            operation_call_signature(context->program, function, terminator);
+        if (!callee)
+            return 0u;
         start = callee->parameter_count;
         for (uint32_t prior = 0u; prior < successor_index; ++prior) {
             uint32_t implicit =
@@ -1846,7 +2048,8 @@ static bool verify_owner_block_closure(VerifyContext *context, uint32_t function
     const XrValidatedInstruction *terminator = &block->instructions[block->instruction_count - 1u];
     bool transfers = terminator->operation_id == XR_CORE_OP_CORE_BRANCH ||
                      terminator->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
-                     terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE;
+                     terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+                     terminator->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE;
     for (uint32_t value = 0; value < function->value_count; ++value) {
         if (function->value_blocks[value] != block_id ||
             function->value_ownerships[value] != XR_CORE_IR_OWNER || consumed[value])
@@ -1903,6 +2106,7 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
         instruction->operation_id == XR_CORE_OP_CORE_OWNER_COPY ||
         instruction->operation_id == XR_CORE_OP_CORE_OWNER_MOVE ||
         instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
+        instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
         instruction->operation_id == XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT ||
         instruction->operation_id == XR_CORE_OP_CORE_VARIANT_CONSTRUCT ||
         instruction->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK ||
@@ -1916,6 +2120,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                                 instruction->operation_id == XR_CORE_OP_CORE_CONDITIONAL_BRANCH ||
                                 instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT ||
                                 instruction->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+                                instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT ||
+                                instruction->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOCAL ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_LOAD ||
                                 instruction->operation_id == XR_CORE_OP_CORE_PLACE_STORE ||
@@ -2103,6 +2309,41 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 }
             }
             if (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
+                !mapped_call_result_roots_match(context->program, function,
+                                                &context->program->signatures[callee->signature_id],
+                                                instruction, instruction->result_id)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                return false;
+            }
+            if ((function->effect_mask & callee->effect_mask) != callee->effect_mask) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_EFFECT, location);
+                return false;
+            }
+            if ((function->capability_mask & callee->capability_mask) != callee->capability_mask) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_CAPABILITY, location);
+                return false;
+            }
+            return true;
+        }
+        case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT: {
+            const XrValidatedSignature *callee =
+                witness_call_signature(context->program, function, instruction);
+            if (!callee || instruction->successor_count != 0u) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE, location);
+                return false;
+            }
+            if (callee->error_type_id != XR_CORE_TYPE_VOID ||
+                callee->panic_type_id != XR_CORE_TYPE_VOID ||
+                instruction->operand_count != callee->parameter_count ||
+                (callee->result_type_id == XR_CORE_TYPE_VOID) !=
+                    (instruction->result_id == XR_PROGRAM_LOCATION_NONE) ||
+                instruction->result_type_id != callee->result_type_id ||
+                instruction->result_ownership != callee->result_ownership ||
+                !witness_arguments_match(context->program, function, instruction, callee)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+                return false;
+            }
+            if (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
                 !mapped_call_result_roots_match(context->program, function, callee, instruction,
                                                 instruction->result_id)) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
@@ -2178,8 +2419,9 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 }
             }
             if (normal_implicit != 0u &&
-                !mapped_call_result_roots_match(context->program, function, callee, instruction,
-                                                normal->argument_ids[0])) {
+                !mapped_call_result_roots_match(context->program, function,
+                                                &context->program->signatures[callee->signature_id],
+                                                instruction, normal->argument_ids[0])) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
                 return false;
             }
@@ -2238,6 +2480,8 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
             }
             return true;
         }
+        case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
+            return verify_witness_invoke(context, function, instruction, location, local_effects);
         case XR_CORE_OP_CORE_TRAP:
             if (!expect_shape(context, instruction, location, 0, 0, XR_CORE_IR_IMMEDIATE_U32,
                               XR_CORE_TYPE_VOID, false) ||
@@ -2581,10 +2825,12 @@ static bool edge_argument_source(const XrValidatedProgram *program,
         operand = 1u + argument_index;
         if (successor_index != 0u)
             operand += function->blocks[terminator->successors[0]].argument_count;
-    } else if (terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE) {
-        if (terminator->immediate.function_id >= program->function_count)
+    } else if (terminator->operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE ||
+               terminator->operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
+        const XrValidatedSignature *callee =
+            operation_call_signature(program, function, terminator);
+        if (!callee)
             return false;
-        const XrValidatedFunction *callee = &program->functions[terminator->immediate.function_id];
         operand = callee->parameter_count;
         for (uint32_t prior = 0; prior < successor_index; ++prior) {
             const XrValidatedBlock *target = &function->blocks[terminator->successors[prior]];

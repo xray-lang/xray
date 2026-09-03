@@ -265,6 +265,8 @@ def validate(root: Path) -> None:
     wave_three_slice_four = {"core.error.publish"}
     wave_three_slice_five = {"core.call.sealed_invoke", "core.panic.publish"}
     wave_four_executor = {
+        "core.call.witness_direct",
+        "core.call.witness_invoke",
         "core.existential.pack",
         "core.existential.test",
         "core.existential.project",

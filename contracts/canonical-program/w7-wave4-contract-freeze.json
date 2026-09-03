@@ -15,8 +15,8 @@
     "borrow_origin_set": "COMPLETE",
     "borrow_root_tables": "COMPLETE",
     "program_tables": "COMPLETE",
-    "existential_operations": "IN_PROGRESS_EXECUTOR_SLICE",
-    "witness_dispatch": "PENDING",
+    "existential_operations": "EXECUTOR_COMPLETE_SOURCE_PENDING",
+    "witness_dispatch": "EXECUTOR_COMPLETE_SOURCE_PENDING",
     "callable_dispatch": "PENDING",
     "source_integration": "PENDING",
     "wave_closure": "PENDING"
@@ -142,9 +142,21 @@
     "project_guard": "a successful exact existential.test must dominate project on every predecessor path; joins intersect facts",
     "ownership": "READ carriers are trivial-copy logical snapshots; REF carriers preserve one typed place and are affine/copy-forbidden borrow tokens; MOVE/OWNED_STORAGE carriers are affine and copy-forbidden; CONSTRAINT_BOUND is not a runtime existential",
     "ref_escape": "REF existential is a call-chain-local affine borrow token; parameters and local control flow may carry it, but function results, error types, aggregate fields and variant payloads must reject it",
-    "carrier": "reference evaluator and VM use execution-lifetime arenas; AOT threads a backend-private execution context and arena-boxes READ/MOVE/OWNED payload snapshots while REF preserves a typed place pointer; no carrier layout is serialized or exposed through BoundaryABI",
+    "carrier": "reference evaluator and VM use execution-lifetime arenas and an owned-storage cell; AOT threads a backend-private execution context and arena-boxes READ/MOVE/OWNED payload snapshots while REF preserves a typed place pointer; no carrier layout is serialized or exposed through BoundaryABI",
     "source_status": "pending class, struct, enum, import and dynamic-target producer integration",
     "compatibility": "no old reader, erased-object fallback, selector lookup, backend semantic inference or dual operation spelling"
+  },
+  "witness_operation_contract": {
+    "slot_immediate": "one declaration-ordered slot ordinal interpreted only against the receiver existential InterfaceId; no selector, method name or backend table offset is encoded",
+    "signature_authority": "the canonical interface slot SignatureId owns parameter modes, result ownership, borrowed-result origins, typed error and panic channels, effects and capabilities",
+    "receiver_capability": "READ carriers admit READ receivers; REF carriers admit READ or REF; MOVE carriers admit READ or MOVE; OWNED_STORAGE carriers admit READ, REF or MOVE; READ/MOVE calls materialize a value and REF preserves the exact place",
+    "receiver_substitution": "conformance validation substitutes only the existential receiver TypeId with the exact nominal implementor TypeId and requires every other signature fact to match",
+    "dispatch": "the carrier exact ConformanceId selects one validated slot-to-FunctionId row; malformed carrier identity is refused and target bodies are never inspected to recover semantics",
+    "direct": "witness_direct is admitted only for a slot without error or panic and returns through its typed result",
+    "invoke": "witness_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments",
+    "executor_realization": "reference evaluator and VM resolve the validated FunctionId; portable-C AOT emits a closed ConformanceId switch whose cases directly call the exact typed implementation after unwrapping the receiver",
+    "source_status": "pending class, struct, enum, import and dynamic-target producer integration",
+    "compatibility": "no selector lookup, erased universal call ABI, class-only itable, backend semantic inference, old reader or dual operation spelling"
   },
   "old_owner_inventory": [
     {

@@ -820,6 +820,23 @@ static bool type_is_existential_ref(const XrCoreIrProgram *program, uint16_t typ
            type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_REF;
 }
 
+static bool existential_receiver_mode_supported(const XrCoreIrType *type, XrParamMode mode) {
+    if (!type || type->kind != XR_CORE_IR_TYPE_EXISTENTIAL)
+        return false;
+    switch (type->interface_use_kind) {
+        case XR_CORE_IR_INTERFACE_EXISTENTIAL_READ:
+            return mode == XR_PARAM_READ;
+        case XR_CORE_IR_INTERFACE_EXISTENTIAL_REF:
+            return mode == XR_PARAM_READ || mode == XR_PARAM_REF;
+        case XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE:
+            return mode == XR_PARAM_READ || mode == XR_PARAM_MOVE;
+        case XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static XrCoreIrCallableSignature function_signature(const XrCoreIrFunction *function) {
     XrCoreIrCallableSignature signature = {
         .parameter_types = function->parameter_types,
@@ -1175,9 +1192,23 @@ static bool validate_program_tables(const XrCoreIrProgram *program) {
             (interface != 0u &&
              key_compare_value(program->interfaces[interface - 1u].key, row->key) >= 0))
             return false;
-        for (uint32_t slot = 0; slot < row->slot_count; ++slot)
-            if (!signature_is_valid(program, &row->slots[slot]))
+        for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
+            const XrCoreIrCallableSignature *signature = &row->slots[slot];
+            const XrCoreIrType *receiver =
+                signature->has_receiver && signature->parameter_count != 0u &&
+                        signature->parameter_types[0] >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+                        (uint32_t) signature->parameter_types[0] -
+                                XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE <
+                            program->type_count
+                    ? &program->types[signature->parameter_types[0] -
+                                      XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                    : NULL;
+            if (!signature_is_valid(program, signature) || !receiver ||
+                receiver->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+                !xr_core_ir_key_equal(receiver->existential_interface, row->key) ||
+                !existential_receiver_mode_supported(receiver, signature->receiver_mode))
                 return false;
+        }
     }
     for (uint32_t conformance = 0; conformance < program->conformance_count; ++conformance) {
         const XrCoreIrConformance *row = &program->conformances[conformance];

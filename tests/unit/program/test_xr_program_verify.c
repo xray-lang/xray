@@ -16,6 +16,8 @@
 #include <string.h>
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE == 41, "witness invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
@@ -2763,6 +2765,8 @@ static void test_existential_pack_test_project(void) {
         XR_EXISTENTIAL_FIXTURE_UNDOMINATED_PROJECT,
         XR_EXISTENTIAL_FIXTURE_FALSE_EDGE_PROJECT,
         XR_EXISTENTIAL_FIXTURE_NO_CONFORMANCE,
+        XR_EXISTENTIAL_FIXTURE_WITNESS_DIRECT_FALLIBLE,
+        XR_EXISTENTIAL_FIXTURE_WITNESS_INVOKE_INFALLIBLE,
     };
     for (size_t index = 0; index < sizeof(rejected) / sizeof(rejected[0]); ++index) {
         memset(&artifact, 0, sizeof(artifact));
@@ -2772,6 +2776,13 @@ static void test_existential_pack_test_project(void) {
         expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
         xr_program_artifact_free(&artifact);
     }
+
+    memset(&artifact, 0, sizeof(artifact));
+    CHECK(xr_program_existential_fixture_write_mutated(
+              XR_EXISTENTIAL_FIXTURE_WITNESS_SLOT_OUT_OF_RANGE, &artifact, diagnostic,
+              sizeof(diagnostic)) == XR_PROGRAM_BUILD_OK);
+    expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_IMMEDIATE);
+    xr_program_artifact_free(&artifact);
 
     const XrProgramExistentialFixtureMutation escaped_refs[] = {
         XR_EXISTENTIAL_FIXTURE_REF_RESULT_ESCAPE,

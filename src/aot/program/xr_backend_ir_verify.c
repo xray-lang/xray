@@ -108,6 +108,9 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
                    instruction->immediate.function_id < ir->function_count;
+        case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT:
+        case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32;
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_FIELD;

@@ -5,7 +5,7 @@
   "execution_authority": "XrInstance",
   "private_realization": "XrBackendIR",
   "backend": "xray-c11-aot@1",
-  "operation_count": 32,
+  "operation_count": 34,
   "operations": [
     {
       "stable_id": 1,
@@ -106,6 +106,22 @@
     {
       "stable_id": 37,
       "spelling": "core.call.sealed_invoke",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 40,
+      "spelling": "core.call.witness_direct",
+      "aot": "COMPLETE",
+      "backend_ir": "COMPLETE",
+      "portable_c11": "COMPLETE",
+      "translation_validation": "STRUCTURAL_EXACT"
+    },
+    {
+      "stable_id": 41,
+      "spelling": "core.call.witness_invoke",
       "aot": "COMPLETE",
       "backend_ir": "COMPLETE",
       "portable_c11": "COMPLETE",

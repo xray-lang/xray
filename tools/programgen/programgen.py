@@ -79,6 +79,7 @@ VALUE_SYSTEM_KEYS = {
     "conformance_table",
     "operation_type_immediate_contract",
     "existential_operation_contract",
+    "witness_operation_contract",
     "existential_ref_escape_contract",
 }
 SOURCE_PROJECTION_KEYS = {
@@ -240,6 +241,7 @@ def validate(schema: dict[str, Any]) -> None:
         "conformance_table": "semantic-key order; exact nominal implementor kind, InterfaceId and slot-to-FunctionId map",
         "operation_type_immediate_contract": "canonical program TypeId; used only by operations whose law names an exact semantic type and never carries layout or backend representation",
         "existential_operation_contract": "pack derives the unique exact conformance from concrete TypeId plus existential InterfaceId; test compares exact nominal TypeId; project requires a dominating successful exact test on every predecessor path",
+        "witness_operation_contract": "a witness call resolves the receiver existential InterfaceId plus an explicit slot ordinal through the carrier's exact validated ConformanceId; the slot signature and InterfaceUseKind receiver capability are authoritative, only the receiver TypeId is substituted by the nominal implementor, direct rejects error/panic channels, and invoke transfers through explicit typed continuations",
         "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
     }, "value-system semantic policy drifted")
 
@@ -557,6 +559,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Conformance table: `{value_system['conformance_table']}`",
         f"- Operation TypeId immediate: `{value_system['operation_type_immediate_contract']}`",
         f"- Existential operations: `{value_system['existential_operation_contract']}`",
+        f"- Witness operations: `{value_system['witness_operation_contract']}`",
         f"- Existential REF escape: `{value_system['existential_ref_escape_contract']}`",
         "",
         "A `place` is a verifier-confined SSA capability with a pointee `TypeId`; it is not a language type and never enters the type table. `REF` entry arguments and call operands are places, while `READ` and `MOVE` use values. An `owner` disposition is an exactly-once logical token; physical retain/release and storage remain executor-private.",

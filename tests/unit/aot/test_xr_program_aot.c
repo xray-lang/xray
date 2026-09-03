@@ -21,6 +21,8 @@
 #include <string.h>
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_DIRECT == 40, "witness direct stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_CALL_WITNESS_INVOKE == 41, "witness invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
@@ -1018,6 +1020,10 @@ static void test_existential_pack_test_project_lowering(void) {
     REQUIRE(strstr(generated.bytes, "xr_aot_alloc(xr_ctx") != NULL);
     REQUIRE(strstr(generated.bytes, ".data = (void *)existential_payload_") != NULL);
     REQUIRE(strstr(generated.bytes, ".concrete_type_id == UINT16_C(") != NULL);
+    REQUIRE(strstr(generated.bytes, "switch (v") != NULL);
+    REQUIRE(strstr(generated.bytes, ".conformance_id) {") != NULL);
+    REQUIRE(strstr(generated.bytes, "*(const XrAotType") != NULL);
+    REQUIRE(strstr(generated.bytes, "selector") == NULL);
     xr_generated_c_free(&generated);
     xr_backend_ir_free(ir);
     retire_instance(&instance);

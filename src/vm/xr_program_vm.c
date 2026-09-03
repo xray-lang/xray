@@ -130,6 +130,7 @@ struct XrVmExistentialValue {
     uint16_t concrete_type_id;
     uint32_t conformance_id;
     XrVmRuntimeValue payload;
+    XrVmPlace owned_storage;
 };
 
 static XrVmOutcome vm_outcome(XrVmOutcomeKind kind, const XrVmContext *context) {
@@ -250,6 +251,44 @@ static uint32_t conformance_id(const XrValidatedProgram *program, uint16_t concr
             program->conformances[index].interface_id == interface_id)
             return index;
     return XR_PROGRAM_LOCATION_NONE;
+}
+
+static uint32_t witness_function_id(const XrValidatedProgram *program,
+                                    const XrVmExistentialValue *carrier, uint32_t slot_ordinal) {
+    if (!program || !carrier || carrier->conformance_id >= program->conformance_count)
+        return XR_PROGRAM_LOCATION_NONE;
+    const XrValidatedConformance *conformance = &program->conformances[carrier->conformance_id];
+    const XrValidatedType *existential =
+        xr_validated_program_type(program, carrier->existential_type_id);
+    if (!existential || existential->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+        conformance->interface_id != existential->interface_id ||
+        conformance->implementor_type_id != carrier->concrete_type_id ||
+        slot_ordinal >= conformance->slot_count)
+        return XR_PROGRAM_LOCATION_NONE;
+    uint32_t function_id = conformance->slot_function_ids[slot_ordinal];
+    return function_id < program->function_count ? function_id : XR_PROGRAM_LOCATION_NONE;
+}
+
+static bool witness_receiver_argument(const XrVmExistentialValue *carrier,
+                                      XrParamMode receiver_mode, XrVmRuntimeValue *argument) {
+    if (!carrier || !argument)
+        return false;
+    if (receiver_mode == XR_PARAM_REF) {
+        if (carrier->payload.category != XR_CORE_IR_PLACE || !carrier->payload.as.place ||
+            !carrier->payload.as.place->initialized)
+            return false;
+        *argument = carrier->payload;
+        return true;
+    }
+    if (carrier->payload.category == XR_CORE_IR_PLACE) {
+        if (!carrier->payload.as.place || !carrier->payload.as.place->initialized)
+            return false;
+        argument->category = XR_CORE_IR_VALUE;
+        argument->as.value = carrier->payload.as.place->value;
+        return true;
+    }
+    *argument = carrier->payload;
+    return argument->category == XR_CORE_IR_VALUE;
 }
 
 static bool clone_vm_value(XrVmContext *context, XrVmValue source, uint16_t type_id,
@@ -597,12 +636,32 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                                        ? void_value()
                                        : values[instruction.operands[0]].as.value;
                     goto done;
-                case XR_CORE_OP_CORE_CALL_SEALED_DIRECT: {
-                    for (uint32_t index = 0; index < instruction.operand_count; ++index)
+                case XR_CORE_OP_CORE_CALL_SEALED_DIRECT:
+                case XR_CORE_OP_CORE_CALL_WITNESS_DIRECT: {
+                    uint32_t target_function =
+                        instruction.operation_id == XR_CORE_OP_CORE_CALL_SEALED_DIRECT
+                            ? instruction.immediate.function_id
+                            : XR_PROGRAM_LOCATION_NONE;
+                    uint32_t first_argument = 0u;
+                    if (instruction.operation_id == XR_CORE_OP_CORE_CALL_WITNESS_DIRECT) {
+                        const XrVmExistentialValue *carrier =
+                            values[instruction.operands[0]].as.value.as.existential;
+                        target_function = witness_function_id(context->code->program, carrier,
+                                                              instruction.immediate.u32);
+                        if (target_function == XR_PROGRAM_LOCATION_NONE)
+                            goto done;
+                        if (!witness_receiver_argument(
+                                carrier,
+                                context->code->program->functions[target_function].receiver_mode,
+                                &scratch[0]))
+                            goto done;
+                        first_argument = 1u;
+                    }
+                    for (uint32_t index = first_argument; index < instruction.operand_count;
+                         ++index)
                         scratch[index] = values[instruction.operands[index]];
-                    XrVmOutcome nested =
-                        execute_function(context, instruction.immediate.function_id, scratch,
-                                         instruction.operand_count, depth + 1u);
+                    XrVmOutcome nested = execute_function(context, target_function, scratch,
+                                                          instruction.operand_count, depth + 1u);
                     if (nested.kind != XR_VM_OUTCOME_RETURN) {
                         result = nested;
                         goto done;
@@ -610,14 +669,33 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     produced.as.value = nested.value;
                     break;
                 }
-                case XR_CORE_OP_CORE_CALL_SEALED_INVOKE: {
+                case XR_CORE_OP_CORE_CALL_SEALED_INVOKE:
+                case XR_CORE_OP_CORE_CALL_WITNESS_INVOKE: {
+                    uint32_t target_function =
+                        instruction.operation_id == XR_CORE_OP_CORE_CALL_SEALED_INVOKE
+                            ? instruction.immediate.function_id
+                            : XR_PROGRAM_LOCATION_NONE;
+                    uint32_t first_argument = 0u;
+                    if (instruction.operation_id == XR_CORE_OP_CORE_CALL_WITNESS_INVOKE) {
+                        const XrVmExistentialValue *carrier =
+                            values[instruction.operands[0]].as.value.as.existential;
+                        target_function = witness_function_id(context->code->program, carrier,
+                                                              instruction.immediate.u32);
+                        if (target_function == XR_PROGRAM_LOCATION_NONE)
+                            goto done;
+                        if (!witness_receiver_argument(
+                                carrier,
+                                context->code->program->functions[target_function].receiver_mode,
+                                &scratch[0]))
+                            goto done;
+                        first_argument = 1u;
+                    }
                     const XrValidatedFunction *callee =
-                        &context->code->program->functions[instruction.immediate.function_id];
-                    for (uint32_t index = 0; index < callee->parameter_count; ++index)
+                        &context->code->program->functions[target_function];
+                    for (uint32_t index = first_argument; index < callee->parameter_count; ++index)
                         scratch[index] = values[instruction.operands[index]];
-                    XrVmOutcome nested =
-                        execute_function(context, instruction.immediate.function_id, scratch,
-                                         callee->parameter_count, depth + 1u);
+                    XrVmOutcome nested = execute_function(context, target_function, scratch,
+                                                          callee->parameter_count, depth + 1u);
                     uint32_t successor = 0u;
                     uint32_t implicit = 0u;
                     uint32_t operand = callee->parameter_count;
@@ -794,7 +872,15 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                     carrier->existential_type_id = instruction.result_type_id;
                     carrier->concrete_type_id = concrete_type;
                     carrier->conformance_id = conformance;
-                    carrier->payload = values[instruction.operands[0]];
+                    if (existential->interface_use_kind ==
+                        XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) {
+                        carrier->owned_storage.value = values[instruction.operands[0]].as.value;
+                        carrier->owned_storage.initialized = true;
+                        carrier->payload.category = XR_CORE_IR_PLACE;
+                        carrier->payload.as.place = &carrier->owned_storage;
+                    } else {
+                        carrier->payload = values[instruction.operands[0]];
+                    }
                     produced.as.value.kind = XR_VM_VALUE_EXISTENTIAL;
                     produced.as.value.as.existential = carrier;
                     break;
@@ -810,7 +896,15 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                 case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT: {
                     const XrVmExistentialValue *carrier =
                         values[instruction.operands[0]].as.value.as.existential;
-                    produced = carrier->payload;
+                    const XrValidatedType *existential = xr_validated_program_type(
+                        context->code->program, carrier->existential_type_id);
+                    if (existential && existential->interface_use_kind ==
+                                           XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) {
+                        produced.category = XR_CORE_IR_VALUE;
+                        produced.as.value = carrier->owned_storage.value;
+                    } else {
+                        produced = carrier->payload;
+                    }
                     break;
                 }
                 default:
