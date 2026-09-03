@@ -26,7 +26,8 @@
     "dynamic_type_base": 16,
     "dynamic_kinds": [
       "aggregate",
-      "variant"
+      "variant",
+      "view"
     ],
     "ownership_kinds": [
       "0:trivial",
@@ -40,12 +41,13 @@
     "identity_order": "ascending-semantic-key",
     "aggregate_shape": "declaration-ordered-field-type-ids",
     "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
+    "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
     "recursive_value_shape": "reject",
     "physical_layout": "forbidden"
   },
   "value_system": {
-    "function_parameter_contract": "ordered-(TypeId,ParamMode)",
-    "function_result_contract": "ordered-(TypeId,OwnershipDisposition,ErrorTypeId,PanicTypeId); ErrorTypeId=void is business-error-free; PanicTypeId=void is panic-free; PanicTypeId=panic-info otherwise",
+    "function_parameter_contract": "ordered-(TypeId,ParamMode) plus declaration-owned receiver marker; receiver occupies parameter slot 0 and source parameter ordinals exclude it",
+    "function_result_contract": "ordered-(TypeId,OwnershipDisposition,BorrowOriginSet,ErrorTypeId,PanicTypeId); BorrowOriginSet is sorted unique PARAM/RECEIVER/STATIC and is required exactly for readonly view results; ErrorTypeId=void is business-error-free; PanicTypeId=void is panic-free; PanicTypeId=panic-info otherwise",
     "parameter_modes": [
       "0:read",
       "1:ref",
@@ -60,7 +62,10 @@
       "1:owner"
     ],
     "value_definition_contract": "ordered-(TypeId,ValueCategory,OwnershipDisposition)",
-    "place_physical_layout": "forbidden"
+    "place_physical_layout": "forbidden",
+    "root_identity_contract": "function-local dense RootId table independent of SSA ValueId; roots are PARAM, RECEIVER, STATIC or LOCAL",
+    "value_root_contract": "every safe view maps to a sorted unique non-empty RootId set; PARAM/RECEIVER/LOCAL root definitions bind the owning source identity",
+    "root_mapping": "callee PARAM/RECEIVER/STATIC origins map to caller value RootId sets and are sorted/deduplicated"
   },
   "sections": [
     {
@@ -115,6 +120,8 @@
     "values_per_function": 16777216,
     "operations": 16777216,
     "operands_per_operation": 65536,
-    "successors_per_operation": 16
+    "successors_per_operation": 16,
+    "roots_per_function": 16777216,
+    "roots_per_value": 65536
   }
 }

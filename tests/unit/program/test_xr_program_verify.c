@@ -236,8 +236,16 @@ static bool mode_fixture_offsets(const XrProgramArtifact *artifact, size_t *mode
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* parameter type */
     *mode_offset = cursor;
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* has receiver */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* receiver mode */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* result type */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* result ownership */
+    uint64_t origins = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint64_t origin = 0u; origin < origins; ++origin) {
+        uint64_t kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (kind == XR_VIEW_ORIGIN_PARAM)
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    }
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* error type */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* panic type */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* effects */
@@ -283,6 +291,16 @@ static void expect_mutated_verify(const XrProgramArtifact *artifact, size_t offs
     XrProgramDiagnostic diagnostic;
     XrProgramVerifyStatus status =
         xr_program_validate(bytes, artifact->size, NULL, &program, &diagnostic);
+    if (status != expected_status || diagnostic.kind != expected_diagnostic) {
+        XrProgramView view;
+        XrProgramDecodeStatus decode =
+            xr_program_decode_structure(bytes, artifact->size, NULL, &view, NULL, 0u);
+        fprintf(stderr,
+                "mutated verify mismatch at %zu: status=%s diagnostic=%s decode=%s old=%u new=%u\n",
+                offset, xr_program_verify_status_name(status),
+                xr_program_diagnostic_kind_name(diagnostic.kind),
+                xr_program_decode_status_name(decode), artifact->bytes[offset], value);
+    }
     CHECK(status == expected_status);
     CHECK(diagnostic.kind == expected_diagnostic);
     CHECK(program == NULL);
@@ -2217,6 +2235,189 @@ static void test_typed_random_and_linear_work(void) {
     xr_program_artifact_free(&first);
 }
 
+static XrProgramArtifact build_view_root_artifact(bool reverse_rows, bool incomplete_call_roots) {
+    enum {
+        VIEW_TYPE = 91
+    };
+    XrCoreIrTypeInput view_type = {
+        .key = key("view-root:type:const-slice-i64"),
+        .local_id = VIEW_TYPE,
+        .kind = XR_CORE_IR_TYPE_VIEW,
+        .view_element_type = XR_CORE_TYPE_I64,
+        .view_capability = XR_CORE_IR_VIEW_READ,
+    };
+    XrParamMode modes[] = {XR_PARAM_READ, XR_PARAM_READ};
+    uint16_t parameter_types[] = {VIEW_TYPE, VIEW_TYPE};
+    XrViewOrigin result_origins[] = {
+        {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 0},
+        {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 1},
+    };
+
+    XrCoreIrKey callee_key = key("view-root:function:callee");
+    XrCoreIrKey callee_block_key = key("view-root:callee:block");
+    XrCoreIrKey callee_a = key("view-root:callee:a");
+    XrCoreIrKey callee_b = key("view-root:callee:b");
+    XrCoreIrKey callee_r0 = key("view-root:callee:root-a");
+    XrCoreIrKey callee_r1 = key("view-root:callee:root-b");
+    XrCoreIrValueInput callee_arguments[] = {
+        {.key = callee_a, .type_id = VIEW_TYPE},
+        {.key = callee_b, .type_id = VIEW_TYPE},
+    };
+    XrCoreIrKey callee_block_operands[] = {callee_a, callee_b};
+    XrCoreIrKey callee_return_operand[] = {callee_a};
+    XrCoreIrInstructionInput callee_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = callee_block_operands,
+         .operand_count = 2u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = callee_return_operand,
+         .operand_count = 1u},
+    };
+    XrCoreIrBlockInput callee_block = {
+        .key = callee_block_key,
+        .arguments = callee_arguments,
+        .argument_count = 2u,
+        .instructions = callee_instructions,
+        .instruction_count = 2u,
+    };
+    XrCoreIrRootInput callee_roots[] = {
+        {.key = callee_r0, .kind = XR_CORE_IR_ROOT_PARAMETER, .parameter_ordinal = 0},
+        {.key = callee_r1, .kind = XR_CORE_IR_ROOT_PARAMETER, .parameter_ordinal = 1},
+    };
+    XrCoreIrKey callee_a_roots[] = {callee_r0};
+    XrCoreIrKey callee_b_roots[] = {callee_r1};
+    XrCoreIrValueRootSetInput callee_sets[] = {
+        {.value = callee_a, .roots = callee_a_roots, .root_count = 1u},
+        {.value = callee_b, .roots = callee_b_roots, .root_count = 1u},
+    };
+
+    XrCoreIrKey caller_block_key = key("view-root:caller:block");
+    XrCoreIrKey caller_x = key("view-root:caller:x");
+    XrCoreIrKey caller_y = key("view-root:caller:y");
+    XrCoreIrKey caller_result = key("view-root:caller:result");
+    XrCoreIrKey caller_r0 = key("view-root:caller:root-x");
+    XrCoreIrKey caller_r1 = key("view-root:caller:root-y");
+    XrCoreIrValueInput caller_arguments[] = {
+        {.key = caller_x, .type_id = VIEW_TYPE},
+        {.key = caller_y, .type_id = VIEW_TYPE},
+    };
+    XrCoreIrKey caller_block_operands[] = {caller_x, caller_y};
+    XrCoreIrKey caller_call_operands[] = {caller_x, caller_y};
+    XrCoreIrKey caller_return_operand[] = {caller_result};
+    XrCoreIrInstructionInput caller_instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = caller_block_operands,
+         .operand_count = 2u},
+        {.operation_id = XR_CORE_OP_CORE_CALL_SEALED_DIRECT,
+         .result = caller_result,
+         .result_type_id = VIEW_TYPE,
+         .operands = caller_call_operands,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION,
+         .immediate.key = callee_key},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = caller_return_operand,
+         .operand_count = 1u},
+    };
+    XrCoreIrBlockInput caller_block = {
+        .key = caller_block_key,
+        .arguments = caller_arguments,
+        .argument_count = 2u,
+        .instructions = caller_instructions,
+        .instruction_count = 3u,
+    };
+    XrCoreIrRootInput caller_roots[] = {
+        {.key = caller_r0, .kind = XR_CORE_IR_ROOT_PARAMETER, .parameter_ordinal = 0},
+        {.key = caller_r1, .kind = XR_CORE_IR_ROOT_PARAMETER, .parameter_ordinal = 1},
+    };
+    XrCoreIrKey caller_x_roots[] = {caller_r0};
+    XrCoreIrKey caller_y_roots[] = {caller_r1};
+    XrCoreIrKey caller_result_roots[] = {caller_r1, caller_r0};
+    XrCoreIrValueRootSetInput caller_sets[] = {
+        {.value = caller_x, .roots = caller_x_roots, .root_count = 1u},
+        {.value = caller_y, .roots = caller_y_roots, .root_count = 1u},
+        {.value = caller_result,
+         .roots = caller_result_roots,
+         .root_count = incomplete_call_roots ? 1u : 2u},
+    };
+    if (reverse_rows) {
+        XrCoreIrRootInput root = callee_roots[0];
+        callee_roots[0] = callee_roots[1];
+        callee_roots[1] = root;
+        root = caller_roots[0];
+        caller_roots[0] = caller_roots[1];
+        caller_roots[1] = root;
+        XrCoreIrValueRootSetInput set = callee_sets[0];
+        callee_sets[0] = callee_sets[1];
+        callee_sets[1] = set;
+        set = caller_sets[0];
+        caller_sets[0] = caller_sets[2];
+        caller_sets[2] = set;
+    }
+    XrCoreIrFunctionInput functions[] = {
+        {.key = callee_key,
+         .parameter_types = parameter_types,
+         .parameter_modes = modes,
+         .parameter_count = 2u,
+         .result_type_id = VIEW_TYPE,
+         .result_borrow_origins = result_origins,
+         .result_borrow_origin_count = 2u,
+         .effect_mask = 1u,
+         .entry_block = callee_block_key,
+         .blocks = &callee_block,
+         .block_count = 1u,
+         .roots = callee_roots,
+         .root_count = 2u,
+         .value_root_sets = callee_sets,
+         .value_root_set_count = 2u},
+        {.key = key("view-root:function:caller"),
+         .parameter_types = parameter_types,
+         .parameter_modes = modes,
+         .parameter_count = 2u,
+         .result_type_id = VIEW_TYPE,
+         .result_borrow_origins = result_origins,
+         .result_borrow_origin_count = 2u,
+         .effect_mask = 5u,
+         .entry_block = caller_block_key,
+         .blocks = &caller_block,
+         .block_count = 1u,
+         .roots = caller_roots,
+         .root_count = 2u,
+         .value_root_sets = caller_sets,
+         .value_root_set_count = 3u,
+         .flags = XR_PROGRAM_FUNCTION_ENTRY},
+    };
+    XrCoreIrModuleInput module = {
+        .key = key("view-root:module"),
+        .functions = functions,
+        .function_count = 2u,
+    };
+    XrProgramArtifact artifact = {0};
+    CHECK(write_typed_modules(&view_type, 1u, &module, 1u, &artifact) == XR_PROGRAM_BUILD_OK);
+    return artifact;
+}
+
+static void test_immutable_view_root_tables(void) {
+    XrProgramArtifact first = build_view_root_artifact(false, false);
+    XrProgramArtifact reordered = build_view_root_artifact(true, false);
+    CHECK(first.size != 0u && first.size == reordered.size);
+    CHECK(first.size != 0u && memcmp(first.bytes, reordered.bytes, first.size) == 0);
+    CHECK(xr_program_id_equal(first.id, reordered.id));
+    XrValidatedProgram *program = validate_ok(&first);
+    xr_validated_program_free(program);
+
+    XrProgramArtifact incomplete = build_view_root_artifact(false, true);
+    expect_semantic_reject(&incomplete, XR_PROGRAM_DIAGNOSTIC_ROOT);
+
+    xr_program_artifact_free(&incomplete);
+    xr_program_artifact_free(&reordered);
+    xr_program_artifact_free(&first);
+}
+
 int main(void) {
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
@@ -2232,6 +2433,7 @@ int main(void) {
     test_negative_diagnostics_and_budget();
     test_evaluator_traps_and_budget();
     test_typed_random_and_linear_work();
+    test_immutable_view_root_tables();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

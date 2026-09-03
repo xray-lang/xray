@@ -13,6 +13,7 @@
   "implementation_state": {
     "declaration_receiver_contract": "COMPLETE",
     "borrow_origin_set": "COMPLETE",
+    "borrow_root_tables": "COMPLETE",
     "program_tables": "PENDING",
     "existential_operations": "PENDING",
     "witness_dispatch": "PENDING",
@@ -110,6 +111,7 @@
     "body_role": "verify every actual return root belongs to the signature set; never infer signature authority",
     "call_mapping": "map every formal origin to caller RootIds, recursively expand view actuals, then sort and deduplicate",
     "xi_evidence": "retain only a normalized source recipe; consumers recursively materialize the complete caller-local root set from current SSA operands, with no mutable root cache, and the verifier rejects empty, cyclic or invalid recipes",
+    "program_rows": "XrProgram owns function-local dense RootIds independent of SSA ValueIds plus one sorted unique RootId set for every safe view; PARAM ordinals exclude the receiver and call results are verified by formal-origin expansion",
     "semantic_plan_boundary": "legacy scalar SemanticPlan projection fails XR_SEM_0019 for every non-singleton set until program tables land",
     "compatibility": "no scalar origin fields, body-derived fallback, old reader or dual path",
     "positive_fixtures": [

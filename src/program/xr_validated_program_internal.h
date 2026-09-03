@@ -21,7 +21,20 @@ typedef struct XrValidatedType {
     uint32_t field_count;
     XrValidatedVariant *variants;
     uint32_t variant_count;
+    uint16_t view_element_type;
+    XrCoreIrViewCapability view_capability;
 } XrValidatedType;
+
+typedef struct XrValidatedRoot {
+    XrCoreIrRootKind kind;
+    uint32_t parameter_ordinal;
+    uint32_t source_value_id;
+} XrValidatedRoot;
+
+typedef struct XrValidatedValueRootSet {
+    uint32_t *root_ids;
+    uint32_t root_count;
+} XrValidatedValueRootSet;
 
 typedef struct XrValidatedConstant {
     uint16_t type_id;
@@ -72,8 +85,12 @@ typedef struct XrValidatedFunction {
     uint16_t *parameter_types;
     XrParamMode *parameter_modes;
     uint32_t parameter_count;
+    bool has_receiver;
+    XrParamMode receiver_mode;
     uint16_t result_type_id;
     XrCoreIrOwnershipDisposition result_ownership;
+    XrViewOrigin *result_borrow_origins;
+    uint32_t result_borrow_origin_count;
     uint16_t error_type_id;
     uint16_t panic_type_id;
     uint32_t effect_mask;
@@ -86,6 +103,9 @@ typedef struct XrValidatedFunction {
     XrCoreIrOwnershipDisposition *value_ownerships;
     uint32_t *value_blocks;
     uint32_t *value_positions;
+    XrValidatedRoot *roots;
+    uint32_t root_count;
+    XrValidatedValueRootSet *value_root_sets;
     uint32_t value_count;
     uint32_t flags;
 } XrValidatedFunction;

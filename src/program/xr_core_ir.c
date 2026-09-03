@@ -43,6 +43,16 @@ static int type_compare(const void *left, const void *right) {
                              ((const XrCoreIrType *) right)->key);
 }
 
+static int view_origin_compare(const void *left, const void *right) {
+    const XrViewOrigin *a = left;
+    const XrViewOrigin *b = right;
+    if (a->kind != b->kind)
+        return a->kind < b->kind ? -1 : 1;
+    if (a->param_ordinal != b->param_ordinal)
+        return a->param_ordinal < b->param_ordinal ? -1 : 1;
+    return 0;
+}
+
 XrCoreIrKey xr_core_ir_key(const void *semantic_bytes, size_t semantic_size) {
     static const uint8_t domain[] = "xray-core-ir-semantic-key-v1";
     XrCoreIrKey key = {{0}};
@@ -153,6 +163,11 @@ static void free_function(XrCoreIrFunction *function) {
     xr_free(function->blocks);
     xr_free(function->parameter_types);
     xr_free(function->parameter_modes);
+    xr_free(function->result_borrow_origins);
+    for (uint32_t index = 0; index < function->value_root_set_count; ++index)
+        xr_free(function->value_root_sets[index].roots);
+    xr_free(function->value_root_sets);
+    xr_free(function->roots);
 }
 
 void xr_core_ir_program_free(XrCoreIrProgram *program) {
@@ -263,14 +278,19 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
     memset(output, 0, sizeof(*output));
     output->key = input->key;
     output->parameter_count = input->parameter_count;
+    output->has_receiver = input->has_receiver;
+    output->receiver_mode = input->receiver_mode;
     output->result_type_id = input->result_type_id;
     output->result_ownership = input->result_ownership;
+    output->result_borrow_origin_count = input->result_borrow_origin_count;
     output->error_type_id = input->error_type_id;
     output->panic_type_id = input->panic_type_id;
     output->effect_mask = input->effect_mask;
     output->capability_mask = input->capability_mask;
     output->entry_block = input->entry_block;
     output->block_count = input->block_count;
+    output->root_count = input->root_count;
+    output->value_root_set_count = input->value_root_set_count;
     output->flags = input->flags;
     if (!copy_bytes((void **) &output->parameter_types, input->parameter_types,
                     input->parameter_count, sizeof(uint16_t)))
@@ -286,6 +306,53 @@ static XrProgramBuildStatus copy_function(const XrCoreIrFunctionInput *input,
                 input->parameter_modes ? input->parameter_modes[parameter] : XR_PARAM_READ;
         }
     } else if (input->parameter_modes) {
+        free_function(output);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    if (!copy_bytes((void **) &output->result_borrow_origins, input->result_borrow_origins,
+                    input->result_borrow_origin_count, sizeof(XrViewOrigin))) {
+        free_function(output);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (output->result_borrow_origin_count != 0u) {
+        qsort(output->result_borrow_origins, output->result_borrow_origin_count,
+              sizeof(XrViewOrigin), view_origin_compare);
+        uint32_t unique = 0;
+        for (uint32_t index = 0; index < output->result_borrow_origin_count; ++index) {
+            if (unique == 0u || view_origin_compare(&output->result_borrow_origins[unique - 1u],
+                                                    &output->result_borrow_origins[index]) != 0)
+                output->result_borrow_origins[unique++] = output->result_borrow_origins[index];
+        }
+        output->result_borrow_origin_count = unique;
+    }
+    if (!copy_bytes((void **) &output->roots, input->roots, input->root_count,
+                    sizeof(XrCoreIrRoot))) {
+        free_function(output);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (input->value_root_set_count != 0u) {
+        if (!input->value_root_sets) {
+            free_function(output);
+            return XR_PROGRAM_BUILD_INVALID_INPUT;
+        }
+        output->value_root_sets =
+            xr_calloc(input->value_root_set_count, sizeof(XrCoreIrValueRootSet));
+        if (!output->value_root_sets) {
+            free_function(output);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t index = 0; index < input->value_root_set_count; ++index) {
+            const XrCoreIrValueRootSetInput *source = &input->value_root_sets[index];
+            XrCoreIrValueRootSet *target = &output->value_root_sets[index];
+            target->value = source->value;
+            target->root_count = source->root_count;
+            if (!copy_bytes((void **) &target->roots, source->roots, source->root_count,
+                            sizeof(XrCoreIrKey))) {
+                free_function(output);
+                return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            }
+        }
+    } else if (input->value_root_sets) {
         free_function(output);
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -345,6 +412,8 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
     output->copy_contract = input->copy_contract;
     output->field_count = input->field_count;
     output->variant_count = input->variant_count;
+    output->view_element_type = input->view_element_type;
+    output->view_capability = input->view_capability;
     if (!copy_bytes((void **) &output->field_types, input->field_types, input->field_count,
                     sizeof(uint16_t)))
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
@@ -405,6 +474,10 @@ static bool remap_program_types(XrCoreIrProgram *program) {
                     return false;
             }
         }
+        if (type->kind == XR_CORE_IR_TYPE_VIEW &&
+            !remap_type_id(program->types, program->type_count, type->view_element_type,
+                           &type->view_element_type))
+            return false;
     }
     for (uint32_t module = 0; module < program->module_count; ++module) {
         XrCoreIrModule *module_row = &program->modules[module];
@@ -501,6 +574,171 @@ static bool function_has_value(const XrCoreIrFunction *function, XrCoreIrKey key
     return occurrences == 1u;
 }
 
+static bool function_value_contract(const XrCoreIrFunction *function, XrCoreIrKey key,
+                                    uint16_t *type_id, XrCoreIrValueCategory *category,
+                                    XrCoreIrOwnershipDisposition *ownership) {
+    for (uint32_t block_index = 0; block_index < function->block_count; ++block_index) {
+        const XrCoreIrBlock *block = &function->blocks[block_index];
+        for (uint32_t index = 0; index < block->argument_count; ++index) {
+            if (!xr_core_ir_key_equal(block->arguments[index].key, key))
+                continue;
+            *type_id = block->arguments[index].type_id;
+            *category = block->arguments[index].category;
+            *ownership = block->arguments[index].ownership;
+            return true;
+        }
+        for (uint32_t index = 0; index < block->instruction_count; ++index) {
+            const XrCoreIrInstruction *instruction = &block->instructions[index];
+            if (!xr_core_ir_key_is_zero(instruction->result) &&
+                xr_core_ir_key_equal(instruction->result, key)) {
+                *type_id = instruction->result_type_id;
+                *category = instruction->result_category;
+                *ownership = instruction->result_ownership;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static const XrCoreIrRoot *function_root(const XrCoreIrFunction *function, XrCoreIrKey key) {
+    const XrCoreIrRoot *match = NULL;
+    for (uint32_t index = 0; index < function->root_count; ++index) {
+        if (!xr_core_ir_key_equal(function->roots[index].key, key))
+            continue;
+        if (match)
+            return NULL;
+        match = &function->roots[index];
+    }
+    return match;
+}
+
+static const XrCoreIrValueRootSet *function_value_root_set(const XrCoreIrFunction *function,
+                                                           XrCoreIrKey value) {
+    const XrCoreIrValueRootSet *match = NULL;
+    for (uint32_t index = 0; index < function->value_root_set_count; ++index) {
+        if (!xr_core_ir_key_equal(function->value_root_sets[index].value, value))
+            continue;
+        if (match)
+            return NULL;
+        match = &function->value_root_sets[index];
+    }
+    return match;
+}
+
+static bool type_is_view(const XrCoreIrProgram *program, uint16_t type_id) {
+    return type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+           (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count &&
+           program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].kind == XR_CORE_IR_TYPE_VIEW;
+}
+
+static bool roots_have_same_identity(const XrCoreIrRoot *left, const XrCoreIrRoot *right) {
+    if (left->kind != right->kind)
+        return false;
+    if (left->kind == XR_CORE_IR_ROOT_PARAMETER)
+        return left->parameter_ordinal == right->parameter_ordinal;
+    if (left->kind == XR_CORE_IR_ROOT_LOCAL)
+        return xr_core_ir_key_equal(left->source_value, right->source_value);
+    return true;
+}
+
+static bool validate_function_roots(const XrCoreIrProgram *program,
+                                    const XrCoreIrFunction *function) {
+    uint32_t explicit_parameter_count =
+        function->parameter_count - (function->has_receiver ? 1u : 0u);
+    for (uint32_t index = 0; index < function->result_borrow_origin_count; ++index) {
+        const XrViewOrigin *origin = &function->result_borrow_origins[index];
+        if ((index != 0u &&
+             view_origin_compare(&function->result_borrow_origins[index - 1u], origin) >= 0) ||
+            origin->kind > XR_VIEW_ORIGIN_STATIC)
+            return false;
+        if (origin->kind == XR_VIEW_ORIGIN_PARAM) {
+            if (origin->param_ordinal < 0 ||
+                (uint32_t) origin->param_ordinal >= explicit_parameter_count ||
+                function->parameter_modes[(uint32_t) origin->param_ordinal +
+                                          (function->has_receiver ? 1u : 0u)] != XR_PARAM_READ)
+                return false;
+        } else if (origin->param_ordinal != -1 ||
+                   (origin->kind == XR_VIEW_ORIGIN_RECEIVER &&
+                    (!function->has_receiver || function->receiver_mode != XR_PARAM_READ))) {
+            return false;
+        }
+    }
+    bool readonly_view_result =
+        type_is_view(program, function->result_type_id) &&
+        program->types[function->result_type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                .view_capability == XR_CORE_IR_VIEW_READ;
+    if (readonly_view_result != (function->result_borrow_origin_count != 0u))
+        return false;
+
+    for (uint32_t index = 0; index < function->root_count; ++index) {
+        const XrCoreIrRoot *root = &function->roots[index];
+        if (xr_core_ir_key_is_zero(root->key) || root->kind > XR_CORE_IR_ROOT_LOCAL)
+            return false;
+        for (uint32_t prior = 0; prior < index; ++prior) {
+            if (xr_core_ir_key_equal(root->key, function->roots[prior].key) ||
+                roots_have_same_identity(root, &function->roots[prior]))
+                return false;
+        }
+        if (root->kind == XR_CORE_IR_ROOT_PARAMETER) {
+            if (root->parameter_ordinal < 0 ||
+                (uint32_t) root->parameter_ordinal >= explicit_parameter_count ||
+                !xr_core_ir_key_is_zero(root->source_value))
+                return false;
+        } else if (root->kind == XR_CORE_IR_ROOT_RECEIVER) {
+            if (!function->has_receiver || root->parameter_ordinal != -1 ||
+                !xr_core_ir_key_is_zero(root->source_value))
+                return false;
+        } else if (root->kind == XR_CORE_IR_ROOT_STATIC) {
+            if (root->parameter_ordinal != -1 || !xr_core_ir_key_is_zero(root->source_value))
+                return false;
+        } else {
+            uint16_t source_type = XR_CORE_TYPE_VOID;
+            XrCoreIrValueCategory source_category = XR_CORE_IR_VALUE;
+            XrCoreIrOwnershipDisposition source_ownership = XR_CORE_IR_NON_OWNER;
+            if (root->parameter_ordinal != -1 || xr_core_ir_key_is_zero(root->source_value) ||
+                !function_value_contract(function, root->source_value, &source_type,
+                                         &source_category, &source_ownership) ||
+                source_ownership != XR_CORE_IR_OWNER || type_is_view(program, source_type))
+                return false;
+        }
+    }
+
+    for (uint32_t index = 0; index < function->value_root_set_count; ++index) {
+        const XrCoreIrValueRootSet *set = &function->value_root_sets[index];
+        uint16_t value_type = XR_CORE_TYPE_VOID;
+        XrCoreIrValueCategory category = XR_CORE_IR_VALUE;
+        XrCoreIrOwnershipDisposition ownership = XR_CORE_IR_NON_OWNER;
+        if (xr_core_ir_key_is_zero(set->value) || set->root_count == 0u || !set->roots ||
+            !function_value_contract(function, set->value, &value_type, &category, &ownership) ||
+            !type_is_view(program, value_type) ||
+            function_value_root_set(function, set->value) != set)
+            return false;
+        for (uint32_t root = 0; root < set->root_count; ++root) {
+            if (!function_root(function, set->roots[root]))
+                return false;
+            for (uint32_t prior = 0; prior < root; ++prior)
+                if (xr_core_ir_key_equal(set->roots[root], set->roots[prior]))
+                    return false;
+        }
+    }
+    for (uint32_t block_index = 0; block_index < function->block_count; ++block_index) {
+        const XrCoreIrBlock *block = &function->blocks[block_index];
+        for (uint32_t argument = 0; argument < block->argument_count; ++argument)
+            if (type_is_view(program, block->arguments[argument].type_id) &&
+                !function_value_root_set(function, block->arguments[argument].key))
+                return false;
+        for (uint32_t instruction = 0; instruction < block->instruction_count; ++instruction) {
+            const XrCoreIrInstruction *row = &block->instructions[instruction];
+            if (!xr_core_ir_key_is_zero(row->result) &&
+                type_is_view(program, row->result_type_id) &&
+                !function_value_root_set(function, row->result))
+                return false;
+        }
+    }
+    return true;
+}
+
 static bool type_graph_visit(const XrCoreIrProgram *program, uint32_t index, uint8_t *state) {
     if (state[index] == 1u)
         return false;
@@ -508,6 +746,10 @@ static bool type_graph_visit(const XrCoreIrProgram *program, uint32_t index, uin
         return true;
     state[index] = 1u;
     const XrCoreIrType *type = &program->types[index];
+    if (type->kind == XR_CORE_IR_TYPE_VIEW) {
+        state[index] = 2u;
+        return true;
+    }
     for (uint32_t field = 0; field < type->field_count; ++field) {
         uint16_t child = type->field_types[field];
         if (child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
@@ -559,6 +801,15 @@ static bool validate_types(const XrCoreIrProgram *program) {
                     valid = type_id_supported(program, row->payload_types[field]) &&
                             row->payload_types[field] != XR_CORE_TYPE_VOID;
             }
+        } else if (type->kind == XR_CORE_IR_TYPE_VIEW) {
+            valid = valid && type->field_count == 0u && !type->field_types &&
+                    type->variant_count == 0u && !type->variants &&
+                    type_id_supported(program, type->view_element_type) &&
+                    type->view_element_type != XR_CORE_TYPE_VOID &&
+                    (type->view_capability == XR_CORE_IR_VIEW_READ ||
+                     type->view_capability == XR_CORE_IR_VIEW_WRITE_EXCLUSIVE) &&
+                    type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
+                    type->copy_contract == XR_CORE_IR_COPY_TRIVIAL;
         } else {
             valid = false;
         }
@@ -670,9 +921,17 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                                                         XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
                                                     ? XR_CORE_IR_OWNER
                                                     : XR_CORE_IR_NON_OWNER)) ||
+                !xr_param_mode_is_valid(function->receiver_mode) ||
+                (function->has_receiver &&
+                 (function->parameter_count == 0u ||
+                  function->parameter_modes[0] != function->receiver_mode)) ||
+                (!function->has_receiver && function->receiver_mode != XR_PARAM_READ) ||
                 function->block_count == 0 ||
                 function->block_count > XR_PROGRAM_LIMIT_BLOCKS_PER_FUNCTION ||
-                !find_block(function, function->entry_block)) {
+                function->root_count > XR_PROGRAM_LIMIT_ROOTS_PER_FUNCTION ||
+                function->value_root_set_count > XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION ||
+                !find_block(function, function->entry_block) ||
+                !validate_function_roots(program, function)) {
                 xr_program_set_diagnostic(
                     diagnostic, diagnostic_size,
                     "function identity, signature, or entry block is invalid");

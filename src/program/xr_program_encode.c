@@ -32,6 +32,16 @@ typedef struct ConstantRef {
     const XrCoreIrConstantInput *constant;
 } ConstantRef;
 
+typedef struct RootRef {
+    const XrCoreIrRoot *root;
+    uint32_t source_value_id;
+} RootRef;
+
+typedef struct ValueRootSetRef {
+    const XrCoreIrValueRootSet *set;
+    uint32_t value_id;
+} ValueRootSetRef;
+
 static bool buffer_reserve(ByteBuffer *buffer, size_t extra) {
     if (buffer->status != XR_PROGRAM_BUILD_OK)
         return false;
@@ -240,6 +250,54 @@ static uint32_t function_value_count(const XrCoreIrFunction *function) {
     return count;
 }
 
+static int root_ref_compare(const void *left, const void *right) {
+    const RootRef *a = left;
+    const RootRef *b = right;
+    if (a->root->kind != b->root->kind)
+        return a->root->kind < b->root->kind ? -1 : 1;
+    if (a->root->parameter_ordinal != b->root->parameter_ordinal)
+        return a->root->parameter_ordinal < b->root->parameter_ordinal ? -1 : 1;
+    if (a->source_value_id != b->source_value_id)
+        return a->source_value_id < b->source_value_id ? -1 : 1;
+    return 0;
+}
+
+static int value_root_set_ref_compare(const void *left, const void *right) {
+    const ValueRootSetRef *a = left;
+    const ValueRootSetRef *b = right;
+    if (a->value_id == b->value_id)
+        return 0;
+    return a->value_id < b->value_id ? -1 : 1;
+}
+
+static RootRef *collect_roots(const XrCoreIrFunction *function) {
+    if (function->root_count == 0u)
+        return (RootRef *) xr_calloc(1u, sizeof(RootRef));
+    RootRef *refs = xr_calloc(function->root_count, sizeof(RootRef));
+    if (!refs)
+        return NULL;
+    for (uint32_t index = 0; index < function->root_count; ++index) {
+        refs[index].root = &function->roots[index];
+        if (function->roots[index].kind == XR_CORE_IR_ROOT_LOCAL)
+            (void) value_id(function, function->roots[index].source_value,
+                            &refs[index].source_value_id);
+        else
+            refs[index].source_value_id = UINT32_MAX;
+    }
+    qsort(refs, function->root_count, sizeof(RootRef), root_ref_compare);
+    return refs;
+}
+
+static bool root_id(const RootRef *roots, uint32_t count, XrCoreIrKey key, uint32_t *id_out) {
+    for (uint32_t index = 0; index < count; ++index) {
+        if (xr_core_ir_key_equal(roots[index].root->key, key)) {
+            *id_out = index;
+            return true;
+        }
+    }
+    return false;
+}
+
 static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
     /* type-id, kind, logical ownership, copy contract, then logical shape */
     static const uint8_t rows[][4] = {
@@ -260,9 +318,10 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
     for (uint32_t index = 0; index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
         buffer_put_uvar(buffer, type->type_id);
-        buffer_put_uvar(buffer, type->kind == XR_CORE_IR_TYPE_AGGREGATE
-                                    ? XR_PROGRAM_TYPE_KIND_AGGREGATE
-                                    : XR_PROGRAM_TYPE_KIND_VARIANT);
+        buffer_put_uvar(buffer,
+                        type->kind == XR_CORE_IR_TYPE_AGGREGATE ? XR_PROGRAM_TYPE_KIND_AGGREGATE
+                        : type->kind == XR_CORE_IR_TYPE_VARIANT ? XR_PROGRAM_TYPE_KIND_VARIANT
+                                                                : XR_PROGRAM_TYPE_KIND_VIEW);
         buffer_put_uvar(buffer, type->ownership);
         buffer_put_uvar(buffer, type->copy_contract);
         buffer_put_bytes(buffer, type->key.bytes, sizeof(type->key.bytes));
@@ -270,7 +329,7 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
             buffer_put_uvar(buffer, type->field_count);
             for (uint32_t field = 0; field < type->field_count; ++field)
                 buffer_put_uvar(buffer, type->field_types[field]);
-        } else {
+        } else if (type->kind == XR_CORE_IR_TYPE_VARIANT) {
             buffer_put_uvar(buffer, type->variant_count);
             for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
                 const XrCoreIrVariant *row = &type->variants[variant];
@@ -278,6 +337,9 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
                 for (uint32_t field = 0; field < row->payload_count; ++field)
                     buffer_put_uvar(buffer, row->payload_types[field]);
             }
+        } else {
+            buffer_put_uvar(buffer, type->view_element_type);
+            buffer_put_uvar(buffer, type->view_capability);
         }
     }
 }
@@ -313,8 +375,17 @@ static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, u
             buffer_put_uvar(buffer, function->parameter_types[parameter]);
             buffer_put_uvar(buffer, function->parameter_modes[parameter]);
         }
+        buffer_put_uvar(buffer, function->has_receiver ? 1u : 0u);
+        buffer_put_uvar(buffer, function->receiver_mode);
         buffer_put_uvar(buffer, function->result_type_id);
         buffer_put_uvar(buffer, function->result_ownership);
+        buffer_put_uvar(buffer, function->result_borrow_origin_count);
+        for (uint32_t origin = 0; origin < function->result_borrow_origin_count; ++origin) {
+            buffer_put_uvar(buffer, function->result_borrow_origins[origin].kind);
+            if (function->result_borrow_origins[origin].kind == XR_VIEW_ORIGIN_PARAM)
+                buffer_put_uvar(buffer,
+                                (uint32_t) function->result_borrow_origins[origin].param_ordinal);
+        }
         buffer_put_uvar(buffer, function->error_type_id);
         buffer_put_uvar(buffer, function->panic_type_id);
         buffer_put_uvar(buffer, function->effect_mask);
@@ -323,6 +394,74 @@ static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, u
         buffer_put_uvar(buffer, function->block_count);
         buffer_put_uvar(buffer, function_value_count(function));
         buffer_put_uvar(buffer, function->flags);
+    }
+}
+
+static void encode_semantic_metadata(ByteBuffer *buffer, const FunctionRef *functions,
+                                     uint32_t function_count) {
+    buffer_put_uvar(buffer, function_count);
+    for (uint32_t function_id_value = 0; function_id_value < function_count; ++function_id_value) {
+        const XrCoreIrFunction *function = functions[function_id_value].function;
+        RootRef *roots = collect_roots(function);
+        ValueRootSetRef *sets = NULL;
+        if (!roots) {
+            buffer->status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+            return;
+        }
+        if (function->value_root_set_count != 0u) {
+            sets = xr_calloc(function->value_root_set_count, sizeof(ValueRootSetRef));
+            if (!sets) {
+                xr_free(roots);
+                buffer->status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                return;
+            }
+            for (uint32_t index = 0; index < function->value_root_set_count; ++index) {
+                sets[index].set = &function->value_root_sets[index];
+                (void) value_id(function, sets[index].set->value, &sets[index].value_id);
+            }
+            qsort(sets, function->value_root_set_count, sizeof(ValueRootSetRef),
+                  value_root_set_ref_compare);
+        }
+        buffer_put_uvar(buffer, function_id_value);
+        buffer_put_uvar(buffer, function->root_count);
+        for (uint32_t index = 0; index < function->root_count; ++index) {
+            buffer_put_uvar(buffer, index);
+            buffer_put_uvar(buffer, roots[index].root->kind);
+            if (roots[index].root->kind == XR_CORE_IR_ROOT_PARAMETER)
+                buffer_put_uvar(buffer, (uint32_t) roots[index].root->parameter_ordinal);
+            else if (roots[index].root->kind == XR_CORE_IR_ROOT_LOCAL)
+                buffer_put_uvar(buffer, roots[index].source_value_id);
+        }
+        buffer_put_uvar(buffer, function->value_root_set_count);
+        for (uint32_t index = 0; index < function->value_root_set_count; ++index) {
+            const XrCoreIrValueRootSet *set = sets[index].set;
+            uint32_t *ids = xr_calloc(set->root_count, sizeof(uint32_t));
+            if (!ids) {
+                buffer->status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+                break;
+            }
+            for (uint32_t root = 0; root < set->root_count; ++root)
+                if (!root_id(roots, function->root_count, set->roots[root], &ids[root]))
+                    buffer->status = XR_PROGRAM_BUILD_INVALID_INPUT;
+            for (uint32_t root = 1; root < set->root_count; ++root) {
+                uint32_t key = ids[root];
+                uint32_t position = root;
+                while (position != 0u && ids[position - 1u] > key) {
+                    ids[position] = ids[position - 1u];
+                    --position;
+                }
+                ids[position] = key;
+            }
+            buffer_put_uvar(buffer, sets[index].value_id);
+            buffer_put_uvar(buffer, set->root_count);
+            for (uint32_t root = 0; root < set->root_count; ++root)
+                buffer_put_uvar(buffer, ids[root]);
+            xr_free(ids);
+        }
+        xr_free(sets);
+        xr_free(roots);
+        if (buffer->status != XR_PROGRAM_BUILD_OK)
+            return;
     }
 }
 
@@ -478,7 +617,7 @@ XrProgramBuildStatus xr_program_write(const XrCoreIrProgram *program,
     encode_code(&sections[3], functions, function_count, constants, constant_count);
     buffer_put_uvar(&sections[4], 0u);
     buffer_put_uvar(&sections[5], 0u);
-    buffer_put_uvar(&sections[6], 0u);
+    encode_semantic_metadata(&sections[6], functions, function_count);
     for (size_t index = 0; index < SECTION_COUNT; ++index) {
         if (sections[index].status != XR_PROGRAM_BUILD_OK) {
             status = sections[index].status;

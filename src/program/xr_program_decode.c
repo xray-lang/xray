@@ -165,29 +165,38 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
         uint64_t copy_contract = take_uvar(&section);
         uint8_t key[XR_CORE_IR_KEY_SIZE] = {0};
         take_bytes(&section, key, sizeof(key));
-        uint64_t member_count = take_uvar(&section);
+        uint64_t shape_head = take_uvar(&section);
         if (type_id != XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index ||
-            (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT) ||
+            (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT &&
+             kind != XR_PROGRAM_TYPE_KIND_VIEW) ||
             ownership > XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
-            copy_contract > XR_CORE_IR_COPY_FORBIDDEN || member_count == 0u ||
+            copy_contract > XR_CORE_IR_COPY_FORBIDDEN ||
             ((ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL) !=
              (copy_contract == XR_CORE_IR_COPY_TRIVIAL)) ||
-            member_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
-            !count_records(&section, member_count) ||
             (index != 0u && memcmp(previous_key, key, sizeof(key)) >= 0)) {
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
             break;
         }
         memcpy(previous_key, key, sizeof(key));
         if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
-            for (uint64_t field = 0; field < member_count; ++field) {
+            if (shape_head == 0u || shape_head > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                !count_records(&section, shape_head)) {
+                section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+                break;
+            }
+            for (uint64_t field = 0; field < shape_head; ++field) {
                 uint64_t field_type = take_uvar(&section);
                 if (!encoded_type_id_is_valid(field_type, dynamic_count) ||
                     field_type == XR_CORE_TYPE_VOID)
                     section.status = XR_PROGRAM_DECODE_NONCANONICAL;
             }
-        } else {
-            for (uint64_t variant = 0; variant < member_count; ++variant) {
+        } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
+            if (shape_head == 0u || shape_head > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                !count_records(&section, shape_head)) {
+                section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+                break;
+            }
+            for (uint64_t variant = 0; variant < shape_head; ++variant) {
                 uint64_t payload_count = take_uvar(&section);
                 if (payload_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
                     !count_records(&section, payload_count)) {
@@ -201,6 +210,14 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
                         section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                 }
             }
+        } else {
+            uint64_t capability = take_uvar(&section);
+            if (!encoded_type_id_is_valid(shape_head, dynamic_count) ||
+                shape_head == XR_CORE_TYPE_VOID || ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
+                copy_contract != XR_CORE_IR_COPY_TRIVIAL ||
+                (capability != XR_CORE_IR_VIEW_READ &&
+                 capability != XR_CORE_IR_VIEW_WRITE_EXCLUSIVE))
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
         }
     }
     *dynamic_count_out = dynamic_count;
@@ -279,8 +296,31 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
             if (!encoded_type_id_is_valid(type_id, dynamic_type_count) || mode > XR_PARAM_MOVE)
                 section.status = XR_PROGRAM_DECODE_UNSUPPORTED_SECTION_CONTENT;
         }
+        uint64_t has_receiver = take_uvar(&section);
+        uint64_t receiver_mode = take_uvar(&section);
         uint64_t result_type = take_uvar(&section);
         uint64_t result_ownership = take_uvar(&section);
+        uint64_t origin_count = take_uvar(&section);
+        if (origin_count > XR_PROGRAM_LIMIT_ROOTS_PER_VALUE ||
+            !count_records(&section, origin_count)) {
+            if (section.status == XR_PROGRAM_DECODE_OK)
+                section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+            break;
+        }
+        uint64_t prior_kind = 0u;
+        uint64_t prior_parameter = 0u;
+        bool have_prior = false;
+        for (uint64_t origin = 0; origin < origin_count; ++origin) {
+            uint64_t kind = take_uvar(&section);
+            uint64_t parameter = kind == XR_VIEW_ORIGIN_PARAM ? take_uvar(&section) : 0u;
+            if (kind > XR_VIEW_ORIGIN_STATIC ||
+                (have_prior &&
+                 (kind < prior_kind || (kind == prior_kind && parameter <= prior_parameter))))
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+            prior_kind = kind;
+            prior_parameter = parameter;
+            have_prior = true;
+        }
         uint64_t error_type = take_uvar(&section);
         uint64_t panic_type = take_uvar(&section);
         (void) take_uvar(&section); /* effect mask */
@@ -289,7 +329,10 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
         uint64_t block_count = take_uvar(&section);
         uint64_t value_count = take_uvar(&section);
         (void) take_uvar(&section); /* flags */
-        if (encoded_id != id || !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
+        if (encoded_id != id || has_receiver > 1u || receiver_mode > XR_PARAM_MOVE ||
+            (has_receiver != 0u && parameter_count == 0u) ||
+            (has_receiver == 0u && receiver_mode != XR_PARAM_READ) ||
+            !encoded_type_id_is_valid(result_type, dynamic_type_count) ||
             !encoded_type_id_is_valid(error_type, dynamic_type_count) ||
             !encoded_type_id_is_valid(panic_type, dynamic_type_count) ||
             result_ownership > XR_CORE_IR_OWNER || block_count == 0 ||
@@ -298,6 +341,72 @@ static bool decode_functions(Reader *artifact, const XrProgramSectionView *view,
             section.status = XR_PROGRAM_DECODE_NONCANONICAL;
     }
     *count_out = count;
+    return section_done(&section, artifact);
+}
+
+static bool decode_semantic_metadata(Reader *artifact, const XrProgramSectionView *view,
+                                     uint64_t function_count) {
+    Reader section = section_reader(artifact, view);
+    uint64_t count = take_uvar(&section);
+    if (count != function_count || !count_records(&section, count)) {
+        section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+        return section_done(&section, artifact);
+    }
+    for (uint64_t function = 0; function < count && section.status == XR_PROGRAM_DECODE_OK;
+         ++function) {
+        uint64_t function_id = take_uvar(&section);
+        uint64_t root_count = take_uvar(&section);
+        if (function_id != function || root_count > XR_PROGRAM_LIMIT_ROOTS_PER_FUNCTION ||
+            !count_records(&section, root_count)) {
+            section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+            break;
+        }
+        uint64_t prior_kind = 0u;
+        uint64_t prior_payload = 0u;
+        bool have_prior = false;
+        for (uint64_t root = 0; root < root_count; ++root) {
+            uint64_t root_id = take_uvar(&section);
+            uint64_t kind = take_uvar(&section);
+            uint64_t payload = kind == XR_CORE_IR_ROOT_PARAMETER || kind == XR_CORE_IR_ROOT_LOCAL
+                                   ? take_uvar(&section)
+                                   : 0u;
+            if (root_id != root || kind > XR_CORE_IR_ROOT_LOCAL ||
+                (have_prior &&
+                 (kind < prior_kind || (kind == prior_kind && payload <= prior_payload))))
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+            prior_kind = kind;
+            prior_payload = payload;
+            have_prior = true;
+        }
+        uint64_t value_count = take_uvar(&section);
+        if (value_count > XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION ||
+            !count_records(&section, value_count)) {
+            section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
+            break;
+        }
+        uint64_t prior_value = 0u;
+        bool have_value = false;
+        for (uint64_t value = 0; value < value_count; ++value) {
+            uint64_t value_id = take_uvar(&section);
+            uint64_t value_root_count = take_uvar(&section);
+            if ((have_value && value_id <= prior_value) ||
+                value_id >= XR_PROGRAM_LIMIT_VALUES_PER_FUNCTION || value_root_count == 0u ||
+                value_root_count > XR_PROGRAM_LIMIT_ROOTS_PER_VALUE ||
+                !count_records(&section, value_root_count)) {
+                section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                break;
+            }
+            uint64_t prior_root = 0u;
+            for (uint64_t index = 0; index < value_root_count; ++index) {
+                uint64_t root_id = take_uvar(&section);
+                if (root_id >= root_count || (index != 0u && root_id <= prior_root))
+                    section.status = XR_PROGRAM_DECODE_NONCANONICAL;
+                prior_root = root_id;
+            }
+            prior_value = value_id;
+            have_value = true;
+        }
+    }
     return section_done(&section, artifact);
 }
 
@@ -530,7 +639,7 @@ XrProgramDecodeStatus xr_program_decode_structure(const uint8_t *bytes, size_t s
                      dynamic_type_count) ||
         !decode_empty_section(&reader, &view.sections[4]) ||
         !decode_empty_section(&reader, &view.sections[5]) ||
-        !decode_empty_section(&reader, &view.sections[6]))
+        !decode_semantic_metadata(&reader, &view.sections[6], function_count))
         goto done;
     if (view.section_count == XR_PROGRAM_SECTION_COUNT && view.sections[7].size != 32u) {
         reader.status = XR_PROGRAM_DECODE_NONCANONICAL;

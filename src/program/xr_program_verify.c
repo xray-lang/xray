@@ -114,6 +114,11 @@ static bool type_is_runtime(const XrValidatedProgram *program, uint64_t type_id)
             type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count);
 }
 
+static bool type_is_view(const XrValidatedProgram *program, uint16_t type_id) {
+    const XrValidatedType *type = xr_validated_program_type(program, type_id);
+    return type && type->kind == XR_CORE_IR_TYPE_VIEW;
+}
+
 static bool parse_current_core_spec_fingerprint(uint8_t output[XR_PROGRAM_DIGEST_SIZE]) {
     const char *hex = XR_CORE_SPEC_SEMANTIC_SHA256;
     for (size_t index = 0; index < XR_PROGRAM_DIGEST_SIZE; ++index) {
@@ -158,6 +163,11 @@ static void free_function(XrValidatedFunction *function) {
     xr_free(function->blocks);
     xr_free(function->parameter_types);
     xr_free(function->parameter_modes);
+    xr_free(function->result_borrow_origins);
+    for (uint32_t value = 0; value < function->value_count; ++value)
+        xr_free(function->value_root_sets ? function->value_root_sets[value].root_ids : NULL);
+    xr_free(function->value_root_sets);
+    xr_free(function->roots);
     xr_free(function->value_types);
     xr_free(function->value_categories);
     xr_free(function->value_ownerships);
@@ -196,6 +206,10 @@ static bool validated_type_graph_visit(const XrValidatedProgram *program, uint32
         return true;
     state[index] = 1u;
     const XrValidatedType *type = &program->types[index];
+    if (type->kind == XR_CORE_IR_TYPE_VIEW) {
+        state[index] = 2u;
+        return true;
+    }
     for (uint32_t field = 0; field < type->field_count; ++field) {
         uint16_t child = type->field_types[field];
         if (child >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
@@ -260,28 +274,34 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
         uint64_t ownership = take_uvar(&reader);
         uint64_t copy_contract = take_uvar(&reader);
         take_bytes(&reader, type->key.bytes, sizeof(type->key.bytes));
-        uint64_t member_count = take_uvar(&reader);
+        uint64_t shape_head = take_uvar(&reader);
         location.value_id = type_id <= UINT32_MAX ? (uint32_t) type_id : XR_PROGRAM_LOCATION_NONE;
         if (type_id != XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index ||
-            (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT) ||
+            (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT &&
+             kind != XR_PROGRAM_TYPE_KIND_VIEW) ||
             ownership > XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
-            copy_contract > XR_CORE_IR_COPY_FORBIDDEN || member_count == 0u ||
+            copy_contract > XR_CORE_IR_COPY_FORBIDDEN ||
             ((ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL) !=
              (copy_contract == XR_CORE_IR_COPY_TRIVIAL)) ||
-            member_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
             (index != 0u && memcmp(previous_key, type->key.bytes, sizeof(previous_key)) >= 0) ||
-            !spend(context, member_count, location)) {
+            !spend(context, 1u, location)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
             return false;
         }
         memcpy(previous_key, type->key.bytes, sizeof(previous_key));
         type->type_id = (uint16_t) type_id;
         type->kind = kind == XR_PROGRAM_TYPE_KIND_AGGREGATE ? XR_CORE_IR_TYPE_AGGREGATE
-                                                            : XR_CORE_IR_TYPE_VARIANT;
+                     : kind == XR_PROGRAM_TYPE_KIND_VARIANT ? XR_CORE_IR_TYPE_VARIANT
+                                                            : XR_CORE_IR_TYPE_VIEW;
         type->ownership = (XrCoreIrTypeOwnership) ownership;
         type->copy_contract = (XrCoreIrCopyContract) copy_contract;
         if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
-            type->field_count = (uint32_t) member_count;
+            if (shape_head == 0u || shape_head > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                !spend(context, shape_head, location)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
+                return false;
+            }
+            type->field_count = (uint32_t) shape_head;
             type->field_types = xr_calloc(type->field_count, sizeof(uint16_t));
             if (!type->field_types) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
@@ -296,8 +316,13 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
                 }
                 type->field_types[field] = (uint16_t) field_type;
             }
-        } else {
-            type->variant_count = (uint32_t) member_count;
+        } else if (type->kind == XR_CORE_IR_TYPE_VARIANT) {
+            if (shape_head == 0u || shape_head > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                !spend(context, shape_head, location)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
+                return false;
+            }
+            type->variant_count = (uint32_t) shape_head;
             type->variants = xr_calloc(type->variant_count, sizeof(XrValidatedVariant));
             if (!type->variants) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
@@ -329,6 +354,18 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
                     row->payload_types[field] = (uint16_t) field_type;
                 }
             }
+        } else {
+            uint64_t capability = take_uvar(&reader);
+            if (!type_is_runtime(context->program, shape_head) || shape_head == XR_CORE_TYPE_VOID ||
+                ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
+                copy_contract != XR_CORE_IR_COPY_TRIVIAL ||
+                (capability != XR_CORE_IR_VIEW_READ &&
+                 capability != XR_CORE_IR_VIEW_WRITE_EXCLUSIVE)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+                return false;
+            }
+            type->view_element_type = (uint16_t) shape_head;
+            type->view_capability = (XrCoreIrViewCapability) capability;
         }
     }
     if (!reader_done(&reader)) {
@@ -473,8 +510,61 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
             function->parameter_types[parameter] = (uint16_t) type_id;
             function->parameter_modes[parameter] = (XrParamMode) mode;
         }
+        uint64_t has_receiver = take_uvar(&reader);
+        uint64_t receiver_mode = take_uvar(&reader);
         uint64_t result_type = take_uvar(&reader);
         uint64_t result_ownership = take_uvar(&reader);
+        uint64_t origin_count = take_uvar(&reader);
+        if (has_receiver > 1u || receiver_mode > XR_PARAM_MOVE ||
+            (has_receiver != 0u &&
+             (parameter_count == 0u || function->parameter_modes[0] != receiver_mode)) ||
+            (has_receiver == 0u && receiver_mode != XR_PARAM_READ) ||
+            origin_count > XR_PROGRAM_LIMIT_ROOTS_PER_VALUE ||
+            origin_count > SIZE_MAX / sizeof(XrViewOrigin) ||
+            !spend(context, origin_count, location)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+            return false;
+        }
+        function->has_receiver = has_receiver != 0u;
+        function->receiver_mode = (XrParamMode) receiver_mode;
+        function->result_borrow_origin_count = (uint32_t) origin_count;
+        if (origin_count != 0u) {
+            function->result_borrow_origins =
+                xr_calloc((size_t) origin_count, sizeof(XrViewOrigin));
+            if (!function->result_borrow_origins) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+                return false;
+            }
+        }
+        XrViewOrigin prior_origin = {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = -1};
+        for (uint32_t origin = 0; origin < (uint32_t) origin_count; ++origin) {
+            uint64_t kind = take_uvar(&reader);
+            uint64_t parameter = kind == XR_VIEW_ORIGIN_PARAM ? take_uvar(&reader) : UINT64_MAX;
+            if (kind > XR_VIEW_ORIGIN_STATIC ||
+                (kind == XR_VIEW_ORIGIN_PARAM && parameter > INT16_MAX) ||
+                (kind == XR_VIEW_ORIGIN_PARAM &&
+                 (parameter >= parameter_count - (function->has_receiver ? 1u : 0u) ||
+                  function->parameter_modes[(uint32_t) parameter +
+                                            (function->has_receiver ? 1u : 0u)] !=
+                      XR_PARAM_READ)) ||
+                (kind == XR_VIEW_ORIGIN_RECEIVER &&
+                 (!function->has_receiver || function->receiver_mode != XR_PARAM_READ))) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+                return false;
+            }
+            XrViewOrigin row = {
+                .kind = (XrViewOriginKind) kind,
+                .param_ordinal = kind == XR_VIEW_ORIGIN_PARAM ? (int16_t) parameter : -1,
+            };
+            if (origin != 0u && (row.kind < prior_origin.kind ||
+                                 (row.kind == prior_origin.kind &&
+                                  row.param_ordinal <= prior_origin.param_ordinal))) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+                return false;
+            }
+            function->result_borrow_origins[origin] = row;
+            prior_origin = row;
+        }
         uint64_t error_type = take_uvar(&reader);
         uint64_t panic_type = take_uvar(&reader);
         uint64_t effect_mask = take_uvar(&reader);
@@ -507,6 +597,15 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         function->block_count = (uint32_t) block_count;
         function->value_count = (uint32_t) value_count;
         function->flags = (uint32_t) flags;
+        const XrValidatedType *result_view =
+            xr_validated_program_type(context->program, function->result_type_id);
+        bool readonly_view = result_view && result_view->kind == XR_CORE_IR_TYPE_VIEW &&
+                             result_view->view_capability == XR_CORE_IR_VIEW_READ;
+        if (readonly_view != (function->result_borrow_origin_count != 0u) ||
+            (type_is_view(context->program, function->result_type_id) && !readonly_view)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+            return false;
+        }
         function->blocks = xr_calloc((size_t) block_count, sizeof(XrValidatedBlock));
         function->value_types =
             xr_calloc((size_t) (value_count ? value_count : 1u), sizeof(uint16_t));
@@ -831,6 +930,186 @@ static bool parse_code(VerifyContext *context, const XrProgramView *view) {
     return true;
 }
 
+static uint32_t root_for_origin(const XrValidatedFunction *function, const XrViewOrigin *origin) {
+    for (uint32_t root = 0; root < function->root_count; ++root) {
+        const XrValidatedRoot *row = &function->roots[root];
+        if ((origin->kind == XR_VIEW_ORIGIN_PARAM && row->kind == XR_CORE_IR_ROOT_PARAMETER &&
+             row->parameter_ordinal == (uint32_t) origin->param_ordinal) ||
+            (origin->kind == XR_VIEW_ORIGIN_RECEIVER && row->kind == XR_CORE_IR_ROOT_RECEIVER) ||
+            (origin->kind == XR_VIEW_ORIGIN_STATIC && row->kind == XR_CORE_IR_ROOT_STATIC))
+            return root;
+    }
+    return XR_PROGRAM_LOCATION_NONE;
+}
+
+static bool parse_semantic_metadata(VerifyContext *context, const XrProgramView *view) {
+    VerifyReader reader = section_reader(view, XR_PROGRAM_SECTION_SEMANTIC_METADATA - 1u);
+    uint64_t function_count = take_uvar(&reader);
+    XrProgramSemanticLocation location = no_location();
+    location.section_id = XR_PROGRAM_SECTION_SEMANTIC_METADATA;
+    if (function_count != context->program->function_count ||
+        !spend(context, function_count + 1u, location)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+        return false;
+    }
+    for (uint32_t function_id = 0; function_id < context->program->function_count; ++function_id) {
+        XrValidatedFunction *function = &context->program->functions[function_id];
+        uint64_t encoded_function = take_uvar(&reader);
+        uint64_t root_count = take_uvar(&reader);
+        location.function_id = function_id;
+        if (encoded_function != function_id || root_count > XR_PROGRAM_LIMIT_ROOTS_PER_FUNCTION ||
+            root_count > SIZE_MAX / sizeof(XrValidatedRoot) ||
+            !spend(context, root_count, location)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+            return false;
+        }
+        function->root_count = (uint32_t) root_count;
+        if (root_count != 0u) {
+            function->roots = xr_calloc((size_t) root_count, sizeof(XrValidatedRoot));
+            if (!function->roots) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+                return false;
+            }
+        }
+        XrCoreIrRootKind prior_kind = XR_CORE_IR_ROOT_PARAMETER;
+        uint32_t prior_payload = 0u;
+        bool have_prior = false;
+        for (uint32_t root_id = 0; root_id < (uint32_t) root_count; ++root_id) {
+            uint64_t encoded_root = take_uvar(&reader);
+            uint64_t kind = take_uvar(&reader);
+            uint64_t payload = kind == XR_CORE_IR_ROOT_PARAMETER || kind == XR_CORE_IR_ROOT_LOCAL
+                                   ? take_uvar(&reader)
+                                   : 0u;
+            location.value_id = root_id;
+            if (encoded_root != root_id || kind > XR_CORE_IR_ROOT_LOCAL || payload > UINT32_MAX ||
+                (have_prior &&
+                 (kind < prior_kind || (kind == prior_kind && payload <= prior_payload)))) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                return false;
+            }
+            XrValidatedRoot *root = &function->roots[root_id];
+            root->kind = (XrCoreIrRootKind) kind;
+            root->parameter_ordinal = XR_PROGRAM_LOCATION_NONE;
+            root->source_value_id = XR_PROGRAM_LOCATION_NONE;
+            if (root->kind == XR_CORE_IR_ROOT_PARAMETER) {
+                uint32_t explicit_count =
+                    function->parameter_count - (function->has_receiver ? 1u : 0u);
+                if (payload >= explicit_count) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                    return false;
+                }
+                root->parameter_ordinal = (uint32_t) payload;
+            } else if (root->kind == XR_CORE_IR_ROOT_RECEIVER) {
+                if (!function->has_receiver) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                    return false;
+                }
+            } else if (root->kind == XR_CORE_IR_ROOT_LOCAL) {
+                if (payload >= function->value_count ||
+                    function->value_ownerships[payload] != XR_CORE_IR_OWNER ||
+                    type_is_view(context->program, function->value_types[payload])) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                    return false;
+                }
+                root->source_value_id = (uint32_t) payload;
+            }
+            prior_kind = root->kind;
+            prior_payload = (uint32_t) payload;
+            have_prior = true;
+        }
+        uint64_t row_count = take_uvar(&reader);
+        if (row_count > function->value_count || !spend(context, row_count, location)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+            return false;
+        }
+        function->value_root_sets = xr_calloc(function->value_count ? function->value_count : 1u,
+                                              sizeof(XrValidatedValueRootSet));
+        if (!function->value_root_sets) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+            return false;
+        }
+        uint32_t prior_value = 0u;
+        bool have_value = false;
+        for (uint32_t row = 0; row < (uint32_t) row_count; ++row) {
+            uint64_t value_id = take_uvar(&reader);
+            uint64_t value_root_count = take_uvar(&reader);
+            location.value_id =
+                value_id <= UINT32_MAX ? (uint32_t) value_id : XR_PROGRAM_LOCATION_NONE;
+            if (value_id >= function->value_count || (have_value && value_id <= prior_value) ||
+                !type_is_view(context->program, function->value_types[value_id]) ||
+                value_root_count == 0u || value_root_count > XR_PROGRAM_LIMIT_ROOTS_PER_VALUE ||
+                value_root_count > SIZE_MAX / sizeof(uint32_t) ||
+                !spend(context, value_root_count, location)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                return false;
+            }
+            XrValidatedValueRootSet *set = &function->value_root_sets[value_id];
+            set->root_count = (uint32_t) value_root_count;
+            set->root_ids = xr_calloc((size_t) value_root_count, sizeof(uint32_t));
+            if (!set->root_ids) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+                return false;
+            }
+            uint32_t prior_root = 0u;
+            for (uint32_t index = 0; index < (uint32_t) value_root_count; ++index) {
+                uint64_t root_id = take_uvar(&reader);
+                if (root_id >= function->root_count || (index != 0u && root_id <= prior_root)) {
+                    reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                    return false;
+                }
+                set->root_ids[index] = (uint32_t) root_id;
+                prior_root = (uint32_t) root_id;
+            }
+            prior_value = (uint32_t) value_id;
+            have_value = true;
+        }
+        for (uint32_t value_id = 0; value_id < function->value_count; ++value_id) {
+            bool view_value = type_is_view(context->program, function->value_types[value_id]);
+            if (view_value != (function->value_root_sets[value_id].root_count != 0u)) {
+                location.value_id = value_id;
+                reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                return false;
+            }
+        }
+        for (uint32_t origin = 0; origin < function->result_borrow_origin_count; ++origin) {
+            if (root_for_origin(function, &function->result_borrow_origins[origin]) ==
+                XR_PROGRAM_LOCATION_NONE) {
+                location.value_id = origin;
+                reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                return false;
+            }
+        }
+        const XrValidatedBlock *entry = &function->blocks[function->entry_block];
+        for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
+            uint32_t value_id = entry->argument_ids[parameter];
+            if (!type_is_view(context->program, function->value_types[value_id]))
+                continue;
+            XrViewOrigin origin = {
+                .kind = function->has_receiver && parameter == 0u ? XR_VIEW_ORIGIN_RECEIVER
+                                                                  : XR_VIEW_ORIGIN_PARAM,
+                .param_ordinal = function->has_receiver && parameter != 0u
+                                     ? (int16_t) (parameter - 1u)
+                                     : (int16_t) parameter,
+            };
+            if (origin.kind == XR_VIEW_ORIGIN_RECEIVER)
+                origin.param_ordinal = -1;
+            uint32_t root_id = root_for_origin(function, &origin);
+            const XrValidatedValueRootSet *set = &function->value_root_sets[value_id];
+            if (root_id == XR_PROGRAM_LOCATION_NONE || set->root_count != 1u ||
+                set->root_ids[0] != root_id) {
+                location.value_id = value_id;
+                reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                return false;
+            }
+        }
+    }
+    if (!reader_done(&reader)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_STRUCTURAL, location);
+        return false;
+    }
+    return true;
+}
+
 static bool value_is_available(const XrValidatedFunction *function, uint32_t block_id,
                                uint32_t instruction_id, uint32_t value_id) {
     if (value_id >= function->value_count)
@@ -925,6 +1204,113 @@ static bool value_ownership_contract_is_valid(const XrValidatedProgram *program,
                                                 XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
 }
 
+static bool root_set_contains(const XrValidatedValueRootSet *set, uint32_t root_id) {
+    if (!set)
+        return false;
+    for (uint32_t index = 0; index < set->root_count; ++index)
+        if (set->root_ids[index] == root_id)
+            return true;
+    return false;
+}
+
+static bool root_set_is_subset(const XrValidatedValueRootSet *source,
+                               const XrValidatedValueRootSet *target) {
+    if (!source || !target)
+        return false;
+    for (uint32_t index = 0; index < source->root_count; ++index)
+        if (!root_set_contains(target, source->root_ids[index]))
+            return false;
+    return true;
+}
+
+static uint32_t root_for_source_value(const XrValidatedFunction *function, uint32_t value_id) {
+    const XrValidatedBlock *entry = &function->blocks[function->entry_block];
+    for (uint32_t parameter = 0; parameter < entry->argument_count; ++parameter) {
+        if (entry->argument_ids[parameter] != value_id)
+            continue;
+        XrViewOrigin origin = {
+            .kind = function->has_receiver && parameter == 0u ? XR_VIEW_ORIGIN_RECEIVER
+                                                              : XR_VIEW_ORIGIN_PARAM,
+            .param_ordinal = function->has_receiver && parameter != 0u ? (int16_t) (parameter - 1u)
+                                                                       : (int16_t) parameter,
+        };
+        if (origin.kind == XR_VIEW_ORIGIN_RECEIVER)
+            origin.param_ordinal = -1;
+        return root_for_origin(function, &origin);
+    }
+    for (uint32_t root = 0; root < function->root_count; ++root)
+        if (function->roots[root].kind == XR_CORE_IR_ROOT_LOCAL &&
+            function->roots[root].source_value_id == value_id)
+            return root;
+    return XR_PROGRAM_LOCATION_NONE;
+}
+
+static bool mapped_call_result_roots_match(const XrValidatedProgram *program,
+                                           const XrValidatedFunction *caller,
+                                           const XrValidatedFunction *callee,
+                                           const XrValidatedInstruction *instruction,
+                                           uint32_t result_value_id) {
+    if (!type_is_view(program, callee->result_type_id))
+        return true;
+    if (result_value_id >= caller->value_count || !caller->value_root_sets)
+        return false;
+    const XrValidatedValueRootSet *actual = &caller->value_root_sets[result_value_id];
+    bool *expected = xr_calloc(caller->root_count ? caller->root_count : 1u, sizeof(bool));
+    if (!expected)
+        return false;
+    bool valid = true;
+    uint32_t expected_count = 0u;
+    for (uint32_t index = 0; valid && index < callee->result_borrow_origin_count; ++index) {
+        const XrViewOrigin *origin = &callee->result_borrow_origins[index];
+        if (origin->kind == XR_VIEW_ORIGIN_STATIC) {
+            uint32_t root = root_for_origin(caller, origin);
+            if (root == XR_PROGRAM_LOCATION_NONE)
+                valid = false;
+            else if (!expected[root]) {
+                expected[root] = true;
+                ++expected_count;
+            }
+            continue;
+        }
+        uint32_t operand =
+            origin->kind == XR_VIEW_ORIGIN_RECEIVER
+                ? 0u
+                : (uint32_t) origin->param_ordinal + (callee->has_receiver ? 1u : 0u);
+        if (operand >= instruction->operand_count) {
+            valid = false;
+            break;
+        }
+        uint32_t value_id = instruction->operands[operand];
+        if (type_is_view(program, caller->value_types[value_id])) {
+            const XrValidatedValueRootSet *source = &caller->value_root_sets[value_id];
+            if (source->root_count == 0u) {
+                valid = false;
+                break;
+            }
+            for (uint32_t root_index = 0; root_index < source->root_count; ++root_index) {
+                uint32_t root = source->root_ids[root_index];
+                if (!expected[root]) {
+                    expected[root] = true;
+                    ++expected_count;
+                }
+            }
+        } else {
+            uint32_t root = root_for_source_value(caller, value_id);
+            if (root == XR_PROGRAM_LOCATION_NONE)
+                valid = false;
+            else if (!expected[root]) {
+                expected[root] = true;
+                ++expected_count;
+            }
+        }
+    }
+    valid = valid && actual->root_count == expected_count;
+    for (uint32_t index = 0; valid && index < actual->root_count; ++index)
+        valid = actual->root_ids[index] < caller->root_count && expected[actual->root_ids[index]];
+    xr_free(expected);
+    return valid;
+}
+
 static bool verify_successor_arguments(VerifyContext *context, const XrValidatedFunction *function,
                                        const XrValidatedInstruction *instruction,
                                        uint32_t successor_index, uint32_t operand_start,
@@ -948,6 +1334,14 @@ static bool verify_successor_arguments(VerifyContext *context, const XrValidated
             !operand_ownership_is(function, instruction, operand_start + index,
                                   target->argument_ownerships[index])) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+            return false;
+        }
+        uint32_t source_value = instruction->operands[operand_start + index];
+        uint32_t target_value = target->argument_ids[index];
+        if (type_is_view(context->program, target->argument_types[index]) &&
+            !root_set_is_subset(&function->value_root_sets[source_value],
+                                &function->value_root_sets[target_value])) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
             return false;
         }
     }
@@ -979,6 +1373,14 @@ static bool verify_successor_argument_suffix(VerifyContext *context,
             !operand_ownership_is(function, instruction, operand,
                                   target->argument_ownerships[index])) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
+            return false;
+        }
+        uint32_t source_value = instruction->operands[operand];
+        uint32_t target_value = target->argument_ids[index];
+        if (type_is_view(context->program, target->argument_types[index]) &&
+            !root_set_is_subset(&function->value_root_sets[source_value],
+                                &function->value_root_sets[target_value])) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
             return false;
         }
     }
@@ -1259,6 +1661,22 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                 return false;
             }
+            if (expected == 1u && type_is_view(context->program, function->result_type_id)) {
+                const XrValidatedValueRootSet *set =
+                    &function->value_root_sets[instruction->operands[0]];
+                for (uint32_t root = 0; root < set->root_count; ++root) {
+                    bool allowed = false;
+                    for (uint32_t origin = 0; origin < function->result_borrow_origin_count;
+                         ++origin)
+                        allowed |=
+                            root_for_origin(function, &function->result_borrow_origins[origin]) ==
+                            set->root_ids[root];
+                    if (!allowed) {
+                        reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                        return false;
+                    }
+                }
+            }
             return true;
         }
         case XR_CORE_OP_CORE_CALL_SEALED_DIRECT: {
@@ -1293,6 +1711,12 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                     reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                     return false;
                 }
+            }
+            if (instruction->result_id != XR_PROGRAM_LOCATION_NONE &&
+                !mapped_call_result_roots_match(context->program, function, callee, instruction,
+                                                instruction->result_id)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                return false;
             }
             if ((function->effect_mask & callee->effect_mask) != callee->effect_mask) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_EFFECT, location);
@@ -1362,6 +1786,12 @@ static bool verify_operation(VerifyContext *context, uint32_t function_id, uint3
                     reject(context, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE, location);
                     return false;
                 }
+            }
+            if (normal_implicit != 0u &&
+                !mapped_call_result_roots_match(context->program, function, callee, instruction,
+                                                normal->argument_ids[0])) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);
+                return false;
             }
             for (uint32_t argument = 0; argument < callee->parameter_count; ++argument) {
                 if (!operand_type_is(function, instruction, argument,
@@ -1855,7 +2285,8 @@ XrProgramVerifyStatus xr_program_validate(const uint8_t *bytes, size_t size,
     memcpy(context.program->semantic_profile_fingerprint, view.semantic_profile_fingerprint,
            XR_PROGRAM_DIGEST_SIZE);
     if (!parse_types(&context, &view) || !parse_constants(&context, &view) ||
-        !parse_functions(&context, &view) || !parse_code(&context, &view))
+        !parse_functions(&context, &view) || !parse_code(&context, &view) ||
+        !parse_semantic_metadata(&context, &view))
         goto rejected;
 
     uint32_t entry_count = 0;
@@ -1963,6 +2394,8 @@ const char *xr_program_diagnostic_kind_name(XrProgramDiagnosticKind kind) {
             return "effect";
         case XR_PROGRAM_DIAGNOSTIC_CAPABILITY:
             return "capability";
+        case XR_PROGRAM_DIAGNOSTIC_ROOT:
+            return "root";
         case XR_PROGRAM_DIAGNOSTIC_ENTRY_POINT:
             return "entry-point";
         default:

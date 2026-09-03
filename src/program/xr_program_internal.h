@@ -18,6 +18,8 @@ typedef struct XrCoreIrType {
     uint32_t field_count;
     XrCoreIrVariant *variants;
     uint32_t variant_count;
+    uint16_t view_element_type;
+    XrCoreIrViewCapability view_capability;
 } XrCoreIrType;
 
 typedef struct XrCoreIrInstruction {
@@ -53,13 +55,30 @@ typedef struct XrCoreIrBlock {
     uint32_t instruction_count;
 } XrCoreIrBlock;
 
+typedef struct XrCoreIrRoot {
+    XrCoreIrKey key;
+    XrCoreIrRootKind kind;
+    int32_t parameter_ordinal;
+    XrCoreIrKey source_value;
+} XrCoreIrRoot;
+
+typedef struct XrCoreIrValueRootSet {
+    XrCoreIrKey value;
+    XrCoreIrKey *roots;
+    uint32_t root_count;
+} XrCoreIrValueRootSet;
+
 typedef struct XrCoreIrFunction {
     XrCoreIrKey key;
     uint16_t *parameter_types;
     XrParamMode *parameter_modes;
     uint32_t parameter_count;
+    bool has_receiver;
+    XrParamMode receiver_mode;
     uint16_t result_type_id;
     XrCoreIrOwnershipDisposition result_ownership;
+    XrViewOrigin *result_borrow_origins;
+    uint32_t result_borrow_origin_count;
     uint16_t error_type_id;
     uint16_t panic_type_id;
     uint32_t effect_mask;
@@ -67,6 +86,10 @@ typedef struct XrCoreIrFunction {
     XrCoreIrKey entry_block;
     XrCoreIrBlock *blocks;
     uint32_t block_count;
+    XrCoreIrRoot *roots;
+    uint32_t root_count;
+    XrCoreIrValueRootSet *value_root_sets;
+    uint32_t value_root_set_count;
     uint32_t flags;
 } XrCoreIrFunction;
 

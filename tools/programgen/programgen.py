@@ -44,6 +44,8 @@ LIMIT_KEYS = {
     "operations",
     "operands_per_operation",
     "successors_per_operation",
+    "roots_per_function",
+    "roots_per_value",
 }
 TYPE_SYSTEM_KEYS = {
     "builtin_rows",
@@ -54,6 +56,7 @@ TYPE_SYSTEM_KEYS = {
     "identity_order",
     "aggregate_shape",
     "variant_shape",
+    "view_shape",
     "recursive_value_shape",
     "physical_layout",
 }
@@ -65,6 +68,9 @@ VALUE_SYSTEM_KEYS = {
     "ownership_dispositions",
     "value_definition_contract",
     "place_physical_layout",
+    "root_identity_contract",
+    "value_root_contract",
+    "root_mapping",
 }
 SOURCE_PROJECTION_KEYS = {
     "schema",
@@ -192,12 +198,13 @@ def validate(schema: dict[str, Any]) -> None:
     require(type_system == {
         "builtin_rows": ["0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info"],
         "dynamic_type_base": 16,
-        "dynamic_kinds": ["aggregate", "variant"],
+        "dynamic_kinds": ["aggregate", "variant", "view"],
         "ownership_kinds": ["0:trivial", "1:affine"],
         "copy_contracts": ["0:trivial", "1:explicit", "2:forbidden"],
         "identity_order": "ascending-semantic-key",
         "aggregate_shape": "declaration-ordered-field-type-ids",
         "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
+        "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
         "recursive_value_shape": "reject",
         "physical_layout": "forbidden",
     }, "type-system semantic policy drifted")
@@ -206,13 +213,16 @@ def validate(schema: dict[str, Any]) -> None:
     require(isinstance(value_system, dict) and set(value_system) == VALUE_SYSTEM_KEYS,
             "value-system contract fields drifted")
     require(value_system == {
-        "function_parameter_contract": "ordered-(TypeId,ParamMode)",
-        "function_result_contract": "ordered-(TypeId,OwnershipDisposition,ErrorTypeId,PanicTypeId); ErrorTypeId=void is business-error-free; PanicTypeId=void is panic-free; PanicTypeId=panic-info otherwise",
+        "function_parameter_contract": "ordered-(TypeId,ParamMode) plus declaration-owned receiver marker; receiver occupies parameter slot 0 and source parameter ordinals exclude it",
+        "function_result_contract": "ordered-(TypeId,OwnershipDisposition,BorrowOriginSet,ErrorTypeId,PanicTypeId); BorrowOriginSet is sorted unique PARAM/RECEIVER/STATIC and is required exactly for readonly view results; ErrorTypeId=void is business-error-free; PanicTypeId=void is panic-free; PanicTypeId=panic-info otherwise",
         "parameter_modes": ["0:read", "1:ref", "2:move"],
         "value_categories": ["0:value", "1:place"],
         "ownership_dispositions": ["0:non-owner", "1:owner"],
         "value_definition_contract": "ordered-(TypeId,ValueCategory,OwnershipDisposition)",
         "place_physical_layout": "forbidden",
+        "root_identity_contract": "function-local dense RootId table independent of SSA ValueId; roots are PARAM, RECEIVER, STATIC or LOCAL",
+        "value_root_contract": "every safe view maps to a sorted unique non-empty RootId set; PARAM/RECEIVER/LOCAL root definitions bind the owning source identity",
+        "root_mapping": "callee PARAM/RECEIVER/STATIC origins map to caller value RootId sets and are sorted/deduplicated",
     }, "value-system semantic policy drifted")
 
     sections = schema["sections"]
@@ -503,6 +513,7 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Copy contracts: `{', '.join(type_system['copy_contracts'])}`",
         f"- Aggregate shape: `{type_system['aggregate_shape']}`",
         f"- Variant shape: `{type_system['variant_shape']}`",
+        f"- View shape: `{type_system['view_shape']}`",
         f"- Recursive value shape: `{type_system['recursive_value_shape']}`",
         f"- Physical layout: `{type_system['physical_layout']}`",
         "",
@@ -517,6 +528,9 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Ownership dispositions: `{', '.join(value_system['ownership_dispositions'])}`",
         f"- Value definitions: `{value_system['value_definition_contract']}`",
         f"- Place physical layout: `{value_system['place_physical_layout']}`",
+        f"- Root identity: `{value_system['root_identity_contract']}`",
+        f"- Value roots: `{value_system['value_root_contract']}`",
+        f"- Call root mapping: `{value_system['root_mapping']}`",
         "",
         "A `place` is a verifier-confined SSA capability with a pointee `TypeId`; it is not a language type and never enters the type table. `REF` entry arguments and call operands are places, while `READ` and `MOVE` use values. An `owner` disposition is an exactly-once logical token; physical retain/release and storage remain executor-private.",
     ])

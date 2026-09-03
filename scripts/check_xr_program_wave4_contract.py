@@ -41,6 +41,7 @@ def validate(root: Path) -> None:
     require(data.get("implementation_state") == {
         "declaration_receiver_contract": "COMPLETE",
         "borrow_origin_set": "COMPLETE",
+        "borrow_root_tables": "COMPLETE",
         "program_tables": "PENDING",
         "existential_operations": "PENDING",
         "witness_dispatch": "PENDING",
@@ -101,6 +102,7 @@ def validate(root: Path) -> None:
         "body_role",
         "call_mapping",
         "xi_evidence",
+        "program_rows",
         "semantic_plan_boundary",
         "compatibility",
         "positive_fixtures",
@@ -139,6 +141,14 @@ def validate(root: Path) -> None:
         "src/ir/xi_lower_expr.c": ["static void lower_instantiate_call_view_evidence("],
         "src/ir/xi_verify.c": [
             "has an invalid ViewEvidence source recipe",
+        ],
+        "src/program/xr_program.h": [
+            "typedef struct XrCoreIrRootInput",
+            "typedef struct XrCoreIrValueRootSetInput",
+        ],
+        "src/program/xr_program_verify.c": [
+            "static bool parse_semantic_metadata(",
+            "static bool mapped_call_result_roots_match(",
         ],
     }
     for relative, anchors in required_anchors.items():
@@ -183,6 +193,8 @@ def self_test(root: Path) -> None:
         Path("src/ir/xi.c"),
         Path("src/ir/xi_lower_expr.c"),
         Path("src/ir/xi_verify.c"),
+        Path("src/program/xr_program.h"),
+        Path("src/program/xr_program_verify.c"),
         Path("tests/fixtures/task284_ownership_positive/borrow_origin_set.xr"),
         Path("tests/fixtures/task284_ownership_positive/borrow_origin_static.xr"),
         Path("tests/fixtures/task284_ownership_negative/borrow_origin_ambiguous.xr"),

@@ -13,6 +13,7 @@
 
 #include "../base/xdefs.h"
 #include "../shared/xr_param_mode.h"
+#include "../shared/xr_view_origin.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -31,6 +32,7 @@ typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_ERROR = 4,
     XR_PROGRAM_TYPE_KIND_AGGREGATE = 16,
     XR_PROGRAM_TYPE_KIND_VARIANT = 17,
+    XR_PROGRAM_TYPE_KIND_VIEW = 18,
 } XrProgramTypeKind;
 
 typedef struct XrCoreIrKey {
@@ -40,7 +42,13 @@ typedef struct XrCoreIrKey {
 typedef enum XrCoreIrTypeKind {
     XR_CORE_IR_TYPE_AGGREGATE = 1,
     XR_CORE_IR_TYPE_VARIANT = 2,
+    XR_CORE_IR_TYPE_VIEW = 3,
 } XrCoreIrTypeKind;
+
+typedef enum XrCoreIrViewCapability {
+    XR_CORE_IR_VIEW_READ = 1,
+    XR_CORE_IR_VIEW_WRITE_EXCLUSIVE = 2,
+} XrCoreIrViewCapability;
 
 /* Logical ownership is part of TypeId semantics, while physical retain,
  * release, allocation, and layout remain executor-private. */
@@ -74,6 +82,8 @@ typedef struct XrCoreIrTypeInput {
     uint32_t field_count;
     const XrCoreIrVariantInput *variants;
     uint32_t variant_count;
+    uint16_t view_element_type;
+    XrCoreIrViewCapability view_capability;
 } XrCoreIrTypeInput;
 
 typedef enum XrCoreIrConstantKind {
@@ -158,13 +168,43 @@ typedef struct XrCoreIrBlockInput {
     uint32_t instruction_count;
 } XrCoreIrBlockInput;
 
+/* RootId is a function-local semantic identity independent of SSA ValueId.
+ * PARAMETER ordinals exclude an optional receiver. LOCAL roots name the value
+ * that creates a fresh logical identity; no physical allocation fact is
+ * encoded. STATIC has neither a parameter nor a source value. */
+typedef enum XrCoreIrRootKind {
+    XR_CORE_IR_ROOT_PARAMETER = 0,
+    XR_CORE_IR_ROOT_RECEIVER = 1,
+    XR_CORE_IR_ROOT_STATIC = 2,
+    XR_CORE_IR_ROOT_LOCAL = 3,
+} XrCoreIrRootKind;
+
+typedef struct XrCoreIrRootInput {
+    XrCoreIrKey key;
+    XrCoreIrRootKind kind;
+    int32_t parameter_ordinal;
+    XrCoreIrKey source_value;
+} XrCoreIrRootInput;
+
+/* A root-bearing SSA value has one canonical RootId set. Affine owners and
+ * places have exactly one root; views may carry multiple roots. */
+typedef struct XrCoreIrValueRootSetInput {
+    XrCoreIrKey value;
+    const XrCoreIrKey *roots;
+    uint32_t root_count;
+} XrCoreIrValueRootSetInput;
+
 typedef struct XrCoreIrFunctionInput {
     XrCoreIrKey key;
     const uint16_t *parameter_types;
     const XrParamMode *parameter_modes;
     uint32_t parameter_count;
+    bool has_receiver;
+    XrParamMode receiver_mode;
     uint16_t result_type_id;
     XrCoreIrOwnershipDisposition result_ownership;
+    const XrViewOrigin *result_borrow_origins;
+    uint32_t result_borrow_origin_count;
     /* VOID denotes an infallible function. A non-VOID TypeId is the exact
      * value transferred by core.error.publish and sealed-invoke's error edge. */
     uint16_t error_type_id;
@@ -176,6 +216,10 @@ typedef struct XrCoreIrFunctionInput {
     XrCoreIrKey entry_block;
     const XrCoreIrBlockInput *blocks;
     uint32_t block_count;
+    const XrCoreIrRootInput *roots;
+    uint32_t root_count;
+    const XrCoreIrValueRootSetInput *value_root_sets;
+    uint32_t value_root_set_count;
     uint32_t flags;
 } XrCoreIrFunctionInput;
 

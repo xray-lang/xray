@@ -79,10 +79,12 @@ static bool reference_value_matches_type(const XrValidatedProgram *program, XrRe
             return value.kind == XR_REFERENCE_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
             return value.kind == XR_REFERENCE_VALUE_PANIC_INFO;
-        default:
-            return xr_validated_program_type(program, type_id) &&
+        default: {
+            const XrValidatedType *type = xr_validated_program_type(program, type_id);
+            return type && type->kind != XR_CORE_IR_TYPE_VIEW &&
                    value.kind == XR_REFERENCE_VALUE_AGGREGATE && value.as.aggregate &&
                    ((const XrReferenceAggregateValue *) value.as.aggregate)->type_id == type_id;
+        }
     }
 }
 
@@ -131,6 +133,8 @@ static bool clone_reference_value(EvalContext *context, XrReferenceValue source,
         *output = source;
         return true;
     }
+    if (type->kind == XR_CORE_IR_TYPE_VIEW)
+        return false;
     const XrReferenceAggregateValue *source_aggregate = source.as.aggregate;
     if (!source_aggregate || source_aggregate->type_id != type_id)
         return false;
