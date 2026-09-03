@@ -37,6 +37,8 @@ typedef struct XrProgramXiProjection {
 
 bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,
                               XrProgramXiProjection *projection_out);
+bool xr_program_xi_operation_contract(uint16_t xi_operation, uint32_t *effect_mask_out,
+                                      uint32_t *capability_mask_out);
 bool xr_program_xi_value_is_materialized(uint16_t xi_operation);
 
 #endif /* XR_PROGRAM_XI_PROJECTION_GEN_H */

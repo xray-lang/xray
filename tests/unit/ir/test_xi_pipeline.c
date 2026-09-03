@@ -1183,6 +1183,8 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT},
         {XI_AGG_GET, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_AGGREGATE_PROJECT, 0u,
          XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT},
+        {XI_LOAD_UPVAL, XR_CORE_TYPE_I64, XR_CORE_OP_CORE_AGGREGATE_PROJECT, 0u,
+         XR_PROGRAM_XI_PROJECTION_AGGREGATE_PROJECT},
         {XI_AGG_UPDATE, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_AGGREGATE_UPDATE, 0u,
          XR_PROGRAM_XI_PROJECTION_AGGREGATE_UPDATE},
         {XI_VARIANT_CONSTRUCT, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_VARIANT_CONSTRUCT,
@@ -1201,6 +1203,8 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
          XR_PROGRAM_XI_PROJECTION_PLACE_LOAD},
         {XI_PLACE_STORE, XR_CORE_TYPE_VOID, XR_CORE_OP_CORE_PLACE_STORE, 0u,
          XR_PROGRAM_XI_PROJECTION_PLACE_STORE},
+        {XI_CLOSURE_NEW, XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE, XR_CORE_OP_CORE_CALLABLE_PACK, 0u,
+         XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK},
     };
     for (size_t index = 0; index < sizeof(rows) / sizeof(rows[0]); ++index) {
         XrProgramXiProjection projection = {0};
@@ -1211,6 +1215,15 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
         PIPELINE_TEST_REQUIRE(projection.immediate_u32 == rows[index].immediate);
         PIPELINE_TEST_REQUIRE(projection.kind == rows[index].kind);
         PIPELINE_TEST_REQUIRE(xr_program_xi_value_is_materialized(rows[index].xi_operation));
+        uint32_t effects = UINT32_MAX;
+        uint32_t capabilities = UINT32_MAX;
+        const XrCoreOperationSpec *operation =
+            xr_core_spec_operation_by_id(rows[index].core_operation);
+        PIPELINE_TEST_REQUIRE(operation != NULL);
+        PIPELINE_TEST_REQUIRE(
+            xr_program_xi_operation_contract(rows[index].xi_operation, &effects, &capabilities));
+        PIPELINE_TEST_REQUIRE(effects == operation->effect_mask);
+        PIPELINE_TEST_REQUIRE(capabilities == operation->capability_mask);
     }
 
     XrProgramXiProjection rejected = {0};
@@ -1218,6 +1231,11 @@ TEST(e2e_program_xi_projection_is_exact_and_fail_closed) {
     PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_MOD, XR_CORE_TYPE_I64, &rejected));
     PIPELINE_TEST_REQUIRE(!xr_program_xi_projection(XI_ADD, XR_CORE_TYPE_I64, NULL));
     PIPELINE_TEST_REQUIRE(!xr_program_xi_value_is_materialized(XI_MOD));
+    uint32_t effects = 0u;
+    uint32_t capabilities = 0u;
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_operation_contract(XI_MOD, &effects, &capabilities));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_operation_contract(XI_ADD, NULL, &capabilities));
+    PIPELINE_TEST_REQUIRE(!xr_program_xi_operation_contract(XI_ADD, &effects, NULL));
 }
 
 static void require_program_input_tree(const XiFunc *function) {
@@ -1342,8 +1360,8 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  return value\n"
                                          "}\n"
                                          "fn callable_value() -> i64 {\n"
-                                         "  var captured = 47\n"
-                                         "  var action = fn() -> i64 { return captured }\n"
+                                         "  var captured = 5\n"
+                                         "  var action = fn() -> i64 { return captured + 42 }\n"
                                          "  return action()\n"
                                          "}\n"
                                          "fn root() -> i64 {\n"
@@ -1601,8 +1619,13 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     bool found_nested_generic_variant = false;
     bool found_point_aggregate = false;
     bool found_capture_aggregate = false;
+    bool found_effectful_callable = false;
     for (uint32_t type_index = 0; type_index < validated->type_count; ++type_index) {
         const XrValidatedType *variant = &validated->types[type_index];
+        if (variant->kind == XR_CORE_IR_TYPE_CALLABLE &&
+            variant->signature_id < validated->signature_count &&
+            validated->signatures[variant->signature_id].effect_mask == XR_CORE_EFFECT_TRAP)
+            found_effectful_callable = true;
         if (variant->kind == XR_CORE_IR_TYPE_AGGREGATE && variant->field_count == 2u &&
             variant->field_types && variant->field_types[0] == XR_CORE_TYPE_I64 &&
             variant->field_types[1] == XR_CORE_TYPE_I64)
@@ -1634,6 +1657,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     PIPELINE_TEST_REQUIRE(found_nested_generic_variant);
     PIPELINE_TEST_REQUIRE(found_point_aggregate);
     PIPELINE_TEST_REQUIRE(found_capture_aggregate);
+    PIPELINE_TEST_REQUIRE(found_effectful_callable);
     static const uint16_t required_source_operations[] = {
         XR_CORE_OP_CORE_CONSTANT_I64,
         XR_CORE_OP_CORE_CONSTANT_BOOL,

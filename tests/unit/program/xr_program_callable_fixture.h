@@ -9,6 +9,7 @@
 typedef enum XrProgramCallableFixtureMutation {
     XR_CALLABLE_FIXTURE_VALID = 0,
     XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,
+    XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
     XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,
     XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
 } XrProgramCallableFixtureMutation;
@@ -44,10 +45,11 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
         .result_ownership = XR_CORE_IR_NON_OWNER,
         .error_type_id = XR_CORE_TYPE_VOID,
         .panic_type_id = XR_CORE_TYPE_VOID,
+        .effect_mask = XR_CORE_EFFECT_TRAP,
     };
     XrCoreIrCallableSignatureInput fallible_signature = direct_signature;
     fallible_signature.error_type_id = XR_CORE_TYPE_ERROR;
-    fallible_signature.effect_mask = XR_CORE_EFFECT_ERROR;
+    fallible_signature.effect_mask |= XR_CORE_EFFECT_ERROR;
     XrCoreIrTypeInput types[] = {
         {
             .key = xr_callable_fixture_key("callable:type:capture"),
@@ -133,6 +135,8 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
         .blocks = &captured_block,
         .block_count = 1u,
     };
+    if (mutation == XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS)
+        captured_target.capability_mask = XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH;
 
     XrCoreIrKey constant_key = xr_callable_fixture_key("callable:constant:42");
     XrCoreIrConstantInput constant = {
@@ -437,7 +441,7 @@ xr_program_callable_fixture_write_mutated(XrProgramCallableFixtureMutation mutat
         .result_ownership = XR_CORE_IR_NON_OWNER,
         .error_type_id = XR_CORE_TYPE_VOID,
         .panic_type_id = XR_CORE_TYPE_VOID,
-        .effect_mask = XR_CORE_EFFECT_CALL,
+        .effect_mask = XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_TRAP,
         .entry_block = entry_block_key,
         .blocks = entry_blocks,
         .block_count = 3u,

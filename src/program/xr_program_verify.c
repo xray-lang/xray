@@ -1183,8 +1183,8 @@ static bool validated_signature_satisfies_interface(const XrValidatedProgram *pr
         implementation->result_borrow_origin_count != requirement->result_borrow_origin_count ||
         implementation->error_type_id != requirement->error_type_id ||
         implementation->panic_type_id != requirement->panic_type_id ||
-        implementation->effect_mask != requirement->effect_mask ||
-        implementation->capability_mask != requirement->capability_mask)
+        (implementation->effect_mask & ~requirement->effect_mask) != 0u ||
+        (implementation->capability_mask & ~requirement->capability_mask) != 0u)
         return false;
     for (uint32_t index = 0; index < requirement->parameter_count; ++index) {
         if (implementation->parameter_modes[index] != requirement->parameter_modes[index])
@@ -1801,8 +1801,8 @@ static bool callable_target_matches(const XrValidatedProgram *program,
         implementation->result_ownership != visible->result_ownership ||
         implementation->error_type_id != visible->error_type_id ||
         implementation->panic_type_id != visible->panic_type_id ||
-        implementation->effect_mask != visible->effect_mask ||
-        implementation->capability_mask != visible->capability_mask ||
+        (implementation->effect_mask & ~visible->effect_mask) != 0u ||
+        (implementation->capability_mask & ~visible->capability_mask) != 0u ||
         !borrow_origins_equal(visible, implementation))
         return false;
     for (uint32_t parameter = 0; parameter < visible->parameter_count; ++parameter)

@@ -232,6 +232,37 @@ bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,
     return false;
 }
 
+bool xr_program_xi_operation_contract(uint16_t xi_operation, uint32_t *effect_mask_out,
+                                      uint32_t *capability_mask_out) {
+    if (!effect_mask_out || !capability_mask_out)
+        return false;
+    bool found = false;
+    uint32_t effects = 0u;
+    uint32_t capabilities = 0u;
+    for (uint32_t index = 0;
+         index < sizeof(xr_program_xi_projection_rows) / sizeof(xr_program_xi_projection_rows[0]);
+         ++index) {
+        const XrProgramXiProjectionRow *row = &xr_program_xi_projection_rows[index];
+        if (row->xi_operation != xi_operation)
+            continue;
+        const XrCoreOperationSpec *operation =
+            xr_core_spec_operation_by_id(row->core_operation_id);
+        if (!operation)
+            return false;
+        if (found && (effects != operation->effect_mask ||
+                      capabilities != operation->capability_mask))
+            return false;
+        found = true;
+        effects = operation->effect_mask;
+        capabilities = operation->capability_mask;
+    }
+    if (!found)
+        return false;
+    *effect_mask_out = effects;
+    *capability_mask_out = capabilities;
+    return true;
+}
+
 bool xr_program_xi_value_is_materialized(uint16_t xi_operation) {
     for (uint32_t index = 0;
          index < sizeof(xr_program_xi_projection_rows) / sizeof(xr_program_xi_projection_rows[0]);

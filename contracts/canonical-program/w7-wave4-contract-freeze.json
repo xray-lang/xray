@@ -148,9 +148,9 @@
   },
   "witness_operation_contract": {
     "slot_immediate": "one declaration-ordered slot ordinal interpreted only against the receiver existential InterfaceId; no selector, method name or backend table offset is encoded",
-    "signature_authority": "the canonical interface slot SignatureId owns parameter modes, result ownership, borrowed-result origins, typed error and panic channels, effects and capabilities",
+    "signature_authority": "the canonical interface slot SignatureId owns parameter modes, result ownership, borrowed-result origins, typed error and panic channels, and effect and capability upper bounds",
     "receiver_capability": "READ carriers admit READ receivers; REF carriers admit READ or REF; MOVE carriers admit READ or MOVE; OWNED_STORAGE carriers admit READ, REF or MOVE; READ/MOVE calls materialize a value and REF preserves the exact place",
-    "receiver_substitution": "conformance validation substitutes only the existential receiver TypeId with the exact nominal implementor TypeId and requires every other signature fact to match",
+    "receiver_substitution": "conformance validation substitutes only the existential receiver TypeId with the exact nominal implementor TypeId, requires every other structural signature fact to match, and requires implementation effects and capabilities to be subsets of the slot upper bounds",
     "dispatch": "the carrier exact ConformanceId selects one validated slot-to-FunctionId row; malformed carrier identity is refused and target bodies are never inspected to recover semantics",
     "direct": "witness_direct is admitted only for a slot without error or panic and returns through its typed result",
     "invoke": "witness_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments",
@@ -159,9 +159,9 @@
     "compatibility": "no selector lookup, erased universal call ABI, class-only itable, backend semantic inference, old reader or dual operation spelling"
   },
   "callable_operation_contract": {
-    "signature_authority": "the callable TypeId owns one canonical SignatureId containing visible parameter modes, result ownership, borrowed-result origins, typed error and panic channels, effects and capabilities",
+    "signature_authority": "the callable TypeId owns one canonical SignatureId containing visible parameter modes, result ownership, borrowed-result origins, typed error and panic channels, and effect and capability upper bounds",
     "target_identity": "callable.pack records one closed FunctionId; no symbol name, selector, source expression or backend address is canonical data",
-    "capture_shape": "a captureless target matches the visible signature exactly; a captured target adds exactly one READ receiver whose TypeId is the optional aggregate capture operand",
+    "capture_shape": "a captureless target matches the visible structural signature; a captured target adds exactly one READ receiver whose TypeId is the optional aggregate capture operand; implementation effects and capabilities must be subsets of the visible upper bounds",
     "capture_ownership": "capture aggregates are affine explicit-copy owners; callable values are affine explicit-copy owners and cloning recursively copies the typed capture only through core.owner.copy",
     "direct": "indirect_direct is admitted only for a callable signature without error or panic and returns through its exact typed result",
     "invoke": "indirect_invoke requires at least one typed error or panic channel and transfers through explicit normal, error and panic successor arguments",

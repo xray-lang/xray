@@ -64,6 +64,10 @@ typedef struct XrXiFunctionStorage {
     XrCoreIrBlockInput *blocks;
     XrXiBlockStorage *block_storage;
     uint32_t local_effect_mask;
+    uint32_t local_capability_mask;
+    uint32_t closed_effect_mask;
+    uint32_t closed_capability_mask;
+    bool closed_contract_ready;
 } XrXiFunctionStorage;
 
 typedef struct XrXiModuleStorage {
@@ -443,9 +447,10 @@ static bool map_capture_type(XrXiBuildContext *context, const XiFunc *function, 
     return true;
 }
 
-static bool map_callable_type_recursive(XrXiBuildContext *context, const XrType *type,
-                                        uint16_t *type_id, const XrType *const *stack,
-                                        uint32_t depth) {
+static bool map_callable_type_contract_recursive(XrXiBuildContext *context, const XrType *type,
+                                                 uint32_t effect_mask, uint32_t capability_mask,
+                                                 uint16_t *type_id, const XrType *const *stack,
+                                                 uint32_t depth) {
     if (!context || !type || !type_id || type->kind != XR_KIND_FUNCTION || type->is_nullable ||
         type->function.param_count < 0 || type->function.param_count > UINT16_MAX ||
         (type->function.param_count != 0 && !type->function.params) ||
@@ -492,13 +497,13 @@ static bool map_callable_type_recursive(XrXiBuildContext *context, const XrType 
     }
 
     const size_t type_reference_size = 1u + XR_CORE_IR_KEY_SIZE;
-    if (parameter_count > (SIZE_MAX - 6u - type_reference_size) / (type_reference_size + 1u)) {
+    if (parameter_count > (SIZE_MAX - 14u - type_reference_size) / (type_reference_size + 1u)) {
         xr_free(parameter_types);
         xr_free(parameter_modes);
         return false;
     }
     size_t material_size =
-        5u + (size_t) parameter_count * (type_reference_size + 1u) + type_reference_size + 1u;
+        5u + (size_t) parameter_count * (type_reference_size + 1u) + type_reference_size + 9u;
     uint8_t *material = xr_calloc(material_size, 1u);
     if (!material) {
         xr_free(parameter_types);
@@ -517,6 +522,10 @@ static bool map_callable_type_recursive(XrXiBuildContext *context, const XrType 
     put_dynamic_type_reference(context, material + cursor, result_type);
     cursor += type_reference_size;
     material[cursor++] = (uint8_t) logical_ownership_for_type(context, result_type);
+    put_u32_be(material + cursor, effect_mask);
+    cursor += 4u;
+    put_u32_be(material + cursor, capability_mask);
+    cursor += 4u;
     if (cursor != material_size) {
         xr_free(material);
         xr_free(parameter_types);
@@ -557,6 +566,8 @@ static bool map_callable_type_recursive(XrXiBuildContext *context, const XrType 
         logical_ownership_for_type(context, result_type);
     storage->callable_signature->error_type_id = XR_CORE_TYPE_VOID;
     storage->callable_signature->panic_type_id = XR_CORE_TYPE_VOID;
+    storage->callable_signature->effect_mask = effect_mask;
+    storage->callable_signature->capability_mask = capability_mask;
     storage->input.key = semantic_key;
     storage->input.kind = XR_CORE_IR_TYPE_CALLABLE;
     storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
@@ -565,6 +576,12 @@ static bool map_callable_type_recursive(XrXiBuildContext *context, const XrType 
     *type_id = storage->input.local_id;
     ++context->type_count;
     return true;
+}
+
+static bool map_callable_type_recursive(XrXiBuildContext *context, const XrType *type,
+                                        uint16_t *type_id, const XrType *const *stack,
+                                        uint32_t depth) {
+    return map_callable_type_contract_recursive(context, type, 0u, 0u, type_id, stack, depth);
 }
 
 static bool map_variant_type_recursive(XrXiBuildContext *context, const XrType *type,
@@ -1071,6 +1088,14 @@ static const XrXiFunctionStorage *find_xi_function(const XrXiBuildContext *conte
     return NULL;
 }
 
+static bool map_callable_target_type(XrXiBuildContext *context, const XrType *type,
+                                     const XiFunc *target, uint16_t *type_id) {
+    const XrXiFunctionStorage *storage = find_xi_function(context, target, NULL, NULL);
+    return storage && storage->closed_contract_ready &&
+           map_callable_type_contract_recursive(context, type, storage->closed_effect_mask,
+                                                storage->closed_capability_mask, type_id, NULL, 0u);
+}
+
 static bool value_is_only_elided_operand(const XiFunc *function, const XiValue *value) {
     bool found = false;
     for (uint32_t block_index = 0; function && block_index < function->nblocks; ++block_index) {
@@ -1241,6 +1266,19 @@ static const XiValue *logical_value_identity(const XiValue *value) {
             value = value->args[0];
     }
     return value;
+}
+
+static const XiFunc *resolved_callable_call_target(const XrXiBuildContext *context,
+                                                   const XiFunc *caller, const XiValue *call) {
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    if (row && row->kind == XG_CALL_CLOSURE && row->static_target_func_id != XG_NO_ID) {
+        const XiFunc *target = find_xi_function_by_xg_id(context, row->static_target_func_id);
+        if (target)
+            return target;
+    }
+    const XiValue *callee =
+        call && call->nargs != 0u ? logical_value_identity(call->args[0]) : NULL;
+    return resolved_callable_target(caller, callee);
 }
 
 static XrCoreIrValueCategory logical_value_category(const XiValue *value) {
@@ -1467,10 +1505,13 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi indirect call v%u requires an explicit error continuation", value->id);
         const XiValue *callee_value = value->nargs ? logical_value_identity(value->args[0]) : NULL;
+        const XiFunc *callable_target = resolved_callable_call_target(context, function->xi, value);
         uint16_t callable_type_id = XR_CORE_TYPE_VOID;
-        if (!callee_value || !map_type(context, callee_value->type, &callable_type_id))
+        if (!callee_value || !callable_target ||
+            !map_callable_target_type(context, callee_value->type, callable_target,
+                                      &callable_type_id))
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                        "Xi call v%u has no typed callable target", value->id);
+                        "Xi call v%u has no closed typed callable target", value->id);
         const XrXiTypeStorage *callable = find_dynamic_type_by_id(context, callable_type_id);
         if (!callable || callable->input.kind != XR_CORE_IR_TYPE_CALLABLE ||
             !callable->callable_signature ||
@@ -1569,7 +1610,8 @@ static XrProgramBuildStatus translate_callable_pack(XrXiBuildContext *context,
     uint16_t callable_type_id = XR_CORE_TYPE_VOID;
     const XiFunc *target = resolved_callable_target(function->xi, value);
     const XrXiFunctionStorage *target_storage = find_xi_function(context, target, NULL, NULL);
-    if (!target || !target_storage || !map_type(context, value->type, &callable_type_id))
+    if (!target || !target_storage ||
+        !map_callable_target_type(context, value->type, target, &callable_type_id))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi callable pack v%u has no exact target or signature", value->id);
     const XrXiTypeStorage *callable = find_dynamic_type_by_id(context, callable_type_id);
@@ -1601,7 +1643,11 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                                             size_t diagnostic_size) {
     memset(instruction, 0, sizeof(*instruction));
     uint16_t result_type = XR_CORE_TYPE_VOID;
-    if (!map_type(context, value->type, &result_type))
+    const XiFunc *callable_target = resolved_callable_target(function->xi, value);
+    bool result_mapped = callable_target ? map_callable_target_type(context, value->type,
+                                                                    callable_target, &result_type)
+                                         : map_type(context, value->type, &result_type);
+    if (!result_mapped)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi operation %u at v%u result type kind %u is not active in CoreSpec",
                     value->op, value->id, value->type ? (unsigned) value->type->kind : UINT32_MAX);
@@ -2278,6 +2324,133 @@ unavailable:
                 "Xi invoke edge operand is unavailable in predecessor b%u", predecessor->xi->id);
 }
 
+static const XrCoreOperationSpec *xi_block_terminal_contract(const XrXiBuildContext *context,
+                                                             const XiFunc *function,
+                                                             const XiBlock *block) {
+    if (block_sealed_invoke_call(context, function, block))
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_SEALED_INVOKE);
+    if (block->kind == XI_BLOCK_UNREACHABLE)
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_PANIC_PUBLISH);
+    if (block->kind == XI_BLOCK_RETURN && block->control && block->control->op == XI_ERR_RETURN)
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_ERROR_PUBLISH);
+    if (block->kind == XI_BLOCK_RETURN)
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_RETURN);
+    if (block->kind == XI_BLOCK_PLAIN)
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_BRANCH);
+    if (block->kind == XI_BLOCK_IF)
+        return xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CONDITIONAL_BRANCH);
+    return NULL;
+}
+
+/* Close target-neutral function contracts before any callable TypeId is
+ * materialized.  This is a CoreSpec operation-algebra pass: it reads the
+ * generated Xi projection plus exact Xg call targets and never inspects a
+ * backend body, source spelling, or runtime representation. */
+static XrProgramBuildStatus
+precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_t diagnostic_size) {
+    uint32_t total_functions = 0u;
+    for (uint32_t module_index = 0; module_index < context->source->module_count; ++module_index) {
+        XrXiModuleStorage *module = &context->storage[module_index];
+        if (module->function_count > UINT32_MAX - total_functions)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi function contract graph is too large");
+        total_functions += module->function_count;
+        for (uint32_t function_index = 0; function_index < module->function_count;
+             ++function_index) {
+            XrXiFunctionStorage *storage = &module->function_storage[function_index];
+            const XiFunc *function = storage->xi;
+            uint32_t effects = 0u;
+            uint32_t capabilities = 0u;
+            for (uint32_t block_index = 0; function && block_index < function->nblocks;
+                 ++block_index) {
+                const XiBlock *block = function->blocks[block_index];
+                for (uint32_t value_index = 0; block && value_index < block->nvalues;
+                     ++value_index) {
+                    const XiValue *value = block->values[value_index];
+                    if (!value || value_is_skipped(context, function, value))
+                        continue;
+                    uint32_t value_effects = 0u;
+                    uint32_t value_capabilities = 0u;
+                    if (!xr_program_xi_operation_contract(value->op, &value_effects,
+                                                          &value_capabilities))
+                        return fail(diagnostic, diagnostic_size,
+                                    XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                    "Xi operation %s (%u) at v%u has no unique CoreSpec "
+                                    "contract",
+                                    xi_op_name(value->op), value->op, value->id);
+                    effects |= value_effects;
+                    capabilities |= value_capabilities;
+                }
+                const XrCoreOperationSpec *terminal =
+                    block ? xi_block_terminal_contract(context, function, block) : NULL;
+                if (!terminal)
+                    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                                "Xi block has no active CoreSpec terminal contract");
+                effects |= terminal->effect_mask;
+                capabilities |= terminal->capability_mask;
+            }
+            storage->closed_effect_mask = effects;
+            storage->closed_capability_mask = capabilities;
+        }
+    }
+
+    for (uint32_t iteration = 0; iteration <= total_functions; ++iteration) {
+        bool changed = false;
+        for (uint32_t module_index = 0; module_index < context->source->module_count;
+             ++module_index) {
+            XrXiModuleStorage *module = &context->storage[module_index];
+            for (uint32_t function_index = 0; function_index < module->function_count;
+                 ++function_index) {
+                XrXiFunctionStorage *storage = &module->function_storage[function_index];
+                uint32_t effects = storage->closed_effect_mask;
+                uint32_t capabilities = storage->closed_capability_mask;
+                for (uint32_t block_index = 0; block_index < storage->xi->nblocks; ++block_index) {
+                    const XiBlock *block = storage->xi->blocks[block_index];
+                    for (uint32_t value_index = 0; block && value_index < block->nvalues;
+                         ++value_index) {
+                        const XiValue *value = block->values[value_index];
+                        if (!value || value->op != XI_CALL)
+                            continue;
+                        const XiFunc *callee = resolved_direct_callee(context, storage->xi, value);
+                        if (!callee)
+                            callee = resolved_callable_call_target(context, storage->xi, value);
+                        const XrXiFunctionStorage *callee_storage =
+                            find_xi_function(context, callee, NULL, NULL);
+                        if (!callee_storage)
+                            return fail(diagnostic, diagnostic_size,
+                                        XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                                        "Xi function contract has an unresolved call target");
+                        uint32_t callee_effects = callee_storage->closed_effect_mask;
+                        if (block_sealed_invoke_call(context, storage->xi, block) == value)
+                            callee_effects &= ~XR_CORE_EFFECT_ERROR;
+                        effects |= callee_effects;
+                        capabilities |= callee_storage->closed_capability_mask;
+                    }
+                }
+                if (effects != storage->closed_effect_mask ||
+                    capabilities != storage->closed_capability_mask) {
+                    storage->closed_effect_mask = effects;
+                    storage->closed_capability_mask = capabilities;
+                    changed = true;
+                }
+            }
+        }
+        if (!changed) {
+            for (uint32_t module_index = 0; module_index < context->source->module_count;
+                 ++module_index)
+                for (uint32_t function_index = 0;
+                     function_index < context->storage[module_index].function_count;
+                     ++function_index)
+                    context->storage[module_index]
+                        .function_storage[function_index]
+                        .closed_contract_ready = true;
+            return XR_PROGRAM_BUILD_OK;
+        }
+    }
+    return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                "Xi callable contract closure did not converge");
+}
+
 static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModuleStorage *module,
                                            uint32_t function_index, char *diagnostic,
                                            size_t diagnostic_size) {
@@ -2286,10 +2459,16 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
     XrCoreIrFunctionInput *output = &module->functions[function_index];
     XrXiFunctionStorage *storage = &module->function_storage[function_index];
     XrCoreIrKey key = storage->key;
+    uint32_t closed_effect_mask = storage->closed_effect_mask;
+    uint32_t closed_capability_mask = storage->closed_capability_mask;
+    bool closed_contract_ready = storage->closed_contract_ready;
     memset(output, 0, sizeof(*output));
     memset(storage, 0, sizeof(*storage));
     storage->xi = xi;
     storage->key = key;
+    storage->closed_effect_mask = closed_effect_mask;
+    storage->closed_capability_mask = closed_capability_mask;
+    storage->closed_contract_ready = closed_contract_ready;
     if (!xi || xi->stage != XI_STAGE_OPTIMIZED || xi->semantic_plan || xi->nblocks == 0u ||
         !xi->entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
@@ -2417,6 +2596,8 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
                     return status;
                 storage->local_effect_mask |=
                     xr_core_spec_operation_by_id(capture->operation_id)->effect_mask;
+                storage->local_capability_mask |=
+                    xr_core_spec_operation_by_id(capture->operation_id)->capability_mask;
             }
             XrCoreIrInstructionInput *instruction =
                 &block_storage->instructions[instruction_index++];
@@ -2430,6 +2611,7 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "translated Xi v%u has no CoreSpec operation", value->id);
             storage->local_effect_mask |= operation->effect_mask;
+            storage->local_capability_mask |= operation->capability_mask;
             const XiValue *drop_owner = logical_callable_owner_ending_after(xi, value);
             if (drop_owner) {
                 XrCoreIrInstructionInput *drop = &block_storage->instructions[instruction_index++];
@@ -2559,6 +2741,7 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi block b%u has no CoreSpec terminal operation", xi_block->id);
         storage->local_effect_mask |= terminal_operation->effect_mask;
+        storage->local_capability_mask |= terminal_operation->capability_mask;
         if (instruction_index != emitted)
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi block b%u instruction accounting is inconsistent", xi_block->id);
@@ -2568,15 +2751,21 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
 
 static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagnostic,
                                           size_t diagnostic_size) {
-    uint32_t total_functions = 0;
+    uint32_t total_functions = 0u;
     for (uint32_t module_index = 0; module_index < context->source->module_count; ++module_index) {
         XrXiModuleStorage *module = &context->storage[module_index];
+        if (module->function_count > UINT32_MAX - total_functions)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi call-effect graph is too large");
         total_functions += module->function_count;
-        for (uint32_t function = 0; function < module->function_count; ++function)
+        for (uint32_t function = 0; function < module->function_count; ++function) {
             module->functions[function].effect_mask =
                 module->function_storage[function].local_effect_mask;
+            module->functions[function].capability_mask =
+                module->function_storage[function].local_capability_mask;
+        }
     }
-    for (uint32_t iteration = 0; iteration < total_functions; ++iteration) {
+    for (uint32_t iteration = 0; iteration <= total_functions; ++iteration) {
         bool changed = false;
         for (uint32_t module_index = 0; module_index < context->source->module_count;
              ++module_index) {
@@ -2585,6 +2774,7 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                  ++function_index) {
                 XrXiFunctionStorage *function = &module->function_storage[function_index];
                 uint32_t effects = module->functions[function_index].effect_mask;
+                uint32_t capabilities = module->functions[function_index].capability_mask;
                 for (uint32_t block_index = 0; block_index < function->xi->nblocks; ++block_index) {
                     const XiBlock *block = function->xi->blocks[block_index];
                     for (uint32_t value_index = 0; value_index < block->nvalues; ++value_index) {
@@ -2592,49 +2782,51 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                         if (value->op != XI_CALL)
                             continue;
                         const XiFunc *callee = resolved_direct_callee(context, function->xi, value);
+                        if (!callee)
+                            callee = resolved_callable_call_target(context, function->xi, value);
                         uint32_t callee_module = 0;
                         uint32_t callee_function = 0;
-                        uint32_t callee_effects = 0u;
-                        if (callee) {
-                            if (!find_xi_function(context, callee, &callee_module,
-                                                  &callee_function))
-                                return fail(diagnostic, diagnostic_size,
-                                            XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                                            "Xi effect closure has an unresolved sealed call");
-                            callee_effects = context->storage[callee_module]
-                                                 .functions[callee_function]
-                                                 .effect_mask;
-                            if (block_sealed_invoke_call(context, function->xi, block) == value)
-                                callee_effects &= ~XR_CORE_EFFECT_ERROR;
-                        } else {
-                            uint16_t callable_type_id = XR_CORE_TYPE_VOID;
-                            const XiValue *callee_value =
-                                value->nargs ? logical_value_identity(value->args[0]) : NULL;
-                            if (!callee_value ||
-                                !map_type(context, callee_value->type, &callable_type_id))
-                                return fail(diagnostic, diagnostic_size,
-                                            XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                                            "Xi effect closure has an untyped indirect call");
-                            const XrXiTypeStorage *callable =
-                                find_dynamic_type_by_id(context, callable_type_id);
-                            if (!callable || callable->input.kind != XR_CORE_IR_TYPE_CALLABLE ||
-                                !callable->callable_signature)
-                                return fail(diagnostic, diagnostic_size,
-                                            XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                                            "Xi effect closure has a non-callable indirect target");
-                            callee_effects = callable->callable_signature->effect_mask;
-                        }
+                        if (!callee ||
+                            !find_xi_function(context, callee, &callee_module, &callee_function))
+                            return fail(diagnostic, diagnostic_size,
+                                        XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                                        "Xi effect closure has an unresolved call target");
+                        uint32_t callee_effects =
+                            context->storage[callee_module].functions[callee_function].effect_mask;
+                        if (block_sealed_invoke_call(context, function->xi, block) == value)
+                            callee_effects &= ~XR_CORE_EFFECT_ERROR;
                         effects |= callee_effects;
+                        capabilities |= context->storage[callee_module]
+                                            .functions[callee_function]
+                                            .capability_mask;
                     }
                 }
-                if (effects != module->functions[function_index].effect_mask) {
+                if (effects != module->functions[function_index].effect_mask ||
+                    capabilities != module->functions[function_index].capability_mask) {
                     module->functions[function_index].effect_mask = effects;
+                    module->functions[function_index].capability_mask = capabilities;
                     changed = true;
                 }
             }
         }
-        if (!changed)
+        if (!changed) {
+            for (uint32_t module_index = 0; module_index < context->source->module_count;
+                 ++module_index) {
+                XrXiModuleStorage *module = &context->storage[module_index];
+                for (uint32_t function_index = 0; function_index < module->function_count;
+                     ++function_index) {
+                    XrXiFunctionStorage *storage = &module->function_storage[function_index];
+                    if (!storage->closed_contract_ready ||
+                        module->functions[function_index].effect_mask !=
+                            storage->closed_effect_mask ||
+                        module->functions[function_index].capability_mask !=
+                            storage->closed_capability_mask)
+                        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                                    "Xi precomputed and emitted function contracts disagree");
+                }
+            }
             return XR_PROGRAM_BUILD_OK;
+        }
     }
     return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                 "Xi call-effect closure did not converge");
@@ -2788,6 +2980,11 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
                 function_key(storage->source_authority->module_identity, function);
         }
     }
+
+    XrProgramBuildStatus contract_status =
+        precompute_function_contracts(context, diagnostic, diagnostic_size);
+    if (contract_status != XR_PROGRAM_BUILD_OK)
+        return contract_status;
 
     if (!find_xi_function(context, context->source->entry_function, NULL, NULL))
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,

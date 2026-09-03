@@ -927,8 +927,8 @@ static bool signature_satisfies_interface(const XrCoreIrProgram *program,
         implementation->result_borrow_origin_count != requirement->result_borrow_origin_count ||
         implementation->error_type_id != requirement->error_type_id ||
         implementation->panic_type_id != requirement->panic_type_id ||
-        implementation->effect_mask != requirement->effect_mask ||
-        implementation->capability_mask != requirement->capability_mask)
+        (implementation->effect_mask & ~requirement->effect_mask) != 0u ||
+        (implementation->capability_mask & ~requirement->capability_mask) != 0u)
         return false;
     for (uint32_t index = 0; index < requirement->parameter_count; ++index) {
         if (implementation->parameter_modes[index] != requirement->parameter_modes[index])

@@ -2826,6 +2826,7 @@ static void test_callable_pack_and_indirect_calls(void) {
 
     const XrProgramCallableFixtureMutation rejected[] = {
         XR_CALLABLE_FIXTURE_PACK_SIGNATURE_MISMATCH,
+        XR_CALLABLE_FIXTURE_PACK_CAPABILITY_EXCESS,
         XR_CALLABLE_FIXTURE_DIRECT_FALLIBLE,
         XR_CALLABLE_FIXTURE_INVOKE_INFALLIBLE,
     };

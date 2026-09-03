@@ -169,6 +169,9 @@ struct XrCoreIrCallableSignatureInput {
     uint32_t result_borrow_origin_count;
     uint16_t error_type_id;
     uint16_t panic_type_id;
+    /* Visible upper bounds. A packed function or interface implementation may
+     * require a strict subset, but never an effect/capability outside these
+     * masks. */
     uint32_t effect_mask;
     uint32_t capability_mask;
 };
