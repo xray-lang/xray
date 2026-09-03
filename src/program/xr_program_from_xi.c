@@ -14,6 +14,7 @@
 #include "../ir/xi_op_name.h"
 
 #include "../base/xmalloc.h"
+#include "../analysis/xglobal_summary.h"
 #include "../core/xr_core_spec_gen.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../ir/xi.h"
@@ -66,6 +67,8 @@ typedef struct XrXiFunctionStorage {
 typedef struct XrXiModuleStorage {
     const XiFunc *root;
     const XrProgramSemanticModuleInput *source_authority;
+    const XiFunc **xi_functions;
+    uint32_t function_count;
     XrCoreIrConstantInput *constants;
     uint32_t constant_count;
     uint32_t constant_capacity;
@@ -78,6 +81,9 @@ typedef struct XrXiTypeStorage {
     uint16_t *field_types;
     XrCoreIrVariantInput *variants;
     uint16_t **variant_payload_types;
+    XrCoreIrCallableSignatureInput *callable_signature;
+    uint16_t *callable_parameter_types;
+    XrParamMode *callable_parameter_modes;
 } XrXiTypeStorage;
 
 typedef struct XrXiBuildContext {
@@ -209,6 +215,8 @@ static bool type_stack_contains(const XrType *const *stack, uint32_t depth, cons
 
 static bool map_type_recursive(XrXiBuildContext *context, const XrType *type, uint16_t *type_id,
                                const XrType *const *stack, uint32_t depth);
+static XrCoreIrOwnershipDisposition logical_ownership_for_type(const XrXiBuildContext *context,
+                                                               uint16_t type_id);
 
 static const XiClassData *find_aggregate_schema(const XrXiBuildContext *context, const XrType *type,
                                                 const XiModule **owner_module) {
@@ -352,6 +360,130 @@ static XrXiTypeStorage *append_type_storage(XrXiBuildContext *context) {
     memset(storage, 0, sizeof(*storage));
     storage->input.local_id = (uint16_t) (XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + context->type_count);
     return storage;
+}
+
+static bool map_callable_type_recursive(XrXiBuildContext *context, const XrType *type,
+                                        uint16_t *type_id, const XrType *const *stack,
+                                        uint32_t depth) {
+    if (!context || !type || !type_id || type->kind != XR_KIND_FUNCTION || type->is_nullable ||
+        type->function.param_count < 0 || type->function.param_count > UINT16_MAX ||
+        (type->function.param_count != 0 && !type->function.params) ||
+        !type->function.return_type || type->function.is_variadic || type->function.is_c_abi ||
+        type->function.type_param_count != 0 ||
+        type->function.throw_effect != XR_FN_EFFECT_NO_THROW ||
+        type->function.view_origin_count != 0 || depth >= 64u ||
+        type_stack_contains(stack, depth, type))
+        return false;
+
+    uint32_t parameter_count = (uint32_t) type->function.param_count;
+    uint16_t *parameter_types =
+        parameter_count ? xr_calloc(parameter_count, sizeof(*parameter_types)) : NULL;
+    XrParamMode *parameter_modes =
+        parameter_count ? xr_calloc(parameter_count, sizeof(*parameter_modes)) : NULL;
+    if (parameter_count && (!parameter_types || !parameter_modes)) {
+        xr_free(parameter_types);
+        xr_free(parameter_modes);
+        return false;
+    }
+
+    const XrType *nested_stack[64];
+    if (depth != 0u)
+        memcpy(nested_stack, stack, depth * sizeof(*nested_stack));
+    nested_stack[depth] = type;
+    bool valid = true;
+    for (uint32_t parameter = 0; parameter < parameter_count; ++parameter) {
+        XrFunctionParam *source_parameter = &type->function.params[parameter];
+        if (!source_parameter->type || !xr_param_mode_is_valid(source_parameter->mode) ||
+            !map_type_recursive(context, source_parameter->type, &parameter_types[parameter],
+                                nested_stack, depth + 1u) ||
+            parameter_types[parameter] == XR_CORE_TYPE_VOID) {
+            valid = false;
+            break;
+        }
+        parameter_modes[parameter] = source_parameter->mode;
+    }
+    uint16_t result_type = XR_CORE_TYPE_VOID;
+    if (!valid || !map_type_recursive(context, type->function.return_type, &result_type,
+                                      nested_stack, depth + 1u)) {
+        xr_free(parameter_types);
+        xr_free(parameter_modes);
+        return false;
+    }
+
+    const size_t type_reference_size = 1u + XR_CORE_IR_KEY_SIZE;
+    if (parameter_count > (SIZE_MAX - 6u - type_reference_size) / (type_reference_size + 1u)) {
+        xr_free(parameter_types);
+        xr_free(parameter_modes);
+        return false;
+    }
+    size_t material_size =
+        5u + (size_t) parameter_count * (type_reference_size + 1u) + type_reference_size + 1u;
+    uint8_t *material = xr_calloc(material_size, 1u);
+    if (!material) {
+        xr_free(parameter_types);
+        xr_free(parameter_modes);
+        return false;
+    }
+    size_t cursor = 0u;
+    material[cursor++] = UINT8_C(0x4c);
+    put_u32_be(material + cursor, parameter_count);
+    cursor += 4u;
+    for (uint32_t parameter = 0; parameter < parameter_count; ++parameter) {
+        put_dynamic_type_reference(context, material + cursor, parameter_types[parameter]);
+        cursor += type_reference_size;
+        material[cursor++] = (uint8_t) parameter_modes[parameter];
+    }
+    put_dynamic_type_reference(context, material + cursor, result_type);
+    cursor += type_reference_size;
+    material[cursor++] = (uint8_t) logical_ownership_for_type(context, result_type);
+    if (cursor != material_size) {
+        xr_free(material);
+        xr_free(parameter_types);
+        xr_free(parameter_modes);
+        return false;
+    }
+    XrCoreIrKey semantic_key = xr_core_ir_key(material, material_size);
+    xr_free(material);
+    for (uint32_t index = 0; index < context->type_count; ++index) {
+        if (xr_core_ir_key_equal(context->type_storage[index].input.key, semantic_key)) {
+            *type_id = context->type_storage[index].input.local_id;
+            xr_free(parameter_types);
+            xr_free(parameter_modes);
+            return true;
+        }
+    }
+
+    XrXiTypeStorage *storage = append_type_storage(context);
+    if (!storage) {
+        xr_free(parameter_types);
+        xr_free(parameter_modes);
+        return false;
+    }
+    storage->callable_signature = xr_calloc(1u, sizeof(*storage->callable_signature));
+    if (!storage->callable_signature) {
+        xr_free(parameter_types);
+        xr_free(parameter_modes);
+        return false;
+    }
+    storage->callable_parameter_types = parameter_types;
+    storage->callable_parameter_modes = parameter_modes;
+    storage->callable_signature->parameter_types = parameter_types;
+    storage->callable_signature->parameter_modes = parameter_modes;
+    storage->callable_signature->parameter_count = parameter_count;
+    storage->callable_signature->receiver_mode = XR_PARAM_READ;
+    storage->callable_signature->result_type_id = result_type;
+    storage->callable_signature->result_ownership =
+        logical_ownership_for_type(context, result_type);
+    storage->callable_signature->error_type_id = XR_CORE_TYPE_VOID;
+    storage->callable_signature->panic_type_id = XR_CORE_TYPE_VOID;
+    storage->input.key = semantic_key;
+    storage->input.kind = XR_CORE_IR_TYPE_CALLABLE;
+    storage->input.ownership = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    storage->input.copy_contract = XR_CORE_IR_COPY_EXPLICIT;
+    storage->input.callable_signature = storage->callable_signature;
+    *type_id = storage->input.local_id;
+    ++context->type_count;
+    return true;
 }
 
 static bool map_variant_type_recursive(XrXiBuildContext *context, const XrType *type,
@@ -625,6 +757,8 @@ static bool map_type_recursive(XrXiBuildContext *context, const XrType *type, ui
                                const XrType *const *stack, uint32_t depth) {
     if (map_builtin_type(type, type_id))
         return true;
+    if (context && type && type_id && type->kind == XR_KIND_FUNCTION)
+        return map_callable_type_recursive(context, type, type_id, stack, depth);
     if (context && type && type_id && !type->is_nullable && type->kind == XR_KIND_ENUM)
         return map_variant_type_recursive(context, type, type_id, stack, depth);
     if (context && type && type_id && !type->is_nullable &&
@@ -699,7 +833,8 @@ static bool map_type(XrXiBuildContext *context, const XrType *type, uint16_t *ty
     return map_type_recursive(context, type, type_id, NULL, 0u);
 }
 
-static const XiFunc *resolved_direct_callee(const XiFunc *caller, const XiValue *call);
+static const XiFunc *resolved_direct_callee(const XrXiBuildContext *context, const XiFunc *caller,
+                                            const XiValue *call);
 
 static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *context,
                                                         const XiFunc *function,
@@ -737,7 +872,7 @@ static XrProgramBuildStatus function_has_uncaught_panic(XrXiBuildContext *contex
                 found = true;
             }
             if (value->op == XI_CALL) {
-                const XiFunc *callee = resolved_direct_callee(function, value);
+                const XiFunc *callee = resolved_direct_callee(context, function, value);
                 if (!callee)
                     continue;
                 bool callee_panic = false;
@@ -791,8 +926,11 @@ static XrProgramBuildStatus map_function_error_type(XrXiBuildContext *context,
         analyzer && function->analyzer_effect_id != XA_EFFECT_NONE
             ? xa_effect_db_get(analyzer->effect_db, function->analyzer_effect_id)
             : NULL;
-    if (!effect || !function->analyzer_effect_complete ||
-        effect->error_set_completeness != XA_EFFECT_COMPLETE ||
+    /* Error continuation construction depends only on the error-channel
+     * component of the effect product.  Uncertainty in allocation,
+     * suspension, or task-spawn semantics must not poison a complete typed
+     * escaping-error set. */
+    if (!effect || effect->error_set_completeness != XA_EFFECT_COMPLETE ||
         effect->error_unknown_reasons != XA_UNKNOWN_NONE || effect->escaping.count != 1u)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                     "Xi function %s does not have one complete typed escaping-error set",
@@ -828,12 +966,6 @@ static XrCoreIrCopyContract logical_copy_contract_for_type(const XrXiBuildContex
     return type ? type->input.copy_contract : XR_CORE_IR_COPY_TRIVIAL;
 }
 
-static const XiModule *function_module(const XiFunc *function) {
-    while (function && function->parent_func)
-        function = function->parent_func;
-    return function ? function->module : NULL;
-}
-
 static const XrXiFunctionStorage *find_xi_function(const XrXiBuildContext *context,
                                                    const XiFunc *needle, uint32_t *module_index_out,
                                                    uint32_t *function_index_out) {
@@ -841,11 +973,11 @@ static const XrXiFunctionStorage *find_xi_function(const XrXiBuildContext *conte
         return NULL;
     for (uint32_t module_index = 0; module_index < context->source->module_count; ++module_index) {
         const XrXiModuleStorage *storage = &context->storage[module_index];
-        const XiModule *module = storage->root ? storage->root->module : NULL;
-        if (!module || !storage->function_storage)
+        if (!storage->root || !storage->function_storage || !storage->xi_functions)
             continue;
-        for (uint32_t function_index = 0; function_index < module->nfuncs; ++function_index) {
-            const XiFunc *function = module->functions[function_index];
+        for (uint32_t function_index = 0; function_index < storage->function_count;
+             ++function_index) {
+            const XiFunc *function = storage->xi_functions[function_index];
             if (function == needle) {
                 if (module_index_out)
                     *module_index_out = module_index;
@@ -856,26 +988,6 @@ static const XrXiFunctionStorage *find_xi_function(const XrXiBuildContext *conte
         }
     }
     return NULL;
-}
-
-static bool get_shared_is_only_call_callee(const XiFunc *function, const XiValue *shared) {
-    bool found = false;
-    for (uint32_t block_index = 0; block_index < function->nblocks; ++block_index) {
-        const XiBlock *block = function->blocks[block_index];
-        if (block->control == shared)
-            return false;
-        for (uint32_t value_index = 0; value_index < block->nvalues; ++value_index) {
-            const XiValue *consumer = block->values[value_index];
-            for (uint16_t argument = 0; argument < consumer->nargs; ++argument) {
-                if (consumer->args[argument] != shared)
-                    continue;
-                if (consumer->op != XI_CALL || argument != 0u)
-                    return false;
-                found = true;
-            }
-        }
-    }
-    return found;
 }
 
 static bool value_is_only_elided_operand(const XiFunc *function, const XiValue *value) {
@@ -900,19 +1012,54 @@ static bool value_is_only_elided_operand(const XiFunc *function, const XiValue *
     return found;
 }
 
-static const XiFunc *resolved_direct_callee(const XiFunc *caller, const XiValue *call) {
-    if (!caller || !call || call->op != XI_CALL || call->nargs == 0u)
+static const XgCallsiteSummary *resolved_callsite(const XrXiBuildContext *context,
+                                                  const XiFunc *caller, const XiValue *call) {
+    if (!context || !context->source || !context->source->global_evidence || !caller || !call ||
+        call->xg_callsite_id == XG_NO_ID || caller->xg_body_func_id == XG_NO_ID)
         return NULL;
-    const XiValue *callee_value = xi_value_trace_identity(call->args[0]);
-    const XiModule *owner = function_module(caller);
-    if (!callee_value || callee_value->op != XI_GET_SHARED || !owner || !owner->slot_funcs ||
-        callee_value->aux_int < 0 || (uint64_t) callee_value->aux_int >= owner->nslots ||
-        !get_shared_is_only_call_callee(caller, callee_value))
+    const XgCallsiteSummary *row = xg_global_evidence_find_callsite(
+        context->source->global_evidence, (XgCallsiteId) call->xg_callsite_id);
+    if (!row || row->owner_func_id != (XgFuncId) caller->xg_body_func_id)
         return NULL;
-    return owner->slot_funcs[callee_value->aux_int];
+    return row;
 }
 
-static const XiValue *block_sealed_invoke_call(const XiFunc *function, const XiBlock *block) {
+static const XiFunc *find_xi_function_by_xg_id(const XrXiBuildContext *context,
+                                               XgFuncId function_id) {
+    if (!context || function_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t module_index = 0; module_index < context->source->module_count; ++module_index) {
+        const XrXiModuleStorage *module = &context->storage[module_index];
+        for (uint32_t function_index = 0;
+             module->xi_functions && function_index < module->function_count; ++function_index) {
+            const XiFunc *function = module->xi_functions[function_index];
+            if (function && function->xg_body_func_id == function_id)
+                return function;
+        }
+    }
+    return NULL;
+}
+
+static const XiFunc *resolved_direct_callee(const XrXiBuildContext *context, const XiFunc *caller,
+                                            const XiValue *call) {
+    if (!call || call->op != XI_CALL || call->nargs == 0u)
+        return NULL;
+    const XgCallsiteSummary *row = resolved_callsite(context, caller, call);
+    if (!row || row->kind != XG_CALL_DIRECT_FUNC || row->static_target_func_id == XG_NO_ID)
+        return NULL;
+    return find_xi_function_by_xg_id(context, row->static_target_func_id);
+}
+
+static const XiFunc *resolved_callable_target(const XiFunc *caller, const XiValue *value) {
+    if (!caller || !value)
+        return NULL;
+    if (value->op == XI_CLOSURE_NEW && value->aux)
+        return (const XiFunc *) value->aux;
+    return NULL;
+}
+
+static const XiValue *block_sealed_invoke_call(const XrXiBuildContext *context,
+                                               const XiFunc *function, const XiBlock *block) {
     if (!function || !block || block->kind != XI_BLOCK_IF || !block->control ||
         block->control->op != XI_ERR_CHECK || !block->succs[0] || !block->succs[1])
         return NULL;
@@ -927,7 +1074,7 @@ static const XiValue *block_sealed_invoke_call(const XiFunc *function, const XiB
         previous = value;
     }
     return reached_check && previous && previous->op == XI_CALL &&
-                   resolved_direct_callee(function, previous)
+                   resolved_direct_callee(context, function, previous)
                ? previous
                : NULL;
 }
@@ -945,14 +1092,15 @@ static const XiValue *block_error_catch(const XiBlock *block) {
     return found;
 }
 
-static bool value_is_invoke_scaffold(const XiFunc *function, const XiValue *value) {
+static bool value_is_invoke_scaffold(const XrXiBuildContext *context, const XiFunc *function,
+                                     const XiValue *value) {
     if (!value)
         return false;
     if (value->op == XI_ERR_RETURN)
         return true;
     if (!function || !value->block)
         return false;
-    const XiValue *call = block_sealed_invoke_call(function, value->block);
+    const XiValue *call = block_sealed_invoke_call(context, function, value->block);
     if (value == call || value == value->block->control)
         return call != NULL;
     if (value->op == XI_ERR_CATCH)
@@ -1001,8 +1149,7 @@ static const XiValue *logical_value_identity(const XiValue *value) {
         value = value->args[0];
     while (
         value && value->nargs == 1u && value->args && value->args[0] && value->type &&
-        ((value->op == XI_RETAIN &&
-          (value->type->kind == XR_KIND_TUPLE || value->type->kind == XR_KIND_ENUM)) ||
+        ((value->op == XI_RETAIN && xi_type_has_logical_value_identity(value->type)) ||
          (xi_copy_is_value_clone(value) &&
           (value->type->kind == XR_KIND_TUPLE ||
            ((value->type->kind == XR_KIND_INSTANCE || value->type->kind == XR_KIND_CLASS) &&
@@ -1145,8 +1292,7 @@ static void free_context(XrXiBuildContext *context) {
     for (uint32_t module_index = 0;
          context->storage && module_index < context->source->module_count; ++module_index) {
         XrXiModuleStorage *module = &context->storage[module_index];
-        uint32_t function_count =
-            module->root && module->root->module ? module->root->module->nfuncs : 0u;
+        uint32_t function_count = module->function_count;
         for (uint32_t function_index = 0;
              module->function_storage && function_index < function_count; ++function_index) {
             XrXiFunctionStorage *function = &module->function_storage[function_index];
@@ -1170,6 +1316,7 @@ static void free_context(XrXiBuildContext *context) {
         }
         xr_free(module->function_storage);
         xr_free(module->functions);
+        xr_free(module->xi_functions);
         xr_free(module->constants);
     }
     xr_free(context->storage);
@@ -1181,6 +1328,9 @@ static void free_context(XrXiBuildContext *context) {
         xr_free(context->type_storage[type].variant_payload_types);
         xr_free(context->type_storage[type].variants);
         xr_free(context->type_storage[type].field_types);
+        xr_free(context->type_storage[type].callable_parameter_types);
+        xr_free(context->type_storage[type].callable_parameter_modes);
+        xr_free(context->type_storage[type].callable_signature);
     }
     xr_free(context->type_storage);
     xr_free(context->types);
@@ -1215,11 +1365,52 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
                const XrProgramXiProjection *projection, XrCoreIrInstructionInput *instruction,
                char *diagnostic, size_t diagnostic_size) {
     (void) module;
-    const XiFunc *callee = resolved_direct_callee(function->xi, value);
-    const XrXiFunctionStorage *callee_storage = find_xi_function(context, callee, NULL, NULL);
-    if (!callee || !callee_storage)
+    const XgCallsiteSummary *callsite = resolved_callsite(context, function->xi, value);
+    if (!callsite)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi call v%u lacks matching global callsite evidence", value->id);
+    if (callsite->kind != XG_CALL_DIRECT_FUNC && callsite->kind != XG_CALL_CLOSURE)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi call v%u is not an exact resolved sealed direct call", value->id);
+                    "Xi call v%u uses unsupported global callsite kind %u", value->id,
+                    callsite->kind);
+    if ((callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) == 0u)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi call v%u lacks verified callsite error evidence", value->id);
+    const XiFunc *callee = resolved_direct_callee(context, function->xi, value);
+    const XrXiFunctionStorage *callee_storage = find_xi_function(context, callee, NULL, NULL);
+    if (!callee) {
+        if ((callsite->flags & XG_CALL_MAY_ERROR) != 0u)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi indirect call v%u requires an explicit error continuation", value->id);
+        const XiValue *callee_value = value->nargs ? logical_value_identity(value->args[0]) : NULL;
+        uint16_t callable_type_id = XR_CORE_TYPE_VOID;
+        if (!callee_value || !map_type(context, callee_value->type, &callable_type_id))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi call v%u has no typed callable target", value->id);
+        const XrXiTypeStorage *callable = find_dynamic_type_by_id(context, callable_type_id);
+        if (!callable || callable->input.kind != XR_CORE_IR_TYPE_CALLABLE ||
+            !callable->callable_signature ||
+            callable->callable_signature->error_type_id != XR_CORE_TYPE_VOID ||
+            callable->callable_signature->panic_type_id != XR_CORE_TYPE_VOID)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi call v%u requires an unsupported callable continuation", value->id);
+        uint16_t result_type = XR_CORE_TYPE_VOID;
+        if (!map_type(context, value->type, &result_type) ||
+            result_type != callable->callable_signature->result_type_id)
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                        "Xi call v%u result disagrees with its callable signature", value->id);
+        instruction->operation_id = XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT;
+        instruction->result_type_id = result_type;
+        instruction->result_ownership = logical_ownership_for_type(context, result_type);
+        if (result_type != XR_CORE_TYPE_VOID)
+            instruction->result = value_key(function, value);
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+        return set_operands(instruction, function, block, value->args, value->nargs, diagnostic,
+                            diagnostic_size);
+    }
+    if (!callee_storage)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                    "Xi call v%u names a function outside the canonical graph", value->id);
     uint16_t error_type = XR_CORE_TYPE_VOID;
     XrProgramBuildStatus error_status =
         map_function_error_type(context, callee, &error_type, diagnostic, diagnostic_size);
@@ -1250,6 +1441,31 @@ translate_call(XrXiBuildContext *context, const XrXiModuleStorage *module,
     instruction->immediate.key = callee_storage->key;
     return set_operands(instruction, function, block, value->args + 1u, value->nargs - 1u,
                         diagnostic, diagnostic_size);
+}
+
+static XrProgramBuildStatus translate_callable_pack(XrXiBuildContext *context,
+                                                    XrXiFunctionStorage *function,
+                                                    const XiValue *value,
+                                                    XrCoreIrInstructionInput *instruction,
+                                                    char *diagnostic, size_t diagnostic_size) {
+    uint16_t callable_type_id = XR_CORE_TYPE_VOID;
+    const XiFunc *target = resolved_callable_target(function->xi, value);
+    const XrXiFunctionStorage *target_storage = find_xi_function(context, target, NULL, NULL);
+    if (!target || !target_storage || !map_type(context, value->type, &callable_type_id))
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi callable pack v%u has no exact target or signature", value->id);
+    const XrXiTypeStorage *callable = find_dynamic_type_by_id(context, callable_type_id);
+    if (!callable || callable->input.kind != XR_CORE_IR_TYPE_CALLABLE ||
+        !callable->callable_signature || value->nargs != 0u)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                    "Xi callable pack v%u is not captureless", value->id);
+    instruction->operation_id = XR_CORE_OP_CORE_CALLABLE_PACK;
+    instruction->result = value_key(function, value);
+    instruction->result_type_id = callable_type_id;
+    instruction->result_ownership = XR_CORE_IR_OWNER;
+    instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_FUNCTION;
+    instruction->immediate.key = target_storage->key;
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModuleStorage *module,
@@ -1517,6 +1733,9 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             return set_operands(instruction, function, block, value->args, 2u, diagnostic,
                                 diagnostic_size);
         }
+        case XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK:
+            return translate_callable_pack(context, function, value, instruction, diagnostic,
+                                           diagnostic_size);
         default:
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
                         "Xi operation %u at v%u has an invalid CoreSpec projection", value->op,
@@ -1524,17 +1743,79 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
     }
 }
 
-static bool value_is_skipped(const XiFunc *function, const XiValue *value) {
-    if (value_is_invoke_scaffold(function, value))
+static bool value_is_skipped(const XrXiBuildContext *context, const XiFunc *function,
+                             const XiValue *value) {
+    if (value_is_invoke_scaffold(context, function, value))
         return true;
     if (value->op == XI_PARAM || value->op == XI_THROW || xi_copy_is_identity_alias(value) ||
         (xi_copy_is_value_clone(value) && logical_value_identity(value) != value))
         return true;
-    if ((value->op == XI_RETAIN || value->op == XI_RELEASE) && value->nargs == 1u && value->args &&
-        value->args[0] && xi_type_has_logical_value_identity(value->args[0]->type))
+    /* Physical RC is executor-private representation.  Canonical ownership is
+     * reconstructed from typed owner creation and semantic uses, never from
+     * retain/release counts. */
+    if (value->op == XI_RETAIN || value->op == XI_RELEASE)
         return true;
     return (value->op == XI_GET_SHARED || value->op == XI_GET_BUILTIN) &&
            value_is_only_elided_operand(function, value);
+}
+
+/* Captureless closure creation establishes one affine callable owner.  When
+ * its sole semantic use is one indirect call in the same block, its logical
+ * lifetime ends immediately after that call.  Physical ARC users are ignored:
+ * they can be rewritten by an executor without changing this conclusion. */
+static const XiValue *logical_callable_owner_ending_after(const XiFunc *function,
+                                                          const XiValue *consumer) {
+    if (!function || !consumer || consumer->op != XI_CALL || consumer->nargs == 0u ||
+        !consumer->args)
+        return NULL;
+    const XiValue *owner = logical_value_identity(consumer->args[0]);
+    if (!owner || owner->op != XI_CLOSURE_NEW || owner->nargs != 0u ||
+        owner->block != consumer->block)
+        return NULL;
+    uint32_t semantic_uses = 0u;
+    for (uint32_t block_index = 0; block_index < function->nblocks; ++block_index) {
+        const XiBlock *block = function->blocks[block_index];
+        if (block && block->control && logical_value_identity(block->control) == owner)
+            return NULL;
+        for (uint32_t value_index = 0; block && value_index < block->nvalues; ++value_index) {
+            const XiValue *value = block->values[value_index];
+            if (!value)
+                continue;
+            bool physical_arc = value->op == XI_RETAIN || value->op == XI_RELEASE;
+            for (uint16_t argument = 0; argument < value->nargs; ++argument) {
+                if (logical_value_identity(value->args[argument]) != owner || physical_arc)
+                    continue;
+                semantic_uses++;
+                if (value != consumer || argument != 0u)
+                    return NULL;
+            }
+        }
+    }
+    return semantic_uses == 1u ? owner : NULL;
+}
+
+static XrProgramBuildStatus emit_logical_owner_drop(const XrXiFunctionStorage *function,
+                                                    const XrXiBlockStorage *block,
+                                                    const XiValue *owner,
+                                                    XrCoreIrInstructionInput *instruction,
+                                                    char *diagnostic, size_t diagnostic_size) {
+    if (!function || !block || !owner || !instruction)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    XrCoreIrKey *operands = xr_calloc(1u, sizeof(*operands));
+    if (!operands)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (!value_operand_key(function, block, owner, operands)) {
+        xr_free(operands);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "logical callable owner v%u is unavailable at lifetime end", owner->id);
+    }
+    memset(instruction, 0, sizeof(*instruction));
+    instruction->operation_id = XR_CORE_OP_CORE_OWNER_DROP;
+    instruction->result_type_id = XR_CORE_TYPE_VOID;
+    instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
+    instruction->operands = operands;
+    instruction->operand_count = 1u;
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus require_value_available(XrXiBuildContext *context,
@@ -1560,7 +1841,11 @@ static XrProgramBuildStatus collect_value_live_ins(XrXiBuildContext *context,
                                                    XrXiBlockStorage *block, const XiValue *value,
                                                    bool *changed, char *diagnostic,
                                                    size_t diagnostic_size) {
-    uint16_t begin = value->op == XI_CALL || value->op == XI_VARIANT_CONSTRUCT ? 1u : 0u;
+    uint16_t begin = value->op == XI_VARIANT_CONSTRUCT ||
+                             (value->op == XI_CALL &&
+                              resolved_direct_callee(context, function->xi, value) != NULL)
+                         ? 1u
+                         : 0u;
     for (uint16_t argument = begin; argument < value->nargs; ++argument) {
         XrProgramBuildStatus status = require_value_available(
             context, function, block, value->args[argument], changed, diagnostic, diagnostic_size);
@@ -1595,10 +1880,10 @@ static XrProgramBuildStatus prepare_invoke_arguments(XrXiBuildContext *context,
                                                      char *diagnostic, size_t diagnostic_size) {
     for (uint32_t block_index = 0; block_index < function->xi->nblocks; ++block_index) {
         const XiBlock *source = function->xi->blocks[block_index];
-        const XiValue *call = block_sealed_invoke_call(function->xi, source);
+        const XiValue *call = block_sealed_invoke_call(context, function->xi, source);
         if (!call)
             continue;
-        const XiFunc *callee = resolved_direct_callee(function->xi, call);
+        const XiFunc *callee = resolved_direct_callee(context, function->xi, call);
         uint16_t error_type = XR_CORE_TYPE_VOID;
         XrProgramBuildStatus status =
             map_function_error_type(context, callee, &error_type, diagnostic, diagnostic_size);
@@ -1673,7 +1958,7 @@ static XrProgramBuildStatus close_block_arguments(XrXiBuildContext *context,
         }
         for (uint32_t value_index = 0; value_index < block->xi->nvalues; ++value_index) {
             const XiValue *value = block->xi->values[value_index];
-            if (value_is_skipped(function->xi, value))
+            if (value_is_skipped(context, function->xi, value))
                 continue;
             XrProgramBuildStatus status = collect_value_live_ins(context, function, block, value,
                                                                  NULL, diagnostic, diagnostic_size);
@@ -1832,7 +2117,8 @@ unavailable:
 static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModuleStorage *module,
                                            uint32_t function_index, char *diagnostic,
                                            size_t diagnostic_size) {
-    const XiFunc *xi = module->root->module->functions[function_index];
+    const XiFunc *xi =
+        function_index < module->function_count ? module->xi_functions[function_index] : NULL;
     XrCoreIrFunctionInput *output = &module->functions[function_index];
     XrXiFunctionStorage *storage = &module->function_storage[function_index];
     XrCoreIrKey key = storage->key;
@@ -1840,10 +2126,10 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
     memset(storage, 0, sizeof(*storage));
     storage->xi = xi;
     storage->key = key;
-    if (xi->stage != XI_STAGE_OPTIMIZED || xi->semantic_plan || xi->nblocks == 0u ||
-        xi->nchildren != 0u || !xi->entry)
+    if (!xi || xi->stage != XI_STAGE_OPTIMIZED || xi->semantic_plan || xi->nblocks == 0u ||
+        !xi->entry)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                    "Xi function %u is not a leaf Optimized program input", function_index);
+                    "Xi function %u is not an Optimized program input", function_index);
     output->key = storage->key;
     output->parameter_count = xi->nparams;
     if (!map_type(context, xi->return_type, &output->result_type_id))
@@ -1858,6 +2144,8 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
     if (signature_status != XR_PROGRAM_BUILD_OK)
         return signature_status;
     output->result_ownership = logical_ownership_for_type(context, output->result_type_id);
+    output->has_receiver = xi->has_receiver;
+    output->receiver_mode = xi->has_receiver ? xi->receiver_mode : XR_PARAM_READ;
     if (xi->nparams != 0) {
         storage->parameter_types = xr_calloc(xi->nparams, sizeof(*storage->parameter_types));
         storage->parameter_modes = xr_calloc(xi->nparams, sizeof(*storage->parameter_modes));
@@ -1905,7 +2193,10 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
 
         uint32_t emitted = block_storage->argument_count != 0u ? 1u : 0u;
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
-            if (!value_is_skipped(xi, xi_block->values[value_index]))
+            const XiValue *value = xi_block->values[value_index];
+            if (!value_is_skipped(context, xi, value))
+                ++emitted;
+            if (logical_callable_owner_ending_after(xi, value))
                 ++emitted;
         }
         ++emitted;
@@ -1931,7 +2222,7 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
         }
         for (uint32_t value_index = 0; value_index < xi_block->nvalues; ++value_index) {
             const XiValue *value = xi_block->values[value_index];
-            if (value_is_skipped(xi, value))
+            if (value_is_skipped(context, xi, value))
                 continue;
             XrCoreIrInstructionInput *instruction =
                 &block_storage->instructions[instruction_index++];
@@ -1945,14 +2236,22 @@ static XrProgramBuildStatus build_function(XrXiBuildContext *context, XrXiModule
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "translated Xi v%u has no CoreSpec operation", value->id);
             storage->local_effect_mask |= operation->effect_mask;
+            const XiValue *drop_owner = logical_callable_owner_ending_after(xi, value);
+            if (drop_owner) {
+                XrCoreIrInstructionInput *drop = &block_storage->instructions[instruction_index++];
+                status = emit_logical_owner_drop(storage, block_storage, drop_owner, drop,
+                                                 diagnostic, diagnostic_size);
+                if (status != XR_PROGRAM_BUILD_OK)
+                    return status;
+            }
         }
 
         XrCoreIrInstructionInput *terminator = &block_storage->instructions[instruction_index++];
         terminator->result_type_id = XR_CORE_TYPE_VOID;
         terminator->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
-        const XiValue *invoke_call = block_sealed_invoke_call(xi, xi_block);
+        const XiValue *invoke_call = block_sealed_invoke_call(context, xi, xi_block);
         if (invoke_call) {
-            const XiFunc *callee = resolved_direct_callee(xi, invoke_call);
+            const XiFunc *callee = resolved_direct_callee(context, xi, invoke_call);
             const XrXiFunctionStorage *callee_storage =
                 find_xi_function(context, callee, NULL, NULL);
             XrXiBlockStorage *normal = find_block_storage(storage, xi_block->succs[1]);
@@ -2078,8 +2377,8 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
     uint32_t total_functions = 0;
     for (uint32_t module_index = 0; module_index < context->source->module_count; ++module_index) {
         XrXiModuleStorage *module = &context->storage[module_index];
-        total_functions += module->root->module->nfuncs;
-        for (uint32_t function = 0; function < module->root->module->nfuncs; ++function)
+        total_functions += module->function_count;
+        for (uint32_t function = 0; function < module->function_count; ++function)
             module->functions[function].effect_mask =
                 module->function_storage[function].local_effect_mask;
     }
@@ -2088,7 +2387,7 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
         for (uint32_t module_index = 0; module_index < context->source->module_count;
              ++module_index) {
             XrXiModuleStorage *module = &context->storage[module_index];
-            for (uint32_t function_index = 0; function_index < module->root->module->nfuncs;
+            for (uint32_t function_index = 0; function_index < module->function_count;
                  ++function_index) {
                 XrXiFunctionStorage *function = &module->function_storage[function_index];
                 uint32_t effects = module->functions[function_index].effect_mask;
@@ -2098,18 +2397,39 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                         const XiValue *value = block->values[value_index];
                         if (value->op != XI_CALL)
                             continue;
-                        const XiFunc *callee = resolved_direct_callee(function->xi, value);
+                        const XiFunc *callee = resolved_direct_callee(context, function->xi, value);
                         uint32_t callee_module = 0;
                         uint32_t callee_function = 0;
-                        if (!callee ||
-                            !find_xi_function(context, callee, &callee_module, &callee_function))
-                            return fail(diagnostic, diagnostic_size,
-                                        XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
-                                        "Xi effect closure has an unresolved sealed call");
-                        uint32_t callee_effects =
-                            context->storage[callee_module].functions[callee_function].effect_mask;
-                        if (block_sealed_invoke_call(function->xi, block) == value)
-                            callee_effects &= ~XR_CORE_EFFECT_ERROR;
+                        uint32_t callee_effects = 0u;
+                        if (callee) {
+                            if (!find_xi_function(context, callee, &callee_module,
+                                                  &callee_function))
+                                return fail(diagnostic, diagnostic_size,
+                                            XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                                            "Xi effect closure has an unresolved sealed call");
+                            callee_effects = context->storage[callee_module]
+                                                 .functions[callee_function]
+                                                 .effect_mask;
+                            if (block_sealed_invoke_call(context, function->xi, block) == value)
+                                callee_effects &= ~XR_CORE_EFFECT_ERROR;
+                        } else {
+                            uint16_t callable_type_id = XR_CORE_TYPE_VOID;
+                            const XiValue *callee_value =
+                                value->nargs ? logical_value_identity(value->args[0]) : NULL;
+                            if (!callee_value ||
+                                !map_type(context, callee_value->type, &callable_type_id))
+                                return fail(diagnostic, diagnostic_size,
+                                            XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                                            "Xi effect closure has an untyped indirect call");
+                            const XrXiTypeStorage *callable =
+                                find_dynamic_type_by_id(context, callable_type_id);
+                            if (!callable || callable->input.kind != XR_CORE_IR_TYPE_CALLABLE ||
+                                !callable->callable_signature)
+                                return fail(diagnostic, diagnostic_size,
+                                            XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE,
+                                            "Xi effect closure has a non-callable indirect target");
+                            callee_effects = callable->callable_signature->effect_mask;
+                        }
                         effects |= callee_effects;
                     }
                 }
@@ -2175,6 +2495,68 @@ static XrProgramBuildStatus finalize_type_inputs(XrXiBuildContext *context) {
     return XR_PROGRAM_BUILD_OK;
 }
 
+static bool count_nested_functions(const XiFunc *function, uint32_t *count) {
+    if (!function || !count)
+        return false;
+    for (uint16_t child = 0; child < function->nchildren; ++child) {
+        if (*count == UINT32_MAX)
+            return false;
+        ++*count;
+        if (!count_nested_functions(function->children[child], count))
+            return false;
+    }
+    return true;
+}
+
+static bool append_nested_functions(const XiFunc *function, const XiFunc **functions,
+                                    uint32_t capacity, uint32_t *cursor) {
+    if (!function || !functions || !cursor)
+        return false;
+    for (uint16_t child = 0; child < function->nchildren; ++child) {
+        if (*cursor >= capacity || !function->children[child])
+            return false;
+        functions[(*cursor)++] = function->children[child];
+        if (!append_nested_functions(function->children[child], functions, capacity, cursor))
+            return false;
+    }
+    return true;
+}
+
+static XrProgramBuildStatus collect_module_functions(XrXiModuleStorage *storage, char *diagnostic,
+                                                     size_t diagnostic_size) {
+    const XiModule *module = storage && storage->root ? storage->root->module : NULL;
+    if (!module || module->nfuncs == 0u || !module->functions)
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi module has no source functions");
+    uint32_t count = module->nfuncs;
+    for (uint16_t function = 0; function < module->nfuncs; ++function)
+        if (!module->functions[function] ||
+            !count_nested_functions(module->functions[function], &count))
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi module function tree is malformed or too large");
+    const XiFunc **functions = xr_calloc(count, sizeof(*functions));
+    if (!functions)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    uint32_t cursor = 0u;
+    for (uint16_t function = 0; function < module->nfuncs; ++function)
+        functions[cursor++] = module->functions[function];
+    for (uint16_t function = 0; function < module->nfuncs; ++function) {
+        if (!append_nested_functions(module->functions[function], functions, count, &cursor)) {
+            xr_free(functions);
+            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                        "Xi module function tree cannot be flattened");
+        }
+    }
+    if (cursor != count) {
+        xr_free(functions);
+        return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
+                    "Xi module function count is inconsistent");
+    }
+    storage->xi_functions = functions;
+    storage->function_count = count;
+    return XR_PROGRAM_BUILD_OK;
+}
+
 static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagnostic,
                                           size_t diagnostic_size) {
     context->modules = xr_calloc(context->source->module_count, sizeof(*context->modules));
@@ -2194,19 +2576,20 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
             return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                         "Xi module %u is not verified canonical-program input", module_index);
         storage->source_authority = &root->module->source_semantic_module;
-        if (root->module->nfuncs == 0u)
-            return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
-                        "Xi module %u has no source functions", module_index);
+        XrProgramBuildStatus collect_status =
+            collect_module_functions(storage, diagnostic, diagnostic_size);
+        if (collect_status != XR_PROGRAM_BUILD_OK)
+            return collect_status;
         output->key = key_from_stable_id(UINT8_C(0x4d), storage->source_authority->module_identity);
-        storage->functions = xr_calloc(root->module->nfuncs, sizeof(*storage->functions));
+        storage->functions = xr_calloc(storage->function_count, sizeof(*storage->functions));
         storage->function_storage =
-            xr_calloc(root->module->nfuncs, sizeof(*storage->function_storage));
+            xr_calloc(storage->function_count, sizeof(*storage->function_storage));
         if (!storage->functions || !storage->function_storage)
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         output->functions = storage->functions;
-        output->function_count = root->module->nfuncs;
-        for (uint32_t function = 0; function < root->module->nfuncs; ++function) {
-            storage->function_storage[function].xi = root->module->functions[function];
+        output->function_count = storage->function_count;
+        for (uint32_t function = 0; function < storage->function_count; ++function) {
+            storage->function_storage[function].xi = storage->xi_functions[function];
             storage->function_storage[function].key =
                 function_key(storage->source_authority->module_identity, function);
         }
@@ -2220,7 +2603,7 @@ static XrProgramBuildStatus build_context(XrXiBuildContext *context, char *diagn
     for (uint32_t module_index = 0; module_index < context->source->module_count; ++module_index) {
         XrXiModuleStorage *storage = &context->storage[module_index];
         XrCoreIrModuleInput *output = &context->modules[module_index];
-        for (uint32_t function = 0; function < storage->root->module->nfuncs; ++function) {
+        for (uint32_t function = 0; function < storage->function_count; ++function) {
             XrProgramBuildStatus status =
                 build_function(context, storage, function, diagnostic, diagnostic_size);
             if (status != XR_PROGRAM_BUILD_OK)
@@ -2255,7 +2638,7 @@ XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
     if (diagnostic && diagnostic_size != 0)
         diagnostic[0] = '\0';
     if (!input || !artifact_out || !input->module_roots || input->module_count == 0u ||
-        !input->entry_function || !input->semantic_profile_fingerprint)
+        !input->entry_function || !input->global_evidence || !input->semantic_profile_fingerprint)
         return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                     "Xi program producer input is incomplete");
     XrXiBuildContext context = {.source = input};

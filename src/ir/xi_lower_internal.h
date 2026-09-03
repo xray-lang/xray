@@ -289,11 +289,11 @@ XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, struct AstNode *node, X
  * target; otherwise it propagates by writing the error and returning. */
 XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool producer_may_throw);
 
-/* Whether a call's callee may raise into the error channel. Fail-closed: only a
- * callee proven NO_THROW reports false. `callee_type` may be NULL when the
- * caller has no static callee type to offer. */
-XR_FUNC bool xi_lower_call_callee_may_throw(XiLower *l, struct CallExprNode *call,
-                                            struct XrType *callee_type);
+/* Whether a call may raise into the error channel. Flow-sensitive callsite
+ * evidence is authoritative; declaration/type fallback remains fail-closed
+ * for compiler-owned calls outside that publication. */
+XR_FUNC bool xi_lower_call_may_throw(XiLower *l, const struct AstNode *call_node,
+                                     struct XrType *callee_type);
 
 /* Re-propagate a materialized error value through the value channel,
  * running any finally blocks it escapes (see xi_lower_stmt.c). */

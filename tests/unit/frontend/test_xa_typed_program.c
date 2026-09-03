@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 
 #include "frontend/analyzer/xa_typed_program.h"
+#include "frontend/analyzer/xa_node_table.h"
 #include "frontend/analyzer/xanalyzer.h"
 #include "frontend/parser/xast_nodes.h"
 #include "frontend/parser/xparse.h"
@@ -114,6 +115,87 @@ TEST(conversion_snapshot_is_owned_and_immutable) {
     xr_program_destroy(program);
 }
 
+TEST(call_error_effect_snapshot_preserves_flow_sensitive_fact) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    AstNode *program = parse_and_analyze(analyzer, "call-effect.xr",
+                                         "fn run() -> i64 {\n"
+                                         "  var action = fn() -> i64 { return 42 }\n"
+                                         "  return action()\n"
+                                         "}\n");
+    ASSERT_NOT_NULL(program);
+    ASSERT_EQ_INT(program->type, AST_PROGRAM);
+    ASSERT_EQ_INT(program->as.program.count, 1);
+    AstNode *run = program->as.program.statements[0];
+    ASSERT_NOT_NULL(run);
+    ASSERT_EQ_INT(run->type, AST_FUNCTION_DECL);
+    AstNode *body = run->as.function_decl.body;
+    ASSERT_NOT_NULL(body);
+    ASSERT_EQ_INT(body->type, AST_BLOCK);
+    ASSERT_EQ_INT(body->as.block.count, 2);
+    AstNode *return_statement = body->as.block.statements[1];
+    ASSERT_NOT_NULL(return_statement);
+    ASSERT_EQ_INT(return_statement->type, AST_RETURN_STMT);
+    ASSERT_EQ_INT(return_statement->as.return_stmt.value_count, 1);
+    AstNode *call = return_statement->as.return_stmt.values[0];
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_INT(call->type, AST_CALL_EXPR);
+
+    XaCallErrorEffectFact analyzed = {0};
+    ASSERT_TRUE(xa_analyzer_get_call_error_effect(analyzer, call, &analyzed));
+    ASSERT_EQ_INT(analyzed.throw_effect, XR_FN_EFFECT_NO_THROW);
+    ASSERT_EQ_INT(analyzed.completeness, XA_EFFECT_COMPLETE);
+    ASSERT_EQ_UINT(analyzed.unknown_reasons, XA_UNKNOWN_NONE);
+    ASSERT_TRUE(analyzed.effect_id != XA_EFFECT_NONE);
+
+    XaTypedProgramPublishResult result = xa_typed_program_publish(analyzer, program, NULL, 0);
+    ASSERT_NOT_NULL(result.program);
+
+    XaCallErrorEffectFact replacement = {
+        .effect_id = analyzed.effect_id,
+        .throw_effect = XR_FN_EFFECT_MAY_THROW,
+        .completeness = XA_EFFECT_INCOMPLETE,
+        .unknown_reasons = XA_UNKNOWN_DYNAMIC_CALL_TARGET,
+    };
+    ASSERT_TRUE(xa_analyzer_set_call_error_effect(analyzer, call, &replacement));
+
+    XaCallErrorEffectFact published = {0};
+    ASSERT_TRUE(xa_typed_program_call_error_effect(result.program, call, &published));
+    ASSERT_EQ_INT(published.throw_effect, XR_FN_EFFECT_NO_THROW);
+    ASSERT_EQ_INT(published.completeness, XA_EFFECT_COMPLETE);
+    ASSERT_EQ_UINT(published.unknown_reasons, XA_UNKNOWN_NONE);
+    ASSERT_EQ_UINT(published.effect_id, analyzed.effect_id);
+
+    xa_typed_program_free(result.program);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
+TEST(top_level_call_publishes_flow_sensitive_error_effect) {
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    AstNode *program = parse_and_analyze(analyzer, "top-level-call-error-effect.xr",
+                                         "var action = fn() -> i64 { return 42 }\n"
+                                         "var result = action()\n");
+    ASSERT_NOT_NULL(program);
+    ASSERT_EQ_INT(program->type, AST_PROGRAM);
+    ASSERT_EQ_INT(program->as.program.count, 2);
+    AstNode *result = program->as.program.statements[1];
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ_INT(result->type, AST_VAR_DECL);
+    AstNode *call = result->as.var_decl.initializer;
+    ASSERT_NOT_NULL(call);
+    ASSERT_EQ_INT(call->type, AST_CALL_EXPR);
+
+    XaCallErrorEffectFact fact = {0};
+    ASSERT_TRUE(xa_analyzer_get_call_error_effect(analyzer, call, &fact));
+    ASSERT_EQ_INT(fact.throw_effect, XR_FN_EFFECT_NO_THROW);
+    ASSERT_EQ_INT(fact.completeness, XA_EFFECT_COMPLETE);
+    ASSERT_EQ_UINT(fact.unknown_reasons, XA_UNKNOWN_NONE);
+    ASSERT_TRUE(fact.effect_id != XA_EFFECT_NONE);
+
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
 TEST(error_diagnostic_blocks_publication) {
     XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     AstNode *program = parse_and_analyze(analyzer, "error.xr", "var value = 42\n");
@@ -139,6 +221,8 @@ RUN_TEST_SUITE("typed program publication");
 RUN_TEST(publishes_verified_current_snapshot);
 RUN_TEST(reanalysis_invalidates_old_snapshot);
 RUN_TEST(conversion_snapshot_is_owned_and_immutable);
+RUN_TEST(call_error_effect_snapshot_preserves_flow_sensitive_fact);
+RUN_TEST(top_level_call_publishes_flow_sensitive_error_effect);
 RUN_TEST(error_diagnostic_blocks_publication);
 teardown();
 TEST_MAIN_END()

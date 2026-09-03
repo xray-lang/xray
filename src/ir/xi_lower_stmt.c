@@ -3951,8 +3951,7 @@ static void lower_return(XiLower *l, AstNode *node) {
          * module-level function is bound as `any`, because that makes the
          * callee type test fail; giving the binding its signature exposes it. */
         bool is_direct_call = !return_is_unit && (ret->values[0]->type == AST_CALL_EXPR);
-        if (is_direct_call && l->try_depth != 0 &&
-            xi_lower_call_callee_may_throw(l, &ret->values[0]->as.call_expr, NULL))
+        if (is_direct_call && l->try_depth != 0 && xi_lower_call_may_throw(l, ret->values[0], NULL))
             is_direct_call = false;
         /* A `T(args)` construction lowers to an XI_CALL_METHOD whose aux is
          * "constructor". Constructors must materialize and return the new

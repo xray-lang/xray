@@ -34,6 +34,8 @@ typedef struct XaNodeEntry {
     XrCtValue ct_value;
     bool has_conversion;
     XrConversionWitness conversion;
+    bool has_call_error_effect;
+    XaCallErrorEffectFact call_error_effect;
     struct XaNodeEntry *next;
 } XaNodeEntry;
 
@@ -161,7 +163,8 @@ static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
 }
 
 static bool entry_has_no_facts(const XaNodeEntry *e) {
-    return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion;
+    return e && !e->type && !e->scope && !e->symbol && !e->has_ct_value && !e->has_conversion &&
+           !e->has_call_error_effect;
 }
 
 static void remove_entry_by_id(XaNodeTable *t, uint32_t id) {
@@ -341,4 +344,94 @@ bool xa_node_table_snapshot_conversions(const XaNodeTable *t,
     *out_entries = entries;
     *out_count = count;
     return true;
+}
+
+bool xa_node_table_set_call_error_effect(XaNodeTable *t, const struct AstNode *node,
+                                         const XaCallErrorEffectFact *fact) {
+    if (!t || !node || !fact)
+        return false;
+    XaNodeEntry *entry = find_or_create(t, node->node_id);
+    if (!entry)
+        return false;
+    entry->has_call_error_effect = true;
+    entry->call_error_effect = *fact;
+    return true;
+}
+
+bool xa_node_table_get_call_error_effect(const XaNodeTable *t, const struct AstNode *node,
+                                         XaCallErrorEffectFact *out_fact) {
+    if (!t || !node)
+        return false;
+    const XaNodeEntry *entry = find_entry(t, node->node_id);
+    if (!entry || !entry->has_call_error_effect)
+        return false;
+    if (out_fact)
+        *out_fact = entry->call_error_effect;
+    return true;
+}
+
+static int compare_node_call_error_effect_entry(const void *left, const void *right) {
+    const XaNodeCallErrorEffectEntry *a = (const XaNodeCallErrorEffectEntry *) left;
+    const XaNodeCallErrorEffectEntry *b = (const XaNodeCallErrorEffectEntry *) right;
+    return a->node_id < b->node_id ? -1 : a->node_id > b->node_id ? 1 : 0;
+}
+
+bool xa_node_table_snapshot_call_error_effects(const XaNodeTable *t,
+                                               XaNodeCallErrorEffectEntry **out_entries,
+                                               uint32_t *out_count) {
+    if (!out_entries || !out_count)
+        return false;
+    *out_entries = NULL;
+    *out_count = 0;
+    if (!t)
+        return false;
+
+    uint32_t count = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (entry->has_call_error_effect)
+                count++;
+        }
+    }
+    if (count == 0)
+        return true;
+
+    XaNodeCallErrorEffectEntry *entries =
+        (XaNodeCallErrorEffectEntry *) xr_malloc(sizeof(*entries) * (size_t) count);
+    if (!entries)
+        return false;
+    uint32_t index = 0;
+    for (int i = 0; i < t->bucket_count; i++) {
+        for (const XaNodeEntry *entry = t->buckets[i]; entry; entry = entry->next) {
+            if (!entry->has_call_error_effect)
+                continue;
+            entries[index].node_id = entry->node_id;
+            entries[index].fact = entry->call_error_effect;
+            index++;
+        }
+    }
+    qsort(entries, count, sizeof(*entries), compare_node_call_error_effect_entry);
+    *out_entries = entries;
+    *out_count = count;
+    return true;
+}
+
+void xa_node_table_clear_call_error_effects(XaNodeTable *t) {
+    if (!t)
+        return;
+    for (int i = 0; i < t->bucket_count; i++) {
+        XaNodeEntry **link = &t->buckets[i];
+        while (*link) {
+            XaNodeEntry *entry = *link;
+            entry->has_call_error_effect = false;
+            entry->call_error_effect = (XaCallErrorEffectFact) {0};
+            if (entry_has_no_facts(entry)) {
+                *link = entry->next;
+                xr_free(entry);
+                t->size--;
+                continue;
+            }
+            link = &entry->next;
+        }
+    }
 }

@@ -10,7 +10,9 @@
 #include "../../../src/ir/xi_emit.h"
 #include "../../../src/ir/xi_program_semantic.h"
 #include "../../../src/aot/program/xr_backend_ir.h"
+#include "../../../src/analysis/xglobal_producer.h"
 #include "../../../src/execution/xr_execution.h"
+#include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/frontend/parser/xparse.h"
@@ -247,6 +249,44 @@ static void xi_pipeline_scalar_fixture_cleanup(XiPipelineScalarFixture *fixture)
     xr_module_graph_free(fixture->graph);
     xr_module_resolver_free(fixture->resolver);
     memset(fixture, 0, sizeof(*fixture));
+}
+
+static bool xi_pipeline_fixture_build_global_evidence(XiPipelineScalarFixture *fixture,
+                                                      XrCompilerSession *session,
+                                                      XgGlobalEvidence *evidence) {
+    if (!fixture || !fixture->spec || !fixture->spec->ast || !fixture->analyzer || !session ||
+        !evidence)
+        return false;
+    XrCompilerSessionScope canon_scope;
+    bool has_canon_scope =
+        fixture->spec->ast->type == AST_PROGRAM && fixture->spec->ast->as.program.arena &&
+        xr_compiler_session_push_arena(session, fixture->spec->ast->as.program.arena,
+                                       fixture->spec->source_path, &canon_scope);
+    XrCanonStatus canon = xr_canon_program(fixture->spec->ast, fixture->analyzer, session);
+    if (has_canon_scope)
+        xr_compiler_session_pop_arena(&canon_scope);
+    if (canon != XR_CANON_OK)
+        return false;
+
+    xa_analyzer_clear_diagnostics(fixture->analyzer);
+    xa_analyzer_analyze(fixture->analyzer, "scalar-binding.xr", fixture->spec->ast);
+    int diagnostic_count = 0;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(fixture->analyzer, &diagnostic_count);
+         diag; diag = diag->next) {
+        if (diag->severity == XR_DIAG_SEV_ERROR)
+            return false;
+    }
+    if (fixture->spec->export_symbols) {
+        xr_hashmap_free(fixture->spec->export_symbols);
+        fixture->spec->export_symbols = NULL;
+    }
+    if (!xa_analyzer_collect_export_symbols_checked(fixture->analyzer, fixture->spec->ast,
+                                                    &fixture->spec->export_symbols))
+        return false;
+    fixture->spec->status = XR_MODSPEC_ANALYZED;
+    memset(evidence, 0, sizeof(*evidence));
+    return xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        evidence, fixture->graph, XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u, fixture->analyzer);
 }
 
 /* Check that the proto contains at least one instruction with the given opcode */
@@ -1301,19 +1341,30 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
                                          "  write_ref(ref value)\n"
                                          "  return value\n"
                                          "}\n"
+                                         "fn callable_value() -> i64 {\n"
+                                         "  var action = fn() -> i64 { return 42 }\n"
+                                         "  return action()\n"
+                                         "}\n"
                                          "fn root() -> i64 {\n"
                                          "  return choose(10) + scalar_matrix(10, 2) + "
                                          "choose_bool(true) + choose_bool(false) + pair_value() + "
                                          "packet_value() + ref_value()\n"
-                                         "    + invoke_value()\n"
+                                         "    + invoke_value() + callable_value()\n"
                                          "}\n";
     PIPELINE_TEST_REQUIRE(
         xi_pipeline_fixture_analyze_source(&fixture, session, "xi-program-input", program_source));
 
+    XgGlobalEvidence global_evidence = {0};
+    PIPELINE_TEST_REQUIRE(
+        xi_pipeline_fixture_build_global_evidence(&fixture, session, &global_evidence));
+
     XiPipelineConfig config = xi_pipeline_program_input_config();
+    config.run_canonicalize = false;
     config.source_file = "scalar-binding.xr";
     config.module_name = "program_input";
     config.module_identity = fixture.spec->canonical;
+    config.global_evidence = &global_evidence;
+    config.global_evidence_module_id = 1u;
 
     XiPipelineResult result =
         xi_pipeline_compile_program(fixture.spec->ast, fixture.analyzer, g_iso, &config);
@@ -1336,6 +1387,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     XiFunc *update_function = NULL;
     XiFunc *ref_function = NULL;
     XiFunc *maybe_error_function = NULL;
+    XiFunc *callable_function = NULL;
     for (uint16_t function = 0; function < result.ir->module->nfuncs; ++function) {
         XiFunc *candidate = result.ir->module->functions[function];
         if (candidate && candidate->name && strcmp(candidate->name, "root") == 0)
@@ -1348,12 +1400,15 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
             ref_function = candidate;
         if (candidate && candidate->name && strcmp(candidate->name, "maybe_error") == 0)
             maybe_error_function = candidate;
+        if (candidate && candidate->name && strcmp(candidate->name, "callable_value") == 0)
+            callable_function = candidate;
     }
     PIPELINE_TEST_REQUIRE(entry != NULL);
     PIPELINE_TEST_REQUIRE(packet_function != NULL);
     PIPELINE_TEST_REQUIRE(update_function != NULL);
     PIPELINE_TEST_REQUIRE(ref_function != NULL);
     PIPELINE_TEST_REQUIRE(maybe_error_function != NULL);
+    PIPELINE_TEST_REQUIRE(callable_function != NULL);
     PIPELINE_TEST_REQUIRE(xi_function_has_operation(update_function, XI_AGG_GET));
     PIPELINE_TEST_REQUIRE(xi_function_has_operation(update_function, XI_AGG_UPDATE));
     PIPELINE_TEST_REQUIRE(!xi_function_has_operation(update_function, XI_AGG_SET));
@@ -1362,6 +1417,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         .module_roots = module_roots,
         .module_count = 1u,
         .entry_function = entry,
+        .global_evidence = &global_evidence,
         .semantic_profile_fingerprint = semantic_profile.bytes,
     };
     XrProgramArtifact artifact = {0};
@@ -1372,6 +1428,58 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         fprintf(stderr, "program producer failed: %s: %s\n",
                 xr_program_build_status_name(producer_status), producer_diagnostic);
     PIPELINE_TEST_REQUIRE(producer_status == XR_PROGRAM_BUILD_OK);
+
+    XrProgramFromXiInput missing_evidence_input = producer_input;
+    missing_evidence_input.global_evidence = NULL;
+    XrProgramArtifact missing_evidence_artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(&missing_evidence_input,
+                                                   &missing_evidence_artifact, producer_diagnostic,
+                                                   sizeof(producer_diagnostic)) ==
+                          XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(missing_evidence_artifact.bytes == NULL);
+
+    XiValue *indirect_call = NULL;
+    XgCallsiteSummary *indirect_callsite = NULL;
+    for (uint32_t block = 0; block < callable_function->nblocks && !indirect_call; ++block) {
+        XiBlock *row = callable_function->blocks[block];
+        for (uint32_t value_index = 0; row && value_index < row->nvalues; ++value_index) {
+            XiValue *value = row->values[value_index];
+            if (!value || value->op != XI_CALL || value->xg_callsite_id == XG_NO_ID)
+                continue;
+            for (uint32_t callsite_index = 0; callsite_index < global_evidence.ncallsites;
+                 ++callsite_index) {
+                XgCallsiteSummary *candidate = &global_evidence.callsites[callsite_index];
+                if (candidate->callsite_id == value->xg_callsite_id &&
+                    candidate->kind == XG_CALL_CLOSURE) {
+                    indirect_call = value;
+                    indirect_callsite = candidate;
+                    break;
+                }
+            }
+        }
+    }
+    PIPELINE_TEST_REQUIRE(indirect_call != NULL);
+    PIPELINE_TEST_REQUIRE(indirect_callsite != NULL);
+    PIPELINE_TEST_REQUIRE((indirect_callsite->flags & XG_CALL_ERROR_EFFECT_VERIFIED) != 0u);
+    PIPELINE_TEST_REQUIRE((indirect_callsite->flags & XG_CALL_MAY_ERROR) == 0u);
+
+    uint32_t saved_callsite_id = indirect_call->xg_callsite_id;
+    indirect_call->xg_callsite_id = XG_NO_ID;
+    XrProgramArtifact missing_callsite_artifact = {0};
+    PIPELINE_TEST_REQUIRE(
+        xr_program_write_from_xi(&producer_input, &missing_callsite_artifact, producer_diagnostic,
+                                 sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(missing_callsite_artifact.bytes == NULL);
+    indirect_call->xg_callsite_id = saved_callsite_id;
+
+    uint32_t saved_callsite_flags = indirect_callsite->flags;
+    indirect_callsite->flags &= ~XG_CALL_ERROR_EFFECT_VERIFIED;
+    XrProgramArtifact unverified_callsite_artifact = {0};
+    PIPELINE_TEST_REQUIRE(xr_program_write_from_xi(
+                              &producer_input, &unverified_callsite_artifact, producer_diagnostic,
+                              sizeof(producer_diagnostic)) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    PIPELINE_TEST_REQUIRE(unverified_callsite_artifact.bytes == NULL);
+    indirect_callsite->flags = saved_callsite_flags;
 
     XrProgramArtifact repeated_artifact = {0};
     PIPELINE_TEST_REQUIRE(
@@ -1543,6 +1651,9 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         XR_CORE_OP_CORE_PLACE_LOCAL,
         XR_CORE_OP_CORE_PLACE_LOAD,
         XR_CORE_OP_CORE_PLACE_STORE,
+        XR_CORE_OP_CORE_CALLABLE_PACK,
+        XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT,
+        XR_CORE_OP_CORE_OWNER_DROP,
     };
     for (size_t index = 0;
          index < sizeof(required_source_operations) / sizeof(required_source_operations[0]);
@@ -1557,7 +1668,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
         validated, xr_validated_program_entry_function(validated), NULL, 0u, NULL, NULL);
     PIPELINE_TEST_REQUIRE(reference.kind == XR_REFERENCE_OUTCOME_RETURN);
     PIPELINE_TEST_REQUIRE(reference.value.kind == XR_REFERENCE_VALUE_I64);
-    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 187);
+    PIPELINE_TEST_REQUIRE(reference.value.as.i64 == 229);
 
     XiProgramProviderBindings bindings;
     xi_program_build_provider_bindings(profile, &bindings);
@@ -1614,6 +1725,7 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     xr_program_artifact_free(&artifact);
 
     xi_pipeline_result_free(&result);
+    xg_global_evidence_free(&global_evidence);
     xi_pipeline_scalar_fixture_cleanup(&fixture);
     xr_target_profile_free(profile);
     PIPELINE_TEST_REQUIRE(xr_compiler_session_attach_isolate(g_iso, original_session) == session);

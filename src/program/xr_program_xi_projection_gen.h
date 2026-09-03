@@ -25,6 +25,7 @@ typedef enum XrProgramXiProjectionKind {
     XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL = 13,
     XR_PROGRAM_XI_PROJECTION_PLACE_LOAD = 14,
     XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 15,
+    XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,
 } XrProgramXiProjectionKind;
 
 typedef struct XrProgramXiProjection {

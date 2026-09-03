@@ -35,6 +35,8 @@ struct XaTypedProgram {
     XrProgramSemanticClosure *program_semantic_closure;
     XaNodeConversionEntry *conversions;
     uint32_t conversion_count;
+    XaNodeCallErrorEffectEntry *call_error_effects;
+    uint32_t call_error_effect_count;
     bool verified;
 };
 
@@ -178,9 +180,19 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
         result.detail = "conversion snapshot allocation failed (AnalysisResourceFailure)";
         return result;
     }
+    if (!xa_node_table_snapshot_call_error_effects((const XaNodeTable *) analyzer->node_table,
+                                                   &program->call_error_effects,
+                                                   &program->call_error_effect_count)) {
+        xr_free(program->conversions);
+        xr_free(program);
+        result.reason = XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE;
+        result.detail = "call-error-effect snapshot allocation failed (AnalysisResourceFailure)";
+        return result;
+    }
     XaScalarProgramAuthorityStatus scalar_status = xa_scalar_program_authority_publish(
         analyzer, syntax, module_spec, &program->scalar_authority);
     if (scalar_status == XA_SCALAR_PROGRAM_AUTHORITY_INVALID) {
+        xr_free(program->call_error_effects);
         xr_free(program->conversions);
         xr_free(program);
         result.reason = XA_TYPED_PROGRAM_REASON_SCALAR_AUTHORITY;
@@ -188,6 +200,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
         return result;
     }
     if (scalar_status == XA_SCALAR_PROGRAM_AUTHORITY_RESOURCE_FAILURE) {
+        xr_free(program->call_error_effects);
         xr_free(program->conversions);
         xr_free(program);
         result.reason = XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE;
@@ -205,6 +218,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
                 sizeof(closure_error));
         if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_INVALID ||
             closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE) {
+            xr_free(program->call_error_effects);
             xr_free(program->conversions);
             xr_free(program);
             result.reason = closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
@@ -228,6 +242,7 @@ void xa_typed_program_free(XaTypedProgram *program) {
         return;
     xa_scalar_program_authority_free(program->scalar_authority);
     xr_program_semantic_closure_free(program->program_semantic_closure);
+    xr_free(program->call_error_effects);
     xr_free(program->conversions);
     xr_free(program);
 }
@@ -304,6 +319,29 @@ bool xa_typed_program_conversion(const XaTypedProgram *program, const struct Ast
         } else {
             if (out_witness)
                 *out_witness = entry->witness;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool xa_typed_program_call_error_effect(const XaTypedProgram *program,
+                                        const struct AstNode *call_node,
+                                        XaCallErrorEffectFact *out_fact) {
+    if (!xa_typed_program_is_current(program) || !call_node)
+        return false;
+    uint32_t low = 0;
+    uint32_t high = program->call_error_effect_count;
+    while (low < high) {
+        uint32_t mid = low + (high - low) / 2;
+        const XaNodeCallErrorEffectEntry *entry = &program->call_error_effects[mid];
+        if (entry->node_id < call_node->node_id) {
+            low = mid + 1;
+        } else if (entry->node_id > call_node->node_id) {
+            high = mid;
+        } else {
+            if (out_fact)
+                *out_fact = entry->fact;
             return true;
         }
     }

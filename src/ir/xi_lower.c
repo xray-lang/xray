@@ -1674,6 +1674,17 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         parent_ctx && parent_ctx->func && parent_ctx->func->is_generic_template;
     xi_lower_publish_effect_sidecars(l.func, analyzer,
                                      xi_lower_function_symbol(analyzer, func_node));
+    /* Anonymous functions have no declaration symbol to own an effect-db row.
+     * Their analyzed function-value type is nevertheless the published throw
+     * contract.  Preserve its constructive NO_THROW proof on the Xi body so
+     * canonical call signatures do not widen an infallible closure merely
+     * because declaration-side metadata is inapplicable. */
+    if (func_node->type == AST_FUNCTION_EXPR && !l.func->error_effect_nothrow) {
+        XrType *function_value_type = xa_analyzer_get_node_type(analyzer, func_node);
+        if (function_value_type && function_value_type->kind == XR_KIND_FUNCTION &&
+            function_value_type->function.throw_effect == XR_FN_EFFECT_NO_THROW)
+            l.func->error_effect_nothrow = true;
+    }
     if (!l.func->return_storage_known && func_node->type == AST_FUNCTION_EXPR) {
         XaScope *semantic_scope = xa_scope_find_by_node(analyzer->global_scope, func_node);
         if (semantic_scope && semantic_scope->return_storage_known &&

@@ -317,6 +317,12 @@ XR_FUNC void xa_analyzer_set_node_conversion(XaAnalyzer *analyzer, const struct 
                                              const XrConversionWitness *witness);
 XR_FUNC bool xa_analyzer_get_node_conversion(XaAnalyzer *analyzer, const struct AstNode *node,
                                              XrConversionWitness *out_witness);
+struct XaCallErrorEffectFact;
+XR_FUNC bool xa_analyzer_set_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                               const struct XaCallErrorEffectFact *fact);
+XR_FUNC bool xa_analyzer_get_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                               struct XaCallErrorEffectFact *out_fact);
+XR_FUNC void xa_analyzer_clear_call_error_effects(XaAnalyzer *analyzer);
 XR_FUNC void xa_analyzer_set_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,
                                            const XrCtValue *value);
 XR_FUNC bool xa_analyzer_get_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,

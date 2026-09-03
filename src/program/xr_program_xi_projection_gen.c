@@ -195,6 +195,13 @@ static const XrProgramXiProjectionRow xr_program_xi_projection_rows[] = {
         UINT32_C(0),
         XR_PROGRAM_XI_PROJECTION_PLACE_STORE,
     },
+    {
+        XI_CLOSURE_NEW,
+        XR_PROGRAM_XI_ANY_RESULT_TYPE,
+        XR_CORE_OP_CORE_CALLABLE_PACK,
+        UINT32_C(0),
+        XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK,
+    },
 };
 
 bool xr_program_xi_projection(uint16_t xi_operation, uint16_t result_type_id,

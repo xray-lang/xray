@@ -2340,6 +2340,26 @@ bool xa_analyzer_get_node_conversion(XaAnalyzer *analyzer, const struct AstNode 
     return xa_node_table_get_conversion((XaNodeTable *) analyzer->node_table, node, out_witness);
 }
 
+bool xa_analyzer_set_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                       const XaCallErrorEffectFact *fact) {
+    if (!analyzer || !analyzer->node_table || !node || !fact)
+        return false;
+    return xa_node_table_set_call_error_effect((XaNodeTable *) analyzer->node_table, node, fact);
+}
+
+bool xa_analyzer_get_call_error_effect(XaAnalyzer *analyzer, const struct AstNode *node,
+                                       XaCallErrorEffectFact *out_fact) {
+    if (!analyzer || !analyzer->node_table || !node)
+        return false;
+    return xa_node_table_get_call_error_effect((XaNodeTable *) analyzer->node_table, node,
+                                               out_fact);
+}
+
+void xa_analyzer_clear_call_error_effects(XaAnalyzer *analyzer) {
+    if (analyzer && analyzer->node_table)
+        xa_node_table_clear_call_error_effects((XaNodeTable *) analyzer->node_table);
+}
+
 void xa_analyzer_set_node_ct_value(XaAnalyzer *analyzer, const struct AstNode *node,
                                    const XrCtValue *value) {
     if (!analyzer || !node)

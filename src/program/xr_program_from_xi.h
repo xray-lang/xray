@@ -14,20 +14,24 @@
 #include "xr_program.h"
 
 struct XiFunc;
+struct XgGlobalEvidence;
 
 typedef struct XrProgramFromXiInput {
     const struct XiFunc *const *module_roots;
     uint32_t module_count;
     const struct XiFunc *entry_function;
+    const struct XgGlobalEvidence *global_evidence;
     const uint8_t *semantic_profile_fingerprint;
 } XrProgramFromXiInput;
 
 /* Xi is compiler-private source IR. This function accepts only an Optimized,
  * target-neutral graph with exact source-module authority and whose old
  * SemanticPlan has never been built. The caller selects one exact Xi function
- * as the linked-program entry; no source spelling or legacy plan row is used to
- * infer it. The result is the canonical distributable XrProgram artifact;
- * unsupported Xi operations fail closed. */
+ * as the linked-program entry. Calls consume the same verified global evidence
+ * identities that were bound during Xi lowering; no source spelling, Xi value
+ * shape, or legacy plan row is used to infer a target. The result is the
+ * canonical distributable XrProgram artifact; unsupported Xi operations fail
+ * closed. */
 XR_FUNC XrProgramBuildStatus xr_program_write_from_xi(const XrProgramFromXiInput *input,
                                                       XrProgramArtifact *artifact_out,
                                                       char *diagnostic, size_t diagnostic_size);

@@ -191,6 +191,13 @@
       "projection_kind": "place-store",
       "core_operation": "core.place.store",
       "immediate_u32": 0
+    },
+    {
+      "xi_operation": "xi.closure.new",
+      "result_type": "any",
+      "projection_kind": "callable-pack",
+      "core_operation": "core.callable.pack",
+      "immediate_u32": 0
     }
   ],
   "structural_mappings": [

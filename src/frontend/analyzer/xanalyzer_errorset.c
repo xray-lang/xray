@@ -27,6 +27,7 @@
 #include "xanalyzer_visitor.h"
 #include "../parser/xtype_ref.h"
 #include "xa_effect_db.h"
+#include "xa_node_table.h"
 #include "xa_selection.h"
 #include "xbuiltin_receiver_registry.h"
 #include "xtype_ref_resolve.h"
@@ -319,6 +320,8 @@ struct ErrorSetCtx {
     XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
     XaSymbol *current_func;          /* Current function symbol */
     bool changed;                    /* Fixpoint: did anything change this iteration? */
+    bool publish_call_error_effect_facts;
+    bool call_error_effect_publication_failed;
 };
 
 /* Coroutine-boundary facts are per-body.  Expanding a callee's body into this
@@ -377,6 +380,8 @@ static void es_walk_block(ErrorSetCtx *ctx, AstNode *node);
 static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *callee, int depth);
 static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
                                       AstNode *function_expr);
+static void publish_call_error_effect_fact(ErrorSetCtx *ctx, AstNode *call_node,
+                                           FunctionValueTarget target);
 
 static bool function_has_error_diagnostic(ErrorSetCtx *ctx, AstNode *func_node,
                                           XaSymbol *func_sym) {
@@ -3585,7 +3590,7 @@ static const XaEffectContract *es_builtin_type_member_effect_contract(ErrorSetCt
     return contract;
 }
 
-static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
+static const XaEffectContract *es_native_call_effect_contract(ErrorSetCtx *ctx, AstNode *callee) {
     AstNode *source = identity_source(callee);
     const XaEffectContract *contract = es_imported_function_effect_contract(ctx, source);
     if (!contract)
@@ -3594,7 +3599,11 @@ static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
         contract = es_handle_method_effect_contract(ctx, source);
     if (!contract)
         contract = es_builtin_type_member_effect_contract(ctx, source);
-    return es_apply_effect_contract(ctx, contract);
+    return contract;
+}
+
+static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
+    return es_apply_effect_contract(ctx, es_native_call_effect_contract(ctx, callee));
 }
 
 /* ========== Coroutine Boundaries ========== */
@@ -3766,10 +3775,16 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
             if (callee_source && callee_source->type == AST_MEMBER_ACCESS)
                 apply_catch_aggregate_member_update(ctx, &member_update);
 
-            if (es_walk_immediate_function_expr_call(ctx, node->as.call_expr.callee))
+            if (es_walk_immediate_function_expr_call(ctx, node->as.call_expr.callee)) {
+                publish_call_error_effect_fact(ctx, node,
+                                               resolve_call_target(ctx, node->as.call_expr.callee));
                 break;
-            if (es_apply_native_call_contract(ctx, node->as.call_expr.callee))
+            }
+            if (es_apply_native_call_contract(ctx, node->as.call_expr.callee)) {
+                publish_call_error_effect_fact(ctx, node,
+                                               resolve_call_target(ctx, node->as.call_expr.callee));
                 break;
+            }
 
             const XaSelection *callee_selection =
                 xa_analyzer_get_selection(ctx->analyzer, callee_source);
@@ -3788,6 +3803,7 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
             if (!function_value_target_is_exact(call_target))
                 call_target = resolve_call_target(ctx, node->as.call_expr.callee);
             if (function_value_target_is_exact(call_target)) {
+                publish_call_error_effect_fact(ctx, node, call_target);
                 for (int i = 0; i < call_target.target_count; i++) {
                     AstNode *function_expr = call_target.target_function_exprs[i];
                     XaSymbol *callee_sym = call_target.target_symbols[i];
@@ -3811,6 +3827,7 @@ static void es_walk_expr_inner(ErrorSetCtx *ctx, AstNode *node) {
                 }
                 break;
             }
+            publish_call_error_effect_fact(ctx, node, call_target);
             if (is_dynamic_function_call_target(ctx->analyzer, node->as.call_expr.callee,
                                                 call_target.symbol)) {
                 xa_effect_summary_mark_incomplete(ctx->current_summary,
@@ -4894,6 +4911,137 @@ static XrFnThrowEffect function_value_target_throw_effect(ErrorSetCtx *ctx,
     return XR_FN_EFFECT_NO_THROW;
 }
 
+static void publish_call_error_effect_fact(ErrorSetCtx *ctx, AstNode *call_node,
+                                           FunctionValueTarget target) {
+    if (!ctx || !ctx->publish_call_error_effect_facts || !call_node ||
+        call_node->type != AST_CALL_EXPR)
+        return;
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    const XaEffectContract *native_contract =
+        es_native_call_effect_contract(ctx, call_node->as.call_expr.callee);
+    if (native_contract) {
+        XaEffectSummary *saved_summary = ctx->current_summary;
+        ctx->current_summary = &summary;
+        if (!es_apply_effect_contract(ctx, native_contract))
+            xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_NATIVE_CONTRACT_MISSING);
+        ctx->current_summary = saved_summary;
+    } else if (!function_value_target_is_exact(target)) {
+        xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+    } else {
+        for (int i = 0; i < target.target_count; i++) {
+            XaSymbol *symbol = target.target_symbols[i];
+            AstNode *function_expr = target.target_function_exprs[i];
+            if (symbol) {
+                const XaEffectSummary *target_summary =
+                    symbol->links.effect_id != XA_EFFECT_NONE
+                        ? xa_effect_db_get(ctx->analyzer->effect_db, symbol->links.effect_id)
+                        : NULL;
+                if (!target_summary || !xa_effect_summary_add_summary(ctx->analyzer->effect_db,
+                                                                      &summary, target_summary))
+                    xa_effect_summary_mark_incomplete(
+                        &summary, target_summary ? XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE
+                                                 : XA_UNKNOWN_UNRESOLVED_CALLEE);
+                continue;
+            }
+            if (function_expr) {
+                XaEffectSummary function_summary;
+                xa_effect_summary_init(&function_summary);
+                if (!compute_function_expr_summary(ctx, function_expr, &function_summary) ||
+                    !xa_effect_summary_add_summary(ctx->analyzer->effect_db, &summary,
+                                                   &function_summary))
+                    xa_effect_summary_mark_incomplete(&summary,
+                                                      XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE);
+                xa_effect_summary_clear(&function_summary);
+                continue;
+            }
+            xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_UNRESOLVED_CALLEE);
+        }
+    }
+
+    XaCallErrorEffectFact fact = {
+        .effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary),
+        .throw_effect =
+            xa_effect_summary_is_nothrow(&summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW,
+        .completeness = summary.error_set_completeness,
+        .unknown_reasons = summary.error_unknown_reasons,
+    };
+    if (fact.effect_id == XA_EFFECT_NONE ||
+        !xa_analyzer_set_call_error_effect(ctx->analyzer, call_node, &fact))
+        ctx->call_error_effect_publication_failed = true;
+    xa_effect_summary_clear(&summary);
+}
+
+static void publish_function_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *func_node,
+                                                     XaSymbol *func_sym) {
+    if (!ctx || !func_node || !func_sym)
+        return;
+    AstNode *body = function_like_body(func_node);
+    if (!body)
+        return;
+
+    XaScope *saved_scope = ctx->analyzer->current_scope;
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, func_node);
+    if (fn_scope)
+        ctx->analyzer->current_scope = fn_scope;
+    XaEffectSummary sink;
+    xa_effect_summary_init(&sink);
+    ctx->current_summary = &sink;
+    ctx->current_func = func_sym;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
+    ctx->task_spawn_alias_count = 0;
+    ctx->linked_scope_depth = 0;
+    clear_function_value_param_aliases(ctx, func_node);
+    apply_specialized_function_param_targets(ctx, func_node, func_sym);
+    es_walk_block(ctx, body);
+    xa_effect_summary_clear(&sink);
+    ctx->current_summary = NULL;
+    ctx->current_func = NULL;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
+    ctx->analyzer->current_scope = saved_scope;
+}
+
+/* Publish call-site facts for executable top-level statements as well as for
+ * declaration bodies.  Top-level code is the semantic body of `<main>` even
+ * though it has no XaSymbol/effect-id of its own; omitting it would leave the
+ * canonical producer dependent on a lowering-time type guess. */
+static void publish_program_call_error_effect_facts(ErrorSetCtx *ctx, AstNode *program) {
+    if (!ctx || !program || program->type != AST_PROGRAM)
+        return;
+
+    XaScope *saved_scope = ctx->analyzer->current_scope;
+    ctx->analyzer->current_scope = ctx->analyzer->global_scope;
+    XaEffectSummary sink;
+    xa_effect_summary_init(&sink);
+    ctx->current_summary = &sink;
+    ctx->current_func = NULL;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
+    ctx->current_caught = NULL;
+    ctx->current_catch_var = NULL;
+    ctx->current_catch_symbol_id = 0;
+    ctx->current_catch_alias_count = 0;
+    ctx->current_catch_aggregate_alias_count = 0;
+    ctx->current_catch_alias_control_depth = 0;
+    ctx->function_value_alias_count = 0;
+    ctx->function_value_control_depth = 0;
+    ctx->function_value_mutation_count = 0;
+    ctx->function_value_mutation_depth = 0;
+    ctx->task_spawn_alias_count = 0;
+    ctx->linked_scope_depth = 0;
+    for (int i = 0; i < program->as.program.count; i++)
+        es_walk_stmt(ctx, program->as.program.statements[i]);
+    xa_effect_summary_clear(&sink);
+    ctx->current_summary = NULL;
+    ctx->analyzer->current_scope = saved_scope;
+}
+
 /* Materialize the effect argument of a monomorphized HOF parameter after all
  * concrete callees have their final bit. A merged/unknown target is MAY_THROW;
  * the lowering therefore skips ERR_CHECK only for a closed all-NO target set. */
@@ -5120,6 +5268,7 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     ErrorSetCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.analyzer = analyzer;
+    xa_analyzer_clear_call_error_effects(analyzer);
 
     /* Phase 1: Collect all function declarations */
     FuncEntry *funcs = NULL;
@@ -5128,9 +5277,6 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
 
     FunctionExprList function_exprs = {0};
     xa_ast_walk(ast, collect_function_expr_pre, NULL, &function_exprs);
-
-    if (func_count == 0 && function_exprs.count == 0)
-        goto cleanup;
 
     /* Phase 2: Iterate the finite monotone effect/target domains to a real fixed point.
      * Do not stop after a guessed round count: an unfinished recursive component must
@@ -5173,10 +5319,22 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
         infer_function_expr_throw_effect(&ctx, function_exprs.items[i]);
 
     publish_specialized_param_throw_effects(&ctx);
+    ctx.publish_call_error_effect_facts = true;
+    publish_program_call_error_effect_facts(&ctx, ast);
+    for (int i = 0; i < func_count; i++)
+        publish_function_call_error_effect_facts(&ctx, funcs[i].node, funcs[i].sym);
+    ctx.publish_call_error_effect_facts = false;
+    if (ctx.call_error_effect_publication_failed) {
+        const char *message = "call-error-effect publication failed (AnalysisResourceFailure)";
+        XrLocation location = {.file = analyzer->current_file,
+                               .line = (uint32_t) ast->line,
+                               .column = (uint32_t) ast->column};
+        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_OUT_OF_MEMORY, message,
+                                   &location);
+    }
     validate_no_throw_value_constraints(&ctx, ast);
     validate_defer_no_throw(&ctx, ast);
 
-cleanup:
     xr_free(function_exprs.items);
     xr_free(funcs);
     xr_free(ctx.function_return_targets);

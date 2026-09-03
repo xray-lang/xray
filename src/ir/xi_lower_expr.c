@@ -34,6 +34,7 @@
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_parallel_call_plan.h"
 #include "../frontend/analyzer/xa_typed_program.h"
+#include "../frontend/analyzer/xa_node_table.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
@@ -1358,7 +1359,12 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
      * objects in callee position. */
     if (sid != 0 && l->analyzer) {
         XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, sid);
-        XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+        /* Only a declaration symbol is the direct callee authority.  A local,
+         * parameter, field, or property is a function value; its symbol row may
+         * retain the conservative slot type while the analyzed callee
+         * expression has a narrower, proven throw effect. */
+        XaSymbolLinks *links =
+            sym && sym->kind == XA_SYM_FUNCTION ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
         const char *member_name =
             links && links->import_member_name ? links->import_member_name : name;
         if (links && links->module_name && member_name) {
@@ -5361,19 +5367,24 @@ static bool lower_apply_call_writebacks(XiLower *l, const XiCallPlan *plan,
     return true;
 }
 
-/* Task 216 P1: whether a call's callee may raise into the error channel.
- * Fail-closed — report false (nothrow) only when the callee is provably
- * NO_THROW, so an error check is elided only where it could never fire. For a
- * direct named call we consult the resolved function symbol's published bit;
- * otherwise we fall back to the static callee function type (which defaults to
- * the fail-closed MAY_THROW). */
-XR_FUNC bool xi_lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
-                                            struct XrType *callee_type) {
+/* Whether this exact call site may raise into the error channel.  The
+ * flow-sensitive analyzer fact is authoritative; declaration and type facts
+ * are only fail-closed recovery for invalid or pre-publication test inputs. */
+XR_FUNC bool xi_lower_call_may_throw(XiLower *l, const AstNode *call_node,
+                                     struct XrType *callee_type) {
+    const CallExprNode *call =
+        call_node && call_node->type == AST_CALL_EXPR ? &call_node->as.call_expr : NULL;
     struct XrType *fn_type = NULL;
+    XaCallErrorEffectFact call_effect;
+    if (l && l->analyzer && call_node &&
+        xa_analyzer_get_call_error_effect(l->analyzer, call_node, &call_effect))
+        return call_effect.completeness != XA_EFFECT_COMPLETE ||
+               call_effect.throw_effect != XR_FN_EFFECT_NO_THROW;
     if (l && l->analyzer && call && call->callee && call->callee->type == AST_VARIABLE) {
         XaSymbol *sym =
             xa_scope_lookup_by_id(l->analyzer->global_scope, call->callee->as.variable.symbol_id);
-        XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+        XaSymbolLinks *links =
+            sym && sym->kind == XA_SYM_FUNCTION ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
         if (links && links->type && links->type->kind == XR_KIND_FUNCTION)
             fn_type = links->type;
     }
@@ -5410,7 +5421,8 @@ XR_FUNC bool xi_lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
 static void lower_call_emit_err_check(XiLower *l, XiValue *call_v, AstNode *node,
                                       CallExprNode *call, struct XrType *callee_type) {
     (void) call_v;
-    xi_lower_insert_err_check(l, node, xi_lower_call_callee_may_throw(l, call, callee_type));
+    (void) call;
+    xi_lower_insert_err_check(l, node, xi_lower_call_may_throw(l, node, callee_type));
 }
 
 static XaSymbolLinks *lower_call_return_ownership_links(XiLower *l, CallExprNode *call) {

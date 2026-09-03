@@ -122,6 +122,7 @@ PROJECTION_KINDS = {
     "place-local": "XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL",
     "place-load": "XR_PROGRAM_XI_PROJECTION_PLACE_LOAD",
     "place-store": "XR_PROGRAM_XI_PROJECTION_PLACE_STORE",
+    "callable-pack": "XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK",
 }
 CORE_TYPE_NAMES = {
     "any": "XR_PROGRAM_XI_ANY_RESULT_TYPE",
@@ -383,6 +384,7 @@ def generate_source_projection_header() -> str:
         "    XR_PROGRAM_XI_PROJECTION_PLACE_LOCAL = 13,",
         "    XR_PROGRAM_XI_PROJECTION_PLACE_LOAD = 14,",
         "    XR_PROGRAM_XI_PROJECTION_PLACE_STORE = 15,",
+        "    XR_PROGRAM_XI_PROJECTION_CALLABLE_PACK = 16,",
         "} XrProgramXiProjectionKind;",
         "",
         "typedef struct XrProgramXiProjection {",

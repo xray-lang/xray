@@ -373,6 +373,10 @@ enum {
     XG_CALL_MAY_SUSPEND = 1u << 1,
     XG_CALL_USES_DEFAULT_ARGS = 1u << 2,
     XG_CALL_MAY_PANIC = 1u << 3,
+    /* The error-channel decision came from the analyzer's flow-sensitive
+     * callsite fact.  Without this bit, absence of MAY_ERROR is not proof of
+     * no-throw and consumers must fail closed. */
+    XG_CALL_ERROR_EFFECT_VERIFIED = 1u << 4,
 };
 
 enum {

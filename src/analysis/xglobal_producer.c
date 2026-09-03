@@ -16,6 +16,7 @@
 #include "../os/os_proc.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xa_selection.h"
+#include "../frontend/analyzer/xa_node_table.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -8591,6 +8592,18 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                 row.method_name_id = method_name_id;
             }
         }
+    }
+    XaCallErrorEffectFact call_effect;
+    if (bc->producer->analyzer &&
+        xa_analyzer_get_call_error_effect(bc->producer->analyzer, call, &call_effect)) {
+        if (call_effect.throw_effect != XR_FN_EFFECT_NO_THROW)
+            row.flags |= XG_CALL_MAY_ERROR;
+        if (call_effect.completeness == XA_EFFECT_COMPLETE &&
+            call_effect.unknown_reasons == XA_UNKNOWN_NONE)
+            row.flags |= XG_CALL_ERROR_EFFECT_VERIFIED;
+    } else {
+        /* Missing semantic publication is never interpreted as no-throw. */
+        row.flags |= XG_CALL_MAY_ERROR;
     }
     if (bc->callsite_count == 0)
         bc->callsite_start = row.callsite_id;

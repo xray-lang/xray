@@ -28,6 +28,7 @@ struct XaScalarProgramAuthority;
 struct XaOwnershipCandidateProof;
 struct XaFinalMoveProof;
 struct XaAllocationInstancePlan;
+struct XaCallErrorEffectFact;
 
 typedef struct XaTypedProgram XaTypedProgram;
 
@@ -87,6 +88,9 @@ XR_FUNC const struct XaResolvedCall *
 xa_typed_program_resolved_call(const XaTypedProgram *program, const struct AstNode *call_node);
 XR_FUNC bool xa_typed_program_conversion(const XaTypedProgram *program, const struct AstNode *node,
                                          XrConversionWitness *out_witness);
+XR_FUNC bool xa_typed_program_call_error_effect(const XaTypedProgram *program,
+                                                const struct AstNode *call_node,
+                                                struct XaCallErrorEffectFact *out_fact);
 XR_FUNC const struct XaEffectSummary *
 xa_typed_program_effect_summary(const XaTypedProgram *program, const struct XaSymbol *symbol);
 XR_FUNC const struct XaMemoryEffectSummary *

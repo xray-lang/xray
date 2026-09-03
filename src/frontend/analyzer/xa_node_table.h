@@ -29,8 +29,10 @@
 #define XA_NODE_TABLE_H
 
 #include "xconsteval.h"
+#include "xa_effect_db.h"
 #include "../../base/xdefs.h"
 #include "../../shared/xr_conversion.h"
+#include "../../runtime/value/xtype.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -48,6 +50,21 @@ typedef struct XaNodeConversionEntry {
     uint32_t node_id;
     XrConversionWitness witness;
 } XaNodeConversionEntry;
+
+/* Flow-sensitive error-channel conclusion for one call expression.  The
+ * effect id names the exact analyzer-owned error set; throw_effect is the
+ * constructive lowering decision, and incomplete facts remain fail-closed. */
+typedef struct XaCallErrorEffectFact {
+    XaEffectId effect_id;
+    XrFnThrowEffect throw_effect;
+    XaEffectCompleteness completeness;
+    XaUnknownReasonSet unknown_reasons;
+} XaCallErrorEffectFact;
+
+typedef struct XaNodeCallErrorEffectEntry {
+    uint32_t node_id;
+    XaCallErrorEffectFact fact;
+} XaNodeCallErrorEffectEntry;
 
 XR_FUNC XaNodeTable *xa_node_table_new(void);
 XR_FUNC void xa_node_table_free(XaNodeTable *t);
@@ -88,6 +105,18 @@ XR_FUNC bool xa_node_table_get_conversion(const XaNodeTable *t, const struct Ast
 XR_FUNC bool xa_node_table_snapshot_conversions(const XaNodeTable *t,
                                                 XaNodeConversionEntry **out_entries,
                                                 uint32_t *out_count);
+
+/* Store and publish the flow-sensitive call effect computed by error-set
+ * inference.  These facts are separate from the callee's declared function
+ * type because a mutable local can have a precise target at one callsite. */
+XR_FUNC bool xa_node_table_set_call_error_effect(XaNodeTable *t, const struct AstNode *node,
+                                                 const XaCallErrorEffectFact *fact);
+XR_FUNC bool xa_node_table_get_call_error_effect(const XaNodeTable *t, const struct AstNode *node,
+                                                 XaCallErrorEffectFact *out_fact);
+XR_FUNC bool xa_node_table_snapshot_call_error_effects(const XaNodeTable *t,
+                                                       XaNodeCallErrorEffectEntry **out_entries,
+                                                       uint32_t *out_count);
+XR_FUNC void xa_node_table_clear_call_error_effects(XaNodeTable *t);
 
 // Drop all entries, keep the bucket array allocated. Used between
 // analyses of the same file when the analyzer reuses its scratch state.
