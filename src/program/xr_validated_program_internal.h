@@ -15,6 +15,7 @@ typedef struct XrValidatedType {
     XrCoreIrKey key;
     uint16_t type_id;
     XrCoreIrTypeKind kind;
+    XrCoreIrNominalKind nominal_kind;
     XrCoreIrTypeOwnership ownership;
     XrCoreIrCopyContract copy_contract;
     uint16_t *field_types;
@@ -23,7 +24,41 @@ typedef struct XrValidatedType {
     uint32_t variant_count;
     uint16_t view_element_type;
     XrCoreIrViewCapability view_capability;
+    uint32_t signature_id;
+    uint32_t interface_id;
+    XrCoreIrInterfaceUseKind interface_use_kind;
 } XrValidatedType;
+
+typedef struct XrValidatedSignature {
+    uint16_t *parameter_types;
+    XrParamMode *parameter_modes;
+    uint32_t parameter_count;
+    bool has_receiver;
+    XrParamMode receiver_mode;
+    uint16_t result_type_id;
+    XrCoreIrOwnershipDisposition result_ownership;
+    XrViewOrigin *result_borrow_origins;
+    uint32_t result_borrow_origin_count;
+    uint16_t error_type_id;
+    uint16_t panic_type_id;
+    uint32_t effect_mask;
+    uint32_t capability_mask;
+} XrValidatedSignature;
+
+typedef struct XrValidatedInterface {
+    XrCoreIrKey key;
+    uint32_t *slot_signature_ids;
+    uint32_t slot_count;
+} XrValidatedInterface;
+
+typedef struct XrValidatedConformance {
+    XrCoreIrKey key;
+    uint16_t implementor_type_id;
+    XrCoreIrNominalKind implementor_kind;
+    uint32_t interface_id;
+    uint32_t *slot_function_ids;
+    uint32_t slot_count;
+} XrValidatedConformance;
 
 typedef struct XrValidatedRoot {
     XrCoreIrRootKind kind;
@@ -82,6 +117,7 @@ typedef struct XrValidatedBlock {
 } XrValidatedBlock;
 
 typedef struct XrValidatedFunction {
+    uint32_t signature_id;
     uint16_t *parameter_types;
     XrParamMode *parameter_modes;
     uint32_t parameter_count;
@@ -118,6 +154,12 @@ struct XrValidatedProgram {
     uint8_t semantic_profile_fingerprint[XR_PROGRAM_DIGEST_SIZE];
     XrValidatedType *types;
     uint32_t type_count;
+    XrValidatedSignature *signatures;
+    uint32_t signature_count;
+    XrValidatedInterface *interfaces;
+    uint32_t interface_count;
+    XrValidatedConformance *conformances;
+    uint32_t conformance_count;
     XrValidatedConstant *constants;
     uint32_t constant_count;
     XrValidatedFunction *functions;

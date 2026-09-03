@@ -93,19 +93,20 @@ static XrValidatedProgram *validate_ok(const XrProgramArtifact *artifact) {
     return program;
 }
 
-static void expect_semantic_reject(const XrProgramArtifact *artifact,
-                                   XrProgramDiagnosticKind expected) {
+static void expect_semantic_reject_at(const XrProgramArtifact *artifact,
+                                      XrProgramDiagnosticKind expected, int caller_line) {
     XrValidatedProgram *program = NULL;
     XrProgramDiagnostic first;
     XrProgramDiagnostic second;
     XrProgramVerifyStatus first_status =
         xr_program_validate(artifact->bytes, artifact->size, NULL, &program, &first);
     if (first_status != XR_PROGRAM_VERIFY_SEMANTIC_REJECTED || first.kind != expected)
-        fprintf(stderr, "unexpected reject: status=%s diagnostic=%s expected=%s f=%u b=%u i=%u\n",
-                xr_program_verify_status_name(first_status),
-                xr_program_diagnostic_kind_name(first.kind),
-                xr_program_diagnostic_kind_name(expected), first.location.function_id,
-                first.location.block_id, first.location.instruction_id);
+        fprintf(
+            stderr,
+            "unexpected reject from line %d: status=%s diagnostic=%s expected=%s f=%u b=%u i=%u\n",
+            caller_line, xr_program_verify_status_name(first_status),
+            xr_program_diagnostic_kind_name(first.kind), xr_program_diagnostic_kind_name(expected),
+            first.location.function_id, first.location.block_id, first.location.instruction_id);
     CHECK(first_status == XR_PROGRAM_VERIFY_SEMANTIC_REJECTED);
     CHECK(program == NULL);
     CHECK(first.kind == expected);
@@ -115,6 +116,9 @@ static void expect_semantic_reject(const XrProgramArtifact *artifact,
     CHECK(memcmp(&first, &second, sizeof(first)) == 0);
     CHECK(program == NULL);
 }
+
+#define expect_semantic_reject(artifact, expected)                                                 \
+    expect_semantic_reject_at((artifact), (expected), __LINE__)
 
 static uint64_t test_take_uvar(const uint8_t *bytes, size_t size, size_t *offset) {
     uint64_t value = 0u;
@@ -228,8 +232,10 @@ static bool mode_fixture_offsets(const XrProgramArtifact *artifact, size_t *mode
 
     const XrProgramSectionView *functions = &view.sections[XR_PROGRAM_SECTION_FUNCTIONS - 1u];
     size_t cursor = (size_t) functions->offset;
-    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* function count */
-    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* function id */
+    uint64_t signature_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    if (signature_count != 1u)
+        return false;
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* signature id */
     uint64_t parameter_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
     if (parameter_count != 1u)
         return false;
@@ -250,6 +256,9 @@ static bool mode_fixture_offsets(const XrProgramArtifact *artifact, size_t *mode
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* panic type */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* effects */
     (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* capabilities */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* function count */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* function id */
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor); /* signature id */
     uint32_t entry_block = (uint32_t) test_take_uvar(artifact->bytes, artifact->size, &cursor);
 
     const XrProgramSectionView *code = &view.sections[XR_PROGRAM_SECTION_CODE - 1u];
@@ -1859,7 +1868,7 @@ static void test_typed_panic_invoke_and_cleanup_cfg(void) {
     } invalid[] = {
         {XR_PANIC_FIXTURE_DIRECT_PANICFUL, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
         {XR_PANIC_FIXTURE_COPY_PANIC, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
-        {XR_PANIC_FIXTURE_PANIC_AS_ERROR, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
+        {XR_PANIC_FIXTURE_PANIC_AS_ERROR, XR_PROGRAM_DIAGNOSTIC_FUNCTION},
         {XR_PANIC_FIXTURE_WRONG_CHANNEL_TYPE, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE},
         {XR_PANIC_FIXTURE_MISSING_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_OPERATION_ARITY},
         {XR_PANIC_FIXTURE_DUPLICATE_NORMAL_OWNER, XR_PROGRAM_DIAGNOSTIC_VALUE_USE},
@@ -2418,6 +2427,221 @@ static void test_immutable_view_root_tables(void) {
     xr_program_artifact_free(&first);
 }
 
+static XrProgramBuildStatus build_program_table_artifact(bool reverse_inputs, bool bad_slot,
+                                                         XrProgramArtifact *artifact) {
+    enum {
+        IMPLEMENTOR_TYPE = 70,
+        EXISTENTIAL_A_TYPE = 71,
+        EXISTENTIAL_B_TYPE = 72,
+        CALLABLE_TYPE = 73,
+    };
+    XrCoreIrKey interface_a_key = key("program-table:interface:a");
+    XrCoreIrKey interface_b_key = key("program-table:interface:b");
+    XrParamMode receiver_mode = XR_PARAM_READ;
+    uint16_t interface_a_receiver = EXISTENTIAL_A_TYPE;
+    uint16_t interface_b_receiver = EXISTENTIAL_B_TYPE;
+    XrCoreIrCallableSignatureInput slot_a = {
+        .parameter_types = &interface_a_receiver,
+        .parameter_modes = &receiver_mode,
+        .parameter_count = 1u,
+        .has_receiver = true,
+        .receiver_mode = XR_PARAM_READ,
+        .result_type_id = XR_CORE_TYPE_VOID,
+    };
+    XrCoreIrCallableSignatureInput slot_b = slot_a;
+    slot_b.parameter_types = &interface_b_receiver;
+    if (bad_slot)
+        slot_b.result_type_id = XR_CORE_TYPE_I64;
+    uint16_t implementor_fields[] = {XR_CORE_TYPE_I64};
+    XrCoreIrTypeInput types[] = {
+        {.key = key("program-table:type:implementor"),
+         .local_id = IMPLEMENTOR_TYPE,
+         .kind = XR_CORE_IR_TYPE_AGGREGATE,
+         .nominal_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .field_types = implementor_fields,
+         .field_count = 1u},
+        {.key = key("program-table:type:existential-a"),
+         .local_id = EXISTENTIAL_A_TYPE,
+         .kind = XR_CORE_IR_TYPE_EXISTENTIAL,
+         .existential_interface = interface_a_key,
+         .interface_use_kind = XR_CORE_IR_INTERFACE_EXISTENTIAL_READ},
+        {.key = key("program-table:type:existential-b"),
+         .local_id = EXISTENTIAL_B_TYPE,
+         .kind = XR_CORE_IR_TYPE_EXISTENTIAL,
+         .existential_interface = interface_b_key,
+         .interface_use_kind = XR_CORE_IR_INTERFACE_EXISTENTIAL_READ},
+        {.key = key("program-table:type:callable"),
+         .local_id = CALLABLE_TYPE,
+         .kind = XR_CORE_IR_TYPE_CALLABLE,
+         .callable_signature = &slot_a},
+    };
+    XrCoreIrTypeInput ordered_types[4] = {types[0], types[1], types[2], types[3]};
+    if (reverse_inputs) {
+        for (uint32_t index = 0; index < 4u; ++index)
+            ordered_types[index] = types[3u - index];
+    }
+
+    XrCoreIrKey function_key = key("program-table:function:implementation");
+    XrCoreIrKey block_key = key("program-table:block:implementation");
+    XrCoreIrKey receiver_value = key("program-table:value:receiver");
+    XrCoreIrValueInput argument = {
+        .key = receiver_value,
+        .type_id = IMPLEMENTOR_TYPE,
+    };
+    XrCoreIrKey block_argument_operand[] = {receiver_value};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_BLOCK_ARGUMENT,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = block_argument_operand,
+         .operand_count = 1u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN, .result_type_id = XR_CORE_TYPE_VOID},
+    };
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .arguments = &argument,
+        .argument_count = 1u,
+        .instructions = instructions,
+        .instruction_count = 2u,
+    };
+    uint16_t implementation_receiver = IMPLEMENTOR_TYPE;
+    XrCoreIrFunctionInput function = {
+        .key = function_key,
+        .parameter_types = &implementation_receiver,
+        .parameter_modes = &receiver_mode,
+        .parameter_count = 1u,
+        .has_receiver = true,
+        .receiver_mode = XR_PARAM_READ,
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    XrCoreIrKey unrelated_block_key = key("program-table:block:unrelated");
+    XrCoreIrInstructionInput unrelated_return = {
+        .operation_id = XR_CORE_OP_CORE_RETURN,
+        .result_type_id = XR_CORE_TYPE_VOID,
+    };
+    XrCoreIrBlockInput unrelated_block = {
+        .key = unrelated_block_key,
+        .instructions = &unrelated_return,
+        .instruction_count = 1u,
+    };
+    XrCoreIrFunctionInput unrelated_function = {
+        .key = key("program-table:function:unrelated"),
+        .result_type_id = XR_CORE_TYPE_VOID,
+        .entry_block = unrelated_block_key,
+        .blocks = &unrelated_block,
+        .block_count = 1u,
+    };
+    XrCoreIrFunctionInput functions[] = {function, unrelated_function};
+    XrCoreIrModuleInput module = {
+        .key = key("program-table:module"),
+        .functions = functions,
+        .function_count = 2u,
+    };
+    XrCoreIrInterfaceInput interfaces[] = {
+        {.key = interface_a_key, .slots = &slot_a, .slot_count = 1u},
+        {.key = interface_b_key, .slots = &slot_b, .slot_count = 1u},
+    };
+    XrCoreIrInterfaceInput ordered_interfaces[2] = {interfaces[0], interfaces[1]};
+    XrCoreIrKey slot_function[] = {function_key};
+    XrCoreIrConformanceInput conformances[] = {
+        {.key = key("program-table:conformance:a"),
+         .implementor_type_id = IMPLEMENTOR_TYPE,
+         .implementor_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .interface_key = interface_a_key,
+         .slot_functions = slot_function,
+         .slot_count = 1u},
+        {.key = key("program-table:conformance:b"),
+         .implementor_type_id = IMPLEMENTOR_TYPE,
+         .implementor_kind = XR_CORE_IR_NOMINAL_STRUCT,
+         .interface_key = interface_b_key,
+         .slot_functions = slot_function,
+         .slot_count = 1u},
+    };
+    XrCoreIrConformanceInput ordered_conformances[2] = {conformances[0], conformances[1]};
+    if (reverse_inputs) {
+        ordered_interfaces[0] = interfaces[1];
+        ordered_interfaces[1] = interfaces[0];
+        ordered_conformances[0] = conformances[1];
+        ordered_conformances[1] = conformances[0];
+    }
+    XrCoreIrKey profile = key("program-table:profile");
+    uint16_t features[] = {XR_CORE_FEATURE_CORE_BASE};
+    XrCoreIrProgramInput input = {
+        .semantic_profile_fingerprint = profile.bytes,
+        .required_features = features,
+        .required_feature_count = 1u,
+        .types = ordered_types,
+        .type_count = 4u,
+        .interfaces = ordered_interfaces,
+        .interface_count = 2u,
+        .conformances = ordered_conformances,
+        .conformance_count = 2u,
+        .modules = &module,
+        .module_count = 1u,
+    };
+    XrCoreIrProgram *program = NULL;
+    char diagnostic[256] = {0};
+    XrProgramBuildStatus status =
+        xr_core_ir_program_build(&input, &program, diagnostic, sizeof(diagnostic));
+    if (status == XR_PROGRAM_BUILD_OK)
+        status = xr_program_write(program, artifact, diagnostic, sizeof(diagnostic));
+    xr_core_ir_program_free(program);
+    return status;
+}
+
+static size_t first_conformance_slot_offset(const XrProgramArtifact *artifact) {
+    XrProgramView view;
+    if (xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+        XR_PROGRAM_DECODE_OK)
+        return SIZE_MAX;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_SEMANTIC_METADATA - 1u].offset;
+    uint64_t interface_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint64_t interface = 0; interface < interface_count; ++interface) {
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        cursor += XR_CORE_IR_KEY_SIZE;
+        uint64_t slot_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        for (uint64_t slot = 0; slot < slot_count; ++slot)
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    }
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) == 0u)
+        return SIZE_MAX;
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    cursor += XR_CORE_IR_KEY_SIZE;
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    if (test_take_uvar(artifact->bytes, artifact->size, &cursor) == 0u)
+        return SIZE_MAX;
+    return cursor;
+}
+
+static void test_callable_interface_conformance_tables(void) {
+    XrProgramArtifact first = {0};
+    XrProgramArtifact reordered = {0};
+    XrProgramArtifact invalid = {0};
+    CHECK(build_program_table_artifact(false, false, &first) == XR_PROGRAM_BUILD_OK);
+    CHECK(build_program_table_artifact(true, false, &reordered) == XR_PROGRAM_BUILD_OK);
+    CHECK(first.size != 0u && first.size == reordered.size);
+    CHECK(first.size != 0u && memcmp(first.bytes, reordered.bytes, first.size) == 0);
+    CHECK(xr_program_id_equal(first.id, reordered.id));
+    XrValidatedProgram *program = validate_ok(&first);
+    xr_validated_program_free(program);
+    CHECK(build_program_table_artifact(false, true, &invalid) == XR_PROGRAM_BUILD_INVALID_INPUT);
+    size_t slot_offset = first_conformance_slot_offset(&first);
+    CHECK(slot_offset != SIZE_MAX && first.bytes[slot_offset] <= 1u);
+    if (slot_offset != SIZE_MAX && first.bytes[slot_offset] <= 1u) {
+        uint8_t saved = first.bytes[slot_offset];
+        first.bytes[slot_offset] = saved == 0u ? 1u : 0u;
+        expect_semantic_reject(&first, XR_PROGRAM_DIAGNOSTIC_FUNCTION);
+        first.bytes[slot_offset] = saved;
+    }
+    xr_program_artifact_free(&reordered);
+    xr_program_artifact_free(&first);
+}
+
 int main(void) {
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
@@ -2434,6 +2658,7 @@ int main(void) {
     test_evaluator_traps_and_budget();
     test_typed_random_and_linear_work();
     test_immutable_view_root_tables();
+    test_callable_interface_conformance_tables();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

@@ -271,9 +271,9 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
     require_fingerprint(xr_execution_instance_id(first),
-                        "3d1417f4379c282bfe012eadd1b13ea7626691e04cd476a473c07d0be74b8e9c");
+                        "85706ee9ace21b0630affd1bde2f16921ec73f130b948c675ead4e5866475ca2");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "c061ddc44857ad05e9a4643238c78a028cfd738050851afc2b3abbc88222d968");
+                        "f930a4937b85e3346564a9fbf20481df791452b71479195d57264abcd8fd0bb3");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));

@@ -33,6 +33,8 @@ typedef enum XrProgramTypeKind {
     XR_PROGRAM_TYPE_KIND_AGGREGATE = 16,
     XR_PROGRAM_TYPE_KIND_VARIANT = 17,
     XR_PROGRAM_TYPE_KIND_VIEW = 18,
+    XR_PROGRAM_TYPE_KIND_CALLABLE = 19,
+    XR_PROGRAM_TYPE_KIND_EXISTENTIAL = 20,
 } XrProgramTypeKind;
 
 typedef struct XrCoreIrKey {
@@ -43,7 +45,26 @@ typedef enum XrCoreIrTypeKind {
     XR_CORE_IR_TYPE_AGGREGATE = 1,
     XR_CORE_IR_TYPE_VARIANT = 2,
     XR_CORE_IR_TYPE_VIEW = 3,
+    XR_CORE_IR_TYPE_CALLABLE = 4,
+    XR_CORE_IR_TYPE_EXISTENTIAL = 5,
 } XrCoreIrTypeKind;
+
+typedef enum XrCoreIrNominalKind {
+    XR_CORE_IR_NOMINAL_NONE = 0,
+    XR_CORE_IR_NOMINAL_CLASS = 1,
+    XR_CORE_IR_NOMINAL_STRUCT = 2,
+    XR_CORE_IR_NOMINAL_ENUM = 3,
+} XrCoreIrNominalKind;
+
+typedef enum XrCoreIrInterfaceUseKind {
+    XR_CORE_IR_INTERFACE_CONSTRAINT_BOUND = 0,
+    XR_CORE_IR_INTERFACE_EXISTENTIAL_READ = 1,
+    XR_CORE_IR_INTERFACE_EXISTENTIAL_REF = 2,
+    XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE = 3,
+    XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE = 4,
+} XrCoreIrInterfaceUseKind;
+
+typedef struct XrCoreIrCallableSignatureInput XrCoreIrCallableSignatureInput;
 
 typedef enum XrCoreIrViewCapability {
     XR_CORE_IR_VIEW_READ = 1,
@@ -76,6 +97,7 @@ typedef struct XrCoreIrTypeInput {
     XrCoreIrKey key;
     uint16_t local_id;
     XrCoreIrTypeKind kind;
+    XrCoreIrNominalKind nominal_kind;
     XrCoreIrTypeOwnership ownership;
     XrCoreIrCopyContract copy_contract;
     const uint16_t *field_types;
@@ -84,6 +106,9 @@ typedef struct XrCoreIrTypeInput {
     uint32_t variant_count;
     uint16_t view_element_type;
     XrCoreIrViewCapability view_capability;
+    const XrCoreIrCallableSignatureInput *callable_signature;
+    XrCoreIrKey existential_interface;
+    XrCoreIrInterfaceUseKind interface_use_kind;
 } XrCoreIrTypeInput;
 
 typedef enum XrCoreIrConstantKind {
@@ -127,6 +152,25 @@ typedef enum XrCoreIrOwnershipDisposition {
     XR_CORE_IR_NON_OWNER = 0,
     XR_CORE_IR_OWNER = 1,
 } XrCoreIrOwnershipDisposition;
+
+/* A callable signature is the sole semantic call contract. Functions,
+ * callable values, and interface slots are canonicalized to one SignatureId
+ * table; none of those consumers owns a duplicate wire signature. */
+struct XrCoreIrCallableSignatureInput {
+    const uint16_t *parameter_types;
+    const XrParamMode *parameter_modes;
+    uint32_t parameter_count;
+    bool has_receiver;
+    XrParamMode receiver_mode;
+    uint16_t result_type_id;
+    XrCoreIrOwnershipDisposition result_ownership;
+    const XrViewOrigin *result_borrow_origins;
+    uint32_t result_borrow_origin_count;
+    uint16_t error_type_id;
+    uint16_t panic_type_id;
+    uint32_t effect_mask;
+    uint32_t capability_mask;
+};
 
 typedef struct XrCoreIrValueInput {
     XrCoreIrKey key;
@@ -231,12 +275,31 @@ typedef struct XrCoreIrModuleInput {
     uint32_t function_count;
 } XrCoreIrModuleInput;
 
+typedef struct XrCoreIrInterfaceInput {
+    XrCoreIrKey key;
+    const XrCoreIrCallableSignatureInput *slots;
+    uint32_t slot_count;
+} XrCoreIrInterfaceInput;
+
+typedef struct XrCoreIrConformanceInput {
+    XrCoreIrKey key;
+    uint16_t implementor_type_id;
+    XrCoreIrNominalKind implementor_kind;
+    XrCoreIrKey interface_key;
+    const XrCoreIrKey *slot_functions;
+    uint32_t slot_count;
+} XrCoreIrConformanceInput;
+
 typedef struct XrCoreIrProgramInput {
     const uint8_t *semantic_profile_fingerprint;
     const uint16_t *required_features;
     uint32_t required_feature_count;
     const XrCoreIrTypeInput *types;
     uint32_t type_count;
+    const XrCoreIrInterfaceInput *interfaces;
+    uint32_t interface_count;
+    const XrCoreIrConformanceInput *conformances;
+    uint32_t conformance_count;
     const XrCoreIrModuleInput *modules;
     uint32_t module_count;
 } XrCoreIrProgramInput;

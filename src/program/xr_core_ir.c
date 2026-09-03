@@ -43,6 +43,16 @@ static int type_compare(const void *left, const void *right) {
                              ((const XrCoreIrType *) right)->key);
 }
 
+static int interface_compare(const void *left, const void *right) {
+    return key_compare_value(((const XrCoreIrInterface *) left)->key,
+                             ((const XrCoreIrInterface *) right)->key);
+}
+
+static int conformance_compare(const void *left, const void *right) {
+    return key_compare_value(((const XrCoreIrConformance *) left)->key,
+                             ((const XrCoreIrConformance *) right)->key);
+}
+
 static int view_origin_compare(const void *left, const void *right) {
     const XrViewOrigin *a = left;
     const XrViewOrigin *b = right;
@@ -137,6 +147,14 @@ static void free_instruction(XrCoreIrInstruction *instruction) {
     xr_free(instruction->successors);
 }
 
+static void free_signature(XrCoreIrCallableSignature *signature) {
+    if (!signature)
+        return;
+    xr_free(signature->parameter_types);
+    xr_free(signature->parameter_modes);
+    xr_free(signature->result_borrow_origins);
+}
+
 static void free_type(XrCoreIrType *type) {
     if (!type)
         return;
@@ -144,6 +162,7 @@ static void free_type(XrCoreIrType *type) {
         xr_free(type->variants[variant].payload_types);
     xr_free(type->variants);
     xr_free(type->field_types);
+    free_signature(&type->callable_signature);
 }
 
 static void free_block(XrCoreIrBlock *block) {
@@ -173,19 +192,81 @@ static void free_function(XrCoreIrFunction *function) {
 void xr_core_ir_program_free(XrCoreIrProgram *program) {
     if (!program)
         return;
-    for (uint32_t module_index = 0; module_index < program->module_count; ++module_index) {
+    for (uint32_t module_index = 0; program->modules && module_index < program->module_count;
+         ++module_index) {
         XrCoreIrModule *module = &program->modules[module_index];
         for (uint32_t function_index = 0; function_index < module->function_count; ++function_index)
             free_function(&module->functions[function_index]);
         xr_free(module->functions);
         xr_free(module->constants);
     }
-    for (uint32_t type = 0; type < program->type_count; ++type)
+    for (uint32_t type = 0; program->types && type < program->type_count; ++type)
         free_type(&program->types[type]);
+    for (uint32_t interface = 0; program->interfaces && interface < program->interface_count;
+         ++interface) {
+        for (uint32_t slot = 0; slot < program->interfaces[interface].slot_count; ++slot)
+            free_signature(&program->interfaces[interface].slots[slot]);
+        xr_free(program->interfaces[interface].slots);
+    }
+    for (uint32_t conformance = 0;
+         program->conformances && conformance < program->conformance_count; ++conformance)
+        xr_free(program->conformances[conformance].slot_functions);
+    xr_free(program->interfaces);
+    xr_free(program->conformances);
     xr_free(program->types);
     xr_free(program->modules);
     xr_free(program->required_features);
     xr_free(program);
+}
+
+static XrProgramBuildStatus copy_signature(const XrCoreIrCallableSignatureInput *input,
+                                           XrCoreIrCallableSignature *output) {
+    memset(output, 0, sizeof(*output));
+    if (!input)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    output->parameter_count = input->parameter_count;
+    output->has_receiver = input->has_receiver;
+    output->receiver_mode = input->receiver_mode;
+    output->result_type_id = input->result_type_id;
+    output->result_ownership = input->result_ownership;
+    output->result_borrow_origin_count = input->result_borrow_origin_count;
+    output->error_type_id = input->error_type_id;
+    output->panic_type_id = input->panic_type_id;
+    output->effect_mask = input->effect_mask;
+    output->capability_mask = input->capability_mask;
+    if (!copy_bytes((void **) &output->parameter_types, input->parameter_types,
+                    input->parameter_count, sizeof(uint16_t)))
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    if (input->parameter_count != 0u) {
+        output->parameter_modes = xr_calloc(input->parameter_count, sizeof(XrParamMode));
+        if (!output->parameter_modes) {
+            free_signature(output);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t parameter = 0; parameter < input->parameter_count; ++parameter)
+            output->parameter_modes[parameter] =
+                input->parameter_modes ? input->parameter_modes[parameter] : XR_PARAM_READ;
+    } else if (input->parameter_modes) {
+        free_signature(output);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    if (!copy_bytes((void **) &output->result_borrow_origins, input->result_borrow_origins,
+                    input->result_borrow_origin_count, sizeof(XrViewOrigin))) {
+        free_signature(output);
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    }
+    if (output->result_borrow_origin_count != 0u) {
+        qsort(output->result_borrow_origins, output->result_borrow_origin_count,
+              sizeof(XrViewOrigin), view_origin_compare);
+        uint32_t unique = 0;
+        for (uint32_t index = 0; index < output->result_borrow_origin_count; ++index) {
+            if (unique == 0u || view_origin_compare(&output->result_borrow_origins[unique - 1u],
+                                                    &output->result_borrow_origins[index]) != 0)
+                output->result_borrow_origins[unique++] = output->result_borrow_origins[index];
+        }
+        output->result_borrow_origin_count = unique;
+    }
+    return XR_PROGRAM_BUILD_OK;
 }
 
 static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *input,
@@ -408,12 +489,15 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
     output->key = input->key;
     output->type_id = input->local_id;
     output->kind = input->kind;
+    output->nominal_kind = input->nominal_kind;
     output->ownership = input->ownership;
     output->copy_contract = input->copy_contract;
     output->field_count = input->field_count;
     output->variant_count = input->variant_count;
     output->view_element_type = input->view_element_type;
     output->view_capability = input->view_capability;
+    output->existential_interface = input->existential_interface;
+    output->interface_use_kind = input->interface_use_kind;
     if (!copy_bytes((void **) &output->field_types, input->field_types, input->field_count,
                     sizeof(uint16_t)))
         return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
@@ -440,6 +524,49 @@ static XrProgramBuildStatus copy_type(const XrCoreIrTypeInput *input, XrCoreIrTy
             return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         }
     }
+    if (input->kind == XR_CORE_IR_TYPE_CALLABLE) {
+        XrProgramBuildStatus status =
+            copy_signature(input->callable_signature, &output->callable_signature);
+        if (status != XR_PROGRAM_BUILD_OK) {
+            free_type(output);
+            return status;
+        }
+    } else if (input->callable_signature) {
+        free_type(output);
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus copy_interface(const XrCoreIrInterfaceInput *input,
+                                           XrCoreIrInterface *output) {
+    memset(output, 0, sizeof(*output));
+    output->key = input->key;
+    output->slot_count = input->slot_count;
+    if (input->slot_count == 0u || !input->slots)
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    output->slots = xr_calloc(input->slot_count, sizeof(XrCoreIrCallableSignature));
+    if (!output->slots)
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+    for (uint32_t slot = 0; slot < input->slot_count; ++slot) {
+        XrProgramBuildStatus status = copy_signature(&input->slots[slot], &output->slots[slot]);
+        if (status != XR_PROGRAM_BUILD_OK)
+            return status;
+    }
+    return XR_PROGRAM_BUILD_OK;
+}
+
+static XrProgramBuildStatus copy_conformance(const XrCoreIrConformanceInput *input,
+                                             XrCoreIrConformance *output) {
+    memset(output, 0, sizeof(*output));
+    output->key = input->key;
+    output->implementor_type_id = input->implementor_type_id;
+    output->implementor_kind = input->implementor_kind;
+    output->interface_key = input->interface_key;
+    output->slot_count = input->slot_count;
+    if (!copy_bytes((void **) &output->slot_functions, input->slot_functions, input->slot_count,
+                    sizeof(XrCoreIrKey)))
+        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
     return XR_PROGRAM_BUILD_OK;
 }
 
@@ -478,7 +605,45 @@ static bool remap_program_types(XrCoreIrProgram *program) {
             !remap_type_id(program->types, program->type_count, type->view_element_type,
                            &type->view_element_type))
             return false;
+        if (type->kind == XR_CORE_IR_TYPE_CALLABLE) {
+            XrCoreIrCallableSignature *signature = &type->callable_signature;
+            for (uint32_t parameter = 0; parameter < signature->parameter_count; ++parameter)
+                if (!remap_type_id(program->types, program->type_count,
+                                   signature->parameter_types[parameter],
+                                   &signature->parameter_types[parameter]))
+                    return false;
+            if (!remap_type_id(program->types, program->type_count, signature->result_type_id,
+                               &signature->result_type_id) ||
+                !remap_type_id(program->types, program->type_count, signature->error_type_id,
+                               &signature->error_type_id) ||
+                !remap_type_id(program->types, program->type_count, signature->panic_type_id,
+                               &signature->panic_type_id))
+                return false;
+        }
     }
+    for (uint32_t interface = 0; interface < program->interface_count; ++interface) {
+        XrCoreIrInterface *row = &program->interfaces[interface];
+        for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
+            XrCoreIrCallableSignature *signature = &row->slots[slot];
+            for (uint32_t parameter = 0; parameter < signature->parameter_count; ++parameter)
+                if (!remap_type_id(program->types, program->type_count,
+                                   signature->parameter_types[parameter],
+                                   &signature->parameter_types[parameter]))
+                    return false;
+            if (!remap_type_id(program->types, program->type_count, signature->result_type_id,
+                               &signature->result_type_id) ||
+                !remap_type_id(program->types, program->type_count, signature->error_type_id,
+                               &signature->error_type_id) ||
+                !remap_type_id(program->types, program->type_count, signature->panic_type_id,
+                               &signature->panic_type_id))
+                return false;
+        }
+    }
+    for (uint32_t conformance = 0; conformance < program->conformance_count; ++conformance)
+        if (!remap_type_id(program->types, program->type_count,
+                           program->conformances[conformance].implementor_type_id,
+                           &program->conformances[conformance].implementor_type_id))
+            return false;
     for (uint32_t module = 0; module < program->module_count; ++module) {
         XrCoreIrModule *module_row = &program->modules[module];
         for (uint32_t constant = 0; constant < module_row->constant_count; ++constant) {
@@ -546,6 +711,13 @@ static const XrCoreIrConstantInput *find_constant(const XrCoreIrProgram *program
                 return &module->constants[index];
         }
     }
+    return NULL;
+}
+
+static const XrCoreIrInterface *find_interface(const XrCoreIrProgram *program, XrCoreIrKey key) {
+    for (uint32_t index = 0; index < program->interface_count; ++index)
+        if (xr_core_ir_key_equal(program->interfaces[index].key, key))
+            return &program->interfaces[index];
     return NULL;
 }
 
@@ -630,6 +802,120 @@ static bool type_is_view(const XrCoreIrProgram *program, uint16_t type_id) {
     return type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
            (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE < program->type_count &&
            program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].kind == XR_CORE_IR_TYPE_VIEW;
+}
+
+static XrCoreIrCallableSignature function_signature(const XrCoreIrFunction *function) {
+    XrCoreIrCallableSignature signature = {
+        .parameter_types = function->parameter_types,
+        .parameter_modes = function->parameter_modes,
+        .parameter_count = function->parameter_count,
+        .has_receiver = function->has_receiver,
+        .receiver_mode = function->receiver_mode,
+        .result_type_id = function->result_type_id,
+        .result_ownership = function->result_ownership,
+        .result_borrow_origins = function->result_borrow_origins,
+        .result_borrow_origin_count = function->result_borrow_origin_count,
+        .error_type_id = function->error_type_id,
+        .panic_type_id = function->panic_type_id,
+        .effect_mask = function->effect_mask,
+        .capability_mask = function->capability_mask,
+    };
+    return signature;
+}
+
+static bool signature_is_valid(const XrCoreIrProgram *program,
+                               const XrCoreIrCallableSignature *signature) {
+    if (!signature || signature->parameter_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+        (signature->parameter_count != 0u &&
+         (!signature->parameter_types || !signature->parameter_modes)) ||
+        !type_id_supported(program, signature->result_type_id) ||
+        !type_id_supported(program, signature->error_type_id) ||
+        !type_id_supported(program, signature->panic_type_id) ||
+        (signature->panic_type_id != XR_CORE_TYPE_VOID &&
+         signature->panic_type_id != XR_CORE_TYPE_PANIC_INFO) ||
+        !ownership_disposition_is_valid(signature->result_ownership) ||
+        (signature->result_type_id == XR_CORE_TYPE_VOID &&
+         signature->result_ownership != XR_CORE_IR_NON_OWNER) ||
+        (signature->result_type_id != XR_CORE_TYPE_VOID &&
+         signature->result_ownership !=
+             (type_ownership(program, signature->result_type_id) == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
+                  ? XR_CORE_IR_OWNER
+                  : XR_CORE_IR_NON_OWNER)) ||
+        !xr_param_mode_is_valid(signature->receiver_mode) ||
+        (signature->has_receiver && (signature->parameter_count == 0u ||
+                                     signature->parameter_modes[0] != signature->receiver_mode)) ||
+        (!signature->has_receiver && signature->receiver_mode != XR_PARAM_READ) ||
+        signature->result_borrow_origin_count > XR_PROGRAM_LIMIT_ROOTS_PER_VALUE ||
+        (signature->result_borrow_origin_count != 0u && !signature->result_borrow_origins))
+        return false;
+    for (uint32_t parameter = 0; parameter < signature->parameter_count; ++parameter)
+        if (!type_id_supported(program, signature->parameter_types[parameter]) ||
+            signature->parameter_types[parameter] == XR_CORE_TYPE_VOID ||
+            !xr_param_mode_is_valid(signature->parameter_modes[parameter]))
+            return false;
+    uint32_t explicit_parameter_count =
+        signature->parameter_count - (signature->has_receiver ? 1u : 0u);
+    for (uint32_t index = 0; index < signature->result_borrow_origin_count; ++index) {
+        const XrViewOrigin *origin = &signature->result_borrow_origins[index];
+        if ((index != 0u &&
+             view_origin_compare(&signature->result_borrow_origins[index - 1u], origin) >= 0) ||
+            origin->kind > XR_VIEW_ORIGIN_STATIC)
+            return false;
+        if (origin->kind == XR_VIEW_ORIGIN_PARAM) {
+            if (origin->param_ordinal < 0 ||
+                (uint32_t) origin->param_ordinal >= explicit_parameter_count ||
+                signature->parameter_modes[(uint32_t) origin->param_ordinal +
+                                           (signature->has_receiver ? 1u : 0u)] != XR_PARAM_READ)
+                return false;
+        } else if (origin->param_ordinal != -1 ||
+                   (origin->kind == XR_VIEW_ORIGIN_RECEIVER &&
+                    (!signature->has_receiver || signature->receiver_mode != XR_PARAM_READ))) {
+            return false;
+        }
+    }
+    bool readonly_view_result =
+        type_is_view(program, signature->result_type_id) &&
+        program->types[signature->result_type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                .view_capability == XR_CORE_IR_VIEW_READ;
+    return readonly_view_result == (signature->result_borrow_origin_count != 0u);
+}
+
+static bool signature_satisfies_interface(const XrCoreIrProgram *program,
+                                          const XrCoreIrCallableSignature *implementation,
+                                          const XrCoreIrCallableSignature *requirement,
+                                          uint16_t implementor_type, XrCoreIrKey interface_key) {
+    if (implementation->parameter_count != requirement->parameter_count ||
+        implementation->has_receiver != requirement->has_receiver ||
+        implementation->receiver_mode != requirement->receiver_mode ||
+        implementation->result_type_id != requirement->result_type_id ||
+        implementation->result_ownership != requirement->result_ownership ||
+        implementation->result_borrow_origin_count != requirement->result_borrow_origin_count ||
+        implementation->error_type_id != requirement->error_type_id ||
+        implementation->panic_type_id != requirement->panic_type_id ||
+        implementation->effect_mask != requirement->effect_mask ||
+        implementation->capability_mask != requirement->capability_mask)
+        return false;
+    for (uint32_t index = 0; index < requirement->parameter_count; ++index) {
+        if (implementation->parameter_modes[index] != requirement->parameter_modes[index])
+            return false;
+        if (requirement->has_receiver && index == 0u) {
+            if (implementation->parameter_types[index] != implementor_type ||
+                requirement->parameter_types[index] < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE)
+                return false;
+            const XrCoreIrType *receiver = &program->types[requirement->parameter_types[index] -
+                                                           XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE];
+            if (receiver->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+                !xr_core_ir_key_equal(receiver->existential_interface, interface_key))
+                return false;
+        } else if (implementation->parameter_types[index] != requirement->parameter_types[index]) {
+            return false;
+        }
+    }
+    for (uint32_t index = 0; index < requirement->result_borrow_origin_count; ++index)
+        if (view_origin_compare(&implementation->result_borrow_origins[index],
+                                &requirement->result_borrow_origins[index]) != 0)
+            return false;
+    return true;
 }
 
 static bool roots_have_same_identity(const XrCoreIrRoot *left, const XrCoreIrRoot *right) {
@@ -746,7 +1032,8 @@ static bool type_graph_visit(const XrCoreIrProgram *program, uint32_t index, uin
         return true;
     state[index] = 1u;
     const XrCoreIrType *type = &program->types[index];
-    if (type->kind == XR_CORE_IR_TYPE_VIEW) {
+    if (type->kind == XR_CORE_IR_TYPE_VIEW || type->kind == XR_CORE_IR_TYPE_CALLABLE ||
+        type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
         state[index] = 2u;
         return true;
     }
@@ -787,13 +1074,15 @@ static bool validate_types(const XrCoreIrProgram *program) {
                   type->copy_contract != XR_CORE_IR_COPY_TRIVIAL));
         if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
             valid = valid && type->field_count != 0u && type->field_types &&
-                    type->variant_count == 0u && !type->variants;
+                    type->variant_count == 0u && !type->variants &&
+                    type->nominal_kind <= XR_CORE_IR_NOMINAL_ENUM;
             for (uint32_t field = 0; valid && field < type->field_count; ++field)
                 valid = type_id_supported(program, type->field_types[field]) &&
                         type->field_types[field] != XR_CORE_TYPE_VOID;
         } else if (type->kind == XR_CORE_IR_TYPE_VARIANT) {
             valid = valid && type->field_count == 0u && !type->field_types &&
-                    type->variant_count != 0u && type->variants;
+                    type->variant_count != 0u && type->variants &&
+                    type->nominal_kind <= XR_CORE_IR_NOMINAL_ENUM;
             for (uint32_t variant = 0; valid && variant < type->variant_count; ++variant) {
                 const XrCoreIrVariant *row = &type->variants[variant];
                 valid = row->payload_count == 0u || row->payload_types;
@@ -804,12 +1093,27 @@ static bool validate_types(const XrCoreIrProgram *program) {
         } else if (type->kind == XR_CORE_IR_TYPE_VIEW) {
             valid = valid && type->field_count == 0u && !type->field_types &&
                     type->variant_count == 0u && !type->variants &&
+                    type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
                     type_id_supported(program, type->view_element_type) &&
                     type->view_element_type != XR_CORE_TYPE_VOID &&
                     (type->view_capability == XR_CORE_IR_VIEW_READ ||
                      type->view_capability == XR_CORE_IR_VIEW_WRITE_EXCLUSIVE) &&
                     type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
                     type->copy_contract == XR_CORE_IR_COPY_TRIVIAL;
+        } else if (type->kind == XR_CORE_IR_TYPE_CALLABLE) {
+            valid = valid && type->field_count == 0u && !type->field_types &&
+                    type->variant_count == 0u && !type->variants &&
+                    type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
+                    type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
+                    type->copy_contract == XR_CORE_IR_COPY_TRIVIAL &&
+                    signature_is_valid(program, &type->callable_signature);
+        } else if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
+            valid = valid && type->field_count == 0u && !type->field_types &&
+                    type->variant_count == 0u && !type->variants &&
+                    type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
+                    !xr_core_ir_key_is_zero(type->existential_interface) &&
+                    find_interface(program, type->existential_interface) != NULL &&
+                    type->interface_use_kind <= XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE;
         } else {
             valid = false;
         }
@@ -832,6 +1136,56 @@ static bool validate_types(const XrCoreIrProgram *program) {
     }
     xr_free(state);
     return valid;
+}
+
+static bool validate_program_tables(const XrCoreIrProgram *program) {
+    for (uint32_t interface = 0; interface < program->interface_count; ++interface) {
+        const XrCoreIrInterface *row = &program->interfaces[interface];
+        if (xr_core_ir_key_is_zero(row->key) || row->slot_count == 0u || !row->slots ||
+            row->slot_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+            (interface != 0u &&
+             key_compare_value(program->interfaces[interface - 1u].key, row->key) >= 0))
+            return false;
+        for (uint32_t slot = 0; slot < row->slot_count; ++slot)
+            if (!signature_is_valid(program, &row->slots[slot]))
+                return false;
+    }
+    for (uint32_t conformance = 0; conformance < program->conformance_count; ++conformance) {
+        const XrCoreIrConformance *row = &program->conformances[conformance];
+        const XrCoreIrInterface *interface = find_interface(program, row->interface_key);
+        const XrCoreIrType *implementor =
+            row->implementor_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+                    (uint32_t) row->implementor_type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE <
+                        program->type_count
+                ? &program->types[row->implementor_type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE]
+                : NULL;
+        if (xr_core_ir_key_is_zero(row->key) || !interface || !implementor ||
+            row->implementor_kind == XR_CORE_IR_NOMINAL_NONE ||
+            row->implementor_kind > XR_CORE_IR_NOMINAL_ENUM ||
+            implementor->nominal_kind != row->implementor_kind ||
+            (implementor->kind != XR_CORE_IR_TYPE_AGGREGATE &&
+             implementor->kind != XR_CORE_IR_TYPE_VARIANT) ||
+            row->slot_count != interface->slot_count ||
+            (row->slot_count != 0u && !row->slot_functions) ||
+            (conformance != 0u &&
+             key_compare_value(program->conformances[conformance - 1u].key, row->key) >= 0))
+            return false;
+        for (uint32_t prior = 0; prior < conformance; ++prior)
+            if (program->conformances[prior].implementor_type_id == row->implementor_type_id &&
+                xr_core_ir_key_equal(program->conformances[prior].interface_key,
+                                     row->interface_key))
+                return false;
+        for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
+            const XrCoreIrFunction *function = find_function(program, row->slot_functions[slot]);
+            if (!function)
+                return false;
+            XrCoreIrCallableSignature signature = function_signature(function);
+            if (!signature_satisfies_interface(program, &signature, &interface->slots[slot],
+                                               row->implementor_type_id, row->interface_key))
+                return false;
+        }
+    }
+    return true;
 }
 
 static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, char *diagnostic,
@@ -861,6 +1215,11 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
     if (!validate_types(program)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "dynamic type graph is malformed or recursive by value");
+        return XR_PROGRAM_BUILD_INVALID_INPUT;
+    }
+    if (!validate_program_tables(program)) {
+        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                  "interface or conformance table is invalid");
         return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
     for (uint32_t left = 0; left < program->module_count; ++left) {
@@ -906,8 +1265,10 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
         for (uint32_t function_index = 0; function_index < module->function_count;
              ++function_index) {
             const XrCoreIrFunction *function = &module->functions[function_index];
+            XrCoreIrCallableSignature signature = function_signature(function);
             if (xr_core_ir_key_is_zero(function->key) ||
                 find_function(program, function->key) != function ||
+                !signature_is_valid(program, &signature) ||
                 !type_id_supported(program, function->result_type_id) ||
                 !type_id_supported(program, function->error_type_id) ||
                 !type_id_supported(program, function->panic_type_id) ||
@@ -1078,7 +1439,11 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
         input->module_count == 0 || input->module_count > XR_PROGRAM_LIMIT_FUNCTIONS ||
         input->type_count > XR_PROGRAM_LIMIT_TYPES - 6u ||
         input->type_count > UINT16_MAX - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + 1u ||
-        (input->type_count == 0u) != (input->types == NULL)) {
+        input->interface_count > XR_PROGRAM_LIMIT_TYPES ||
+        input->conformance_count > XR_PROGRAM_LIMIT_TYPES ||
+        (input->type_count == 0u) != (input->types == NULL) ||
+        (input->interface_count == 0u) != (input->interfaces == NULL) ||
+        (input->conformance_count == 0u) != (input->conformances == NULL)) {
         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                   "CoreIR program input is incomplete");
         return XR_PROGRAM_BUILD_INVALID_INPUT;
@@ -1090,6 +1455,8 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
            XR_PROGRAM_DIGEST_SIZE);
     program->required_feature_count = input->required_feature_count;
     program->type_count = input->type_count;
+    program->interface_count = input->interface_count;
+    program->conformance_count = input->conformance_count;
     program->module_count = input->module_count;
     if (!copy_bytes((void **) &program->required_features, input->required_features,
                     input->required_feature_count, sizeof(uint16_t))) {
@@ -1132,6 +1499,40 @@ XrProgramBuildStatus xr_core_ir_program_build(const XrCoreIrProgramInput *input,
     }
     if (program->type_count != 0u)
         qsort(program->types, program->type_count, sizeof(XrCoreIrType), type_compare);
+    if (input->interface_count != 0u) {
+        program->interfaces = xr_calloc(input->interface_count, sizeof(XrCoreIrInterface));
+        if (!program->interfaces) {
+            xr_core_ir_program_free(program);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t index = 0; index < input->interface_count; ++index) {
+            XrProgramBuildStatus status =
+                copy_interface(&input->interfaces[index], &program->interfaces[index]);
+            if (status != XR_PROGRAM_BUILD_OK) {
+                xr_core_ir_program_free(program);
+                return status;
+            }
+        }
+        qsort(program->interfaces, program->interface_count, sizeof(XrCoreIrInterface),
+              interface_compare);
+    }
+    if (input->conformance_count != 0u) {
+        program->conformances = xr_calloc(input->conformance_count, sizeof(XrCoreIrConformance));
+        if (!program->conformances) {
+            xr_core_ir_program_free(program);
+            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        }
+        for (uint32_t index = 0; index < input->conformance_count; ++index) {
+            XrProgramBuildStatus status =
+                copy_conformance(&input->conformances[index], &program->conformances[index]);
+            if (status != XR_PROGRAM_BUILD_OK) {
+                xr_core_ir_program_free(program);
+                return status;
+            }
+        }
+        qsort(program->conformances, program->conformance_count, sizeof(XrCoreIrConformance),
+              conformance_compare);
+    }
     program->modules = xr_calloc(input->module_count, sizeof(XrCoreIrModule));
     if (!program->modules) {
         xr_core_ir_program_free(program);

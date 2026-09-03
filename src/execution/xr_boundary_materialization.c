@@ -352,6 +352,10 @@ static bool dynamic_metric(XrBoundaryLayoutBuilder *builder, uint16_t type_id,
     metric->state = 1u;
     ++builder->type_visits;
     const XrValidatedType *type = &builder->program->types[index];
+    if (type->kind != XR_CORE_IR_TYPE_AGGREGATE && type->kind != XR_CORE_IR_TYPE_VARIANT)
+        return reject(builder, XR_BOUNDARY_MATERIALIZATION_UNSUPPORTED,
+                      XR_BOUNDARY_MATERIALIZATION_DIAGNOSTIC_TYPE, type_id,
+                      XR_BOUNDARY_VARIANT_NONE, UINT32_MAX);
     if (!note_type_members(builder, type))
         return false;
     metric->layout_kind = type->kind == XR_CORE_IR_TYPE_AGGREGATE

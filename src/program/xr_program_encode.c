@@ -42,6 +42,26 @@ typedef struct ValueRootSetRef {
     uint32_t value_id;
 } ValueRootSetRef;
 
+typedef struct SignatureView {
+    const uint16_t *parameter_types;
+    const XrParamMode *parameter_modes;
+    uint32_t parameter_count;
+    bool has_receiver;
+    XrParamMode receiver_mode;
+    uint16_t result_type_id;
+    XrCoreIrOwnershipDisposition result_ownership;
+    const XrViewOrigin *result_borrow_origins;
+    uint32_t result_borrow_origin_count;
+    uint16_t error_type_id;
+    uint16_t panic_type_id;
+    uint32_t effect_mask;
+    uint32_t capability_mask;
+} SignatureView;
+
+typedef struct SignatureRef {
+    SignatureView signature;
+} SignatureRef;
+
 static bool buffer_reserve(ByteBuffer *buffer, size_t extra) {
     if (buffer->status != XR_PROGRAM_BUILD_OK)
         return false;
@@ -206,6 +226,160 @@ static bool function_id(const FunctionRef *functions, uint32_t count, XrCoreIrKe
     return false;
 }
 
+static SignatureView signature_from_function(const XrCoreIrFunction *function) {
+    SignatureView result = {
+        .parameter_types = function->parameter_types,
+        .parameter_modes = function->parameter_modes,
+        .parameter_count = function->parameter_count,
+        .has_receiver = function->has_receiver,
+        .receiver_mode = function->receiver_mode,
+        .result_type_id = function->result_type_id,
+        .result_ownership = function->result_ownership,
+        .result_borrow_origins = function->result_borrow_origins,
+        .result_borrow_origin_count = function->result_borrow_origin_count,
+        .error_type_id = function->error_type_id,
+        .panic_type_id = function->panic_type_id,
+        .effect_mask = function->effect_mask,
+        .capability_mask = function->capability_mask,
+    };
+    return result;
+}
+
+static SignatureView signature_from_row(const XrCoreIrCallableSignature *signature) {
+    SignatureView result = {
+        .parameter_types = signature->parameter_types,
+        .parameter_modes = signature->parameter_modes,
+        .parameter_count = signature->parameter_count,
+        .has_receiver = signature->has_receiver,
+        .receiver_mode = signature->receiver_mode,
+        .result_type_id = signature->result_type_id,
+        .result_ownership = signature->result_ownership,
+        .result_borrow_origins = signature->result_borrow_origins,
+        .result_borrow_origin_count = signature->result_borrow_origin_count,
+        .error_type_id = signature->error_type_id,
+        .panic_type_id = signature->panic_type_id,
+        .effect_mask = signature->effect_mask,
+        .capability_mask = signature->capability_mask,
+    };
+    return result;
+}
+
+static int compare_u32(uint32_t left, uint32_t right) {
+    return left == right ? 0 : (left < right ? -1 : 1);
+}
+
+static int signature_value_compare(const SignatureView *left, const SignatureView *right) {
+    int order = compare_u32(left->parameter_count, right->parameter_count);
+    if (order != 0)
+        return order;
+    for (uint32_t index = 0; index < left->parameter_count; ++index) {
+        order = compare_u32(left->parameter_types[index], right->parameter_types[index]);
+        if (order != 0)
+            return order;
+        order = compare_u32(left->parameter_modes[index], right->parameter_modes[index]);
+        if (order != 0)
+            return order;
+    }
+#define COMPARE_SIGNATURE_FIELD(field)                                                             \
+    do {                                                                                           \
+        order = compare_u32((uint32_t) left->field, (uint32_t) right->field);                      \
+        if (order != 0)                                                                            \
+            return order;                                                                          \
+    } while (0)
+    COMPARE_SIGNATURE_FIELD(has_receiver);
+    COMPARE_SIGNATURE_FIELD(receiver_mode);
+    COMPARE_SIGNATURE_FIELD(result_type_id);
+    COMPARE_SIGNATURE_FIELD(result_ownership);
+    COMPARE_SIGNATURE_FIELD(result_borrow_origin_count);
+    for (uint32_t index = 0; index < left->result_borrow_origin_count; ++index) {
+        order = compare_u32(left->result_borrow_origins[index].kind,
+                            right->result_borrow_origins[index].kind);
+        if (order != 0)
+            return order;
+        order = left->result_borrow_origins[index].param_ordinal ==
+                        right->result_borrow_origins[index].param_ordinal
+                    ? 0
+                    : (left->result_borrow_origins[index].param_ordinal <
+                               right->result_borrow_origins[index].param_ordinal
+                           ? -1
+                           : 1);
+        if (order != 0)
+            return order;
+    }
+    COMPARE_SIGNATURE_FIELD(error_type_id);
+    COMPARE_SIGNATURE_FIELD(panic_type_id);
+    COMPARE_SIGNATURE_FIELD(effect_mask);
+    COMPARE_SIGNATURE_FIELD(capability_mask);
+#undef COMPARE_SIGNATURE_FIELD
+    return 0;
+}
+
+static int signature_ref_compare(const void *left, const void *right) {
+    return signature_value_compare(&((const SignatureRef *) left)->signature,
+                                   &((const SignatureRef *) right)->signature);
+}
+
+static SignatureRef *collect_signatures(const XrCoreIrProgram *program,
+                                        const FunctionRef *functions, uint32_t function_count,
+                                        uint32_t *count_out) {
+    uint64_t count = function_count;
+    for (uint32_t type = 0; type < program->type_count; ++type)
+        count += program->types[type].kind == XR_CORE_IR_TYPE_CALLABLE;
+    for (uint32_t interface = 0; interface < program->interface_count; ++interface)
+        count += program->interfaces[interface].slot_count;
+    if (count > UINT32_MAX)
+        return NULL;
+    SignatureRef *refs = xr_calloc((size_t) count, sizeof(SignatureRef));
+    if (!refs)
+        return NULL;
+    uint32_t cursor = 0;
+    for (uint32_t function = 0; function < function_count; ++function)
+        refs[cursor++].signature = signature_from_function(functions[function].function);
+    for (uint32_t type = 0; type < program->type_count; ++type)
+        if (program->types[type].kind == XR_CORE_IR_TYPE_CALLABLE)
+            refs[cursor++].signature = signature_from_row(&program->types[type].callable_signature);
+    for (uint32_t interface = 0; interface < program->interface_count; ++interface)
+        for (uint32_t slot = 0; slot < program->interfaces[interface].slot_count; ++slot)
+            refs[cursor++].signature =
+                signature_from_row(&program->interfaces[interface].slots[slot]);
+    qsort(refs, (size_t) count, sizeof(SignatureRef), signature_ref_compare);
+    *count_out = (uint32_t) count;
+    return refs;
+}
+
+static uint32_t canonical_signature_count(const SignatureRef *signatures, uint32_t count) {
+    uint32_t unique = 0;
+    for (uint32_t index = 0; index < count; ++index)
+        if (index == 0u || signature_value_compare(&signatures[index - 1u].signature,
+                                                   &signatures[index].signature) != 0)
+            ++unique;
+    return unique;
+}
+
+static bool signature_id(const SignatureRef *signatures, uint32_t count,
+                         const SignatureView *signature, uint32_t *id_out) {
+    uint32_t id = 0;
+    for (uint32_t index = 0; index < count; ++index) {
+        if (index != 0u && signature_value_compare(&signatures[index - 1u].signature,
+                                                   &signatures[index].signature) != 0)
+            ++id;
+        if (signature_value_compare(&signatures[index].signature, signature) == 0) {
+            *id_out = id;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool interface_id(const XrCoreIrProgram *program, XrCoreIrKey key, uint32_t *id_out) {
+    for (uint32_t index = 0; index < program->interface_count; ++index)
+        if (xr_core_ir_key_equal(program->interfaces[index].key, key)) {
+            *id_out = index;
+            return true;
+        }
+    return false;
+}
+
 static bool block_id(const XrCoreIrFunction *function, XrCoreIrKey key, uint32_t *id_out) {
     for (uint32_t index = 0; index < function->block_count; ++index) {
         if (xr_core_ir_key_equal(function->blocks[index].key, key)) {
@@ -298,7 +472,8 @@ static bool root_id(const RootRef *roots, uint32_t count, XrCoreIrKey key, uint3
     return false;
 }
 
-static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
+static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program,
+                         const SignatureRef *signatures, uint32_t signature_count) {
     /* type-id, kind, logical ownership, copy contract, then logical shape */
     static const uint8_t rows[][4] = {
         {XR_CORE_TYPE_VOID, 0u, XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL, XR_CORE_IR_COPY_FORBIDDEN},
@@ -318,18 +493,22 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
     for (uint32_t index = 0; index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
         buffer_put_uvar(buffer, type->type_id);
-        buffer_put_uvar(buffer,
-                        type->kind == XR_CORE_IR_TYPE_AGGREGATE ? XR_PROGRAM_TYPE_KIND_AGGREGATE
-                        : type->kind == XR_CORE_IR_TYPE_VARIANT ? XR_PROGRAM_TYPE_KIND_VARIANT
-                                                                : XR_PROGRAM_TYPE_KIND_VIEW);
+        uint32_t kind = type->kind == XR_CORE_IR_TYPE_AGGREGATE  ? XR_PROGRAM_TYPE_KIND_AGGREGATE
+                        : type->kind == XR_CORE_IR_TYPE_VARIANT  ? XR_PROGRAM_TYPE_KIND_VARIANT
+                        : type->kind == XR_CORE_IR_TYPE_VIEW     ? XR_PROGRAM_TYPE_KIND_VIEW
+                        : type->kind == XR_CORE_IR_TYPE_CALLABLE ? XR_PROGRAM_TYPE_KIND_CALLABLE
+                                                                 : XR_PROGRAM_TYPE_KIND_EXISTENTIAL;
+        buffer_put_uvar(buffer, kind);
         buffer_put_uvar(buffer, type->ownership);
         buffer_put_uvar(buffer, type->copy_contract);
         buffer_put_bytes(buffer, type->key.bytes, sizeof(type->key.bytes));
         if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
+            buffer_put_uvar(buffer, type->nominal_kind);
             buffer_put_uvar(buffer, type->field_count);
             for (uint32_t field = 0; field < type->field_count; ++field)
                 buffer_put_uvar(buffer, type->field_types[field]);
         } else if (type->kind == XR_CORE_IR_TYPE_VARIANT) {
+            buffer_put_uvar(buffer, type->nominal_kind);
             buffer_put_uvar(buffer, type->variant_count);
             for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
                 const XrCoreIrVariant *row = &type->variants[variant];
@@ -337,9 +516,19 @@ static void encode_types(ByteBuffer *buffer, const XrCoreIrProgram *program) {
                 for (uint32_t field = 0; field < row->payload_count; ++field)
                     buffer_put_uvar(buffer, row->payload_types[field]);
             }
-        } else {
+        } else if (type->kind == XR_CORE_IR_TYPE_VIEW) {
             buffer_put_uvar(buffer, type->view_element_type);
             buffer_put_uvar(buffer, type->view_capability);
+        } else if (type->kind == XR_CORE_IR_TYPE_CALLABLE) {
+            uint32_t id = 0;
+            SignatureView signature = signature_from_row(&type->callable_signature);
+            (void) signature_id(signatures, signature_count, &signature, &id);
+            buffer_put_uvar(buffer, id);
+        } else {
+            uint32_t id = 0;
+            (void) interface_id(program, type->existential_interface, &id);
+            buffer_put_uvar(buffer, id);
+            buffer_put_uvar(buffer, type->interface_use_kind);
         }
     }
 }
@@ -363,33 +552,51 @@ static void encode_constants(ByteBuffer *buffer, const ConstantRef *constants, u
     }
 }
 
-static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, uint32_t count) {
+static void encode_signature(ByteBuffer *buffer, uint32_t id, const SignatureView *signature) {
+    buffer_put_uvar(buffer, id);
+    buffer_put_uvar(buffer, signature->parameter_count);
+    for (uint32_t parameter = 0; parameter < signature->parameter_count; ++parameter) {
+        buffer_put_uvar(buffer, signature->parameter_types[parameter]);
+        buffer_put_uvar(buffer, signature->parameter_modes[parameter]);
+    }
+    buffer_put_uvar(buffer, signature->has_receiver ? 1u : 0u);
+    buffer_put_uvar(buffer, signature->receiver_mode);
+    buffer_put_uvar(buffer, signature->result_type_id);
+    buffer_put_uvar(buffer, signature->result_ownership);
+    buffer_put_uvar(buffer, signature->result_borrow_origin_count);
+    for (uint32_t origin = 0; origin < signature->result_borrow_origin_count; ++origin) {
+        buffer_put_uvar(buffer, signature->result_borrow_origins[origin].kind);
+        if (signature->result_borrow_origins[origin].kind == XR_VIEW_ORIGIN_PARAM)
+            buffer_put_uvar(buffer,
+                            (uint32_t) signature->result_borrow_origins[origin].param_ordinal);
+    }
+    buffer_put_uvar(buffer, signature->error_type_id);
+    buffer_put_uvar(buffer, signature->panic_type_id);
+    buffer_put_uvar(buffer, signature->effect_mask);
+    buffer_put_uvar(buffer, signature->capability_mask);
+}
+
+static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, uint32_t count,
+                             const SignatureRef *signatures, uint32_t signature_ref_count) {
+    uint32_t signature_count = canonical_signature_count(signatures, signature_ref_count);
+    buffer_put_uvar(buffer, signature_count);
+    uint32_t signature_id_value = 0;
+    for (uint32_t index = 0; index < signature_ref_count; ++index) {
+        if (index != 0u && signature_value_compare(&signatures[index - 1u].signature,
+                                                   &signatures[index].signature) == 0)
+            continue;
+        encode_signature(buffer, signature_id_value++, &signatures[index].signature);
+    }
     buffer_put_uvar(buffer, count);
     for (uint32_t id = 0; id < count; ++id) {
         const XrCoreIrFunction *function = functions[id].function;
         uint32_t entry = 0;
+        uint32_t function_signature_id = 0;
+        SignatureView signature = signature_from_function(function);
         (void) block_id(function, function->entry_block, &entry);
+        (void) signature_id(signatures, signature_ref_count, &signature, &function_signature_id);
         buffer_put_uvar(buffer, id);
-        buffer_put_uvar(buffer, function->parameter_count);
-        for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
-            buffer_put_uvar(buffer, function->parameter_types[parameter]);
-            buffer_put_uvar(buffer, function->parameter_modes[parameter]);
-        }
-        buffer_put_uvar(buffer, function->has_receiver ? 1u : 0u);
-        buffer_put_uvar(buffer, function->receiver_mode);
-        buffer_put_uvar(buffer, function->result_type_id);
-        buffer_put_uvar(buffer, function->result_ownership);
-        buffer_put_uvar(buffer, function->result_borrow_origin_count);
-        for (uint32_t origin = 0; origin < function->result_borrow_origin_count; ++origin) {
-            buffer_put_uvar(buffer, function->result_borrow_origins[origin].kind);
-            if (function->result_borrow_origins[origin].kind == XR_VIEW_ORIGIN_PARAM)
-                buffer_put_uvar(buffer,
-                                (uint32_t) function->result_borrow_origins[origin].param_ordinal);
-        }
-        buffer_put_uvar(buffer, function->error_type_id);
-        buffer_put_uvar(buffer, function->panic_type_id);
-        buffer_put_uvar(buffer, function->effect_mask);
-        buffer_put_uvar(buffer, function->capability_mask);
+        buffer_put_uvar(buffer, function_signature_id);
         buffer_put_uvar(buffer, entry);
         buffer_put_uvar(buffer, function->block_count);
         buffer_put_uvar(buffer, function_value_count(function));
@@ -397,8 +604,39 @@ static void encode_functions(ByteBuffer *buffer, const FunctionRef *functions, u
     }
 }
 
-static void encode_semantic_metadata(ByteBuffer *buffer, const FunctionRef *functions,
-                                     uint32_t function_count) {
+static void encode_semantic_metadata(ByteBuffer *buffer, const XrCoreIrProgram *program,
+                                     const FunctionRef *functions, uint32_t function_count,
+                                     const SignatureRef *signatures, uint32_t signature_count) {
+    buffer_put_uvar(buffer, program->interface_count);
+    for (uint32_t interface = 0; interface < program->interface_count; ++interface) {
+        const XrCoreIrInterface *row = &program->interfaces[interface];
+        buffer_put_uvar(buffer, interface);
+        buffer_put_bytes(buffer, row->key.bytes, sizeof(row->key.bytes));
+        buffer_put_uvar(buffer, row->slot_count);
+        for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
+            uint32_t id = 0;
+            SignatureView signature = signature_from_row(&row->slots[slot]);
+            (void) signature_id(signatures, signature_count, &signature, &id);
+            buffer_put_uvar(buffer, id);
+        }
+    }
+    buffer_put_uvar(buffer, program->conformance_count);
+    for (uint32_t conformance = 0; conformance < program->conformance_count; ++conformance) {
+        const XrCoreIrConformance *row = &program->conformances[conformance];
+        uint32_t row_interface_id = 0;
+        (void) interface_id(program, row->interface_key, &row_interface_id);
+        buffer_put_uvar(buffer, conformance);
+        buffer_put_bytes(buffer, row->key.bytes, sizeof(row->key.bytes));
+        buffer_put_uvar(buffer, row->implementor_type_id);
+        buffer_put_uvar(buffer, row->implementor_kind);
+        buffer_put_uvar(buffer, row_interface_id);
+        buffer_put_uvar(buffer, row->slot_count);
+        for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
+            uint32_t id = 0;
+            (void) function_id(functions, function_count, row->slot_functions[slot], &id);
+            buffer_put_uvar(buffer, id);
+        }
+    }
     buffer_put_uvar(buffer, function_count);
     for (uint32_t function_id_value = 0; function_id_value < function_count; ++function_id_value) {
         const XrCoreIrFunction *function = functions[function_id_value].function;
@@ -590,8 +828,10 @@ XrProgramBuildStatus xr_program_write(const XrCoreIrProgram *program,
     ByteBuffer artifact = {0};
     FunctionRef *functions = NULL;
     ConstantRef *constants = NULL;
+    SignatureRef *signatures = NULL;
     uint32_t function_count = 0;
     uint32_t constant_count = 0;
+    uint32_t signature_count = 0;
     uint8_t core_spec_fingerprint[XR_PROGRAM_DIGEST_SIZE] = {0};
     XrProgramBuildStatus status = XR_PROGRAM_BUILD_OK;
 
@@ -610,14 +850,20 @@ XrProgramBuildStatus xr_program_write(const XrCoreIrProgram *program,
         status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
         goto cleanup;
     }
+    signatures = collect_signatures(program, functions, function_count, &signature_count);
+    if (!signatures) {
+        status = XR_PROGRAM_BUILD_OUT_OF_MEMORY;
+        goto cleanup;
+    }
 
-    encode_types(&sections[0], program);
+    encode_types(&sections[0], program, signatures, signature_count);
     encode_constants(&sections[1], constants, constant_count);
-    encode_functions(&sections[2], functions, function_count);
+    encode_functions(&sections[2], functions, function_count, signatures, signature_count);
     encode_code(&sections[3], functions, function_count, constants, constant_count);
     buffer_put_uvar(&sections[4], 0u);
     buffer_put_uvar(&sections[5], 0u);
-    encode_semantic_metadata(&sections[6], functions, function_count);
+    encode_semantic_metadata(&sections[6], program, functions, function_count, signatures,
+                             signature_count);
     for (size_t index = 0; index < SECTION_COUNT; ++index) {
         if (sections[index].status != XR_PROGRAM_BUILD_OK) {
             status = sections[index].status;
@@ -660,6 +906,7 @@ cleanup:
                                   xr_program_build_status_name(status));
     xr_free(constants);
     xr_free(functions);
+    xr_free(signatures);
     for (size_t index = 0; index < SECTION_COUNT; ++index)
         buffer_destroy(&sections[index]);
     buffer_destroy(&artifact);

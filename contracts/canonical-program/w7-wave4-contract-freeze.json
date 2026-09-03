@@ -14,7 +14,7 @@
     "declaration_receiver_contract": "COMPLETE",
     "borrow_origin_set": "COMPLETE",
     "borrow_root_tables": "COMPLETE",
-    "program_tables": "PENDING",
+    "program_tables": "COMPLETE",
     "existential_operations": "PENDING",
     "witness_dispatch": "PENDING",
     "callable_dispatch": "PENDING",
@@ -124,6 +124,16 @@
       "tests/fixtures/task284_ownership_negative/borrow_origin_outside_set.xr",
       "tests/fixtures/task284_ownership_negative/borrow_origin_ref.xr"
     ]
+  },
+  "program_table_contract": {
+    "signature_owner": "one canonical content-deduplicated SignatureId table shared by functions, callable types and interface slots",
+    "type_rows": "nominal aggregate/variant kind, callable SignatureId and existential InterfaceId plus InterfaceUseKind are target-neutral semantic rows",
+    "interface_rows": "stable semantic-key order with declaration-ordered object-safe SignatureId slots",
+    "conformance_rows": "stable semantic-key order with exact nominal implementor kind, InterfaceId and slot-to-FunctionId mapping",
+    "receiver_substitution": "interface slot receiver is existential Self; conformance verification substitutes only receiver TypeId with the exact nominal implementor and requires every other signature fact to match",
+    "canonicality": "input type, interface and conformance order cannot change bytes or ProgramId; signature rows are sorted and deduplicated by complete semantic content",
+    "independent_verification": "writer validation and artifact semantic verification independently reject a wrong slot target or malformed table",
+    "compatibility": "no duplicate function-owned wire signatures, class-only table, selector/name lookup, old reader or dual schema"
   },
   "old_owner_inventory": [
     {

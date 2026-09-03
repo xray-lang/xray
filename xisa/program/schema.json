@@ -27,7 +27,9 @@
     "dynamic_kinds": [
       "aggregate",
       "variant",
-      "view"
+      "view",
+      "callable",
+      "existential"
     ],
     "ownership_kinds": [
       "0:trivial",
@@ -42,6 +44,9 @@
     "aggregate_shape": "declaration-ordered-field-type-ids",
     "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
     "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
+    "callable_shape": "one canonical SignatureId",
+    "existential_shape": "ordered-(InterfaceId,InterfaceUseKind)",
+    "nominal_kind": "aggregate/variant rows carry NONE/CLASS/STRUCT/ENUM; conformance implementor kind must match",
     "recursive_value_shape": "reject",
     "physical_layout": "forbidden"
   },
@@ -65,7 +70,10 @@
     "place_physical_layout": "forbidden",
     "root_identity_contract": "function-local dense RootId table independent of SSA ValueId; roots are PARAM, RECEIVER, STATIC or LOCAL",
     "value_root_contract": "every safe view maps to a sorted unique non-empty RootId set; PARAM/RECEIVER/LOCAL root definitions bind the owning source identity",
-    "root_mapping": "callee PARAM/RECEIVER/STATIC origins map to caller value RootId sets and are sorted/deduplicated"
+    "root_mapping": "callee PARAM/RECEIVER/STATIC origins map to caller value RootId sets and are sorted/deduplicated",
+    "signature_table": "content-addressed canonical rows shared by functions, callable types and interface slots",
+    "interface_table": "semantic-key order; each row contains an ordered object-safe SignatureId slot list",
+    "conformance_table": "semantic-key order; exact nominal implementor kind, InterfaceId and slot-to-FunctionId map"
   },
   "sections": [
     {

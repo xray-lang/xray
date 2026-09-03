@@ -42,7 +42,7 @@ def validate(root: Path) -> None:
         "declaration_receiver_contract": "COMPLETE",
         "borrow_origin_set": "COMPLETE",
         "borrow_root_tables": "COMPLETE",
-        "program_tables": "PENDING",
+        "program_tables": "COMPLETE",
         "existential_operations": "PENDING",
         "witness_dispatch": "PENDING",
         "callable_dispatch": "PENDING",
@@ -126,6 +126,21 @@ def validate(root: Path) -> None:
     require(all((root / fixture).is_file() for fixture in positive + negative),
             "Wave 4 BorrowOriginSet fixture is absent")
 
+    tables = data.get("program_table_contract")
+    require(isinstance(tables, dict) and set(tables) == {
+        "signature_owner",
+        "type_rows",
+        "interface_rows",
+        "conformance_rows",
+        "receiver_substitution",
+        "canonicality",
+        "independent_verification",
+        "compatibility",
+    }, "Wave 4 program-table contract drifted")
+    require(tables.get("compatibility") ==
+            "no duplicate function-owned wire signatures, class-only table, selector/name lookup, old reader or dual schema",
+            "Wave 4 program tables regained a legacy path")
+
     required_anchors = {
         "src/shared/xr_view_origin.h": ["typedef struct XrViewOrigin"],
         "src/runtime/value/xtype.h": ["XrViewOrigin *view_origin_set;"],
@@ -145,10 +160,15 @@ def validate(root: Path) -> None:
         "src/program/xr_program.h": [
             "typedef struct XrCoreIrRootInput",
             "typedef struct XrCoreIrValueRootSetInput",
+            "struct XrCoreIrCallableSignatureInput {",
+            "typedef struct XrCoreIrInterfaceInput",
+            "typedef struct XrCoreIrConformanceInput",
         ],
+        "src/program/xr_program_encode.c": ["static SignatureRef *collect_signatures("],
         "src/program/xr_program_verify.c": [
             "static bool parse_semantic_metadata(",
             "static bool mapped_call_result_roots_match(",
+            "static bool validated_signature_satisfies_interface(",
         ],
     }
     for relative, anchors in required_anchors.items():
@@ -194,6 +214,7 @@ def self_test(root: Path) -> None:
         Path("src/ir/xi_lower_expr.c"),
         Path("src/ir/xi_verify.c"),
         Path("src/program/xr_program.h"),
+        Path("src/program/xr_program_encode.c"),
         Path("src/program/xr_program_verify.c"),
         Path("tests/fixtures/task284_ownership_positive/borrow_origin_set.xr"),
         Path("tests/fixtures/task284_ownership_positive/borrow_origin_static.xr"),

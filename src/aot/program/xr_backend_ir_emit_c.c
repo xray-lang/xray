@@ -155,7 +155,7 @@ static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_
             if (!name || !append_format(buffer, "    %s f%u;\n", name, field))
                 return false;
         }
-    } else {
+    } else if (type->kind == XR_CORE_IR_TYPE_VARIANT) {
         if (!append_text(buffer, "    uint32_t tag;\n    union {\n"))
             return false;
         for (uint32_t variant = 0; variant < type->variant_count; ++variant) {
@@ -175,6 +175,19 @@ static bool emit_type_definition(CBuffer *buffer, const XrBackendIR *ir, uint32_
         }
         if (!append_text(buffer, "    } payload;\n"))
             return false;
+    } else if (type->kind == XR_CORE_IR_TYPE_VIEW) {
+        if (!append_text(buffer, "    void *data;\n"))
+            return false;
+    } else if (type->kind == XR_CORE_IR_TYPE_CALLABLE) {
+        if (!append_text(buffer, "    uint32_t function_id;\n    void *capture;\n"))
+            return false;
+    } else if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
+        if (!append_text(
+                buffer,
+                "    uint16_t concrete_type_id;\n    uint32_t conformance_id;\n    void *data;\n"))
+            return false;
+    } else {
+        return false;
     }
     if (!append_text(buffer, "};\n\n"))
         return false;

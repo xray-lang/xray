@@ -161,9 +161,6 @@ static void free_function(XrValidatedFunction *function) {
         xr_free(row->argument_ownerships);
     }
     xr_free(function->blocks);
-    xr_free(function->parameter_types);
-    xr_free(function->parameter_modes);
-    xr_free(function->result_borrow_origins);
     for (uint32_t value = 0; value < function->value_count; ++value)
         xr_free(function->value_root_sets ? function->value_root_sets[value].root_ids : NULL);
     xr_free(function->value_root_sets);
@@ -184,7 +181,19 @@ void xr_validated_program_free(XrValidatedProgram *program) {
         free_function(&program->functions[function]);
     for (uint32_t type = 0; type < program->type_count; ++type)
         free_type(&program->types[type]);
+    for (uint32_t signature = 0; signature < program->signature_count; ++signature) {
+        xr_free(program->signatures[signature].parameter_types);
+        xr_free(program->signatures[signature].parameter_modes);
+        xr_free(program->signatures[signature].result_borrow_origins);
+    }
+    for (uint32_t interface = 0; interface < program->interface_count; ++interface)
+        xr_free(program->interfaces[interface].slot_signature_ids);
+    for (uint32_t conformance = 0; conformance < program->conformance_count; ++conformance)
+        xr_free(program->conformances[conformance].slot_function_ids);
     xr_free(program->types);
+    xr_free(program->signatures);
+    xr_free(program->interfaces);
+    xr_free(program->conformances);
     xr_free(program->functions);
     xr_free(program->constants);
     xr_free(program->bytes);
@@ -206,7 +215,8 @@ static bool validated_type_graph_visit(const XrValidatedProgram *program, uint32
         return true;
     state[index] = 1u;
     const XrValidatedType *type = &program->types[index];
-    if (type->kind == XR_CORE_IR_TYPE_VIEW) {
+    if (type->kind == XR_CORE_IR_TYPE_VIEW || type->kind == XR_CORE_IR_TYPE_CALLABLE ||
+        type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
         state[index] = 2u;
         return true;
     }
@@ -278,7 +288,8 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
         location.value_id = type_id <= UINT32_MAX ? (uint32_t) type_id : XR_PROGRAM_LOCATION_NONE;
         if (type_id != XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE + index ||
             (kind != XR_PROGRAM_TYPE_KIND_AGGREGATE && kind != XR_PROGRAM_TYPE_KIND_VARIANT &&
-             kind != XR_PROGRAM_TYPE_KIND_VIEW) ||
+             kind != XR_PROGRAM_TYPE_KIND_VIEW && kind != XR_PROGRAM_TYPE_KIND_CALLABLE &&
+             kind != XR_PROGRAM_TYPE_KIND_EXISTENTIAL) ||
             ownership > XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
             copy_contract > XR_CORE_IR_COPY_FORBIDDEN ||
             ((ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL) !=
@@ -290,18 +301,23 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
         }
         memcpy(previous_key, type->key.bytes, sizeof(previous_key));
         type->type_id = (uint16_t) type_id;
-        type->kind = kind == XR_PROGRAM_TYPE_KIND_AGGREGATE ? XR_CORE_IR_TYPE_AGGREGATE
-                     : kind == XR_PROGRAM_TYPE_KIND_VARIANT ? XR_CORE_IR_TYPE_VARIANT
-                                                            : XR_CORE_IR_TYPE_VIEW;
+        type->kind = kind == XR_PROGRAM_TYPE_KIND_AGGREGATE  ? XR_CORE_IR_TYPE_AGGREGATE
+                     : kind == XR_PROGRAM_TYPE_KIND_VARIANT  ? XR_CORE_IR_TYPE_VARIANT
+                     : kind == XR_PROGRAM_TYPE_KIND_VIEW     ? XR_CORE_IR_TYPE_VIEW
+                     : kind == XR_PROGRAM_TYPE_KIND_CALLABLE ? XR_CORE_IR_TYPE_CALLABLE
+                                                             : XR_CORE_IR_TYPE_EXISTENTIAL;
         type->ownership = (XrCoreIrTypeOwnership) ownership;
         type->copy_contract = (XrCoreIrCopyContract) copy_contract;
         if (type->kind == XR_CORE_IR_TYPE_AGGREGATE) {
-            if (shape_head == 0u || shape_head > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
-                !spend(context, shape_head, location)) {
+            uint64_t field_count = take_uvar(&reader);
+            if (shape_head > XR_CORE_IR_NOMINAL_ENUM || field_count == 0u ||
+                field_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                !spend(context, field_count, location)) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
                 return false;
             }
-            type->field_count = (uint32_t) shape_head;
+            type->nominal_kind = (XrCoreIrNominalKind) shape_head;
+            type->field_count = (uint32_t) field_count;
             type->field_types = xr_calloc(type->field_count, sizeof(uint16_t));
             if (!type->field_types) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
@@ -317,12 +333,15 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
                 type->field_types[field] = (uint16_t) field_type;
             }
         } else if (type->kind == XR_CORE_IR_TYPE_VARIANT) {
-            if (shape_head == 0u || shape_head > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
-                !spend(context, shape_head, location)) {
+            uint64_t variant_count = take_uvar(&reader);
+            if (shape_head > XR_CORE_IR_NOMINAL_ENUM || variant_count == 0u ||
+                variant_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+                !spend(context, variant_count, location)) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
                 return false;
             }
-            type->variant_count = (uint32_t) shape_head;
+            type->nominal_kind = (XrCoreIrNominalKind) shape_head;
+            type->variant_count = (uint32_t) variant_count;
             type->variants = xr_calloc(type->variant_count, sizeof(XrValidatedVariant));
             if (!type->variants) {
                 reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
@@ -354,7 +373,7 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
                     row->payload_types[field] = (uint16_t) field_type;
                 }
             }
-        } else {
+        } else if (type->kind == XR_CORE_IR_TYPE_VIEW) {
             uint64_t capability = take_uvar(&reader);
             if (!type_is_runtime(context->program, shape_head) || shape_head == XR_CORE_TYPE_VOID ||
                 ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
@@ -366,6 +385,22 @@ static bool parse_types(VerifyContext *context, const XrProgramView *view) {
             }
             type->view_element_type = (uint16_t) shape_head;
             type->view_capability = (XrCoreIrViewCapability) capability;
+        } else if (type->kind == XR_CORE_IR_TYPE_CALLABLE) {
+            if (ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
+                copy_contract != XR_CORE_IR_COPY_TRIVIAL || shape_head > UINT32_MAX) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+                return false;
+            }
+            type->signature_id = (uint32_t) shape_head;
+        } else {
+            uint64_t use_kind = take_uvar(&reader);
+            if (shape_head > UINT32_MAX ||
+                use_kind > XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+                return false;
+            }
+            type->interface_id = (uint32_t) shape_head;
+            type->interface_use_kind = (XrCoreIrInterfaceUseKind) use_kind;
         }
     }
     if (!reader_done(&reader)) {
@@ -463,12 +498,221 @@ static bool parse_constants(VerifyContext *context, const XrProgramView *view) {
     return true;
 }
 
+static int compare_u32(uint32_t left, uint32_t right) {
+    return left == right ? 0 : (left < right ? -1 : 1);
+}
+
+static int validated_signature_compare(const XrValidatedSignature *left,
+                                       const XrValidatedSignature *right) {
+    int order = compare_u32(left->parameter_count, right->parameter_count);
+    if (order != 0)
+        return order;
+    for (uint32_t index = 0; index < left->parameter_count; ++index) {
+        order = compare_u32(left->parameter_types[index], right->parameter_types[index]);
+        if (order != 0)
+            return order;
+        order = compare_u32(left->parameter_modes[index], right->parameter_modes[index]);
+        if (order != 0)
+            return order;
+    }
+#define COMPARE_SIGNATURE_FIELD(field)                                                             \
+    do {                                                                                           \
+        order = compare_u32((uint32_t) left->field, (uint32_t) right->field);                      \
+        if (order != 0)                                                                            \
+            return order;                                                                          \
+    } while (0)
+    COMPARE_SIGNATURE_FIELD(has_receiver);
+    COMPARE_SIGNATURE_FIELD(receiver_mode);
+    COMPARE_SIGNATURE_FIELD(result_type_id);
+    COMPARE_SIGNATURE_FIELD(result_ownership);
+    COMPARE_SIGNATURE_FIELD(result_borrow_origin_count);
+    for (uint32_t index = 0; index < left->result_borrow_origin_count; ++index) {
+        order = compare_u32(left->result_borrow_origins[index].kind,
+                            right->result_borrow_origins[index].kind);
+        if (order != 0)
+            return order;
+        if (left->result_borrow_origins[index].param_ordinal !=
+            right->result_borrow_origins[index].param_ordinal)
+            return left->result_borrow_origins[index].param_ordinal <
+                           right->result_borrow_origins[index].param_ordinal
+                       ? -1
+                       : 1;
+    }
+    COMPARE_SIGNATURE_FIELD(error_type_id);
+    COMPARE_SIGNATURE_FIELD(panic_type_id);
+    COMPARE_SIGNATURE_FIELD(effect_mask);
+    COMPARE_SIGNATURE_FIELD(capability_mask);
+#undef COMPARE_SIGNATURE_FIELD
+    return 0;
+}
+
+static bool parse_signature(VerifyContext *context, VerifyReader *reader,
+                            XrValidatedSignature *signature, uint32_t id,
+                            XrProgramSemanticLocation location) {
+    uint64_t encoded_id = take_uvar(reader);
+    uint64_t parameter_count = take_uvar(reader);
+    location.value_id = id;
+    if (encoded_id != id || parameter_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+        parameter_count > SIZE_MAX / sizeof(uint16_t) ||
+        !spend(context, parameter_count, location)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+        return false;
+    }
+    signature->parameter_count = (uint32_t) parameter_count;
+    if (parameter_count != 0u) {
+        signature->parameter_types = xr_calloc((size_t) parameter_count, sizeof(uint16_t));
+        signature->parameter_modes = xr_calloc((size_t) parameter_count, sizeof(XrParamMode));
+        if (!signature->parameter_types || !signature->parameter_modes) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+            return false;
+        }
+    }
+    for (uint32_t parameter = 0; parameter < signature->parameter_count; ++parameter) {
+        uint64_t type_id = take_uvar(reader);
+        uint64_t mode = take_uvar(reader);
+        if (!type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID ||
+            mode > XR_PARAM_MOVE) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+            return false;
+        }
+        signature->parameter_types[parameter] = (uint16_t) type_id;
+        signature->parameter_modes[parameter] = (XrParamMode) mode;
+    }
+    uint64_t has_receiver = take_uvar(reader);
+    uint64_t receiver_mode = take_uvar(reader);
+    uint64_t result_type = take_uvar(reader);
+    uint64_t result_ownership = take_uvar(reader);
+    uint64_t origin_count = take_uvar(reader);
+    if (has_receiver > 1u || receiver_mode > XR_PARAM_MOVE ||
+        (has_receiver != 0u &&
+         (parameter_count == 0u || signature->parameter_modes[0] != receiver_mode)) ||
+        (has_receiver == 0u && receiver_mode != XR_PARAM_READ) ||
+        origin_count > XR_PROGRAM_LIMIT_ROOTS_PER_VALUE ||
+        origin_count > SIZE_MAX / sizeof(XrViewOrigin) || !spend(context, origin_count, location)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+        return false;
+    }
+    signature->has_receiver = has_receiver != 0u;
+    signature->receiver_mode = (XrParamMode) receiver_mode;
+    signature->result_borrow_origin_count = (uint32_t) origin_count;
+    if (origin_count != 0u) {
+        signature->result_borrow_origins = xr_calloc((size_t) origin_count, sizeof(XrViewOrigin));
+        if (!signature->result_borrow_origins) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+            return false;
+        }
+    }
+    XrViewOrigin prior_origin = {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = -1};
+    for (uint32_t origin = 0; origin < signature->result_borrow_origin_count; ++origin) {
+        uint64_t kind = take_uvar(reader);
+        uint64_t parameter = kind == XR_VIEW_ORIGIN_PARAM ? take_uvar(reader) : UINT64_MAX;
+        if (kind > XR_VIEW_ORIGIN_STATIC ||
+            (kind == XR_VIEW_ORIGIN_PARAM && parameter > INT16_MAX) ||
+            (kind == XR_VIEW_ORIGIN_PARAM &&
+             (parameter >= parameter_count - (signature->has_receiver ? 1u : 0u) ||
+              signature->parameter_modes[(uint32_t) parameter +
+                                         (signature->has_receiver ? 1u : 0u)] != XR_PARAM_READ)) ||
+            (kind == XR_VIEW_ORIGIN_RECEIVER &&
+             (!signature->has_receiver || signature->receiver_mode != XR_PARAM_READ))) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+            return false;
+        }
+        XrViewOrigin row = {
+            .kind = (XrViewOriginKind) kind,
+            .param_ordinal = kind == XR_VIEW_ORIGIN_PARAM ? (int16_t) parameter : -1,
+        };
+        if (origin != 0u &&
+            (row.kind < prior_origin.kind ||
+             (row.kind == prior_origin.kind && row.param_ordinal <= prior_origin.param_ordinal))) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+            return false;
+        }
+        signature->result_borrow_origins[origin] = row;
+        prior_origin = row;
+    }
+    uint64_t error_type = take_uvar(reader);
+    uint64_t panic_type = take_uvar(reader);
+    uint64_t effect_mask = take_uvar(reader);
+    uint64_t capability_mask = take_uvar(reader);
+    const XrValidatedType *result_view =
+        result_type <= UINT16_MAX
+            ? xr_validated_program_type(context->program, (uint16_t) result_type)
+            : NULL;
+    bool readonly_view = result_view && result_view->kind == XR_CORE_IR_TYPE_VIEW &&
+                         result_view->view_capability == XR_CORE_IR_VIEW_READ;
+    if (!type_is_runtime(context->program, result_type) ||
+        !type_is_runtime(context->program, error_type) ||
+        !type_is_runtime(context->program, panic_type) ||
+        (panic_type != XR_CORE_TYPE_VOID && panic_type != XR_CORE_TYPE_PANIC_INFO) ||
+        result_ownership > XR_CORE_IR_OWNER || effect_mask > UINT32_MAX ||
+        capability_mask > UINT32_MAX ||
+        readonly_view != (signature->result_borrow_origin_count != 0u) ||
+        (type_is_view(context->program, (uint16_t) result_type) && !readonly_view)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+        return false;
+    }
+    signature->result_type_id = (uint16_t) result_type;
+    signature->result_ownership = (XrCoreIrOwnershipDisposition) result_ownership;
+    signature->error_type_id = (uint16_t) error_type;
+    signature->panic_type_id = (uint16_t) panic_type;
+    signature->effect_mask = (uint32_t) effect_mask;
+    signature->capability_mask = (uint32_t) capability_mask;
+    XrCoreIrOwnershipDisposition expected_result =
+        signature->result_type_id != XR_CORE_TYPE_VOID &&
+                xr_validated_program_type_ownership(context->program, signature->result_type_id) ==
+                    XR_CORE_IR_TYPE_OWNERSHIP_AFFINE
+            ? XR_CORE_IR_OWNER
+            : XR_CORE_IR_NON_OWNER;
+    if ((signature->effect_mask & ~UINT32_C(0x1f)) != 0u ||
+        (signature->capability_mask & ~UINT32_C(0x01)) != 0u ||
+        ((signature->error_type_id == XR_CORE_TYPE_VOID) !=
+         ((signature->effect_mask & XR_CORE_EFFECT_ERROR) == 0u)) ||
+        signature->error_type_id == XR_CORE_TYPE_PANIC_INFO ||
+        ((signature->panic_type_id == XR_CORE_TYPE_VOID) !=
+         ((signature->effect_mask & XR_CORE_EFFECT_PANIC) == 0u)) ||
+        signature->result_ownership != expected_result) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+        return false;
+    }
+    return true;
+}
+
 static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
     VerifyReader reader = section_reader(view, XR_PROGRAM_SECTION_FUNCTIONS - 1u);
-    uint64_t count = take_uvar(&reader);
     XrProgramSemanticLocation location = no_location();
     location.section_id = XR_PROGRAM_SECTION_FUNCTIONS;
-    if (count == 0 || count > context->budget.max_functions ||
+    uint64_t signature_count = take_uvar(&reader);
+    if (signature_count == 0u || signature_count > XR_PROGRAM_LIMIT_FUNCTIONS ||
+        signature_count > SIZE_MAX / sizeof(XrValidatedSignature) ||
+        !spend(context, signature_count + 1u, location)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
+        return false;
+    }
+    context->program->signature_count = (uint32_t) signature_count;
+    context->program->signatures =
+        xr_calloc((size_t) signature_count, sizeof(XrValidatedSignature));
+    if (!context->program->signatures) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+        return false;
+    }
+    for (uint32_t id = 0; id < context->program->signature_count; ++id) {
+        if (!parse_signature(context, &reader, &context->program->signatures[id], id, location))
+            return false;
+        if (id != 0u && validated_signature_compare(&context->program->signatures[id - 1u],
+                                                    &context->program->signatures[id]) >= 0) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+            return false;
+        }
+    }
+    for (uint32_t type = 0; type < context->program->type_count; ++type)
+        if (context->program->types[type].kind == XR_CORE_IR_TYPE_CALLABLE &&
+            context->program->types[type].signature_id >= context->program->signature_count) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+            return false;
+        }
+
+    uint64_t count = take_uvar(&reader);
+    if (count == 0u || count > context->budget.max_functions ||
         count > SIZE_MAX / sizeof(XrValidatedFunction) || !spend(context, count + 1u, location)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
         return false;
@@ -479,133 +723,43 @@ static bool parse_functions(VerifyContext *context, const XrProgramView *view) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
         return false;
     }
-    for (uint32_t id = 0; id < (uint32_t) count; ++id) {
+    for (uint32_t id = 0; id < context->program->function_count; ++id) {
         XrValidatedFunction *function = &context->program->functions[id];
         uint64_t encoded_id = take_uvar(&reader);
-        uint64_t parameter_count = take_uvar(&reader);
-        location.function_id = id;
-        if (encoded_id != id || parameter_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
-            parameter_count > SIZE_MAX / sizeof(uint16_t) ||
-            !spend(context, parameter_count, location)) {
-            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
-            return false;
-        }
-        function->parameter_count = (uint32_t) parameter_count;
-        if (parameter_count != 0) {
-            function->parameter_types = xr_calloc((size_t) parameter_count, sizeof(uint16_t));
-            function->parameter_modes = xr_calloc((size_t) parameter_count, sizeof(XrParamMode));
-            if (!function->parameter_types || !function->parameter_modes) {
-                reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
-                return false;
-            }
-        }
-        for (uint32_t parameter = 0; parameter < (uint32_t) parameter_count; ++parameter) {
-            uint64_t type_id = take_uvar(&reader);
-            uint64_t mode = take_uvar(&reader);
-            if (!type_is_runtime(context->program, type_id) || type_id == XR_CORE_TYPE_VOID ||
-                mode > XR_PARAM_MOVE) {
-                reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
-                return false;
-            }
-            function->parameter_types[parameter] = (uint16_t) type_id;
-            function->parameter_modes[parameter] = (XrParamMode) mode;
-        }
-        uint64_t has_receiver = take_uvar(&reader);
-        uint64_t receiver_mode = take_uvar(&reader);
-        uint64_t result_type = take_uvar(&reader);
-        uint64_t result_ownership = take_uvar(&reader);
-        uint64_t origin_count = take_uvar(&reader);
-        if (has_receiver > 1u || receiver_mode > XR_PARAM_MOVE ||
-            (has_receiver != 0u &&
-             (parameter_count == 0u || function->parameter_modes[0] != receiver_mode)) ||
-            (has_receiver == 0u && receiver_mode != XR_PARAM_READ) ||
-            origin_count > XR_PROGRAM_LIMIT_ROOTS_PER_VALUE ||
-            origin_count > SIZE_MAX / sizeof(XrViewOrigin) ||
-            !spend(context, origin_count, location)) {
-            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
-            return false;
-        }
-        function->has_receiver = has_receiver != 0u;
-        function->receiver_mode = (XrParamMode) receiver_mode;
-        function->result_borrow_origin_count = (uint32_t) origin_count;
-        if (origin_count != 0u) {
-            function->result_borrow_origins =
-                xr_calloc((size_t) origin_count, sizeof(XrViewOrigin));
-            if (!function->result_borrow_origins) {
-                reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
-                return false;
-            }
-        }
-        XrViewOrigin prior_origin = {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = -1};
-        for (uint32_t origin = 0; origin < (uint32_t) origin_count; ++origin) {
-            uint64_t kind = take_uvar(&reader);
-            uint64_t parameter = kind == XR_VIEW_ORIGIN_PARAM ? take_uvar(&reader) : UINT64_MAX;
-            if (kind > XR_VIEW_ORIGIN_STATIC ||
-                (kind == XR_VIEW_ORIGIN_PARAM && parameter > INT16_MAX) ||
-                (kind == XR_VIEW_ORIGIN_PARAM &&
-                 (parameter >= parameter_count - (function->has_receiver ? 1u : 0u) ||
-                  function->parameter_modes[(uint32_t) parameter +
-                                            (function->has_receiver ? 1u : 0u)] !=
-                      XR_PARAM_READ)) ||
-                (kind == XR_VIEW_ORIGIN_RECEIVER &&
-                 (!function->has_receiver || function->receiver_mode != XR_PARAM_READ))) {
-                reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
-                return false;
-            }
-            XrViewOrigin row = {
-                .kind = (XrViewOriginKind) kind,
-                .param_ordinal = kind == XR_VIEW_ORIGIN_PARAM ? (int16_t) parameter : -1,
-            };
-            if (origin != 0u && (row.kind < prior_origin.kind ||
-                                 (row.kind == prior_origin.kind &&
-                                  row.param_ordinal <= prior_origin.param_ordinal))) {
-                reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
-                return false;
-            }
-            function->result_borrow_origins[origin] = row;
-            prior_origin = row;
-        }
-        uint64_t error_type = take_uvar(&reader);
-        uint64_t panic_type = take_uvar(&reader);
-        uint64_t effect_mask = take_uvar(&reader);
-        uint64_t capability_mask = take_uvar(&reader);
+        uint64_t signature_id = take_uvar(&reader);
         uint64_t entry_block = take_uvar(&reader);
         uint64_t block_count = take_uvar(&reader);
         uint64_t value_count = take_uvar(&reader);
         uint64_t flags = take_uvar(&reader);
-        if (!type_is_runtime(context->program, result_type) ||
-            !type_is_runtime(context->program, error_type) ||
-            !type_is_runtime(context->program, panic_type) ||
-            (panic_type != XR_CORE_TYPE_VOID && panic_type != XR_CORE_TYPE_PANIC_INFO) ||
-            result_ownership > XR_CORE_IR_OWNER || effect_mask > UINT32_MAX ||
-            capability_mask > UINT32_MAX || block_count == 0 ||
-            block_count > context->budget.max_blocks_per_function || entry_block >= block_count ||
-            value_count > context->budget.max_values_per_function || flags > UINT32_MAX ||
-            block_count > SIZE_MAX / sizeof(XrValidatedBlock) ||
+        location.function_id = id;
+        if (encoded_id != id || signature_id >= context->program->signature_count ||
+            block_count == 0u || block_count > context->budget.max_blocks_per_function ||
+            entry_block >= block_count || value_count > context->budget.max_values_per_function ||
+            flags > UINT32_MAX || block_count > SIZE_MAX / sizeof(XrValidatedBlock) ||
             value_count > SIZE_MAX / sizeof(uint16_t) ||
             !spend(context, block_count + value_count, location)) {
             reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
             return false;
         }
-        function->result_type_id = (uint16_t) result_type;
-        function->result_ownership = (XrCoreIrOwnershipDisposition) result_ownership;
-        function->error_type_id = (uint16_t) error_type;
-        function->panic_type_id = (uint16_t) panic_type;
-        function->effect_mask = (uint32_t) effect_mask;
-        function->capability_mask = (uint32_t) capability_mask;
+        const XrValidatedSignature *signature = &context->program->signatures[signature_id];
+        function->signature_id = (uint32_t) signature_id;
+        function->parameter_types = signature->parameter_types;
+        function->parameter_modes = signature->parameter_modes;
+        function->parameter_count = signature->parameter_count;
+        function->has_receiver = signature->has_receiver;
+        function->receiver_mode = signature->receiver_mode;
+        function->result_type_id = signature->result_type_id;
+        function->result_ownership = signature->result_ownership;
+        function->result_borrow_origins = signature->result_borrow_origins;
+        function->result_borrow_origin_count = signature->result_borrow_origin_count;
+        function->error_type_id = signature->error_type_id;
+        function->panic_type_id = signature->panic_type_id;
+        function->effect_mask = signature->effect_mask;
+        function->capability_mask = signature->capability_mask;
         function->entry_block = (uint32_t) entry_block;
         function->block_count = (uint32_t) block_count;
         function->value_count = (uint32_t) value_count;
         function->flags = (uint32_t) flags;
-        const XrValidatedType *result_view =
-            xr_validated_program_type(context->program, function->result_type_id);
-        bool readonly_view = result_view && result_view->kind == XR_CORE_IR_TYPE_VIEW &&
-                             result_view->view_capability == XR_CORE_IR_VIEW_READ;
-        if (readonly_view != (function->result_borrow_origin_count != 0u) ||
-            (type_is_view(context->program, function->result_type_id) && !readonly_view)) {
-            reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
-            return false;
-        }
         function->blocks = xr_calloc((size_t) block_count, sizeof(XrValidatedBlock));
         function->value_types =
             xr_calloc((size_t) (value_count ? value_count : 1u), sizeof(uint16_t));
@@ -942,11 +1096,184 @@ static uint32_t root_for_origin(const XrValidatedFunction *function, const XrVie
     return XR_PROGRAM_LOCATION_NONE;
 }
 
+static bool key_is_zero(XrCoreIrKey key) {
+    uint8_t combined = 0u;
+    for (size_t index = 0; index < sizeof(key.bytes); ++index)
+        combined |= key.bytes[index];
+    return combined == 0u;
+}
+
+static bool validated_signature_satisfies_interface(const XrValidatedProgram *program,
+                                                    const XrValidatedSignature *implementation,
+                                                    const XrValidatedSignature *requirement,
+                                                    uint16_t implementor_type,
+                                                    uint32_t interface_id) {
+    if (implementation->parameter_count != requirement->parameter_count ||
+        implementation->has_receiver != requirement->has_receiver ||
+        implementation->receiver_mode != requirement->receiver_mode ||
+        implementation->result_type_id != requirement->result_type_id ||
+        implementation->result_ownership != requirement->result_ownership ||
+        implementation->result_borrow_origin_count != requirement->result_borrow_origin_count ||
+        implementation->error_type_id != requirement->error_type_id ||
+        implementation->panic_type_id != requirement->panic_type_id ||
+        implementation->effect_mask != requirement->effect_mask ||
+        implementation->capability_mask != requirement->capability_mask)
+        return false;
+    for (uint32_t index = 0; index < requirement->parameter_count; ++index) {
+        if (implementation->parameter_modes[index] != requirement->parameter_modes[index])
+            return false;
+        if (requirement->has_receiver && index == 0u) {
+            const XrValidatedType *receiver =
+                xr_validated_program_type(program, requirement->parameter_types[index]);
+            if (implementation->parameter_types[index] != implementor_type || !receiver ||
+                receiver->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+                receiver->interface_id != interface_id)
+                return false;
+        } else if (implementation->parameter_types[index] != requirement->parameter_types[index]) {
+            return false;
+        }
+    }
+    for (uint32_t index = 0; index < requirement->result_borrow_origin_count; ++index)
+        if (implementation->result_borrow_origins[index].kind !=
+                requirement->result_borrow_origins[index].kind ||
+            implementation->result_borrow_origins[index].param_ordinal !=
+                requirement->result_borrow_origins[index].param_ordinal)
+            return false;
+    return true;
+}
+
 static bool parse_semantic_metadata(VerifyContext *context, const XrProgramView *view) {
     VerifyReader reader = section_reader(view, XR_PROGRAM_SECTION_SEMANTIC_METADATA - 1u);
-    uint64_t function_count = take_uvar(&reader);
     XrProgramSemanticLocation location = no_location();
     location.section_id = XR_PROGRAM_SECTION_SEMANTIC_METADATA;
+    uint64_t interface_count = take_uvar(&reader);
+    if (interface_count > XR_PROGRAM_LIMIT_TYPES ||
+        interface_count > SIZE_MAX / sizeof(XrValidatedInterface) ||
+        !spend(context, interface_count + 1u, location)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
+        return false;
+    }
+    context->program->interface_count = (uint32_t) interface_count;
+    if (interface_count != 0u) {
+        context->program->interfaces =
+            xr_calloc((size_t) interface_count, sizeof(XrValidatedInterface));
+        if (!context->program->interfaces) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+            return false;
+        }
+    }
+    for (uint32_t interface = 0; interface < context->program->interface_count; ++interface) {
+        XrValidatedInterface *row = &context->program->interfaces[interface];
+        uint64_t id = take_uvar(&reader);
+        take_bytes(&reader, row->key.bytes, sizeof(row->key.bytes));
+        uint64_t slot_count = take_uvar(&reader);
+        if (id != interface || key_is_zero(row->key) ||
+            (interface != 0u && memcmp(context->program->interfaces[interface - 1u].key.bytes,
+                                       row->key.bytes, sizeof(row->key.bytes)) >= 0) ||
+            slot_count == 0u || slot_count > XR_PROGRAM_LIMIT_OPERANDS_PER_OPERATION ||
+            slot_count > SIZE_MAX / sizeof(uint32_t) || !spend(context, slot_count, location)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+            return false;
+        }
+        row->slot_count = (uint32_t) slot_count;
+        row->slot_signature_ids = xr_calloc((size_t) slot_count, sizeof(uint32_t));
+        if (!row->slot_signature_ids) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+            return false;
+        }
+        for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
+            uint64_t signature_id = take_uvar(&reader);
+            if (signature_id >= context->program->signature_count) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+                return false;
+            }
+            row->slot_signature_ids[slot] = (uint32_t) signature_id;
+        }
+    }
+    for (uint32_t type = 0; type < context->program->type_count; ++type)
+        if (context->program->types[type].kind == XR_CORE_IR_TYPE_EXISTENTIAL &&
+            context->program->types[type].interface_id >= context->program->interface_count) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+            return false;
+        }
+
+    uint64_t conformance_count = take_uvar(&reader);
+    if (conformance_count > XR_PROGRAM_LIMIT_TYPES ||
+        conformance_count > SIZE_MAX / sizeof(XrValidatedConformance) ||
+        !spend(context, conformance_count + 1u, location)) {
+        reject(context, XR_PROGRAM_DIAGNOSTIC_RESOURCE_LIMIT, location);
+        return false;
+    }
+    context->program->conformance_count = (uint32_t) conformance_count;
+    if (conformance_count != 0u) {
+        context->program->conformances =
+            xr_calloc((size_t) conformance_count, sizeof(XrValidatedConformance));
+        if (!context->program->conformances) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+            return false;
+        }
+    }
+    for (uint32_t conformance = 0; conformance < context->program->conformance_count;
+         ++conformance) {
+        XrValidatedConformance *row = &context->program->conformances[conformance];
+        uint64_t id = take_uvar(&reader);
+        take_bytes(&reader, row->key.bytes, sizeof(row->key.bytes));
+        uint64_t implementor_type = take_uvar(&reader);
+        uint64_t implementor_kind = take_uvar(&reader);
+        uint64_t interface_id = take_uvar(&reader);
+        uint64_t slot_count = take_uvar(&reader);
+        const XrValidatedType *implementor =
+            implementor_type <= UINT16_MAX
+                ? xr_validated_program_type(context->program, (uint16_t) implementor_type)
+                : NULL;
+        if (id != conformance || key_is_zero(row->key) ||
+            (conformance != 0u && memcmp(context->program->conformances[conformance - 1u].key.bytes,
+                                         row->key.bytes, sizeof(row->key.bytes)) >= 0) ||
+            !implementor || implementor_kind == XR_CORE_IR_NOMINAL_NONE ||
+            implementor_kind > XR_CORE_IR_NOMINAL_ENUM ||
+            implementor->nominal_kind != implementor_kind ||
+            (implementor->kind != XR_CORE_IR_TYPE_AGGREGATE &&
+             implementor->kind != XR_CORE_IR_TYPE_VARIANT) ||
+            interface_id >= context->program->interface_count ||
+            slot_count != context->program->interfaces[interface_id].slot_count ||
+            slot_count > SIZE_MAX / sizeof(uint32_t) || !spend(context, slot_count, location)) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+            return false;
+        }
+        for (uint32_t prior = 0; prior < conformance; ++prior)
+            if (context->program->conformances[prior].implementor_type_id == implementor_type &&
+                context->program->conformances[prior].interface_id == interface_id) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_TYPE, location);
+                return false;
+            }
+        row->implementor_type_id = (uint16_t) implementor_type;
+        row->implementor_kind = (XrCoreIrNominalKind) implementor_kind;
+        row->interface_id = (uint32_t) interface_id;
+        row->slot_count = (uint32_t) slot_count;
+        row->slot_function_ids = xr_calloc((size_t) slot_count, sizeof(uint32_t));
+        if (!row->slot_function_ids) {
+            reject(context, XR_PROGRAM_DIAGNOSTIC_OUT_OF_MEMORY, location);
+            return false;
+        }
+        for (uint32_t slot = 0; slot < row->slot_count; ++slot) {
+            uint64_t function_id = take_uvar(&reader);
+            uint32_t requirement_id =
+                context->program->interfaces[row->interface_id].slot_signature_ids[slot];
+            if (function_id >= context->program->function_count ||
+                !validated_signature_satisfies_interface(
+                    context->program,
+                    &context->program
+                         ->signatures[context->program->functions[function_id].signature_id],
+                    &context->program->signatures[requirement_id], row->implementor_type_id,
+                    row->interface_id)) {
+                reject(context, XR_PROGRAM_DIAGNOSTIC_FUNCTION, location);
+                return false;
+            }
+            row->slot_function_ids[slot] = (uint32_t) function_id;
+        }
+    }
+
+    uint64_t function_count = take_uvar(&reader);
     if (function_count != context->program->function_count ||
         !spend(context, function_count + 1u, location)) {
         reject(context, XR_PROGRAM_DIAGNOSTIC_ROOT, location);

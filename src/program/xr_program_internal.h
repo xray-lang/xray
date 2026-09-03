@@ -8,10 +8,27 @@ typedef struct XrCoreIrVariant {
     uint32_t payload_count;
 } XrCoreIrVariant;
 
+typedef struct XrCoreIrCallableSignature {
+    uint16_t *parameter_types;
+    XrParamMode *parameter_modes;
+    uint32_t parameter_count;
+    bool has_receiver;
+    XrParamMode receiver_mode;
+    uint16_t result_type_id;
+    XrCoreIrOwnershipDisposition result_ownership;
+    XrViewOrigin *result_borrow_origins;
+    uint32_t result_borrow_origin_count;
+    uint16_t error_type_id;
+    uint16_t panic_type_id;
+    uint32_t effect_mask;
+    uint32_t capability_mask;
+} XrCoreIrCallableSignature;
+
 typedef struct XrCoreIrType {
     XrCoreIrKey key;
     uint16_t type_id;
     XrCoreIrTypeKind kind;
+    XrCoreIrNominalKind nominal_kind;
     XrCoreIrTypeOwnership ownership;
     XrCoreIrCopyContract copy_contract;
     uint16_t *field_types;
@@ -20,6 +37,9 @@ typedef struct XrCoreIrType {
     uint32_t variant_count;
     uint16_t view_element_type;
     XrCoreIrViewCapability view_capability;
+    XrCoreIrCallableSignature callable_signature;
+    XrCoreIrKey existential_interface;
+    XrCoreIrInterfaceUseKind interface_use_kind;
 } XrCoreIrType;
 
 typedef struct XrCoreIrInstruction {
@@ -101,12 +121,31 @@ typedef struct XrCoreIrModule {
     uint32_t function_count;
 } XrCoreIrModule;
 
+typedef struct XrCoreIrInterface {
+    XrCoreIrKey key;
+    XrCoreIrCallableSignature *slots;
+    uint32_t slot_count;
+} XrCoreIrInterface;
+
+typedef struct XrCoreIrConformance {
+    XrCoreIrKey key;
+    uint16_t implementor_type_id;
+    XrCoreIrNominalKind implementor_kind;
+    XrCoreIrKey interface_key;
+    XrCoreIrKey *slot_functions;
+    uint32_t slot_count;
+} XrCoreIrConformance;
+
 struct XrCoreIrProgram {
     uint8_t semantic_profile_fingerprint[XR_PROGRAM_DIGEST_SIZE];
     uint16_t *required_features;
     uint32_t required_feature_count;
     XrCoreIrType *types;
     uint32_t type_count;
+    XrCoreIrInterface *interfaces;
+    uint32_t interface_count;
+    XrCoreIrConformance *conformances;
+    uint32_t conformance_count;
     XrCoreIrModule *modules;
     uint32_t module_count;
 };
