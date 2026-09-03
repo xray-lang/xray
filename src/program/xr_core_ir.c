@@ -308,6 +308,9 @@ static XrProgramBuildStatus copy_instruction(const XrCoreIrInstructionInput *inp
             output->immediate.variant_field.field_ordinal =
                 input->immediate.variant_field.field_ordinal;
             break;
+        case XR_CORE_IR_IMMEDIATE_TYPE:
+            output->immediate.type_id = input->immediate.type_id;
+            break;
         default:
             return XR_PROGRAM_BUILD_INVALID_INPUT;
     }
@@ -679,9 +682,13 @@ static bool remap_program_types(XrCoreIrProgram *program) {
                 }
                 for (uint32_t instruction = 0; instruction < block_row->instruction_count;
                      ++instruction) {
-                    if (!remap_type_id(program->types, program->type_count,
-                                       block_row->instructions[instruction].result_type_id,
-                                       &block_row->instructions[instruction].result_type_id))
+                    XrCoreIrInstruction *row = &block_row->instructions[instruction];
+                    if (!remap_type_id(program->types, program->type_count, row->result_type_id,
+                                       &row->result_type_id))
+                        return false;
+                    if (row->immediate_kind == XR_CORE_IR_IMMEDIATE_TYPE &&
+                        !remap_type_id(program->types, program->type_count, row->immediate.type_id,
+                                       &row->immediate.type_id))
                         return false;
                 }
             }
@@ -804,6 +811,15 @@ static bool type_is_view(const XrCoreIrProgram *program, uint16_t type_id) {
            program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE].kind == XR_CORE_IR_TYPE_VIEW;
 }
 
+static bool type_is_existential_ref(const XrCoreIrProgram *program, uint16_t type_id) {
+    if (type_id < XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ||
+        (uint32_t) type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE >= program->type_count)
+        return false;
+    const XrCoreIrType *type = &program->types[type_id - XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE];
+    return type->kind == XR_CORE_IR_TYPE_EXISTENTIAL &&
+           type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_REF;
+}
+
 static XrCoreIrCallableSignature function_signature(const XrCoreIrFunction *function) {
     XrCoreIrCallableSignature signature = {
         .parameter_types = function->parameter_types,
@@ -831,6 +847,8 @@ static bool signature_is_valid(const XrCoreIrProgram *program,
         !type_id_supported(program, signature->result_type_id) ||
         !type_id_supported(program, signature->error_type_id) ||
         !type_id_supported(program, signature->panic_type_id) ||
+        type_is_existential_ref(program, signature->result_type_id) ||
+        type_is_existential_ref(program, signature->error_type_id) ||
         (signature->panic_type_id != XR_CORE_TYPE_VOID &&
          signature->panic_type_id != XR_CORE_TYPE_PANIC_INFO) ||
         !ownership_disposition_is_valid(signature->result_ownership) ||
@@ -1108,12 +1126,21 @@ static bool validate_types(const XrCoreIrProgram *program) {
                     type->copy_contract == XR_CORE_IR_COPY_TRIVIAL &&
                     signature_is_valid(program, &type->callable_signature);
         } else if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
+            bool trivial = type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_READ;
+            bool affine =
+                type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_REF ||
+                type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE ||
+                type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE;
             valid = valid && type->field_count == 0u && !type->field_types &&
                     type->variant_count == 0u && !type->variants &&
                     type->nominal_kind == XR_CORE_IR_NOMINAL_NONE &&
                     !xr_core_ir_key_is_zero(type->existential_interface) &&
                     find_interface(program, type->existential_interface) != NULL &&
-                    type->interface_use_kind <= XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE;
+                    (trivial || affine) &&
+                    (trivial ? type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL &&
+                                   type->copy_contract == XR_CORE_IR_COPY_TRIVIAL
+                             : type->ownership == XR_CORE_IR_TYPE_OWNERSHIP_AFFINE &&
+                                   type->copy_contract == XR_CORE_IR_COPY_FORBIDDEN);
         } else {
             valid = false;
         }
@@ -1122,16 +1149,18 @@ static bool validate_types(const XrCoreIrProgram *program) {
     }
     for (uint32_t index = 0; valid && index < program->type_count; ++index) {
         const XrCoreIrType *type = &program->types[index];
-        if (type->ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE)
-            continue;
         for (uint32_t field = 0; valid && field < type->field_count; ++field)
-            valid = type_ownership(program, type->field_types[field]) ==
-                    XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+            valid = !type_is_existential_ref(program, type->field_types[field]) &&
+                    (type->ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                     type_ownership(program, type->field_types[field]) ==
+                         XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL);
         for (uint32_t variant = 0; valid && variant < type->variant_count; ++variant) {
             const XrCoreIrVariant *row = &type->variants[variant];
             for (uint32_t field = 0; valid && field < row->payload_count; ++field)
-                valid = type_ownership(program, row->payload_types[field]) ==
-                        XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL;
+                valid = !type_is_existential_ref(program, row->payload_types[field]) &&
+                        (type->ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                         type_ownership(program, row->payload_types[field]) ==
+                             XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL);
         }
     }
     xr_free(state);
@@ -1412,6 +1441,13 @@ static XrProgramBuildStatus validate_program(const XrCoreIrProgram *program, cha
                         !find_function(program, instruction->immediate.key)) {
                         xr_program_set_diagnostic(diagnostic, diagnostic_size,
                                                   "instruction has unresolved function");
+                        return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
+                    }
+                    if (instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_TYPE &&
+                        (!type_id_supported(program, instruction->immediate.type_id) ||
+                         instruction->immediate.type_id == XR_CORE_TYPE_VOID)) {
+                        xr_program_set_diagnostic(diagnostic, diagnostic_size,
+                                                  "instruction has unresolved type immediate");
                         return XR_PROGRAM_BUILD_UNRESOLVED_REFERENCE;
                     }
                 }

@@ -94,7 +94,7 @@ def expected_coverage(registry: dict[str, Any]) -> dict[str, Any]:
             "vm": False,
             "compiler": False,
             "aot_toolchain": False,
-            "runtime_dependency": "libc-only-for-active-value-skeleton",
+            "runtime_dependency": "libc-only",
         },
         "inactive_contracts": [
             "full-language-operation-families",
@@ -153,6 +153,16 @@ def validate_sources(root: Path, overrides: dict[Path, str] | None = None) -> No
             "typed local spelling must come from BackendIR representation")
     require("XrAotValue" not in emitter,
             "generated local values use a systematic tagged representation")
+    for token in (
+        "XrAotContext *xr_ctx",
+        "xr_aot_alloc(xr_ctx",
+        "xr_aot_context_destroy(&xr_ctx)",
+        ".data = (void *)existential_payload_",
+    ):
+        require(token in emitter or token in test,
+                f"AOT existential execution-lifetime contract lacks {token}")
+    require('.data = (void *)&v' not in emitter,
+            "AOT existential carrier points at a callee-local value")
     require("native_artifact_id" in artifact and
             "artifact->bytes, artifact->size" in artifact,
             "NativeArtifactId does not bind native bytes")

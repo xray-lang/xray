@@ -325,7 +325,8 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
             "owner-copy", "owner-drop", "owner-move", "panic-publish", "place-load",
             "place-local", "place-store", "return", "scalar-oracle", "sealed-call",
             "sealed-invoke", "variant-construct",
-            "variant-project", "variant-test",
+            "variant-project", "variant-test", "existential-pack",
+            "existential-project", "existential-test",
         }, f"operation {spelling} has unknown KAT validator")
         coverage = operation["coverage"]
         require(isinstance(coverage, dict) and set(coverage) == set(CONSUMERS),
@@ -527,6 +528,30 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and 0 <= variant < len(payloads) and isinstance(payloads[variant], list)
                 and isinstance(field, int) and 0 <= field < len(payloads[variant])
                 and actual.get("result_type") == payloads[variant][field])
+    if validator == "existential-pack":
+        interface_use = actual.get("interface_use")
+        expected_category = "place" if interface_use == "ref" else "value"
+        expected_ownership = "owner" if interface_use in {"move", "owned-storage"} else "non-owner"
+        return (actual.get("concrete_nominal") is True
+                and actual.get("conformance_interface") == actual.get("existential_interface")
+                and interface_use in {"read", "ref", "move", "owned-storage"}
+                and actual.get("operand_category") == expected_category
+                and actual.get("result_category") == "value"
+                and actual.get("result_ownership") == expected_ownership
+                and (interface_use != "read" or actual.get("operand_ownership") == "non-owner"))
+    if validator == "existential-test":
+        return (actual.get("requested_nominal") is True
+                and actual.get("conformance_interface") == actual.get("operand_interface")
+                and actual.get("result_type") == "bool")
+    if validator == "existential-project":
+        interface_use = actual.get("interface_use")
+        expected_category = "place" if interface_use == "ref" else "value"
+        expected_ownership = "owner" if interface_use in {"move", "owned-storage"} else "non-owner"
+        return (actual.get("conformance_interface") == actual.get("operand_interface")
+                and actual.get("dominating_exact_test") is True
+                and actual.get("result_type") == actual.get("requested_type")
+                and actual.get("result_category") == expected_category
+                and actual.get("result_ownership") == expected_ownership)
     if validator == "error-publish":
         return (actual.get("function_error_type") not in {None, "void", "panic-info"}
                 and actual.get("operand_types") == [actual.get("function_error_type")])

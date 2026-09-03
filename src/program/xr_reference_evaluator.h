@@ -21,6 +21,7 @@ typedef enum XrReferenceValueKind {
     XR_REFERENCE_VALUE_ERROR,
     XR_REFERENCE_VALUE_PANIC_INFO,
     XR_REFERENCE_VALUE_AGGREGATE,
+    XR_REFERENCE_VALUE_EXISTENTIAL,
 } XrReferenceValueKind;
 
 typedef struct XrReferenceValue {
@@ -32,6 +33,7 @@ typedef struct XrReferenceValue {
         uint32_t error;
         uint32_t panic_info;
         const void *aggregate;
+        const void *existential;
     } as;
 } XrReferenceValue;
 

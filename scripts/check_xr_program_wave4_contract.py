@@ -43,7 +43,7 @@ def validate(root: Path) -> None:
         "borrow_origin_set": "COMPLETE",
         "borrow_root_tables": "COMPLETE",
         "program_tables": "COMPLETE",
-        "existential_operations": "PENDING",
+        "existential_operations": "IN_PROGRESS_EXECUTOR_SLICE",
         "witness_dispatch": "PENDING",
         "callable_dispatch": "PENDING",
         "source_integration": "PENDING",
@@ -141,6 +141,25 @@ def validate(root: Path) -> None:
             "no duplicate function-owned wire signatures, class-only table, selector/name lookup, old reader or dual schema",
             "Wave 4 program tables regained a legacy path")
 
+    existential = data.get("existential_operation_contract")
+    require(isinstance(existential, dict) and set(existential) == {
+        "type_immediate",
+        "pack_conformance",
+        "test_identity",
+        "project_guard",
+        "ownership",
+        "ref_escape",
+        "carrier",
+        "source_status",
+        "compatibility",
+    }, "Wave 4 existential-operation contract drifted")
+    require(existential.get("source_status") ==
+            "pending class, struct, enum, import and dynamic-target producer integration",
+            "Wave 4 existential source work was completed without source evidence")
+    require(existential.get("compatibility") ==
+            "no old reader, erased-object fallback, selector lookup, backend semantic inference or dual operation spelling",
+            "Wave 4 existential operations regained a legacy path")
+
     required_anchors = {
         "src/shared/xr_view_origin.h": ["typedef struct XrViewOrigin"],
         "src/runtime/value/xtype.h": ["XrViewOrigin *view_origin_set;"],
@@ -163,18 +182,37 @@ def validate(root: Path) -> None:
             "struct XrCoreIrCallableSignatureInput {",
             "typedef struct XrCoreIrInterfaceInput",
             "typedef struct XrCoreIrConformanceInput",
+            "XR_CORE_IR_IMMEDIATE_TYPE",
         ],
         "src/program/xr_program_encode.c": ["static SignatureRef *collect_signatures("],
+        "src/program/xr_core_ir.c": ["static bool type_is_existential_ref("],
         "src/program/xr_program_verify.c": [
             "static bool parse_semantic_metadata(",
             "static bool mapped_call_result_roots_match(",
             "static bool validated_signature_satisfies_interface(",
+            "static bool type_is_existential_ref(",
+            "static bool verify_existential_projection_guards(",
+        ],
+        "src/program/xr_reference_evaluator.h": ["XR_REFERENCE_VALUE_EXISTENTIAL"],
+        "src/vm/xr_program_vm.h": ["XR_VM_VALUE_EXISTENTIAL"],
+        "src/aot/program/xr_backend_ir_emit_c.c": ["static inline void *xr_aot_alloc"],
+        "tests/unit/program/xr_program_existential_fixture.h": [
+            "XR_CORE_OP_CORE_EXISTENTIAL_PACK",
+            "XR_CORE_OP_CORE_EXISTENTIAL_TEST",
+            "XR_EXISTENTIAL_FIXTURE_REF_RESULT_ESCAPE,",
+        ],
+        "tests/unit/program/test_xr_program_verify.c": [
+            "static void test_existential_ref_non_escape_admission("
         ],
     }
     for relative, anchors in required_anchors.items():
         source = (root / relative).read_text(encoding="utf-8", errors="strict")
         require(all(source.count(anchor) == 1 for anchor in anchors),
                 f"Wave 4 BorrowOriginSet owner drifted: {relative}")
+    existential_fixture = (root / "tests/unit/program/xr_program_existential_fixture.h").read_text(
+        encoding="utf-8", errors="strict")
+    require(existential_fixture.count("XR_CORE_OP_CORE_EXISTENTIAL_PROJECT") == 2,
+            "Wave 4 existential projection positive/negative evidence drifted")
     retired = {
         "src/frontend/analyzer/xanalyzer_visitor_decl.c": ["view_return_source"],
         "src/runtime/value/xtype.h": ["view_return_source", "view_return_param"],
@@ -214,8 +252,14 @@ def self_test(root: Path) -> None:
         Path("src/ir/xi_lower_expr.c"),
         Path("src/ir/xi_verify.c"),
         Path("src/program/xr_program.h"),
+        Path("src/program/xr_core_ir.c"),
         Path("src/program/xr_program_encode.c"),
         Path("src/program/xr_program_verify.c"),
+        Path("src/program/xr_reference_evaluator.h"),
+        Path("src/vm/xr_program_vm.h"),
+        Path("src/aot/program/xr_backend_ir_emit_c.c"),
+        Path("tests/unit/program/xr_program_existential_fixture.h"),
+        Path("tests/unit/program/test_xr_program_verify.c"),
         Path("tests/fixtures/task284_ownership_positive/borrow_origin_set.xr"),
         Path("tests/fixtures/task284_ownership_positive/borrow_origin_static.xr"),
         Path("tests/fixtures/task284_ownership_negative/borrow_origin_ambiguous.xr"),

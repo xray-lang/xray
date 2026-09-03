@@ -17,6 +17,8 @@
 #include <limits.h>
 #include <string.h>
 
+typedef struct XrReferenceExistentialValue XrReferenceExistentialValue;
+
 typedef struct EvalContext {
     const XrValidatedProgram *program;
     XrReferenceProfile profile;
@@ -26,6 +28,9 @@ typedef struct EvalContext {
     struct XrReferenceAggregateValue **aggregates;
     uint32_t aggregate_count;
     uint32_t aggregate_capacity;
+    XrReferenceExistentialValue **existentials;
+    uint32_t existential_count;
+    uint32_t existential_capacity;
 } EvalContext;
 
 typedef struct XrReferenceAggregateValue {
@@ -47,6 +52,13 @@ typedef struct EvalRuntimeValue {
         EvalPlace *place;
     } as;
 } EvalRuntimeValue;
+
+struct XrReferenceExistentialValue {
+    uint16_t existential_type_id;
+    uint16_t concrete_type_id;
+    uint32_t conformance_id;
+    EvalRuntimeValue payload;
+};
 
 static XrReferenceOutcome outcome(XrReferenceOutcomeKind kind, EvalContext *context) {
     XrReferenceOutcome result = {.kind = kind, .steps = context->steps};
@@ -81,8 +93,13 @@ static bool reference_value_matches_type(const XrValidatedProgram *program, XrRe
             return value.kind == XR_REFERENCE_VALUE_PANIC_INFO;
         default: {
             const XrValidatedType *type = xr_validated_program_type(program, type_id);
-            return type &&
-                   (type->kind == XR_CORE_IR_TYPE_AGGREGATE ||
+            if (!type)
+                return false;
+            if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL)
+                return value.kind == XR_REFERENCE_VALUE_EXISTENTIAL && value.as.existential &&
+                       ((const XrReferenceExistentialValue *) value.as.existential)
+                               ->existential_type_id == type_id;
+            return (type->kind == XR_CORE_IR_TYPE_AGGREGATE ||
                     type->kind == XR_CORE_IR_TYPE_VARIANT) &&
                    value.kind == XR_REFERENCE_VALUE_AGGREGATE && value.as.aggregate &&
                    ((const XrReferenceAggregateValue *) value.as.aggregate)->type_id == type_id;
@@ -128,10 +145,51 @@ static XrReferenceAggregateValue *allocate_aggregate(EvalContext *context, uint1
     return aggregate;
 }
 
+static XrReferenceExistentialValue *allocate_existential(EvalContext *context) {
+    if (context->aggregate_cell_count == context->budget.max_value_cells)
+        return NULL;
+    if (context->existential_count == context->existential_capacity) {
+        uint32_t capacity = context->existential_capacity ? context->existential_capacity * 2u : 8u;
+        if (capacity < context->existential_count)
+            return NULL;
+#if SIZE_MAX < UINT64_MAX
+        if ((size_t) capacity > SIZE_MAX / sizeof(*context->existentials))
+            return NULL;
+#endif
+        XrReferenceExistentialValue **grown =
+            xr_realloc(context->existentials, (size_t) capacity * sizeof(*context->existentials));
+        if (!grown)
+            return NULL;
+        context->existentials = grown;
+        context->existential_capacity = capacity;
+    }
+    XrReferenceExistentialValue *value = xr_calloc(1u, sizeof(*value));
+    if (!value)
+        return NULL;
+    context->existentials[context->existential_count++] = value;
+    ++context->aggregate_cell_count;
+    return value;
+}
+
+static uint32_t conformance_id(const XrValidatedProgram *program, uint16_t concrete_type_id,
+                               uint32_t interface_id) {
+    for (uint32_t index = 0; index < program->conformance_count; ++index)
+        if (program->conformances[index].implementor_type_id == concrete_type_id &&
+            program->conformances[index].interface_id == interface_id)
+            return index;
+    return XR_PROGRAM_LOCATION_NONE;
+}
+
 static bool clone_reference_value(EvalContext *context, XrReferenceValue source, uint16_t type_id,
                                   XrReferenceValue *output) {
     const XrValidatedType *type = xr_validated_program_type(context->program, type_id);
     if (!type) {
+        *output = source;
+        return true;
+    }
+    if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
+        if (source.kind != XR_REFERENCE_VALUE_EXISTENTIAL || !source.as.existential)
+            return false;
         *output = source;
         return true;
     }
@@ -171,6 +229,9 @@ static void free_aggregates(EvalContext *context) {
         xr_free(context->aggregates[index]);
     }
     xr_free(context->aggregates);
+    for (uint32_t index = 0; index < context->existential_count; ++index)
+        xr_free(context->existentials[index]);
+    xr_free(context->existentials);
 }
 
 static int64_t i64_from_bits(uint64_t bits) {
@@ -600,6 +661,41 @@ static XrReferenceOutcome evaluate_function(EvalContext *context, uint32_t funct
                         aggregate->fields[instruction->immediate.variant_field.field_ordinal];
                     break;
                 }
+                case XR_CORE_OP_CORE_EXISTENTIAL_PACK: {
+                    const XrValidatedType *existential =
+                        xr_validated_program_type(context->program, instruction->result_type_id);
+                    uint16_t concrete_type = function->value_types[instruction->operands[0]];
+                    XrReferenceExistentialValue *carrier = allocate_existential(context);
+                    uint32_t conformance = existential
+                                               ? conformance_id(context->program, concrete_type,
+                                                                existential->interface_id)
+                                               : XR_PROGRAM_LOCATION_NONE;
+                    if (!carrier || conformance == XR_PROGRAM_LOCATION_NONE) {
+                        result = outcome(XR_REFERENCE_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    carrier->existential_type_id = instruction->result_type_id;
+                    carrier->concrete_type_id = concrete_type;
+                    carrier->conformance_id = conformance;
+                    carrier->payload = values[instruction->operands[0]];
+                    produced.as.value.kind = XR_REFERENCE_VALUE_EXISTENTIAL;
+                    produced.as.value.as.existential = carrier;
+                    break;
+                }
+                case XR_CORE_OP_CORE_EXISTENTIAL_TEST: {
+                    const XrReferenceExistentialValue *carrier =
+                        values[instruction->operands[0]].as.value.as.existential;
+                    produced.as.value.kind = XR_REFERENCE_VALUE_BOOL;
+                    produced.as.value.as.boolean =
+                        carrier->concrete_type_id == instruction->immediate.type_id;
+                    break;
+                }
+                case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT: {
+                    const XrReferenceExistentialValue *carrier =
+                        values[instruction->operands[0]].as.value.as.existential;
+                    produced = carrier->payload;
+                    break;
+                }
                 default:
                     result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, context);
                     goto done;
@@ -666,10 +762,12 @@ XrReferenceOutcome xr_reference_evaluate(const XrValidatedProgram *program, uint
         evaluate_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
     if (result.kind == XR_REFERENCE_OUTCOME_RETURN &&
-        result.value.kind == XR_REFERENCE_VALUE_AGGREGATE)
+        (result.value.kind == XR_REFERENCE_VALUE_AGGREGATE ||
+         result.value.kind == XR_REFERENCE_VALUE_EXISTENTIAL))
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     if (result.kind == XR_REFERENCE_OUTCOME_ERROR &&
-        result.error_value.kind == XR_REFERENCE_VALUE_AGGREGATE)
+        (result.error_value.kind == XR_REFERENCE_VALUE_AGGREGATE ||
+         result.error_value.kind == XR_REFERENCE_VALUE_EXISTENTIAL))
         result = outcome(XR_REFERENCE_OUTCOME_INVALID_INVOCATION, &context);
     if (result.kind == XR_REFERENCE_OUTCOME_PANIC &&
         result.panic_value.kind != XR_REFERENCE_VALUE_PANIC_INFO)

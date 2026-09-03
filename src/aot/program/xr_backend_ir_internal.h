@@ -45,6 +45,7 @@ typedef struct XrBackendInstruction {
             uint32_t variant_ordinal;
             uint32_t field_ordinal;
         } variant_field;
+        uint16_t type_id;
     } immediate;
     uint32_t *successors;
     uint32_t successor_count;

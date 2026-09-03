@@ -229,9 +229,24 @@ static const char *outcome_field(uint16_t type_id) {
     }
 }
 
-static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping) {
+static bool conformance_id(const XrValidatedProgram *program, uint16_t concrete_type_id,
+                           uint32_t interface_id, uint32_t *id_out) {
+    if (!program || !id_out)
+        return false;
+    for (uint32_t index = 0; index < program->conformance_count; ++index) {
+        const XrValidatedConformance *row = &program->conformances[index];
+        if (row->implementor_type_id == concrete_type_id && row->interface_id == interface_id) {
+            *id_out = index;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, bool *arena) {
     *checked = false;
     *wrapping = false;
+    *arena = false;
     for (uint32_t function = 0; function < ir->function_count; ++function) {
         const XrBackendFunction *fn = &ir->functions[function];
         for (uint32_t block = 0; block < fn->block_count; ++block) {
@@ -246,6 +261,8 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping) {
                     else
                         *wrapping = true;
                 }
+                if (op->operation_id == XR_CORE_OP_CORE_EXISTENTIAL_PACK)
+                    *arena = true;
             }
         }
     }
@@ -254,10 +271,51 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping) {
 static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
     bool checked = false;
     bool wrapping = false;
-    scan_helpers(ir, &checked, &wrapping);
+    bool arena = false;
+    scan_helpers(ir, &checked, &wrapping, &arena);
     if (!append_text(buffer, "#include <stdint.h>\n"
-                             "#include <limits.h>\n\n"
-                             "typedef struct XrAotOutcome {\n"
+                             "#include <limits.h>\n"
+                             "#include <stddef.h>\n") ||
+        (arena && !append_text(buffer, "#include <stdlib.h>\n")) || !append_text(buffer, "\n"))
+        return false;
+    if (arena) {
+        if (!append_text(buffer,
+                         "typedef union XrAotAllocation XrAotAllocation;\n"
+                         "union XrAotAllocation {\n"
+                         "    struct { XrAotAllocation *next; } link;\n"
+                         "    max_align_t alignment;\n"
+                         "};\n"
+                         "typedef struct XrAotContext {\n"
+                         "    XrAotAllocation *allocations;\n"
+                         "} XrAotContext;\n\n"
+                         "static inline void *xr_aot_alloc(XrAotContext *context, size_t size) "
+                         "{\n"
+                         "    if (!context || size > SIZE_MAX - sizeof(XrAotAllocation)) "
+                         "return NULL;\n"
+                         "    XrAotAllocation *allocation = "
+                         "(XrAotAllocation *)malloc(sizeof(XrAotAllocation) + size);\n"
+                         "    if (!allocation) return NULL;\n"
+                         "    allocation->link.next = context->allocations;\n"
+                         "    context->allocations = allocation;\n"
+                         "    return (void *)(allocation + 1);\n"
+                         "}\n"
+                         "static inline void xr_aot_context_destroy(XrAotContext *context) "
+                         "{\n"
+                         "    XrAotAllocation *allocation = context->allocations;\n"
+                         "    while (allocation) {\n"
+                         "        XrAotAllocation *next = allocation->link.next;\n"
+                         "        free(allocation);\n"
+                         "        allocation = next;\n"
+                         "    }\n"
+                         "    context->allocations = NULL;\n"
+                         "}\n\n"))
+            return false;
+    } else if (!append_text(buffer, "typedef struct XrAotContext {\n"
+                                    "    uint8_t unused;\n"
+                                    "} XrAotContext;\n\n")) {
+        return false;
+    }
+    if (!append_text(buffer, "typedef struct XrAotOutcome {\n"
                              "    uint32_t kind;\n"
                              "    uint32_t value_kind;\n"
                              "    uint32_t trap;\n"
@@ -312,49 +370,37 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir) {
 
 static bool emit_function_signature(CBuffer *buffer, const XrBackendFunction *function,
                                     const XrBackendIR *ir, uint32_t function_id, bool prototype) {
-    if (!append_format(buffer, "XrAotOutcome xr_aot_fn_%u(", function_id))
+    if (!append_format(buffer, "XrAotOutcome xr_aot_fn_%u(XrAotContext *xr_ctx", function_id))
         return false;
     bool aggregate_result =
         xr_validated_program_type(ir->program, function->result_type_id) != NULL;
     bool has_error = function->error_type_id != XR_CORE_TYPE_VOID;
     bool has_panic = function->panic_type_id != XR_CORE_TYPE_VOID;
-    if (function->parameter_count == 0u && !aggregate_result && !has_error && !has_panic) {
-        if (!append_text(buffer, "void"))
+    for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
+        char storage[32];
+        const char *name = type_c_name(function->parameter_types[parameter], storage);
+        if (!name)
             return false;
-    } else {
-        for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
-            char storage[32];
-            const char *name = type_c_name(function->parameter_types[parameter], storage);
-            if (!name)
-                return false;
-            const char *pointer = function->parameter_modes[parameter] == XR_PARAM_REF ? " *" : "";
-            if (!append_format(buffer, "%s%s%s p%u", parameter ? ", " : "", name, pointer,
-                               parameter))
-                return false;
-        }
+        const char *pointer = function->parameter_modes[parameter] == XR_PARAM_REF ? " *" : "";
+        if (!append_format(buffer, ", %s%s p%u", name, pointer, parameter))
+            return false;
     }
     if (aggregate_result) {
         char storage[32];
         const char *name = type_c_name(function->result_type_id, storage);
-        if (!name ||
-            !append_format(buffer, "%s%s *out_result", function->parameter_count ? ", " : "", name))
+        if (!name || !append_format(buffer, ", %s *out_result", name))
             return false;
     }
     if (has_error) {
         char storage[32];
         const char *name = type_c_name(function->error_type_id, storage);
-        if (!name ||
-            !append_format(buffer, "%s%s *out_error",
-                           function->parameter_count || aggregate_result ? ", " : "", name))
+        if (!name || !append_format(buffer, ", %s *out_error", name))
             return false;
     }
     if (has_panic) {
         char storage[32];
         const char *name = type_c_name(function->panic_type_id, storage);
-        if (!name ||
-            !append_format(buffer, "%s%s *out_panic",
-                           function->parameter_count || aggregate_result || has_error ? ", " : "",
-                           name))
+        if (!name || !append_format(buffer, ", %s *out_panic", name))
             return false;
     }
     return append_text(buffer, prototype ? ");\n" : ") {\n");
@@ -416,27 +462,18 @@ static bool emit_call(CBuffer *buffer, const XrBackendIR *ir,
                       const XrBackendInstruction *instruction, uint32_t instruction_id) {
     uint32_t callee_id = instruction->immediate.function_id;
     const XrBackendFunction *callee = &ir->functions[callee_id];
-    if (!append_format(buffer, "        XrAotOutcome call_%u = xr_aot_fn_%u(", instruction_id,
+    if (!append_format(buffer, "        XrAotOutcome call_%u = xr_aot_fn_%u(xr_ctx", instruction_id,
                        callee_id))
         return false;
-    if (instruction->operand_count == 0u) {
-        if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
-            if (!append_format(buffer, "&v%u)", instruction->result_id))
-                return false;
-        } else if (!append_text(buffer, ")"))
-            return false;
-    } else {
-        for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
-            if (!append_format(buffer, "%sv%u", operand ? ", " : "",
-                               instruction->operands[operand]))
-                return false;
-        }
-        if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
-            if (!append_format(buffer, ", &v%u)", instruction->result_id))
-                return false;
-        } else if (!append_text(buffer, ")"))
+    for (uint32_t operand = 0; operand < instruction->operand_count; ++operand) {
+        if (!append_format(buffer, ", v%u", instruction->operands[operand]))
             return false;
     }
+    if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE &&
+        !append_format(buffer, ", &v%u", instruction->result_id))
+        return false;
+    if (!append_text(buffer, ")"))
+        return false;
     if (!append_text(buffer, ";\n") ||
         !append_format(buffer, "        if (call_%u.kind != 0) return call_%u;\n", instruction_id,
                        instruction_id))
@@ -501,27 +538,22 @@ static bool emit_invoke(CBuffer *buffer, const XrBackendIR *ir, const XrBackendF
     if (has_panic &&
         !append_format(buffer, "        uint32_t invoke_panic_%u = 0;\n", instruction_id))
         return false;
-    if (!append_format(buffer, "        XrAotOutcome call_%u = xr_aot_fn_%u(", instruction_id,
+    if (!append_format(buffer, "        XrAotOutcome call_%u = xr_aot_fn_%u(xr_ctx", instruction_id,
                        instruction->immediate.function_id))
         return false;
-    bool emitted = false;
     for (uint32_t parameter = 0; parameter < callee->parameter_count; ++parameter) {
-        if (!append_format(buffer, "%sv%u", emitted ? ", " : "", instruction->operands[parameter]))
+        if (!append_format(buffer, ", v%u", instruction->operands[parameter]))
             return false;
-        emitted = true;
     }
     if (callee->result_type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE) {
-        if (!append_format(buffer, "%s&v%u", emitted ? ", " : "", normal->argument_ids[0]))
+        if (!append_format(buffer, ", &v%u", normal->argument_ids[0]))
             return false;
-        emitted = true;
     }
     if (has_error) {
-        if (!append_format(buffer, "%s&invoke_error_%u", emitted ? ", " : "", instruction_id))
+        if (!append_format(buffer, ", &invoke_error_%u", instruction_id))
             return false;
-        emitted = true;
     }
-    if (has_panic &&
-        !append_format(buffer, "%s&invoke_panic_%u", emitted ? ", " : "", instruction_id))
+    if (has_panic && !append_format(buffer, ", &invoke_panic_%u", instruction_id))
         return false;
     if (!append_text(buffer, ");\n"))
         return false;
@@ -718,6 +750,60 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                 instruction->result_id, instruction->operands[0],
                 instruction->immediate.variant_field.variant_ordinal,
                 instruction->immediate.variant_field.field_ordinal);
+        case XR_CORE_OP_CORE_EXISTENTIAL_PACK: {
+            uint16_t concrete_type = function->value_types[instruction->operands[0]];
+            const XrValidatedType *existential =
+                xr_validated_program_type(ir->program, instruction->result_type_id);
+            uint32_t conformance = 0u;
+            if (!existential || existential->kind != XR_CORE_IR_TYPE_EXISTENTIAL ||
+                !conformance_id(ir->program, concrete_type, existential->interface_id,
+                                &conformance))
+                return false;
+            if (function->value_categories[instruction->operands[0]] == XR_CORE_IR_PLACE)
+                return append_format(
+                    buffer,
+                    "        v%u = (XrAotType%u){.concrete_type_id = UINT16_C(%u), "
+                    ".conformance_id = UINT32_C(%u), .data = (void *)v%u};\n",
+                    instruction->result_id, instruction->result_type_id, concrete_type, conformance,
+                    instruction->operands[0]);
+            char storage[32];
+            const char *name = type_c_name(concrete_type, storage);
+            if (!name ||
+                !append_format(buffer,
+                               "        %s *existential_payload_%u = "
+                               "(%s *)xr_aot_alloc(xr_ctx, sizeof(%s));\n",
+                               name, instruction->result_id, name, name) ||
+                !append_format(buffer,
+                               "        if (!existential_payload_%u) return "
+                               "xr_aot_make(4, 0, 0);\n",
+                               instruction->result_id) ||
+                !append_format(buffer, "        *existential_payload_%u = v%u;\n",
+                               instruction->result_id, instruction->operands[0]))
+                return false;
+            return append_format(buffer,
+                                 "        v%u = (XrAotType%u){.concrete_type_id = UINT16_C(%u), "
+                                 ".conformance_id = UINT32_C(%u), "
+                                 ".data = (void *)existential_payload_%u};\n",
+                                 instruction->result_id, instruction->result_type_id, concrete_type,
+                                 conformance, instruction->result_id);
+        }
+        case XR_CORE_OP_CORE_EXISTENTIAL_TEST:
+            return append_format(buffer,
+                                 "        v%u = (uint8_t)(v%u.concrete_type_id == "
+                                 "UINT16_C(%u));\n",
+                                 instruction->result_id, instruction->operands[0],
+                                 instruction->immediate.type_id);
+        case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT: {
+            char storage[32];
+            const char *name = type_c_name(instruction->immediate.type_id, storage);
+            if (!name)
+                return false;
+            if (instruction->result_category == XR_CORE_IR_PLACE)
+                return append_format(buffer, "        v%u = (%s *)v%u.data;\n",
+                                     instruction->result_id, name, instruction->operands[0]);
+            return append_format(buffer, "        v%u = *(const %s *)v%u.data;\n",
+                                 instruction->result_id, name, instruction->operands[0]);
+        }
         default:
             return false;
     }
@@ -726,6 +812,8 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
 static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t function_id) {
     const XrBackendFunction *function = &ir->functions[function_id];
     if (!emit_function_signature(buffer, function, ir, function_id, false))
+        return false;
+    if (!append_text(buffer, "    (void)xr_ctx;\n"))
         return false;
     for (uint32_t parameter = 0; parameter < function->parameter_count; ++parameter) {
         if (!append_format(buffer, "    (void)p%u;\n", parameter))
@@ -779,11 +867,14 @@ static bool emit_function(CBuffer *buffer, const XrBackendIR *ir, uint32_t funct
 
 static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     const XrBackendFunction *entry = &ir->functions[ir->entry_function];
+    bool checked = false;
+    bool wrapping = false;
+    bool arena = false;
+    scan_helpers(ir, &checked, &wrapping, &arena);
     if (entry->parameter_count != 0u)
         return false;
-    if (!append_text(buffer, "int main(void) {\n"))
+    if (!append_text(buffer, "int main(void) {\n    XrAotContext xr_ctx = {0};\n"))
         return false;
-    bool emitted_argument = false;
     if (entry->error_type_id != XR_CORE_TYPE_VOID) {
         char storage[32];
         const char *type = type_c_name(entry->error_type_id, storage);
@@ -795,36 +886,50 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
     if (entry->panic_type_id != XR_CORE_TYPE_VOID &&
         !append_text(buffer, "    uint32_t entry_panic = 0;\n"))
         return false;
-    if (!append_format(buffer, "    XrAotOutcome result = xr_aot_fn_%u(", ir->entry_function))
+    if (!append_format(buffer, "    XrAotOutcome result = xr_aot_fn_%u(&xr_ctx",
+                       ir->entry_function))
         return false;
     if (entry->error_type_id != XR_CORE_TYPE_VOID) {
-        if (!append_text(buffer, "&entry_error"))
+        if (!append_text(buffer, ", &entry_error"))
             return false;
-        emitted_argument = true;
     }
-    if (entry->panic_type_id != XR_CORE_TYPE_VOID &&
-        !append_format(buffer, "%s&entry_panic", emitted_argument ? ", " : ""))
+    if (entry->panic_type_id != XR_CORE_TYPE_VOID && !append_text(buffer, ", &entry_panic"))
         return false;
     if (!append_text(buffer, ");\n"))
         return false;
-    if (!append_text(buffer, "    if (result.kind != 0) return "
-                             "(int)(200u + result.kind * 10u + result.trap);\n"))
+    if (!append_text(buffer, "    int exit_code = (int)(200u + result.kind * 10u + result.trap);\n"
+                             "    if (result.kind == 0) {\n"))
         return false;
     switch (entry->result_type_id) {
         case XR_CORE_TYPE_VOID:
-            return append_text(buffer, "    return 0;\n}\n");
+            if (!append_text(buffer, "        exit_code = 0;\n"))
+                return false;
+            break;
         case XR_CORE_TYPE_BOOL:
-            return append_text(buffer, "    return result.boolean ? 1 : 0;\n}\n");
+            if (!append_text(buffer, "        exit_code = result.boolean ? 1 : 0;\n"))
+                return false;
+            break;
         case XR_CORE_TYPE_I64:
-            return append_text(buffer,
-                               "    return (int)((uint64_t)result.i64 & UINT64_C(255));\n}\n");
+            if (!append_text(buffer,
+                             "        exit_code = (int)((uint64_t)result.i64 & UINT64_C(255));\n"))
+                return false;
+            break;
         case XR_CORE_TYPE_U32:
-            return append_text(buffer, "    return (int)(result.u32 & UINT32_C(255));\n}\n");
+            if (!append_text(buffer, "        exit_code = (int)(result.u32 & UINT32_C(255));\n"))
+                return false;
+            break;
         case XR_CORE_TYPE_ERROR:
-            return append_text(buffer, "    return (int)(result.error & UINT32_C(255));\n}\n");
+            if (!append_text(buffer, "        exit_code = (int)(result.error & UINT32_C(255));\n"))
+                return false;
+            break;
         default:
             return false;
     }
+    if (!append_text(buffer, "    }\n"))
+        return false;
+    if (arena && !append_text(buffer, "    xr_aot_context_destroy(&xr_ctx);\n"))
+        return false;
+    return append_text(buffer, "    return exit_code;\n}\n");
 }
 
 XrBackendStatus xr_backend_ir_emit_c(const XrBackendIR *ir, bool standalone_main,

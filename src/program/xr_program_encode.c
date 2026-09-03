@@ -754,6 +754,9 @@ static void encode_instruction(ByteBuffer *buffer, const XrCoreIrInstruction *in
             buffer_put_uvar(buffer, instruction->immediate.variant_field.variant_ordinal);
             buffer_put_uvar(buffer, instruction->immediate.variant_field.field_ordinal);
             break;
+        case XR_CORE_IR_IMMEDIATE_TYPE:
+            buffer_put_uvar(buffer, instruction->immediate.type_id);
+            break;
         default:
             buffer->status = XR_PROGRAM_BUILD_INVALID_INPUT;
             return;

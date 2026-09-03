@@ -236,7 +236,15 @@ static bool decode_types(Reader *artifact, const XrProgramSectionView *view,
                 signature_reference_count = shape_head + 1u;
         } else {
             uint64_t use_kind = take_uvar(&section);
-            if (use_kind > XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE)
+            bool trivial = use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_READ;
+            bool affine = use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_REF ||
+                          use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_MOVE ||
+                          use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_OWNED_STORAGE;
+            if ((!trivial && !affine) ||
+                (trivial && (ownership != XR_CORE_IR_TYPE_OWNERSHIP_TRIVIAL ||
+                             copy_contract != XR_CORE_IR_COPY_TRIVIAL)) ||
+                (affine && (ownership != XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ||
+                            copy_contract != XR_CORE_IR_COPY_FORBIDDEN)))
                 section.status = XR_PROGRAM_DECODE_NONCANONICAL;
             if (shape_head == UINT64_MAX)
                 section.status = XR_PROGRAM_DECODE_RESOURCE_LIMIT;
@@ -574,7 +582,7 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                 for (uint64_t operand = 0; operand < operand_count; ++operand)
                     (void) take_uvar(&section);
                 uint64_t immediate_kind = take_uvar(&section);
-                if (immediate_kind > XR_CORE_IR_IMMEDIATE_VARIANT_FIELD) {
+                if (immediate_kind > XR_CORE_IR_IMMEDIATE_TYPE) {
                     section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                     break;
                 }
@@ -584,7 +592,9 @@ static bool decode_code(Reader *artifact, const XrProgramSectionView *view, uint
                         (immediate_kind == XR_CORE_IR_IMMEDIATE_CONSTANT &&
                          immediate >= constant_count) ||
                         (immediate_kind == XR_CORE_IR_IMMEDIATE_FUNCTION &&
-                         immediate >= function_count))
+                         immediate >= function_count) ||
+                        (immediate_kind == XR_CORE_IR_IMMEDIATE_TYPE &&
+                         !encoded_type_id_is_valid(immediate, dynamic_type_count)))
                         section.status = XR_PROGRAM_DECODE_NONCANONICAL;
                     if (immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD) {
                         uint64_t field = take_uvar(&section);

@@ -1,7 +1,7 @@
 {
   "schema": "xray-program-format-coverage/1",
   "format": "1.0",
-  "schema_sha256": "3d12074d8652a7ad543fafaf10e55fb2f55da7d83e0b060c1d2da516c12b669a",
+  "schema_sha256": "9fc00eefd0be644132695f4623ce7acec87531e4d2c51d759aa71104ecd7a53e",
   "product_status": "OFF_PRODUCT_UNTIL_TASK_302",
   "structural_decoder": "COMPLETE",
   "semantic_admission": "COMPLETE_TASK_297",

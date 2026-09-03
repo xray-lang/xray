@@ -77,6 +77,9 @@ VALUE_SYSTEM_KEYS = {
     "signature_table",
     "interface_table",
     "conformance_table",
+    "operation_type_immediate_contract",
+    "existential_operation_contract",
+    "existential_ref_escape_contract",
 }
 SOURCE_PROJECTION_KEYS = {
     "schema",
@@ -212,7 +215,7 @@ def validate(schema: dict[str, Any]) -> None:
         "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
         "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
         "callable_shape": "one canonical SignatureId",
-        "existential_shape": "ordered-(InterfaceId,InterfaceUseKind)",
+        "existential_shape": "ordered-(InterfaceId,InterfaceUseKind); READ is trivial-copy snapshot, REF/MOVE/OWNED_STORAGE are affine and copy-forbidden, CONSTRAINT_BOUND is non-runtime",
         "nominal_kind": "aggregate/variant rows carry NONE/CLASS/STRUCT/ENUM; conformance implementor kind must match",
         "recursive_value_shape": "reject",
         "physical_layout": "forbidden",
@@ -235,6 +238,9 @@ def validate(schema: dict[str, Any]) -> None:
         "signature_table": "content-addressed canonical rows shared by functions, callable types and interface slots",
         "interface_table": "semantic-key order; each row contains an ordered object-safe SignatureId slot list",
         "conformance_table": "semantic-key order; exact nominal implementor kind, InterfaceId and slot-to-FunctionId map",
+        "operation_type_immediate_contract": "canonical program TypeId; used only by operations whose law names an exact semantic type and never carries layout or backend representation",
+        "existential_operation_contract": "pack derives the unique exact conformance from concrete TypeId plus existential InterfaceId; test compares exact nominal TypeId; project requires a dominating successful exact test on every predecessor path",
+        "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload",
     }, "value-system semantic policy drifted")
 
     sections = schema["sections"]
@@ -549,6 +555,9 @@ def generate_spec(schema: dict[str, Any], digest: str) -> str:
         f"- Signature table: `{value_system['signature_table']}`",
         f"- Interface table: `{value_system['interface_table']}`",
         f"- Conformance table: `{value_system['conformance_table']}`",
+        f"- Operation TypeId immediate: `{value_system['operation_type_immediate_contract']}`",
+        f"- Existential operations: `{value_system['existential_operation_contract']}`",
+        f"- Existential REF escape: `{value_system['existential_ref_escape_contract']}`",
         "",
         "A `place` is a verifier-confined SSA capability with a pointee `TypeId`; it is not a language type and never enters the type table. `REF` entry arguments and call operands are places, while `READ` and `MOVE` use values. An `owner` disposition is an exactly-once logical token; physical retain/release and storage remain executor-private.",
     ])

@@ -1064,6 +1064,110 @@
       }
     },
     {
+      "id": "existential-pack-valid-read",
+      "operation": "core.existential.pack",
+      "kind": "contract",
+      "actual": {
+        "concrete_type": "Rect",
+        "concrete_nominal": true,
+        "conformance_interface": "Shape",
+        "existential_interface": "Shape",
+        "interface_use": "read",
+        "operand_category": "value",
+        "operand_ownership": "non-owner",
+        "result_category": "value",
+        "result_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "existential-pack-conformance-mismatch",
+      "operation": "core.existential.pack",
+      "kind": "contract",
+      "actual": {
+        "concrete_type": "Rect",
+        "concrete_nominal": true,
+        "conformance_interface": "Drawable",
+        "existential_interface": "Shape",
+        "interface_use": "read",
+        "operand_category": "value",
+        "operand_ownership": "non-owner",
+        "result_category": "value",
+        "result_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "existential-test-valid",
+      "operation": "core.existential.test",
+      "kind": "contract",
+      "actual": {
+        "operand_interface": "Shape",
+        "requested_type": "Rect",
+        "requested_nominal": true,
+        "conformance_interface": "Shape",
+        "result_type": "bool"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "existential-test-nonconforming-type",
+      "operation": "core.existential.test",
+      "kind": "contract",
+      "actual": {
+        "operand_interface": "Shape",
+        "requested_type": "String",
+        "requested_nominal": true,
+        "conformance_interface": "Drawable",
+        "result_type": "bool"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "existential-project-valid-dominated",
+      "operation": "core.existential.project",
+      "kind": "contract",
+      "actual": {
+        "operand_interface": "Shape",
+        "requested_type": "Rect",
+        "conformance_interface": "Shape",
+        "dominating_exact_test": true,
+        "interface_use": "read",
+        "result_type": "Rect",
+        "result_category": "value",
+        "result_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "existential-project-undominated",
+      "operation": "core.existential.project",
+      "kind": "contract",
+      "actual": {
+        "operand_interface": "Shape",
+        "requested_type": "Rect",
+        "conformance_interface": "Shape",
+        "dominating_exact_test": false,
+        "interface_use": "read",
+        "result_type": "Rect",
+        "result_category": "value",
+        "result_ownership": "non-owner"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
       "id": "owner-copy-valid",
       "operation": "core.owner.copy",
       "kind": "contract",

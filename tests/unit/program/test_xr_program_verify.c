@@ -6,6 +6,7 @@
 #include "program/xr_program.h"
 #include "program/xr_program_verify.h"
 #include "program/xr_reference_evaluator.h"
+#include "xr_program_existential_fixture.h"
 #include "xr_program_invoke_fixture.h"
 #include "xr_program_panic_fixture.h"
 
@@ -16,6 +17,9 @@
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 
 static int failures = 0;
 
@@ -2642,6 +2646,146 @@ static void test_callable_interface_conformance_tables(void) {
     xr_program_artifact_free(&first);
 }
 
+typedef struct ExistentialTypeOffsets {
+    size_t read_ownership;
+    size_t read_copy_contract;
+    size_t read_use_kind;
+    size_t aggregate_field;
+    uint16_t ref_type_id;
+} ExistentialTypeOffsets;
+
+static bool find_existential_type_offsets(const XrProgramArtifact *artifact,
+                                          ExistentialTypeOffsets *offsets) {
+    memset(offsets, 0, sizeof(*offsets));
+    offsets->read_ownership = SIZE_MAX;
+    offsets->read_copy_contract = SIZE_MAX;
+    offsets->read_use_kind = SIZE_MAX;
+    offsets->aggregate_field = SIZE_MAX;
+    XrProgramView view;
+    if (xr_program_decode_structure(artifact->bytes, artifact->size, NULL, &view, NULL, 0u) !=
+        XR_PROGRAM_DECODE_OK)
+        return false;
+    size_t cursor = (size_t) view.sections[XR_PROGRAM_SECTION_TYPES - 1u].offset;
+    uint64_t total_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint32_t builtin = 0u; builtin < 6u; ++builtin)
+        for (uint32_t field = 0u; field < 4u; ++field)
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+    for (uint64_t index = 6u; index < total_count; ++index) {
+        uint64_t type_id = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        uint64_t kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        size_t ownership = cursor;
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        size_t copy_contract = cursor;
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (cursor > artifact->size || XR_CORE_IR_KEY_SIZE > artifact->size - cursor)
+            return false;
+        cursor += XR_CORE_IR_KEY_SIZE;
+        (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        if (kind == XR_PROGRAM_TYPE_KIND_AGGREGATE) {
+            uint64_t field_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t field = 0u; field < field_count; ++field) {
+                if (offsets->aggregate_field == SIZE_MAX)
+                    offsets->aggregate_field = cursor;
+                (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            }
+        } else if (kind == XR_PROGRAM_TYPE_KIND_VARIANT) {
+            uint64_t variant_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            for (uint64_t variant = 0u; variant < variant_count; ++variant) {
+                uint64_t field_count = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+                for (uint64_t field = 0u; field < field_count; ++field)
+                    (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            }
+        } else if (kind == XR_PROGRAM_TYPE_KIND_VIEW) {
+            (void) test_take_uvar(artifact->bytes, artifact->size, &cursor);
+        } else if (kind == XR_PROGRAM_TYPE_KIND_EXISTENTIAL) {
+            size_t use_kind_offset = cursor;
+            uint64_t use_kind = test_take_uvar(artifact->bytes, artifact->size, &cursor);
+            if (use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_READ) {
+                offsets->read_ownership = ownership;
+                offsets->read_copy_contract = copy_contract;
+                offsets->read_use_kind = use_kind_offset;
+            } else if (use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_REF && type_id <= UINT16_MAX) {
+                offsets->ref_type_id = (uint16_t) type_id;
+            }
+        }
+    }
+    return offsets->read_ownership != SIZE_MAX && offsets->read_copy_contract != SIZE_MAX &&
+           offsets->read_use_kind != SIZE_MAX && offsets->aggregate_field != SIZE_MAX &&
+           offsets->ref_type_id != 0u;
+}
+
+static void test_existential_ref_non_escape_admission(const XrProgramArtifact *artifact) {
+    ExistentialTypeOffsets offsets;
+    bool found = find_existential_type_offsets(artifact, &offsets);
+    CHECK(found);
+    if (!found)
+        return;
+    uint8_t *bytes = malloc(artifact->size);
+    CHECK(bytes != NULL);
+    if (!bytes)
+        return;
+    XrProgramArtifact mutated = {.bytes = bytes, .size = artifact->size};
+
+    memcpy(bytes, artifact->bytes, artifact->size);
+    bytes[offsets.read_ownership] = XR_CORE_IR_TYPE_OWNERSHIP_AFFINE;
+    bytes[offsets.read_copy_contract] = XR_CORE_IR_COPY_FORBIDDEN;
+    bytes[offsets.read_use_kind] = XR_CORE_IR_INTERFACE_EXISTENTIAL_REF;
+    expect_semantic_reject(&mutated, XR_PROGRAM_DIAGNOSTIC_FUNCTION);
+
+    CHECK(offsets.ref_type_id < UINT8_C(0x80));
+    if (offsets.ref_type_id >= UINT8_C(0x80)) {
+        free(bytes);
+        return;
+    }
+    memcpy(bytes, artifact->bytes, artifact->size);
+    bytes[offsets.aggregate_field] = (uint8_t) offsets.ref_type_id;
+    expect_semantic_reject(&mutated, XR_PROGRAM_DIAGNOSTIC_TYPE);
+    free(bytes);
+}
+
+static void test_existential_pack_test_project(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    CHECK(xr_program_existential_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+          XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = validate_ok(&artifact);
+    XrReferenceProfile profile = {.pointer_width = 64u};
+    XrReferenceOutcome result = xr_reference_evaluate(
+        program, xr_validated_program_entry_function(program), NULL, 0u, &profile, NULL);
+    CHECK(result.kind == XR_REFERENCE_OUTCOME_RETURN);
+    CHECK(result.value.kind == XR_REFERENCE_VALUE_I64);
+    CHECK(result.value.as.i64 == 42);
+    test_existential_ref_non_escape_admission(&artifact);
+    xr_validated_program_free(program);
+    xr_program_artifact_free(&artifact);
+
+    const XrProgramExistentialFixtureMutation rejected[] = {
+        XR_EXISTENTIAL_FIXTURE_UNDOMINATED_PROJECT,
+        XR_EXISTENTIAL_FIXTURE_FALSE_EDGE_PROJECT,
+        XR_EXISTENTIAL_FIXTURE_NO_CONFORMANCE,
+    };
+    for (size_t index = 0; index < sizeof(rejected) / sizeof(rejected[0]); ++index) {
+        memset(&artifact, 0, sizeof(artifact));
+        CHECK(xr_program_existential_fixture_write_mutated(rejected[index], &artifact, diagnostic,
+                                                           sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_OK);
+        expect_semantic_reject(&artifact, XR_PROGRAM_DIAGNOSTIC_OPERATION_TYPE);
+        xr_program_artifact_free(&artifact);
+    }
+
+    const XrProgramExistentialFixtureMutation escaped_refs[] = {
+        XR_EXISTENTIAL_FIXTURE_REF_RESULT_ESCAPE,
+        XR_EXISTENTIAL_FIXTURE_REF_FIELD_ESCAPE,
+    };
+    for (size_t index = 0; index < sizeof(escaped_refs) / sizeof(escaped_refs[0]); ++index) {
+        memset(&artifact, 0, sizeof(artifact));
+        CHECK(xr_program_existential_fixture_write_mutated(escaped_refs[index], &artifact,
+                                                           diagnostic, sizeof(diagnostic)) ==
+              XR_PROGRAM_BUILD_INVALID_INPUT);
+        xr_program_artifact_free(&artifact);
+    }
+}
+
 int main(void) {
     test_aggregate_variant_operations();
     test_dynamic_type_graph_rejection();
@@ -2659,6 +2803,7 @@ int main(void) {
     test_typed_random_and_linear_work();
     test_immutable_view_root_tables();
     test_callable_interface_conformance_tables();
+    test_existential_pack_test_project();
     if (failures != 0) {
         fprintf(stderr, "XrProgram verifier tests failed: %d\n", failures);
         return 1;

@@ -15,7 +15,7 @@
     "borrow_origin_set": "COMPLETE",
     "borrow_root_tables": "COMPLETE",
     "program_tables": "COMPLETE",
-    "existential_operations": "PENDING",
+    "existential_operations": "IN_PROGRESS_EXECUTOR_SLICE",
     "witness_dispatch": "PENDING",
     "callable_dispatch": "PENDING",
     "source_integration": "PENDING",
@@ -134,6 +134,17 @@
     "canonicality": "input type, interface and conformance order cannot change bytes or ProgramId; signature rows are sorted and deduplicated by complete semantic content",
     "independent_verification": "writer validation and artifact semantic verification independently reject a wrong slot target or malformed table",
     "compatibility": "no duplicate function-owned wire signatures, class-only table, selector/name lookup, old reader or dual schema"
+  },
+  "existential_operation_contract": {
+    "type_immediate": "canonical program TypeId only; no target layout, VM tag or C representation",
+    "pack_conformance": "derive exactly one conformance from the concrete operand TypeId and result existential InterfaceId",
+    "test_identity": "compare the carrier's exact nominal TypeId with the TypeId immediate",
+    "project_guard": "a successful exact existential.test must dominate project on every predecessor path; joins intersect facts",
+    "ownership": "READ carriers are trivial-copy logical snapshots; REF carriers preserve one typed place and are affine/copy-forbidden borrow tokens; MOVE/OWNED_STORAGE carriers are affine and copy-forbidden; CONSTRAINT_BOUND is not a runtime existential",
+    "ref_escape": "REF existential is a call-chain-local affine borrow token; parameters and local control flow may carry it, but function results, error types, aggregate fields and variant payloads must reject it",
+    "carrier": "reference evaluator and VM use execution-lifetime arenas; AOT threads a backend-private execution context and arena-boxes READ/MOVE/OWNED payload snapshots while REF preserves a typed place pointer; no carrier layout is serialized or exposed through BoundaryABI",
+    "source_status": "pending class, struct, enum, import and dynamic-target producer integration",
+    "compatibility": "no old reader, erased-object fallback, selector lookup, backend semantic inference or dual operation spelling"
   },
   "old_owner_inventory": [
     {

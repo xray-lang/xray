@@ -41,6 +41,9 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_VARIANT_CONSTRUCT:
         case XR_CORE_OP_CORE_VARIANT_TEST:
         case XR_CORE_OP_CORE_VARIANT_PROJECT:
+        case XR_CORE_OP_CORE_EXISTENTIAL_PACK:
+        case XR_CORE_OP_CORE_EXISTENTIAL_TEST:
+        case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT:
         case XR_CORE_OP_CORE_OWNER_COPY:
         case XR_CORE_OP_CORE_OWNER_MOVE:
         case XR_CORE_OP_CORE_OWNER_DROP:
@@ -374,6 +377,9 @@ static void hash_immediate(XrSHA256Context *context, const XrBackendInstruction 
         case XR_CORE_IR_IMMEDIATE_VARIANT_FIELD:
             hash_u32(context, instruction->immediate.variant_field.variant_ordinal);
             hash_u32(context, instruction->immediate.variant_field.field_ordinal);
+            return;
+        case XR_CORE_IR_IMMEDIATE_TYPE:
+            hash_u16(context, instruction->immediate.type_id);
             return;
     }
 }

@@ -93,6 +93,7 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_PANIC_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
+        case XR_CORE_OP_CORE_EXISTENTIAL_PACK:
         case XR_CORE_OP_CORE_OWNER_COPY:
         case XR_CORE_OP_CORE_OWNER_MOVE:
         case XR_CORE_OP_CORE_OWNER_DROP:
@@ -115,6 +116,10 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT;
         case XR_CORE_OP_CORE_VARIANT_PROJECT:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_VARIANT_FIELD;
+        case XR_CORE_OP_CORE_EXISTENTIAL_TEST:
+        case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_TYPE &&
+                   instruction->immediate.type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE;
         default:
             return false;
     }
@@ -278,6 +283,8 @@ static bool immediate_equal(const XrValidatedInstruction *source,
                        lowered->immediate.variant_field.variant_ordinal &&
                    source->immediate.variant_field.field_ordinal ==
                        lowered->immediate.variant_field.field_ordinal;
+        case XR_CORE_IR_IMMEDIATE_TYPE:
+            return source->immediate.type_id == lowered->immediate.type_id;
     }
     return false;
 }

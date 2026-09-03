@@ -16,7 +16,7 @@
     "schema": "xisa/core/schema.json",
     "normative_kats": "xisa/core/kats.json",
     "generated_coverage": "contracts/canonical-program/core-spec-coverage.json",
-    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke and typed error publication are COMPLETE_W7_WAVE3_SLICE4; trap and profile query remain frozen for their owning waves."
+    "note": "Operation rows advance only by complete W7 vertical slices. Twelve scalar/control/sealed-call rows are COMPLETE_W7_WAVE1; aggregate construct/project/update and all three named record-variant operations are COMPLETE_W7_WAVE2; owner move/drop and local place load/store are COMPLETE_W7_WAVE3_SLICE2; explicit copy and the monotone ownership-domain proof are COMPLETE_W7_WAVE3_SLICE3; sealed invoke plus typed error and panic publication are complete; existential pack/test/project have complete executor slices but remain IN_PROGRESS until source integration and old-owner deletion; trap and profile query remain frozen for their owning waves."
   },
   "program_format_stage": {
     "status": "COMPLETE",
@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 28 registered operations have bounded verification and independent reference evaluation. Explicit owner copy, affine ownership-domain proof, sealed invoke, and typed error publication are active; panic, coroutine, import, and boundary surfaces fail closed until their owning slices activate them."
+    "note": "All 32 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; coroutine, import, callable/witness dispatch, and boundary surfaces remain fail closed until their owning slices activate them."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 28 registered operations execute in the independent typed VM and match the reference evaluator. Private fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 32 registered operations execute in the independent typed VM and match the reference evaluator. Private existential carriers and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 28 registered operations lower through an independently verified BackendIR into portable C11. The pure native fixture links no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 32 registered operations lower through an independently verified BackendIR into portable C11. Existential carriers remain backend-private, and the pure native fixture links no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -416,6 +416,66 @@
       ]
     },
     {
+      "id": "core.existential.pack",
+      "core_spec_contract": "form one existential value from one concrete nominal value and the unique exact conformance for the result InterfaceId",
+      "program_encoding": "concrete typed operand and existential result TypeId; conformance identity is derived from canonical conformance rows and no carrier layout is encoded",
+      "decoder_verifier_evaluator": "nominal implementor, runtime existential use kind, exact conformance, ownership transfer and bounded private-carrier construction checks",
+      "vm_implementation": "private carrier stores concrete TypeId, conformance identity and typed payload without exposing a public object layout",
+      "aot_lowering": "private portable-C11 execution arena boxes READ/MOVE/OWNED payload snapshots while REF preserves a typed place pointer, so internal-call returns remain valid without a shared object ABI",
+      "source_producer": "pending Wave 4 class, struct, enum, import and dynamic-target integration",
+      "old_owner_deletion": "pending removal of class-only itable/carrier and selector-driven existential construction from the product route",
+      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/schema.json",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/xr_program_existential_fixture.h"
+      ]
+    },
+    {
+      "id": "core.existential.test",
+      "core_spec_contract": "compare one existential carrier's exact nominal implementor TypeId with an explicit canonical TypeId",
+      "program_encoding": "existential operand, bool result and exact TypeId immediate with no target tag representation",
+      "decoder_verifier_evaluator": "runtime existential kind, nominal test target and independent exact-identity comparison",
+      "vm_implementation": "compare the private carrier concrete TypeId",
+      "aot_lowering": "compare the private C11 carrier concrete_type_id field",
+      "source_producer": "pending Wave 4 checked-cast and selective dynamic-target integration",
+      "old_owner_deletion": "pending removal of class-name, selector and backend-specific RTTI tests from the product route",
+      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/schema.json",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/xr_program_existential_fixture.h"
+      ]
+    },
+    {
+      "id": "core.existential.project",
+      "core_spec_contract": "recover one exact concrete value only where a successful exact nominal test dominates every incoming path",
+      "program_encoding": "existential operand, concrete result TypeId and matching exact TypeId immediate",
+      "decoder_verifier_evaluator": "must-dataflow intersects predecessor facts; only the true edge of the matching test grants projection and false/unguarded paths are rejected",
+      "vm_implementation": "read the typed payload from the private carrier after verifier-owned proof",
+      "aot_lowering": "cast and read the exact typed arena payload or place pointer after the same verifier-owned proof",
+      "source_producer": "pending Wave 4 cast-narrowing CFG integration",
+      "old_owner_deletion": "pending removal of unchecked downcasts and executor-owned dynamic type reasoning from the product route",
+      "status": "IN_PROGRESS_W7_WAVE4_EXECUTOR",
+      "evidence": [
+        "xisa/core/registry.json",
+        "xisa/program/schema.json",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/program/xr_program_existential_fixture.h"
+      ]
+    },
+    {
       "id": "core.owner.copy",
       "core_spec_contract": "borrow one VALUE and produce one independent logical value plus ownership domain exactly when the TypeId copy contract permits it",
       "program_encoding": "type rows carry TRIVIAL/AFFINE ownership and TRIVIAL/EXPLICIT/FORBIDDEN copy contracts; every SSA definition carries NON_OWNER/OWNER disposition",
@@ -574,11 +634,15 @@
       ],
       "planned_operations": [
         "existential.pack",
-        "existential.unpack",
-        "witness.lookup",
-        "dispatch"
+        "existential.test",
+        "existential.project",
+        "call.witness_direct",
+        "call.witness_invoke",
+        "callable.pack",
+        "call.indirect_direct",
+        "call.indirect_invoke"
       ],
-      "status": "PLANNED_AFTER_AGGREGATE_AND_CALL"
+      "status": "EXECUTOR_SLICE_IN_PROGRESS"
     },
     {
       "id": "ownership",

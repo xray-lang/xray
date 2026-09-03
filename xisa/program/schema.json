@@ -45,7 +45,7 @@
     "variant_shape": "declaration-ordered-variants-and-payload-type-ids",
     "view_shape": "ordered-(element-TypeId,capability); capability is 1:read or 2:write-exclusive",
     "callable_shape": "one canonical SignatureId",
-    "existential_shape": "ordered-(InterfaceId,InterfaceUseKind)",
+    "existential_shape": "ordered-(InterfaceId,InterfaceUseKind); READ is trivial-copy snapshot, REF/MOVE/OWNED_STORAGE are affine and copy-forbidden, CONSTRAINT_BOUND is non-runtime",
     "nominal_kind": "aggregate/variant rows carry NONE/CLASS/STRUCT/ENUM; conformance implementor kind must match",
     "recursive_value_shape": "reject",
     "physical_layout": "forbidden"
@@ -73,7 +73,10 @@
     "root_mapping": "callee PARAM/RECEIVER/STATIC origins map to caller value RootId sets and are sorted/deduplicated",
     "signature_table": "content-addressed canonical rows shared by functions, callable types and interface slots",
     "interface_table": "semantic-key order; each row contains an ordered object-safe SignatureId slot list",
-    "conformance_table": "semantic-key order; exact nominal implementor kind, InterfaceId and slot-to-FunctionId map"
+    "conformance_table": "semantic-key order; exact nominal implementor kind, InterfaceId and slot-to-FunctionId map",
+    "operation_type_immediate_contract": "canonical program TypeId; used only by operations whose law names an exact semantic type and never carries layout or backend representation",
+    "existential_operation_contract": "pack derives the unique exact conformance from concrete TypeId plus existential InterfaceId; test compares exact nominal TypeId; project requires a dominating successful exact test on every predecessor path",
+    "existential_ref_escape_contract": "REF existential is an affine borrow token accepted by parameters and local control flow; it is forbidden as a function result, error type, aggregate field or variant payload"
   },
   "sections": [
     {

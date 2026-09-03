@@ -18,6 +18,8 @@
 #include <limits.h>
 #include <string.h>
 
+typedef struct XrVmExistentialValue XrVmExistentialValue;
+
 typedef struct XrVmFixedInstruction {
     uint16_t operation_id;
     uint16_t result_type_id;
@@ -38,6 +40,7 @@ typedef struct XrVmFixedInstruction {
             uint32_t variant_ordinal;
             uint32_t field_ordinal;
         } variant_field;
+        uint16_t type_id;
     } immediate;
     const uint32_t *successors;
     uint32_t successor_count;
@@ -83,6 +86,7 @@ typedef struct XrVmInstructionView {
             uint32_t variant_ordinal;
             uint32_t field_ordinal;
         } variant_field;
+        uint16_t type_id;
     } immediate;
     const uint32_t *successors;
     uint32_t successor_count;
@@ -96,6 +100,9 @@ typedef struct XrVmContext {
     struct XrVmAggregateValue **aggregates;
     uint32_t aggregate_count;
     uint32_t aggregate_capacity;
+    XrVmExistentialValue **existentials;
+    uint32_t existential_count;
+    uint32_t existential_capacity;
 } XrVmContext;
 
 typedef struct XrVmAggregateValue {
@@ -117,6 +124,13 @@ typedef struct XrVmRuntimeValue {
         XrVmPlace *place;
     } as;
 } XrVmRuntimeValue;
+
+struct XrVmExistentialValue {
+    uint16_t existential_type_id;
+    uint16_t concrete_type_id;
+    uint32_t conformance_id;
+    XrVmRuntimeValue payload;
+};
 
 static XrVmOutcome vm_outcome(XrVmOutcomeKind kind, const XrVmContext *context) {
     XrVmOutcome outcome = {.kind = kind, .steps = context ? context->steps : 0u};
@@ -151,8 +165,13 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
             return value.kind == XR_VM_VALUE_PANIC_INFO;
         default: {
             const XrValidatedType *type = xr_validated_program_type(program, type_id);
-            return type &&
-                   (type->kind == XR_CORE_IR_TYPE_AGGREGATE ||
+            if (!type)
+                return false;
+            if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL)
+                return value.kind == XR_VM_VALUE_EXISTENTIAL && value.as.existential &&
+                       ((const XrVmExistentialValue *) value.as.existential)->existential_type_id ==
+                           type_id;
+            return (type->kind == XR_CORE_IR_TYPE_AGGREGATE ||
                     type->kind == XR_CORE_IR_TYPE_VARIANT) &&
                    value.kind == XR_VM_VALUE_AGGREGATE && value.as.aggregate &&
                    ((const XrVmAggregateValue *) value.as.aggregate)->type_id == type_id;
@@ -198,10 +217,51 @@ static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t typ
     return aggregate;
 }
 
+static XrVmExistentialValue *allocate_existential(XrVmContext *context) {
+    if (context->aggregate_cell_count == context->code->options.max_value_cells)
+        return NULL;
+    if (context->existential_count == context->existential_capacity) {
+        uint32_t capacity = context->existential_capacity ? context->existential_capacity * 2u : 8u;
+        if (capacity < context->existential_count)
+            return NULL;
+#if SIZE_MAX < UINT64_MAX
+        if ((size_t) capacity > SIZE_MAX / sizeof(*context->existentials))
+            return NULL;
+#endif
+        XrVmExistentialValue **grown =
+            xr_realloc(context->existentials, (size_t) capacity * sizeof(*context->existentials));
+        if (!grown)
+            return NULL;
+        context->existentials = grown;
+        context->existential_capacity = capacity;
+    }
+    XrVmExistentialValue *value = xr_calloc(1u, sizeof(*value));
+    if (!value)
+        return NULL;
+    context->existentials[context->existential_count++] = value;
+    ++context->aggregate_cell_count;
+    return value;
+}
+
+static uint32_t conformance_id(const XrValidatedProgram *program, uint16_t concrete_type_id,
+                               uint32_t interface_id) {
+    for (uint32_t index = 0; index < program->conformance_count; ++index)
+        if (program->conformances[index].implementor_type_id == concrete_type_id &&
+            program->conformances[index].interface_id == interface_id)
+            return index;
+    return XR_PROGRAM_LOCATION_NONE;
+}
+
 static bool clone_vm_value(XrVmContext *context, XrVmValue source, uint16_t type_id,
                            XrVmValue *output) {
     const XrValidatedType *type = xr_validated_program_type(context->code->program, type_id);
     if (!type) {
+        *output = source;
+        return true;
+    }
+    if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL) {
+        if (source.kind != XR_VM_VALUE_EXISTENTIAL || !source.as.existential)
+            return false;
         *output = source;
         return true;
     }
@@ -241,6 +301,9 @@ static void free_aggregates(XrVmContext *context) {
         xr_free(context->aggregates[index]);
     }
     xr_free(context->aggregates);
+    for (uint32_t index = 0; index < context->existential_count; ++index)
+        xr_free(context->existentials[index]);
+    xr_free(context->existentials);
 }
 
 static int64_t i64_from_bits(uint64_t bits) {
@@ -715,6 +778,41 @@ static XrVmOutcome execute_function(XrVmContext *context, uint32_t function_id,
                         aggregate->fields[instruction.immediate.variant_field.field_ordinal];
                     break;
                 }
+                case XR_CORE_OP_CORE_EXISTENTIAL_PACK: {
+                    const XrValidatedType *existential = xr_validated_program_type(
+                        context->code->program, instruction.result_type_id);
+                    uint16_t concrete_type = function->value_types[instruction.operands[0]];
+                    XrVmExistentialValue *carrier = allocate_existential(context);
+                    uint32_t conformance =
+                        existential ? conformance_id(context->code->program, concrete_type,
+                                                     existential->interface_id)
+                                    : XR_PROGRAM_LOCATION_NONE;
+                    if (!carrier || conformance == XR_PROGRAM_LOCATION_NONE) {
+                        result = vm_outcome(XR_VM_OUTCOME_RESOURCE_LIMIT, context);
+                        goto done;
+                    }
+                    carrier->existential_type_id = instruction.result_type_id;
+                    carrier->concrete_type_id = concrete_type;
+                    carrier->conformance_id = conformance;
+                    carrier->payload = values[instruction.operands[0]];
+                    produced.as.value.kind = XR_VM_VALUE_EXISTENTIAL;
+                    produced.as.value.as.existential = carrier;
+                    break;
+                }
+                case XR_CORE_OP_CORE_EXISTENTIAL_TEST: {
+                    const XrVmExistentialValue *carrier =
+                        values[instruction.operands[0]].as.value.as.existential;
+                    produced.as.value.kind = XR_VM_VALUE_BOOL;
+                    produced.as.value.as.boolean =
+                        carrier->concrete_type_id == instruction.immediate.type_id;
+                    break;
+                }
+                case XR_CORE_OP_CORE_EXISTENTIAL_PROJECT: {
+                    const XrVmExistentialValue *carrier =
+                        values[instruction.operands[0]].as.value.as.existential;
+                    produced = carrier->payload;
+                    break;
+                }
                 default:
                     goto done;
             }
@@ -952,9 +1050,12 @@ XrVmOutcome xr_vm_code_execute(const XrVmCode *code, XrInstance *instance, uint3
     XrVmOutcome outcome =
         execute_function(&context, function_id, runtime_arguments, argument_count, 1u);
     xr_free(runtime_arguments);
-    if (outcome.kind == XR_VM_OUTCOME_RETURN && outcome.value.kind == XR_VM_VALUE_AGGREGATE)
+    if (outcome.kind == XR_VM_OUTCOME_RETURN && (outcome.value.kind == XR_VM_VALUE_AGGREGATE ||
+                                                 outcome.value.kind == XR_VM_VALUE_EXISTENTIAL))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
-    if (outcome.kind == XR_VM_OUTCOME_ERROR && outcome.error_value.kind == XR_VM_VALUE_AGGREGATE)
+    if (outcome.kind == XR_VM_OUTCOME_ERROR &&
+        (outcome.error_value.kind == XR_VM_VALUE_AGGREGATE ||
+         outcome.error_value.kind == XR_VM_VALUE_EXISTENTIAL))
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);
     if (outcome.kind == XR_VM_OUTCOME_PANIC && outcome.panic_value.kind != XR_VM_VALUE_PANIC_INFO)
         outcome = vm_outcome(XR_VM_OUTCOME_INVALID_INVOCATION, &context);

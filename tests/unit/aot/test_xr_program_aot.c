@@ -12,6 +12,7 @@
 #include "program/xr_reference_evaluator.h"
 #include "vm/xr_program_vm.h"
 #include "../plan/target_profile_test_fixture.h"
+#include "../program/xr_program_existential_fixture.h"
 #include "../program/xr_program_invoke_fixture.h"
 #include "../program/xr_program_panic_fixture.h"
 
@@ -21,6 +22,9 @@
 
 _Static_assert(XR_CORE_OP_CORE_CALL_SEALED_INVOKE == 37, "sealed invoke stable id drifted");
 _Static_assert(XR_CORE_OP_CORE_PANIC_PUBLISH == 50, "panic publish stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PACK == 86, "existential pack stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_TEST == 87, "existential test stable id drifted");
+_Static_assert(XR_CORE_OP_CORE_EXISTENTIAL_PROJECT == 88, "existential project stable id drifted");
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -811,6 +815,19 @@ static XrValidatedProgram *build_binary_program(uint16_t operation_id, int64_t l
     return validate_functions(constants, sizeof(constants) / sizeof(constants[0]), &function, 1u);
 }
 
+static XrValidatedProgram *build_existential_program(void) {
+    XrProgramArtifact artifact = {0};
+    char diagnostic[256] = {0};
+    REQUIRE(xr_program_existential_fixture_write(&artifact, diagnostic, sizeof(diagnostic)) ==
+            XR_PROGRAM_BUILD_OK);
+    XrValidatedProgram *program = NULL;
+    XrProgramDiagnostic verify_diagnostic;
+    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program,
+                                &verify_diagnostic) == XR_PROGRAM_VERIFY_OK);
+    xr_program_artifact_free(&artifact);
+    return program;
+}
+
 static XrInstance *create_instance(XrValidatedProgram *program, XrTargetProfile *profile,
                                    const TestBindings *bindings, uint64_t generation) {
     XrExecutionBindingInput input = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
@@ -982,6 +999,30 @@ static void test_typed_panic_cleanup_lowering(void) {
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
     xr_program_artifact_free(&artifact);
+}
+
+static void test_existential_pack_test_project_lowering(void) {
+    XrValidatedProgram *program = build_existential_program();
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    TestBindings bindings;
+    build_bindings(profile, &bindings);
+    XrInstance *instance = create_instance(program, profile, &bindings, 79u);
+    XrBackendIR *ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    XrGeneratedC generated = {0};
+    XrBackendDiagnostic diagnostic;
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "concrete_type_id") != NULL);
+    REQUIRE(strstr(generated.bytes, "conformance_id") != NULL);
+    REQUIRE(strstr(generated.bytes, "xr_aot_alloc(xr_ctx") != NULL);
+    REQUIRE(strstr(generated.bytes, ".data = (void *)existential_payload_") != NULL);
+    REQUIRE(strstr(generated.bytes, ".concrete_type_id == UINT16_C(") != NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    retire_instance(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
 }
 
 static void test_reference_vm_aot_identity(XrValidatedProgram *program, XrInstance *instance) {
@@ -1170,6 +1211,8 @@ int main(int argc, char **argv) {
         program = build_binary_program(XR_CORE_OP_CORE_ADD_I64, INT64_MAX, 1, 1u);
     else if (argc == 3 && strcmp(argv[2], "division-zero") == 0)
         program = build_binary_program(XR_CORE_OP_CORE_DIV_I64, 42, 0, 0u);
+    else if (argc == 3 && strcmp(argv[2], "existential") == 0)
+        program = build_existential_program();
     else if (invoke_object_mode || panic_object_mode) {
         XrProgramArtifact artifact = {0};
         char diagnostic[256] = {0};
@@ -1201,6 +1244,7 @@ int main(int argc, char **argv) {
         test_affine_copy_lowering();
         test_sealed_invoke_typed_error_cleanup_lowering();
         test_typed_panic_cleanup_lowering();
+        test_existential_pack_test_project_lowering();
         test_foreign_profile_and_translation_mutation();
         puts("canonical XrProgram AOT tests passed");
     }
