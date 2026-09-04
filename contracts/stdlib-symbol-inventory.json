@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "base": "3fe561bf6b4a2987bf1bbc2f85682345ea997461",
+  "base": "e132b0c0f64a8264c14a41d0d63d3545dd2e1bcf",
   "counts": {
     "modules": 32,
     "production_modules": 30,
@@ -9024,7 +9024,7 @@
       "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "security_provider_leaf",
-      "leaf_reason": "abi=OpenSSL SSL_CTX_new(3), server certificate/private-key loading and optional peer trust-store loading; ownership=fresh; effect=nothrow; provider=OpenSSL context construction behind an immutable managed Xray resource; net.xr validates paths and chooses verification policy; deletion_trigger=never while OpenSSL owns TLS policy objects; this remains the resource factory for an audited security provider",
+      "leaf_reason": "abi=OpenSSL SSL_CTX_new(3), server certificate/private-key loading, optional peer trust-store loading and SSL_CTX_set_alpn_select_cb(3); ownership=fresh; effect=nothrow; provider=OpenSSL context construction behind an immutable managed Xray resource; net.xr validates paths, chooses verification policy and encodes the server-preference ALPN list, while the provider owns the wire bytes for the complete SSL_CTX lifetime; deletion_trigger=never while OpenSSL owns TLS policy objects; this remains the resource factory for an audited security provider",
       "plan_coverage": "native_binding",
       "vm_binding": "net_tls_server_context_new"
     },
@@ -9050,7 +9050,7 @@
       "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "security_provider_leaf",
-      "leaf_reason": "abi=OpenSSL SSL_new(3), SSL_accept(3), SSL_get_error(3), plus the scheduler netpoll wait ABI; ownership=none; effect=suspends; provider=the generic non-blocking NetConn TLS provider parameterized by an immutable TlsServerContext managed by Xray source; deletion_trigger=never while OpenSSL owns server TLS handshakes; it remains the audited security-provider boundary",
+      "leaf_reason": "abi=OpenSSL SSL_new(3), SSL_accept(3), SSL_select_next_proto(3), SSL_get_error(3), plus the scheduler netpoll wait ABI; ownership=none; effect=suspends; provider=the generic non-blocking NetConn TLS provider parameterized by an immutable TlsServerContext managed by Xray source; server ALPN selection follows the context's preference order; deletion_trigger=never while OpenSSL owns server TLS handshakes; it remains the audited security-provider boundary",
       "plan_coverage": "native_binding",
       "vm_binding": "net_tls_server_handshake_context_yieldable"
     },
@@ -9181,7 +9181,7 @@
       "semantic_source": "stdlib/defs/core.def",
       "native_leaf": true,
       "leaf_class": "security_provider_leaf",
-      "leaf_reason": "abi=OpenSSL SSL_CTX_free(3) through the native-body destroy hook; ownership=none; effect=nothrow; provider=an immutable private handle whose native body owns one OpenSSL SSL_CTX; source TlsClientContext and TlsServerContext values retain the handle without exposing provider state; deletion_trigger=when the language has a generic opaque-provider resource declaration that can bind a native destroy hook without a module-specific native class",
+      "leaf_reason": "abi=OpenSSL SSL_CTX_free(3) through the native-body destroy hook; ownership=none; effect=nothrow; provider=an immutable private handle whose native body owns one OpenSSL SSL_CTX; server ALPN preference storage is attached to the SSL_CTX lifetime, and source TlsClientContext and TlsServerContext values retain the handle without exposing provider state; deletion_trigger=when the language has a generic opaque-provider resource declaration that can bind a native destroy hook without a module-specific native class",
       "plan_coverage": "native_binding"
     },
     {
@@ -9215,6 +9215,15 @@
       "module": "net",
       "symbol": "DialOptions.DialOptions",
       "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "DialOptions.alpnProtocols",
+      "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/net/net.xr",
       "xray_body": true,
@@ -9502,15 +9511,6 @@
     {
       "module": "net",
       "symbol": "dialEndpoint",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "net",
-      "symbol": "dialTLS",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/net/net.xr",

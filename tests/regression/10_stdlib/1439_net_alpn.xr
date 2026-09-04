@@ -3,11 +3,31 @@
 // while the provider only applies the wire bytes and reports its selection.
 
 import net
-import { NetError, TlsClientContext } from net
+import { DialOptions, NetError, TlsClientContext, TlsServerContext } from net
 
 fn contextOutcome(protocols: Array<string>) -> NetError? {
     try {
         var context = TlsClientContext.create("", "", "", true, protocols)
+        return null
+    } catch (e: NetError) {
+        return e
+    }
+}
+
+fn dialOutcome(tls: bool, protocols: Array<string>) -> NetError? {
+    try {
+        var conn = net.dial("127.0.0.1", 443, DialOptions(1000, tls, protocols))
+        net.close(conn)
+        return null
+    } catch (e: NetError) {
+        return e
+    }
+}
+
+fn serverContextOutcome(protocols: Array<string>) -> NetError? {
+    try {
+        var context = TlsServerContext.create(
+            "missing-server-cert.pem", "missing-server-key.pem", "", false, protocols)
         return null
     } catch (e: NetError) {
         return e
@@ -34,6 +54,9 @@ fn test_alpn_protocol_length_boundaries() {
 
     var zero: Array<string> = [""]
     assertEqual(contextOutcome(zero), NetError.Invalid)
+    assertEqual(dialOutcome(true, zero), NetError.Invalid)
+    assertEqual(dialOutcome(false, ["h2"]), NetError.Invalid)
+    assertEqual(serverContextOutcome(zero), NetError.Invalid)
 
     var max: Array<string> = ["a".repeat(255)]
     var maxOutcome = contextOutcome(max)

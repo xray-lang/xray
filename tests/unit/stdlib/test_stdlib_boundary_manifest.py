@@ -278,6 +278,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         source = (ROOT / "stdlib/http2/http2.xr").read_text(encoding="utf-8")
         net_source = (ROOT / "stdlib/net/net.xr").read_text(encoding="utf-8")
         net_provider = (ROOT / "src/io/xnet_provider.c").read_text(encoding="utf-8")
+        tls_provider = (ROOT / "src/io/xtls_provider.c").read_text(encoding="utf-8")
         aot_net = (ROOT / "src/aot/xrt_net.h").read_text(encoding="utf-8")
         definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
         cache = (ROOT / "src/module/xstdlib_runtime_cache.h").read_text(encoding="utf-8")
@@ -285,8 +286,9 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         for owner in (
             'const H2_ALPN = "h2"',
             "const MAX_TRANSPORT_TIMEOUT_MS: i64 = 2147483647",
-            "net.dialTLS(host, port, timeoutMs, protocols)",
+            "net.dial(host, port, net.DialOptions(remaining, true, protocols))",
             "net.negotiatedProtocol(live) != H2_ALPN",
+            "net.setDeadline(live, deadline)",
             "net.writeBytes(conn, ex.outbox)",
             "net.readInto(conn, ref chunk, DEFAULT_MAX_FRAME_SIZE)",
             "net.close(conn)",
@@ -298,14 +300,17 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         for generic_net_owner in (
             "fn _encodeAlpnProtocols",
             "alpnProtocols: Array<string>? = null",
-            "export fn dialTLS",
             "export fn negotiatedProtocol(conn: NetConn) -> string?",
         ):
             self.assertIn(generic_net_owner, net_source)
+        self.assertNotIn("export fn dialTLS", net_source)
+        self.assertIn("SSL_CTX_set_alpn_select_cb", tls_provider)
+        self.assertIn("SSL_select_next_proto", tls_provider)
         self.assertIn("net_tls_negotiated_protocol", net_provider)
         self.assertIn("wire->length > UINT16_MAX", net_provider)
         self.assertIn("buf->length = (int32_t) n;", net_provider)
-        self.assertIn("ex.buf.appendFrom(chunk[:])", source)
+        self.assertIn("ex.buf.appendFrom(chunk[:received])", source)
+        self.assertIn("xrt_net_alpn_wire_valid", aot_net)
         self.assertIn("xrt_net_tls_negotiated_protocol", aot_net)
         self.assertIn("return XR_NULL_VAL;", aot_net)
         self.assertNotIn("http2_state", cache)

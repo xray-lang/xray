@@ -1454,8 +1454,11 @@ static XrValue net_tls_client_context_new(XrVMRuntime *X, XrValue *args, int nar
 
 static XrValue net_tls_server_context_new(XrVMRuntime *X, XrValue *args, int nargs) {
 #ifdef XR_ENABLE_TLS
-    if (nargs < 4 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) ||
+    if (nargs < 5 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) ||
         !XR_IS_BOOL(args[3]))
+        return XR_NULL_VAL;
+    XrArray *alpn = net_as_bytes(args[4]);
+    if (!net_alpn_wire_valid(alpn))
         return XR_NULL_VAL;
     const char *cert_file = XR_STRING_CHARS(XR_TO_STRING(args[0]));
     const char *key_file = XR_STRING_CHARS(XR_TO_STRING(args[1]));
@@ -1463,7 +1466,10 @@ static XrValue net_tls_server_context_new(XrVMRuntime *X, XrValue *args, int nar
     XrTlsContext *provider = xr_tls_context_new_server(cert_file, key_file);
     if (!provider)
         return XR_NULL_VAL;
-    if (XR_TO_BOOL(args[3]) && xr_tls_context_load_ca(provider, ca_file) != 0) {
+    bool configured = (!XR_TO_BOOL(args[3]) || xr_tls_context_load_ca(provider, ca_file) == 0) &&
+                      (alpn->length == 0 || xr_tls_context_set_alpn(provider, xr_array_raw_u8(alpn),
+                                                                    (size_t) alpn->length) == 0);
+    if (!configured) {
         xr_tls_context_free(provider);
         return XR_NULL_VAL;
     }

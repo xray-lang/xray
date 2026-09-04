@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local TLS benchmark harness for Xray's net.dialTLS/read/write path."""
+"""Local TLS benchmark harness for Xray's net.dial TLS byte-I/O path."""
 
 import argparse
 import json

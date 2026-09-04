@@ -20,6 +20,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -41,6 +42,41 @@ struct XrTlsConn {
     int fd;
 };
 
+typedef struct {
+    unsigned char *wire;
+    unsigned int length;
+} XrTlsAlpnPolicy;
+
+static int tls_alpn_policy_index = -1;
+
+static void tls_alpn_policy_destroy(XrTlsAlpnPolicy *policy) {
+    if (!policy)
+        return;
+    xr_free(policy->wire);
+    xr_free(policy);
+}
+
+static void tls_alpn_policy_ex_free(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl,
+                                    void *argp) {
+    (void) parent;
+    (void) ad;
+    (void) idx;
+    (void) argl;
+    (void) argp;
+    tls_alpn_policy_destroy((XrTlsAlpnPolicy *) ptr);
+}
+
+static int tls_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen,
+                           const unsigned char *in, unsigned int inlen, void *arg) {
+    (void) ssl;
+    XrTlsAlpnPolicy *policy = (XrTlsAlpnPolicy *) arg;
+    if (!policy || !policy->wire || policy->length == 0)
+        return SSL_TLSEXT_ERR_NOACK;
+    int selected = SSL_select_next_proto((unsigned char **) out, outlen, policy->wire,
+                                         policy->length, in, inlen);
+    return selected == OPENSSL_NPN_NEGOTIATED ? SSL_TLSEXT_ERR_OK : SSL_TLSEXT_ERR_NOACK;
+}
+
 /* ========== Availability ========== */
 
 bool xr_tls_is_available(void) {
@@ -57,6 +93,8 @@ void xr_tls_init(void) {
 
     // OpenSSL 1.1.0+ auto-initializes, but explicit call is safer
     OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS | OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
+
+    tls_alpn_policy_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, tls_alpn_policy_ex_free);
 
     tls_initialized = 1;
 }
@@ -265,13 +303,36 @@ int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname) {
 }
 
 int xr_tls_context_set_alpn(XrTlsContext *ctx, const unsigned char *protocols, size_t len) {
-    if (!ctx || !ctx->ssl_ctx || !protocols || len == 0)
+    if (!ctx || !ctx->ssl_ctx || !protocols || len == 0 || len > UINT_MAX)
         return -1;
 
-    // Set client ALPN protocol list
-    if (SSL_CTX_set_alpn_protos(ctx->ssl_ctx, protocols, (unsigned int) len) != 0) {
+    if (ctx->is_client) {
+        if (SSL_CTX_set_alpn_protos(ctx->ssl_ctx, protocols, (unsigned int) len) != 0)
+            return -1;
+        return 0;
+    }
+
+    if (tls_alpn_policy_index < 0)
+        return -1;
+    XrTlsAlpnPolicy *policy = (XrTlsAlpnPolicy *) xr_calloc(1, sizeof(XrTlsAlpnPolicy));
+    if (!policy)
+        return -1;
+    policy->wire = (unsigned char *) xr_malloc(len);
+    if (!policy->wire) {
+        tls_alpn_policy_destroy(policy);
         return -1;
     }
+    memcpy(policy->wire, protocols, len);
+    policy->length = (unsigned int) len;
+
+    XrTlsAlpnPolicy *previous =
+        (XrTlsAlpnPolicy *) SSL_CTX_get_ex_data(ctx->ssl_ctx, tls_alpn_policy_index);
+    if (SSL_CTX_set_ex_data(ctx->ssl_ctx, tls_alpn_policy_index, policy) != 1) {
+        tls_alpn_policy_destroy(policy);
+        return -1;
+    }
+    tls_alpn_policy_destroy(previous);
+    SSL_CTX_set_alpn_select_cb(ctx->ssl_ctx, tls_alpn_select, policy);
     return 0;
 }
 

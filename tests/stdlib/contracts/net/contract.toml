@@ -1,6 +1,6 @@
 schema = 1
 module = "net"
-contract_revision = 4
+contract_revision = 5
 legacy_commit = "b6955520e9bc142e23e3a7486c00dbcaf4a55127"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/net/legacy_expected.jsonl"
@@ -42,14 +42,15 @@ legacy_public_surface = [
 ]
 intentional_semantic_changes = [
   "net.read and net.write are removed; stream I/O is byte-only through readInto, readBytes and writeBytes",
-  "dial takes DialOptions and throws typed NetError values; dialTLS is folded into DialOptions.tls and upgradeTLS covers STARTTLS flows",
+  "dial takes DialOptions and throws typed NetError values; TLS and ALPN offers are configured through DialOptions while TlsClientContext covers custom trust, identity and STARTTLS flows",
   "listen, udpBind and upgradeTLS throw NetError instead of returning null handles",
   "lookup returns Array<IpAddress>, empty on failure, instead of string?",
   "UdpPacket is removed; recvFrom fills a caller buffer and returns UdpFrom sender identity under an explicit timeoutMs",
   "sendTo takes Array<u8> payloads and an explicit timeoutMs",
   "copyBidirectional throws NetError only for argument validation (Closed, Invalid); a per-direction I/O error ends that direction and the byte counts are still returned",
   "NetError gains Cancelled so cooperative cancellation is distinct from Closed",
-  "NetConn and NetListener are final source classes with private native storage; handle state, lifecycle, direction, and deadline policy are source-owned net module functions"
+  "NetConn and NetListener are final source classes with private native storage; handle state, lifecycle, direction, and deadline policy are source-owned net module functions",
+  "ALPN protocol-list validation and wire encoding are source-owned; immutable client and server contexts delegate offer, server-preference selection and negotiated-protocol state to the generic TLS provider"
 ]
 # Byte-first convergence roadmap:
 #   converged byte read: readBytes returns Array<u8>

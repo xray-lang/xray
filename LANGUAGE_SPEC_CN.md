@@ -6344,7 +6344,7 @@ print(len(empty))           // 0
 
 | 模块 | 主题 | 关键 API |
 |--|--|--|
-| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
+| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `readInto` `readBytes` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `TlsClientContext` `TlsServerContext` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL 解析与构造 | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
@@ -6365,7 +6365,7 @@ TCP 等待操作使用协程友好的 netpoll 路径。`setReadDeadline(conn, de
 
 `shutdownRead(conn)`、`shutdownWrite(conn)` 和 `shutdown(conn)` 暴露 TCP 半关闭语义。通用 proxy/relay 应优先使用 `copyBidirectional(a, b)`，它会在单向 EOF 后半关闭对端写侧，并返回两个方向的字节统计。
 
-TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, hostname, timeout?)` 提供；TLS read/write/copy 与 plain TCP 共享同一套 deadline、错误诊断和 typed handle 生命周期语义。
+TLS 客户端连接统一使用 `dial(host, port, DialOptions(timeoutMs, true, alpnProtocols))`；需要自定义 CA、客户端证书或 STARTTLS 时使用 `TlsClientContext`。`TlsServerContext` 接受按服务端优先级排列的 ALPN 列表，`negotiatedProtocol(conn)` 返回双方协商的协议或 `null`。ALPN 只配置协商能力，是否接受选中结果仍由 HTTP/2、WebSocket 等协议模块决定。TLS read/write/copy 与 plain TCP 共享同一套 deadline、错误诊断和 typed handle 生命周期语义。
 
 ### 15.3 数据格式
 

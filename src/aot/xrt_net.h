@@ -877,6 +877,24 @@ static inline XrValue xrt_net_has_tls(void) {
     return XR_FALSE_VAL;
 }
 
+static inline bool xrt_net_alpn_wire_valid(XrValue wire_value) {
+    if (!XR_IS_ARRAY(wire_value) || !wire_value.ptr)
+        return false;
+    xrt_net_array_view_t *wire = (xrt_net_array_view_t *) wire_value.ptr;
+    if (wire->elem_type != XR_ELEM_U8 || wire->elem_size != 1 || wire->length < 0 ||
+        wire->length > UINT16_MAX || (wire->length > 0 && !wire->data))
+        return false;
+    const uint8_t *bytes = (const uint8_t *) wire->data;
+    int64_t offset = 0;
+    while (offset < wire->length) {
+        uint8_t protocol_length = bytes[offset++];
+        if (protocol_length == 0 || protocol_length > wire->length - offset)
+            return false;
+        offset += protocol_length;
+    }
+    return true;
+}
+
 /*
  * net.__tlsHandshake(conn, hostname, timeoutMs, alpnWire) -> int
  * The standalone AOT runtime carries no TLS engine, so a valid open TCP conn
@@ -886,8 +904,14 @@ static inline XrValue xrt_net_tls_handshake(XrValue conn_value, XrValue host_val
                                             XrValue deadline_value, XrValue alpn_wire_value) {
     (void) host_value;
     (void) deadline_value;
-    (void) alpn_wire_value;
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    if (!xrt_net_alpn_wire_valid(alpn_wire_value)) {
+        if (conn) {
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+            xrt_net_close_base(&conn->base);
+        }
+        return XR_FROM_INT(XRT_NETERR_INVALID);
+    }
     if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET ||
         conn->conn_kind != XRT_NETCONN_TCP) {
         if (conn) {

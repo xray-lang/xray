@@ -383,7 +383,8 @@ CONTRACT_SPECS = (
             # Compress and crypto used to publish typed errors from C. Their
             # Xray modules now state those errors directly, so neither private
             # provider translation unit belongs to this contract.
-            "stdlib/net/net.c",
+            # Net still publishes transport failures through this provider.
+            "src/io/xnet_provider.c",
             "tests/unit/runtime/test_execution_error_channel.c",
             "tests/unit/vm/test_vm_exception.c",
         ),

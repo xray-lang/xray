@@ -1,7 +1,7 @@
 {
   "module": "net",
-  "summary": "TCP/UDP/TLS networking with native stream pumps",
-  "lead": "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Array<u8>`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.",
+  "summary": "TCP/UDP/TLS networking with typed handles and source-owned stream policy",
+  "lead": "TCP/UDP/TLS networking. Binary I/O uses reusable `Array<u8>` buffers through `readInto` and `writeBytes`; source-owned `copy` and `copyBidirectional` pumps compose those operations for relays.",
   "usage": "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.",
   "sections": [
     {
@@ -11,6 +11,10 @@
     {
       "heading": "Deadlines and errors",
       "markdown": "Use `setReadDeadline`, `setWriteDeadline`, `setDeadline`, and `setAcceptDeadline` with `time.monotonic()` deadlines. Operations return the normal null or `-1` failure shape, and `lastError(handle)` / `lastErrno(handle)` expose diagnostic causes such as `timeout`, `closed`, `reset`, `refused`, `dns`, `tls`, and `io`."
+    },
+    {
+      "heading": "TLS and ALPN",
+      "markdown": "Use `dial(host, port, DialOptions(timeoutMs, true, protocols))` for ordinary TLS clients with an optional ALPN offer. `TlsClientContext` adds custom trust, client identity, and STARTTLS policy. `TlsServerContext` takes protocols in server-preference order. After either handshake, `negotiatedProtocol(conn)` returns the selected protocol or `null`; the application protocol owns acceptance."
     },
     {
       "heading": "Lifecycle",

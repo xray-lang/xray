@@ -6374,7 +6374,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 
 | Module | Topic | Key APIs |
 |--|--|--|
-| `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
+| `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `readInto` `readBytes` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `TlsClientContext` `TlsServerContext` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL parsing and construction | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
@@ -6395,7 +6395,7 @@ TCP waiting operations use the coroutine-friendly netpoll path. `setReadDeadline
 
 `shutdownRead(conn)`, `shutdownWrite(conn)`, and `shutdown(conn)` expose TCP half-close semantics. Generic proxy and relay code should prefer `copyBidirectional(a, b)`, which half-closes the opposite write side after one-way EOF and returns byte counts for both directions.
 
-The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeTLS(conn, hostname, timeout?)`; TLS read/write/copy share the same deadline, diagnostic error, and typed-handle lifecycle semantics as plain TCP.
+TLS clients use the single `dial(host, port, DialOptions(timeoutMs, true, alpnProtocols))` entry point. `TlsClientContext` supplies custom trust, client identity, and STARTTLS policy. `TlsServerContext` accepts an ALPN list in server-preference order, while `negotiatedProtocol(conn)` returns the selected protocol or `null`. ALPN configures negotiation only; HTTP/2, WebSocket, and other protocol modules own acceptance of the selected value. TLS read/write/copy share the same deadline, diagnostic error, and typed-handle lifecycle semantics as plain TCP.
 
 ### 15.3 Data Formats
 

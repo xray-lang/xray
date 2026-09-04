@@ -1597,7 +1597,7 @@ fn _exchange(conn: NetConn, target: Target, method: string, names: Array<string>
             if (received == 0) {
                 throw Http2Error.ConnectionFailed { target: "connection closed before the response ended" }
             }
-            ex.buf.appendFrom(chunk[:])
+            ex.buf.appendFrom(chunk[:received])
         }
         ex.consumeOneFrame()
         frames = frames + 1
@@ -1618,25 +1618,29 @@ fn _exchange(conn: NetConn, target: Target, method: string, names: Array<string>
     return (ex.status, ex.headers.names, ex.headers.values, ex.responseBody)
 }
 
-fn _connect(host: string, port: i64, timeoutMs: i64) -> NetConn {
+fn _connect(targetText: string, host: string, port: i64, deadline: i64) -> NetConn {
     if (!net.hasTLS()) { throw Http2Error.TlsUnavailable }
     var conn: NetConn? = null
     try {
+        var remaining = deadline - time.monotonic()
+        if (remaining <= 0) {
+            throw Http2Error.ConnectionFailed { target: targetText }
+        }
         var protocols: Array<string> = [H2_ALPN]
-        conn = net.dialTLS(host, port, timeoutMs, protocols)
+        conn = net.dial(host, port, net.DialOptions(remaining, true, protocols))
         var live = conn!
         if (net.negotiatedProtocol(live) != H2_ALPN) {
             net.close(live)
             throw Http2Error.FramingError { reason: "peer did not negotiate HTTP/2" }
         }
-        if (!net.setDeadline(live, time.monotonic() + timeoutMs)) {
+        if (!net.setDeadline(live, deadline)) {
             net.close(live)
-            throw Http2Error.ConnectionFailed { target: host }
+            throw Http2Error.ConnectionFailed { target: targetText }
         }
         return live
     } catch (e: NetError) {
         if (conn != null) { net.close(conn!) }
-        throw Http2Error.ConnectionFailed { target: host }
+        throw Http2Error.ConnectionFailed { target: targetText }
     }
 }
 
@@ -1656,10 +1660,11 @@ export fn request(url: string, method: string, headerNames: Array<string>,
         throw Http2Error.ProtocolError { reason: "timeout is outside the transport range" }
     }
     var target = _parseTarget(url)
+    var deadline = time.monotonic() + timeoutMs
 
     var host = target.host
     var port = target.port
-    var conn = _connect(host, port, timeoutMs)
+    var conn = _connect(url, host, port, deadline)
     try {
         var answer = _exchange(conn, target, method, headerNames, headerValues, body)
         net.close(conn)

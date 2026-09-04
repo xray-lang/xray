@@ -1,6 +1,6 @@
 schema = 1
 module = "http2"
-contract_revision = 4
+contract_revision = 5
 legacy_commit = "1134404162e287db158ec1ce805700114b47cecb"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/http2/legacy_expected.jsonl"
@@ -8,11 +8,11 @@ legacy_public_surface = ["http.HttpVersion.Http2"]
 intentional_semantic_changes = [
   "HTTP/2 transport ownership moved from the monolithic http module to the built-in http2 standard module",
   "supported and request expose one bare-name standard-module capability and data-plane boundary",
-  "HPACK, framing, the stream state machine and flow control moved from C into http2.xr; the native boundary is now four protocol-agnostic socket leaves (__connect/__send/__recv/__close) instead of one __request leaf that owned the whole protocol",
+  "HPACK, framing, the stream state machine, flow control and connection lifecycle live in http2.xr; transport crosses only the generic net module TLS/socket provider boundary",
   "request answers a tuple and raises Http2Error instead of answering null: every refusal now has one name, where the same input previously surfaced as ProtocolError or ConnectionFailed depending on which of two copies of the admission rules noticed it",
   "one connection per request: the C connection pool is gone because HPACK dynamic-table state is per-connection and would have to live in module-level mutable state, which is not thread-safe",
-  "the ALPN selection, partial-write drain loop, timeout bound and typed mapping of TLS absence, protocol mismatch, EOF and transport failure are owned by http2.xr; native leaves expose only raw TLS/socket outcomes",
-  "AOT no longer advertises unconditional connect/send/recv/close stubs as transport implementations; it retains only the truthful false build-capability probe until a real AOT TLS provider exists",
+  "ALPN acceptance, the partial-write drain loop, one request-wide absolute deadline and typed mapping of TLS absence, protocol mismatch, EOF and transport failure are owned by http2.xr; native leaves expose only generic TLS/socket outcomes",
+  "AOT no longer advertises HTTP/2 transport stubs; http2.supported delegates to the generic net TLS capability, which remains false until standalone AOT links a real TLS provider",
 ]
 known_legacy_bugs = []
 equivalence = ["value", "error", "effect", "complexity"]

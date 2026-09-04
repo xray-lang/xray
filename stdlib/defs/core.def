@@ -1904,11 +1904,11 @@ module net {
   }
 
   fn __newTlsServerContext {
-    signature: "(certFile: string, keyFile: string, caFile: string, requireClientCertificate: bool): __TlsContextStorage?"
-    doc: "Create one immutable server TLS policy resource, optionally requiring a CA-verified client certificate"
+    signature: "(certFile: string, keyFile: string, caFile: string, requireClientCertificate: bool, alpnWire: Array<u8>): __TlsContextStorage?"
+    doc: "Create one immutable server TLS policy resource with source-encoded ALPN preference and optional CA-verified client certificates"
     vm: "net_tls_server_context_new"
-    argc: 4
-    arg_spec: "sssv"
+    argc: 5
+    arg_spec: "sssvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
