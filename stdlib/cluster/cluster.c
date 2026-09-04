@@ -19,7 +19,6 @@
 #include "../../stdlib/net/io.h"
 #include "../../stdlib/mem/mem.h"
 #include "../../stdlib/stdlib_cache.h"
-#include "../../src/runtime/class/xenum.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
@@ -1306,30 +1305,20 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
     }
 }
 
-static XrValue cluster_delivery_value(XrVMRuntime *X, XrClusterDelivery delivery) {
-    XrEnumType *type = xr_stdlib_enum_type_get(X, "cluster", "ClusterDelivery");
-    if (!type || delivery < XR_CLUSTER_DELIVERY_ACCEPTED ||
-        delivery > XR_CLUSTER_DELIVERY_DISCONNECTED)
-        return XR_NULL_VAL;
-    XrEnumAggregateValue *value =
-        xr_enum_zero_payload_value(xr_isolate_get_runtime_core(X), type, (uint32_t) delivery);
-    return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
-}
-
 // xray binding: cluster.send(topic, move envelope)
 static XrValue cluster_send_primitive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 3 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[2]))
-        return cluster_delivery_value(X, XR_CLUSTER_DELIVERY_INVALID_TOPIC);
+        return xr_int(XR_CLUSTER_DELIVERY_INVALID_TOPIC);
 
     const uint8_t *envelope = NULL;
     size_t envelope_len = 0;
     if (!xr_mem_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX)
-        return cluster_delivery_value(X, XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
+        return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
 
     XrString *topic = XR_TO_STRING(args[0]);
     XrClusterDelivery delivery = cluster_transport_send(
         X, topic->data, envelope, (uint32_t) envelope_len, (uint8_t) XR_TO_INT(args[2]));
-    return cluster_delivery_value(X, delivery);
+    return xr_int((int64_t) delivery);
 }
 
 // xray binding: cluster.listen(pattern)
@@ -1353,15 +1342,6 @@ static XrObjectInstance *cluster_object_new(XrVMRuntime *X, const char *name) {
     return cls ? xr_object_instance_new_with_class(NULL, cls) : NULL;
 }
 
-static XrValue cluster_node_state_value(XrVMRuntime *X, int state) {
-    XrEnumType *type = xr_stdlib_enum_type_get(X, "cluster", "ClusterNodeState");
-    if (!type || state < XR_NODE_IDLE || state > XR_NODE_CLOSING)
-        return XR_NULL_VAL;
-    XrEnumAggregateValue *value =
-        xr_enum_zero_payload_value(xr_isolate_get_runtime_core(X), type, (uint32_t) state);
-    return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
-}
-
 static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -1369,7 +1349,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (!c)
         return xr_null();
 
-    XrObjectInstance *info = cluster_object_new(X, "ClusterInfo");
+    XrObjectInstance *info = cluster_object_new(X, "__ClusterSnapshot");
     if (!info)
         return xr_null();
 
@@ -1385,7 +1365,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
         xr_amutex_lock(&c->nodes_lock);
         XrClusterNode *node = c->nodes;
         while (node) {
-            XrObjectInstance *nj = cluster_object_new(X, "ClusterNodeInfo");
+            XrObjectInstance *nj = cluster_object_new(X, "__ClusterNodeSnapshot");
             if (nj) {
                 XrString *nname = xr_string_intern(X, node->name, (uint32_t) strlen(node->name), 0);
                 xr_object_instance_set_by_key(X, nj, "name", xr_string_value(nname));
@@ -1393,12 +1373,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                 XrString *nhost = xr_string_intern(X, node->host, (uint32_t) strlen(node->host), 0);
                 xr_object_instance_set_by_key(X, nj, "host", xr_string_value(nhost));
                 xr_object_instance_set_by_key(X, nj, "port", xr_int(node->port));
-                XrValue state = cluster_node_state_value(X, node->state);
-                if (XR_IS_NULL(state)) {
-                    xr_amutex_unlock(&c->nodes_lock);
-                    return xr_null();
-                }
-                xr_object_instance_set_by_key(X, nj, "state", state);
+                xr_object_instance_set_by_key(X, nj, "state", xr_int((int64_t) node->state));
 
                 /*
                  * Per-node metrics snapshot. All counters are
@@ -1492,7 +1467,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
      * (enabled with neither context ready) remains directly visible to
      * operators without exposing a bitmap convention in the public API.
      */
-    XrObjectInstance *tls = cluster_object_new(X, "ClusterTlsStatus");
+    XrObjectInstance *tls = cluster_object_new(X, "__ClusterTlsSnapshot");
     if (!tls)
         return xr_null();
     xr_object_instance_set_by_key(X, tls, "enabled", xr_bool(c->tls_enabled));

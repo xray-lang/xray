@@ -112,6 +112,65 @@ export type ClusterConfig = {
     maxMissedHeartbeats: i64?,
 }
 
+// Public cluster values are declared here rather than injected by the native
+// registry. The transport crosses the private boundary with scalar codes and
+// internal snapshots; this module owns the public nominal identities and the
+// mapping from runtime state to the API.
+export enum ClusterDelivery {
+    Accepted,
+    InvalidTopic,
+    InvalidEnvelope,
+    Unavailable,
+    Overloaded,
+    Disconnected,
+}
+
+export enum ClusterNodeState {
+    Idle,
+    Connecting,
+    Handshaking,
+    Connected,
+    Closing,
+}
+
+export type ClusterTlsStatus = {
+    enabled: bool,
+    clientReady: bool,
+    serverReady: bool,
+}
+
+export type ClusterNodeInfo = {
+    name: string,
+    host: string,
+    port: i64,
+    state: ClusterNodeState,
+    framesSent: i64,
+    framesReceived: i64,
+    bytesSent: i64,
+    bytesReceived: i64,
+    sendErrors: i64,
+    slowConsumerEvents: i64,
+    rttMs: i64,
+    outQueueBytes: i64,
+    outQueueFrames: i64,
+    slow: bool,
+    phi: f64,
+    missedHeartbeats: i64,
+}
+
+export type ClusterInfo = {
+    self: string,
+    port: i64,
+    running: bool,
+    nodes: Array<ClusterNodeInfo>,
+    listeners: i64,
+    deadNodes: i64,
+    heartbeatIntervalMs: i64,
+    heartbeatTimeoutMs: i64,
+    maxMissedHeartbeats: i64,
+    tls: ClusterTlsStatus,
+}
+
 export enum AddressError {
     MissingPort { address: string },
     InvalidHost { host: string },
@@ -134,7 +193,7 @@ export class NodeAddress {
 // rune loop would make every one of these rules quadratic in the length of a
 // name that is checked on every join and every publish.
 fn _asciiPrintable(s: string) -> bool {
-    var b: Slice<u8> = s.bytes()
+    const b: Slice<u8> = s.bytes()
     for (var i = 0; i < len(b); i++) {
         var c = b[i] as i64
         if (c < 0x20 || c > 0x7E) { return false }
@@ -153,7 +212,7 @@ export fn validNodeName(name: string) -> bool {
 // ========== Address grammar ==========
 
 fn _parsePort(raw: string) -> i64 {
-    var b: Slice<u8> = raw.bytes()
+    const b: Slice<u8> = raw.bytes()
     if (len(b) == 0) { return 0 }
     var out = 0
     for (var i = 0; i < len(b); i++) {
@@ -194,7 +253,7 @@ export fn parseAddress(addr: string) -> NodeAddress {
 // ========== Topic language ==========
 
 fn _hasEmptyTopicSegment(s: string) -> bool {
-    var b: Slice<u8> = s.bytes()
+    const b: Slice<u8> = s.bytes()
     if (len(b) == 0) { return true }
     if (b[0] == 0x2E || b[len(b) - 1] == 0x2E) { return true }
     for (var i = 1; i < len(b); i++) {
@@ -254,7 +313,60 @@ export fn nodes() -> Array<string>? { return __nodes() }
 
 export fn discover() { __discover() }
 
-export fn info() -> ClusterInfo? { return __info() }
+fn _nodeStateFromCode(code: i64) -> ClusterNodeState {
+    if (code == 0) { return ClusterNodeState.Idle }
+    if (code == 1) { return ClusterNodeState.Connecting }
+    if (code == 2) { return ClusterNodeState.Handshaking }
+    if (code == 3) { return ClusterNodeState.Connected }
+    return ClusterNodeState.Closing
+}
+
+export fn info() -> ClusterInfo? {
+    var raw = __info()
+    if (raw == null) { return null }
+    var snapshot = raw!
+    var nodes: Array<ClusterNodeInfo> = []
+    for (var i = 0; i < len(snapshot.nodes); i++) {
+        var node = snapshot.nodes[i]
+        var publicNode: ClusterNodeInfo = {
+            name: node.name,
+            host: node.host,
+            port: node.port,
+            state: _nodeStateFromCode(node.state),
+            framesSent: node.framesSent,
+            framesReceived: node.framesReceived,
+            bytesSent: node.bytesSent,
+            bytesReceived: node.bytesReceived,
+            sendErrors: node.sendErrors,
+            slowConsumerEvents: node.slowConsumerEvents,
+            rttMs: node.rttMs,
+            outQueueBytes: node.outQueueBytes,
+            outQueueFrames: node.outQueueFrames,
+            slow: node.slow,
+            phi: node.phi,
+            missedHeartbeats: node.missedHeartbeats,
+        }
+        nodes.push(publicNode)
+    }
+    var tls: ClusterTlsStatus = {
+        enabled: snapshot.tls.enabled,
+        clientReady: snapshot.tls.clientReady,
+        serverReady: snapshot.tls.serverReady,
+    }
+    var result: ClusterInfo = {
+        self: snapshot.self,
+        port: snapshot.port,
+        running: snapshot.running,
+        nodes: nodes,
+        listeners: snapshot.listeners,
+        deadNodes: snapshot.deadNodes,
+        heartbeatIntervalMs: snapshot.heartbeatIntervalMs,
+        heartbeatTimeoutMs: snapshot.heartbeatTimeoutMs,
+        maxMissedHeartbeats: snapshot.maxMissedHeartbeats,
+        tls: tls,
+    }
+    return result
+}
 
 // The monitor channel carries the node or coroutine name that ended, and the
 // termination reason for a remote coroutine; both are published as strings.
@@ -340,5 +452,11 @@ export fn send(topic: string, envelope: move Buffer,
     if (len(envelope.asBytes()) < ENVELOPE_HEADER_SIZE) {
         return ClusterDelivery.InvalidEnvelope
     }
-    return __send(topic, move envelope, hopLimit)
+    var code = __send(topic, move envelope, hopLimit)
+    if (code == 0) { return ClusterDelivery.Accepted }
+    if (code == 1) { return ClusterDelivery.InvalidTopic }
+    if (code == 2) { return ClusterDelivery.InvalidEnvelope }
+    if (code == 3) { return ClusterDelivery.Unavailable }
+    if (code == 4) { return ClusterDelivery.Overloaded }
+    return ClusterDelivery.Disconnected
 }

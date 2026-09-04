@@ -57,6 +57,36 @@ schema = 1
 
 [[leaf]]
 module = "cluster"
+symbol = "__ClusterTlsSnapshot"
+class = "native_record_shape_leaf"
+abi = "none; a record layout, not a call"
+ownership = "none"
+effect = "nothrow"
+provider = "declaration only (stdlib/defs/core.def). The VM fills it from the cluster TLS runtime state before cluster.xr constructs the public ClusterTlsStatus value; there is no AOT binding"
+deletion_trigger = "when cluster runtime state is exposed through scalar accessor leaves, so cluster.xr can assemble the TLS snapshot without a native record class"
+
+[[leaf]]
+module = "cluster"
+symbol = "__ClusterNodeSnapshot"
+class = "native_record_shape_leaf"
+abi = "none; a record layout, not a call"
+ownership = "none"
+effect = "nothrow"
+provider = "declaration only (stdlib/defs/core.def). The VM fills it from one runtime-owned cluster node before cluster.xr constructs the public ClusterNodeInfo value; there is no AOT binding"
+deletion_trigger = "when the cluster node table and counters are exposed through scalar accessor leaves, so cluster.xr can assemble each node snapshot without a native record class"
+
+[[leaf]]
+module = "cluster"
+symbol = "__ClusterSnapshot"
+class = "native_record_shape_leaf"
+abi = "none; a record layout, not a call"
+ownership = "none"
+effect = "nothrow"
+provider = "declaration only (stdlib/defs/core.def). The VM fills it from runtime-owned cluster state before cluster.xr constructs the public ClusterInfo value; there is no AOT binding"
+deletion_trigger = "when cluster runtime state is exposed through scalar accessor leaves, so cluster.xr can assemble the diagnostic snapshot without a native record class"
+
+[[leaf]]
+module = "cluster"
 symbol = "__discover"
 class = "host_abi_leaf"
 abi = "socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP (IP_DROP_MEMBERSHIP on stop), sendto(2) and recvfrom(2)"
@@ -73,7 +103,7 @@ abi = "none; reads cluster runtime state under its own mutexes and atomics"
 ownership = "fresh"
 effect = "nothrow"
 provider = "the cluster runtime's own state (stdlib/cluster/cluster.c cluster_info_fn): the node tables under nodes_lock/dead_nodes_lock, relaxed atomic counters, and whether the TLS contexts are non-NULL. It does not call OpenSSL. There is no AOT binding"
-deletion_trigger = "when the cluster runtime's node tables and counters are reachable from cluster.xr through smaller accessor leaves, so assembling the snapshot record stops being a C-side operation"
+deletion_trigger = "when the cluster runtime's node tables and counters are reachable from cluster.xr through smaller accessor leaves; this leaf currently returns only private __Cluster*Snapshot records and cluster.xr alone maps them into the public ClusterInfo graph"
 
 [[leaf]]
 module = "cluster"
@@ -130,9 +160,9 @@ module = "cluster"
 symbol = "__send"
 class = "runtime_leaf"
 abi = "none on the sending call itself: it moves buffer ownership, matches the topic trie and enqueues. The only host call is a write(2) on the node's notify pipe; the network bytes leave later on a writer coroutine"
-ownership = "borrowed_static"
+ownership = "none"
 effect = "nothrow"
-provider = "the cluster transport's own queues and the Xray channel subsystem. VM stdlib/cluster/cluster_topic.c cluster_transport_send; AOT stdlib/cluster/cluster_aot.c xrt_cluster_send, an independent lock-and-list implementation over OS threads. The two share the topic matching in cluster_topic_core.h and the frame encoding in cluster_proto.c, and now take the topic rule and the hop budget from cluster.xr's send() instead of deciding either. One divergence is left and is not this leaf's to close: the VM re-forwards a received envelope to every other peer with the hop count decremented (cluster_topic.c cluster_transport_handle_frame) while the AOT reader delivers locally and never reads the hop byte at all (cluster_aot.c aot_cluster_process_transport), so a three-node chain reaches its far end on one backend and not the other"
+provider = "the cluster transport's own queues and the Xray channel subsystem. VM stdlib/cluster/cluster_topic.c cluster_transport_send; AOT stdlib/cluster/cluster_aot.c xrt_cluster_send, an independent lock-and-list implementation over OS threads. The leaf returns only a private integer code; cluster.xr alone maps it to ClusterDelivery. The two providers still share the topic matching in cluster_topic_core.h and the frame encoding in cluster_proto.c. One divergence is left and is not this leaf's to close: the VM re-forwards a received envelope to every other peer with the hop count decremented (cluster_topic.c cluster_transport_handle_frame) while the AOT reader delivers locally and never reads the hop byte at all (cluster_aot.c aot_cluster_process_transport), so a three-node chain reaches its far end on one backend and not the other"
 deletion_trigger = "when the topic table and the per-node outbound queue are surfaces Xray source can name, so cluster.xr can do the match and the enqueue itself"
 
 [[leaf]]

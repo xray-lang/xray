@@ -188,25 +188,25 @@ TEST(native_module_object_and_enum_metadata) {
         xa_builtin_get_object_shape("cluster", "ClusterConfig");
     const XaBuiltinObjectShape *cluster_info =
         xa_builtin_get_object_shape("cluster", "ClusterInfo");
+    const XaBuiltinObjectShape *cluster_snapshot =
+        xa_builtin_get_object_shape("cluster", "__ClusterSnapshot");
     ASSERT_NULL(cluster_config);
-    ASSERT_NOT_NULL(cluster_info);
-    ASSERT_TRUE(cluster_info->is_exact);
-    ASSERT_EQ_INT(cluster_info->field_count, 10);
-    ASSERT_TRUE(strcmp(cluster_info->fields[4].name, "listeners") == 0);
-    ASSERT_TRUE(strcmp(cluster_info->fields[5].name, "deadNodes") == 0);
+    ASSERT_NULL(cluster_info);
+    ASSERT_NOT_NULL(cluster_snapshot);
+    ASSERT_TRUE(cluster_snapshot->is_exact);
+    ASSERT_EQ_INT(cluster_snapshot->field_count, 10);
+    ASSERT_TRUE(strcmp(cluster_snapshot->fields[4].name, "listeners") == 0);
+    ASSERT_TRUE(strcmp(cluster_snapshot->fields[5].name, "deadNodes") == 0);
 
-    XrClass *cluster_info_class = xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo");
-    ASSERT_NOT_NULL(cluster_info_class);
-    ASSERT_TRUE(cluster_info_class == xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo"));
+    XrClass *cluster_snapshot_class =
+        xr_stdlib_record_class_get(iso, "cluster", "__ClusterSnapshot");
+    ASSERT_NOT_NULL(cluster_snapshot_class);
+    ASSERT_TRUE(cluster_snapshot_class ==
+                xr_stdlib_record_class_get(iso, "cluster", "__ClusterSnapshot"));
 
     const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
-    ASSERT_NOT_NULL(cluster_state);
-    ASSERT_EQ_INT(cluster_state->variant_count, 5);
-    ASSERT_TRUE(cluster_state->layout_id != 0);
-    ASSERT_TRUE(strcmp(cluster_state->variants[3].name, "Connected") == 0);
-    XrEnumType *runtime_cluster_state = xr_stdlib_enum_type_get(iso, "cluster", "ClusterNodeState");
-    ASSERT_NOT_NULL(runtime_cluster_state);
-    ASSERT_EQ_INT(runtime_cluster_state->layout->layout_id, cluster_state->layout_id);
+    ASSERT_NULL(cluster_state);
+    ASSERT_NULL(xr_stdlib_enum_type_get(iso, "cluster", "ClusterNodeState"));
 
     const char *cluster_start_signature = xa_builtin_get_module_func_signature("cluster", "start");
     const XaBuiltinMember *cluster_start_primitive = find_module_member("cluster", "__start");
