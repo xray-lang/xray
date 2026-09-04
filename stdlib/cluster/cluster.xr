@@ -1731,25 +1731,15 @@ export fn listen(pattern: string, capacity: i64 = 1024) -> Channel<Buffer>? {
     return __listen(pattern, capacity)
 }
 
-// Topic legality and envelope shape are decided here, so the transport leaf is
-// handed a topic it does not need to re-check. The order is deliberate: a topic
-// the caller misspelled is wrong whether or not this node is running, so it is
-// reported as InvalidTopic even after stop(), where the leaf used to answer
-// Unavailable and hide the mistake.
-fn _deliveryFromCode(code: i64) -> ClusterDelivery {
-    if (code == 0) { return ClusterDelivery.Accepted }
-    if (code == 1) { return ClusterDelivery.InvalidTopic }
-    if (code == 2) { return ClusterDelivery.InvalidEnvelope }
-    if (code == 3) { return ClusterDelivery.Unavailable }
-    if (code == 4) { return ClusterDelivery.Overloaded }
-    return ClusterDelivery.Disconnected
-}
-
-fn _deliveryFromBroadcast(stats: __ClusterBroadcastStats?) -> ClusterDelivery {
+// Queue and channel providers report only why each admission succeeded or
+// failed. This source policy is shared by local and remote publication.
+fn _deliveryFromStats(stats: __ClusterDeliveryStats?) -> ClusterDelivery {
     if (stats == null) { return ClusterDelivery.Unavailable }
     var observed = stats!
     if (observed.accepted > 0) { return ClusterDelivery.Accepted }
-    if (observed.connected > 0) { return ClusterDelivery.Overloaded }
+    if (observed.full > 0) { return ClusterDelivery.Overloaded }
+    if (observed.resource > 0) { return ClusterDelivery.Unavailable }
+    if (observed.stopped > 0) { return ClusterDelivery.Disconnected }
     return ClusterDelivery.Disconnected
 }
 
@@ -1786,8 +1776,8 @@ export fn send(topic: string, envelope: move Buffer,
         return ClusterDelivery.InvalidEnvelope
     }
     var remoteWire = encodeTransportFrame(hopLimit, topic, envelopeBytes)
-    var local = _deliveryFromCode(__publishLocal(topic, envelope))
+    var local = _deliveryFromStats(__publishLocal(topic, envelope))
     var remote = remoteWire == null ? ClusterDelivery.InvalidEnvelope
-                                    : _deliveryFromBroadcast(__broadcast(0, remoteWire!))
+                                    : _deliveryFromStats(__broadcast(0, remoteWire!))
     return _combinePublicationDelivery(local, remote)
 }

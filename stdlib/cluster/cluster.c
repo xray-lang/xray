@@ -536,24 +536,24 @@ static XrValue cluster_observe_heartbeat_fn(XrVMRuntime *X, XrValue *args, int a
 
 static XrValue cluster_deliver_inbound_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_ARRAY(args[1]))
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return xr_null();
     XrArray *envelope = XR_TO_ARRAY(args[1]);
     if (envelope->elem_type != XR_ELEM_U8 || envelope->length < 0 ||
         (envelope->length > 0 && !envelope->data))
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return xr_null();
     XrCluster *cluster = NULL;
     XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
     if (!cluster)
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return xr_null();
     if (!atomic_load(&cluster->running)) {
         cluster_runtime_release(cluster);
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return xr_null();
     }
-    int64_t status = (int64_t) xr_topic_registry_deliver(
-        cluster->topics, XR_TO_STRING(args[0])->data, (const uint8_t *) envelope->data,
-        (uint32_t) envelope->length);
+    (void) xr_topic_registry_deliver(cluster->topics, XR_TO_STRING(args[0])->data,
+                                     (const uint8_t *) envelope->data,
+                                     (uint32_t) envelope->length);
     cluster_runtime_release(cluster);
-    return xr_int(status);
+    return xr_null();
 }
 
 static XrValue cluster_broadcast_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -570,16 +570,18 @@ static XrValue cluster_broadcast_fn(XrVMRuntime *X, XrValue *args, int argc) {
         cluster_runtime_release(cluster);
         return xr_null();
     }
-    XrObjectInstance *result = xr_stdlib_record_new(X, "cluster", "__ClusterBroadcastStats");
+    XrObjectInstance *result = xr_stdlib_record_new(X, "cluster", "__ClusterDeliveryStats");
     if (!result) {
         cluster_runtime_release(cluster);
         return xr_null();
     }
-    XrClusterBroadcastStats stats = cluster_transport_broadcast(
+    XrClusterDeliveryStats stats = cluster_transport_broadcast(
         cluster, (uint64_t) XR_TO_INT(args[0]), (const uint8_t *) wire->data,
         (uint32_t) wire->length);
-    xr_object_instance_set_by_key(X, result, "connected", xr_int(stats.connected));
     xr_object_instance_set_by_key(X, result, "accepted", xr_int(stats.accepted));
+    xr_object_instance_set_by_key(X, result, "full", xr_int(stats.full));
+    xr_object_instance_set_by_key(X, result, "stopped", xr_int(stats.stopped));
+    xr_object_instance_set_by_key(X, result, "resource", xr_int(stats.resource));
     cluster_runtime_release(cluster);
     return xr_object_instance_value(result);
 }
@@ -649,24 +651,33 @@ static XrValue cluster_disconnect_peer_fn(XrVMRuntime *X, XrValue *args, int arg
 
 static XrValue cluster_publish_local_primitive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]))
-        return xr_int(XR_CLUSTER_DELIVERY_INVALID_TOPIC);
+        return xr_null();
     const uint8_t *envelope = NULL;
     size_t envelope_len = 0;
     if (!xr_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX)
-        return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
+        return xr_null();
     XrCluster *cluster = NULL;
     XR_CLUSTER_RUNTIME_ACQUIRE(X, cluster);
     if (!cluster)
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return xr_null();
     if (!atomic_load(&cluster->running)) {
         cluster_runtime_release(cluster);
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return xr_null();
+    }
+    XrObjectInstance *result = xr_stdlib_record_new(X, "cluster", "__ClusterDeliveryStats");
+    if (!result) {
+        cluster_runtime_release(cluster);
+        return xr_null();
     }
     XrString *topic = XR_TO_STRING(args[0]);
-    int64_t status = (int64_t) xr_topic_registry_deliver(cluster->topics, topic->data, envelope,
-                                                         (uint32_t) envelope_len);
+    XrTopicDeliveryStats stats =
+        xr_topic_registry_deliver(cluster->topics, topic->data, envelope, (uint32_t) envelope_len);
+    xr_object_instance_set_by_key(X, result, "accepted", xr_int(stats.accepted));
+    xr_object_instance_set_by_key(X, result, "full", xr_int(stats.full));
+    xr_object_instance_set_by_key(X, result, "stopped", xr_int(stats.stopped));
+    xr_object_instance_set_by_key(X, result, "resource", xr_int(stats.resource));
     cluster_runtime_release(cluster);
-    return xr_int(status);
+    return xr_object_instance_value(result);
 }
 
 // xray binding: cluster.listen(pattern)

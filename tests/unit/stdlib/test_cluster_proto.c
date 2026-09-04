@@ -699,6 +699,23 @@ TEST(cluster_topic_projection_matches_the_xray_surface) {
     ASSERT_FALSE(xr_topic_pattern_matches("events.>.tail", "events.user.tail"));
 }
 
+TEST(cluster_output_queue_reports_admission_reasons) {
+    uint8_t byte = 0x2A;
+    XrClusterOutputQueue *queue = xr_cluster_output_queue_new(1);
+    ASSERT_NOT_NULL(queue);
+
+    ASSERT_EQ_INT(xr_cluster_output_queue_push_copy(queue, &byte, 1),
+                  XR_CLUSTER_OUTPUT_PUSH_ACCEPTED);
+    ASSERT_EQ_INT(xr_cluster_output_queue_push_copy(queue, &byte, 1), XR_CLUSTER_OUTPUT_PUSH_FULL);
+    xr_cluster_output_queue_stop(queue);
+    ASSERT_EQ_INT(xr_cluster_output_queue_push_copy(queue, &byte, 1),
+                  XR_CLUSTER_OUTPUT_PUSH_STOPPED);
+    xr_cluster_output_queue_destroy(queue);
+
+    ASSERT_EQ_INT(xr_cluster_output_queue_push_copy(NULL, &byte, 1),
+                  XR_CLUSTER_OUTPUT_PUSH_RESOURCE);
+}
+
 TEST(cluster_tombstone_projection_expires_and_refreshes) {
     XrTombstoneRegistry *registry = xr_tombstone_registry_new(2, 1000);
     ASSERT_NOT_NULL(registry);
@@ -734,6 +751,7 @@ RUN_TEST(cluster_frame_decoders_reject_truncated_payloads);
 RUN_TEST(cluster_phi_projection_uses_bounded_history);
 RUN_TEST(cluster_wire_constants_match_the_xray_surface);
 RUN_TEST(cluster_topic_projection_matches_the_xray_surface);
+RUN_TEST(cluster_output_queue_reports_admission_reasons);
 RUN_TEST(cluster_tombstone_projection_expires_and_refreshes);
 
 TEST_MAIN_END()

@@ -52,19 +52,12 @@ struct XrVMRuntime;
 struct XrChannel;
 typedef struct XrCluster XrCluster;
 
-typedef enum XrClusterDelivery {
-    XR_CLUSTER_DELIVERY_ACCEPTED = 0,
-    XR_CLUSTER_DELIVERY_INVALID_TOPIC,
-    XR_CLUSTER_DELIVERY_INVALID_ENVELOPE,
-    XR_CLUSTER_DELIVERY_UNAVAILABLE,
-    XR_CLUSTER_DELIVERY_OVERLOADED,
-    XR_CLUSTER_DELIVERY_DISCONNECTED,
-} XrClusterDelivery;
-
-typedef struct XrClusterBroadcastStats {
-    int64_t connected;
+typedef struct XrClusterDeliveryStats {
     int64_t accepted;
-} XrClusterBroadcastStats;
+    int64_t full;
+    int64_t stopped;
+    int64_t resource;
+} XrClusterDeliveryStats;
 
 /* ========== Cluster Wire Protocol ========== */
 
@@ -300,11 +293,11 @@ static inline bool cluster_node_remove(XrCluster *cluster, XrClusterNode *node) 
  * the locked peer walk and each synchronized queue admission result, so it
  * stays beside the node and queue representations that give those operations
  * meaning instead of exposing another transport-policy boundary. */
-static inline XrClusterBroadcastStats cluster_transport_broadcast(XrCluster *cluster,
-                                                                  uint64_t excluded_generation,
-                                                                  const uint8_t *wire,
-                                                                  uint32_t wire_length) {
-    XrClusterBroadcastStats stats = {0};
+static inline XrClusterDeliveryStats cluster_transport_broadcast(XrCluster *cluster,
+                                                                 uint64_t excluded_generation,
+                                                                 const uint8_t *wire,
+                                                                 uint32_t wire_length) {
+    XrClusterDeliveryStats stats = {0};
     if (!cluster || !wire || wire_length == 0)
         return stats;
     xr_amutex_lock(&cluster->nodes_lock);
@@ -312,9 +305,16 @@ static inline XrClusterBroadcastStats cluster_transport_broadcast(XrCluster *clu
         if ((excluded_generation != 0 && node->generation_token == excluded_generation) ||
             node->state != XR_NODE_CONNECTED)
             continue;
-        stats.connected++;
-        if (xr_cluster_output_queue_push_copy(node->outq, wire, wire_length) == 0)
+        XrClusterOutputPushResult status =
+            xr_cluster_output_queue_push_copy(node->outq, wire, wire_length);
+        if (status == XR_CLUSTER_OUTPUT_ACCEPTED)
             stats.accepted++;
+        else if (status == XR_CLUSTER_OUTPUT_FULL)
+            stats.full++;
+        else if (status == XR_CLUSTER_OUTPUT_STOPPED)
+            stats.stopped++;
+        else
+            stats.resource++;
     }
     xr_amutex_unlock(&cluster->nodes_lock);
     return stats;

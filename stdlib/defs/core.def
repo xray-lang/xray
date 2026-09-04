@@ -2040,10 +2040,10 @@ module cluster {
     doc: "Private scalar snapshot of one connected peer's failure detector state"
   }
 
-  object __ClusterBroadcastStats {
-    fields: "const connected: i64, const accepted: i64"
+  object __ClusterDeliveryStats {
+    fields: "const accepted: i64, const full: i64, const stopped: i64, const resource: i64"
     exact: true
-    doc: "Private raw counts from one locked peer broadcast"
+    doc: "Private raw admission outcomes from cluster channel and queue providers"
   }
 
   fn __start {
@@ -2195,8 +2195,8 @@ module cluster {
   }
 
   fn __deliverInbound {
-    signature: "(topic: string, envelope: Array<u8>): i64"
-    doc: "Offer one source-decoded envelope to the synchronized topic registry"
+    signature: "(topic: string, envelope: Array<u8>): ()"
+    doc: "Offer one source-decoded envelope to the synchronized topic registry and discard delivery observations"
     vm: "cluster_deliver_inbound_fn"
     argc: 2
     arg_spec: "sv"
@@ -2207,8 +2207,8 @@ module cluster {
   }
 
   fn __broadcast {
-    signature: "(excludedPeerGeneration: i64, wire: Array<u8>): __ClusterBroadcastStats?"
-    doc: "Return raw connected and accepted counts after one locked peer broadcast"
+    signature: "(excludedPeerGeneration: i64, wire: Array<u8>): __ClusterDeliveryStats?"
+    doc: "Return raw admission outcomes after one locked peer broadcast"
     vm: "cluster_broadcast_fn"
     argc: 2
     arg_spec: "vv"
@@ -2315,18 +2315,18 @@ module cluster {
   }
 
   fn __publishLocal {
-    signature: "(topic: string, envelope: Buffer): i64"
-    doc: "Offer one validated opaque service envelope to the synchronized local subscription registry"
+    signature: "(topic: string, envelope: Buffer): __ClusterDeliveryStats?"
+    doc: "Return raw channel admission outcomes for one validated local publication"
     vm: "cluster_publish_local_primitive"
     argc: 2
     arg_spec: "sv"
-    ret: "i64"
     aot_direct: false
     link_object: false
     layer: "runtime"
     caps: "channel"
     effect: "nothrow"
     allocation: "may_heap"
+    return_ownership: "fresh"
   }
 
   fn __listen {

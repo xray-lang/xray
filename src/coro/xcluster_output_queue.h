@@ -38,7 +38,7 @@ XR_FUNC void xr_cluster_output_queue_destroy(XrClusterOutputQueue *queue);
 XR_FUNC XrClusterOutputPushResult xr_cluster_output_queue_push_copy(XrClusterOutputQueue *queue,
                                                                     const uint8_t *data,
                                                                     uint32_t length);
-/* The queue consumes data only when this operation succeeds. */
+/* The queue consumes data only when the result is ACCEPTED. */
 XR_FUNC XrClusterOutputPushResult xr_cluster_output_queue_push_owned(XrClusterOutputQueue *queue,
                                                                      uint8_t *data,
                                                                      uint32_t length);

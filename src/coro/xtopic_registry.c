@@ -60,6 +60,10 @@ typedef struct XrTopicTargets {
     uint32_t count;
     uint32_t capacity;
     uint32_t limit;
+    int64_t full;
+    int64_t stopped;
+    int64_t resource;
+    bool allocation_failed;
     bool heap_allocated;
 } XrTopicTargets;
 
@@ -208,10 +212,20 @@ static bool topic_insert(XrTopicTrieNode *root, const char *pattern, XrTopicSubs
 
 static void topic_targets_append(XrTopicTargets *targets, XrTopicSubscription *subscriptions) {
     for (XrTopicSubscription *sub = subscriptions; sub; sub = sub->next) {
-        if (!sub->channel || xr_channel_is_closed(sub->channel))
+        if (!sub->channel)
             continue;
-        if (targets->count >= targets->limit)
-            return;
+        if (xr_channel_is_closed(sub->channel)) {
+            targets->stopped++;
+            continue;
+        }
+        if (targets->count >= targets->limit) {
+            targets->full++;
+            continue;
+        }
+        if (targets->allocation_failed) {
+            targets->resource++;
+            continue;
+        }
         if (targets->count == targets->capacity) {
             uint32_t new_capacity = targets->capacity * 2;
             if (new_capacity > targets->limit)
@@ -225,8 +239,11 @@ static void topic_targets_append(XrTopicTargets *targets, XrTopicSubscription *s
                 if (grown)
                     memcpy(grown, targets->items, (size_t) targets->count * sizeof(*grown));
             }
-            if (!grown)
-                return;
+            if (!grown) {
+                targets->allocation_failed = true;
+                targets->resource++;
+                continue;
+            }
             targets->items = grown;
             targets->capacity = new_capacity;
             targets->heap_allocated = true;
@@ -361,10 +378,13 @@ XrChannel *xr_topic_registry_subscribe(XrTopicRegistry *registry, const char *pa
     return sub->channel;
 }
 
-XrTopicDelivery xr_topic_registry_deliver(XrTopicRegistry *registry, const char *topic,
-                                          const uint8_t *payload, uint32_t payload_length) {
-    if (!registry || !registry->root || !topic || !payload)
-        return XR_TOPIC_DELIVERY_UNAVAILABLE;
+XrTopicDeliveryStats xr_topic_registry_deliver(XrTopicRegistry *registry, const char *topic,
+                                               const uint8_t *payload, uint32_t payload_length) {
+    XrTopicDeliveryStats stats = {0};
+    if (!registry || !registry->root || !topic || !payload) {
+        stats.resource = 1;
+        return stats;
+    }
     enum {
         INLINE_TARGETS = 32
     };
@@ -382,30 +402,34 @@ XrTopicDelivery xr_topic_registry_deliver(XrTopicRegistry *registry, const char 
     topic_collect(registry->root, topic, &targets);
     xr_amutex_unlock(&registry->lock);
 
-    uint32_t delivered = 0;
-    uint32_t rejected = 0;
+    stats.full = targets.full;
+    stats.stopped = targets.stopped;
+    stats.resource = targets.resource;
     for (uint32_t i = 0; i < targets.count; i++) {
         XrValue buffer =
             registry->vm_isolate
                 ? xr_buffer_copy_from_bytes(registry->vm_isolate, payload, payload_length)
                 : registry->aot_values->buffer_copy_transfer(payload, payload_length);
         if (XR_IS_NULL(buffer)) {
-            rejected++;
+            stats.resource++;
             continue;
         }
-        if (xr_chan_try_send_transfer_core(registry->core, targets.items[i], buffer,
-                                           XR_TRANSFER_MOVE))
-            delivered++;
+        XrValue prepared =
+            xr_chan_prepare_send_transfer_core(registry->core, buffer, XR_TRANSFER_MOVE);
+        XrChanResult sent = xr_channel_send(targets.items[i], prepared, NULL, -1);
+        if (sent == XR_CHAN_OK) {
+            stats.accepted++;
+            continue;
+        }
+        xr_chan_abandon_send_core(registry->core, prepared);
+        if (sent == XR_CHAN_CLOSED)
+            stats.stopped++;
         else
-            rejected++;
+            stats.full++;
     }
     if (targets.heap_allocated)
         xr_free(targets.items);
-    if (delivered > 0)
-        return XR_TOPIC_DELIVERY_ACCEPTED;
-    if (rejected > 0)
-        return XR_TOPIC_DELIVERY_OVERLOADED;
-    return XR_TOPIC_DELIVERY_DISCONNECTED;
+    return stats;
 }
 
 int64_t xr_topic_registry_count(XrTopicRegistry *registry) {
