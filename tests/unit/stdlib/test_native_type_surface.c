@@ -152,9 +152,9 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NULL(xa_builtin_get_object_shape("ws", "WsConnectOptions"));
     ASSERT_NULL(xa_builtin_get_module_func_signature("ws", "connect"));
 
-    /* Peer records, metrics, framing and queues are pure cluster.xr state.
-     * Native metadata therefore exposes neither public source records nor a
-     * private transport snapshot shape. */
+    /* Peer records, metrics, framing, queues and lifecycle are pure cluster.xr
+     * state. Native metadata therefore exposes no source records, transport
+     * snapshot shapes or private lifecycle leaves. */
     ASSERT_NULL(xa_builtin_get_object_shape("cluster", "ClusterConfig"));
     ASSERT_NULL(xa_builtin_get_object_shape("cluster", "ClusterInfo"));
     ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterNodeSnapshot"));
@@ -165,13 +165,10 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NULL(cluster_state);
     ASSERT_NULL(xr_stdlib_enum_type_get(iso, "cluster", "ClusterNodeState"));
 
-    const char *cluster_start_signature = xa_builtin_get_module_func_signature("cluster", "start");
-    const XaBuiltinMember *cluster_start_primitive = find_module_member("cluster", "__start");
-    const char *cluster_info_signature = xa_builtin_get_module_func_signature("cluster", "info");
-    ASSERT_NULL(cluster_start_signature);
-    ASSERT_NOT_NULL(cluster_start_primitive);
-    ASSERT_TRUE(cluster_start_primitive->is_internal);
-    ASSERT_NULL(cluster_info_signature);
+    ASSERT_NULL(xa_builtin_get_module_func_signature("cluster", "start"));
+    ASSERT_NULL(xa_builtin_get_module_func_signature("cluster", "info"));
+    ASSERT_NULL(find_module_member("cluster", "__start"));
+    ASSERT_NULL(find_module_member("cluster", "__stop"));
     ASSERT_NULL(find_module_member("cluster", "__info"));
     ASSERT_NULL(find_module_member("cluster", "__registerNodeMonitor"));
     ASSERT_NULL(find_module_member("cluster", "__registerCoroutineMonitor"));
@@ -181,12 +178,6 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NULL(find_module_member("cluster", "__writePeer"));
     ASSERT_NULL(find_module_member("cluster", "__peerEnqueue"));
     ASSERT_NULL(find_module_member("cluster", "__broadcast"));
-    XrType *cluster_start_fn =
-        xa_builtin_parse_full_signature(iso, cluster_start_primitive->signature);
-    ASSERT_NOT_NULL(cluster_start_fn);
-    ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 0);
-    ASSERT_EQ_INT(cluster_start_fn->function.return_type->kind, XR_KIND_BOOL);
 
     /* Whole-input buffering and path metadata projections are io.xr policy.
      * The native registry retains only the descriptor read and stat leaves. */
@@ -236,6 +227,6 @@ RUN_TEST(native_type_protocol_rejects_null_isolate);
 RUN_TEST(native_receiver_alias_contracts_are_typed_data);
 RUN_TEST(native_type_lookup_and_typed_json_contract_are_total);
 RUN_TEST(native_module_object_and_enum_metadata);
-RUN_TEST(native_direct_member_resolves_each_page_alloc_arity);
+RUN_TEST(native_direct_member_resolves_private_page_alloc_leaf);
 RUN_TEST(native_direct_member_identity_rejects_duplicate_tuple);
 TEST_MAIN_END()

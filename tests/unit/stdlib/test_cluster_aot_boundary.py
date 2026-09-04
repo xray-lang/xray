@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep cluster's native backend on the source-owned runtime boundary."""
+"""Keep cluster source-only and its transport on general runtime boundaries."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ sys.path.insert(0, str(ROOT / "tools" / "stdlibgen"))
 from stdlibgen import parse_defs  # noqa: E402
 
 
-SOURCE_OWNED_LEAVES = {
+RETIRED_NATIVE_LEAVES = (
     "__start",
     "__stop",
-}
+)
 
-RETIRED_STANDALONE_FILES = (
+RETIRED_NATIVE_FILES = (
     "src/aot/xrt_cluster.c",
     "src/aot/xrt_cluster.h",
     "src/coro/xcluster_blocking_runtime.c",
@@ -34,26 +34,26 @@ RETIRED_STANDALONE_FILES = (
     "src/io/xcluster_blocking.h",
     "src/io/xcluster_peer_transport.c",
     "src/io/xcluster_peer_transport.h",
+    "stdlib/cluster/cluster.c",
+    "stdlib/cluster/cluster.h",
+    "stdlib/cluster/cluster_internal.h",
     "stdlib/cluster/cluster_node.c",
 )
 
 
 class ClusterAotBoundaryTests(unittest.TestCase):
-    def test_source_owned_leaves_have_no_parallel_aot_dispatch(self) -> None:
-        entries = {
-            entry.name: entry
-            for entry in parse_defs(ROOT)
-            if entry.module == "cluster" and entry.name in SOURCE_OWNED_LEAVES
-        }
-        self.assertEqual(SOURCE_OWNED_LEAVES, set(entries))
-        for name, entry in entries.items():
-            self.assertEqual("", entry.aot, name)
-            self.assertFalse(entry.aot_direct, name)
-            self.assertEqual("", entry.link_object, name)
+    def test_cluster_has_no_native_definition_module(self) -> None:
+        cluster_entries = [entry.name for entry in parse_defs(ROOT) if entry.module == "cluster"]
+        self.assertEqual([], cluster_entries)
 
-    def test_standalone_cluster_runtime_is_absent(self) -> None:
-        for relative in RETIRED_STANDALONE_FILES:
-            self.assertFalse((ROOT / relative).exists(), relative)
+        core_def = (ROOT / "stdlib/defs/core.def").read_text()
+        self.assertNotIn("module cluster {", core_def)
+        for leaf in RETIRED_NATIVE_LEAVES:
+            self.assertNotIn(f"fn {leaf} ", core_def, leaf)
+
+    def test_native_cluster_runtime_is_absent(self) -> None:
+        present = [relative for relative in RETIRED_NATIVE_FILES if (ROOT / relative).exists()]
+        self.assertEqual([], present)
         self.assertNotIn('include "xrt_cluster.h"', (ROOT / "src/aot/xrt.h").read_text())
 
     def test_generated_aot_tables_have_no_cluster_dispatch(self) -> None:
@@ -64,18 +64,8 @@ class ClusterAotBoundaryTests(unittest.TestCase):
             self.assertNotIn("xrt_cluster_", (ROOT / relative).read_text(), relative)
 
     def test_peer_transport_and_health_are_source_owned(self) -> None:
-        cluster_c = (ROOT / "stdlib/cluster/cluster.c").read_text()
-        cluster_h = (ROOT / "stdlib/cluster/cluster_internal.h").read_text()
         cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
-        core_def = (ROOT / "stdlib/defs/core.def").read_text()
 
-        self.assertNotIn("XrPhiDetector", cluster_h)
-        self.assertNotIn("XrClusterNode", cluster_h)
-        self.assertNotIn("last_heartbeat_sent", cluster_h)
-        self.assertNotIn("missed_heartbeats", cluster_h)
-        self.assertNotIn("missed_heartbeats", cluster_c)
-        self.assertNotIn("xcluster_output_queue", cluster_c)
-        self.assertNotIn("xcluster_peer_transport", cluster_c)
         self.assertIn("var _phiPeerStates: Array<_PhiPeerState>", cluster_xr)
         self.assertIn("var _peerTransports: Array<_PeerTransportState>", cluster_xr)
         self.assertIn("committed: bool", cluster_xr)
@@ -89,33 +79,25 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         self.assertIn(
             "_enqueueControlFrame(peer.peerGeneration, heartbeat!)", cluster_xr
         )
-        for retired in (
-            "__adoptPeer",
-            "__readPeer",
-            "__writePeer",
-            "__peerEnqueue",
-            "__broadcast",
-            "__healthSnapshot",
-            "__applyHealthDecision",
-            "__runtimeSnapshot",
-        ):
-            self.assertNotIn(f"fn {retired} ", core_def, retired)
 
-    def test_tls_context_policy_and_lifetime_are_source_owned(self) -> None:
-        cluster_c = (ROOT / "stdlib/cluster/cluster.c").read_text()
-        cluster_h = (ROOT / "stdlib/cluster/cluster_internal.h").read_text()
+    def test_lifecycle_has_no_native_leaf(self) -> None:
         cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+
+        referenced = [leaf for leaf in RETIRED_NATIVE_LEAVES if f"{leaf}(" in cluster_xr]
+        self.assertEqual([], referenced)
+
+    def test_tls_context_policy_is_source_owned(self) -> None:
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+
+        self.assertIn("var _sourceTlsResources: _ClusterTlsResources?", cluster_xr)
+        self.assertIn("context!.upgrade", cluster_xr)
+        self.assertIn("context!.accept", cluster_xr)
+
+    def test_tls_provider_is_a_general_net_boundary(self) -> None:
         net_xr = (ROOT / "stdlib/net/net.xr").read_text()
         tls_provider = (ROOT / "src/io/xtls_provider.c").read_text()
         tls_conn = tls_provider.split("struct XrTlsConn", 1)[1].split("};", 1)[0]
 
-        self.assertNotIn("cluster_join_tls_fn", cluster_c)
-        self.assertNotIn("cluster_accept_tls_fn", cluster_c)
-        self.assertNotIn("tls_client_ctx", cluster_h)
-        self.assertNotIn("tls_server_ctx", cluster_h)
-        self.assertIn("var _sourceTlsResources: _ClusterTlsResources?", cluster_xr)
-        self.assertIn("context!.upgrade", cluster_xr)
-        self.assertIn("context!.accept", cluster_xr)
         self.assertIn("export final class TlsClientContext", net_xr)
         self.assertIn("export final class TlsServerContext", net_xr)
         self.assertIn("requireClientCertificate: bool", net_xr)

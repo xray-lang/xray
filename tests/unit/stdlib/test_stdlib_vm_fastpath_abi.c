@@ -101,9 +101,9 @@ static int verify_runtime_overlay(void) {
     /* Only modules that stay eligible for hosting export a C function here;
      * a module that reaches its private native primitives keeps its Xray
      * export. */
-    const char *modules[] = {"codegen", "datetime", "http", "text", "ws"};
-    const char *members[] = {"compilerFence", "offset", "isRedirectStatus", "trim",
-                             "isValidCloseCode"};
+    const char *modules[] = {"cluster", "codegen", "datetime", "http", "text", "ws"};
+    const char *members[] = {"validNodeName",    "compilerFence", "offset",
+                             "isRedirectStatus", "trim",          "isValidCloseCode"};
     for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
         XrValue module_value = xr_module_import(isolate, modules[i]);
         ASSERT_TRUE(xr_value_is_module(module_value));
@@ -141,6 +141,7 @@ static int verify_string_boundary(void) {
     ASSERT_TRUE(isolate != NULL);
     ASSERT_TRUE(xr_test_init_coro(isolate) != NULL);
     ASSERT_TRUE(xr_value_is_module(xr_module_import(isolate, "text")));
+    ASSERT_TRUE(xr_value_is_module(xr_module_import(isolate, "cluster")));
 
     static const char source[] = "  h\xc3\xa9llo \n";
     static const char expected[] = "h\xc3\xa9llo";
@@ -157,14 +158,10 @@ static int verify_string_boundary(void) {
     ASSERT_TRUE(output->rune_length == 5);
     ASSERT_TRUE(memcmp(output->data, expected, sizeof(expected) - 1) == 0);
 
-    /* cluster reaches its private native primitives, so it has no hosted
-     * entry to exercise the string boundary through; the checks above already
-     * cover that boundary on the hosted string surface. */
+    /* cluster is source-only, so its public validation helper is eligible for
+     * the hosted string boundary. */
     XrStdlibVmFastpathFn valid_name = xr_stdlib_vm_fastpath_lookup("cluster", "validNodeName");
-    if (!valid_name) {
-        xray_vm_delete(isolate);
-        return 0;
-    }
+    ASSERT_TRUE(valid_name != NULL);
     XrString *node = xr_string_new(isolate, "node-01", 7);
     ASSERT_TRUE(node != NULL);
     XrValue node_argument = xr_string_value(node);
