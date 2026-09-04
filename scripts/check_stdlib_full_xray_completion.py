@@ -282,7 +282,7 @@ class ProbeModuleEvidence:
         """Report whether both backends consumed one plan, with the reason.
 
         A successful exit code is never a plan identity.  PASS requires two
-        complete, independently verified PSC9/Semantic45/Target56/GCI/XTP56
+        complete, independently verified PSC9/Semantic46/Target57/GCI/XTP57
         identities that are byte-for-byte equal across every canonical field.
         """
         if self.vm_ok is None or self.aot_ok is None:
@@ -485,7 +485,7 @@ def probe_authority_errors(payload: dict[str, Any], expected_commit: str) -> lis
     if schemas != CURRENT_PLAN_SCHEMAS:
         errors.append(
             f"probe schemas {schemas!r} do not equal current "
-            "PSC9/Semantic45/Target56/XTP56"
+            "PSC9/Semantic46/Target57/XTP57"
         )
     if authority.get("schema_errors") not in ([], None):
         errors.append("probe reports source schema errors")
@@ -1038,7 +1038,7 @@ def gate_unified_target_plan_coverage(
             message=(
                 f"probe evidence covers {len(production) - len(uncovered)} of {len(production)} "
                 f"production modules; the rest carry no complete verified "
-                f"PSC9/Semantic45/Target56/GCI/XTP56 identity"
+                f"PSC9/Semantic46/Target57/GCI/XTP57 identity"
             ),
             observed=len(uncovered),
             evidence=[
