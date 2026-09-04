@@ -18,7 +18,7 @@
 // every rejection leaves through Http2Error.
 
 import net
-import { NetError } from net
+import { NetConn, NetError } from net
 import time
 
 // ---- Frame types (RFC 7540 Section 6) ----
