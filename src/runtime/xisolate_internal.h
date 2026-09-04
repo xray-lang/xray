@@ -183,11 +183,6 @@ struct XrVMRuntime {
     struct XrProviderLifecycleEntry *provider_lifecycle_entries;
     bool provider_lifecycle_closing;
 
-    /* Cluster is the first native provider using the generic lifecycle API.
-     * Its opaque state remains here because transport fast paths need a
-     * constant-time isolate-local slot. */
-    void *cluster;  // XrCluster*, protected by provider_lifecycle_lock
-
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by module/xstdlib_runtime_cache.h. Holds memoised
     // values that reference per-isolate symbol IDs (e.g. the dynamic-

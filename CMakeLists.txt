@@ -1347,9 +1347,11 @@ set(STDLIB_SRC ${STDLIB_CORE_SRC})
 
 if(XR_STDLIB_FULL)
     # Full stdlib includes every built-in module. Group switches apply only to
-    # modular builds, so "full" has one exact, fail-closed meaning.
+    # modular builds, so "full" has one exact, fail-closed meaning. Source-only
+    # modules do not contribute C translation units.
     file(GLOB_RECURSE STDLIB_ALL_SRC CONFIGURE_DEPENDS "stdlib/*/*.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
+    list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/cluster/.*\\.c$")
     if(NOT XR_BUILD_TEST_MODULES)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")
     endif()
@@ -1360,7 +1362,6 @@ if(XR_STDLIB_FULL)
     add_compile_definitions(XR_HAS_NETWORK=1)
     add_compile_definitions(XR_HAS_DATA_FORMATS=1)
     add_compile_definitions(XR_HAS_CRYPTO=1)
-    add_compile_definitions(XR_HAS_CLUSTER=1)
     add_compile_definitions(XR_HAS_WS=1)
     add_compile_definitions(XR_HAS_HTTP2=1)
     message(STATUS "Stdlib: full")
@@ -1397,9 +1398,6 @@ else()
     endif()
 
     if(XR_STDLIB_CLUSTER)
-        file(GLOB STDLIB_CLUSTER_SRC CONFIGURE_DEPENDS "stdlib/cluster/*.c")
-        list(APPEND STDLIB_SRC ${STDLIB_CLUSTER_SRC})
-        add_compile_definitions(XR_HAS_CLUSTER=1)
         message(STATUS "Stdlib: +cluster")
     endif()
 
