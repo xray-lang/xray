@@ -390,10 +390,6 @@ static inline XrValue xrt_os_loadavg(void) {
     return arr;
 }
 
-static inline XrValue xrt_os_clock(void) {
-    return XR_FROM_FLOAT((double) clock() / (double) CLOCKS_PER_SEC);
-}
-
 static inline XrValue xrt_os_sleep(XrValue ms_value) {
     if (!XR_IS_INT(ms_value))
         return XR_NULL_VAL;

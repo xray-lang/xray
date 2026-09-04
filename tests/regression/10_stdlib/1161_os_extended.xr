@@ -3,6 +3,7 @@
 import os
 import io
 import path
+import time
 
 // ===== User Information =====
 
@@ -96,8 +97,8 @@ fn test_ppid() {
 
 @test
 fn test_clock() {
-    var t = os.clock()
-    assert(t >= 0.0)
+    var t = time.clock()
+    assert(t >= 0)
 }
 
 // ===== Process Execution =====

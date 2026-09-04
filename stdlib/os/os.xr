@@ -156,7 +156,6 @@ export fn totalMemory() -> i64 { return __totalMemory() }
 export fn freeMemory() -> i64 { return __freeMemory() }
 export fn uptime() -> f64 { return __uptime() }
 export fn loadavg() -> Array<f64> { return __loadavg() }
-export fn clock() -> f64 { return __clock() }
 export fn sleep(ms: i64) {
     if (ms <= 0) { return }
     __sleep(ms)

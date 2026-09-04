@@ -908,16 +908,6 @@ deletion_trigger = "when the compiler exposes the target architecture to Xray so
 
 [[leaf]]
 module = "os"
-symbol = "__clock"
-class = "host_abi_leaf"
-abi = "clock(3), divided by CLOCKS_PER_SEC"
-ownership = "none"
-effect = "nothrow"
-provider = "libc. VM stdlib/os/os.c os_clock; AOT src/aot/xrt_os.h xrt_os_clock. One line each, same entry point"
-deletion_trigger = "when os.xr reads process CPU time through time.__cpuNanos instead of keeping its own coarser reading, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md"
-
-[[leaf]]
-module = "os"
 symbol = "__cpuCount"
 class = "host_abi_leaf"
 abi = "sysconf(3) _SC_NPROCESSORS_ONLN; Win32 GetSystemInfo"

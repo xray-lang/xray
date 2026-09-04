@@ -262,10 +262,9 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__freeMemory", "(): i64", "Get available system memory in bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__uptime", "(): f64", "Get system uptime in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__clock", "(): f64", "Get process CPU time in seconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_OS_FUNCTION_COUNT 23
+#define GEN_OS_FUNCTION_COUNT 22
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {

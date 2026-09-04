@@ -993,18 +993,6 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __clock {
-    signature: "(): f64"
-    doc: "Get process CPU time in seconds"
-    vm: "os_clock"
-    aot: "xrt_os_clock"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
   fn __sleep {
     signature: "(ms: i64): ()"
     doc: "Sleep for milliseconds"

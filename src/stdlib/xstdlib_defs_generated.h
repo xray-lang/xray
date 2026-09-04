@@ -222,7 +222,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"os", "__freeMemory", "(): i64", "Get available system memory in bytes", "os_freeMemory", "normal", "", "xrt_os_free_memory", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"os", "__uptime", "(): f64", "Get system uptime in seconds", "os_uptime", "normal", "", "xrt_os_uptime", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"os", "__loadavg", "(): Array<f64>", "Get system load averages (1, 5, 15 min)", "os_loadavg", "normal", "", "xrt_os_loadavg", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"os", "__clock", "(): f64", "Get process CPU time in seconds", "os_clock", "normal", "", "xrt_os_clock", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"os", "__sleep", "(ms: i64): ()", "Sleep for milliseconds", "os_sleep", "yieldable", "", "xrt_os_sleep", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__chmod", "(path: Path, mode: i64): bool", "Change file permissions", "io_chmod", "normal", "", "xrt_io_chmod_value", "pv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"io", "__chdir", "(path: Path): bool", "Change working directory", "io_chdir", "normal", "", "xrt_io_chdir", "p", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},

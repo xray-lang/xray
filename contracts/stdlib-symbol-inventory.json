@@ -1,16 +1,16 @@
 {
   "schema": 1,
-  "base": "71ed53094ff2d5574cba3911027b32eb5f3438a6",
+  "base": "d0427d7c33f9a194d1a799572d8a60ae5793e419",
   "counts": {
     "modules": 32,
     "production_modules": 30,
     "test_only_modules": 2,
-    "symbols": 1635,
-    "production_symbols": 1609,
-    "xray_body_symbols": 1446,
+    "symbols": 1633,
+    "production_symbols": 1607,
+    "xray_body_symbols": 1445,
     "handwritten_c_semantic_owner": 0,
-    "native_leaf_symbols": 161,
-    "production_native_leaf_symbols": 161,
+    "native_leaf_symbols": 160,
+    "production_native_leaf_symbols": 160,
     "unclassified_native_leaf": 0,
     "whole_module_native_policy": 0,
     "public_native_symbols": 0,
@@ -477,12 +477,12 @@
       "c_sources": [
         "stdlib/os/os.c"
       ],
-      "c_function_count": 23,
+      "c_function_count": 22,
       "enters_module_graph": true,
-      "symbol_count": 57,
-      "xray_body_symbols": 34,
-      "handwritten_c_symbols": 23,
-      "native_leaf_symbols": 23,
+      "symbol_count": 55,
+      "xray_body_symbols": 33,
+      "handwritten_c_symbols": 22,
+      "native_leaf_symbols": 22,
       "queue": "native-leaf-only",
       "queue_reason": "no handwritten C owner and no per-module loader",
       "probe": {}
@@ -8181,21 +8181,6 @@
     },
     {
       "module": "os",
-      "symbol": "__clock",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/os/os.c",
-      "native_leaf": true,
-      "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=clock(3), divided by CLOCKS_PER_SEC; ownership=none; effect=nothrow; provider=libc. VM stdlib/os/os.c os_clock; AOT src/aot/xrt_os.h xrt_os_clock. One line each, same entry point; deletion_trigger=when os.xr reads process CPU time through time.__cpuNanos instead of keeping its own coarser reading, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md",
-      "plan_coverage": "native_binding",
-      "vm_binding": "os_clock",
-      "aot_binding": "xrt_os_clock",
-      "covered_c_deletion": "stdlib/os/os.c"
-    },
-    {
-      "module": "os",
       "symbol": "__sleep",
       "kind": "function",
       "audience": "production",
@@ -8275,15 +8260,6 @@
     {
       "module": "os",
       "symbol": "arch",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/os/os.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "os",
-      "symbol": "clock",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/os/os.xr",

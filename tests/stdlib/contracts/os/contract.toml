@@ -1,6 +1,6 @@
 schema = 1
 module = "os"
-contract_revision = 2
+contract_revision = 3
 legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/os/legacy_expected.jsonl"
@@ -16,6 +16,7 @@ legacy_public_surface = [
 intentional_semantic_changes = [
   "os is a permanent L2 syscall shell; the .def signatures are the typed contract",
   "exec captures bytes with independent bounds instead of assuming subprocess output is UTF-8 text",
+  "process CPU time has one owner in time.clock; the redundant os.clock surface is removed",
 ]
 known_legacy_bugs = [
   "none recorded for the native baseline",

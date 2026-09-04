@@ -463,14 +463,6 @@ static XrCFuncResult os_sleep(XrVMRuntime *X, XrValue *args, int argc, XrValue *
     return xr_yield_for_timeout(X, ms, xr_yield_finish_null, NULL, result);
 }
 
-// clock() - Get process CPU time in seconds
-static XrValue os_clock(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    (void) args;
-    (void) argc;
-    return xr_float((double) clock() / CLOCKS_PER_SEC);
-}
-
 /* ========== Platform Information ========== */
 
 // Report host facts used by the public Xray wrappers. The ladders themselves
