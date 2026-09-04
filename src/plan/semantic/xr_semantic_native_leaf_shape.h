@@ -23,9 +23,9 @@ static inline bool xr_semantic_native_target_leaf_identity(const XrStdlibDefEntr
         entry->target_leaf >= XR_STDLIB_TARGET_LEAF_COUNT)
         return false;
     char key[512];
-    int written = snprintf(key, sizeof(key), "stdlib-target-leaf-v1:%u:%s.%s:%s",
-                           (unsigned) entry->target_leaf, entry->module, entry->name,
-                           entry->signature);
+    int written =
+        snprintf(key, sizeof(key), "stdlib-target-leaf-v1:%u:%s.%s:%s",
+                 (unsigned) entry->target_leaf, entry->module, entry->name, entry->signature);
     XrFingerprint digest;
     return written > 0 && (size_t) written < sizeof(key) &&
            xr_stable_id_from_key(key, out, &digest);
@@ -65,8 +65,7 @@ xr_semantic_native_direct_import_for_value(const XrSemanticPlan *plan, uint32_t 
             return NULL;
         if (producer->opcode == XI_IMPORT_REF)
             return producer;
-        if (producer->opcode == XI_COPY &&
-            producer->semantic_immediate == XI_COPY_KIND_IDENTITY &&
+        if (producer->opcode == XI_COPY && producer->semantic_immediate == XI_COPY_KIND_IDENTITY &&
             producer->operand_count == 1 && producer->operand_begin < operand_count &&
             producer->result_alias_operand == 0) {
             value = operands[producer->operand_begin].value;
@@ -94,9 +93,10 @@ xr_semantic_native_direct_import_for_value(const XrSemanticPlan *plan, uint32_t 
     return NULL;
 }
 
-static inline bool xr_semantic_native_direct_scalar_call_shape_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
-    const XrStdlibDefEntry **out_entry) {
+static inline bool
+xr_semantic_native_direct_scalar_call_shape_is_exact(const XrSemanticPlan *plan,
+                                                     const XrSemanticOperationRecord *operation,
+                                                     const XrStdlibDefEntry **out_entry) {
     uint32_t operand_count = 0;
     uint32_t metadata_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
@@ -118,8 +118,8 @@ static inline bool xr_semantic_native_direct_scalar_call_shape_is_exact(
     if (callee->role != XR_SEM_OPERAND_CALLEE || callee->parameter != -1 || callee->flags != 0 ||
         callee->ownership_action != XR_SEM_OPERAND_BORROW)
         return false;
-    const XrSemanticOperationRecord *import = xr_semantic_native_direct_import_for_value(
-        plan, operation->function, callee->value);
+    const XrSemanticOperationRecord *import =
+        xr_semantic_native_direct_import_for_value(plan, operation->function, callee->value);
     if (!import || import->opcode != XI_IMPORT_REF ||
         (import->function != 0 && import->function != operation->function) ||
         import->operand_count != 0 || import->metadata_count != 2 ||
@@ -164,17 +164,16 @@ static inline bool xr_semantic_native_target_leaf_call_shape_is_exact(
     const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
     const XrSemanticTypeRecord *result_type =
         operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
-    if (!plan || !operation || !operands || !metadata ||
-        operation->opcode != XI_CALL || operation->operand_count == 0 ||
-        operation->operand_begin >= operand_count ||
+    if (!plan || !operation || !operands || !metadata || operation->opcode != XI_CALL ||
+        operation->operand_count == 0 || operation->operand_begin >= operand_count ||
         operation->operand_count > operand_count - operation->operand_begin ||
         operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
         operation->auxiliary_kind != XI_AUX_KIND_NONE ||
         (operation->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
         operation->effects != xi_generated_op_effects(XI_CALL) ||
         operation->result_alias_operand != -1 ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
-        !result_type || result_type->kind != XR_KIND_INT ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT || !result_type ||
+        result_type->kind != XR_KIND_INT ||
         !xr_semantic_native_module_boundary_type_is_exact(result_type, true))
         return false;
 
@@ -182,13 +181,14 @@ static inline bool xr_semantic_native_target_leaf_call_shape_is_exact(
     if (callee->role != XR_SEM_OPERAND_CALLEE || callee->parameter != -1 || callee->flags != 0 ||
         callee->ownership_action != XR_SEM_OPERAND_BORROW)
         return false;
-    const XrSemanticOperationRecord *import = xr_semantic_unique_operation_for_value(
-        plan, operation->function, callee->value);
+    const XrSemanticOperationRecord *import =
+        xr_semantic_unique_operation_for_value(plan, operation->function, callee->value);
     if (!import || import->opcode != XI_IMPORT_REF || import->operand_count != 0 ||
         import->metadata_count != 2 || import->metadata_begin >= metadata_count ||
         import->metadata_begin + 1u >= metadata_count ||
         import->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
-        import->intrinsic_kind != XR_SEM_INTRINSIC_NONE || import->auxiliary_kind != XI_AUX_KIND_NONE ||
+        import->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        import->auxiliary_kind != XI_AUX_KIND_NONE ||
         import->effects != xi_generated_op_effects(XI_IMPORT_REF) ||
         (import->flags & XI_FLAG_MAY_SUSPEND) != 0)
         return false;
@@ -224,7 +224,82 @@ static inline bool xr_semantic_native_target_leaf_call_is_exact(
     return operation &&
            operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_TARGET_LEAF_SCALAR_CALL &&
            xr_semantic_native_target_leaf_call_shape_is_exact(plan, operation, out_entry,
-                                                               out_identity);
+                                                              out_identity);
+}
+
+/* A grounded normal stdlib call whose generated direct shim accepts and
+ * returns tagged XrValue carriers. Unlike the scalar intrinsic family, its
+ * arguments may hold managed references and its registry row may require a
+ * hosted runtime capability. The call remains non-suspending and the result is
+ * deliberately limited to the already-closed scalar/Unit result domain. */
+static inline bool xr_semantic_native_direct_call_shape_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    const XrStdlibDefEntry **out_entry, XrStableId *out_identity) {
+    uint32_t operand_count = 0;
+    uint32_t metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    const XrSemanticTypeRecord *result_type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!plan || !operation || !operands || !metadata || operation->opcode != XI_CALL ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE || operation->operand_count == 0 ||
+        operation->operand_begin >= operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        (operation->flags & XI_FLAG_MAY_SUSPEND) != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CALL) ||
+        operation->result_alias_operand != -1 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        !xr_semantic_native_module_boundary_type_is_exact(result_type, true))
+        return false;
+
+    const XrSemanticOperandRecord *callee = &operands[operation->operand_begin];
+    if (callee->role != XR_SEM_OPERAND_CALLEE || callee->parameter != -1 || callee->flags != 0 ||
+        callee->ownership_action != XR_SEM_OPERAND_BORROW)
+        return false;
+    const XrSemanticOperationRecord *import =
+        xr_semantic_native_direct_import_for_value(plan, operation->function, callee->value);
+    if (!import || import->opcode != XI_IMPORT_REF ||
+        (import->function != 0 && import->function != operation->function) ||
+        import->operand_count != 0 || import->metadata_count != 2 ||
+        import->metadata_begin >= metadata_count || import->metadata_begin + 1u >= metadata_count ||
+        import->import_resolution != XR_SEM_IMPORT_RESOLUTION_NATIVE_STDLIB ||
+        import->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        import->auxiliary_kind != XI_AUX_KIND_NONE ||
+        import->effects != xi_generated_op_effects(XI_IMPORT_REF) ||
+        (import->flags & XI_FLAG_MAY_SUSPEND) != 0 || import->result_type != callee->type)
+        return false;
+    for (uint16_t i = 1; i < operation->operand_count; i++) {
+        const XrSemanticOperandRecord *argument = callee + i;
+        if (argument->role != XR_SEM_OPERAND_ARGUMENT ||
+            argument->parameter != (int16_t) (i - 1u) ||
+            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+            argument->ownership_action != XR_SEM_OPERAND_BORROW ||
+            !xr_semantic_plan_type(plan, argument->type))
+            return false;
+    }
+
+    const char *module = metadata[import->metadata_begin];
+    const char *member = metadata[import->metadata_begin + 1u];
+    const XrStdlibDefEntry *entry = xr_stdlib_metadata_exact_native_direct_call(
+        module, member, (uint16_t) (operation->operand_count - 1u));
+    if (!entry)
+        return false;
+    char key[768];
+    int written = snprintf(key, sizeof(key), "stdlib-native-direct-v1:%s.%s:%s:%s:%s:%u",
+                           entry->module, entry->name, entry->signature, entry->aot,
+                           entry->arg_spec, entry->runtime_capabilities);
+    XrStableId identity = {{0}};
+    XrFingerprint digest;
+    if (written <= 0 || (size_t) written >= sizeof(key) ||
+        !xr_stable_id_from_key(key, &identity, &digest))
+        return false;
+    if (out_entry)
+        *out_entry = entry;
+    if (out_identity)
+        *out_identity = identity;
+    return true;
 }
 
 #endif /* XR_SEMANTIC_NATIVE_LEAF_SHAPE_H */

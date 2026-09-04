@@ -6409,16 +6409,20 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+        bool native_yieldable = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
+        bool native_direct = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT;
         bool class_construction =
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
         bool builtin_instance =
             target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE;
         if (!target || !operation ||
-            (!direct && !source && !native_namespace && !class_construction && !builtin_instance) ||
+            (!direct && !source && !native_namespace && !native_yieldable && !native_direct &&
+             !class_construction && !builtin_instance) ||
             (direct && !xr_semantic_call_target_names_local_function(target, operation,
                                                                      semantic_functions)) ||
             (source && operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
+            ((native_yieldable || native_direct) && operation->opcode != XI_CALL) ||
             (class_construction && operation->opcode != XI_CALL) ||
             (builtin_instance && operation->opcode != XI_CALL_METHOD)) {
             valid = false;
@@ -6485,6 +6489,13 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
+        bool native_yieldable = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
+        bool native_direct = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT;
+        const XrStdlibDefEntry *native_direct_entry = NULL;
+        XrStableId native_direct_identity = {{0}};
+        bool native_direct_exact = native_direct && xr_semantic_native_direct_call_shape_is_exact(
+                                                        semantic, operation, &native_direct_entry,
+                                                        &native_direct_identity);
         /* Re-derived from the plan, never read back from the row: a target row
          * that claims a construction the shared judgement cannot re-prove is
          * rejected together with the intent that names it. */
@@ -6768,7 +6779,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         bool expected_suspend =
             operation &&
             ((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 || operation->opcode == XI_GO ||
-             native_namespace || (source && source_callee_suspendable) ||
+             native_namespace || native_yieldable || (source && source_callee_suspendable) ||
              (operation->opcode == XI_CALL && target && target->function < semantic_functions &&
               suspendable[target->function] != 0));
         valid =
@@ -6805,11 +6816,13 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             plan->machine_reps[call->error_register_rep].kind == XR_MACHINE_REP_VOID &&
             plan->machine_reps[call->error_memory_rep].kind == XR_MACHINE_REP_VOID &&
             call->native_abi == machine->native_abi &&
-            (native_target_leaf ? (!stable_id_is_zero(call->native_callee_identity) &&
-                                   call->native_leaf > XR_STDLIB_TARGET_LEAF_NONE &&
-                                   call->native_leaf < XR_STDLIB_TARGET_LEAF_COUNT)
-                                : (stable_id_is_zero(call->native_callee_identity) &&
-                                   call->native_leaf == XR_STDLIB_TARGET_LEAF_NONE)) &&
+            (native_target_leaf
+                 ? (native_target_leaf_entry && !stable_id_is_zero(call->native_callee_identity) &&
+                    call->native_leaf == native_target_leaf_entry->target_leaf)
+             : native_direct ? (!stable_id_is_zero(call->native_callee_identity) &&
+                                call->native_leaf == XR_STDLIB_TARGET_LEAF_NONE)
+                             : (stable_id_is_zero(call->native_callee_identity) &&
+                                call->native_leaf == XR_STDLIB_TARGET_LEAF_NONE)) &&
             call->result_mode ==
                 (direct_aggregate_result ? XR_TARGET_CALL_CALLER_STORAGE : XR_TARGET_CALL_VALUE) &&
             /* Receiver-aliasing StringBuilder append preserves a borrowed
@@ -7283,6 +7296,48 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     argument->flags == expected_flags;
                 next_argument++;
             }
+        } else if (native_direct) {
+            valid = native_direct_exact && native_direct_entry && !suspends && !expected_suspend &&
+                    target->function == XR_SEMANTIC_INDEX_NONE &&
+                    target->dependency == XR_SEMANTIC_INDEX_NONE &&
+                    target->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    target->callable_type == XR_SEMANTIC_INDEX_NONE &&
+                    reconstruct_call_identity(
+                        "xray-target-native-direct-v1", target->id, native_direct_identity,
+                        native_direct_entry->runtime_capabilities, &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    xr_stable_id_equal(call->native_callee_identity, native_direct_identity) &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) && call->argument_count == 0 &&
+                    call->flags == 0 &&
+                    call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT &&
+                    call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT;
+            if (!valid)
+                break;
+        } else if (native_yieldable) {
+            valid = suspends && expected_suspend && operation->opcode == XI_CALL &&
+                    operation->operand_count >= 1 && target->function == XR_SEMANTIC_INDEX_NONE &&
+                    target->dependency == XR_SEMANTIC_INDEX_NONE &&
+                    target->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    target->callable_type == XR_SEMANTIC_INDEX_NONE &&
+                    reconstruct_call_identity("xray-target-native-yieldable-v1", target->id,
+                                              operation->id, operation->operand_count - 1u,
+                                              &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    stable_id_is_zero(call->native_callee_identity) && call->argument_count == 0 &&
+                    call->flags == XR_TARGET_CALL_SUSPEND &&
+                    call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_YIELDABLE &&
+                    call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE;
+            if (!valid)
+                break;
         } else if (native_namespace) {
             valid =
                 target && suspends && expected_suspend && operation->opcode == XI_CALL_METHOD &&

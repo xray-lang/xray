@@ -3776,6 +3776,10 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         bool native_yieldable = !program_bound && resolve_frozen_native_yieldable_target(
                                                       plan, definitions, value_count, operation,
                                                       &native_module, &native_member);
+        const XrStdlibDefEntry *native_direct_entry = NULL;
+        bool native_direct =
+            !program_bound && xr_semantic_native_direct_call_shape_is_exact(
+                                  plan, &plan->operations[operation], &native_direct_entry, NULL);
         const char *source_module = NULL;
         const char *source_selector = NULL;
         bool source_namespace =
@@ -3935,7 +3939,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             return report(error, error_size, "XR_SEM_0019",
                           "bound program call has no call-target authority");
         }
-        if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable ||
+        if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable || native_direct ||
              indirect_type != XR_SEMANTIC_INDEX_NONE || native_namespace || builtin_instance ||
              source_instance_function != XR_SEMANTIC_INDEX_NONE ||
              class_construction != XR_SEMANTIC_INDEX_NONE || imported_class_result) &&
@@ -3943,7 +3947,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             char detail[512];
             snprintf(detail, sizeof(detail),
                      "provable call has no call-target authority operation=%u function=%u "
-                     "name=%s opcode=%u direct=%u native-yieldable=%u indirect=%u "
+                     "name=%s opcode=%u direct=%u native-yieldable=%u native-direct=%u indirect=%u "
                      "native-namespace=%u builtin-instance=%u source-instance=%u "
                      "source-module=%s source-selector=%s class-construction=%u "
                      "imported-class-result=%u",
@@ -3953,10 +3957,10 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                          ? plan->functions[source_call->function].name
                          : "",
                      source_call->opcode, direct_function, native_yieldable ? 1u : 0u,
-                     indirect_type, native_namespace ? 1u : 0u, builtin_instance ? 1u : 0u,
-                     source_instance_function, source_module ? source_module : "",
-                     source_selector ? source_selector : "", class_construction,
-                     imported_class_result ? 1u : 0u);
+                     native_direct ? 1u : 0u, indirect_type, native_namespace ? 1u : 0u,
+                     builtin_instance ? 1u : 0u, source_instance_function,
+                     source_module ? source_module : "", source_selector ? source_selector : "",
+                     class_construction, imported_class_result ? 1u : 0u);
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019", detail);
         }
@@ -3981,6 +3985,14 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                       stable_id_zero(target->export_identity) &&
                       stable_id_zero(target->callee_function) &&
                       target->callable_type == XR_SEMANTIC_INDEX_NONE;
+        bool normal_native = direct_function == XR_SEMANTIC_INDEX_NONE && !native_yieldable &&
+                             native_direct && target->function == XR_SEMANTIC_INDEX_NONE &&
+                             target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT &&
+                             target->dependency == XR_SEMANTIC_INDEX_NONE &&
+                             target->source_export == XR_SEMANTIC_INDEX_NONE &&
+                             stable_id_zero(target->export_identity) &&
+                             stable_id_zero(target->callee_function) &&
+                             target->callable_type == XR_SEMANTIC_INDEX_NONE;
         bool source_shape =
             source_export && source_namespace && direct_function == XR_SEMANTIC_INDEX_NONE &&
             !native_yieldable && target->function == XR_SEMANTIC_INDEX_NONE &&
@@ -4074,9 +4086,10 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             xr_free(stores.rows);
             return false;
         }
-        if ((!direct && !native && !source_shape && !indirect && !native_namespace_shape &&
-             !builtin_instance_shape && !source_instance_shape && !open_source_instance_shape &&
-             !class_construction_shape && !imported_class_construction_shape) ||
+        if ((!direct && !native && !normal_native && !source_shape && !indirect &&
+             !native_namespace_shape && !builtin_instance_shape && !source_instance_shape &&
+             !open_source_instance_shape && !class_construction_shape &&
+             !imported_class_construction_shape) ||
             target->reserved[0] != 0 || target->reserved[1] != 0 || target->reserved[2] != 0) {
             char detail[640];
             snprintf(detail, sizeof(detail),
@@ -4119,6 +4132,11 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               "call-target-v3:schema=%u:operation=%s:native=%s.%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, native_module,
                               native_member, (unsigned) target->kind);
+        } else if (normal_native) {
+            length = snprintf(expected_key, sizeof(expected_key),
+                              "call-target-v3:schema=%u:operation=%s:native-direct=%s.%s:kind=%u",
+                              XR_SEMANTIC_SCHEMA_VERSION, operation_id, native_direct_entry->module,
+                              native_direct_entry->name, (unsigned) target->kind);
         } else if (source_shape) {
             char dependency_id[XR_STABLE_ID_BYTES * 2 + 1];
             char export_id[XR_STABLE_ID_BYTES * 2 + 1];

@@ -696,6 +696,10 @@ add_test(NAME test_target_native_target_leaf_authority
     COMMAND $<TARGET_FILE:test_target_plan> native-target-leaf-authority)
 set_tests_properties(test_target_native_target_leaf_authority PROPERTIES
     LABELS "target-machine;vm;typed-plan;stdlib")
+add_test(NAME test_target_native_direct_ref_authority
+    COMMAND $<TARGET_FILE:test_target_plan> native-direct-ref-authority)
+set_tests_properties(test_target_native_direct_ref_authority PROPERTIES
+    LABELS "target-machine;aot;typed-plan;stdlib")
 add_test(NAME test_target_plan_fingerprint_snapshot_determinism
     COMMAND $<TARGET_FILE:test_target_plan> fingerprint-snapshot-determinism)
 add_test(NAME test_target_plan_fingerprint_channel_close

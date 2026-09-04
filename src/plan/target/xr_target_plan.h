@@ -344,6 +344,7 @@ typedef enum XrTargetCallConvention {
      * symbol, not selector spelling, distinguishes strict and lossy decoding. */
     XR_TARGET_CALL_CONVENTION_STRING_UTF8_STATIC,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CLEAR,
+    XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT,
     XR_TARGET_CALL_CONVENTION_COUNT,
 } XrTargetCallConvention;
 
@@ -363,6 +364,10 @@ typedef enum XrTargetCallConvention {
  * binds for one imported native module namespace and selector, whose receiver
  * is a module handle rather than a value and whose arguments and result are all
  * plain scalars, so the row carries no argument intent of its own.
+ * NATIVE_DIRECT names a non-suspending plain-call member through the frozen
+ * stdlib registry. Its tagged-value ABI admits managed borrowed arguments, so
+ * the exact semantic operand contract and registry capability mask are part of
+ * the target identity even though no source callee or parameter row exists.
  * SOURCE_CLASS_CONSTRUCTOR names the construction of a declared class through
  * its own class object, taken from the SemanticPlan call target of the same
  * name; it names no callee function and carries no argument, and it never
@@ -426,6 +431,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_NATIVE_YIELDABLE,
     XR_TARGET_CALL_TARGET_STRING_UTF8_STATIC,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR,
+    XR_TARGET_CALL_TARGET_NATIVE_DIRECT,
     XR_TARGET_CALL_TARGET_COUNT,
 } XrTargetCallTargetKind;
 

@@ -2692,6 +2692,20 @@ static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue 
     return true;
 }
 
+static const XrStdlibDefEntry *resolve_native_direct_callee(const XiFunc *caller,
+                                                            const XiValue *call) {
+    if (!call || call->op != XI_CALL || call->nargs == 0)
+        return NULL;
+    const XiValue *callee = strip_identity_copies(caller, call->args[0]);
+    if (!callee || callee->op != XI_IMPORT_REF || !callee->aux)
+        return NULL;
+    const XiImportRef *ref = (const XiImportRef *) callee->aux;
+    return xi_import_ref_is_grounded_native(ref)
+               ? xr_stdlib_metadata_exact_native_direct_call(ref->module_path, ref->member_name,
+                                                             (uint16_t) (call->nargs - 1u))
+               : NULL;
+}
+
 static const XrStdlibDefEntry *xi_native_target_leaf_scalar_call_exact(const XiFunc *caller,
                                                                        const XiValue *call) {
     if (!caller || !call || call->op != XI_CALL || call->nargs == 0 ||
@@ -3806,20 +3820,32 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     bool native_yieldable = !local_program_bound && function < 0 &&
                             resolve_native_yieldable_callee(ctx->functions[caller].source, value,
                                                             &native_module, &native_member);
+    const XrStdlibDefEntry *native_direct =
+        !local_program_bound && function < 0 && !native_yieldable &&
+                ctx->plan->operations[operation].intrinsic_kind == XR_SEM_INTRINSIC_NONE
+            ? resolve_native_direct_callee(ctx->functions[caller].source, value)
+            : NULL;
+    const XrStdlibDefEntry *frozen_native_direct = NULL;
+    if (native_direct &&
+        (!xr_semantic_native_direct_call_shape_is_exact(
+             ctx->plan, &ctx->plan->operations[operation], &frozen_native_direct, NULL) ||
+         frozen_native_direct != native_direct))
+        native_direct = NULL;
     const XiValue *indirect_callee = local_program_bound ? NULL : value->args[0];
     while (!local_program_bound && indirect_callee && xi_copy_is_identity_alias(indirect_callee) &&
            indirect_callee->nargs == 1)
         indirect_callee = indirect_callee->args[0];
     bool indirect_callable =
-        !local_program_bound && function < 0 && !native_yieldable && value->op == XI_CALL &&
-        value->args[0] && value->args[0]->type && value->args[0]->type->kind == XR_KIND_FUNCTION &&
-        indirect_callee && indirect_callee->op != XI_IMPORT_REF &&
-        indirect_callee->op != XI_GET_BUILTIN &&
+        !local_program_bound && function < 0 && !native_yieldable && !native_direct &&
+        value->op == XI_CALL && value->args[0] && value->args[0]->type &&
+        value->args[0]->type->kind == XR_KIND_FUNCTION && indirect_callee &&
+        indirect_callee->op != XI_IMPORT_REF && indirect_callee->op != XI_GET_BUILTIN &&
         (indirect_callee->op != XI_GET_SHARED ||
          call_has_coroutine_state(ctx->functions[caller].source, value)) &&
         indirect_callee->op != XI_CLOSURE_NEW &&
         !(indirect_callee->op == XI_STACK_ALLOC && indirect_callee->aux_int == XI_CLOSURE_NEW);
-    if (!local_program_bound && function < 0 && !native_yieldable && !indirect_callable)
+    if (!local_program_bound && function < 0 && !native_yieldable && !native_direct &&
+        !indirect_callable)
         return append_source_class_constructor_call_target(ctx, value, operation);
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
@@ -3834,6 +3860,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     record->source_export = XR_SEMANTIC_INDEX_NONE;
     record->callable_type = XR_SEMANTIC_INDEX_NONE;
     record->kind = function >= 0      ? XR_SEM_CALL_TARGET_DIRECT_LOCAL
+                   : native_direct    ? XR_SEM_CALL_TARGET_NATIVE_DIRECT
                    : native_yieldable ? XR_SEM_CALL_TARGET_NATIVE_YIELDABLE
                                       : XR_SEM_CALL_TARGET_INDIRECT_CALLABLE;
     if (indirect_callable) {
@@ -3850,6 +3877,9 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     if (valid && native_yieldable)
         valid = text_append(&key, ":native=") && text_append(&key, native_module) &&
                 text_append(&key, ".") && text_append(&key, native_member);
+    if (valid && native_direct)
+        valid = text_append(&key, ":native-direct=") && text_append(&key, native_direct->module) &&
+                text_append(&key, ".") && text_append(&key, native_direct->name);
     if (valid && indirect_callable)
         valid = text_append(&key, ":callable-type=") &&
                 text_append_stable_id(&key, ctx->plan->types[record->callable_type].id);

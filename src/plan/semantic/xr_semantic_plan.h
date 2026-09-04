@@ -164,6 +164,10 @@ typedef enum XrSemanticCallTargetKind {
      * exact self value, selector and arity instead name the template-local
      * body. An arbitrary value of the same generic spelling does not. */
     XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL,
+    /* A grounded, non-suspending stdlib member reached as a plain call. The
+     * generated registry, rather than a backend symbol lookup, owns its exact
+     * module/member/arity and tagged-value ABI. */
+    XR_SEM_CALL_TARGET_NATIVE_DIRECT,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -546,8 +550,10 @@ typedef struct XrSemanticOperandRecord {
 
 /*
  * Exact call-site authority. DIRECT_LOCAL is rebuilt from frozen SSA or from a
- * unique lexical SET_SHARED/GET_SHARED slot chain. NATIVE_YIELDABLE is rebuilt
- * from a bare IMPORT_REF and the canonical stdlib binding registry.
+ * unique lexical SET_SHARED/GET_SHARED slot chain. NATIVE_YIELDABLE and
+ * NATIVE_DIRECT are rebuilt from a bare IMPORT_REF and the canonical stdlib
+ * binding registry; the latter proves a non-suspending tagged-value shim and
+ * includes its runtime capability mask in the stable target identity.
  * SOURCE_EXPORT is completed only by the ordered module-set verifier against
  * the dependency's public export table. INDIRECT_CALLABLE freezes only an
  * open function-value dispatch domain and its conservative state obligation;

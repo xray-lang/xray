@@ -421,6 +421,8 @@ static const char *target_trace_call_target_kind_name(uint8_t kind) {
             return "SOURCE_INSTANCE_METHOD_OPEN";
         case XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR:
             return "SOURCE_CLASS_CONSTRUCTOR";
+        case XR_SEM_CALL_TARGET_NATIVE_DIRECT:
+            return "NATIVE_DIRECT";
         default:
             return "unnamed";
     }
@@ -11456,6 +11458,47 @@ static bool collect_native_yieldable_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_native_direct_call_intent(XrTargetPlanBuilder *builder, uint32_t target_index,
+                                              const XrSemanticCallTargetRecord *target,
+                                              bool suspends, char *error, size_t error_size) {
+    const XrSemanticPlan *plan = builder ? builder->semantic_plan : NULL;
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+    const XrStdlibDefEntry *entry = NULL;
+    XrStableId native_identity = {{0}};
+    if (!target || !operation || target->kind != XR_SEM_CALL_TARGET_NATIVE_DIRECT ||
+        target->function != XR_SEMANTIC_INDEX_NONE ||
+        target->dependency != XR_SEMANTIC_INDEX_NONE ||
+        target->source_export != XR_SEMANTIC_INDEX_NONE ||
+        target->callable_type != XR_SEMANTIC_INDEX_NONE || suspends ||
+        !call_type_is_exact_scalar(plan, operation->result_type) ||
+        !xr_semantic_native_direct_call_shape_is_exact(plan, operation, &entry, &native_identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native direct call authority is incomplete");
+    XrTargetCallIntent call = {
+        .semantic_call_target = target_index,
+        .semantic_operation = target->operation,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .native_callee_identity = native_identity,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT,
+        .target_kind = XR_TARGET_CALL_TARGET_NATIVE_DIRECT,
+    };
+    if (!entry ||
+        !stable_identity_from_pair("xray-target-native-direct-v1", target->id, native_identity,
+                                   entry->runtime_capabilities, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "native direct call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 /* The suspending method of a frozen builtin instance. The SemanticPlan target
  * names the receiver type and the roster entry its builtin id and arity select;
  * it names no callee function, so the intent carries none either. The call
@@ -11607,6 +11650,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
         bool native_yieldable = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE;
+        bool native_direct = target && target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT;
         bool class_construction =
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
         bool builtin_instance =
@@ -11621,12 +11665,13 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         bool names_local_function =
             xr_semantic_call_target_names_local_function(target, operation, function_count);
         if (!target || !operation ||
-            (!direct && !source && !native_namespace && !native_yieldable && !class_construction &&
-             !builtin_instance && !instance_method_local) ||
+            (!direct && !source && !native_namespace && !native_yieldable && !native_direct &&
+             !class_construction && !builtin_instance && !instance_method_local) ||
             ((direct || instance_method_local) && !names_local_function) ||
             (source && operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (native_yieldable && operation->opcode != XI_CALL) ||
+            (native_direct && operation->opcode != XI_CALL) ||
             (class_construction && operation->opcode != XI_CALL) ||
             (builtin_instance && operation->opcode != XI_CALL_METHOD) ||
             target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
@@ -11645,7 +11690,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 fprintf(stderr,
                         "[target] refused in call target coverage: SemanticPlan proved a call "
                         "target of kind %s, and this family consumes only DIRECT_LOCAL, "
-                        "SOURCE_EXPORT, NATIVE_YIELDABLE, NATIVE_NAMESPACE_YIELDABLE, "
+                        "SOURCE_EXPORT, NATIVE_DIRECT, NATIVE_YIELDABLE, "
+                        "NATIVE_NAMESPACE_YIELDABLE, "
                         "BUILTIN_INSTANCE_YIELDABLE, SOURCE_INSTANCE_METHOD_LOCAL, "
                         "SOURCE_TEMPLATE_METHOD_LOCAL and SOURCE_CLASS_CONSTRUCTOR\n",
                         target_trace_call_target_kind_name(target ? target->kind : 0u));
@@ -11661,8 +11707,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 target_trace_judgement("the operation record exists", operation != NULL);
                 target_trace_judgement("this family consumes the kind",
                                        direct || source || native_namespace || native_yieldable ||
-                                           class_construction || builtin_instance ||
-                                           instance_method_local);
+                                           native_direct || class_construction ||
+                                           builtin_instance || instance_method_local);
                 if (direct)
                     target_trace_judgement("DIRECT_LOCAL names a function in range",
                                            target->function < function_count);
@@ -11679,6 +11725,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                                            operation && operation->opcode == XI_CALL_METHOD);
                 if (native_yieldable)
                     target_trace_judgement("NATIVE_YIELDABLE sits on CALL",
+                                           operation && operation->opcode == XI_CALL);
+                if (native_direct)
+                    target_trace_judgement("NATIVE_DIRECT sits on CALL",
                                            operation && operation->opcode == XI_CALL);
                 if (class_construction)
                     target_trace_judgement("SOURCE_CLASS_CONSTRUCTOR sits on CALL",
@@ -11778,6 +11827,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                     builder, target_index, target, state_by_operation[i] != 0, error, error_size);
             } else if (target && target->kind == XR_SEM_CALL_TARGET_NATIVE_YIELDABLE) {
                 valid = collect_native_yieldable_call_intent(
+                    builder, target_index, target, state_by_operation[i] != 0, error, error_size);
+            } else if (target && target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT) {
+                valid = collect_native_direct_call_intent(
                     builder, target_index, target, state_by_operation[i] != 0, error, error_size);
             } else if (target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE) {
                 valid = collect_builtin_instance_yieldable_call_intent(

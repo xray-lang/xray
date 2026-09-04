@@ -141,6 +141,21 @@ static XrType stub_float_channel = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_float},
 };
+static XrClassInfo stub_net_conn_class_info = {
+    .name = "NetConn",
+    .xg_class_id = 901,
+};
+static XrType stub_net_conn = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 902,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance =
+        {
+            .class_name = "NetConn",
+            .class_ref = &stub_net_conn_class_info,
+        },
+};
 
 static XrEnumLayout *make_unit_enum_type(XrType *out, uint32_t id, const char *owner,
                                          const char *name) {
@@ -475,6 +490,81 @@ static XrSemanticPlan *build_native_target_leaf_semantic(void) {
     bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "native target leaf semantic fixture failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_native_direct_ref_semantic(void) {
+    XrFunctionParam native_parameters[1] = {
+        {.type = &stub_net_conn, .mode = XR_PARAM_READ},
+    };
+    XrType native_function = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 903,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .function =
+            {
+                .params = native_parameters,
+                .param_count = 1,
+                .min_params = 1,
+                .return_type = &stub_unit,
+                .throw_effect = XR_FN_EFFECT_NO_THROW,
+            },
+    };
+    XiFunc *function = xi_func_new("native_direct_ref_probe", &stub_unit);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    XiValue *connection = xi_param(function, entry, 0, &stub_net_conn);
+    REQUIRE(connection != NULL);
+    function->params[0] = connection;
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+
+    XiImportRef import_ref = {
+        .module_path = "net",
+        .member_name = "__closeConn",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    XiValue *callee = xi_value_new(function, entry, XI_IMPORT_REF, &native_function, 0);
+    XiValue *call = xi_value_new(function, entry, XI_CALL, &stub_unit, 2);
+    REQUIRE(callee != NULL && call != NULL);
+    callee->aux = &import_ref;
+    call->args[0] = callee;
+    call->args[1] = connection;
+    XiCallPlan *call_plan =
+        (XiCallPlan *) xi_func_arena_alloc(function, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan =
+        (XiCallArgPlan *) xi_func_arena_alloc(function, (uint32_t) sizeof(*argument_plan));
+    REQUIRE(call_plan != NULL && argument_plan != NULL);
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, sizeof(*argument_plan));
+    argument_plan->param_mode = XR_PARAM_READ;
+    argument_plan->access = XR_CALL_ARG_PLAIN;
+    argument_plan->origin_var_id = XI_NO_VAR_ID;
+    call_plan->args = argument_plan;
+    call_plan->nargs = 1;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
+    xi_block_set_return(entry, NULL);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native direct ref semantic fixture failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
     xi_func_free(function);
     return semantic;
@@ -2665,6 +2755,49 @@ static void test_native_target_leaf_scalar_authority(void) {
     expect_verify_failure(plan, "XR_TARGET_1003");
     mutable_call->native_callee_identity = saved_native_identity;
     xr_target_call_compute_fingerprint(plan, 0, &mutable_call->fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_native_direct_ref_authority(void) {
+    XrSemanticPlan *semantic = build_native_direct_ref_semantic();
+    REQUIRE(xr_semantic_plan_call_target_count(semantic) == 1);
+    const XrSemanticCallTargetRecord *semantic_target = xr_semantic_plan_call_target(semantic, 0);
+    REQUIRE(semantic_target != NULL && semantic_target->kind == XR_SEM_CALL_TARGET_NATIVE_DIRECT);
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native direct ref TargetPlan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_target_plan_verify(plan, error, sizeof(error)));
+
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    REQUIRE(calls != NULL && call_count == 1);
+    const XrTargetCallRecord *call = &calls[0];
+    REQUIRE(call->semantic_call_target == 0 &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_DIRECT &&
+            call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_DIRECT &&
+            call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+            call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+            call->source_export == XR_SEMANTIC_INDEX_NONE && call->argument_count == 0 &&
+            call->result_mode == XR_TARGET_CALL_VALUE &&
+            call->result_ownership == XR_TARGET_CALL_NONE && call->flags == 0 &&
+            memcmp(call->native_callee_identity.bytes,
+                   (const uint8_t[XR_STABLE_ID_BYTES]) {0}, XR_STABLE_ID_BYTES) != 0);
+
+    XrTargetCallRecord saved = plan->calls[0];
+    plan->calls[0].native_callee_identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->calls[0] = saved;
+    plan->calls[0].calling_convention = XR_TARGET_CALL_CONVENTION_NATIVE_YIELDABLE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->calls[0] = saved;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 
     xr_target_plan_free(plan);
@@ -10446,6 +10579,11 @@ int main(int argc, char **argv) {
         puts("Native target leaf authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "native-direct-ref-authority") == 0) {
+        test_native_direct_ref_authority();
+        puts("Native direct ref authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "fingerprint-snapshot-determinism") == 0) {
         test_plan_snapshot_and_determinism();
         puts("TargetPlan snapshot fingerprint tests passed");
@@ -10677,6 +10815,7 @@ int main(int argc, char **argv) {
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
     test_native_target_leaf_scalar_authority();
+    test_native_direct_ref_authority();
     test_builder_materializes_canonical_scalar_intents();
     test_builder_materializes_parameter_without_operation();
     test_builder_materializes_effect_void_independent_of_type();

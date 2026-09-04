@@ -158,12 +158,14 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
 }
 
 /* The frozen definition registry is the only authority over which native
- * stdlib member a namespace callsite may dispatch to without a backend lookup.
- * A member qualifies when the registry names exactly one entry for the module,
- * selector, and callsite arity, every argument crosses the boundary as one
- * plain tagged value, the member returns a single value through the generated
- * direct shim, and no conditional compilation, result enum, or runtime
- * capability qualifies the row.
+ * stdlib member a callsite may dispatch to without a backend lookup. A member
+ * qualifies when the registry names exactly one entry for the module, member,
+ * and callsite arity, every argument crosses the boundary as one plain tagged
+ * value, the member returns a single value through the generated direct shim,
+ * and no conditional compilation or result enum qualifies the row. Runtime
+ * capabilities remain part of the exact direct-call identity; callers that
+ * need the narrower capability-free namespace-scalar family use the member
+ * predicate below.
  *
  * The `builtin` AOT form is refused on purpose and is not a module exclusion:
  * the native backend rewrites those callsites into a different operation after
@@ -171,20 +173,17 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
  * the backend actually emits. A `yieldable` binding is refused because it
  * suspends, which is a coroutine-state fact this row does not state. */
 static inline const XrStdlibDefEntry *
-xr_stdlib_metadata_exact_native_direct_member_span(const char *module, size_t module_length,
-                                                   const char *name,
-                                                   uint16_t argument_count) {
+xr_stdlib_metadata_exact_native_direct_call_span(const char *module, size_t module_length,
+                                                 const char *name, uint16_t argument_count) {
     const XrStdlibDefEntry *entry =
         xr_stdlib_metadata_unique_func_arity_span(module, module_length, name, argument_count);
     if (!entry || !entry->aot_direct || !entry->aot || !entry->aot_kind || !entry->ret ||
         !entry->vm || !entry->vm_binding || !entry->arg_spec || !entry->aot_enum ||
         !entry->vm_ifdef || !entry->define || !entry->signature)
         return NULL;
-    if (entry->aot[0] == '\0' || entry->vm[0] == '\0' ||
-        strcmp(entry->aot_kind, "method") != 0 || strcmp(entry->ret, "value") != 0 ||
-        strcmp(entry->vm_binding, "normal") != 0 || entry->aot_enum[0] != '\0' ||
-        entry->vm_ifdef[0] != '\0' || entry->define[0] != '\0' ||
-        entry->runtime_capabilities != 0u)
+    if (entry->aot[0] == '\0' || entry->vm[0] == '\0' || strcmp(entry->aot_kind, "method") != 0 ||
+        strcmp(entry->ret, "value") != 0 || strcmp(entry->vm_binding, "normal") != 0 ||
+        entry->aot_enum[0] != '\0' || entry->vm_ifdef[0] != '\0' || entry->define[0] != '\0')
         return NULL;
     uint32_t spec = 0;
     for (; entry->arg_spec[spec] != '\0'; spec++) {
@@ -195,10 +194,26 @@ xr_stdlib_metadata_exact_native_direct_member_span(const char *module, size_t mo
 }
 
 static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_exact_native_direct_call(const char *module, const char *name,
+                                            uint16_t argument_count) {
+    return module ? xr_stdlib_metadata_exact_native_direct_call_span(module, strlen(module), name,
+                                                                     argument_count)
+                  : NULL;
+}
+
+static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_exact_native_direct_member_span(const char *module, size_t module_length,
+                                                   const char *name, uint16_t argument_count) {
+    const XrStdlibDefEntry *entry = xr_stdlib_metadata_exact_native_direct_call_span(
+        module, module_length, name, argument_count);
+    return entry && entry->runtime_capabilities == 0u ? entry : NULL;
+}
+
+static inline const XrStdlibDefEntry *
 xr_stdlib_metadata_exact_native_direct_member(const char *module, const char *name,
                                               uint16_t argument_count) {
-    return module ? xr_stdlib_metadata_exact_native_direct_member_span(
-                        module, strlen(module), name, argument_count)
+    return module ? xr_stdlib_metadata_exact_native_direct_member_span(module, strlen(module), name,
+                                                                       argument_count)
                   : NULL;
 }
 
