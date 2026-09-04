@@ -301,7 +301,7 @@ abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
 provider = "declaration only (stdlib/defs/core.def). VM materialises it via xr_stdlib_record_class_get(X, \"io\", \"__FileStat\") in stdlib/io/io.c; AOT ignores the class and builds an anonymous struct object in src/aot/xrt_io.h"
-deletion_trigger = "when io.__stat is deleted, or when a .def entry can declare its return as a type io.xr owns, so the ten stat fields stop needing a native record class to travel through"
+deletion_trigger = "when a .def entry can return a structural record declared by io.xr, so the ten stat fields can cross the host boundary without a native record class"
 
 [[leaf]]
 module = "io"
@@ -332,16 +332,6 @@ ownership = "fresh"
 effect = "nothrow"
 provider = "kernel via libc. VM stdlib/io/io.c io_cwd -> src/os/unix/fs_unix.c xr_fs_getcwd; AOT src/aot/xrt_io.h calls getcwd directly into a stack buffer"
 deletion_trigger = "when Xray source can issue the getcwd(3) call itself; the leaf is already the minimal form of this boundary"
-
-[[leaf]]
-module = "io"
-symbol = "__exists"
-class = "host_abi_leaf"
-abi = "VM lstat(2); AOT stat(2). Win32 GetFileAttributesA"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_exists -> src/os/unix/fs_unix.c xr_fs_exists -> xr_fs_stat, which uses lstat; AOT src/aot/xrt_io.h xrt_io_exists uses stat. The two backends answer differently for a dangling symlink -- recorded as divergence 1 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md"
-deletion_trigger = "when the compiler owner picks lstat or stat as canonical for this leaf (divergence 1 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md) and Xray source can issue the chosen call itself"
 
 [[leaf]]
 module = "io"
@@ -390,7 +380,7 @@ class = "host_abi_leaf"
 abi = "read(2), retried on EINTR; fread(3) for handle 0. Win32 CRT _read"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel via libc. VM stdlib/io/io.c io_fileRead; AOT src/aot/xrt_io.h xrt_io_read_handle_chunk. One read into a freshly allocated byte array, no drain loop; a zero-length result is EOF. Handle 0 is read through the C runtime's stdin stream on both sides, so it stays ordered against anything else the process reads from it"
+provider = "kernel via libc. VM stdlib/io/io.c io_fileRead; AOT src/aot/xrt_io.h xrt_io_read_handle_chunk. One read into a freshly allocated byte array, no drain loop; a zero-length result is EOF. Handle 0 is read through the C runtime's stdin stream on both sides. io.xr owns whole-file and whole-stdin aggregation, the 2 GiB ceiling and UTF-8 validation"
 deletion_trigger = "same as io.__fileOpen: when a .def entry can declare an opaque handle type io.xr owns. The chunked-read shape itself is already what io.xr's BufReader is built on and does not need to change"
 
 [[leaf]]
@@ -412,46 +402,6 @@ ownership = "none"
 effect = "suspends"
 provider = "kernel plus the Xray runtime's io_uring completion path on the VM; plain write(2) on the AOT side. It exists next to io.__fileWrite because arg_spec \"s\" lowers a string to a borrowed (data, len) pair, so a string write copies nothing; routing strings through the Array<u8> leaf would cost a full copy of every file written"
 deletion_trigger = "when a .def entry can name one parameter type that both a string and an Array<u8> satisfy without copying either, collapsing this leaf into io.__fileWrite; failing that, when Xray source can issue the write(2) call itself"
-
-[[leaf]]
-module = "io"
-symbol = "__fileSize"
-class = "host_abi_leaf"
-abi = "VM lstat(2); AOT stat(2)"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_fileSize -> src/os/unix/fs_unix.c xr_fs_stat (lstat) and reads .size; AOT src/aot/xrt_io.h xrt_io_file_size uses stat and reads st_size. Same lstat/stat split as __exists"
-deletion_trigger = "when io.__stat's divergence is resolved (divergence 1 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md), because a size reading is then one field selection over __stat and needs no leaf of its own"
-
-[[leaf]]
-module = "io"
-symbol = "__isDir"
-class = "host_abi_leaf"
-abi = "VM lstat(2); AOT stat(2). Win32 GetFileAttributesA"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_isDir -> src/os/unix/fs_unix.c xr_fs_is_dir -> xr_fs_stat (lstat); AOT src/aot/xrt_io.h xrt_io_is_dir uses stat. A symlink to a directory answers differently on the two backends"
-deletion_trigger = "when io.__stat's divergence is resolved, because a directory test is then one field selection over __stat and needs no leaf of its own"
-
-[[leaf]]
-module = "io"
-symbol = "__isFile"
-class = "host_abi_leaf"
-abi = "VM lstat(2); AOT stat(2). Win32 GetFileAttributesA"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_isFile -> src/os/unix/fs_unix.c xr_fs_is_file -> xr_fs_stat (lstat); AOT src/aot/xrt_io.h xrt_io_is_file uses stat. A symlink to a file answers differently on the two backends"
-deletion_trigger = "when io.__stat's divergence is resolved, because a regular-file test is then one field selection over __stat and needs no leaf of its own"
-
-[[leaf]]
-module = "io"
-symbol = "__isSymlink"
-class = "host_abi_leaf"
-abi = "lstat(2) plus S_ISLNK; Win32 GetFileAttributesA plus FILE_ATTRIBUTE_REPARSE_POINT"
-ownership = "none"
-effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_isSymlink and AOT src/aot/xrt_io.h xrt_io_is_symlink each inline the same one-call test; neither goes through src/os"
-deletion_trigger = "when io.__stat is the single path-metadata leaf, because the symlink flag it already packs makes this test one field selection"
 
 [[leaf]]
 module = "io"
@@ -490,48 +440,8 @@ class = "host_abi_leaf"
 abi = "opendir(3), readdir(3), closedir(3); Win32 FindFirstFileA, FindNextFileA, FindClose"
 ownership = "fresh"
 effect = "nothrow"
-provider = "libc. VM stdlib/io/io.c io_readDir -> src/os/os_dir.h -> src/os/unix/dir_unix.c; AOT src/aot/xrt_io.h inlines an equivalent loop. Both filter \".\" and \"..\" through xr_io_core_read_dir_visit() in src/shared/xr_io_core.h; the VM additionally drops entries whose name is 260 bytes or longer"
+provider = "libc. VM stdlib/io/io.c and AOT src/aot/xrt_io.h directly use FindFirstFileA/FindNextFileA or opendir/readdir. The leaf returns raw entry names; io.xr alone filters \".\" and \"..\", walks recursively and constructs public Path values"
 deletion_trigger = "when a directory-iterator handle triple (open/next/close) exists with the same shape as the file triple, so the entry loop and the dot-filter can be written in io.xr"
-
-[[leaf]]
-module = "io"
-symbol = "__readFile"
-class = "host_abi_leaf"
-abi = "VM: open(2), fstat(2) and an io_uring READ submission on Linux, falling back to pread(2); otherwise fopen(3)/fseek(3)/ftell(3)/fread(3)/fclose(3). AOT: fopen(3)/fread(3) only"
-ownership = "fresh"
-effect = "suspends"
-provider = "kernel plus the Xray runtime's io_uring completion path on the VM (src/os/netpoll/netpoll_iouring.c); plain libc stdio on the AOT side. The two backends differ in whether the call can park the coroutine at all"
-deletion_trigger = "when io.xr can run the read-until-EOF loop over the existing __fileOpen/__fileRead/__fileClose triple without the cost recorded in blockers/a-stdlib-no-write-side-file-descriptor-leaf.md -- that is, once Xray gains an amortised byte-buffer append so the loop is linear rather than quadratic"
-
-[[leaf]]
-module = "io"
-symbol = "__readFileBytes"
-class = "host_abi_leaf"
-abi = "same as io.__readFile: VM open(2)/fstat(2)/io_uring READ with a pread(2) fallback, otherwise stdio; AOT fopen(3)/fread(3)"
-ownership = "fresh"
-effect = "suspends"
-provider = "kernel plus the Xray runtime's io_uring completion path on the VM; plain libc stdio on the AOT side"
-deletion_trigger = "same as io.__readFile: when io.xr can run the read-until-EOF loop over the existing read-side triple with an amortised byte-buffer append"
-
-[[leaf]]
-module = "io"
-symbol = "__readStdin"
-class = "host_abi_leaf"
-abi = "the stdio `stdin` stream: clearerr(3) plus a fread(3) loop, reaching read(2)"
-ownership = "fresh"
-effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c via xr_io_read_stdin_all; AOT src/aot/xrt_io.h inlines the same loop. Both drive xr_io_core_read_all_stream_alloc() in src/shared/xr_io_core.h. Neither uses the raw descriptor 0"
-deletion_trigger = "when a standard-stream handle exists in the same form as __fileOpen's, so the read-to-EOF loop can be written in io.xr over the existing __fileRead"
-
-[[leaf]]
-module = "io"
-symbol = "__readStdinBytes"
-class = "host_abi_leaf"
-abi = "the stdio `stdin` stream via fread(3); Win32 additionally _setmode(_fileno(stdin), _O_BINARY)"
-ownership = "fresh"
-effect = "nothrow"
-provider = "libc stdio. VM stdlib/io/io.c; AOT src/aot/xrt_io.h. Same shared drain helper as io.__readStdin"
-deletion_trigger = "same as io.__readStdin: when a standard-stream handle exists in the same form as __fileOpen's"
 
 [[leaf]]
 module = "io"
@@ -590,8 +500,8 @@ class = "host_abi_leaf"
 abi = "stat(2) plus lstat(2) -- the second call only to derive the symlink flag, since stat follows links; Win32 CRT stat plus GetFileAttributesA"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_stat packs ten scalars through xr_io_core_stat_fields() into an io.__FileStat instance; AOT src/aot/xrt_io.h xrt_io_stat packs the same ten into an anonymous struct object. The syscalls agree; the returned object shape does not"
-deletion_trigger = "when both backends materialise one record shape for the ten stat fields, and Xray source can issue the stat(2)/lstat(2) pair itself"
+provider = "kernel. VM stdlib/io/io.c io_stat and AOT src/aot/xrt_io.h xrt_io_stat execute the same stat(2)/lstat(2) pair and pack ten scalar fields into the private __FileStat boundary shape. io.xr alone projects that shape into public FileStat and derives exists, fileSize, isFile, isDir and isSymlink"
+deletion_trigger = "when Xray source can issue the stat(2)/lstat(2) pair itself; every path-metadata policy above that pair already lives in io.xr"
 
 [[leaf]]
 module = "io"

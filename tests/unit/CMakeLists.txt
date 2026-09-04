@@ -1418,10 +1418,6 @@ if(XRAY_STDLIB_VM_FASTPATHS)
         LABELS "stdlib;metadata;tooling;task-256"
     )
 endif()
-if(NOT WIN32)
-    add_xray_unit_test(test_io stdlib/test_io.c)
-endif()
-
 # ============================================================================
 # regex/ — Regex engine
 # ============================================================================

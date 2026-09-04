@@ -15,6 +15,12 @@
 # xrt_io_write_handle_chunk/_str. Those four c_contains lines are removed below
 # and the four new entry points added in their place.
 #
+# The read and path-metadata cutover removed xrt_io_read_file,
+# xrt_io_read_file_bytes, xrt_io_exists, xrt_io_file_size, xrt_io_is_file,
+# xrt_io_is_dir and xrt_io_is_symlink. Whole-input buffering now composes the
+# descriptor leaves, while every metadata query projects the single xrt_io_stat
+# leaf in io.xr.
+#
 # Lines that were already stale before that migration, left as they are because
 # this lane did not cause them and cannot verify a replacement: xrt_io_temp_dir,
 # xrt_io_mkdirp, xrt_io_touch, xrt_io_read_dir_recursive and xrt_io_remove_all
@@ -36,18 +42,12 @@ not_contains="runtime_objects": ["xray_core"]
 not_contains="stdlib_objects": ["io"]
 c_contains=xrt_io_temp_dir(
 c_contains=xrt_io_mkdirp(
-c_contains=xrt_io_is_dir(
-c_contains=xrt_io_exists(
-c_contains=xrt_io_is_file(
-c_contains=xrt_io_file_size(
-c_contains=xrt_io_read_file(
 c_contains=xrt_io_file_open(
 c_contains=xrt_io_file_open_write(
 c_contains=xrt_io_write_handle_chunk(
 c_contains=xrt_io_write_handle_str(
 c_contains=xrt_io_file_close(
 c_contains=xrt_io_read_handle_chunk(
-c_contains=xrt_io_read_file_bytes(
 c_contains=xrt_io_rename(
 c_contains=xrt_io_stat(
 c_contains=xrt_io_touch(
@@ -58,7 +58,6 @@ c_contains=xrt_io_realpath(
 c_contains=xrt_io_cwd(
 c_contains=xrt_io_chdir(
 c_contains=xrt_io_symlink(
-c_contains=xrt_io_is_symlink(
 c_contains=xrt_io_readlink(
 c_contains=xrt_io_temp_file(
 c_contains=xrt_io_remove(

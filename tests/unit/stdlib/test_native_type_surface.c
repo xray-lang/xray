@@ -233,6 +233,20 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_TRUE(cluster_info_fn->function.return_type->is_nullable);
 
+    /* Whole-input buffering and path metadata projections are io.xr policy.
+     * The native registry retains only the descriptor read and stat leaves. */
+    ASSERT_NULL(find_module_member("io", "__readFile"));
+    ASSERT_NULL(find_module_member("io", "__readFileBytes"));
+    ASSERT_NULL(find_module_member("io", "__readStdin"));
+    ASSERT_NULL(find_module_member("io", "__readStdinBytes"));
+    ASSERT_NULL(find_module_member("io", "__exists"));
+    ASSERT_NULL(find_module_member("io", "__fileSize"));
+    ASSERT_NULL(find_module_member("io", "__isDir"));
+    ASSERT_NULL(find_module_member("io", "__isFile"));
+    ASSERT_NULL(find_module_member("io", "__isSymlink"));
+    ASSERT_NOT_NULL(find_module_member("io", "__fileRead"));
+    ASSERT_NOT_NULL(find_module_member("io", "__stat"));
+
     xray_vm_delete(iso);
 }
 

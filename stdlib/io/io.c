@@ -8,9 +8,9 @@
  * io.c - File I/O standard library implementation
  *
  * KEY CONCEPT:
- *   Synchronous filesystem wrappers. Blocking syscalls will be routed through
- *   XrAsyncPool in a follow-up change; for now, callers on a Worker thread
- *   should expect them to stall the current coroutine.
+ *   Minimal POSIX, Win32, descriptor and stdio leaves for io.xr. Path policy,
+ *   whole-input buffering, UTF-8 validation and public value construction do
+ *   not live in this translation unit.
  */
 
 #include "io.h"
@@ -37,7 +37,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../src/os/os_fs.h"
-#include "../../src/os/os_dir.h"
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
@@ -138,73 +137,6 @@ static bool io_prepare_binary_stdin(void) {
 
 /* ========== File Read/Write ========== */
 
-// Upper bound for a single in-memory read. The binding exposes the file as
-// either an XrString (whose length field is uint32) or an XrArray (int32
-// length field) — either way we cannot surface a buffer larger than INT32_MAX
-// bytes. Callers needing >2 GiB inputs must stream the file manually.
-#define IO_MAX_READ_BYTES ((long) INT32_MAX)
-
-static char *io_read_file_buffer_sync(const char *path, size_t *out_len);
-
-static void *io_core_alloc(void *ctx, size_t size) {
-    (void) ctx;
-    return xr_malloc(size);
-}
-
-static void *io_core_realloc(void *ctx, void *ptr, size_t size) {
-    (void) ctx;
-    return xr_realloc(ptr, size);
-}
-
-static void io_core_free(void *ctx, void *ptr) {
-    (void) ctx;
-    xr_free(ptr);
-}
-
-static bool io_file_seek_end(void *ctx) {
-    return fseek((FILE *) ctx, 0, SEEK_END) == 0;
-}
-
-static long io_file_tell(void *ctx) {
-    return ftell((FILE *) ctx);
-}
-
-static bool io_file_seek_start(void *ctx) {
-    return fseek((FILE *) ctx, 0, SEEK_SET) == 0;
-}
-
-static size_t io_file_read(void *ctx, void *buf, size_t cap) {
-    return fread(buf, 1, cap, (FILE *) ctx);
-}
-
-static bool io_file_error(void *ctx) {
-    return ferror((FILE *) ctx) != 0;
-}
-
-XR_FUNC char *xr_io_read_stdin_all(size_t *out_len) {
-    if (out_len)
-        *out_len = 0;
-
-    clearerr(stdin);
-    return xr_io_core_read_all_stream_alloc(stdin, io_file_read, io_file_error, io_core_alloc,
-                                            io_core_realloc, io_core_free, NULL, 4096,
-                                            IO_MAX_READ_BYTES, out_len);
-}
-
-static XrValue io_readStdin(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-
-    size_t len = 0;
-    char *buf = xr_io_read_stdin_all(&len);
-    if (!buf)
-        return xr_null();
-
-    XrValue value = xrs_string_value_n(X, buf, len);
-    xr_free(buf);
-    return value;
-}
-
 static XrValue io_stream_read_bytes(XrVMRuntime *X, FILE *stream, int64_t max_bytes) {
     if (!stream || max_bytes < 0 || max_bytes > INT32_MAX)
         return xr_null();
@@ -219,27 +151,6 @@ static XrValue io_stream_read_bytes(XrVMRuntime *X, FILE *stream, int64_t max_by
         return xr_null();
     }
     arr->length = (int32_t) count;
-    return xr_value_from_array(arr);
-}
-
-static XrValue io_readStdinBytes(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    if (!io_prepare_binary_stdin())
-        return xr_null();
-    size_t len = 0;
-    char *buf = xr_io_read_stdin_all(&len);
-    if (!buf)
-        return xr_null();
-    XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) len);
-    if (!arr) {
-        xr_free(buf);
-        return xr_null();
-    }
-    if (len > 0)
-        memcpy(arr->data, buf, len);
-    arr->length = (int32_t) len;
-    xr_free(buf);
     return xr_value_from_array(arr);
 }
 
@@ -319,136 +230,19 @@ static XrValue io_fileFlush(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(true);
 }
 
-/* ========== io_uring async file I/O (Linux) ==========
+/* ========== io_uring async file writes (Linux) ==========
  *
  * Regular files are always "ready" for epoll/kqueue, so readiness pollers cannot
- * make file I/O async — the syscall blocks the worker. io_uring can: it submits
- * a file read/write SQE and parks the coroutine until the CQE. These yieldable
- * builtins use that on Linux when io_uring is active and a coroutine is running;
- * everywhere else (Windows, macOS, the epoll fallback, or non-coroutine callers)
- * they complete synchronously via the portable fopen/fread/fwrite path below.
+ * make a write async. io_uring can: it submits one write SQE and parks the
+ * coroutine until the CQE. The write leaves use that path on Linux when io_uring
+ * is active and a coroutine is running; all other configurations issue one
+ * synchronous write.
  */
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
 
-typedef enum {
-    FILE_IO_READ_BYTES,
-    FILE_IO_READ_STRING
-} FileIoKind;
-
-typedef struct {
-    int fd;
-    XrPollDesc *pd;
-    char *rbuf;  // owned raw buffer (freed on completion)
-    size_t len;
-    size_t off;
-    FileIoKind kind;
-} FileIoState;
-
-static XrCFuncResult file_io_step(XrVMRuntime *X, FileIoState *st, XrValue *result);
-
-static XrCFuncResult file_io_finish(XrVMRuntime *X, FileIoState *st, bool ok, XrValue *result) {
-    XrValue r;
-    if (!ok) {
-        r = xr_null();
-    } else if (st->kind == FILE_IO_READ_STRING) {
-        r = xrs_string_value_n(X, st->rbuf, st->off);
-    } else {  // FILE_IO_READ_BYTES
-        XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) st->off);
-        if (arr) {
-            memcpy(arr->data, st->rbuf, st->off);
-            arr->length = (int32_t) st->off;
-            r = xr_value_from_array(arr);
-        } else {
-            r = xr_null();
-        }
-    }
-    if (st->pd)
-        xr_netpoll_close(&((XrRuntime *) X->vm.scheduler)->netpoll, st->pd);
-    if (st->fd >= 0)
-        close(st->fd);
-    if (st->rbuf)
-        xr_free(st->rbuf);
-    xr_free(st);
-    *result = r;
-    return XR_CFUNC_DONE;
-}
-
-// Fallback used when an SQE cannot be queued (submission queue momentarily full):
-// finish the remaining read synchronously with pread at the offset.
-static XrCFuncResult file_io_sync_rest(XrVMRuntime *X, FileIoState *st, XrValue *result) {
-    while (st->off < st->len) {
-        ssize_t n = pread(st->fd, st->rbuf + st->off, st->len - st->off, st->off);
-        if (n > 0) {
-            st->off += (size_t) n;
-            continue;
-        }
-        if (n == 0)
-            break;  // EOF
-        if (errno == EINTR)
-            continue;
-        return file_io_finish(X, st, true, result);  // keep what was already read
-    }
-    return file_io_finish(X, st, true, result);
-}
-
-static XrCFuncResult file_io_complete(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
-                                      XrValue *result) {
-    (void) status;
-    (void) resume_value;
-    FileIoState *st = (FileIoState *) ctx;
-    XrUringXferKind kind;
-    long n = xr_netpoll_uring_xfer_result(st->pd, XR_POLL_READ, &kind);
-    if (kind != XR_URING_XFER_DATA)
-        return file_io_finish(X, st, st->off > 0, result);
-    if (n > 0)
-        st->off += (size_t) n;
-    if (n > 0 && st->off < st->len)
-        return file_io_step(X, st, result);  // more to transfer
-    return file_io_finish(X, st, true, result);
-}
-
-static XrCFuncResult file_io_step(XrVMRuntime *X, FileIoState *st, XrValue *result) {
-    XrUringReq req = {
-        .kind = XR_URING_OP_FILE_READ,
-        .buf = (void *) (st->rbuf + st->off),
-        .len = (unsigned) (st->len - st->off),
-        .offset = st->off,
-    };
-    XrCFuncResult cr;
-    if (xr_yield_for_uring_io(X, st->pd, XR_POLL_READ, &req, file_io_complete, st, result, &cr))
-        return cr;
-    return file_io_sync_rest(X, st, result);  // SQ exhausted — finish synchronously
-}
-
-// Try the io_uring completion path. Returns true (and sets *out) if taken;
-// false if the caller should run the synchronous fopen/fread path. `rbuf` is an
-// owned buffer adopted by the state.
-static bool file_io_try_uring(XrVMRuntime *X, int fd, FileIoKind kind, char *rbuf, size_t len,
-                              XrValue *result, XrCFuncResult *out) {
-    XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
-    if (!rt || !xr_current_coro(X) || !xr_netpoll_uring_active(&rt->netpoll))
-        return false;
-    XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
-    if (!pd)
-        return false;
-    FileIoState *st = (FileIoState *) xr_calloc(1, sizeof(FileIoState));
-    if (!st) {
-        xr_netpoll_close(&rt->netpoll, pd);
-        return false;
-    }
-    st->fd = fd;
-    st->pd = pd;
-    st->kind = kind;
-    st->rbuf = rbuf;
-    st->len = len;
-    *out = (len == 0) ? file_io_finish(X, st, true, result) : file_io_step(X, st, result);
-    return true;
-}
-
-/* One write submitted through io_uring. Unlike the read state machine above,
- * this owns neither the descriptor nor the buffer: __fileWrite reports what a
- * single write accepted and the retry loop that turns a short write into a
- * complete one lives in io.xr. */
+/* One write submitted through io_uring. This owns neither the descriptor nor
+ * the buffer: __fileWrite reports what a single write accepted and the retry
+ * loop that turns a short write into a complete one lives in io.xr. */
 typedef struct {
     XrPollDesc *pd;
 } IoWriteOnceState;
@@ -570,146 +364,6 @@ static XrCFuncResult io_fileWriteStr(XrVMRuntime *X, XrValue *args, int argc, Xr
     return io_write_once(X, XR_TO_INT(args[0]), data, len, XR_TO_INT(args[2]), result);
 }
 
-// readFile(path) - Read file content (yieldable; io_uring async when available)
-static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    *result = xr_null();
-    if (argc < 1)
-        return XR_CFUNC_DONE;
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path || path[0] == '\0')
-        return XR_CFUNC_DONE;
-
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    do {
-        int fd = open(path, O_RDONLY | O_CLOEXEC);
-        if (fd >= 0) {
-            struct stat sb;
-            if (fstat(fd, &sb) == 0 && S_ISREG(sb.st_mode) && sb.st_size >= 0 &&
-                sb.st_size <= IO_MAX_READ_BYTES) {
-                char *buf = (char *) xr_malloc((size_t) sb.st_size + 1);
-                if (buf) {
-                    XrCFuncResult out;
-                    if (file_io_try_uring(X, fd, FILE_IO_READ_STRING, buf, (size_t) sb.st_size,
-                                          result, &out))
-                        return out;
-                    xr_free(buf);  // not taken — fall through to the sync path
-                }
-            }
-            close(fd);
-        }
-    } while (0);
-#endif
-
-    size_t read_size = 0;
-    char *buf = io_read_file_buffer_sync(path, &read_size);
-    if (!buf)
-        return XR_CFUNC_DONE;
-    *result = xrs_string_value_n(X, buf, read_size);
-    xr_free(buf);
-    return XR_CFUNC_DONE;
-}
-
-// readFileBytes(path) - Read file as byte array (yieldable; io_uring async when available)
-static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    *result = xr_null();
-    if (argc < 1)
-        return XR_CFUNC_DONE;
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return XR_CFUNC_DONE;
-
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    do {
-        int fd = open(path, O_RDONLY | O_CLOEXEC);
-        if (fd >= 0) {
-            struct stat sb;
-            if (fstat(fd, &sb) == 0 && S_ISREG(sb.st_mode) && sb.st_size >= 0 &&
-                sb.st_size <= IO_MAX_READ_BYTES) {
-                char *buf = (char *) xr_malloc((size_t) sb.st_size + 1);
-                if (buf) {
-                    XrCFuncResult out;
-                    if (file_io_try_uring(X, fd, FILE_IO_READ_BYTES, buf, (size_t) sb.st_size,
-                                          result, &out))
-                        return out;
-                    xr_free(buf);
-                }
-            }
-            close(fd);
-        }
-    } while (0);
-#endif
-
-    size_t read_size = 0;
-    char *buf = io_read_file_buffer_sync(path, &read_size);
-    if (!buf)
-        return XR_CFUNC_DONE;
-    XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) read_size);
-    if (!arr) {
-        xr_free(buf);
-        return XR_CFUNC_DONE;
-    }
-    if (read_size > 0)
-        memcpy(arr->data, buf, read_size);
-    arr->length = (int32_t) read_size;
-    xr_free(buf);
-    *result = xr_value_from_array(arr);
-    return XR_CFUNC_DONE;
-}
-
-/* ========== File Checks ========== */
-
-// exists(path) - Check if path exists
-static XrValue io_exists(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_bool(false);
-
-    return xr_bool(xr_fs_exists(path));
-}
-
-// isFile(path) - Check if path is a file
-static XrValue io_isFile(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_bool(false);
-
-    return xr_bool(xr_fs_is_file(path));
-}
-
-// isDir(path) - Check if path is a directory
-static XrValue io_isDir(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_bool(false);
-
-    return xr_bool(xr_fs_is_dir(path));
-}
-
-// fileSize(path) - Get file size
-static XrValue io_fileSize(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_int(-1);
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_int(-1);
-
-    XrFsStat st;
-    if (xr_fs_stat(path, &st) != 0)
-        return xr_int(-1);
-    return xr_int((int64_t) st.size);
-}
-
 /* ========== File Operations ========== */
 
 // remove(path) - Remove file
@@ -776,20 +430,45 @@ static bool io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryF
     (void) ctx;
     if (!path || !visit)
         return false;
-    XrDirIter *it = xr_dir_open(path);
-    if (!it)
+#ifdef XR_OS_WINDOWS
+    size_t len = strlen(path);
+    char *pattern = (char *) xr_malloc(len + 4);
+    if (!pattern)
         return false;
+    memcpy(pattern, path, len);
+    pattern[len++] = '\\';
+    pattern[len++] = '*';
+    pattern[len] = '\0';
 
-    XrDirEntry e;
+    WIN32_FIND_DATAA entry;
+    HANDLE dir = FindFirstFileA(pattern, &entry);
+    xr_free(pattern);
+    if (dir == INVALID_HANDLE_VALUE)
+        return false;
     bool ok = true;
-    while (xr_dir_next(it, &e)) {
-        if (!visit(visit_ctx, e.name)) {
+    do {
+        if (!visit(visit_ctx, entry.cFileName)) {
+            ok = false;
+            break;
+        }
+    } while (FindNextFileA(dir, &entry));
+    FindClose(dir);
+#else
+    DIR *dir = opendir(path);
+    if (!dir)
+        return false;
+    bool ok = true;
+    for (;;) {
+        struct dirent *entry = readdir(dir);
+        if (!entry)
+            break;
+        if (!visit(visit_ctx, entry->d_name)) {
             ok = false;
             break;
         }
     }
-
-    xr_dir_close(it);
+    closedir(dir);
+#endif
     return ok;
 }
 
@@ -822,7 +501,7 @@ static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     IoReadDirEmitCtx emit = {.X = X, .arr = arr};
-    if (!xr_io_core_read_dir(path, io_dir_for_each_entry, NULL, io_read_dir_emit, &emit)) {
+    if (!io_dir_for_each_entry(NULL, path, io_read_dir_emit, &emit)) {
         io_release_array(arr);
         return xr_null();
     }
@@ -857,43 +536,6 @@ static XrValue io_chdir(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // copyFile(src, dst) - Copy file
-static char *io_read_file_buffer_sync(const char *path, size_t *out_len) {
-    if (out_len)
-        *out_len = 0;
-    if (!path || path[0] == '\0')
-        return NULL;
-
-    FILE *f = fopen(path, "rb");
-    if (!f)
-        return NULL;
-    char *buf = xr_io_core_read_sized_stream_alloc(
-        f, io_file_seek_end, io_file_tell, io_file_seek_start, io_file_read, io_file_error,
-        io_core_alloc, io_core_free, NULL, IO_MAX_READ_BYTES, out_len);
-    fclose(f);
-    return buf;
-}
-
-static XrValue io_isSymlink(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_bool(false);
-
-#ifdef XR_OS_WINDOWS
-    DWORD attrs = GetFileAttributesA(path);
-    if (attrs == INVALID_FILE_ATTRIBUTES)
-        return xr_bool(false);
-    return xr_bool((attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0);
-#else
-    struct stat st;
-    if (lstat(path, &st) != 0)
-        return xr_bool(false);
-    return xr_bool(S_ISLNK(st.st_mode));
-#endif
-}
-
 // Lazily construct the stat() result class chain for the given isolate
 // and stash it in the per-isolate stdlib cache. Returns NULL on OOM.
 static XrClass *io_get_stat_class(XrVMRuntime *X) {

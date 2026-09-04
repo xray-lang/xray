@@ -8,17 +8,14 @@
  * io.h - File I/O standard library
  *
  * KEY CONCEPT:
- *   Provides file read/write and directory operations. All calls are
- *   synchronous at the moment; a future revision will offload blocking
- *   filesystem syscalls to XrAsyncPool.
+ *   Public file policy lives in io.xr. The C translation unit provides only
+ *   the private POSIX, Win32, descriptor, stdio and runtime parking boundary.
  */
 
 #ifndef XR_STDLIB_IO_H
 #define XR_STDLIB_IO_H
 
 #include "../../src/base/xdefs.h"
-
-#include <stddef.h>
 
 struct XrVMRuntime;
 struct XrModule;
@@ -67,6 +64,5 @@ struct XrModule;
  *   - tempFile()                  Create temporary file
  *   - tempDir()                   Create temporary directory
  */
-XR_FUNC char *xr_io_read_stdin_all(size_t *out_len);
 
 #endif  // XR_STDLIB_IO_H

@@ -6,6 +6,9 @@
 import os
 import { Path } from path
 
+const READ_CHUNK_SIZE: i64 = 131072
+const MAX_IN_MEMORY_READ_BYTES: i64 = 2147483647
+
 export final class FileStat {
     size: i64
     mode: i64
@@ -98,6 +101,38 @@ export final class File {
         if (this._owned) { ok = __fileClose(this._handle) }
         this._open = false
         return ok
+    }
+}
+
+// Whole-input reads are a source-level buffering policy over the one-read file
+// descriptor leaf. Array growth is amortised, and the explicit ceiling matches
+// the largest byte array either backend can represent. The leaf owns only one
+// host read; EOF, retry progression, aggregation and text validation live here.
+fn _readAll(file: File) -> Array<u8>? {
+    var out: Array<u8> = []
+    while (true) {
+        var chunk = file.read(READ_CHUNK_SIZE)
+        if (chunk == null) { return null }
+        if (len(chunk!) == 0) { return out }
+        if (len(out) > MAX_IN_MEMORY_READ_BYTES - len(chunk!)) { return null }
+        for (var i = 0; i < len(chunk!); i++) { out.push(chunk![i]) }
+    }
+    return null
+}
+
+fn _readPathBytes(path: Path) -> Array<u8>? {
+    var file = File.open(path)
+    if (file == null) { return null }
+    var out = _readAll(file!)
+    file!.close()
+    return out
+}
+
+fn _decodeUtf8(bytes: Array<u8>) -> string? {
+    try {
+        return string.fromUtf8(bytes[:])
+    } catch (e: Utf8Error) {
+        return null
     }
 }
 
@@ -328,11 +363,24 @@ export fn copyFile(src: Path, dst: Path) -> bool {
 }
 
 export fn cwd() -> Path { return Path(__cwd()) }
-export fn exists(path: Path) -> bool { return __exists(path) }
-export fn fileSize(path: Path) -> i64 { return __fileSize(path) }
-export fn isDir(path: Path) -> bool { return __isDir(path) }
-export fn isFile(path: Path) -> bool { return __isFile(path) }
-export fn isSymlink(path: Path) -> bool { return __isSymlink(path) }
+export fn exists(path: Path) -> bool { return __stat(path) != null }
+export fn fileSize(path: Path) -> i64 {
+    var raw = __stat(path)
+    if (raw == null) { return -1 }
+    return raw!.size
+}
+export fn isDir(path: Path) -> bool {
+    var raw = __stat(path)
+    return raw != null && raw!.isDir
+}
+export fn isFile(path: Path) -> bool {
+    var raw = __stat(path)
+    return raw != null && raw!.isFile
+}
+export fn isSymlink(path: Path) -> bool {
+    var raw = __stat(path)
+    return raw != null && raw!.isSymlink
+}
 export fn mkdir(path: Path) -> bool { return __mkdir(path) }
 // Separators follow the Path type's own contract, which is POSIX: '/' only.
 // A backslash is an ordinary filename byte, which is what it is on the systems
@@ -340,7 +388,7 @@ export fn mkdir(path: Path) -> bool { return __mkdir(path) }
 // that already exists as a directory as success, is the whole of the policy.
 fn _ensureDir(dir: Path) -> bool {
     if (__mkdir(dir)) { return true }
-    return __isDir(dir)
+    return isDir(dir)
 }
 
 export fn mkdirp(path: Path) -> bool {
@@ -353,7 +401,7 @@ export fn mkdirp(path: Path) -> bool {
     var end = len(raw)
     while (end > rootLen + 1 && raw.slice(end - 1, end) == "/") { end = end - 1 }
     var p = raw.slice(0, end)
-    if (end <= rootLen) { return __isDir(Path(p)) }
+    if (end <= rootLen) { return isDir(Path(p)) }
 
     var i = rootLen
     while (i < len(p) && p.slice(i, i + 1) == "/") { i = i + 1 }
@@ -366,10 +414,18 @@ export fn mkdirp(path: Path) -> bool {
     }
     return _ensureDir(Path(p))
 }
-export fn readFile(path: Path) -> string? { return __readFile(path) }
-export fn readFileBytes(path: Path) -> Array<u8>? { return __readFileBytes(path) }
-export fn readStdin() -> string? { return __readStdin() }
-export fn readStdinBytes() -> Array<u8>? { return __readStdinBytes() }
+export fn readFile(path: Path) -> string? {
+    var bytes = _readPathBytes(path)
+    if (bytes == null) { return null }
+    return _decodeUtf8(bytes!)
+}
+export fn readFileBytes(path: Path) -> Array<u8>? { return _readPathBytes(path) }
+export fn readStdin() -> string? {
+    var bytes = _readAll(File.stdin())
+    if (bytes == null) { return null }
+    return _decodeUtf8(bytes!)
+}
+export fn readStdinBytes() -> Array<u8>? { return _readAll(File.stdin()) }
 export fn remove(path: Path) -> bool { return __remove(path) }
 // Removal descends into real directories only. A symlink is removed as the
 // link it is, never followed, so a link pointing outside the tree cannot make
@@ -379,10 +435,11 @@ export fn remove(path: Path) -> bool { return __remove(path) }
 // which reports the failure while still clearing what it can.
 fn _removeTree(target: Path, depth: i64) -> bool {
     if (depth >= 64) { return false }
-    if (!__exists(target)) { return false }
-    if (!__isDir(target) || __isSymlink(target)) { return __remove(target) }
+    var metadata = __stat(target)
+    if (metadata == null) { return false }
+    if (!metadata!.isDir || metadata!.isSymlink) { return __remove(target) }
 
-    var names = __readDir(target)
+    var names = _readDirNames(target)
     if (names == null) { return false }
     var ok = true
     for (var i = 0; i < len(names!); i++) {
@@ -457,11 +514,22 @@ export fn realpath(path: Path) -> Path? {
     return Path(raw!)
 }
 
+fn _readDirNames(path: Path) -> Array<string>? {
+    var raw = __readDir(path)
+    if (raw == null) { return null }
+    var names: Array<string> = []
+    for (var i = 0; i < len(raw!); i++) {
+        var name = raw![i]
+        if (name != "." && name != "..") { names.push(name) }
+    }
+    return names
+}
+
 // A path that cannot be listed answers null rather than an empty array: an
 // empty directory and a path that is not a directory are different answers,
 // and returning the same value for both hides the second.
 export fn readDir(path: Path) -> Array<Path>? {
-    var raws = __readDir(path)
+    var raws = _readDirNames(path)
     if (raws == null) { return null }
     var out: Array<Path> = []
     for (var i = 0; i < len(raws!); i++) { out.push(Path(raws![i])) }
@@ -473,7 +541,7 @@ export fn readDir(path: Path) -> Array<Path>? {
 // but not descended into, so a cycle through one cannot make the walk repeat.
 fn _walkDir(full: string, rel: string, depth: i64, out: ref Array<string>) {
     if (depth >= 64) { return }
-    var names = __readDir(Path(full))
+    var names = _readDirNames(Path(full))
     if (names == null) { return }
     for (var i = 0; i < len(names!); i++) {
         var name = names![i]
@@ -482,14 +550,15 @@ fn _walkDir(full: string, rel: string, depth: i64, out: ref Array<string>) {
         if (len(rel) > 0) { childRel = rel + "/" + name }
         out.push(childRel)
         var child = Path(childFull)
-        if (__isDir(child) && !__isSymlink(child)) {
+        var metadata = __stat(child)
+        if (metadata != null && metadata!.isDir && !metadata!.isSymlink) {
             _walkDir(childFull, childRel, depth + 1, ref out)
         }
     }
 }
 
 export fn readDirRecursive(path: Path) -> Array<Path>? {
-    if (!__isDir(path)) { return null }
+    if (!isDir(path)) { return null }
     var raw: Array<string> = []
     _walkDir(path.toString(), "", 0, ref raw)
     var out: Array<Path> = []

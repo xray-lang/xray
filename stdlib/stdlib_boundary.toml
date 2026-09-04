@@ -312,7 +312,7 @@ policy = "xray_semantic"
 semantic_source = "stdlib/io/io.xr"
 public_native = []
 private_native_sources = ["stdlib/io/*.c"]
-private_native_reason = "Private file-descriptor and filesystem syscall primitives consumed by io.xr"
+private_native_reason = "Private POSIX, Win32, file-descriptor and stdio leaves consumed by io.xr"
 perf_suite = "stdlib/io"
 
 [[module]]

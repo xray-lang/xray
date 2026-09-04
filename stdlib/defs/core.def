@@ -1136,18 +1136,6 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn __exists {
-    signature: "(path: Path): bool"
-    doc: "Check if path exists"
-    vm: "io_exists"
-    aot: "xrt_io_exists"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
   fn __fileClose {
     signature: "(handle: i64): bool"
     doc: "Close an owned file descriptor; 0, 1 and 2 are refused"
@@ -1242,54 +1230,6 @@ module io {
     visibility: "internal"
   }
 
-  fn __fileSize {
-    signature: "(path: Path): i64"
-    doc: "Get file size in bytes"
-    vm: "io_fileSize"
-    aot: "xrt_io_file_size"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __isDir {
-    signature: "(path: Path): bool"
-    doc: "Check if path is a directory"
-    vm: "io_isDir"
-    aot: "xrt_io_is_dir"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __isFile {
-    signature: "(path: Path): bool"
-    doc: "Check if path is a file"
-    vm: "io_isFile"
-    aot: "xrt_io_is_file"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
-  fn __isSymlink {
-    signature: "(path: Path): bool"
-    doc: "Check if path is a symlink"
-    vm: "io_isSymlink"
-    aot: "xrt_io_is_symlink"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
   fn __mkdir {
     signature: "(path: Path): bool"
     doc: "Create directory"
@@ -1313,60 +1253,6 @@ module io {
     link_object: false
     layer: "system"
     visibility: "internal"
-    return_ownership: "fresh"
-  }
-
-  fn __readFile {
-    signature: "(path: Path): string?"
-    doc: "Read entire file as string"
-    vm: "io_readFile"
-    vm_binding: "yieldable"
-    aot: "xrt_io_read_file"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __readFileBytes {
-    signature: "(path: Path): Array<u8>?"
-    doc: "Read entire file as byte array"
-    vm: "io_readFileBytes"
-    vm_binding: "yieldable"
-    aot: "xrt_io_read_file_bytes"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __readStdin {
-    signature: "(): string?"
-    doc: "Read all data from standard input"
-    vm: "io_readStdin"
-    aot: "xrt_io_read_stdin"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
-  fn __readStdinBytes {
-    signature: "(): Array<u8>?"
-    doc: "Read all standard input as binary bytes"
-    vm: "io_readStdinBytes"
-    aot: "xrt_io_read_stdin_bytes"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
     return_ownership: "fresh"
   }
 
