@@ -14,9 +14,35 @@
 #include "xcluster_wire.h"
 #include "../base/xmalloc.h"
 #include "../os/os_random.h"
+#include "../os/os_thread.h"
 #include "../shared/xr_crypto_core.h"
 
+#include <stdatomic.h>
 #include <string.h>
+
+#define XR_CLUSTER_BLOCKING_QUEUE_HIGH_WATERMARK (4u * 1024u * 1024u)
+
+typedef struct XrClusterBlockingFrame {
+    uint8_t *data;
+    uint32_t length;
+    struct XrClusterBlockingFrame *next;
+} XrClusterBlockingFrame;
+
+struct XrClusterBlockingPeer {
+    xr_socket_t socket;
+    void *context;
+    XrClusterBlockingFrameHandler frame_handler;
+    _Atomic(bool) running;
+    xr_mutex_t queue_lock;
+    xr_cond_t queue_ready;
+    XrClusterBlockingFrame *queue_head;
+    XrClusterBlockingFrame *queue_tail;
+    size_t queue_bytes;
+    xr_thread_t reader_thread;
+    xr_thread_t writer_thread;
+    bool reader_started;
+    bool writer_started;
+};
 
 int xr_cluster_blocking_wait(xr_socket_t socket, bool read_ready, int timeout_ms) {
     fd_set read_set;
@@ -84,6 +110,201 @@ bool xr_cluster_blocking_read_frame(xr_socket_t socket, uint8_t *type, uint8_t *
     }
     *payload = owned;
     return true;
+}
+
+static void blocking_frame_free(XrClusterBlockingFrame *frame) {
+    if (!frame)
+        return;
+    xr_free(frame->data);
+    xr_free(frame);
+}
+
+void xr_cluster_blocking_peer_stop(XrClusterBlockingPeer *peer) {
+    if (!peer || !atomic_exchange_explicit(&peer->running, false, memory_order_acq_rel))
+        return;
+    shutdown(peer->socket, XR_SHUT_RDWR);
+    xr_mutex_lock(&peer->queue_lock);
+    xr_cond_broadcast(&peer->queue_ready);
+    xr_mutex_unlock(&peer->queue_lock);
+}
+
+static int blocking_peer_enqueue_owned(XrClusterBlockingPeer *peer, XrClusterBlockingFrame *frame) {
+    if (!peer || !frame) {
+        blocking_frame_free(frame);
+        return -1;
+    }
+    xr_mutex_lock(&peer->queue_lock);
+    if (!atomic_load_explicit(&peer->running, memory_order_relaxed) ||
+        peer->queue_bytes > XR_CLUSTER_BLOCKING_QUEUE_HIGH_WATERMARK ||
+        frame->length > XR_CLUSTER_BLOCKING_QUEUE_HIGH_WATERMARK - peer->queue_bytes) {
+        xr_mutex_unlock(&peer->queue_lock);
+        blocking_frame_free(frame);
+        return -1;
+    }
+    if (peer->queue_tail)
+        peer->queue_tail->next = frame;
+    else
+        peer->queue_head = frame;
+    peer->queue_tail = frame;
+    peer->queue_bytes += frame->length;
+    xr_cond_signal(&peer->queue_ready);
+    xr_mutex_unlock(&peer->queue_lock);
+    return 0;
+}
+
+static int blocking_peer_enqueue_copy(XrClusterBlockingPeer *peer, const uint8_t *data,
+                                      uint32_t length) {
+    if (!peer || !data || length == 0)
+        return -1;
+    XrClusterBlockingFrame *frame = (XrClusterBlockingFrame *) xr_calloc(1, sizeof(*frame));
+    if (!frame)
+        return -1;
+    frame->data = (uint8_t *) xr_malloc(length);
+    if (!frame->data) {
+        xr_free(frame);
+        return -1;
+    }
+    memcpy(frame->data, data, length);
+    frame->length = length;
+    return blocking_peer_enqueue_owned(peer, frame);
+}
+
+int xr_cluster_blocking_peer_enqueue_transport(XrClusterBlockingPeer *peer, uint8_t hop_limit,
+                                               const char *topic, uint8_t topic_length,
+                                               const uint8_t *envelope, uint32_t envelope_length) {
+    if (!peer || !topic || topic_length == 0 || !envelope)
+        return -1;
+    size_t frame_length = (size_t) XR_FRAME_HEADER_SIZE + 3u + topic_length + envelope_length;
+    if (frame_length > UINT32_MAX)
+        return -1;
+    XrClusterBlockingFrame *frame = (XrClusterBlockingFrame *) xr_calloc(1, sizeof(*frame));
+    if (!frame)
+        return -1;
+    frame->data = (uint8_t *) xr_malloc(frame_length);
+    if (!frame->data) {
+        xr_free(frame);
+        return -1;
+    }
+    int wrote = cluster_frame_write_transport(frame->data, frame_length, hop_limit, topic,
+                                              topic_length, envelope, envelope_length);
+    if (wrote <= 0) {
+        blocking_frame_free(frame);
+        return -1;
+    }
+    frame->length = (uint32_t) wrote;
+    return blocking_peer_enqueue_owned(peer, frame);
+}
+
+static XrClusterBlockingFrame *blocking_peer_take_frame(XrClusterBlockingPeer *peer) {
+    xr_mutex_lock(&peer->queue_lock);
+    while (atomic_load_explicit(&peer->running, memory_order_relaxed) && !peer->queue_head)
+        xr_cond_wait(&peer->queue_ready, &peer->queue_lock);
+    if (!atomic_load_explicit(&peer->running, memory_order_relaxed)) {
+        xr_mutex_unlock(&peer->queue_lock);
+        return NULL;
+    }
+    XrClusterBlockingFrame *frame = peer->queue_head;
+    peer->queue_head = frame->next;
+    if (!peer->queue_head)
+        peer->queue_tail = NULL;
+    peer->queue_bytes -= frame->length;
+    frame->next = NULL;
+    xr_mutex_unlock(&peer->queue_lock);
+    return frame;
+}
+
+static void *blocking_peer_writer_main(void *argument) {
+    XrClusterBlockingPeer *peer = (XrClusterBlockingPeer *) argument;
+    while (atomic_load_explicit(&peer->running, memory_order_acquire)) {
+        XrClusterBlockingFrame *frame = blocking_peer_take_frame(peer);
+        if (!frame)
+            break;
+        bool written = xr_cluster_blocking_write_all(peer->socket, frame->data, frame->length,
+                                                     XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
+        blocking_frame_free(frame);
+        if (!written)
+            break;
+    }
+    xr_cluster_blocking_peer_stop(peer);
+    return NULL;
+}
+
+static void *blocking_peer_reader_main(void *argument) {
+    XrClusterBlockingPeer *peer = (XrClusterBlockingPeer *) argument;
+    while (atomic_load_explicit(&peer->running, memory_order_acquire)) {
+        uint8_t frame_type = 0;
+        uint8_t *payload = NULL;
+        uint32_t payload_length = 0;
+        if (!xr_cluster_blocking_read_frame(peer->socket, &frame_type, &payload, &payload_length,
+                                            XR_CLUSTER_HANDSHAKE_TIMEOUT_MS))
+            break;
+        XrClusterFrameProjection projection;
+        bool valid = cluster_frame_project(frame_type, payload, payload_length, &projection);
+        if (valid && projection.response_length > 0)
+            (void) blocking_peer_enqueue_copy(peer, projection.response,
+                                              projection.response_length);
+        if (valid)
+            peer->frame_handler(peer->context, &projection);
+        xr_free(payload);
+    }
+    xr_cluster_blocking_peer_stop(peer);
+    return NULL;
+}
+
+XrClusterBlockingPeer *xr_cluster_blocking_peer_new(const XrClusterBlockingPeerConfig *config) {
+    if (!config || config->socket == XR_INVALID_SOCKET || !config->frame_handler)
+        return NULL;
+    XrClusterBlockingPeer *peer = (XrClusterBlockingPeer *) xr_calloc(1, sizeof(*peer));
+    if (!peer)
+        return NULL;
+    peer->socket = config->socket;
+    peer->context = config->context;
+    peer->frame_handler = config->frame_handler;
+    atomic_store_explicit(&peer->running, true, memory_order_relaxed);
+    xr_mutex_init(&peer->queue_lock);
+    xr_cond_init(&peer->queue_ready);
+    (void) xr_socket_set_nodelay(peer->socket, true);
+    return peer;
+}
+
+bool xr_cluster_blocking_peer_start(XrClusterBlockingPeer *peer) {
+    if (!peer || peer->writer_started || peer->reader_started ||
+        !atomic_load_explicit(&peer->running, memory_order_acquire) ||
+        !xr_thread_create(&peer->writer_thread, blocking_peer_writer_main, peer))
+        return false;
+    peer->writer_started = true;
+    if (!xr_thread_create(&peer->reader_thread, blocking_peer_reader_main, peer)) {
+        xr_cluster_blocking_peer_stop(peer);
+        (void) xr_thread_join(peer->writer_thread, NULL);
+        peer->writer_started = false;
+        return false;
+    }
+    peer->reader_started = true;
+    return true;
+}
+
+bool xr_cluster_blocking_peer_is_running(const XrClusterBlockingPeer *peer) {
+    return peer && atomic_load_explicit(&peer->running, memory_order_acquire);
+}
+
+void xr_cluster_blocking_peer_destroy(XrClusterBlockingPeer *peer) {
+    if (!peer)
+        return;
+    xr_cluster_blocking_peer_stop(peer);
+    if (peer->writer_started)
+        (void) xr_thread_join(peer->writer_thread, NULL);
+    if (peer->reader_started)
+        (void) xr_thread_join(peer->reader_thread, NULL);
+    xr_closesocket(peer->socket);
+    XrClusterBlockingFrame *frame = peer->queue_head;
+    while (frame) {
+        XrClusterBlockingFrame *next = frame->next;
+        blocking_frame_free(frame);
+        frame = next;
+    }
+    xr_cond_destroy(&peer->queue_ready);
+    xr_mutex_destroy(&peer->queue_lock);
+    xr_free(peer);
 }
 
 bool xr_cluster_blocking_server_handshake(xr_socket_t socket, const char *self_name,

@@ -8,9 +8,10 @@
  * cluster_aot.c - Standalone AOT adapter for the cluster transport
  *
  * KEY CONCEPT:
- *   The adapter owns sockets and blocking I/O threads, while protocol frames,
- *   authentication, topic rules, Channel transport and Buffer ownership use
- *   the same backend-neutral kernels as the VM runtime. No VM is embedded.
+ *   The adapter owns cluster state while its opaque I/O provider owns sockets,
+ *   blocking threads and byte queues. Protocol frames, authentication, topic
+ *   rules, Channel transport and Buffer ownership use the same backend-neutral
+ *   kernels as the VM runtime. No VM is embedded.
  */
 
 #include "cluster_internal.h"
@@ -26,31 +27,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_AOT_CLUSTER_QUEUE_HIGH_WATERMARK (4u * 1024u * 1024u)
 #define XR_AOT_CLUSTER_ACCEPT_POLL_MS 100
-
-typedef struct XrAotClusterFrame {
-    uint8_t *data;
-    uint32_t length;
-    struct XrAotClusterFrame *next;
-} XrAotClusterFrame;
 
 typedef struct XrAotClusterState XrAotClusterState;
 
 typedef struct XrAotClusterNode {
     XrAotClusterState *cluster;
     char name[XR_NODE_NAME_MAX + 1];
-    xr_socket_t socket;
-    _Atomic(bool) running;
-    xr_mutex_t queue_lock;
-    xr_cond_t queue_ready;
-    XrAotClusterFrame *queue_head;
-    XrAotClusterFrame *queue_tail;
-    size_t queue_bytes;
-    xr_thread_t reader_thread;
-    xr_thread_t writer_thread;
-    bool reader_started;
-    bool writer_started;
+    XrClusterBlockingPeer *peer;
     struct XrAotClusterNode *next;
 } XrAotClusterNode;
 
@@ -79,6 +63,8 @@ struct XrAotClusterState {
     XrTopicRegistry *topics;
 };
 
+static void aot_cluster_receive_frame(void *context, const XrClusterFrameProjection *projection);
+
 static bool aot_cluster_copy_text(char *target, size_t capacity, const char *source, int64_t length,
                                   bool allow_empty) {
     if (!target || capacity == 0 || !source || length < 0 || (size_t) length >= capacity ||
@@ -89,119 +75,32 @@ static bool aot_cluster_copy_text(char *target, size_t capacity, const char *sou
     return true;
 }
 
-static void aot_cluster_node_stop(XrAotClusterNode *node) {
-    if (!node || !atomic_exchange_explicit(&node->running, false, memory_order_acq_rel))
-        return;
-    shutdown(node->socket, XR_SHUT_RDWR);
-    xr_mutex_lock(&node->queue_lock);
-    xr_cond_broadcast(&node->queue_ready);
-    xr_mutex_unlock(&node->queue_lock);
-}
-
 static XrAotClusterNode *aot_cluster_node_new(XrAotClusterState *cluster, const char *name,
                                               xr_socket_t socket) {
     XrAotClusterNode *node = (XrAotClusterNode *) xr_calloc(1, sizeof(*node));
     if (!node)
         return NULL;
     node->cluster = cluster;
-    node->socket = socket;
     strncpy(node->name, name, XR_NODE_NAME_MAX);
     node->name[XR_NODE_NAME_MAX] = '\0';
-    atomic_store_explicit(&node->running, true, memory_order_relaxed);
-    xr_mutex_init(&node->queue_lock);
-    xr_cond_init(&node->queue_ready);
-    (void) xr_socket_set_nodelay(socket, true);
+    XrClusterBlockingPeerConfig peer_config = {
+        .socket = socket,
+        .context = node,
+        .frame_handler = aot_cluster_receive_frame,
+    };
+    node->peer = xr_cluster_blocking_peer_new(&peer_config);
+    if (!node->peer) {
+        xr_free(node);
+        return NULL;
+    }
     return node;
-}
-
-static void aot_cluster_frame_free(XrAotClusterFrame *frame) {
-    if (!frame)
-        return;
-    xr_free(frame->data);
-    xr_free(frame);
 }
 
 static void aot_cluster_node_destroy(XrAotClusterNode *node) {
     if (!node)
         return;
-    aot_cluster_node_stop(node);
-    if (node->writer_started)
-        (void) xr_thread_join(node->writer_thread, NULL);
-    if (node->reader_started)
-        (void) xr_thread_join(node->reader_thread, NULL);
-    xr_closesocket(node->socket);
-    XrAotClusterFrame *frame = node->queue_head;
-    while (frame) {
-        XrAotClusterFrame *next = frame->next;
-        aot_cluster_frame_free(frame);
-        frame = next;
-    }
-    xr_cond_destroy(&node->queue_ready);
-    xr_mutex_destroy(&node->queue_lock);
+    xr_cluster_blocking_peer_destroy(node->peer);
     xr_free(node);
-}
-
-static int aot_cluster_node_enqueue_ready_frame(XrAotClusterNode *node, XrAotClusterFrame *frame) {
-    xr_mutex_lock(&node->queue_lock);
-    if (!atomic_load_explicit(&node->running, memory_order_relaxed) ||
-        node->queue_bytes + frame->length > XR_AOT_CLUSTER_QUEUE_HIGH_WATERMARK) {
-        xr_mutex_unlock(&node->queue_lock);
-        aot_cluster_frame_free(frame);
-        return -1;
-    }
-    if (node->queue_tail)
-        node->queue_tail->next = frame;
-    else
-        node->queue_head = frame;
-    node->queue_tail = frame;
-    node->queue_bytes += frame->length;
-    xr_cond_signal(&node->queue_ready);
-    xr_mutex_unlock(&node->queue_lock);
-    return 0;
-}
-
-static int aot_cluster_node_enqueue(XrAotClusterNode *node, uint8_t frame_type,
-                                    const uint8_t *payload, uint32_t payload_length) {
-    if (!node || !atomic_load_explicit(&node->running, memory_order_acquire))
-        return -1;
-    size_t frame_length = (size_t) payload_length + XR_FRAME_HEADER_SIZE + 1;
-    XrAotClusterFrame *frame = (XrAotClusterFrame *) xr_calloc(1, sizeof(*frame));
-    if (!frame)
-        return -1;
-    frame->data = (uint8_t *) xr_malloc(frame_length);
-    if (!frame->data) {
-        xr_free(frame);
-        return -1;
-    }
-    frame->length =
-        (uint32_t) cluster_frame_write(frame->data, frame_type, payload, payload_length);
-    return aot_cluster_node_enqueue_ready_frame(node, frame);
-}
-
-static int aot_cluster_node_enqueue_transport(XrAotClusterNode *node, uint8_t hop_limit,
-                                              const char *topic, uint8_t topic_len,
-                                              const uint8_t *envelope, uint32_t envelope_length) {
-    if (!node || !atomic_load_explicit(&node->running, memory_order_acquire))
-        return -1;
-    size_t frame_length = (size_t) XR_FRAME_HEADER_SIZE + 3u + topic_len + envelope_length;
-    if (frame_length > UINT32_MAX)
-        return -1;
-    XrAotClusterFrame *frame = (XrAotClusterFrame *) xr_calloc(1, sizeof(*frame));
-    if (!frame)
-        return -1;
-    frame->data = (uint8_t *) xr_malloc(frame_length);
-    if (!frame->data) {
-        xr_free(frame);
-        return -1;
-    }
-    int wrote = cluster_frame_write_transport(frame->data, frame_length, hop_limit, topic,
-                                              topic_len, envelope, envelope_length);
-    if (wrote < 0) {
-        aot_cluster_frame_free(frame);
-        return -1;
-    }
-    frame->length = (uint32_t) wrote;
-    return aot_cluster_node_enqueue_ready_frame(node, frame);
 }
 
 static XrClusterDelivery aot_cluster_broadcast(XrAotClusterState *cluster,
@@ -212,11 +111,11 @@ static XrClusterDelivery aot_cluster_broadcast(XrAotClusterState *cluster,
     int accepted = 0;
     xr_mutex_lock(&cluster->nodes_lock);
     for (XrAotClusterNode *node = cluster->nodes; node; node = node->next) {
-        if (node == excluded_node || !atomic_load_explicit(&node->running, memory_order_acquire))
+        if (node == excluded_node || !xr_cluster_blocking_peer_is_running(node->peer))
             continue;
         connected++;
-        if (aot_cluster_node_enqueue_transport(node, hop_limit, topic, topic_length, envelope,
-                                               envelope_length) == 0)
+        if (xr_cluster_blocking_peer_enqueue_transport(node->peer, hop_limit, topic, topic_length,
+                                                       envelope, envelope_length) == 0)
             accepted++;
     }
     xr_mutex_unlock(&cluster->nodes_lock);
@@ -227,95 +126,19 @@ static XrClusterDelivery aot_cluster_broadcast(XrAotClusterState *cluster,
     return XR_CLUSTER_DELIVERY_DISCONNECTED;
 }
 
-static XrAotClusterFrame *aot_cluster_node_take_frame(XrAotClusterNode *node) {
-    xr_mutex_lock(&node->queue_lock);
-    while (atomic_load_explicit(&node->running, memory_order_relaxed) && !node->queue_head)
-        xr_cond_wait(&node->queue_ready, &node->queue_lock);
-    XrAotClusterFrame *frame = node->queue_head;
-    if (frame) {
-        node->queue_head = frame->next;
-        if (!node->queue_head)
-            node->queue_tail = NULL;
-        node->queue_bytes -= frame->length;
-        frame->next = NULL;
-    }
-    xr_mutex_unlock(&node->queue_lock);
-    return frame;
-}
-
-static void *aot_cluster_writer_main(void *argument) {
-    XrAotClusterNode *node = (XrAotClusterNode *) argument;
-    while (atomic_load_explicit(&node->running, memory_order_acquire)) {
-        XrAotClusterFrame *frame = aot_cluster_node_take_frame(node);
-        if (!frame)
-            break;
-        bool written = xr_cluster_blocking_write_all(node->socket, frame->data, frame->length,
-                                                     XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
-        aot_cluster_frame_free(frame);
-        if (!written)
-            break;
-    }
-    aot_cluster_node_stop(node);
-    return NULL;
-}
-
-static void aot_cluster_process_frame(XrAotClusterNode *node, uint8_t frame_type,
-                                      const uint8_t *payload, uint32_t payload_length) {
-    if (frame_type == XR_FRAME_TRANSPORT_ENVELOPE) {
-        XrFrameTransport transport;
-        if (cluster_frame_decode_transport(payload, payload_length, &transport) != 0 ||
-            !xr_topic_name_valid(transport.topic))
-            return;
-        (void) xr_topic_registry_deliver(node->cluster->topics, transport.topic, transport.envelope,
-                                         transport.envelope_length);
-        if (transport.hop_limit > 0)
-            (void) aot_cluster_broadcast(node->cluster, node, (uint8_t) (transport.hop_limit - 1),
-                                         transport.topic, transport.topic_length,
-                                         transport.envelope, transport.envelope_length);
+static void aot_cluster_receive_frame(void *context, const XrClusterFrameProjection *projection) {
+    XrAotClusterNode *node = (XrAotClusterNode *) context;
+    if (!node || !projection || projection->kind != XR_CLUSTER_FRAME_TRANSPORT ||
+        !xr_topic_name_valid(projection->transport.topic))
         return;
-    }
-    if (frame_type == XR_FRAME_HEARTBEAT_PING) {
-        int64_t timestamp = 0;
-        uint8_t pong[32];
-        if (cluster_frame_decode_heartbeat(payload, payload_length, &timestamp) == 0) {
-            int length = cluster_frame_encode_heartbeat(pong, sizeof(pong), XR_FRAME_HEARTBEAT_PONG,
-                                                        timestamp);
-            if (length > (XR_FRAME_HEADER_SIZE + 1))
-                (void) aot_cluster_node_enqueue(node, XR_FRAME_HEARTBEAT_PONG,
-                                                pong + XR_FRAME_HEADER_SIZE + 1,
-                                                (uint32_t) length - XR_FRAME_HEADER_SIZE - 1);
-        }
-    }
-}
-
-static void *aot_cluster_reader_main(void *argument) {
-    XrAotClusterNode *node = (XrAotClusterNode *) argument;
-    while (atomic_load_explicit(&node->running, memory_order_acquire)) {
-        uint8_t frame_type = 0;
-        uint8_t *payload = NULL;
-        uint32_t payload_length = 0;
-        if (!xr_cluster_blocking_read_frame(node->socket, &frame_type, &payload, &payload_length,
-                                            XR_CLUSTER_HANDSHAKE_TIMEOUT_MS))
-            break;
-        aot_cluster_process_frame(node, frame_type, payload, payload_length);
-        xr_free(payload);
-    }
-    aot_cluster_node_stop(node);
-    return NULL;
-}
-
-static bool aot_cluster_node_start(XrAotClusterNode *node) {
-    if (!node || !xr_thread_create(&node->writer_thread, aot_cluster_writer_main, node))
-        return false;
-    node->writer_started = true;
-    if (!xr_thread_create(&node->reader_thread, aot_cluster_reader_main, node)) {
-        aot_cluster_node_stop(node);
-        (void) xr_thread_join(node->writer_thread, NULL);
-        node->writer_started = false;
-        return false;
-    }
-    node->reader_started = true;
-    return true;
+    (void) xr_topic_registry_deliver(node->cluster->topics, projection->transport.topic,
+                                     projection->transport.envelope,
+                                     projection->transport.envelope_length);
+    if (projection->transport.hop_limit > 0)
+        (void) aot_cluster_broadcast(
+            node->cluster, node, (uint8_t) (projection->transport.hop_limit - 1),
+            projection->transport.topic, projection->transport.topic_length,
+            projection->transport.envelope, projection->transport.envelope_length);
 }
 
 static void aot_cluster_add_node(XrAotClusterState *cluster, XrAotClusterNode *node) {
@@ -348,7 +171,7 @@ static void *aot_cluster_accept_main(void *argument) {
             continue;
         }
         XrAotClusterNode *node = aot_cluster_node_new(cluster, peer_name, socket);
-        if (!node || !aot_cluster_node_start(node)) {
+        if (!node || !xr_cluster_blocking_peer_start(node->peer)) {
             if (node)
                 aot_cluster_node_destroy(node);
             else
@@ -446,7 +269,7 @@ static void aot_cluster_state_destroy(XrAotClusterState *cluster) {
 
     xr_mutex_lock(&cluster->nodes_lock);
     for (XrAotClusterNode *node = cluster->nodes; node; node = node->next)
-        aot_cluster_node_stop(node);
+        xr_cluster_blocking_peer_stop(node->peer);
     XrAotClusterNode *nodes = cluster->nodes;
     cluster->nodes = NULL;
     xr_mutex_unlock(&cluster->nodes_lock);
@@ -567,7 +390,7 @@ XrValue xrt_cluster_join(const char *host_text, int64_t host_len, XrValue port_v
         return XR_FALSE_VAL;
     }
     XrAotClusterNode *node = aot_cluster_node_new(cluster, peer_name, socket);
-    if (!node || !aot_cluster_node_start(node)) {
+    if (!node || !xr_cluster_blocking_peer_start(node->peer)) {
         if (node)
             aot_cluster_node_destroy(node);
         else

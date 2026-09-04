@@ -387,3 +387,56 @@ int cluster_frame_decode_coro_exit(const uint8_t *payload, uint32_t len, char *c
     reason[reason_len] = '\0';
     return 0;
 }
+
+bool cluster_frame_project(uint8_t frame_type, const uint8_t *payload, uint32_t payload_length,
+                           XrClusterFrameProjection *projection) {
+    if (!projection || (payload_length > 0 && !payload))
+        return false;
+    memset(projection, 0, sizeof(*projection));
+
+    switch (frame_type) {
+        case XR_FRAME_HEARTBEAT_PING: {
+            if (cluster_frame_decode_heartbeat(payload, payload_length,
+                                               &projection->heartbeat_timestamp) != 0)
+                return false;
+            int response_length = cluster_frame_encode_heartbeat(
+                projection->response, sizeof(projection->response), XR_FRAME_HEARTBEAT_PONG,
+                projection->heartbeat_timestamp);
+            if (response_length <= 0)
+                return false;
+            projection->kind = XR_CLUSTER_FRAME_HEARTBEAT_PING;
+            projection->response_length = (uint32_t) response_length;
+            return true;
+        }
+        case XR_FRAME_HEARTBEAT_PONG:
+            if (cluster_frame_decode_heartbeat(payload, payload_length,
+                                               &projection->heartbeat_timestamp) != 0)
+                return false;
+            projection->kind = XR_CLUSTER_FRAME_HEARTBEAT_PONG;
+            return true;
+        case XR_FRAME_TRANSPORT_ENVELOPE:
+            if (cluster_frame_decode_transport(payload, payload_length, &projection->transport) !=
+                0)
+                return false;
+            projection->kind = XR_CLUSTER_FRAME_TRANSPORT;
+            return true;
+        case XR_FRAME_CORO_MONITOR:
+        case XR_FRAME_CORO_DEMONITOR:
+            if (cluster_frame_decode_coro_monitor(payload, payload_length, projection->coro_name,
+                                                  sizeof(projection->coro_name)) != 0)
+                return false;
+            projection->kind = frame_type == XR_FRAME_CORO_MONITOR
+                                   ? XR_CLUSTER_FRAME_CORO_MONITOR
+                                   : XR_CLUSTER_FRAME_CORO_DEMONITOR;
+            return true;
+        case XR_FRAME_CORO_EXIT:
+            if (cluster_frame_decode_coro_exit(
+                    payload, payload_length, projection->coro_name, sizeof(projection->coro_name),
+                    projection->coro_reason, sizeof(projection->coro_reason)) != 0)
+                return false;
+            projection->kind = XR_CLUSTER_FRAME_CORO_EXIT;
+            return true;
+        default:
+            return false;
+    }
+}

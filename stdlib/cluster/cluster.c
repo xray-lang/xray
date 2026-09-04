@@ -1188,18 +1188,13 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
     if (!c || !node)
         return;
 
-    switch (frame_type) {
-        case XR_FRAME_HEARTBEAT_PING: {
-            // Reply with PONG via output queue
-            int64_t ts;
-            if (cluster_frame_decode_heartbeat(payload, payload_len, &ts) == 0) {
-                uint8_t pong[32];
-                int plen =
-                    cluster_frame_encode_heartbeat(pong, sizeof(pong), XR_FRAME_HEARTBEAT_PONG, ts);
-                if (plen > 0) {
-                    cluster_node_enqueue(node, pong, (uint32_t) plen);
-                }
-            }
+    XrClusterFrameProjection projection;
+    if (!cluster_frame_project(frame_type, payload, payload_len, &projection))
+        return;
+
+    switch (projection.kind) {
+        case XR_CLUSTER_FRAME_HEARTBEAT_PING: {
+            (void) cluster_node_enqueue(node, projection.response, projection.response_length);
             int64_t now_hb = cluster_now_ms();
             node->last_heartbeat_recv = now_hb;
             node->missed_heartbeats = 0;
@@ -1207,48 +1202,34 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
             break;
         }
 
-        case XR_FRAME_HEARTBEAT_PONG: {
+        case XR_CLUSTER_FRAME_HEARTBEAT_PONG: {
             int64_t now_pong = cluster_now_ms();
-            // Compute RTT from ping timestamp
-            int64_t ping_ts;
-            if (cluster_frame_decode_heartbeat(payload, payload_len, &ping_ts) == 0) {
-                node->metrics.last_rtt_ms = now_pong - ping_ts;
-            }
+            node->metrics.last_rtt_ms = now_pong - projection.heartbeat_timestamp;
             node->last_heartbeat_recv = now_pong;
             node->missed_heartbeats = 0;
             xr_phi_detector_record(&node->phi, now_pong);
             break;
         }
 
-        case XR_FRAME_TRANSPORT_ENVELOPE: {
-            XrFrameTransport transport;
-            if (cluster_frame_decode_transport(payload, payload_len, &transport) == 0)
-                cluster_transport_handle_frame(c, node, transport.topic, transport.envelope,
-                                               transport.envelope_length, transport.hop_limit);
+        case XR_CLUSTER_FRAME_TRANSPORT: {
+            cluster_transport_handle_frame(
+                c, node, projection.transport.topic, projection.transport.envelope,
+                projection.transport.envelope_length, projection.transport.hop_limit);
             break;
         }
 
-        case XR_FRAME_CORO_MONITOR: {
-            char coro_name[XR_CORO_NAME_MAX + 1];
-            if (cluster_frame_decode_coro_monitor(payload, payload_len, coro_name,
-                                                  sizeof(coro_name)) == 0) {
-                cluster_monitor_handle_coro_request(c, node, coro_name);
-            }
+        case XR_CLUSTER_FRAME_CORO_MONITOR: {
+            cluster_monitor_handle_coro_request(c, node, projection.coro_name);
             break;
         }
 
-        case XR_FRAME_CORO_EXIT: {
-            char coro_name[XR_CORO_NAME_MAX + 1];
-            char reason[128];
-            if (cluster_frame_decode_coro_exit(payload, payload_len, coro_name, sizeof(coro_name),
-                                               reason, sizeof(reason)) == 0) {
-                xr_monitor_registry_notify_remote(c->monitors, c->isolate, node->name, coro_name,
-                                                  reason);
-            }
+        case XR_CLUSTER_FRAME_CORO_EXIT: {
+            xr_monitor_registry_notify_remote(c->monitors, c->isolate, node->name,
+                                              projection.coro_name, projection.coro_reason);
             break;
         }
 
-        case XR_FRAME_CORO_DEMONITOR:
+        case XR_CLUSTER_FRAME_CORO_DEMONITOR:
             // Future: remove remote monitor
             break;
 

@@ -406,6 +406,60 @@ TEST(cluster_heartbeat_round_trips) {
                   -1);
 }
 
+TEST(cluster_frame_projection_is_backend_neutral) {
+    const int64_t timestamp = INT64_C(0x0102030405060708);
+    uint8_t frame[256] = {0};
+    int frame_length =
+        cluster_frame_encode_heartbeat(frame, sizeof(frame), XR_FRAME_HEARTBEAT_PING, timestamp);
+    ASSERT_TRUE(frame_length > 0);
+
+    uint8_t frame_type = 0;
+    uint32_t payload_length = 0;
+    ASSERT_EQ_INT(
+        cluster_frame_read_header(frame, (size_t) frame_length, &frame_type, &payload_length), 0);
+    XrClusterFrameProjection projection;
+    ASSERT_TRUE(cluster_frame_project(frame_type, frame + XR_FRAME_HEADER_SIZE + 1, payload_length,
+                                      &projection));
+    ASSERT_EQ_INT(projection.kind, XR_CLUSTER_FRAME_HEARTBEAT_PING);
+    ASSERT_TRUE(projection.heartbeat_timestamp == timestamp);
+    ASSERT_EQ_UINT(projection.response_length, XR_FRAME_HEADER_SIZE + 1 + 8);
+
+    ASSERT_EQ_INT(cluster_frame_read_header(projection.response, projection.response_length,
+                                            &frame_type, &payload_length),
+                  0);
+    ASSERT_EQ_INT(frame_type, XR_FRAME_HEARTBEAT_PONG);
+    int64_t response_timestamp = 0;
+    ASSERT_EQ_INT(cluster_frame_decode_heartbeat(projection.response + XR_FRAME_HEADER_SIZE + 1,
+                                                 payload_length, &response_timestamp),
+                  0);
+    ASSERT_TRUE(response_timestamp == timestamp);
+    ASSERT_FALSE(cluster_frame_project(XR_FRAME_HEARTBEAT_PING, frame + XR_FRAME_HEADER_SIZE + 1,
+                                       payload_length - 1, &projection));
+
+    uint8_t envelope[XR_CLUSTER_ENVELOPE_HEADER_SIZE] = {0};
+    frame_length = cluster_frame_write_transport(frame, sizeof(frame), 3, "events.user", 11,
+                                                 envelope, sizeof(envelope));
+    ASSERT_TRUE(frame_length > 0);
+    ASSERT_EQ_INT(
+        cluster_frame_read_header(frame, (size_t) frame_length, &frame_type, &payload_length), 0);
+    ASSERT_TRUE(cluster_frame_project(frame_type, frame + XR_FRAME_HEADER_SIZE + 1, payload_length,
+                                      &projection));
+    ASSERT_EQ_INT(projection.kind, XR_CLUSTER_FRAME_TRANSPORT);
+    ASSERT_STR_EQ(projection.transport.topic, "events.user");
+    ASSERT_EQ_INT(projection.transport.hop_limit, 3);
+    ASSERT_EQ_UINT(projection.transport.envelope_length, sizeof(envelope));
+
+    frame_length = cluster_frame_encode_coro_exit(frame, sizeof(frame), "worker.7", "finished");
+    ASSERT_TRUE(frame_length > 0);
+    ASSERT_EQ_INT(
+        cluster_frame_read_header(frame, (size_t) frame_length, &frame_type, &payload_length), 0);
+    ASSERT_TRUE(cluster_frame_project(frame_type, frame + XR_FRAME_HEADER_SIZE + 1, payload_length,
+                                      &projection));
+    ASSERT_EQ_INT(projection.kind, XR_CLUSTER_FRAME_CORO_EXIT);
+    ASSERT_STR_EQ(projection.coro_name, "worker.7");
+    ASSERT_STR_EQ(projection.coro_reason, "finished");
+}
+
 /*
  * coroMon  := u8(len(name)) name
  * coroExit := u8(len(name)) name u8(len(reason)) reason
@@ -677,6 +731,7 @@ RUN_TEST(cluster_handshake_ack_round_trips);
 RUN_TEST(cluster_handshake_done_round_trips);
 RUN_TEST(cluster_handshake_projection_shares_one_proof_flow);
 RUN_TEST(cluster_heartbeat_round_trips);
+RUN_TEST(cluster_frame_projection_is_backend_neutral);
 RUN_TEST(cluster_coro_frames_round_trip);
 RUN_TEST(cluster_frame_decoders_reject_truncated_payloads);
 RUN_TEST(cluster_phi_projection_uses_bounded_history);

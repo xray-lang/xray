@@ -16,6 +16,7 @@
 
 #include "../base/xdefs.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -74,6 +75,26 @@ typedef struct {
     uint32_t envelope_length;
 } XrFrameTransport;
 
+typedef enum {
+    XR_CLUSTER_FRAME_INVALID = 0,
+    XR_CLUSTER_FRAME_HEARTBEAT_PING,
+    XR_CLUSTER_FRAME_HEARTBEAT_PONG,
+    XR_CLUSTER_FRAME_TRANSPORT,
+    XR_CLUSTER_FRAME_CORO_MONITOR,
+    XR_CLUSTER_FRAME_CORO_DEMONITOR,
+    XR_CLUSTER_FRAME_CORO_EXIT,
+} XrClusterFrameProjectionKind;
+
+typedef struct {
+    XrClusterFrameProjectionKind kind;
+    int64_t heartbeat_timestamp;
+    XrFrameTransport transport;
+    char coro_name[XR_CORO_NAME_MAX + 1];
+    char coro_reason[256];
+    uint8_t response[XR_FRAME_HEADER_SIZE + 1 + 8];
+    uint32_t response_length;
+} XrClusterFrameProjection;
+
 XR_FUNC int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload,
                                 uint32_t payload_len);
 XR_FUNC int cluster_frame_write_transport(uint8_t *buf, size_t buf_size, uint8_t hop_limit,
@@ -107,5 +128,10 @@ XR_FUNC int cluster_frame_decode_coro_monitor(const uint8_t *payload, uint32_t l
                                               size_t name_size);
 XR_FUNC int cluster_frame_decode_coro_exit(const uint8_t *payload, uint32_t len, char *coro_name,
                                            size_t name_size, char *reason, size_t reason_size);
+/* Projects one connected-state payload without allocating. Any transport
+ * envelope in the result borrows payload and remains valid only while the
+ * caller keeps those input bytes alive. */
+XR_FUNC bool cluster_frame_project(uint8_t frame_type, const uint8_t *payload,
+                                   uint32_t payload_length, XrClusterFrameProjection *projection);
 
-#endif /* XR_IO_CLUSTER_WIRE_H */
+#endif  // XR_IO_CLUSTER_WIRE_H
