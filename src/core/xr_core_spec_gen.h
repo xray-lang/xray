@@ -9,9 +9,9 @@
 
 #define XR_CORE_SPEC_EPOCH 1u
 /* clang-format off */
-#define XR_CORE_SPEC_SEMANTIC_SHA256 "ed30fc17eaf149086dbd9ed3c000386fffa2df785892b3db83ccb2961c91ce25"
+#define XR_CORE_SPEC_SEMANTIC_SHA256 "880ade772a815cfa3fdbeb3df51fe9cf0a7783f075570bc1875bb0b506ad43f4"
 /* clang-format on */
-#define XR_CORE_SPEC_OPERATION_COUNT 43u
+#define XR_CORE_SPEC_OPERATION_COUNT 44u
 #define XR_CORE_SPEC_FEATURE_COUNT 1u
 #define XR_CORE_SPEC_VARIADIC_ARITY UINT8_MAX
 
@@ -36,6 +36,8 @@ typedef enum XrCoreEffectMask {
     XR_CORE_EFFECT_CALL = UINT32_C(4),
     XR_CORE_EFFECT_TARGET_QUERY = UINT32_C(8),
     XR_CORE_EFFECT_PANIC = UINT32_C(16),
+    XR_CORE_EFFECT_PROVIDER_CALL = UINT32_C(64),
+    XR_CORE_EFFECT_ALL = UINT32_C(95),
 } XrCoreEffectMask;
 
 typedef enum XrCoreCapabilityMask {
@@ -44,6 +46,8 @@ typedef enum XrCoreCapabilityMask {
     XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE = UINT32_C(4),
     XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI = UINT32_C(8),
     XR_CORE_CAPABILITY_PROFILE_ENDIANNESS = UINT32_C(16),
+    XR_CORE_CAPABILITY_PROVIDER_BINDING = UINT32_C(32),
+    XR_CORE_CAPABILITY_ALL = UINT32_C(63),
 } XrCoreCapabilityMask;
 
 typedef enum XrCoreFeatureId {
@@ -94,6 +98,7 @@ typedef enum XrCoreOperationId {
     XR_CORE_OP_CORE_PLACE_LOCAL = 104,
     XR_CORE_OP_CORE_PLACE_LOAD = 105,
     XR_CORE_OP_CORE_PLACE_STORE = 106,
+    XR_CORE_OP_CORE_PROVIDER_CALL = 136,
 } XrCoreOperationId;
 
 typedef enum XrCoreCoverageStatus {

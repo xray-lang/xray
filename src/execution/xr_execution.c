@@ -10,6 +10,7 @@
 
 #include "xr_execution.h"
 
+#include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
 
@@ -32,6 +33,7 @@ typedef struct XrBoundProvider {
 
 typedef struct XrExecutionLeaseTicket {
     uint64_t id;
+    uint32_t in_flight_calls;
 } XrExecutionLeaseTicket;
 
 struct XrInstance {
@@ -62,14 +64,18 @@ static void lease_unlock(XrInstance *instance) {
     atomic_store_explicit(&instance->lease_lock, false, memory_order_release);
 }
 
-static bool lease_ticket_is_active_locked(const XrInstance *instance, uint64_t ticket) {
+static XrExecutionLeaseTicket *find_lease_ticket_locked(XrInstance *instance, uint64_t ticket) {
     if (ticket == 0u)
-        return false;
+        return NULL;
     for (size_t index = 0; index < instance->lease_ticket_capacity; ++index) {
         if (instance->lease_tickets[index].id == ticket)
-            return true;
+            return &instance->lease_tickets[index];
     }
-    return false;
+    return NULL;
+}
+
+static bool lease_ticket_is_active_locked(XrInstance *instance, uint64_t ticket) {
+    return find_lease_ticket_locked(instance, ticket) != NULL;
 }
 
 static void clear_diagnostic(XrExecutionDiagnostic *diagnostic) {
@@ -374,6 +380,7 @@ bool xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease
     uint64_t ticket = instance->next_lease_ticket;
     instance->next_lease_ticket = ticket == UINT64_MAX ? 0u : ticket + 1u;
     instance->lease_tickets[slot].id = ticket;
+    instance->lease_tickets[slot].in_flight_calls = 0u;
     atomic_fetch_add_explicit(&instance->leases, 1u, memory_order_relaxed);
     lease_out->instance = instance;
     lease_out->ticket = ticket;
@@ -386,15 +393,12 @@ bool xr_execution_lease_release(XrExecutionLease *lease) {
         return false;
     XrInstance *instance = lease->instance;
     lease_lock(instance);
-    size_t slot = 0u;
-    while (slot < instance->lease_ticket_capacity &&
-           instance->lease_tickets[slot].id != lease->ticket)
-        ++slot;
-    if (slot == instance->lease_ticket_capacity) {
+    XrExecutionLeaseTicket *ticket = find_lease_ticket_locked(instance, lease->ticket);
+    if (!ticket || ticket->in_flight_calls != 0u) {
         lease_unlock(instance);
         return false;
     }
-    instance->lease_tickets[slot].id = 0u;
+    ticket->id = 0u;
     atomic_fetch_sub_explicit(&instance->leases, 1u, memory_order_relaxed);
     lease_unlock(instance);
     lease->instance = NULL;
@@ -412,61 +416,83 @@ bool xr_execution_lease_is_valid(const XrExecutionLease *lease) {
     return valid;
 }
 
-const XrValidatedProgram *xr_execution_lease_program(const XrExecutionLease *lease) {
+XrValidatedProgram *xr_execution_lease_retain_program(const XrExecutionLease *lease) {
     if (!lease || !lease->instance || lease->ticket == 0u)
         return NULL;
     XrInstance *instance = lease->instance;
     lease_lock(instance);
-    const XrValidatedProgram *program =
-        lease_ticket_is_active_locked(instance, lease->ticket) ? instance->program : NULL;
+    XrValidatedProgram *program =
+        lease_ticket_is_active_locked(instance, lease->ticket)
+            ? xr_validated_program_retain(instance->program)
+            : NULL;
     lease_unlock(instance);
     return program;
 }
 
-const XrTargetProfile *xr_execution_lease_profile(const XrExecutionLease *lease) {
+XrTargetProfile *xr_execution_lease_retain_profile(const XrExecutionLease *lease) {
     if (!lease || !lease->instance || lease->ticket == 0u)
         return NULL;
     XrInstance *instance = lease->instance;
     lease_lock(instance);
-    const XrTargetProfile *profile =
-        lease_ticket_is_active_locked(instance, lease->ticket) ? instance->profile : NULL;
+    XrTargetProfile *profile = lease_ticket_is_active_locked(instance, lease->ticket)
+                                   ? xr_target_profile_retain(instance->profile)
+                                   : NULL;
     lease_unlock(instance);
     return profile;
 }
 
-bool xr_execution_lease_provider_operation(const XrExecutionLease *lease,
-                                           XrStableId contract_id,
-                                           XrStableId operation_id,
-                                           XrProviderOperationView *view_out) {
-    if (view_out)
-        memset(view_out, 0, sizeof(*view_out));
-    if (!lease || !lease->instance || lease->ticket == 0u || !view_out)
-        return false;
+XrExecutionProviderCallResult xr_execution_lease_provider_call_i64(
+    const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
+    int64_t argument, int64_t *result_out) {
+    if (result_out)
+        *result_out = 0;
+    if (!lease || !lease->instance || lease->ticket == 0u)
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_LEASE;
+    if (!result_out)
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE;
     XrInstance *instance = lease->instance;
+    const uint64_t lease_ticket = lease->ticket;
     lease_lock(instance);
-    if (!lease_ticket_is_active_locked(instance, lease->ticket)) {
+    XrExecutionLeaseTicket *ticket = find_lease_ticket_locked(instance, lease_ticket);
+    if (!ticket) {
         lease_unlock(instance);
-        return false;
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_LEASE;
     }
-    for (size_t provider = 0; provider < instance->provider_count; ++provider) {
-        const XrBoundProvider *bound = &instance->providers[provider];
-        if (!stable_id_equal(bound->contract_id, contract_id))
-            continue;
-        for (uint16_t operation = 0; operation < bound->operation_count; ++operation) {
-            const XrBoundOperation *candidate = &bound->operations[operation];
-            if (!stable_id_equal(candidate->operation_id, operation_id))
-                continue;
-            view_out->entry = candidate->entry;
-            view_out->context = candidate->context;
-            view_out->behavior_flags = bound->behavior_flags;
-            lease_unlock(instance);
-            return true;
-        }
+    XrProgramProviderRequirementView requirement = {0};
+    if (requirement_index >= instance->provider_count ||
+        !xr_validated_program_provider_requirement(instance->program, requirement_index,
+                                                   &requirement) ||
+        operation_index >= requirement.operation_count) {
         lease_unlock(instance);
-        return false;
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE;
     }
+    XrBoundProvider *provider = &instance->providers[requirement_index];
+    if (operation_index >= provider->operation_count ||
+        !stable_id_equal(provider->contract_id, requirement.contract_id) ||
+        !stable_id_equal(provider->operations[operation_index].operation_id,
+                         requirement.operation_ids[operation_index]) ||
+        !provider->operations[operation_index].entry || ticket->in_flight_calls == UINT32_MAX) {
+        lease_unlock(instance);
+        return XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE;
+    }
+    XrProviderOperationEntry entry = provider->operations[operation_index].entry;
+    void *entry_context = provider->operations[operation_index].context;
+    ++ticket->in_flight_calls;
     lease_unlock(instance);
-    return false;
+
+    int64_t provider_result = 0;
+    XrProviderCallStatus status = entry(entry_context, argument, &provider_result);
+
+    lease_lock(instance);
+    ticket = find_lease_ticket_locked(instance, lease_ticket);
+    XR_CHECK(ticket && ticket->in_flight_calls != 0u,
+             "provider call lost its execution lease pin");
+    --ticket->in_flight_calls;
+    lease_unlock(instance);
+    if (status != XR_PROVIDER_CALL_OK)
+        return XR_EXECUTION_PROVIDER_CALL_FAILED;
+    *result_out = provider_result;
+    return XR_EXECUTION_PROVIDER_CALL_OK;
 }
 
 XrExecutionStatus xr_execution_instance_begin_drain(XrInstance *instance,

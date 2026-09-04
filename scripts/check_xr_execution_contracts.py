@@ -141,13 +141,17 @@ def validate(root: Path, overrides: dict[Path, str] | None = None) -> None:
                   "XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE"):
         require(token in execution_source, f"program-required provider subset omits {token}")
     for token in ("xr_execution_instance_acquire", "xr_execution_lease_release",
-                  "xr_execution_lease_program", "xr_execution_lease_profile",
-                  "xr_execution_lease_provider_operation"):
+                  "xr_execution_lease_retain_program", "xr_execution_lease_retain_profile",
+                  "xr_execution_lease_provider_call_i64"):
         require(token in execution_source, f"generation lease contract omits {token}")
     for token in ("uint64_t ticket", "lease_tickets", "lease_ticket_is_active_locked",
-                  "next_lease_ticket"):
+                  "next_lease_ticket", "in_flight_calls"):
         require(token in execution_header + execution_source,
                 f"release-once lease ticket contract omits {token}")
+    for forbidden in ("XrProviderOperationView", "xr_execution_lease_program(",
+                      "xr_execution_lease_profile(", "xr_execution_lease_provider_operation"):
+        require(forbidden not in execution_header + execution_source,
+                f"unsafe lease borrow surface remains public: {forbidden}")
     require("xr_execution_instance_program" not in execution_header and
             "xr_execution_instance_profile" not in execution_header,
             "generation-bound program/profile remain accessible without a lease")

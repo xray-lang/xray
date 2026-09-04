@@ -63,6 +63,10 @@ typedef struct XrCoreIrInstruction {
             uint32_t field_ordinal;
         } variant_field;
         uint16_t type_id;
+        struct {
+            XrStableId contract_id;
+            XrStableId operation_id;
+        } provider_operation;
     } immediate;
     XrCoreIrKey *successors;
     uint32_t successor_count;

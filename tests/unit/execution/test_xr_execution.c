@@ -56,7 +56,9 @@ static XrValidatedProgram *build_validated_program(const XrTargetProfile *requir
         .value.i64 = 42,
     };
     XrCoreIrKey value = test_key("execution:value:42");
-    XrCoreIrKey return_operand[] = {value};
+    XrCoreIrKey provider_value = test_key("execution:value:provider-result");
+    XrCoreIrKey provider_operand[] = {value};
+    XrCoreIrKey return_operand[] = {provider_value};
     XrCoreIrInstructionInput instructions[] = {
         {
             .operation_id = XR_CORE_OP_CORE_CONSTANT_I64,
@@ -64,6 +66,14 @@ static XrValidatedProgram *build_validated_program(const XrTargetProfile *requir
             .result_type_id = XR_CORE_TYPE_I64,
             .immediate_kind = XR_CORE_IR_IMMEDIATE_CONSTANT,
             .immediate.key = constant.key,
+        },
+        {
+            .operation_id = XR_CORE_OP_CORE_PROVIDER_CALL,
+            .result = provider_value,
+            .result_type_id = XR_CORE_TYPE_I64,
+            .operands = provider_operand,
+            .operand_count = 1,
+            .immediate_kind = XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION,
         },
         {
             .operation_id = XR_CORE_OP_CORE_RETURN,
@@ -77,12 +87,13 @@ static XrValidatedProgram *build_validated_program(const XrTargetProfile *requir
     XrCoreIrBlockInput block = {
         .key = block_key,
         .instructions = instructions,
-        .instruction_count = 2,
+        .instruction_count = 3,
     };
     XrCoreIrFunctionInput function = {
         .key = test_key("execution:function:entry"),
         .result_type_id = XR_CORE_TYPE_I64,
-        .effect_mask = 1u,
+        .effect_mask = XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_CALL | XR_CORE_EFFECT_PROVIDER_CALL,
+        .capability_mask = XR_CORE_CAPABILITY_PROVIDER_BINDING,
         .entry_block = block_key,
         .blocks = &block,
         .block_count = 1,
@@ -109,6 +120,8 @@ static XrValidatedProgram *build_validated_program(const XrTargetProfile *requir
     }
     REQUIRE(required_contract != NULL && required_contract->operation_count != 0u);
     XrStableId operation_id = required_contract->operations[0].stable_id;
+    instructions[1].immediate.provider_operation.contract_id = required_contract->contract_id;
+    instructions[1].immediate.provider_operation.operation_id = operation_id;
     XrCoreIrProviderRequirementInput provider_requirement = {
         .contract_id = required_contract->contract_id,
         .operation_ids = &operation_id,
@@ -154,6 +167,70 @@ static XrProviderCallStatus test_provider_entry(void *context, int64_t argument,
         return XR_PROVIDER_CALL_FAILED;
     *result_out = argument + 1;
     return XR_PROVIDER_CALL_OK;
+}
+
+typedef struct ReentrantProviderContext {
+    XrInstance *instance;
+    XrExecutionLease *lease;
+    uint32_t depth;
+} ReentrantProviderContext;
+
+static XrProviderCallStatus reentrant_provider_entry(void *opaque, int64_t argument,
+                                                     int64_t *result_out) {
+    ReentrantProviderContext *context = opaque;
+    if (!context || !context->instance || !context->lease || !result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    if (context->depth == 0u) {
+        XrExecutionLease alias = *context->lease;
+        XrExecutionDiagnostic diagnostic;
+        REQUIRE(!xr_execution_lease_release(&alias));
+        REQUIRE(xr_execution_instance_begin_drain(context->instance, &diagnostic) ==
+                XR_EXECUTION_OK);
+        REQUIRE(xr_execution_instance_retire(context->instance, &diagnostic) ==
+                XR_EXECUTION_GENERATION_REJECTED);
+        REQUIRE(diagnostic.kind == XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY);
+        ++context->depth;
+        int64_t nested = 0;
+        XrExecutionProviderCallResult call = xr_execution_lease_provider_call_i64(
+            context->lease, 0u, 0u, argument, &nested);
+        --context->depth;
+        if (call != XR_EXECUTION_PROVIDER_CALL_OK)
+            return XR_PROVIDER_CALL_FAILED;
+        *result_out = nested + 1;
+        return XR_PROVIDER_CALL_OK;
+    }
+    *result_out = argument + 1;
+    return XR_PROVIDER_CALL_OK;
+}
+
+typedef struct BlockingProviderContext {
+    atomic_bool entered;
+    atomic_bool return_allowed;
+} BlockingProviderContext;
+
+typedef struct BlockingProviderCall {
+    const XrExecutionLease *lease;
+    XrExecutionProviderCallResult status;
+    int64_t result;
+} BlockingProviderCall;
+
+static XrProviderCallStatus blocking_provider_entry(void *opaque, int64_t argument,
+                                                    int64_t *result_out) {
+    BlockingProviderContext *context = opaque;
+    if (!context || !result_out)
+        return XR_PROVIDER_CALL_FAILED;
+    atomic_store_explicit(&context->entered, true, memory_order_release);
+    while (!atomic_load_explicit(&context->return_allowed, memory_order_acquire))
+        xr_thread_yield();
+    *result_out = argument + 1;
+    return XR_PROVIDER_CALL_OK;
+}
+
+static void *blocking_provider_call_worker(void *opaque) {
+    BlockingProviderCall *call = opaque;
+    call->status =
+        xr_execution_lease_provider_call_i64(call->lease, 0u, 0u, 41, &call->result);
+    return NULL;
 }
 
 static const XrTargetProviderContract *find_profile_contract(const XrTargetProfile *profile,
@@ -343,9 +420,9 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
     require_fingerprint(xr_execution_instance_id(first),
-                        "1fae1f8a00689fcc9804f3f8e3ca3b076b2dcb2ceb24579ab2e9ffb0296b4a96");
+                        "d074ec8f5e866d90f95b70bdc10c02d6d7df90537b5facae476ca6482c8d0244");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "2cad044e0968a763b9b67b8e31c06504058bce5f357b8e909c9c8a57c171c3fc");
+                        "0f0373437a556773a6121d5dc45e7b13daea454de6bd809dff1c49b3fa0fcb65");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));
@@ -357,32 +434,27 @@ static void test_execution_identity_and_lifecycle(void) {
     REQUIRE(xr_execution_lease_is_valid(&lease));
     REQUIRE(xr_execution_lease_is_valid(&copied_lease));
     REQUIRE(xr_execution_lease_is_valid(&independent_lease));
-    REQUIRE(xr_execution_lease_program(&lease) == program);
-    REQUIRE(xr_execution_lease_profile(&lease) == first_profile);
+    XrValidatedProgram *retained_program = xr_execution_lease_retain_program(&lease);
+    XrTargetProfile *retained_profile = xr_execution_lease_retain_profile(&lease);
+    REQUIRE(retained_program == program);
+    REQUIRE(retained_profile == first_profile);
+    xr_target_profile_free(retained_profile);
+    xr_validated_program_free(retained_program);
     REQUIRE(!xr_execution_instance_acquire(first, &lease));
     REQUIRE(xr_execution_instance_lease_count(first) == 2);
     REQUIRE(lease.ticket != 0u && lease.ticket != independent_lease.ticket);
     REQUIRE(xr_execution_instance_generation(first) == 1u);
-    XrProviderOperationView provider_view = {0};
-    REQUIRE(xr_execution_lease_provider_operation(
-        &lease, first_bindings.providers[0].contract_id,
-        first_bindings.operations[0][0].operation_id, &provider_view));
-    REQUIRE(provider_view.entry == test_provider_entry);
-    REQUIRE(provider_view.context == &first_bindings.operations[0][0]);
-    REQUIRE(provider_view.behavior_flags == XR_PROVIDER_BEHAVIOR_FLAGS_ALL);
     int64_t provider_result = 0;
-    REQUIRE(provider_view.entry(provider_view.context, 41, &provider_result) ==
-            XR_PROVIDER_CALL_OK);
+    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, 41, &provider_result) ==
+            XR_EXECUTION_PROVIDER_CALL_OK);
     REQUIRE(provider_result == 42);
-    REQUIRE(provider_view.entry(provider_view.context, 41, NULL) == XR_PROVIDER_CALL_FAILED);
+    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, 41, NULL) ==
+            XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE);
     REQUIRE(xr_execution_instance_lease_count(first) == 2);
     XrExecutionDiagnostic diagnostic;
     REQUIRE(xr_execution_instance_begin_drain(first, &diagnostic) == XR_EXECUTION_OK);
-    REQUIRE(xr_execution_lease_provider_operation(
-        &lease, first_bindings.providers[0].contract_id,
-        first_bindings.operations[0][0].operation_id, &provider_view));
-    REQUIRE(provider_view.entry(provider_view.context, -2, &provider_result) ==
-            XR_PROVIDER_CALL_OK);
+    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, -2, &provider_result) ==
+            XR_EXECUTION_PROVIDER_CALL_OK);
     REQUIRE(provider_result == -1);
     XrExecutionLease refused = {.instance = first, .ticket = UINT64_MAX};
     REQUIRE(!xr_execution_instance_acquire(first, &refused));
@@ -395,20 +467,15 @@ static void test_execution_identity_and_lifecycle(void) {
     REQUIRE(!xr_execution_lease_release(&copied_lease));
     REQUIRE(xr_execution_instance_lease_count(first) == 1);
     REQUIRE(xr_execution_lease_is_valid(&independent_lease));
-    REQUIRE(xr_execution_lease_provider_operation(
-        &independent_lease, first_bindings.providers[0].contract_id,
-        first_bindings.operations[0][0].operation_id, &provider_view));
-    REQUIRE(provider_view.entry(provider_view.context, 0, &provider_result) ==
-            XR_PROVIDER_CALL_OK);
+    REQUIRE(xr_execution_lease_provider_call_i64(&independent_lease, 0u, 0u, 0,
+                                                 &provider_result) ==
+            XR_EXECUTION_PROVIDER_CALL_OK);
     REQUIRE(provider_result == 1);
     REQUIRE(!xr_execution_lease_is_valid(&lease));
-    REQUIRE(xr_execution_lease_program(&lease) == NULL);
-    REQUIRE(xr_execution_lease_profile(&lease) == NULL);
-    REQUIRE(!xr_execution_lease_provider_operation(
-        &lease, first_bindings.providers[0].contract_id,
-        first_bindings.operations[0][0].operation_id, &provider_view));
-    REQUIRE(provider_view.entry == NULL && provider_view.context == NULL &&
-            provider_view.behavior_flags == 0u);
+    REQUIRE(xr_execution_lease_retain_program(&lease) == NULL);
+    REQUIRE(xr_execution_lease_retain_profile(&lease) == NULL);
+    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, 0, &provider_result) ==
+            XR_EXECUTION_PROVIDER_CALL_INVALID_LEASE);
     REQUIRE(!xr_execution_lease_release(&lease));
     REQUIRE(xr_execution_lease_release(&independent_lease));
     REQUIRE(xr_execution_instance_lease_count(first) == 0);
@@ -431,6 +498,90 @@ static void test_execution_identity_and_lifecycle(void) {
     xr_target_profile_free(foreign_profile);
     xr_target_profile_free(same_profile);
     xr_target_profile_free(first_profile);
+    xr_validated_program_free(program);
+}
+
+static void test_reentrant_provider_call_pins_lease_without_holding_lock(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_scalar_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    XrValidatedProgram *program = build_validated_program(profile);
+    TestProviderBindings bindings;
+    build_provider_bindings(program, profile, &bindings);
+    ReentrantProviderContext context = {0};
+    bindings.operations[0][0].entry = reentrant_provider_entry;
+    bindings.operations[0][0].context = &context;
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    XrExecutionLease lease = {0};
+    REQUIRE(xr_execution_instance_acquire(instance, &lease));
+    context.instance = instance;
+    context.lease = &lease;
+
+    int64_t result = 0;
+    REQUIRE(xr_execution_lease_provider_call_i64(&lease, 0u, 0u, 40, &result) ==
+            XR_EXECUTION_PROVIDER_CALL_OK);
+    REQUIRE(result == 42);
+    REQUIRE(xr_execution_lease_is_valid(&lease));
+
+    XrValidatedProgram *retained_program = xr_execution_lease_retain_program(&lease);
+    XrTargetProfile *retained_profile = xr_execution_lease_retain_profile(&lease);
+    REQUIRE(retained_program == program);
+    REQUIRE(retained_profile == profile);
+    REQUIRE(xr_execution_lease_release(&lease));
+    XrExecutionDiagnostic diagnostic;
+    REQUIRE(xr_execution_instance_retire(instance, &diagnostic) == XR_EXECUTION_OK);
+    REQUIRE(xr_execution_instance_free(&instance, &diagnostic) == XR_EXECUTION_OK);
+    REQUIRE(xr_validated_program_provider_requirement_count(retained_program) == 1u);
+    REQUIRE(xr_target_profile_provider_count(retained_profile) != 0u);
+    xr_target_profile_free(retained_profile);
+    xr_validated_program_free(retained_program);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
+}
+
+static void test_concurrent_release_drain_and_retire_during_provider_call(void) {
+    XrTargetProfile *profile = xr_test_target_profile_build_with_scalar_clock(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED,
+        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER);
+    XrValidatedProgram *program = build_validated_program(profile);
+    TestProviderBindings bindings;
+    build_provider_bindings(program, profile, &bindings);
+    BlockingProviderContext provider = {
+        .entered = ATOMIC_VAR_INIT(false),
+        .return_allowed = ATOMIC_VAR_INIT(false),
+    };
+    bindings.operations[0][0].entry = blocking_provider_entry;
+    bindings.operations[0][0].context = &provider;
+    XrInstance *instance = create_instance(program, profile, &bindings, 1u);
+    XrExecutionLease lease = {0};
+    REQUIRE(xr_execution_instance_acquire(instance, &lease));
+    BlockingProviderCall call = {
+        .lease = &lease,
+        .status = XR_EXECUTION_PROVIDER_CALL_FAILED,
+        .result = 0,
+    };
+    xr_thread_t worker;
+    REQUIRE(xr_thread_create(&worker, blocking_provider_call_worker, &call));
+    while (!atomic_load_explicit(&provider.entered, memory_order_acquire))
+        xr_thread_yield();
+
+    XrExecutionLease alias = lease;
+    REQUIRE(!xr_execution_lease_release(&alias));
+    REQUIRE(xr_execution_lease_is_valid(&lease));
+    XrExecutionDiagnostic diagnostic;
+    REQUIRE(xr_execution_instance_begin_drain(instance, &diagnostic) == XR_EXECUTION_OK);
+    REQUIRE(xr_execution_instance_retire(instance, &diagnostic) ==
+            XR_EXECUTION_GENERATION_REJECTED);
+    REQUIRE(diagnostic.kind == XR_EXECUTION_DIAGNOSTIC_GENERATION_BUSY);
+
+    atomic_store_explicit(&provider.return_allowed, true, memory_order_release);
+    REQUIRE(xr_thread_join(worker, NULL) == 0);
+    REQUIRE(call.status == XR_EXECUTION_PROVIDER_CALL_OK);
+    REQUIRE(call.result == 42);
+    REQUIRE(xr_execution_lease_release(&lease));
+    REQUIRE(xr_execution_instance_retire(instance, &diagnostic) == XR_EXECUTION_OK);
+    REQUIRE(xr_execution_instance_free(&instance, &diagnostic) == XR_EXECUTION_OK);
+    xr_target_profile_free(profile);
     xr_validated_program_free(program);
 }
 
@@ -616,6 +767,8 @@ static void test_provider_admission_matrix(void) {
 int main(void) {
     test_profile_partitions_and_foreign_authority();
     test_execution_identity_and_lifecycle();
+    test_reentrant_provider_call_pins_lease_without_holding_lock();
+    test_concurrent_release_drain_and_retire_during_provider_call();
     test_concurrent_pin_and_drain();
     test_provider_admission_matrix();
     puts("execution binding tests passed");

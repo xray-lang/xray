@@ -124,13 +124,12 @@ typedef struct XrExecutionLease {
     uint64_t ticket;
 } XrExecutionLease;
 
-/* A provider operation view is borrowed from its lease.  The entry and
- * context must not be retained or invoked after that lease is released. */
-typedef struct XrProviderOperationView {
-    XrProviderOperationEntry entry;
-    void *context;
-    uint32_t behavior_flags;
-} XrProviderOperationView;
+typedef enum XrExecutionProviderCallResult {
+    XR_EXECUTION_PROVIDER_CALL_OK = 0,
+    XR_EXECUTION_PROVIDER_CALL_FAILED,
+    XR_EXECUTION_PROVIDER_CALL_INVALID_LEASE,
+    XR_EXECUTION_PROVIDER_CALL_INVALID_REFERENCE,
+} XrExecutionProviderCallResult;
 
 XR_FUNC XrExecutionStatus xr_execution_instance_create(const XrExecutionBindingInput *input,
                                                        XrInstance **instance_out,
@@ -141,12 +140,11 @@ XR_FUNC XrExecutionStatus xr_execution_instance_create_successor(
 XR_FUNC bool xr_execution_instance_acquire(XrInstance *instance, XrExecutionLease *lease_out);
 XR_FUNC bool xr_execution_lease_release(XrExecutionLease *lease);
 XR_FUNC bool xr_execution_lease_is_valid(const XrExecutionLease *lease);
-XR_FUNC const XrValidatedProgram *xr_execution_lease_program(const XrExecutionLease *lease);
-XR_FUNC const XrTargetProfile *xr_execution_lease_profile(const XrExecutionLease *lease);
-XR_FUNC bool xr_execution_lease_provider_operation(const XrExecutionLease *lease,
-                                                   XrStableId contract_id,
-                                                   XrStableId operation_id,
-                                                   XrProviderOperationView *view_out);
+XR_FUNC XrValidatedProgram *xr_execution_lease_retain_program(const XrExecutionLease *lease);
+XR_FUNC XrTargetProfile *xr_execution_lease_retain_profile(const XrExecutionLease *lease);
+XR_FUNC XrExecutionProviderCallResult xr_execution_lease_provider_call_i64(
+    const XrExecutionLease *lease, uint32_t requirement_index, uint32_t operation_index,
+    int64_t argument, int64_t *result_out);
 XR_FUNC XrExecutionStatus xr_execution_instance_begin_drain(XrInstance *instance,
                                                             XrExecutionDiagnostic *diagnostic_out);
 XR_FUNC XrExecutionStatus xr_execution_instance_retire(XrInstance *instance,

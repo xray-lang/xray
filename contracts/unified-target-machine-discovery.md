@@ -147,7 +147,7 @@ The three governed performance fixture files are explicitly checked out with
 LF bytes on every host.  Their policy and contract digests therefore identify
 the exact executed input instead of the caller's `core.autocrlf` preference.
 
-anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
+anchor-sha256: .gitattributes aac648b589bf1619791bd0e1dd107b124a9a39e0f85f799bd91454f7e143c3ff
 anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 2a8e290c709bfa123397ef852949eb4a7dadd12f5ed8b30071cc96f3376824a6
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json e6f2b86ab3732d23bdbd3fd86f4bbe636770696c8b35a9dcbdbe239ca9a83ac7
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json a1b272985a73b80df6eab458fff3a221f08af8c32488ee199cb48633552c1916

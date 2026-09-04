@@ -121,6 +121,13 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_CALL_INDIRECT_DIRECT:
         case XR_CORE_OP_CORE_CALL_INDIRECT_INVOKE:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE;
+        case XR_CORE_OP_CORE_PROVIDER_CALL: {
+            uint32_t requirement = instruction->immediate.provider_operation.requirement_index;
+            uint32_t operation = instruction->immediate.provider_operation.operation_index;
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION &&
+                   requirement < ir->program->provider_requirement_count &&
+                   operation < ir->program->provider_requirements[requirement].operation_count;
+        }
         case XR_CORE_OP_CORE_TRAP:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 == 4u;
@@ -319,6 +326,11 @@ static bool immediate_equal(const XrValidatedInstruction *source,
                        lowered->immediate.variant_field.field_ordinal;
         case XR_CORE_IR_IMMEDIATE_TYPE:
             return source->immediate.type_id == lowered->immediate.type_id;
+        case XR_CORE_IR_IMMEDIATE_PROVIDER_OPERATION:
+            return source->immediate.provider_operation.requirement_index ==
+                       lowered->immediate.provider_operation.requirement_index &&
+                   source->immediate.provider_operation.operation_index ==
+                       lowered->immediate.provider_operation.operation_index;
     }
     return false;
 }
