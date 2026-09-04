@@ -102,10 +102,11 @@ const _PEER_READ_STALE = 1
 const _PEER_READ_RUNTIME_STOPPED = 2
 const _PEER_READ_EOF = 3
 const _PEER_READ_IO_ERROR = 4
-const _PEER_READ_INVALID_HEADER = 5
+const _PEER_READ_INVALID_LENGTH = 5
 const _PEER_READ_PAYLOAD_TOO_LARGE = 6
 const _PEER_READ_RESOURCE_UNAVAILABLE = 7
 const _PEER_READ_CANCELLED = 8
+const _PEER_READ_INVALID_LIMIT = 9
 const _PEER_WRITE_DRAINED = 0
 const _PEER_WRITE_STALE = 1
 const _PEER_WRITE_RUNTIME_STOPPED = 2
@@ -599,8 +600,8 @@ fn _dispatchInboundOne(peerGeneration: i64) -> bool {
         return false
     }
     if (reason! == _PEER_READ_EOF || reason! == _PEER_READ_IO_ERROR ||
-        reason! == _PEER_READ_INVALID_HEADER || reason! == _PEER_READ_PAYLOAD_TOO_LARGE ||
-        reason! == _PEER_READ_RESOURCE_UNAVAILABLE) {
+        reason! == _PEER_READ_INVALID_LENGTH || reason! == _PEER_READ_PAYLOAD_TOO_LARGE ||
+        reason! == _PEER_READ_RESOURCE_UNAVAILABLE || reason! == _PEER_READ_INVALID_LIMIT) {
         __disconnectPeer(peerGeneration)
     }
     return false

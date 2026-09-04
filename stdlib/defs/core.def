@@ -2146,7 +2146,7 @@ module cluster {
 
   fn __readPeer {
     signature: "(peerGeneration: i64, maxFramePayload: i64): Array<u8> | i64"
-    doc: "Suspend for one frame and return owned wire bytes or an orthogonal raw stale, stopped, EOF, I/O, header, capacity, resource or cancellation reason"
+    doc: "Suspend for one frame and return owned wire bytes or an orthogonal raw stale, stopped, EOF, I/O, wire-length, capacity, resource, cancellation or caller-limit reason"
     vm: "cluster_peer_read_fn"
     vm_binding: "yieldable"
     argc: 2

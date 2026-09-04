@@ -130,7 +130,7 @@ static XrCFuncResult peer_read_continue(XrVMRuntime *X, int status, XrValue resu
                 ((uint32_t) operation->header[0] << 24) | ((uint32_t) operation->header[1] << 16) |
                 ((uint32_t) operation->header[2] << 8) | (uint32_t) operation->header[3];
             if (total < 1) {
-                event = XR_CLUSTER_PEER_READ_INVALID_HEADER;
+                event = XR_CLUSTER_PEER_READ_INVALID_LENGTH;
                 break;
             }
             if (total > operation->max_frame_payload) {
@@ -258,6 +258,12 @@ XrCFuncResult xr_cluster_peer_read_frame(XrVMRuntime *X, const XrClusterPeerIoLe
     if (!X || !result) {
         peer_lease_release(lease);
         return XR_CFUNC_ERROR;
+    }
+    if (max_frame_payload == 0 ||
+        max_frame_payload > (uint32_t) (INT32_MAX - XR_FRAME_HEADER_SIZE)) {
+        peer_lease_release(lease);
+        *result = xr_int(XR_CLUSTER_PEER_READ_INVALID_LIMIT);
+        return XR_CFUNC_DONE;
     }
     XrClusterPeerIoOperation *operation =
         peer_io_operation_new(XR_CLUSTER_PEER_IO_READ, lease, max_frame_payload);

@@ -20,8 +20,8 @@
 
 XrCFuncResult cluster_peer_read_fn(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || XR_TO_INT(args[1]) <= 0 ||
-        XR_TO_INT(args[1]) > UINT32_MAX) {
-        *result = xr_int(XR_CLUSTER_PEER_READ_RESOURCE_UNAVAILABLE);
+        XR_TO_INT(args[1]) > INT32_MAX - XR_FRAME_HEADER_SIZE) {
+        *result = xr_int(XR_CLUSTER_PEER_READ_INVALID_LIMIT);
         return XR_CFUNC_DONE;
     }
     XrCluster *cluster = NULL;

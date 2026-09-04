@@ -168,7 +168,7 @@ class = "host_abi_leaf"
 abi = "recv(2), TLS read and scheduler netpoll wait; retains the runtime and generation-selected opaque peer across one source-bounded framed read"
 ownership = "fresh"
 effect = "suspends"
-provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the peer socket lease and source-sized framing buffer; it returns wire bytes or distinct stopped, EOF, I/O, invalid-header, capacity, resource and cancellation facts. cluster.xr owns bounds, timestamps, decoding, dispatch, drop and disconnect policy"
+provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the peer socket lease and source-sized framing buffer; it returns wire bytes or distinct stopped, EOF, I/O, unsafe-length, capacity, resource, cancellation and invalid-caller-limit facts. cluster.xr owns bounds, timestamps, decoding, dispatch, drop and disconnect policy"
 deletion_trigger = "when the peer socket is an ordinary Xray-owned NetConn"
 
 [[leaf]]
