@@ -138,7 +138,6 @@ void cluster_node_release(XrClusterNode *node);
 int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, const char *topic,
                                       uint8_t topic_len, const uint8_t *envelope,
                                       uint32_t envelope_len);
-int cluster_node_send_ping(XrClusterNode *node);
 bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrValue inbound_handler,
                            XrValue outbound_handler);
 XrValue cluster_take_inbound_frame_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
@@ -247,9 +246,10 @@ bool cluster_node_remove(XrCluster *c, XrClusterNode *node);
 
 /* ========== Health & Robustness ========== */
 
-void cluster_health_tick(XrCluster *cluster, int64_t heartbeat_timeout_ms,
-                         int64_t max_missed_heartbeats, int64_t phi_min_samples,
-                         double phi_threshold);
+void cluster_health_tick(XrCluster *cluster, const uint8_t *heartbeat_wire,
+                         uint32_t heartbeat_wire_length, int64_t heartbeat_sent_at_ms,
+                         int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
+                         int64_t phi_min_samples, double phi_threshold);
 
 /* ========== Topic Pub/Sub ========== */
 

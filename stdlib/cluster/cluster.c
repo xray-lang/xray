@@ -299,11 +299,17 @@ static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int a
 
 static XrValue cluster_health_tick_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *cluster = (XrCluster *) X->cluster;
-    if (!cluster || !atomic_load(&cluster->running) || argc < 4 || !XR_IS_INT(args[0]) ||
-        !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) || !XR_IS_FLOAT(args[3]))
+    if (!cluster || !atomic_load(&cluster->running) || argc < 6 || !XR_IS_ARRAY(args[0]) ||
+        !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) || !XR_IS_INT(args[3]) || !XR_IS_INT(args[4]) ||
+        !XR_IS_FLOAT(args[5]))
         return xr_bool(false);
-    cluster_health_tick(cluster, XR_TO_INT(args[0]), XR_TO_INT(args[1]), XR_TO_INT(args[2]),
-                        XR_TO_FLOAT(args[3]));
+    XrArray *heartbeat_wire = XR_TO_ARRAY(args[0]);
+    if (heartbeat_wire->elem_type != XR_ELEM_U8 || heartbeat_wire->length <= 0 ||
+        !heartbeat_wire->data)
+        return xr_bool(false);
+    cluster_health_tick(cluster, (const uint8_t *) heartbeat_wire->data,
+                        (uint32_t) heartbeat_wire->length, XR_TO_INT(args[1]), XR_TO_INT(args[2]),
+                        XR_TO_INT(args[3]), XR_TO_INT(args[4]), XR_TO_FLOAT(args[5]));
     return xr_bool(true);
 }
 

@@ -2059,11 +2059,11 @@ module cluster {
   }
 
   fn __healthTick {
-    signature: "(heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64): bool"
-    doc: "Project one source-scheduled health tick onto the locked peer registry"
+    signature: "(heartbeatWire: Array<u8>, heartbeatSentAtMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, phiMinSamples: i64, phiThreshold: f64): bool"
+    doc: "Enqueue one source-encoded heartbeat and project its health tick onto the locked peer registry"
     vm: "cluster_health_tick_fn"
-    argc: 4
-    arg_spec: "vvvv"
+    argc: 6
+    arg_spec: "vvvvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"

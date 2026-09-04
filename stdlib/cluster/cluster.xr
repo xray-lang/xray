@@ -994,7 +994,10 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
     while (_runtimeActiveToken.load() == token) {
         time.sleep(tickMs)
         if (_runtimeActiveToken.load() != token) { return }
-        if (!__healthTick(heartbeatTimeoutMs, maxMissedHeartbeats,
+        var sentAtMs = time.monotonic()
+        var heartbeat = encodeHeartbeat(FRAME_HEARTBEAT_PING, sentAtMs)
+        if (heartbeat == null ||
+            !__healthTick(heartbeat!, sentAtMs, heartbeatTimeoutMs, maxMissedHeartbeats,
                           phiMinSamples, phiThreshold)) {
             var (_, released) = _runtimeActiveToken.compareExchange(token, 0)
             _clearSourceState()

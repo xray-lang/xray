@@ -19,9 +19,10 @@
 
 #include <string.h>
 
-void cluster_health_tick(XrCluster *cluster, int64_t heartbeat_timeout_ms,
-                         int64_t max_missed_heartbeats, int64_t phi_min_samples,
-                         double phi_threshold) {
+void cluster_health_tick(XrCluster *cluster, const uint8_t *heartbeat_wire,
+                         uint32_t heartbeat_wire_length, int64_t heartbeat_sent_at_ms,
+                         int64_t heartbeat_timeout_ms, int64_t max_missed_heartbeats,
+                         int64_t phi_min_samples, double phi_threshold) {
     if (!cluster)
         return;
     enum {
@@ -37,8 +38,9 @@ void cluster_health_tick(XrCluster *cluster, int64_t heartbeat_timeout_ms,
     for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
         if (node->state != XR_NODE_CONNECTED)
             continue;
-        if (node->conn)
-            (void) cluster_node_send_ping(node);
+        if (node->conn && xr_cluster_output_queue_push_copy(node->outq, heartbeat_wire,
+                                                            heartbeat_wire_length) == 0)
+            node->last_heartbeat_sent = heartbeat_sent_at_ms;
 
         bool dead = false;
         if (node->phi.sample_count >= phi_min_samples) {

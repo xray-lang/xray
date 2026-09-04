@@ -494,21 +494,3 @@ bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrVal
     xr_runtime_spawn_batch(runtime, io_coros, 2);
     return true;
 }
-
-/* ========== Heartbeat ========== */
-
-int cluster_node_send_ping(XrClusterNode *node) {
-    int64_t now = (int64_t) xr_time_monotonic_ms();
-    uint8_t frame[32];
-    int len = cluster_frame_encode_heartbeat(frame, sizeof(frame), XR_FRAME_HEARTBEAT_PING, now);
-    if (len < 0)
-        return -1;
-
-    // Enqueue heartbeat via output queue (async)
-    int rc = xr_cluster_output_queue_push_copy(node->outq, frame, (uint32_t) len);
-    if (rc == 0) {
-        node->last_heartbeat_sent = now;
-        return 0;
-    }
-    return -1;
-}
