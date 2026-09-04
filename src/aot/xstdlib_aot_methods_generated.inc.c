@@ -20,15 +20,6 @@ static const char *const g_aot_stdlib_net___copyBidirectional_enum_variants[] = 
     "OutOfMemory",
 };
 
-static const char *const g_aot_stdlib_cluster___send_enum_variants[] = {
-    "Accepted",
-    "InvalidTopic",
-    "InvalidEnvelope",
-    "Unavailable",
-    "Overloaded",
-    "Disconnected",
-};
-
 static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"time", "__realtimeNanos", 0, "xrt_time_realtime_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"time", "__monotonicNanos", 0, "xrt_time_monotonic_nanos", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -38,16 +29,10 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"math", "__randomInt", 2, "xrt_math_random_int", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"crypto", "__randomBytes", 1, "xrt_crypto_random_bytes_raw", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"crypto", "__timingSafeEqualBytes", 2, "xrt_crypto_timing_safe_equal_bytes", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "OsMutex", 0, "xrt_sys_mutex_new", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "__osMutexNew", 0, "xrt_sys_mutex_new", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "OsRwLock", 0, "xrt_sys_rwlock_new", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "OsCondvar", 0, "xrt_sys_condvar_new", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "OsBarrier", 1, "xrt_sys_barrier_new", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "OsOnce", 0, "xrt_sys_once_new", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "cpuCount", 0, "xrt_sys_cpu_count", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "threadYield", 0, "xrt_sys_thread_yield", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "sleepMs", 1, "xrt_sys_sleep_ms", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"sys", "pinToCpu", 1, "xrt_sys_pin_to_cpu", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"sys", "__cpuCount", 0, "xrt_sys_cpu_count", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"sys", "__threadYield", 0, "xrt_sys_thread_yield", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"sys", "__sleepMs", 1, "xrt_sys_sleep_ms", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"sys", "__pinToCpu", 1, "xrt_sys_pin_to_cpu", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__threadLocalId", 0, "xrt_sys_thread_local_id", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__threadLocalAlive", 1, "xrt_sys_thread_local_alive", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"sys", "__onSignal", 2, "xrt_sys_on_signal", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -128,8 +113,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"mem", "__alloc", 1, "xrt_mem_alloc", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"mem", "__allocZeroed", 1, "xrt_mem_alloc_zeroed", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"mem", "__allocAligned", 2, "xrt_mem_alloc_aligned", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"mem", "pageAlloc", 1, "xrt_mem_page_alloc_default", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"mem", "pageAlloc", 2, "xrt_mem_page_alloc", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"mem", "__pageAlloc", 2, "xrt_mem_page_alloc", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"mem", "__pageProtect", 3, "xrt_mem_page_protect", "vvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"mem", "__pageFree", 2, "xrt_mem_page_free", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"mem", "__copy", 3, "xrt_mem_copy", "vvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -146,7 +130,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__accept", 1, "xrt_net_accept", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__readInto", 3, "xrt_net_read_into", "vvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__writeBytes", 2, "xrt_net_write_bytes", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"net", "__copyBidirectional", 2, "xrt_net_copy_bidirectional", "vv", CG_AOT_RET_I64_PAIR_RESULT, NULL, UINT32_C(2184710811), "NetError", g_aot_stdlib_net___copyBidirectional_enum_variants, 10},
+    {"net", "__copyBidirectional", 2, "xrt_net_copy_bidirectional", "vv", CG_AOT_RET_I64_PAIR_RESULT, NULL, UINT32_C(3040362961), "__NetError", g_aot_stdlib_net___copyBidirectional_enum_variants, 10},
     {"net", "__shutdownRead", 1, "xrt_net_shutdown_read", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__shutdownWrite", 1, "xrt_net_shutdown_write", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__shutdown", 1, "xrt_net_shutdown", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -173,7 +157,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"cluster", "__start", 11, "xrt_cluster_start", "svsvsssvvvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__join", 2, "xrt_cluster_join", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__stop", 0, "xrt_cluster_stop", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"cluster", "__send", 3, "xrt_cluster_send", "svv", CG_AOT_RET_ENUM_I64, NULL, UINT32_C(4282747530), "ClusterDelivery", g_aot_stdlib_cluster___send_enum_variants, 6},
+    {"cluster", "__send", 3, "xrt_cluster_send", "svv", CG_AOT_RET_I64, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__listen", 2, "xrt_cluster_listen", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))

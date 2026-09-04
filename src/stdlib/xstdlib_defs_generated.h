@@ -148,7 +148,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"time", "__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", "time_monotonicNanos", "normal", "", "xrt_time_monotonic_nanos", "", "value", "", "time.__monotonicNanos", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"time", "__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", "time_cpuNanos", "normal", "", "xrt_time_cpu_nanos", "", "value", "", "time.__cpuNanos", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"time", "__utcOffsetAt", "(seconds: i64): i64", "Minutes east of UTC at a Unix timestamp in seconds", "time_utcOffsetAt", "normal", "", "xrt_time_utc_offset_at", "v", "value", "", "time.__utcOffsetAt", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"time", "sleep", "(ms: i64): ()", "Sleep for milliseconds", "xr_time_sleep", "yieldable", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_TIMER, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"time", "__sleep", "(ms: i64): ()", "Sleep for milliseconds", "xr_time_sleep", "yieldable", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_TIMER, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"math", "__abs", "(x: f64): f64", "Absolute value", "math_abs", "normal", "", "builtin", "", "value", "", "", "", "core", "builtin", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"math", "__floor", "(x: f64): i64", "Floor to integer", "math_floor", "normal", "", "builtin", "", "value", "", "", "", "core", "builtin", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"math", "__ceil", "(x: f64): i64", "Ceiling to integer", "math_ceil", "normal", "", "builtin", "", "value", "", "", "", "core", "builtin", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -179,16 +179,10 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"math", "__expm1", "(x: f64): f64", "exp(x)-1 accurate for small x", "math_expm1", "normal", "", "builtin", "", "value", "", "", "", "core", "builtin", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"crypto", "__randomBytes", "(n: i64): Array<u8>", "Read n bytes from the platform CSPRNG", "crypto_random_bytes_raw", "normal", "", "xrt_crypto_random_bytes_raw", "v", "value", "", "crypto.__randomBytes", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"crypto", "__timingSafeEqualBytes", "(a: Array<u8>, b: Array<u8>): bool", "Compare two byte buffers in time independent of where they differ", "crypto_timing_safe_equal_bytes", "normal", "", "xrt_crypto_timing_safe_equal_bytes", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "OsMutex", "(): OsMutex", "Create an OS-domain mutex", "sys_mutex_new", "normal", "", "xrt_sys_mutex_new", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "__osMutexNew", "(): OsMutex", "Create an OS-domain mutex for sys module internals", "sys_mutex_new", "normal", "", "xrt_sys_mutex_new", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "OsRwLock", "(): OsRwLock", "Create an OS-domain read-write lock", "sys_rwlock_new", "normal", "", "xrt_sys_rwlock_new", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "OsCondvar", "(): OsCondvar", "Create an OS-domain condition variable", "sys_condvar_new", "normal", "", "xrt_sys_condvar_new", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "OsBarrier", "(parties: i64): OsBarrier", "Create a reusable OS-domain barrier", "sys_barrier_new", "normal", "", "xrt_sys_barrier_new", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "OsOnce", "(): OsOnce", "Create an OS-domain once gate", "sys_once_new", "normal", "", "xrt_sys_once_new", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "cpuCount", "(): i64", "Return the number of CPUs available to OS-thread work", "sys_cpu_count", "normal", "", "xrt_sys_cpu_count", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", "sys_thread_yield", "normal", "", "xrt_sys_thread_yield", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "sleepMs", "(ms: i64): ()", "Block the current OS thread for at least ms milliseconds", "sys_sleep_ms", "normal", "", "xrt_sys_sleep_ms", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"sys", "pinToCpu", "(cpu: i64): bool", "Best-effort pin of the current OS thread to a CPU index", "sys_pin_to_cpu", "normal", "", "xrt_sys_pin_to_cpu", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"sys", "__cpuCount", "(): i64", "Return the number of CPUs available to OS-thread work", "sys_cpu_count", "normal", "", "xrt_sys_cpu_count", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"sys", "__threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", "sys_thread_yield", "normal", "", "xrt_sys_thread_yield", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"sys", "__sleepMs", "(ms: i64): ()", "Block the current OS thread for at least ms milliseconds", "sys_sleep_ms", "normal", "", "xrt_sys_sleep_ms", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"sys", "__pinToCpu", "(cpu: i64): bool", "Best-effort pin of the current OS thread to a CPU index", "sys_pin_to_cpu", "normal", "", "xrt_sys_pin_to_cpu", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__threadLocalId", "(): i64", "Return a stable token for the current OS thread", "sys_thread_local_id", "normal", "", "xrt_sys_thread_local_id", "", "value", "", "", "", "system", "method", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__threadLocalAlive", "(id: i64): bool", "Return whether an internal sys.ThreadLocal OS-thread token is still live", "sys_thread_local_alive", "normal", "", "xrt_sys_thread_local_alive", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__onSignal", "(signal: i64, handler: fn(): ()): bool", "Register a VM-hosted safe-point handler for a portable process signal", "sys_on_signal", "normal", "", "xrt_sys_on_signal", "vv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -205,7 +199,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"sys", "__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", "sys_pipe_write_yieldable", "yieldable", "", "xrt_sys_pipe_write", "vv", "value", "", "", "", "system", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"sys", "__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", "sys_pipe_close", "normal", "", "xrt_sys_pipe_close", "v", "value", "", "", "", "system", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"regex", "__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", "regex_compile", "normal", "", "", "sv", "value", "", "", "", "alloc", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"regex", "__regexMatchNew", "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch", "Allocate a RegexMatch with its four fields set", "regex_match_new", "normal", "", "", "vvsv", "value", "", "", "", "alloc", "", 0, 4, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"regex", "__regexParseFlags", "(flags: string): i64", "Parse flag spelling for the VM representation adapter", "regex_parse_flags", "normal", "", "", "s", "value", "", "", "", "pure", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"regex", "__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", "regex_unicode_prop_id", "normal", "", "", "s", "value", "", "", "", "pure", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"regex", "__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", "regex_unicode_has_prop", "normal", "", "", "vv", "value", "", "", "", "pure", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
@@ -280,8 +273,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"mem", "__alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", "mem_alloc", "normal", "", "xrt_mem_alloc", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", "mem_alloc_zeroed", "normal", "", "xrt_mem_alloc_zeroed", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", "mem_alloc_aligned", "normal", "", "xrt_mem_alloc_aligned", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "pageAlloc", "(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", "mem_page_alloc", "normal", "", "xrt_mem_page_alloc_default", "v", "value", "", "", "", "core", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"mem", "pageAlloc", "(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", "mem_page_alloc", "normal", "", "xrt_mem_page_alloc", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"mem", "__pageAlloc", "(bytes: i64, prot: i64): MutPtr<u8>", "Map zero-filled anonymous pages with explicit protection bits", "mem_page_alloc", "normal", "", "xrt_mem_page_alloc", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", "mem_page_protect", "normal", "", "xrt_mem_page_protect", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", "mem_page_free", "normal", "", "xrt_mem_page_free", "vv", "value", "", "", "", "core", "method", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"mem", "__copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", "mem_copy", "normal", "", "xrt_mem_copy", "vvv", "value", "", "", "", "core", "method", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -298,7 +290,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "__accept", "(listener: NetListener): NetConn?", "Accept a new connection", "net_accept_handle_yieldable", "yieldable", "", "xrt_net_accept", "v", "value", "", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__readInto", "(conn: NetConn, buffer: Array<u8>, maxlen: i64): i64", "Read once into a caller buffer; 0 is EOF, -1 is a stored error", "net_read_into_yieldable", "yieldable", "", "xrt_net_read_into", "vvv", "value", "", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__writeBytes", "(conn: NetConn, data: Array<u8>): i64", "Write the whole buffer; returns bytes written, -1 when nothing was sent", "net_write_bytes_yieldable", "yieldable", "", "xrt_net_write_bytes", "vv", "value", "", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"net", "__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", "net_copy_bidirectional_yieldable", "yieldable", "", "xrt_net_copy_bidirectional", "vv", "i64_pair_result", "NetError", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"net", "__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", "net_copy_bidirectional_yieldable", "yieldable", "", "xrt_net_copy_bidirectional", "vv", "i64_pair_result", "__NetError", "", "", "runtime", "method", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__shutdownRead", "(conn: NetConn): bool", "Shut down the read side", "net_shutdown_read", "normal", "", "xrt_net_shutdown_read", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side", "net_shutdown_write", "normal", "", "xrt_net_shutdown_write", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"net", "__shutdown", "(conn: NetConn): bool", "Shut down both directions", "net_shutdown_conn", "normal", "", "xrt_net_shutdown", "v", "value", "", "", "", "runtime", "method", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, true},
@@ -329,8 +321,8 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 0, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "xrt_cluster_stop", "", "value", "", "cluster.__stop", "", "runtime", "method", XR_CAP_CHANNEL, 0, XR_STDLIB_TARGET_LEAF_NONE, true},
-    {"cluster", "__info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__send", "(topic: string, envelope: move Buffer, hopLimit: i64): ClusterDelivery", "Hand one canonical opaque service envelope, and the hop budget cluster.xr decides, to local and connected transports", "cluster_send_primitive", "normal", "", "xrt_cluster_send", "svv", "enum_i64", "ClusterDelivery", "cluster.__send", "", "runtime", "method", XR_CAP_CHANNEL, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
+    {"cluster", "__info", "(): __ClusterSnapshot?", "Read one private scalar cluster runtime snapshot", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__send", "(topic: string, envelope: move Buffer, hopLimit: i64): i64", "Hand one canonical opaque service envelope to the transport and return a private delivery code", "cluster_send_primitive", "normal", "", "xrt_cluster_send", "svv", "i64", "", "cluster.__send", "", "runtime", "method", XR_CAP_CHANNEL, 3, XR_STDLIB_TARGET_LEAF_NONE, true},
     {"cluster", "__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "xrt_cluster_listen", "sv", "value", "", "cluster.__listen", "", "runtime", "method", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, true},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
@@ -365,42 +357,42 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_net___CopyBidir
     {"net", "__CopyBidirectionalResult", "bToA", "i64", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterTlsStatus[] = {
-    {"cluster", "ClusterTlsStatus", "enabled", "bool", true},
-    {"cluster", "ClusterTlsStatus", "clientReady", "bool", true},
-    {"cluster", "ClusterTlsStatus", "serverReady", "bool", true},
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterTlsSnapshot[] = {
+    {"cluster", "__ClusterTlsSnapshot", "enabled", "bool", true},
+    {"cluster", "__ClusterTlsSnapshot", "clientReady", "bool", true},
+    {"cluster", "__ClusterTlsSnapshot", "serverReady", "bool", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterNodeInfo[] = {
-    {"cluster", "ClusterNodeInfo", "name", "string", true},
-    {"cluster", "ClusterNodeInfo", "host", "string", true},
-    {"cluster", "ClusterNodeInfo", "port", "i64", true},
-    {"cluster", "ClusterNodeInfo", "state", "ClusterNodeState", true},
-    {"cluster", "ClusterNodeInfo", "framesSent", "i64", true},
-    {"cluster", "ClusterNodeInfo", "framesReceived", "i64", true},
-    {"cluster", "ClusterNodeInfo", "bytesSent", "i64", true},
-    {"cluster", "ClusterNodeInfo", "bytesReceived", "i64", true},
-    {"cluster", "ClusterNodeInfo", "sendErrors", "i64", true},
-    {"cluster", "ClusterNodeInfo", "slowConsumerEvents", "i64", true},
-    {"cluster", "ClusterNodeInfo", "rttMs", "i64", true},
-    {"cluster", "ClusterNodeInfo", "outQueueBytes", "i64", true},
-    {"cluster", "ClusterNodeInfo", "outQueueFrames", "i64", true},
-    {"cluster", "ClusterNodeInfo", "slow", "bool", true},
-    {"cluster", "ClusterNodeInfo", "phi", "f64", true},
-    {"cluster", "ClusterNodeInfo", "missedHeartbeats", "i64", true},
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterNodeSnapshot[] = {
+    {"cluster", "__ClusterNodeSnapshot", "name", "string", true},
+    {"cluster", "__ClusterNodeSnapshot", "host", "string", true},
+    {"cluster", "__ClusterNodeSnapshot", "port", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "state", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "framesSent", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "framesReceived", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "bytesSent", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "bytesReceived", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "sendErrors", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "slowConsumerEvents", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "rttMs", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "outQueueBytes", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "outQueueFrames", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "slow", "bool", true},
+    {"cluster", "__ClusterNodeSnapshot", "phi", "f64", true},
+    {"cluster", "__ClusterNodeSnapshot", "missedHeartbeats", "i64", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterInfo[] = {
-    {"cluster", "ClusterInfo", "self", "string", true},
-    {"cluster", "ClusterInfo", "port", "i64", true},
-    {"cluster", "ClusterInfo", "running", "bool", true},
-    {"cluster", "ClusterInfo", "nodes", "Array<ClusterNodeInfo>", true},
-    {"cluster", "ClusterInfo", "listeners", "i64", true},
-    {"cluster", "ClusterInfo", "deadNodes", "i64", true},
-    {"cluster", "ClusterInfo", "heartbeatIntervalMs", "i64", true},
-    {"cluster", "ClusterInfo", "heartbeatTimeoutMs", "i64", true},
-    {"cluster", "ClusterInfo", "maxMissedHeartbeats", "i64", true},
-    {"cluster", "ClusterInfo", "tls", "ClusterTlsStatus", true},
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterSnapshot[] = {
+    {"cluster", "__ClusterSnapshot", "self", "string", true},
+    {"cluster", "__ClusterSnapshot", "port", "i64", true},
+    {"cluster", "__ClusterSnapshot", "running", "bool", true},
+    {"cluster", "__ClusterSnapshot", "nodes", "Array<__ClusterNodeSnapshot>", true},
+    {"cluster", "__ClusterSnapshot", "listeners", "i64", true},
+    {"cluster", "__ClusterSnapshot", "deadNodes", "i64", true},
+    {"cluster", "__ClusterSnapshot", "heartbeatIntervalMs", "i64", true},
+    {"cluster", "__ClusterSnapshot", "heartbeatTimeoutMs", "i64", true},
+    {"cluster", "__ClusterSnapshot", "maxMissedHeartbeats", "i64", true},
+    {"cluster", "__ClusterSnapshot", "tls", "__ClusterTlsSnapshot", true},
 };
 
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
@@ -408,9 +400,9 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
     {"net", "__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_object_fields_net___CopyBidirectionalResult, 2, true},
-    {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_object_fields_cluster_ClusterTlsStatus, 3, true},
-    {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_object_fields_cluster_ClusterNodeInfo, 16, true},
-    {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 10, true},
+    {"cluster", "__ClusterTlsSnapshot", "Private scalar TLS state read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterTlsSnapshot, 3, true},
+    {"cluster", "__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 16, true},
+    {"cluster", "__ClusterSnapshot", "Private scalar snapshot read from the cluster runtime", xr_stdlib_object_fields_cluster___ClusterSnapshot, 10, true},
 };
 #define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / sizeof(xr_stdlib_object_shape_def_entries[0])))
 
@@ -432,7 +424,7 @@ static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_Coro_CoroMetric_variants
     {"Reductions", NULL, 0},
 };
 
-static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_net_NetError_variants[] = {
+static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_net___NetError_variants[] = {
     {"Timeout", NULL, 0},
     {"Closed", NULL, 0},
     {"Reset", NULL, 0},
@@ -445,30 +437,11 @@ static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_net_NetError_variants[] 
     {"OutOfMemory", NULL, 0},
 };
 
-static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_cluster_ClusterDelivery_variants[] = {
-    {"Accepted", NULL, 0},
-    {"InvalidTopic", NULL, 0},
-    {"InvalidEnvelope", NULL, 0},
-    {"Unavailable", NULL, 0},
-    {"Overloaded", NULL, 0},
-    {"Disconnected", NULL, 0},
-};
-
-static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_cluster_ClusterNodeState_variants[] = {
-    {"Idle", NULL, 0},
-    {"Connecting", NULL, 0},
-    {"Handshaking", NULL, 0},
-    {"Connected", NULL, 0},
-    {"Closing", NULL, 0},
-};
-
 static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
     {"Coro", "CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", xr_stdlib_enum_Coro_CoroState_variants, 5, UINT32_C(2882116571)},
     {"Coro", "CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroGroupKey_variants, 2, UINT32_C(2434143071)},
     {"Coro", "CoroMetric", "Metric used to rank coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroMetric_variants, 2, UINT32_C(4039818693)},
-    {"net", "NetError", "Typed failure from network operations; classification from native codes lives in net.xr", xr_stdlib_enum_net_NetError_variants, 10, UINT32_C(2184710811)},
-    {"cluster", "ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", xr_stdlib_enum_cluster_ClusterDelivery_variants, 6, UINT32_C(4282747530)},
-    {"cluster", "ClusterNodeState", "Lifecycle state of a remote cluster node", xr_stdlib_enum_cluster_ClusterNodeState_variants, 5, UINT32_C(2784952505)},
+    {"net", "__NetError", "Private transport error from the bidirectional native pump", xr_stdlib_enum_net___NetError_variants, 10, UINT32_C(3040362961)},
 };
 #define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / sizeof(xr_stdlib_enum_def_entries[0])))
 
@@ -498,19 +471,6 @@ static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
 #define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
 
 static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
-    {"sys", "OsMutex", "lock", "(): ()", "Lock the mutex"},
-    {"sys", "OsMutex", "unlock", "(): ()", "Unlock the mutex"},
-    {"sys", "OsMutex", "tryLock", "(): bool", "Try to lock the mutex"},
-    {"sys", "OsRwLock", "rdlock", "(): ()", "Acquire the read side of the read-write lock"},
-    {"sys", "OsRwLock", "rdunlock", "(): ()", "Release the read side of the read-write lock"},
-    {"sys", "OsRwLock", "wrlock", "(): ()", "Acquire the write side of the read-write lock"},
-    {"sys", "OsRwLock", "wrunlock", "(): ()", "Release the write side of the read-write lock"},
-    {"sys", "OsCondvar", "wait", "(m: OsMutex): ()", "Wait on the condition variable with an already-locked mutex"},
-    {"sys", "OsCondvar", "waitFor", "(m: OsMutex, timeoutNs: i64): bool", "Wait on the condition variable until signalled or timeout elapses"},
-    {"sys", "OsCondvar", "signal", "(): ()", "Wake one waiter"},
-    {"sys", "OsCondvar", "broadcast", "(): ()", "Wake all waiters"},
-    {"sys", "OsBarrier", "wait", "(): bool", "Wait until all parties have arrived"},
-    {"sys", "OsOnce", "call", "(body: fn(): ()): ()", "Run the closure exactly once"},
     {"mem", "Buffer", "asBytes", "(): Slice<u8>", "Borrow this buffer as a readonly Slice<u8> view"},
     {"mem", "Buffer", "asMutBytes", "(): Slice<u8>", "Borrow this buffer as a mutable Slice<u8> view"},
     {"mem", "Buffer", "borrowPtr", "(): MutPtr<u8>", "Borrow the underlying mutable pointer; requires unsafe at the call site"},
@@ -521,11 +481,6 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 
 static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
-    {"sys", "OsMutex", "objectClass", "sysMutexClass", "&g_sys_mutex_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSMUTEX"},
-    {"sys", "OsRwLock", "objectClass", "sysRwLockClass", "&g_sys_rwlock_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSRWLOCK"},
-    {"sys", "OsCondvar", "objectClass", "sysCondvarClass", "&g_sys_condvar_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSCONDVAR"},
-    {"sys", "OsBarrier", "objectClass", "sysBarrierClass", "&g_sys_barrier_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSBARRIER"},
-    {"sys", "OsOnce", "objectClass", "sysOnceClass", "&g_sys_once_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_SYSONCE"},
     {"mem", "Buffer", "objectClass", "memBufferClass", "&g_mem_buffer_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_BUFFER"},
     {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
     {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER"},
@@ -534,24 +489,10 @@ static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = 
 
 static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {
     {"regex", "Regex", "objectClass", "regexClass", "XR_CLASS_BUILTIN", "XR_BK_REGEX"},
-    {"regex", "RegexMatch", "objectClass", "regexMatchClass", "XR_CLASS_BUILTIN | XR_CLASS_FINAL", "XR_BK_REGEX_MATCH"},
 };
 #define XR_STDLIB_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_def_entries) / sizeof(xr_stdlib_class_def_entries[0])))
 
 static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {
-    {"sys", "OsMutex", "lock", "sys_mutex_lock", 0, "0"},
-    {"sys", "OsMutex", "unlock", "sys_mutex_unlock", 0, "0"},
-    {"sys", "OsMutex", "tryLock", "sys_mutex_try_lock", 0, "0"},
-    {"sys", "OsRwLock", "rdlock", "sys_rwlock_rdlock", 0, "0"},
-    {"sys", "OsRwLock", "rdunlock", "sys_rwlock_rdunlock", 0, "0"},
-    {"sys", "OsRwLock", "wrlock", "sys_rwlock_wrlock", 0, "0"},
-    {"sys", "OsRwLock", "wrunlock", "sys_rwlock_wrunlock", 0, "0"},
-    {"sys", "OsCondvar", "wait", "sys_condvar_wait", 1, "0"},
-    {"sys", "OsCondvar", "waitFor", "sys_condvar_wait_for", 2, "0"},
-    {"sys", "OsCondvar", "signal", "sys_condvar_signal", 0, "0"},
-    {"sys", "OsCondvar", "broadcast", "sys_condvar_broadcast", 0, "0"},
-    {"sys", "OsBarrier", "wait", "sys_barrier_wait", 0, "0"},
-    {"sys", "OsOnce", "call", "sys_once_call", 1, "0"},
     {"mem", "Buffer", "asBytes", "mem_buffer_as_bytes", 0, "0"},
     {"mem", "Buffer", "asMutBytes", "mem_buffer_as_mut_bytes", 0, "0"},
     {"mem", "Buffer", "borrowPtr", "mem_buffer_borrow_ptr", 0, "0"},
@@ -571,10 +512,6 @@ static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[] = {
     {"regex", "Regex", "pattern", "0"},
     {"regex", "Regex", "flags", "0"},
     {"regex", "Regex", "prog", "0"},
-    {"regex", "RegexMatch", "start", "0"},
-    {"regex", "RegexMatch", "end", "0"},
-    {"regex", "RegexMatch", "text", "0"},
-    {"regex", "RegexMatch", "groups", "0"},
 };
 #define XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_field_def_entries) / sizeof(xr_stdlib_class_field_def_entries[0])))
 

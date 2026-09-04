@@ -62,7 +62,7 @@ static const char *xaot_stdlib_generated_define_for_symbol(const char *symbol) {
 static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
     if (!symbol)
         return 0;
-    if (strcmp(symbol, "time.sleep") == 0)
+    if (strcmp(symbol, "time.__sleep") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_TIMER;
     if (strcmp(symbol, "net.__resolveAll") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;

@@ -31,44 +31,6 @@ static const XaBuiltinMember g_gen_corolocal_members[] = {
 };
 #define GEN_COROLOCAL_MEMBER_COUNT 2
 
-// OsBarrier methods
-static const XaBuiltinMember g_gen_osbarrier_members[] = {
-    {"wait", "(): bool", "Wait until all parties have arrived", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_OSBARRIER_MEMBER_COUNT 1
-
-// OsCondvar methods
-static const XaBuiltinMember g_gen_oscondvar_members[] = {
-    {"wait", "(m: OsMutex): ()", "Wait on the condition variable with an already-locked mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"waitFor", "(m: OsMutex, timeoutNs: i64): bool", "Wait on the condition variable until signalled or timeout elapses", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"signal", "(): ()", "Wake one waiter", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"broadcast", "(): ()", "Wake all waiters", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_OSCONDVAR_MEMBER_COUNT 4
-
-// OsMutex methods
-static const XaBuiltinMember g_gen_osmutex_members[] = {
-    {"lock", "(): ()", "Lock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"unlock", "(): ()", "Unlock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"tryLock", "(): bool", "Try to lock the mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_OSMUTEX_MEMBER_COUNT 3
-
-// OsOnce methods
-static const XaBuiltinMember g_gen_osonce_members[] = {
-    {"call", "(body: fn(): ()): ()", "Run the closure exactly once", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_OSONCE_MEMBER_COUNT 1
-
-// OsRwLock methods
-static const XaBuiltinMember g_gen_osrwlock_members[] = {
-    {"rdlock", "(): ()", "Acquire the read side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"rdunlock", "(): ()", "Release the read side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"wrlock", "(): ()", "Acquire the write side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"wrunlock", "(): ()", "Release the write side of the read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_OSRWLOCK_MEMBER_COUNT 4
-
 // ======== C Module Declarations ========
 
 // Coro.CoroStats object fields
@@ -127,19 +89,19 @@ static const XaBuiltinEnum g_gen_Coro_enums[] = {
 };
 #define GEN_CORO_ENUM_COUNT 3
 
-// cluster.ClusterTlsStatus object fields
-static const XaBuiltinObjectField g_gen_cluster_clustertlsstatus_object_fields[] = {
+// cluster.__ClusterTlsSnapshot object fields
+static const XaBuiltinObjectField g_gen_cluster___clustertlssnapshot_object_fields[] = {
     {"enabled", "bool"},
     {"clientReady", "bool"},
     {"serverReady", "bool"},
 };
 
-// cluster.ClusterNodeInfo object fields
-static const XaBuiltinObjectField g_gen_cluster_clusternodeinfo_object_fields[] = {
+// cluster.__ClusterNodeSnapshot object fields
+static const XaBuiltinObjectField g_gen_cluster___clusternodesnapshot_object_fields[] = {
     {"name", "string"},
     {"host", "string"},
     {"port", "i64"},
-    {"state", "ClusterNodeState"},
+    {"state", "i64"},
     {"framesSent", "i64"},
     {"framesReceived", "i64"},
     {"bytesSent", "i64"},
@@ -154,49 +116,26 @@ static const XaBuiltinObjectField g_gen_cluster_clusternodeinfo_object_fields[] 
     {"missedHeartbeats", "i64"},
 };
 
-// cluster.ClusterInfo object fields
-static const XaBuiltinObjectField g_gen_cluster_clusterinfo_object_fields[] = {
+// cluster.__ClusterSnapshot object fields
+static const XaBuiltinObjectField g_gen_cluster___clustersnapshot_object_fields[] = {
     {"self", "string"},
     {"port", "i64"},
     {"running", "bool"},
-    {"nodes", "Array<ClusterNodeInfo>"},
+    {"nodes", "Array<__ClusterNodeSnapshot>"},
     {"listeners", "i64"},
     {"deadNodes", "i64"},
     {"heartbeatIntervalMs", "i64"},
     {"heartbeatTimeoutMs", "i64"},
     {"maxMissedHeartbeats", "i64"},
-    {"tls", "ClusterTlsStatus"},
+    {"tls", "__ClusterTlsSnapshot"},
 };
 
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
-    {"ClusterTlsStatus", "Effective TLS posture of a running cluster node", g_gen_cluster_clustertlsstatus_object_fields, 3, true},
-    {"ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", g_gen_cluster_clusternodeinfo_object_fields, 16, true},
-    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_object_fields, 10, true},
+    {"__ClusterTlsSnapshot", "Private scalar TLS state read from the cluster runtime", g_gen_cluster___clustertlssnapshot_object_fields, 3, true},
+    {"__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", g_gen_cluster___clusternodesnapshot_object_fields, 16, true},
+    {"__ClusterSnapshot", "Private scalar snapshot read from the cluster runtime", g_gen_cluster___clustersnapshot_object_fields, 10, true},
 };
 #define GEN_CLUSTER_OBJECT_SHAPE_COUNT 3
-
-static const XaBuiltinEnumVariant g_gen_cluster_clusterdelivery_variants[] = {
-    {"Accepted", NULL, 0},
-    {"InvalidTopic", NULL, 0},
-    {"InvalidEnvelope", NULL, 0},
-    {"Unavailable", NULL, 0},
-    {"Overloaded", NULL, 0},
-    {"Disconnected", NULL, 0},
-};
-
-static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
-    {"Idle", NULL, 0},
-    {"Connecting", NULL, 0},
-    {"Handshaking", NULL, 0},
-    {"Connected", NULL, 0},
-    {"Closing", NULL, 0},
-};
-
-static const XaBuiltinEnum g_gen_cluster_enums[] = {
-    {"ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", g_gen_cluster_clusterdelivery_variants, 6, UINT32_C(4282747530)},
-    {"ClusterNodeState", "Lifecycle state of a remote cluster node", g_gen_cluster_clusternodestate_variants, 5, UINT32_C(2784952505)},
-};
-#define GEN_CLUSTER_ENUM_COUNT 2
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
@@ -207,8 +146,8 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__discover", "(): ()", "Start LAN auto-discovery", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__info", "(): ClusterInfo?", "Get cluster status info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__send", "(topic: string, envelope: move Buffer, hopLimit: i64): ClusterDelivery", "Hand one canonical opaque service envelope, and the hop budget cluster.xr decides, to local and connected transports", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_BORROWED_STATIC},
+    {"__info", "(): __ClusterSnapshot?", "Read one private scalar cluster runtime snapshot", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__send", "(topic: string, envelope: move Buffer, hopLimit: i64): i64", "Hand one canonical opaque service envelope to the transport and return a private delivery code", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_CLUSTER_FUNCTION_COUNT 10
@@ -334,7 +273,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"__alloc", "(n: i64): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__allocZeroed", "(n: i64): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__allocAligned", "(n: i64, align: i64): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"pageAlloc", "(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pageAlloc", "(bytes: i64, prot: i64): MutPtr<u8>", "Map zero-filled anonymous pages with explicit protection bits", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pageProtect", "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pageFree", "(ptr: MutPtr<u8>, bytes: i64): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__copy", "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -357,7 +296,7 @@ static const XaBuiltinObjectShape g_gen_net_object_shapes[] = {
 };
 #define GEN_NET_OBJECT_SHAPE_COUNT 1
 
-static const XaBuiltinEnumVariant g_gen_net_neterror_variants[] = {
+static const XaBuiltinEnumVariant g_gen_net___neterror_variants[] = {
     {"Timeout", NULL, 0},
     {"Closed", NULL, 0},
     {"Reset", NULL, 0},
@@ -371,7 +310,7 @@ static const XaBuiltinEnumVariant g_gen_net_neterror_variants[] = {
 };
 
 static const XaBuiltinEnum g_gen_net_enums[] = {
-    {"NetError", "Typed failure from network operations; classification from native codes lives in net.xr", g_gen_net_neterror_variants, 10, UINT32_C(2184710811)},
+    {"__NetError", "Private transport error from the bidirectional native pump", g_gen_net___neterror_variants, 10, UINT32_C(3040362961)},
 };
 #define GEN_NET_ENUM_COUNT 1
 
@@ -382,16 +321,16 @@ static const XaBuiltinClass g_gen_net_classes[] = {
 #define GEN_NET_CLASS_COUNT 2
 
 static const char *g_gen_net___copybidirectional_8_errors[] = {
-    "NetError.Timeout",
-    "NetError.Closed",
-    "NetError.Reset",
-    "NetError.Refused",
-    "NetError.Dns",
-    "NetError.Tls",
-    "NetError.Io",
-    "NetError.Invalid",
-    "NetError.Cancelled",
-    "NetError.OutOfMemory",
+    "__NetError.Timeout",
+    "__NetError.Closed",
+    "__NetError.Reset",
+    "__NetError.Refused",
+    "__NetError.Dns",
+    "__NetError.Tls",
+    "__NetError.Io",
+    "__NetError.Invalid",
+    "__NetError.Cancelled",
+    "__NetError.OutOfMemory",
 };
 
 // net module functions
@@ -470,19 +409,17 @@ static const XaBuiltinMember g_gen_os_functions[] = {
 
 static const XaBuiltinClass g_gen_regex_classes[] = {
     {"Regex", true},
-    {"RegexMatch", false},
 };
-#define GEN_REGEX_CLASS_COUNT 2
+#define GEN_REGEX_CLASS_COUNT 1
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
     {"__regexNew", "(pattern: string, flags: i64): Regex", "Allocate a Regex carrying its pattern and flags; regex.xr owns compilation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__regexMatchNew", "(start: i64, end: i64, text: string, groups: Array<string>): RegexMatch", "Allocate a RegexMatch with its four fields set", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__regexParseFlags", "(flags: string): i64", "Parse flag spelling for the VM representation adapter", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__unicodePropId", "(name: string): i64", "Unicode property name to id, -1 when unknown", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__unicodeHasProp", "(cp: i64, propId: i64): bool", "Whether a code point carries a unicode property", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_REGEX_FUNCTION_COUNT 5
+#define GEN_REGEX_FUNCTION_COUNT 4
 
 // runtime module functions
 static const XaBuiltinMember g_gen_runtime_functions[] = {
@@ -494,27 +431,12 @@ static const XaBuiltinMember g_gen_runtime_functions[] = {
 };
 #define GEN_RUNTIME_FUNCTION_COUNT 5
 
-static const XaBuiltinClass g_gen_sys_classes[] = {
-    {"OsMutex", false},
-    {"OsRwLock", false},
-    {"OsCondvar", false},
-    {"OsBarrier", false},
-    {"OsOnce", false},
-};
-#define GEN_SYS_CLASS_COUNT 5
-
 // sys module functions
 static const XaBuiltinMember g_gen_sys_functions[] = {
-    {"OsMutex", "(): OsMutex", "Create an OS-domain mutex", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__osMutexNew", "(): OsMutex", "Create an OS-domain mutex for sys module internals", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"OsRwLock", "(): OsRwLock", "Create an OS-domain read-write lock", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"OsCondvar", "(): OsCondvar", "Create an OS-domain condition variable", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"OsBarrier", "(parties: i64): OsBarrier", "Create a reusable OS-domain barrier", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"OsOnce", "(): OsOnce", "Create an OS-domain once gate", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"cpuCount", "(): i64", "Return the number of CPUs available to OS-thread work", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"sleepMs", "(ms: i64): ()", "Block the current OS thread for at least ms milliseconds", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"pinToCpu", "(cpu: i64): bool", "Best-effort pin of the current OS thread to a CPU index", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__cpuCount", "(): i64", "Return the number of CPUs available to OS-thread work", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__threadYield", "(): ()", "Yield the current OS thread to another runnable OS thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sleepMs", "(ms: i64): ()", "Block the current OS thread for at least ms milliseconds", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__pinToCpu", "(cpu: i64): bool", "Best-effort pin of the current OS thread to a CPU index", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__threadLocalId", "(): i64", "Return a stable token for the current OS thread", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__threadLocalAlive", "(id: i64): bool", "Return whether an internal sys.ThreadLocal OS-thread token is still live", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__onSignal", "(signal: i64, handler: fn(): ()): bool", "Register a VM-hosted safe-point handler for a portable process signal", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -531,7 +453,7 @@ static const XaBuiltinMember g_gen_sys_functions[] = {
     {"__pipeWrite", "(handle: i64, data: Array<u8>): i64", "Write one chunk to a pipe endpoint", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pipeClose", "(handle: i64): bool", "Close a pipe endpoint", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_SYS_FUNCTION_COUNT 25
+#define GEN_SYS_FUNCTION_COUNT 19
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {
@@ -539,14 +461,14 @@ static const XaBuiltinMember g_gen_time_functions[] = {
     {"__monotonicNanos", "(): i64", "Nanoseconds on the runtime monotonic clock", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__cpuNanos", "(): i64", "Nanoseconds of process CPU time consumed", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__utcOffsetAt", "(seconds: i64): i64", "Minutes east of UTC at a Unix timestamp in seconds", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__sleep", "(ms: i64): ()", "Sleep for milliseconds", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_TIME_FUNCTION_COUNT 5
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT, NULL, 0},
-    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_object_shapes, GEN_CLUSTER_OBJECT_SHAPE_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT, NULL, 0},
+    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_object_shapes, GEN_CLUSTER_OBJECT_SHAPE_COUNT, NULL, 0, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
@@ -556,7 +478,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_regex_classes, GEN_REGEX_CLASS_COUNT},
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
-    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_sys_classes, GEN_SYS_CLASS_COUNT},
+    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
 };
 #define GEN_BUILTIN_MODULE_COUNT 13

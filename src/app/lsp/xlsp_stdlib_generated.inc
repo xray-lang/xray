@@ -72,13 +72,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"HEARTBEAT_INTERVAL_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"HEARTBEAT_TIMEOUT_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"MAX_MISSED_HEARTBEATS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"ClusterDelivery", XLSP_SYM_CLASS, "type ClusterDelivery", "Enum type", NULL, 0},
+    {"ClusterNodeState", XLSP_SYM_CLASS, "type ClusterNodeState", "Enum type", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
-    {"ClusterTlsStatus", XLSP_SYM_CLASS, "type ClusterTlsStatus = { enabled: bool, clientReady: bool, serverReady: bool }", "Effective TLS posture of a running cluster node", NULL, 0},
-    {"ClusterNodeInfo", XLSP_SYM_CLASS, "type ClusterNodeInfo = { name: string, host: string, port: i64, state: ClusterNodeState, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }", "Typed diagnostic snapshot for one remote cluster node", NULL, 0},
-    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo = { self: string, port: i64, running: bool, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: ClusterTlsStatus }", "Typed diagnostic snapshot for the local cluster runtime", NULL, 0},
-    {"ClusterDelivery", XLSP_SYM_CLASS, "enum ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", NULL, 0},
-    {"ClusterNodeState", XLSP_SYM_CLASS, "enum ClusterNodeState", "Lifecycle state of a remote cluster node", NULL, 0},
+    {"__ClusterTlsSnapshot", XLSP_SYM_CLASS, "type __ClusterTlsSnapshot = { enabled: bool, clientReady: bool, serverReady: bool }", "Private scalar TLS state read from the cluster runtime", NULL, 0},
+    {"__ClusterNodeSnapshot", XLSP_SYM_CLASS, "type __ClusterNodeSnapshot = { name: string, host: string, port: i64, state: i64, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }", "Private scalar snapshot for one remote cluster node", NULL, 0},
+    {"__ClusterSnapshot", XLSP_SYM_CLASS, "type __ClusterSnapshot = { self: string, port: i64, running: bool, nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: __ClusterTlsSnapshot }", "Private scalar snapshot read from the cluster runtime", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 48
 
@@ -374,7 +374,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
 
 // mem module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
-    {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: i64, prot?: i64): MutPtr<u8>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", NULL, 0},
     {"fence", XLSP_SYM_FUNCTION, "fn(ordering: i64): ()", "", NULL, 0},
     {"prefetch", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, rw: i64): ()", "", NULL, 0},
     {"cacheFlush", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<u8>, n: i64): ()", "", NULL, 0},
@@ -384,6 +383,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"alloc", XLSP_SYM_FUNCTION, "fn(n: i64): Buffer", "", NULL, 0},
     {"allocZeroed", XLSP_SYM_FUNCTION, "fn(n: i64): Buffer", "", NULL, 0},
     {"allocAligned", XLSP_SYM_FUNCTION, "fn(n: i64, align: i64): Buffer", "", NULL, 0},
+    {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: i64, prot?: i64): MutPtr<u8>", "", NULL, 0},
     {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", "", NULL, 0},
     {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<u8>, bytes: i64): bool", "", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", "", NULL, 0},
@@ -428,15 +428,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"udpBind", XLSP_SYM_FUNCTION, "fn(port: i64, address?: string): NetConn", "", NULL, 0},
     {"sendTo", XLSP_SYM_FUNCTION, "fn(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs?: i64): i64", "", NULL, 0},
     {"recvFrom", XLSP_SYM_FUNCTION, "fn(handle: NetConn, buffer: ref Array<u8>, timeoutMs?: i64): UdpFrom?", "", NULL, 0},
+    {"NetError", XLSP_SYM_CLASS, "type NetError", "Enum type", NULL, 0},
     {"IpAddress", XLSP_SYM_CLASS, "type IpAddress", "Class type", NULL, 0},
     {"Endpoint", XLSP_SYM_CLASS, "type Endpoint", "Class type", NULL, 0},
     {"DialOptions", XLSP_SYM_CLASS, "type DialOptions", "Class type", NULL, 0},
     {"CopyBidirectionalResult", XLSP_SYM_CLASS, "type CopyBidirectionalResult", "Class type", NULL, 0},
     {"UdpFrom", XLSP_SYM_CLASS, "type UdpFrom", "Class type", NULL, 0},
     {"__CopyBidirectionalResult", XLSP_SYM_CLASS, "type __CopyBidirectionalResult = { aToB: i64, bToA: i64 }", "Byte counts copied in each direction by copyBidirectional", NULL, 0},
-    {"NetError", XLSP_SYM_CLASS, "enum NetError", "Typed failure from network operations; classification from native codes lives in net.xr", NULL, 0},
+    {"__NetError", XLSP_SYM_CLASS, "enum __NetError", "Private transport error from the bidirectional native pump", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 34
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 35
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
@@ -520,9 +521,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
     {"replaceAll", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, repl: string): string", "", NULL, 0},
     {"split", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string, limit?: i64): Array<string>", "", NULL, 0},
     {"escape", XLSP_SYM_FUNCTION, "fn(s: string): string", "", NULL, 0},
+    {"RegexMatch", XLSP_SYM_CLASS, "type RegexMatch", "Class type", NULL, 0},
     {"RegexError", XLSP_SYM_CLASS, "type RegexError", "Enum type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 14
+#define GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT 15
 
 // runtime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
@@ -556,7 +558,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_simd_symbols[] = {
 
 // sync module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
-    {"fence", XLSP_SYM_FUNCTION, "fn(order: Ordering): ()", "standalone memory fence in Ordering-enum form (task 147 §6.5).", NULL, 0},
+    {"fence", XLSP_SYM_FUNCTION, "fn(order: Ordering): ()", "standalone memory fence in Ordering-enum form. The enum's backing", NULL, 0},
+    {"Semaphore", XLSP_SYM_CLASS, "type Semaphore", "Class type", NULL, 0},
+    {"CountdownLatch", XLSP_SYM_CLASS, "type CountdownLatch", "Class type", NULL, 0},
+    {"EventCount", XLSP_SYM_CLASS, "type EventCount", "Class type", NULL, 0},
+    {"WorkQueue", XLSP_SYM_CLASS, "type WorkQueue", "Class type", NULL, 0},
+    {"ResultGroup", XLSP_SYM_CLASS, "type ResultGroup", "Class type", NULL, 0},
     {"CachePadded", XLSP_SYM_CLASS, "type CachePadded", "cache-line aligned wrapper for counters/flags that should", NULL, 0},
     {"Mutex", XLSP_SYM_CLASS, "type Mutex", "data guarded by a coroutine-aware lock; closure-scoped access", NULL, 0},
     {"RwLock", XLSP_SYM_CLASS, "type RwLock", "many readers XOR one writer. `_entry` serializes reader entry and", NULL, 0},
@@ -564,19 +571,19 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
     {"Barrier", XLSP_SYM_CLASS, "type Barrier", "N parties rendezvous; every party blocks until all have arrived.", NULL, 0},
     {"Condvar", XLSP_SYM_CLASS, "type Condvar", "a monitor condition variable. Callers hold the monitor lock, then", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT 7
+#define GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT 12
 
 // sys module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
-    {"OsMutex", XLSP_SYM_FUNCTION, "fn(): OsMutex", "Create an OS-domain mutex", NULL, 0},
-    {"OsRwLock", XLSP_SYM_FUNCTION, "fn(): OsRwLock", "Create an OS-domain read-write lock", NULL, 0},
-    {"OsCondvar", XLSP_SYM_FUNCTION, "fn(): OsCondvar", "Create an OS-domain condition variable", NULL, 0},
-    {"OsBarrier", XLSP_SYM_FUNCTION, "fn(parties: i64): OsBarrier", "Create a reusable OS-domain barrier", NULL, 0},
-    {"OsOnce", XLSP_SYM_FUNCTION, "fn(): OsOnce", "Create an OS-domain once gate", NULL, 0},
-    {"cpuCount", XLSP_SYM_FUNCTION, "fn(): i64", "Return the number of CPUs available to OS-thread work", NULL, 0},
-    {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "Yield the current OS thread to another runnable OS thread", NULL, 0},
-    {"sleepMs", XLSP_SYM_FUNCTION, "fn(ms: i64): ()", "Block the current OS thread for at least ms milliseconds", NULL, 0},
-    {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: i64): bool", "Best-effort pin of the current OS thread to a CPU index", NULL, 0},
+    {"cpuCount", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
+    {"sleepMs", XLSP_SYM_FUNCTION, "fn(ms: i64): ()", "", NULL, 0},
+    {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: i64): bool", "", NULL, 0},
+    {"OsMutex", XLSP_SYM_CLASS, "type OsMutex", "Class type", NULL, 0},
+    {"OsRwLock", XLSP_SYM_CLASS, "type OsRwLock", "Class type", NULL, 0},
+    {"OsCondvar", XLSP_SYM_CLASS, "type OsCondvar", "Class type", NULL, 0},
+    {"OsBarrier", XLSP_SYM_CLASS, "type OsBarrier", "Class type", NULL, 0},
+    {"OsOnce", XLSP_SYM_CLASS, "type OsOnce", "Class type", NULL, 0},
     {"Signal", XLSP_SYM_CLASS, "type Signal", "Enum type", NULL, 0},
     {"Pipe", XLSP_SYM_CLASS, "type Pipe", "Class type", NULL, 0},
     {"ProcessOptions", XLSP_SYM_CLASS, "type ProcessOptions", "Class type", NULL, 0},
@@ -602,7 +609,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {
 
 // time module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
-    {"sleep", XLSP_SYM_FUNCTION, "fn(ms: i64): ()", "Sleep for milliseconds", NULL, 0},
     {"now", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"clock", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"monotonic", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
@@ -610,6 +616,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_time_symbols[] = {
     {"nanos", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
     {"localOffsetAt", XLSP_SYM_FUNCTION, "fn(timestamp: i64): i64", "", NULL, 0},
     {"localOffset", XLSP_SYM_FUNCTION, "fn(): i64", "", NULL, 0},
+    {"sleep", XLSP_SYM_FUNCTION, "fn(ms: i64): ()", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_TIME_SYMBOL_COUNT 8
 
