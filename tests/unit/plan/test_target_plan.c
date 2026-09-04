@@ -37,6 +37,7 @@
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/plan/target/xr_target_instruction_verify.h"
+#include "../../../src/plan/target/xr_target_program_reachability.h"
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/aot/emit_c/xr_c_emission_rule_ids_gen.h"
 #include "../../../src/runtime/class/xclass_info.h"
@@ -10365,7 +10366,81 @@ static void test_owned_string_coroutine_lifecycle_authority(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_program_reachability_excludes_dead_imported_body(void) {
+    XrSemanticFunctionRecord dependency_functions[3] = {
+        {.is_module_initializer = 1},
+        {0},
+        {0},
+    };
+    XrSemanticSourceExportRecord dependency_exports[1] = {
+        {.function = 1, .kind = XR_SEM_SOURCE_EXPORT_FUNCTION},
+    };
+    XrSemanticEntityRecord dependency_entities[1] = {
+        {.id = {{0x11}}, .kind = XR_SEM_ENTITY_MODULE},
+    };
+    XrSemanticPlan dependency = {
+        .fingerprint = {{0x22}},
+        .functions = dependency_functions,
+        .function_count = 3,
+        .source_exports = dependency_exports,
+        .source_export_count = 1,
+        .entities = dependency_entities,
+        .entity_count = 1,
+    };
+
+    XrSemanticFunctionRecord entry_functions[1] = {
+        {.is_module_initializer = 1},
+    };
+    XrSemanticOperationRecord entry_operations[1] = {
+        {.function = 0, .opcode = XI_CALL},
+    };
+    XrSemanticCallTargetRecord entry_targets[1] = {
+        {
+            .operation = 0,
+            .dependency = 0,
+            .source_export = 0,
+            .kind = XR_SEM_CALL_TARGET_SOURCE_EXPORT,
+        },
+    };
+    XrSemanticDependencyRecord entry_dependencies[1] = {
+        {
+            .module = {{0x11}},
+            .semantic_fingerprint = {{0x22}},
+        },
+    };
+    XrSemanticEntityRecord entry_entities[1] = {
+        {.id = {{0x33}}, .kind = XR_SEM_ENTITY_MODULE},
+    };
+    XrSemanticPlan entry = {
+        .functions = entry_functions,
+        .function_count = 1,
+        .operations = entry_operations,
+        .operation_count = 1,
+        .call_targets = entry_targets,
+        .call_target_count = 1,
+        .dependencies = entry_dependencies,
+        .dependency_count = 1,
+        .entities = entry_entities,
+        .entity_count = 1,
+    };
+    const XrSemanticPlan *modules[2] = {&dependency, &entry};
+    XrTargetProgramReachability reachability = {0};
+    char error[256] = {0};
+
+    REQUIRE(xr_target_program_reachability_build(modules, 2, &reachability, error, sizeof(error)));
+    REQUIRE(xr_target_program_function_is_reachable(&reachability, 0, 0));
+    REQUIRE(xr_target_program_function_is_reachable(&reachability, 0, 1));
+    REQUIRE(!xr_target_program_function_is_reachable(&reachability, 0, 2));
+    REQUIRE(xr_target_program_function_is_reachable(&reachability, 1, 0));
+    xr_target_program_reachability_dispose(&reachability);
+}
+
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "program-reachability") == 0) {
+        test_program_reachability_excludes_dead_imported_body();
+        puts("TargetPlan program reachability tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "native-target-leaf-authority") == 0) {
         test_native_target_leaf_scalar_authority();
         puts("Native target leaf authority tests passed");

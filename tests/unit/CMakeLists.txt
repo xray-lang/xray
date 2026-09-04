@@ -688,6 +688,10 @@ set_tests_properties(test_xr_program_aot_providers PROPERTIES
     TIMEOUT 120)
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_test(NAME test_target_program_reachability
+    COMMAND $<TARGET_FILE:test_target_plan> program-reachability)
+set_tests_properties(test_target_program_reachability PROPERTIES
+    LABELS "target-machine;aot;typed-plan;reachability")
 add_test(NAME test_target_native_target_leaf_authority
     COMMAND $<TARGET_FILE:test_target_plan> native-target-leaf-authority)
 set_tests_properties(test_target_native_target_leaf_authority PROPERTIES

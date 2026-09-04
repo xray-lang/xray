@@ -21,6 +21,7 @@
 #include "xr_target_entry_abi.h"
 #include "xr_target_plan_internal.h"
 #include "xr_target_profile_internal.h"
+#include "xr_target_program_reachability.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
@@ -6101,6 +6102,7 @@ static bool overflow_predicate_covers_call_operation(const XrTargetPlan *plan,
 }
 
 static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetPartitionView *view,
+                                   const XrTargetProgramReachability *program_reachability,
                                    char *error, size_t error_size) {
     const XrSemanticPlan *semantic = view ? view->semantic : NULL;
     if (!plan || !semantic)
@@ -6147,7 +6149,18 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         return report(error, error_size, "XR_EXEC_5003", "call verifier allocation failed");
     }
     bool valid = true;
-    uint32_t expected_calls = semantic_targets;
+    uint32_t expected_calls = 0u;
+    for (uint32_t target_index = 0; target_index < semantic_targets; target_index++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(semantic, target_index);
+        const XrSemanticOperationRecord *operation =
+            target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+        if (operation &&
+            (!program_reachability ||
+             xr_target_program_function_is_reachable(
+                 program_reachability, view->range.semantic_module, operation->function)))
+            expected_calls++;
+    }
     uint32_t semantic_entities = (uint32_t) xr_semantic_plan_entity_count(semantic);
     for (uint32_t i = 0; valid && i < semantic_entities; i++) {
         const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(semantic, i);
@@ -6174,6 +6187,10 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             suspendable[operation->function] = 1;
             queue[queue_end++] = operation->function;
         }
+        if (program_reachability &&
+            !xr_target_program_function_is_reachable(
+                program_reachability, view->range.semantic_module, operation->function))
+            continue;
         if (operation_is_exact_channel_close(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
@@ -6382,6 +6399,10 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             target && target->operation < semantic_operations
                 ? xr_semantic_plan_operation(semantic, target->operation)
                 : NULL;
+        if (operation && program_reachability &&
+            !xr_target_program_function_is_reachable(
+                program_reachability, view->range.semantic_module, operation->function))
+            continue;
         bool direct = target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
                                  xr_semantic_call_target_binds_instance_method(
                                      target, semantic, dependencies, dependency_count));
@@ -6446,6 +6467,13 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                             : NULL;
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(semantic, call->semantic_operation);
+        if (!operation ||
+            (program_reachability &&
+             !xr_target_program_function_is_reachable(
+                 program_reachability, view->range.semantic_module, operation->function))) {
+            valid = false;
+            break;
+        }
         bool direct = target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
                                  xr_semantic_call_target_binds_instance_method(
                                      target, semantic, dependencies, dependency_count));
@@ -8324,6 +8352,10 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
     }
     for (uint32_t i = 0; valid && i < semantic_operations; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
+        if (operation && program_reachability &&
+            !xr_target_program_function_is_reachable(
+                program_reachability, view->range.semantic_module, operation->function))
+            continue;
         if (operation_is_call_shaped(semantic, operation) && !covered[i] &&
             !overflow_predicate_covers_call_operation(plan, view, i)) {
             valid = false;
@@ -8342,13 +8374,26 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
 }
 
 static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_size) {
+    XrTargetProgramReachability reachability = {0};
+    const XrTargetProgramReachability *program_reachability = NULL;
+    if (plan && plan->module_partitions_count && !plan->program_graphs_count) {
+        if (!xr_target_program_reachability_build(
+                (const XrSemanticPlan *const *) plan->semantic_modules, plan->semantic_module_count,
+                &reachability, error, error_size))
+            return false;
+        program_reachability = &reachability;
+    }
+    bool valid = true;
     for (uint32_t partition = 0; partition < verifier_partition_count(plan); partition++) {
         XrTargetPartitionView view;
         if (!verifier_partition_view(plan, partition, &view) ||
-            !verify_calls_partition(plan, &view, error, error_size))
-            return false;
+            !verify_calls_partition(plan, &view, program_reachability, error, error_size)) {
+            valid = false;
+            break;
+        }
     }
-    return true;
+    xr_target_program_reachability_dispose(&reachability);
+    return valid;
 }
 
 /* Equal scalar geometry does not admit an architecture by itself. This

@@ -25,6 +25,7 @@
 #include "../semantic/xr_semantic_enum_shape.h"
 #include "../semantic/xr_semantic_range_slice_shape.h"
 #include "xr_target_profile_internal.h"
+#include "xr_target_program_reachability.h"
 #include "../../base/xmalloc.h"
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../ir/xi.h"
@@ -277,6 +278,8 @@ struct XrTargetPlanBuilder {
     XrSemanticPlan *semantic_plan;
     XrSemanticPlan **semantic_dependencies;
     uint32_t semantic_dependency_count;
+    const XrTargetProgramReachability *program_reachability;
+    uint32_t program_module;
     XrTargetProfile *profile;
     XrTargetRepIntent *rep_intents;
     uint32_t rep_intent_count;
@@ -892,6 +895,13 @@ static bool private_leaf_program_excludes_function(const XrTargetPlanBuilder *bu
                XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_SCALAR_PRIVATE_LEAF_CALL &&
            function && !function->is_module_initializer &&
            !xr_semantic_plan_program_function_for_semantic_function(semantic, semantic_function);
+}
+
+static bool program_module_set_excludes_function(const XrTargetPlanBuilder *builder,
+                                                 uint32_t semantic_function) {
+    return builder && builder->program_reachability &&
+           !xr_target_program_function_is_reachable(builder->program_reachability,
+                                                    builder->program_module, semantic_function);
 }
 
 static bool private_leaf_program_compile_time_callee_value(const XrSemanticPlan *semantic,
@@ -11590,6 +11600,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         if (private_leaf_program && operation &&
             !xr_semantic_plan_program_function_for_semantic_function(plan, operation->function))
             continue;
+        if (operation && program_module_set_excludes_function(builder, operation->function))
+            continue;
         bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
@@ -11742,6 +11754,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
         if (private_leaf_program && operation &&
             !xr_semantic_plan_program_function_for_semantic_function(plan, operation->function))
+            continue;
+        if (operation && program_module_set_excludes_function(builder, operation->function))
             continue;
         uint32_t target_index = target_by_operation[i];
         if (target_index != XR_SEMANTIC_INDEX_NONE) {
@@ -16596,13 +16610,16 @@ typedef struct XrProgramGraphModuleDraft {
 static bool build_program_graph_module(const XrSemanticPlan *semantic,
                                        const XrSemanticPlan *const *dependencies,
                                        uint32_t dependency_count, XrTargetProfile *profile,
-                                       XrTargetMaterializedPlan *out, char *error,
-                                       size_t error_size) {
+                                       const XrTargetProgramReachability *program_reachability,
+                                       uint32_t program_module, XrTargetMaterializedPlan *out,
+                                       char *error, size_t error_size) {
     XrTargetPlanBuilder *builder = NULL;
     memset(out, 0, sizeof(*out));
     if (!builder_new(semantic, profile, dependencies, dependency_count, true, &builder, error,
                      error_size))
         return false;
+    builder->program_reachability = program_reachability;
+    builder->program_module = program_module;
     bool built = builder_collect_families(builder, error, error_size) &&
                  builder_materialize(builder, out, error, error_size);
     builder_free(builder);
@@ -17254,13 +17271,12 @@ bool xr_target_plan_build_program_graph(const XrSemanticPlan *const *semantic_mo
         return fail(error, error_size, "XR_TARGET_1000",
                     "program graph local dependency vectors are not exact");
     }
-    bool built =
-        build_program_graph_module(entry, entry_dependencies, entry_dependency_count, profile,
-                                   &modules[entry_program->program_module_row].target, error,
-                                   error_size) &&
-        build_program_graph_module(producer, producer_dependencies, producer_dependency_count,
-                                   profile, &modules[producer_program->program_module_row].target,
-                                   error, error_size);
+    bool built = build_program_graph_module(
+                     entry, entry_dependencies, entry_dependency_count, profile, NULL, 0u,
+                     &modules[entry_program->program_module_row].target, error, error_size) &&
+                 build_program_graph_module(
+                     producer, producer_dependencies, producer_dependency_count, profile, NULL, 0u,
+                     &modules[producer_program->program_module_row].target, error, error_size);
     if (!built)
         goto done;
     /* The per-module entry expectation is the unresolved form of this exact
@@ -17684,6 +17700,10 @@ bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *module
         return fail(error, error_size, "XR_TARGET_1000",
                     "target module set entry module is missing or ambiguous");
 
+    XrTargetProgramReachability reachability = {0};
+    if (!xr_target_program_reachability_build(modules, module_count, &reachability, error,
+                                              error_size))
+        return false;
     XrTargetMaterializedPlan *materialized =
         (XrTargetMaterializedPlan *) xr_calloc(module_count, sizeof(*materialized));
     XrTargetModulePartitionRecord *partitions =
@@ -17695,6 +17715,7 @@ bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *module
         xr_free(materialized);
         xr_free(partitions);
         xr_free(rep_maps);
+        xr_target_program_reachability_dispose(&reachability);
         return fail(error, error_size, "XR_EXEC_5003",
                     "target module set builder allocation failed");
     }
@@ -17708,7 +17729,8 @@ bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *module
         built = xr_target_semantic_program_module_direct_dependencies(
             modules, module_count, row, &dependencies, &dependency_count, error, error_size);
         built = built && build_program_graph_module(modules[row], dependencies, dependency_count,
-                                                    profile, &materialized[row], error, error_size);
+                                                    profile, &reachability, row, &materialized[row],
+                                                    error, error_size);
         if (built && row == entry_row) {
             entry_dependencies = dependencies;
             entry_dependency_count = dependency_count;
@@ -17807,6 +17829,7 @@ bool xr_target_plan_build_program_module_set(const XrSemanticPlan *const *module
     xr_free(partitions);
     xr_free(rep_maps);
     xr_free(entry_dependencies);
+    xr_target_program_reachability_dispose(&reachability);
     return built;
 }
 
