@@ -26,7 +26,7 @@
  */
 
 #include "cluster_internal.h"
-#include "../../stdlib/net/io.h"
+#include "../../src/io/xnet_transport.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xcoroutine.h"

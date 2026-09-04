@@ -25,8 +25,8 @@
 #include "../../src/coro/xchannel.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/runtime/value/xvalue.h"
-#include "../../stdlib/net/io.h"
-#include "../../stdlib/net/tls.h"
+#include "../../src/io/xnet_transport.h"
+#include "../../src/io/xtls_provider.h"
 
 #include <stddef.h>
 #include <stdint.h>

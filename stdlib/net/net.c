@@ -22,8 +22,8 @@
 
 #include "../../src/base/xmalloc.h"
 #include "../common.h"
-#include "io.h"
-#include "tls.h"
+#include "../../src/io/xnet_transport.h"
+#include "../../src/io/xtls_provider.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/io/xdns.h"
 #include "../../src/io/xnet_handle.h"

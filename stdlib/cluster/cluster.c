@@ -16,7 +16,7 @@
 #include "cluster_internal.h"
 #include "../../stdlib/common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe
-#include "../../stdlib/net/io.h"
+#include "../../src/io/xnet_transport.h"
 #include "../../src/runtime/object/xbuffer.h"
 #include "../../src/module/xstdlib_runtime_cache.h"
 #include "../../src/runtime/xisolate_internal.h"

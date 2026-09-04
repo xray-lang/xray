@@ -23,7 +23,7 @@
 #include "../runtime/mem/xsystem_heap.h"
 
 #ifdef XR_ENABLE_TLS
-#include "../../stdlib/net/tls.h"
+#include "xtls_provider.h"
 #endif
 
 /* ========== Allocation helpers ========== */

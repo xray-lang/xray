@@ -5,16 +5,16 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * tls.h - TLS/SSL support layer
+ * xtls_provider.h - TLS/SSL provider interface
  *
  * KEY CONCEPT:
  *   OpenSSL-based TLS support providing client/server connections,
  *   certificate verification, SNI, and ALPN negotiation.
  */
-#ifndef XR_STDLIB_TLS_H
-#define XR_STDLIB_TLS_H
+#ifndef XR_IO_XTLS_PROVIDER_H
+#define XR_IO_XTLS_PROVIDER_H
 
-#include "../../src/base/xdefs.h"
+#include "../base/xdefs.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -26,7 +26,7 @@ typedef struct XrTlsContext XrTlsContext;
 typedef struct XrTlsConn XrTlsConn;
 
 // TLS error codes — aliases into unified XrNetError
-#include "xneterror.h"
+#include "../../stdlib/net/xneterror.h"
 typedef XrNetError XrTlsError;
 #define XR_TLS_OK XR_NERR_OK
 #define XR_TLS_ERR_INIT XR_NERR_TLS_INIT
@@ -130,4 +130,4 @@ XR_FUNC void xr_tls_conn_close(XrTlsConn *conn);
 // Get the error description
 XR_FUNC const char *xr_tls_error_string(XrTlsError err);
 
-#endif  // XR_STDLIB_TLS_H
+#endif  // XR_IO_XTLS_PROVIDER_H

@@ -92,7 +92,7 @@ XR_FUNC int xr_socket_wait_readable(struct XrVMRuntime *X, int fd, int timeout_m
  * After an EINPROGRESS connect(), a writable event on the socket
  * signals the connection has either succeeded (check SO_ERROR == 0)
  * or failed with a specific errno. Same pattern is used inside
- * stdlib/net/io.c's xr_io_connect for the cluster path.
+ * src/io/xnet_transport.c's xr_io_connect for the cluster path.
  *
  * Return codes mirror the reader variant:
  *   > 0 — fd is writable (caller should check SO_ERROR / proceed)

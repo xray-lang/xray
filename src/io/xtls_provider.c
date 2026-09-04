@@ -5,15 +5,15 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * tls.c - TLS/SSL support layer implementation
+ * xtls_provider.c - TLS/SSL provider implementation
  *
  * KEY CONCEPT:
  *   OpenSSL-based TLS with coroutine-friendly I/O integration.
  *   Supports SNI, ALPN, certificate verification.
  */
 
-#include "../../src/base/xmalloc.h"
-#include "tls.h"
+#include "../base/xmalloc.h"
+#include "xtls_provider.h"
 
 #ifdef XR_ENABLE_TLS
 

@@ -15,8 +15,8 @@
 #include "../base/xmalloc.h"
 #include "../module/xstdlib_runtime_cache.h"
 #include "../os/os_thread.h"
-#include "../../stdlib/net/io.h"
-#include "../../stdlib/net/tls.h"
+#include "xnet_transport.h"
+#include "xtls_provider.h"
 
 #define XR_H2_MAX_SLOTS 4096
 

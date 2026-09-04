@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * io.c - Coroutine-friendly I/O layer (script-binding side)
+ * xnet_transport.c - Coroutine-friendly network transport provider
  *
  * KEY CONCEPT:
  *   netpoll, async pool and DNS cache are owned by XrRuntime
@@ -20,14 +20,14 @@
  *   pinned IO semantics to thread layout.
  */
 
-#include "../../src/base/xmalloc.h"
-#include "../../src/base/xchecks.h"
-#include "../../src/os/os_time.h"
-#include "io.h"
-#include "../../src/io/xdns.h"
-#include "../../src/coro/xworker.h"
-#include "../../src/runtime/xisolate_internal.h"
-#include "../../src/os/os_net.h"
+#include "../base/xmalloc.h"
+#include "../base/xchecks.h"
+#include "../os/os_time.h"
+#include "xnet_transport.h"
+#include "xdns.h"
+#include "../coro/xworker.h"
+#include "../runtime/xisolate_internal.h"
+#include "../os/os_net.h"
 #include <stdlib.h>
 #include <string.h>
 

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * io.h - Coroutine-friendly I/O layer (script-binding side)
+ * xnet_transport.h - Coroutine-friendly network transport provider
  *
  * KEY CONCEPT:
  *   This layer wraps platform sockets + netpoll into a single XrIOConn
@@ -21,18 +21,18 @@
  *   and removes the thread-local that hid lifetime bugs.
  */
 
-#ifndef XR_STDLIB_NET_IO_H
-#define XR_STDLIB_NET_IO_H
+#ifndef XR_IO_XNET_TRANSPORT_H
+#define XR_IO_XNET_TRANSPORT_H
 
-#include "../../src/base/xdefs.h"
-#include "tls.h"
-#include "xneterror.h"
-#include "../../src/coro/xnetpoll.h"
+#include "../base/xdefs.h"
+#include "xtls_provider.h"
+#include "../../stdlib/net/xneterror.h"
+#include "../coro/xnetpoll.h"
 #include <stddef.h>
 #include <stdbool.h>
 // os_net.h provides struct iovec and writev on all platforms
 // (POSIX: re-exports <sys/uio.h>; Windows: WSASend-based shim).
-#include "../../src/os/os_net.h"
+#include "../os/os_net.h"
 
 struct XrVMRuntime;
 
@@ -107,4 +107,4 @@ XR_FUNC XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_
 XR_FUNC void xr_io_set_timeout(XrIOConn *conn, int timeout_ms);
 XR_FUNC int xr_io_set_nonblocking(int fd);
 
-#endif  // XR_STDLIB_NET_IO_H
+#endif  // XR_IO_XNET_TRANSPORT_H
