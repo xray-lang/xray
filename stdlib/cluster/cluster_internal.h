@@ -252,8 +252,35 @@ void cluster_health_tick(XrCluster *cluster, const uint8_t *heartbeat_wire,
 
 #define XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX (1024u * 1024u)
 
-XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster, uint64_t excluded_generation,
-                                              const uint8_t *wire, uint32_t wire_length);
+/* The source layer supplies a complete, validated wire frame and decides
+ * whether one peer generation is excluded. The native projection owns only
+ * the locked peer walk and each synchronized queue admission result, so it
+ * stays beside the node and queue representations that give those operations
+ * meaning instead of exposing another transport-policy boundary. */
+static inline XrClusterDelivery cluster_transport_broadcast(XrCluster *cluster,
+                                                            uint64_t excluded_generation,
+                                                            const uint8_t *wire,
+                                                            uint32_t wire_length) {
+    if (!cluster || !wire || wire_length == 0)
+        return XR_CLUSTER_DELIVERY_UNAVAILABLE;
+    int connected = 0;
+    int accepted = 0;
+    xr_amutex_lock(&cluster->nodes_lock);
+    for (XrClusterNode *node = cluster->nodes; node; node = node->next) {
+        if ((excluded_generation != 0 && node->generation_token == excluded_generation) ||
+            node->state != XR_NODE_CONNECTED)
+            continue;
+        connected++;
+        if (xr_cluster_output_queue_push_copy(node->outq, wire, wire_length) == 0)
+            accepted++;
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+    if (accepted > 0)
+        return XR_CLUSTER_DELIVERY_ACCEPTED;
+    if (connected > 0)
+        return XR_CLUSTER_DELIVERY_OVERLOADED;
+    return XR_CLUSTER_DELIVERY_DISCONNECTED;
+}
 
 /* ========== Remote Coroutine Monitoring ========== */
 
