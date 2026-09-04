@@ -21,6 +21,7 @@
 #ifndef XR_CLUSTER_INTERNAL_H
 #define XR_CLUSTER_INTERNAL_H
 
+#include "../../src/base/xchecks.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xcluster_output_queue.h"
@@ -189,57 +190,60 @@ typedef struct XrCluster {
     XrTlsContext *tls_server_ctx;
 } XrCluster;
 
-/* ========== Cluster Lifecycle API ========== */
+/* ========== Opaque Provider Resource Primitives ========== */
 
-/*
- * TLS options for the native cluster runtime provider.
- *
- *   enabled          — master switch. When false the other fields are
- *                      ignored and the cluster reverts to plain TCP.
- *
- *   ca_file          — path to a PEM bundle used to verify peer
- *                      certificates. Pass NULL to fall back on the
- *                      system trust store (TLS contexts are created
- *                      with SSL_CTX_set_default_verify_paths by
- *                      default). If the path ends in '/' it is
- *                      interpreted as a directory (OpenSSL CApath).
- *
- *   cert_file,
- *   key_file         — optional server certificate and private key in
- *                      PEM format. Supplying both enables mTLS /
- *                      inbound TLS accept. Leaving them NULL builds a
- *                      client-only cluster (still useful: outgoing
- *                      join traffic is encrypted).
- *
- *   insecure         — disable peer certificate verification. Set true
- *                      only for development / self-signed sandboxes.
- *                      This is a loaded footgun in production and
- *                      should be logged by callers.
- *
- * All string pointers are borrowed for the duration of the call; the
- * contents are copied into OpenSSL contexts owned by the native runtime.
- */
-typedef struct XrClusterTlsOptions {
-    bool enabled;
-    const char *ca_file;
-    const char *cert_file;
-    const char *key_file;
-    bool insecure;
-} XrClusterTlsOptions;
+/* Transport coroutines retain the provider runtime independently of the
+ * source-owned start/stop generation. The last transport reference reclaims
+ * only opaque registries and TLS contexts; source policy never enters this
+ * primitive. */
+static inline void cluster_runtime_retain(XrCluster *cluster) {
+    if (cluster)
+        atomic_fetch_add(&cluster->ref_count, 1);
+}
 
-void cluster_runtime_retain(XrCluster *c);
-void cluster_runtime_release(XrCluster *c);
+static inline void cluster_runtime_release(XrCluster *cluster) {
+    if (!cluster)
+        return;
+    uint32_t previous = atomic_fetch_sub(&cluster->ref_count, 1);
+    XR_DCHECK(previous > 0, "cluster reference underflow");
+    if (previous != 1)
+        return;
 
-/* ========== Node Query API ========== */
+    XR_DCHECK(cluster->nodes == NULL, "cluster release requires a detached node list");
+    XR_DCHECK(cluster->listener == NULL, "cluster release requires a detached listener");
+    xr_topic_registry_destroy(cluster->topics);
+    xr_monitor_registry_destroy(cluster->monitors);
+    xr_tombstone_registry_destroy(cluster->tombstones);
+    if (cluster->tls_client_ctx)
+        xr_tls_context_free(cluster->tls_client_ctx);
+    if (cluster->tls_server_ctx)
+        xr_tls_context_free(cluster->tls_server_ctx);
+    xr_free(cluster);
+}
 
-// Find a node by name and return a retained reference. Caller releases it.
-XrClusterNode *cluster_node_find(XrCluster *c, const char *name);
+/* A provider callback may race source stop or another terminal callback. The
+ * pointer match is the whole operation: policy selected the generation before
+ * reaching this locked primitive. */
+static inline bool cluster_node_remove(XrCluster *cluster, XrClusterNode *node) {
+    if (!cluster || !node)
+        return false;
 
-// Transfer the caller's node reference into the live-node list.
-bool cluster_node_add(XrCluster *c, XrClusterNode *node);
-
-// Detach the list-owned reference. The caller releases it when true.
-bool cluster_node_remove(XrCluster *c, XrClusterNode *node);
+    bool removed = false;
+    xr_amutex_lock(&cluster->nodes_lock);
+    XrClusterNode **link = &cluster->nodes;
+    while (*link) {
+        if (*link == node) {
+            *link = node->next;
+            node->next = NULL;
+            cluster->node_count--;
+            removed = true;
+            break;
+        }
+        link = &(*link)->next;
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+    return removed;
+}
 
 /* ========== Health & Robustness ========== */
 

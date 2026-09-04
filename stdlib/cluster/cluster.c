@@ -35,249 +35,6 @@
 #include <string.h>
 #include <limits.h>
 
-/* ========== Cluster Lifecycle ========== */
-
-/*
- * Build the per-cluster TLS contexts from XrClusterTlsOptions.
- * Returns 0 on success. On failure any partially-allocated contexts are
- * freed and the corresponding XrCluster fields are left NULL.
- *
- * We keep the helper private to cluster.c because the resulting contexts
- * are owned by XrCluster; exposing creation would invite double-free
- * foot-guns from embedders. Callers get policy via XrClusterTlsOptions
- * instead of raw SSL_CTX * handles.
- */
-static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
-    // Client context backs the source-owned outbound join handshake.
-    XrTlsContext *client_ctx = xr_tls_context_new_client();
-    if (!client_ctx)
-        return -1;
-
-    if (opts->ca_file) {
-        if (xr_tls_context_load_ca(client_ctx, opts->ca_file) != 0) {
-            xr_tls_context_free(client_ctx);
-            return -1;
-        }
-    }
-    if (opts->insecure) {
-        // Disable peer verification. Noisy on purpose — a failing mutual
-        // auth rollout should be visible in the startup logs of every
-        // affected node rather than silently downgrade.
-        xr_tls_context_set_verify(client_ctx, false);
-    }
-    c->tls_client_ctx = client_ctx;
-
-    // Server context is optional: only builds when cert+key supplied. Source
-    // observes readiness before starting its accept loop, so an outbound-only
-    // TLS node never silently downgrades inbound traffic.
-    if (opts->cert_file && opts->key_file) {
-        XrTlsContext *server_ctx = xr_tls_context_new_server(opts->cert_file, opts->key_file);
-        if (!server_ctx) {
-            xr_tls_context_free(client_ctx);
-            c->tls_client_ctx = NULL;
-            return -1;
-        }
-        // A server context that also verifies the peer cert yields
-        // mutual TLS. Cluster's threat model makes peer-as-attacker
-        // plausible (one compromised node), so default to verify on.
-        if (!opts->insecure && opts->ca_file) {
-            xr_tls_context_load_ca(server_ctx, opts->ca_file);
-            xr_tls_context_set_verify(server_ctx, true);
-        }
-        c->tls_server_ctx = server_ctx;
-    }
-
-    c->tls_enabled = true;
-    return 0;
-}
-
-static int cluster_runtime_open(XrVMRuntime *X, const XrClusterTlsOptions *tls,
-                                size_t output_queue_high_watermark,
-                                uint32_t topic_delivery_fanout_max,
-                                int64_t tombstone_retention_ms) {
-    if (X->cluster)
-        return -1;  // already running
-
-    XrCluster *c = (XrCluster *) xr_calloc(1, sizeof(XrCluster));
-    if (!c)
-        return -1;
-
-    atomic_store(&c->ref_count, 1);
-    atomic_store(&c->stop_started, false);
-    atomic_store(&c->next_peer_generation, 1);
-    c->isolate = X;
-
-    // TLS contexts must exist before the source accept loop starts. Failure is
-    // fatal because an explicit TLS request must never become plaintext.
-    if (tls && tls->enabled) {
-        if (build_cluster_tls(c, tls) != 0) {
-            xr_free(c);
-            return -1;
-        }
-    }
-
-    xr_amutex_init(&c->nodes_lock);
-
-    c->topics = xr_topic_registry_new_vm(X, topic_delivery_fanout_max);
-    c->monitors = xr_monitor_registry_new();
-    c->tombstones = xr_tombstone_registry_new(16, tombstone_retention_ms);
-    if (!c->topics || !c->monitors || !c->tombstones) {
-        if (c->tls_client_ctx)
-            xr_tls_context_free(c->tls_client_ctx);
-        if (c->tls_server_ctx)
-            xr_tls_context_free(c->tls_server_ctx);
-        xr_topic_registry_destroy(c->topics);
-        xr_monitor_registry_destroy(c->monitors);
-        xr_tombstone_registry_destroy(c->tombstones);
-        xr_free(c);
-        return -1;
-    }
-
-    c->output_queue_high_watermark = output_queue_high_watermark;
-    atomic_store(&c->running, true);
-    X->cluster = c;
-    return 0;
-}
-
-void cluster_runtime_retain(XrCluster *c) {
-    XR_DCHECK(c != NULL, "cluster retain requires a runtime");
-    if (c)
-        atomic_fetch_add(&c->ref_count, 1);
-}
-
-static void cluster_runtime_destroy(XrCluster *c) {
-    XR_DCHECK(c != NULL, "cluster destroy requires a runtime");
-    XR_DCHECK(c->nodes == NULL, "cluster destroy requires a detached node list");
-    XR_DCHECK(c->listener == NULL, "cluster destroy requires a detached listener");
-
-    xr_topic_registry_destroy(c->topics);
-    c->topics = NULL;
-    xr_monitor_registry_destroy(c->monitors);
-    c->monitors = NULL;
-    xr_tombstone_registry_destroy(c->tombstones);
-    c->tombstones = NULL;
-
-    if (c->tls_client_ctx)
-        xr_tls_context_free(c->tls_client_ctx);
-    if (c->tls_server_ctx)
-        xr_tls_context_free(c->tls_server_ctx);
-    c->tls_client_ctx = NULL;
-    c->tls_server_ctx = NULL;
-    c->tls_enabled = false;
-
-    xr_free(c);
-}
-
-void cluster_runtime_release(XrCluster *c) {
-    if (!c)
-        return;
-    uint32_t previous = atomic_fetch_sub(&c->ref_count, 1);
-    XR_DCHECK(previous > 0, "cluster reference underflow");
-    if (previous == 1)
-        cluster_runtime_destroy(c);
-}
-
-static void cluster_runtime_close(XrCluster *c) {
-    if (!c)
-        return;
-    if (atomic_exchange(&c->stop_started, true))
-        return;
-
-    atomic_store(&c->running, false);
-    if (c->isolate && c->isolate->cluster == c)
-        c->isolate->cluster = NULL;
-
-    /* The source accept coroutine keeps this borrowed handle alive until it
-     * observes the stopped generation. Closing it here wakes the pending
-     * generic net.accept immediately; that coroutine owns the eventual drop. */
-    if (c->listener) {
-        xr_net_listener_close(c->listener);
-        c->listener = NULL;
-    }
-
-    /* Detach the list atomically, then close nodes without holding
-     * nodes_lock. Reader and writer coroutines own independent references;
-     * their final release performs destruction after they return. */
-    xr_amutex_lock(&c->nodes_lock);
-    XrClusterNode *node = c->nodes;
-    c->nodes = NULL;
-    c->node_count = 0;
-    xr_amutex_unlock(&c->nodes_lock);
-    while (node) {
-        XrClusterNode *next = node->next;
-        node->next = NULL;
-        cluster_node_shutdown(node);
-        cluster_node_release(node);
-        node = next;
-    }
-
-    /* Release the isolate-owned reference. Peer transport coroutines keep the
-     * runtime alive and the last one performs final destruction. */
-    cluster_runtime_release(c);
-}
-
-/* ========== Node Management ========== */
-
-XrClusterNode *cluster_node_find(XrCluster *c, const char *name) {
-    if (!c)
-        return NULL;
-    xr_amutex_lock(&c->nodes_lock);
-    XrClusterNode *node = c->nodes;
-    while (node) {
-        if (strcmp(node->name, name) == 0) {
-            cluster_node_retain(node);
-            xr_amutex_unlock(&c->nodes_lock);
-            return node;
-        }
-        node = node->next;
-    }
-    xr_amutex_unlock(&c->nodes_lock);
-    return NULL;
-}
-
-bool cluster_node_add(XrCluster *c, XrClusterNode *node) {
-    if (!c || !node)
-        return false;
-
-    xr_amutex_lock(&c->nodes_lock);
-    if (!atomic_load(&c->running)) {
-        xr_amutex_unlock(&c->nodes_lock);
-        return false;
-    }
-    for (XrClusterNode *existing = c->nodes; existing; existing = existing->next) {
-        if (strcmp(existing->name, node->name) == 0) {
-            xr_amutex_unlock(&c->nodes_lock);
-            return false;
-        }
-    }
-    node->next = c->nodes;
-    c->nodes = node;
-    c->node_count++;
-    xr_amutex_unlock(&c->nodes_lock);
-    return true;
-}
-
-bool cluster_node_remove(XrCluster *c, XrClusterNode *node) {
-    if (!c || !node)
-        return false;
-
-    bool removed = false;
-    xr_amutex_lock(&c->nodes_lock);
-    XrClusterNode **pp = &c->nodes;
-    while (*pp) {
-        if (*pp == node) {
-            *pp = node->next;
-            node->next = NULL;
-            c->node_count--;
-            removed = true;
-            break;
-        }
-        pp = &(*pp)->next;
-    }
-    xr_amutex_unlock(&c->nodes_lock);
-    return removed;
-}
-
 /* ========== xray Function Bindings ========== */
 
 static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -409,7 +166,27 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
     }
 
-    if (!cluster_node_add(cluster, node)) {
+    /* Source admitted the peer before transferring its socket. Publish that
+     * decision atomically so two concurrent handshakes cannot install the same
+     * name and stop cannot acquire a transport after detaching the list. */
+    bool published = false;
+    xr_amutex_lock(&cluster->nodes_lock);
+    if (atomic_load(&cluster->running)) {
+        published = true;
+        for (XrClusterNode *existing = cluster->nodes; existing; existing = existing->next) {
+            if (strcmp(existing->name, node->name) == 0) {
+                published = false;
+                break;
+            }
+        }
+        if (published) {
+            node->next = cluster->nodes;
+            cluster->nodes = node;
+            cluster->node_count++;
+        }
+    }
+    xr_amutex_unlock(&cluster->nodes_lock);
+    if (!published) {
         cluster_node_shutdown(node);
         cluster_node_release(node);
         return xr_bool(false);
@@ -433,24 +210,6 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         !XR_IS_INT(args[9]))
         return xr_bool(false);
 
-    XrClusterTlsOptions tls_opts;
-    memset(&tls_opts, 0, sizeof(tls_opts));
-    const XrClusterTlsOptions *tls_ptr = NULL;
-    if (XR_TO_BOOL(args[3])) {
-        XrString *ca_text = XR_TO_STRING(args[4]);
-        XrString *cert_text = XR_TO_STRING(args[5]);
-        XrString *key_text = XR_TO_STRING(args[6]);
-        const char *ca_file = ca_text->data;
-        const char *cert_file = cert_text->data;
-        const char *key_file = key_text->data;
-        tls_opts.enabled = true;
-        tls_opts.ca_file = ca_file[0] ? ca_file : NULL;
-        tls_opts.cert_file = cert_file[0] ? cert_file : NULL;
-        tls_opts.key_file = key_file[0] ? key_file : NULL;
-        tls_opts.insecure = XR_TO_BOOL(args[7]);
-        tls_ptr = &tls_opts;
-    }
-
     int64_t packed_limits_value = XR_TO_INT(args[8]);
     uint64_t packed_limits = packed_limits_value > 0 ? (uint64_t) packed_limits_value : 0;
     uint64_t output_queue_high_watermark = packed_limits >> 32;
@@ -459,16 +218,95 @@ static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) 
         topic_fanout_max == 0 || XR_TO_INT(args[9]) <= 0)
         return xr_bool(false);
 
-    int rc = cluster_runtime_open(X, tls_ptr, (size_t) output_queue_high_watermark,
-                                  topic_fanout_max, XR_TO_INT(args[9]));
-    return xr_bool(rc == 0);
+    /* Xray owns the validated configuration and start ordering. This leaf
+     * materializes only resources that source cannot represent: TLS contexts,
+     * locked registries and the isolate-local provider slot. */
+    if (X->cluster)
+        return xr_bool(false);
+    XrCluster *cluster = (XrCluster *) xr_calloc(1, sizeof(*cluster));
+    if (!cluster)
+        return xr_bool(false);
+    atomic_store(&cluster->ref_count, 1);
+    atomic_store(&cluster->stop_started, false);
+    atomic_store(&cluster->next_peer_generation, 1);
+    cluster->isolate = X;
+    xr_amutex_init(&cluster->nodes_lock);
+
+    if (XR_TO_BOOL(args[3])) {
+        const char *ca_file = XR_TO_STRING(args[4])->data;
+        const char *cert_file = XR_TO_STRING(args[5])->data;
+        const char *key_file = XR_TO_STRING(args[6])->data;
+        bool insecure = XR_TO_BOOL(args[7]);
+        cluster->tls_client_ctx = xr_tls_context_new_client();
+        if (!cluster->tls_client_ctx ||
+            (ca_file[0] && xr_tls_context_load_ca(cluster->tls_client_ctx, ca_file) != 0)) {
+            cluster_runtime_release(cluster);
+            return xr_bool(false);
+        }
+        if (insecure)
+            xr_tls_context_set_verify(cluster->tls_client_ctx, false);
+        if (cert_file[0] && key_file[0]) {
+            cluster->tls_server_ctx = xr_tls_context_new_server(cert_file, key_file);
+            if (!cluster->tls_server_ctx) {
+                cluster_runtime_release(cluster);
+                return xr_bool(false);
+            }
+            if (!insecure && ca_file[0]) {
+                (void) xr_tls_context_load_ca(cluster->tls_server_ctx, ca_file);
+                xr_tls_context_set_verify(cluster->tls_server_ctx, true);
+            }
+        }
+        cluster->tls_enabled = true;
+    }
+
+    cluster->topics = xr_topic_registry_new_vm(X, topic_fanout_max);
+    cluster->monitors = xr_monitor_registry_new();
+    cluster->tombstones = xr_tombstone_registry_new(16, XR_TO_INT(args[9]));
+    if (!cluster->topics || !cluster->monitors || !cluster->tombstones) {
+        cluster_runtime_release(cluster);
+        return xr_bool(false);
+    }
+    cluster->output_queue_high_watermark = (size_t) output_queue_high_watermark;
+    atomic_store(&cluster->running, true);
+    X->cluster = cluster;
+    return xr_bool(true);
 }
 
 // cluster.stop()
 static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
-    cluster_runtime_close((XrCluster *) X->cluster);
+    XrCluster *cluster = (XrCluster *) X->cluster;
+    if (!cluster || atomic_exchange(&cluster->stop_started, true))
+        return xr_null();
+
+    atomic_store(&cluster->running, false);
+    if (X->cluster == cluster)
+        X->cluster = NULL;
+
+    /* The source accept coroutine owns the listener. Closing the borrowed
+     * provider alias only wakes its pending accept; the coroutine drops the
+     * handle after observing the stopped generation. */
+    if (cluster->listener) {
+        xr_net_listener_close(cluster->listener);
+        cluster->listener = NULL;
+    }
+
+    xr_amutex_lock(&cluster->nodes_lock);
+    XrClusterNode *node = cluster->nodes;
+    cluster->nodes = NULL;
+    cluster->node_count = 0;
+    xr_amutex_unlock(&cluster->nodes_lock);
+    while (node) {
+        XrClusterNode *next = node->next;
+        node->next = NULL;
+        cluster_node_shutdown(node);
+        cluster_node_release(node);
+        node = next;
+    }
+
+    /* Transport coroutines retain independent provider references. */
+    cluster_runtime_release(cluster);
     return xr_null();
 }
 
@@ -658,11 +496,6 @@ static XrValue cluster_listen_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Cluster Info API ========== */
 
-static XrObjectInstance *cluster_object_new(XrVMRuntime *X, const char *name) {
-    XrClass *cls = xr_stdlib_record_class_get(X, "cluster", name);
-    return cls ? xr_object_instance_new_with_class(NULL, cls) : NULL;
-}
-
 static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -670,7 +503,11 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
     if (!c)
         return xr_null();
 
-    XrObjectInstance *info = cluster_object_new(X, "__ClusterRuntimeSnapshot");
+    XrClass *info_class = xr_stdlib_record_class_get(X, "cluster", "__ClusterRuntimeSnapshot");
+    XrClass *node_class = xr_stdlib_record_class_get(X, "cluster", "__ClusterNodeSnapshot");
+    if (!info_class || !node_class)
+        return xr_null();
+    XrObjectInstance *info = xr_object_instance_new_with_class(NULL, info_class);
     if (!info)
         return xr_null();
 
@@ -680,7 +517,7 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
         xr_amutex_lock(&c->nodes_lock);
         XrClusterNode *node = c->nodes;
         while (node) {
-            XrObjectInstance *nj = cluster_object_new(X, "__ClusterNodeSnapshot");
+            XrObjectInstance *nj = xr_object_instance_new_with_class(NULL, node_class);
             if (nj) {
                 XrString *nname = xr_string_intern(X, node->name, (uint32_t) strlen(node->name), 0);
                 xr_object_instance_set_by_key(X, nj, "name", xr_string_value(nname));
