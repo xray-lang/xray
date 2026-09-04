@@ -299,14 +299,14 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http2", "__close", "(handle: i64): ()", "Close an HTTP/2 connection and release its handle; stale handles are already closed", "h2_close", "normal", "", "", "v", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__start", "(tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool, outputQueueHighWatermark: i64): bool", "Open cluster TLS contexts and native peer provider state from source-normalized scalar configuration", "cluster_start_primitive", "normal", "", "", "vsssvv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 6, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__healthSnapshot", "(): Array<__ClusterHealthPeerSnapshot>?", "Snapshot locked raw peer health facts without applying heartbeat queue policy", "cluster_health_snapshot_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64, expectedMissedHeartbeats: i64, nextMissedHeartbeats: i64, disconnect: bool): string?", "Compare and apply one source-owned health decision, returning only the generation-safe detached peer name", "cluster_health_apply_fn", "normal", "", "", "vvvvv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 5, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__applyHealthDecision", "(peerGeneration: i64, expectedLastReceivedAtMs: i64): string?", "Generation-check and detach one source-declared unhealthy peer, returning only its owned name", "cluster_health_apply_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__joinTls", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote an outbound cluster socket with the cluster-specific TLS client context", "cluster_join_tls_fn", "yieldable", "", "", "vsv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__acceptTls", "(conn: NetConn, deadlineMs: i64): i64", "Promote an accepted cluster socket with the cluster-specific TLS server context", "cluster_accept_tls_fn", "yieldable", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool", "Transfer an authenticated socket into the locked cluster node registry and start generation-keyed source transport loops", "cluster_adopt_peer_fn", "normal", "", "", "vssvvvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_CHANNEL, 7, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__adoptPeer", "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, adoptedAtMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): i64", "Transfer an authenticated socket into the locked cluster node registry and return its generation, or zero on refusal", "cluster_adopt_peer_fn", "normal", "", "", "vssvvvvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_CHANNEL, 8, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__readPeer", "(peerGeneration: i64, maxFramePayload: i64, callback: fn(peerGeneration: i64, wire: Array<u8>?, reason: i64): ()): i64", "Start one owned peer read and deliver wire bytes or an orthogonal raw reason to the source callback", "cluster_peer_read_fn", "normal", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__writePeer", "(peerGeneration: i64, callback: fn(peerGeneration: i64, reason: i64): ()): i64", "Start one owned peer write and deliver an orthogonal raw queue, socket, provider or cancellation reason to the source callback", "cluster_peer_write_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__peerEnqueue", "(peerGeneration: i64, wire: Array<u8>): i64", "Return the raw accepted, full, stopped, resource or invalid result of one peer queue admission", "cluster_peer_enqueue_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__observeHeartbeat", "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool", "Project one source-decoded heartbeat onto locked raw peer receive facts", "cluster_observe_heartbeat_fn", "normal", "", "", "vvv", "value", "", "", "", "runtime", "", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__observeHeartbeat", "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool", "Generation-check one source-decoded heartbeat and update only raw last-receive and RTT facts", "cluster_observe_heartbeat_fn", "normal", "", "", "vvv", "value", "", "", "", "runtime", "", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__broadcast", "(excludedPeerGeneration: i64, wire: Array<u8>): __ClusterDeliveryStats?", "Return raw admission outcomes after one locked peer broadcast", "cluster_broadcast_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__peerName", "(peerGeneration: i64): string?", "Look up the connected peer name for one exact generation", "cluster_peer_name_fn", "normal", "", "", "v", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__peerGeneration", "(name: string): i64", "Look up the connected peer generation for one exact name", "cluster_peer_generation_fn", "normal", "", "", "s", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
@@ -335,7 +335,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
     {"cluster", "__ClusterNodeSnapshot", "outQueueBytes", "i64", true},
     {"cluster", "__ClusterNodeSnapshot", "outQueueFrames", "i64", true},
     {"cluster", "__ClusterNodeSnapshot", "slow", "bool", true},
-    {"cluster", "__ClusterNodeSnapshot", "missedHeartbeats", "i64", true},
     {"cluster", "__ClusterNodeSnapshot", "lastReceivedAtMs", "i64", true},
 };
 
@@ -346,7 +345,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterHealthPeerSnapshot[] = {
     {"cluster", "__ClusterHealthPeerSnapshot", "peerGeneration", "i64", true},
     {"cluster", "__ClusterHealthPeerSnapshot", "lastReceivedAtMs", "i64", true},
-    {"cluster", "__ClusterHealthPeerSnapshot", "missedHeartbeats", "i64", true},
 };
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterDeliveryStats[] = {
@@ -378,9 +376,9 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlo
 };
 
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
-    {"cluster", "__ClusterNodeSnapshot", "Private metrics and raw transport-health facts for one connected peer", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 16, true},
+    {"cluster", "__ClusterNodeSnapshot", "Private metrics and raw transport-health facts for one connected peer", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 15, true},
     {"cluster", "__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer state", xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot, 1, true},
-    {"cluster", "__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's raw transport-health facts", xr_stdlib_object_fields_cluster___ClusterHealthPeerSnapshot, 3, true},
+    {"cluster", "__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's raw transport-health facts", xr_stdlib_object_fields_cluster___ClusterHealthPeerSnapshot, 2, true},
     {"cluster", "__ClusterDeliveryStats", "Private raw admission outcomes from cluster channel and queue providers", xr_stdlib_object_fields_cluster___ClusterDeliveryStats, 4, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},

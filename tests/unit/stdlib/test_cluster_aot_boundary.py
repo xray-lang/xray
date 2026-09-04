@@ -66,11 +66,27 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         health_snapshot = cluster_c.split(
             "static XrValue cluster_health_snapshot_fn", 1
         )[1].split("static XrValue cluster_health_apply_fn", 1)[0]
+        health_apply = cluster_c.split(
+            "static XrValue cluster_health_apply_fn", 1
+        )[1].split("static XrCFuncResult cluster_join_tls_fn", 1)[0]
+        observe_heartbeat = cluster_c.split(
+            "static XrValue cluster_observe_heartbeat_fn", 1
+        )[1].split("static XrValue cluster_broadcast_fn", 1)[0]
 
         self.assertNotIn("XrPhiDetector", cluster_h)
         self.assertNotIn("last_heartbeat_sent", cluster_h)
+        self.assertNotIn("missed_heartbeats", cluster_h)
+        self.assertNotIn("missed_heartbeats", cluster_c)
         self.assertNotIn("xr_cluster_output_queue", health_snapshot)
+        self.assertNotIn("next_missed", health_apply)
+        self.assertNotIn("disconnect", health_apply)
+        self.assertNotIn("missed", observe_heartbeat)
+        self.assertIn("node->last_heartbeat_recv == expected_last_received", health_apply)
+        self.assertIn("node->last_heartbeat_recv = adopted_at_ms", cluster_c)
         self.assertIn("var _phiPeerStates: Array<_PhiPeerState>", cluster_xr)
+        self.assertIn("adoptedAtMs: i64", cluster_xr)
+        self.assertIn("missedHeartbeats: i64", cluster_xr)
+        self.assertIn("fn _advanceMissedHeartbeat", cluster_xr)
         self.assertIn("var peers = __healthSnapshot()", cluster_xr)
         self.assertIn(
             "_enqueueControlFrame(peer.peerGeneration, heartbeat!)", cluster_xr

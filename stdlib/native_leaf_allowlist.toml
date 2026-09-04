@@ -78,7 +78,7 @@ class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM copies one peer generation plus last-receive and missed-heartbeat counters under nodes_lock; cluster.xr joins them with source-owned detector state and computes removal decisions; there is no AOT binding"
+provider = "declaration only (stdlib/defs/core.def). The VM copies one peer generation plus its raw last-receive timestamp under nodes_lock; cluster.xr joins it with source-owned adopted-at, missed-heartbeat and detector state and computes removal decisions; there is no AOT binding"
 deletion_trigger = "when the locked peer table and raw transport-health facts can be enumerated as ordinary Xray-owned state without a native record class"
 
 [[leaf]]
@@ -125,10 +125,10 @@ deletion_trigger = "when a caller-supplied TLS server context is an ordinary Xra
 module = "cluster"
 symbol = "__adoptPeer"
 class = "runtime_leaf"
-abi = "none; transfers an opaque NetConn body into the synchronized cluster node registry and scheduler-owned reader and writer coroutines"
+abi = "none; transfers an opaque NetConn body into the synchronized cluster node registry and scheduler-owned reader and writer coroutines, returning its scalar generation or zero"
 ownership = "none"
 effect = "nothrow"
-provider = "the native NetConn representation, sole peer-resource factory, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it, together with source-owned reader and writer dispatchers"
+provider = "the native NetConn representation, sole peer-resource factory, locked cluster node table and coroutine scheduler (stdlib/cluster/cluster.c cluster_adopt_peer_fn). The socket reaches this leaf only after cluster.xr has authenticated and admitted it; source supplies the adoption timestamp and uses the returned generation to install health state before accepting the peer as live"
 deletion_trigger = "when the live cluster node registry, output queue and transport coroutine lifecycle are expressible as Xray-owned module state"
 
 [[leaf]]
@@ -165,10 +165,10 @@ deletion_trigger = "when the peer socket and output queue are ordinary Xray-owne
 module = "cluster"
 symbol = "__observeHeartbeat"
 class = "runtime_leaf"
-abi = "none; updates the selected peer's raw last-receive, missed-heartbeat and RTT facts under the registry lock"
+abi = "none; updates the selected peer's raw last-receive and RTT facts under the registry lock"
 ownership = "none"
 effect = "nothrow"
-provider = "the locked native peer registry only. cluster.xr owns decoding, observation timing, the generation-keyed PhiDetector registry and every detector update"
+provider = "the locked native peer registry only. cluster.xr owns decoding, observation timing, adopted-at and missed-heartbeat state, the generation-keyed PhiDetector registry and every detector update"
 deletion_trigger = "when the peer transport-health facts are ordinary synchronized Xray state"
 
 [[leaf]]
@@ -235,10 +235,10 @@ deletion_trigger = "when peer transport-health facts are Xray-owned values"
 module = "cluster"
 symbol = "__applyHealthDecision"
 class = "runtime_leaf"
-abi = "none; compare-and-apply against one locked peer generation and its observed health state"
+abi = "none; compare one locked peer generation and raw last-receive timestamp, then detach on an exact match"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the VM cluster peer registry. cluster.xr supplies the exact observed generation and state, next counter and removal decision; stale decisions are rejected and a successful detach returns an owned peer name for source-owned recent-departure and monitor notification policy"
+provider = "the VM cluster peer registry. cluster.xr owns adopted-at and missed-heartbeat state and supplies the exact observed generation and last-receive timestamp only after deciding removal; stale decisions are rejected and a successful detach returns an owned peer name for source-owned recent-departure and monitor notification policy"
 deletion_trigger = "when peer transport state is Xray-owned"
 
 [[leaf]]

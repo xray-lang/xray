@@ -85,7 +85,6 @@ typedef struct XrClusterNode {
     XrIOConn *conn;
     int64_t last_heartbeat_recv;
     uint32_t flags;
-    uint32_t missed_heartbeats;
     uint64_t generation_token;
 
     XrClusterOutputQueue *outq;

@@ -205,11 +205,15 @@ type _NodeDownMonitors = {
 type _PhiPeerState = {
     runtimeToken: i64,
     peerGeneration: i64,
+    adoptedAtMs: i64,
+    missedHeartbeats: i64,
     detector: PhiDetector,
 }
 
 type _PhiPeerSnapshot = {
     recorded: bool,
+    adoptedAtMs: i64,
+    missedHeartbeats: i64,
     samples: i64,
     mean: f64,
     variance: f64,
@@ -745,7 +749,8 @@ fn _readU64(src: Array<u8>, pos: i64) -> u64 {
 }
 
 fn _validFrameKind(kind: i64) -> bool {
-    return kind >= FRAME_HANDSHAKE_REQ && kind <= FRAME_CORO_EXIT
+    return (kind >= FRAME_HANDSHAKE_REQ && kind <= FRAME_CORO_MONITOR) ||
+           kind == FRAME_CORO_EXIT
 }
 
 fn _validFlags(flags: i64) -> bool { return flags >= 0 && flags <= 4294967295 }
@@ -1138,10 +1143,54 @@ fn _removePhiPeerState(runtimeToken: i64, peerGeneration: i64) {
     _phiStateLock.store(false)
 }
 
-// Source records first, then the provider validates and projects the raw peer
-// receive facts. A failed provider update removes the speculative entry. The
-// health reader rejects the brief two-step mismatch, so no partial observation
-// can cause a disconnect decision.
+fn _registerPhiPeerState(runtimeToken: i64, peerGeneration: i64,
+                         adoptedAtMs: i64, expectedIntervalMs: i64) -> bool {
+    if (peerGeneration == 0) { return false }
+    _lockPhiState()
+    if (_runtimeActiveToken.load() != runtimeToken) {
+        _phiStateLock.store(false)
+        return false
+    }
+    for (var i = 0; i < len(_phiPeerStates); i++) {
+        var state = _phiPeerStates[i]
+        if (state.runtimeToken == runtimeToken && state.peerGeneration == peerGeneration) {
+            if (adoptedAtMs < state.adoptedAtMs) {
+                state.adoptedAtMs = adoptedAtMs
+                _phiPeerStates[i] = state
+            }
+            _phiStateLock.store(false)
+            return true
+        }
+    }
+    var state: _PhiPeerState = {
+        runtimeToken: runtimeToken,
+        peerGeneration: peerGeneration,
+        adoptedAtMs: adoptedAtMs,
+        missedHeartbeats: 0,
+        detector: PhiDetector(expectedIntervalMs),
+    }
+    _phiPeerStates.push(state)
+    _phiStateLock.store(false)
+    return true
+}
+
+fn _registerAdoptedPeer(runtimeToken: i64, peerGeneration: i64, name: string,
+                        adoptedAtMs: i64, expectedIntervalMs: i64) -> bool {
+    if (!_registerPhiPeerState(runtimeToken, peerGeneration, adoptedAtMs,
+                              expectedIntervalMs)) {
+        return false
+    }
+    var current = __peerName(peerGeneration)
+    if (current == null || current! != name) {
+        _removePhiPeerState(runtimeToken, peerGeneration)
+        return false
+    }
+    return true
+}
+
+// The provider first validates the generation and updates raw receive/RTT
+// facts. Source detector state follows under its own lock. The health reader
+// rejects that brief mismatch, so no partial observation can detach a peer.
 fn _recordPhiHeartbeat(runtimeToken: i64, peerGeneration: i64,
                        receivedAtMs: i64, expectedIntervalMs: i64) -> bool {
     _lockPhiState()
@@ -1152,8 +1201,12 @@ fn _recordPhiHeartbeat(runtimeToken: i64, peerGeneration: i64,
     for (var i = 0; i < len(_phiPeerStates); i++) {
         var state = _phiPeerStates[i]
         if (state.runtimeToken == runtimeToken && state.peerGeneration == peerGeneration) {
-            if (receivedAtMs >= state.detector.lastHeartbeatMs) {
+            var lastObservedAtMs = state.detector.lastHeartbeatMs > 0
+                ? state.detector.lastHeartbeatMs : state.adoptedAtMs
+            if (receivedAtMs >= lastObservedAtMs) {
                 state.detector.record(receivedAtMs)
+                state.missedHeartbeats = 0
+                _phiPeerStates[i] = state
             }
             _phiStateLock.store(false)
             return true
@@ -1164,6 +1217,8 @@ fn _recordPhiHeartbeat(runtimeToken: i64, peerGeneration: i64,
     var state: _PhiPeerState = {
         runtimeToken: runtimeToken,
         peerGeneration: peerGeneration,
+        adoptedAtMs: receivedAtMs,
+        missedHeartbeats: 0,
         detector: detector,
     }
     _phiPeerStates.push(state)
@@ -1175,19 +1230,16 @@ fn _observeHeartbeat(peerGeneration: i64, receivedAtMs: i64, rttMs: i64) {
     var runtimeToken = _runtimeActiveToken.load()
     if (runtimeToken == 0) { return }
     var source = _sourceStateSnapshot()
-    if (source == null ||
-        !_recordPhiHeartbeat(runtimeToken, peerGeneration, receivedAtMs,
-                            source!.heartbeatIntervalMs)) {
-        return
-    }
-    if (!__observeHeartbeat(peerGeneration, receivedAtMs, rttMs)) {
-        _removePhiPeerState(runtimeToken, peerGeneration)
-    }
+    if (source == null || !__observeHeartbeat(peerGeneration, receivedAtMs, rttMs)) { return }
+    _recordPhiHeartbeat(runtimeToken, peerGeneration, receivedAtMs,
+                        source!.heartbeatIntervalMs)
 }
 
 fn _phiPeerSnapshot(runtimeToken: i64, peerGeneration: i64) -> _PhiPeerSnapshot {
     var snapshot: _PhiPeerSnapshot = {
         recorded: false,
+        adoptedAtMs: 0,
+        missedHeartbeats: 0,
         samples: 0,
         mean: 0.0,
         variance: 1.0,
@@ -1199,6 +1251,8 @@ fn _phiPeerSnapshot(runtimeToken: i64, peerGeneration: i64) -> _PhiPeerSnapshot 
             var state = _phiPeerStates[i]
             if (state.runtimeToken == runtimeToken && state.peerGeneration == peerGeneration) {
                 snapshot.recorded = true
+                snapshot.adoptedAtMs = state.adoptedAtMs
+                snapshot.missedHeartbeats = state.missedHeartbeats
                 snapshot.samples = state.detector.sampleCount
                 snapshot.mean = state.detector.mean
                 snapshot.variance = state.detector.variance
@@ -1208,6 +1262,30 @@ fn _phiPeerSnapshot(runtimeToken: i64, peerGeneration: i64) -> _PhiPeerSnapshot 
     }
     _phiStateLock.store(false)
     return snapshot
+}
+
+fn _advanceMissedHeartbeat(runtimeToken: i64, peerGeneration: i64,
+                           expectedLastReceivedAtMs: i64,
+                           expectedMissedHeartbeats: i64) -> i64 {
+    var nextMissedHeartbeats: i64 = -1
+    _lockPhiState()
+    if (_runtimeActiveToken.load() == runtimeToken) {
+        for (var i = 0; i < len(_phiPeerStates); i++) {
+            var state = _phiPeerStates[i]
+            var lastReceivedAtMs = state.detector.lastHeartbeatMs > 0
+                ? state.detector.lastHeartbeatMs : state.adoptedAtMs
+            if (state.runtimeToken == runtimeToken &&
+                state.peerGeneration == peerGeneration &&
+                lastReceivedAtMs == expectedLastReceivedAtMs &&
+                state.missedHeartbeats == expectedMissedHeartbeats) {
+                state.missedHeartbeats = state.missedHeartbeats + 1
+                nextMissedHeartbeats = state.missedHeartbeats
+                _phiPeerStates[i] = state
+            }
+        }
+    }
+    _phiStateLock.store(false)
+    return nextMissedHeartbeats
 }
 
 // The writer reports only transport facts: the queue crossed its configured
@@ -1383,6 +1461,8 @@ fn _joinPeer(host: string, port: i64) -> bool {
     var source = _sourceStateSnapshot()
     if (source == null) { return false }
     var config = source!
+    var runtimeToken = _runtimeActiveToken.load()
+    if (runtimeToken == 0) { return false }
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
     var pending = _dialJoinPeer(host, port, HANDSHAKE_TIMEOUT_MS)
     if (pending == null) { return false }
@@ -1442,12 +1522,24 @@ fn _joinPeer(host: string, port: i64) -> bool {
         net.close(live)
         return false
     }
-    return __adoptPeer(move live, ack!.name, host, port, ack!.flags,
-                       _dispatchInbound, _dispatchOutbound)
+    if (_runtimeActiveToken.load() != runtimeToken) {
+        net.close(live)
+        return false
+    }
+    var adoptedAtMs = time.monotonic()
+    var peerGeneration = __adoptPeer(move live, ack!.name, host, port, ack!.flags,
+                                     adoptedAtMs, _dispatchInbound, _dispatchOutbound)
+    if (peerGeneration == 0) { return false }
+    if (!_registerAdoptedPeer(runtimeToken, peerGeneration, ack!.name, adoptedAtMs,
+                             config.heartbeatIntervalMs)) {
+        __detachPeer(peerGeneration)
+        return false
+    }
+    return true
 }
 
 fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: string,
-                      tlsEnabled: bool, tlsServerReady: bool) {
+                      tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) {
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
     if (_runtimeActiveToken.load() != token || !net.setDeadline(conn, deadline)) {
         net.close(conn)
@@ -1512,15 +1604,21 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         net.close(conn)
         return
     }
-    __adoptPeer(move conn, request!.name, "", 0, request!.flags,
-                _dispatchInbound, _dispatchOutbound)
+    var adoptedAtMs = time.monotonic()
+    var peerGeneration = __adoptPeer(move conn, request!.name, "", 0, request!.flags,
+                                     adoptedAtMs, _dispatchInbound, _dispatchOutbound)
+    if (peerGeneration != 0 &&
+        !_registerAdoptedPeer(token, peerGeneration, request!.name, adoptedAtMs,
+                             heartbeatIntervalMs)) {
+        __detachPeer(peerGeneration)
+    }
 }
 
 // Keep the affine connection inside a single-iteration frame. A loop-carried
 // local would have one source identity on both sides of its back edge, which
 // cannot be consumed by one iteration and then reused by the next.
 fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: string,
-              tlsEnabled: bool, tlsServerReady: bool) -> bool {
+              tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) -> bool {
     if (!net.setAcceptDeadline(listener, time.monotonic() + _ACCEPT_POLL_MS)) {
         if (_runtimeActiveToken.load() != token) { return false }
         time.sleep(10)
@@ -1538,16 +1636,18 @@ fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: strin
         net.close(live)
         return false
     }
-    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled, tlsServerReady)
+    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled, tlsServerReady,
+                          heartbeatIntervalMs)
     return true
 }
 
 fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: string,
-               tlsEnabled: bool, tlsServerReady: bool) {
+               tlsEnabled: bool, tlsServerReady: bool, heartbeatIntervalMs: i64) {
     var live = listener
     defer { net.close(live) }
     while (_runtimeActiveToken.load() == token &&
-           _acceptOne(live, token, selfName, secret, tlsEnabled, tlsServerReady)) {}
+           _acceptOne(live, token, selfName, secret, tlsEnabled, tlsServerReady,
+                      heartbeatIntervalMs)) {}
 }
 
 fn _stopFailedHealthGeneration(token: i64) {
@@ -1579,21 +1679,26 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
             var peer = peers![i]
             _enqueueControlFrame(peer.peerGeneration, heartbeat!)
             var detector = _phiPeerSnapshot(token, peer.peerGeneration)
-            if (detector.recorded && detector.lastHeartbeatMs != peer.lastReceivedAtMs) {
-                continue
-            }
-            var elapsedMs = sentAtMs - peer.lastReceivedAtMs
+            if (!detector.recorded) { continue }
+            var sourceLastReceivedAtMs = detector.lastHeartbeatMs > 0
+                ? detector.lastHeartbeatMs : detector.adoptedAtMs
+            if (sourceLastReceivedAtMs != peer.lastReceivedAtMs) { continue }
+            var elapsedMs = sentAtMs - sourceLastReceivedAtMs
             var phi = _phiValue(detector.samples, detector.mean, detector.variance,
                                 detector.lastHeartbeatMs, sentAtMs)
             var expiredDuringWarmup = detector.samples < PHI_MIN_SAMPLES &&
                                       elapsedMs > heartbeatTimeoutMs
-            var dead = heartbeatIsDead(phi, detector.samples, elapsedMs, peer.missedHeartbeats,
+            var dead = heartbeatIsDead(phi, detector.samples, elapsedMs,
+                                       detector.missedHeartbeats,
                                        heartbeatTimeoutMs, maxMissedHeartbeats)
-            if (dead || expiredDuringWarmup) {
-                var nextMissed = expiredDuringWarmup ? peer.missedHeartbeats + 1
-                                                     : peer.missedHeartbeats
-                var name = __applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs,
-                                                 peer.missedHeartbeats, nextMissed, dead)
+            if (expiredDuringWarmup &&
+                _advanceMissedHeartbeat(token, peer.peerGeneration,
+                                        sourceLastReceivedAtMs,
+                                        detector.missedHeartbeats) < 0) {
+                continue
+            }
+            if (dead) {
+                var name = __applyHealthDecision(peer.peerGeneration, peer.lastReceivedAtMs)
                 if (name != null) {
                     _removePhiPeerState(token, peer.peerGeneration)
                     _notifyNodeDownIfCurrent(token, peer.peerGeneration, name!, sentAtMs)
@@ -1643,7 +1748,7 @@ fn _activateClusterSource(started: bool, state: _ClusterSourceState, tickMs: i64
     // Source state retains a strong listener reference so stop can close it
     // synchronously; the accept coroutine releases its own reference on exit.
     go _acceptLoop(listener, token, state.selfName, state.secret, state.tlsEnabled,
-                   state.tlsServerReady)
+                   state.tlsServerReady, state.heartbeatIntervalMs)
     return true
 }
 
@@ -2149,7 +2254,11 @@ export fn info() -> ClusterInfo? {
     for (var i = 0; i < len(snapshot.nodes); i++) {
         var node = snapshot.nodes[i]
         var detector = _phiPeerSnapshot(runtimeToken, node.peerGeneration)
-        var phi = detector.recorded && detector.lastHeartbeatMs == node.lastReceivedAtMs
+        var sourceLastReceivedAtMs = detector.lastHeartbeatMs > 0
+            ? detector.lastHeartbeatMs : detector.adoptedAtMs
+        var synchronized = detector.recorded &&
+                           sourceLastReceivedAtMs == node.lastReceivedAtMs
+        var phi = synchronized
                     ? _phiValue(detector.samples, detector.mean, detector.variance,
                                 detector.lastHeartbeatMs, observedAtMs)
                     : 0.0
@@ -2171,7 +2280,7 @@ export fn info() -> ClusterInfo? {
             outQueueFrames: node.outQueueFrames,
             slow: node.slow,
             phi: phi,
-            missedHeartbeats: node.missedHeartbeats,
+            missedHeartbeats: synchronized ? detector.missedHeartbeats : 0,
         }
         nodes.push(publicNode)
     }
@@ -2250,9 +2359,9 @@ fn _clusterListener(port: i64) -> NetListener? {
 
 // A node whose name is not a legal node name cannot start. The listener and
 // both long-lived loops are ordinary Xray values and coroutines; the runtime
-// leaf only constructs TLS contexts and synchronized registries. The heartbeat
-// schedule is passed down because the locked health projection needs the same
-// thresholds, while its cadence remains entirely source-owned.
+// leaf only constructs TLS contexts and synchronized registries. Heartbeat
+// cadence, adopted-at state, missed-beat progression and thresholds remain
+// entirely source-owned.
 export fn start(config: ClusterConfig) -> bool {
     if (_sourceStateSnapshot() != null) { return false }
     if (!validNodeName(config.name)) { return false }

@@ -28,6 +28,10 @@ print(rawFrame!.kind)
 print(rawFrame!.payload)
 print(cluster.decodeFrame(Array<u8>([0, 0, 0, 4, 4, 170, 187])) == null)
 print(cluster.decodeFrame(Array<u8>([0, 0, 0, 3, 4, 170, 187, 204])) == null)
+// 0x09 was retired with the request/reply projection and must stay invalid;
+// the neighboring 0x08 and 0x0a coroutine protocol kinds remain live.
+print(cluster.encodeFrame(0x09, Array<u8>(0)) == null)
+print(cluster.decodeFrame(Array<u8>([0, 0, 0, 1, 0x09])) == null)
 
 var envelope = Array<u8>(64)
 for (var i = 0; i < len(envelope); i++) { envelope[i] = i as u8 }

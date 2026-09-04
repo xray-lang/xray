@@ -2035,7 +2035,7 @@ module http2 {
 
 module cluster {
   object __ClusterNodeSnapshot {
-    fields: "const name: string, const host: string, const port: i64, const peerGeneration: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const missedHeartbeats: i64, const lastReceivedAtMs: i64"
+    fields: "const name: string, const host: string, const port: i64, const peerGeneration: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const lastReceivedAtMs: i64"
     exact: true
     doc: "Private metrics and raw transport-health facts for one connected peer"
   }
@@ -2047,7 +2047,7 @@ module cluster {
   }
 
   object __ClusterHealthPeerSnapshot {
-    fields: "const peerGeneration: i64, const lastReceivedAtMs: i64, const missedHeartbeats: i64"
+    fields: "const peerGeneration: i64, const lastReceivedAtMs: i64"
     exact: true
     doc: "Private scalar snapshot of one connected peer's raw transport-health facts"
   }
@@ -2084,11 +2084,11 @@ module cluster {
   }
 
   fn __applyHealthDecision {
-    signature: "(peerGeneration: i64, expectedLastReceivedAtMs: i64, expectedMissedHeartbeats: i64, nextMissedHeartbeats: i64, disconnect: bool): string?"
-    doc: "Compare and apply one source-owned health decision, returning only the generation-safe detached peer name"
+    signature: "(peerGeneration: i64, expectedLastReceivedAtMs: i64): string?"
+    doc: "Generation-check and detach one source-declared unhealthy peer, returning only its owned name"
     vm: "cluster_health_apply_fn"
-    argc: 5
-    arg_spec: "vvvvv"
+    argc: 2
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2123,11 +2123,11 @@ module cluster {
   }
 
   fn __adoptPeer {
-    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): bool"
-    doc: "Transfer an authenticated socket into the locked cluster node registry and start generation-keyed source transport loops"
+    signature: "(conn: move NetConn, name: string, host: string, port: i64, flags: i64, adoptedAtMs: i64, inbound: fn(peerGeneration: i64): (), outbound: fn(peerGeneration: i64): ()): i64"
+    doc: "Transfer an authenticated socket into the locked cluster node registry and return its generation, or zero on refusal"
     vm: "cluster_adopt_peer_fn"
-    argc: 7
-    arg_spec: "vssvvvv"
+    argc: 8
+    arg_spec: "vssvvvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -2172,7 +2172,7 @@ module cluster {
 
   fn __observeHeartbeat {
     signature: "(peerGeneration: i64, receivedAtMs: i64, rttMs: i64): bool"
-    doc: "Project one source-decoded heartbeat onto locked raw peer receive facts"
+    doc: "Generation-check one source-decoded heartbeat and update only raw last-receive and RTT facts"
     vm: "cluster_observe_heartbeat_fn"
     argc: 3
     arg_spec: "vvv"
