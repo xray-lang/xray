@@ -37,8 +37,6 @@
 
 /* ========== xray Function Bindings ========== */
 
-static XrObjectInstance *cluster_object_new(XrVMRuntime *X, const char *name);
-
 static XrValue cluster_recently_departed_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *cluster = (XrCluster *) X->cluster;
     if (!cluster || argc < 1 || !XR_IS_STRING(args[0]))
@@ -71,7 +69,8 @@ static XrValue cluster_health_snapshot_fn(XrVMRuntime *X, XrValue *args, int arg
                                               (uint32_t) heartbeat_wire->length) == 0)
             node->last_heartbeat_sent = sent_at_ms;
 
-        XrObjectInstance *snapshot = cluster_object_new(X, "__ClusterHealthPeerSnapshot");
+        XrObjectInstance *snapshot =
+            xr_stdlib_record_new(X, "cluster", "__ClusterHealthPeerSnapshot");
         if (!snapshot) {
             xr_amutex_unlock(&cluster->nodes_lock);
             return xr_null();
@@ -458,18 +457,24 @@ static XrValue cluster_deliver_inbound_fn(XrVMRuntime *X, XrValue *args, int arg
                                                       (uint32_t) envelope->length));
 }
 
-static XrValue cluster_forward_inbound_fn(XrVMRuntime *X, XrValue *args, int argc) {
+static XrValue cluster_broadcast_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_ARRAY(args[1]))
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return xr_null();
     XrArray *wire = XR_TO_ARRAY(args[1]);
     if (wire->elem_type != XR_ELEM_U8 || wire->length <= 0 || !wire->data)
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return xr_null();
     XrCluster *cluster = (XrCluster *) X->cluster;
     if (!cluster || !atomic_load(&cluster->running))
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
-    return xr_int((int64_t) cluster_transport_broadcast(cluster, (uint64_t) XR_TO_INT(args[0]),
-                                                        (const uint8_t *) wire->data,
-                                                        (uint32_t) wire->length));
+        return xr_null();
+    XrObjectInstance *result = xr_stdlib_record_new(X, "cluster", "__ClusterBroadcastStats");
+    if (!result)
+        return xr_null();
+    XrClusterBroadcastStats stats =
+        cluster_transport_broadcast(cluster, (uint64_t) XR_TO_INT(args[0]),
+                                    (const uint8_t *) wire->data, (uint32_t) wire->length);
+    xr_object_instance_set_by_key(X, result, "connected", xr_int(stats.connected));
+    xr_object_instance_set_by_key(X, result, "accepted", xr_int(stats.accepted));
+    return xr_object_instance_value(result);
 }
 
 static XrValue cluster_notify_remote_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
@@ -540,19 +545,6 @@ static XrValue cluster_publish_local_primitive(XrVMRuntime *X, XrValue *args, in
     XrString *topic = XR_TO_STRING(args[0]);
     return xr_int((int64_t) xr_topic_registry_deliver(cluster->topics, topic->data, envelope,
                                                       (uint32_t) envelope_len));
-}
-
-static XrValue cluster_publish_remote_primitive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_ARRAY(args[0]))
-        return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
-    XrArray *wire = XR_TO_ARRAY(args[0]);
-    if (wire->elem_type != XR_ELEM_U8 || wire->length <= 0 || !wire->data)
-        return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
-    XrCluster *cluster = (XrCluster *) X->cluster;
-    if (!cluster || !atomic_load(&cluster->running))
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
-    return xr_int((int64_t) cluster_transport_broadcast(cluster, 0, (const uint8_t *) wire->data,
-                                                        (uint32_t) wire->length));
 }
 
 // xray binding: cluster.listen(pattern)

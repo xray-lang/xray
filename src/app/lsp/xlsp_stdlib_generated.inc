@@ -123,8 +123,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"__ClusterRuntimeSnapshot", XLSP_SYM_CLASS, "type __ClusterRuntimeSnapshot = { nodes: Array<__ClusterNodeSnapshot>, listeners: i64, deadNodes: i64 }", "Private snapshot of mutable native peer registries and counters", NULL, 0},
     {"__ClusterInboundFrame", XLSP_SYM_CLASS, "type __ClusterInboundFrame = { receivedAtMs: i64, status: i64, wire: Array<u8>? }", "Private projection of one complete frame or terminal reader event", NULL, 0},
     {"__ClusterHealthPeerSnapshot", XLSP_SYM_CLASS, "type __ClusterHealthPeerSnapshot = { peerGeneration: i64, lastReceivedAtMs: i64, missedHeartbeats: i64, samples: i64, mean: f64, variance: f64, detectorLastHeartbeatMs: i64 }", "Private scalar snapshot of one connected peer's failure detector state", NULL, 0},
+    {"__ClusterBroadcastStats", XLSP_SYM_CLASS, "type __ClusterBroadcastStats = { connected: i64, accepted: i64 }", "Private raw counts from one locked peer broadcast", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 92
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 93
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

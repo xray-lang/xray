@@ -532,7 +532,7 @@ fn _dispatchInboundFrame(peerGeneration: i64, receivedAtMs: i64, wire: Array<u8>
         if (transport!.hopLimit > 0) {
             var forward = encodeTransportFrame(transport!.hopLimit - 1, transport!.topic,
                                                transport!.envelope)
-            if (forward != null) { __forwardInbound(peerGeneration, forward!) }
+            if (forward != null) { __broadcast(peerGeneration, forward!) }
         }
         return
     }
@@ -1692,6 +1692,14 @@ fn _deliveryFromCode(code: i64) -> ClusterDelivery {
     return ClusterDelivery.Disconnected
 }
 
+fn _deliveryFromBroadcast(stats: __ClusterBroadcastStats?) -> ClusterDelivery {
+    if (stats == null) { return ClusterDelivery.Unavailable }
+    var observed = stats!
+    if (observed.accepted > 0) { return ClusterDelivery.Accepted }
+    if (observed.connected > 0) { return ClusterDelivery.Overloaded }
+    return ClusterDelivery.Disconnected
+}
+
 // One publication has two independent destinations. Success wins because at
 // least one subscriber accepted the envelope; overload wins over a completely
 // disconnected route, and caller errors remain errors even if another route
@@ -1727,6 +1735,6 @@ export fn send(topic: string, envelope: move Buffer,
     var remoteWire = encodeTransportFrame(hopLimit, topic, envelopeBytes)
     var local = _deliveryFromCode(__publishLocal(topic, envelope))
     var remote = remoteWire == null ? ClusterDelivery.InvalidEnvelope
-                                    : _deliveryFromCode(__publishRemote(remoteWire!))
+                                    : _deliveryFromBroadcast(__broadcast(0, remoteWire!))
     return _combinePublicationDelivery(local, remote)
 }
