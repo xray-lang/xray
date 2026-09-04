@@ -213,16 +213,17 @@ fn _lockTopicState() {
     }
 }
 
-// Retirement first makes new registrations fail their locked token recheck;
-// closing and clearing under the same registry lock then makes the cutover
-// atomic for collectors already holding or about to acquire that lock.
+// Retirement first makes new registrations fail their locked token recheck.
+// Detaching the complete registry under the lock makes the cutover atomic;
+// closing the detached channels afterwards keeps wakeups out of the spinlock.
 fn _closeTopicSubscriptions() {
     _lockTopicState()
-    for (var i = 0; i < len(_topicSubscriptions); i++) {
-        _topicSubscriptions[i].notifications.close()
-    }
+    var retired = _topicSubscriptions
     _topicSubscriptions = []
     _topicStateLock.store(false)
+    for (var i = 0; i < len(retired); i++) {
+        retired[i].notifications.close()
+    }
 }
 
 fn _retireRuntimeGeneration(token: i64) -> bool {
