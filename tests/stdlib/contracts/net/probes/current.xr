@@ -5,8 +5,9 @@ fn emit(name: string, ok: bool) {
     print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{\"transport\":\"loopback\"}}")
 }
 
-fn highServer(listener: NetListener) -> bool {
+fn highServer(listener: move NetListener) -> bool {
     var conn = net.accept(listener)!
+    net.close(listener)
     var buffer = Array<u8>(16)
     var n = net.readInto(conn, ref buffer, 16)
     var written = net.writeBytes(conn, buffer)
@@ -23,8 +24,9 @@ fn highClient(port: i64) -> bool {
     return n == 5 && buffer[0] == 195 && buffer[4] == 172
 }
 
-fn copyServer(listener: NetListener) -> bool {
+fn copyServer(listener: move NetListener) -> bool {
     var conn = net.accept(listener)!
+    net.close(listener)
     var copied = net.copy(conn, conn)
     net.close(conn)
     return copied == 6
@@ -43,19 +45,19 @@ fn copyClient(port: i64) -> bool {
 
 fn run() {
     var highListener = net.listen(0, 8)
-    var highServerTask = go highServer(highListener)
-    var highClientTask = go highClient(net.port(highListener))
+    var highPort = net.port(highListener)
+    var highServerTask = go highServer(move highListener)
+    var highClientTask = go highClient(highPort)
     var highOk = await highClientTask
     highOk = (await highServerTask) && highOk
-    net.close(highListener)
     emit("high-byte-loopback", highOk)
 
     var copyListener = net.listen(0, 8)
-    var copyServerTask = go copyServer(copyListener)
-    var copyClientTask = go copyClient(net.port(copyListener))
+    var copyPort = net.port(copyListener)
+    var copyServerTask = go copyServer(move copyListener)
+    var copyClientTask = go copyClient(copyPort)
     var copyOk = await copyClientTask
     copyOk = (await copyServerTask) && copyOk
-    net.close(copyListener)
     emit("native-copy-byte-boundary", copyOk)
 }
 
