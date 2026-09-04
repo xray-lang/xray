@@ -461,28 +461,27 @@ export fn udpBind(port: i64, address: string = "") -> NetConn {
     return NetConn(storage!)
 }
 
-fn _parseIpv4Octet(part: string) -> i64? {
-    if (len(part) == 0 || len(part) > 3) { return null }
-    const bytes: Slice<u8> = part.bytes()
+fn _validIpv4MulticastGroup(group: string) -> bool {
+    const bytes: Slice<u8> = group.bytes()
+    var octets = 0
+    var digits = 0
     var value = 0
     for (var i = 0; i < len(bytes); i++) {
-        var digit = bytes[i] as i64
-        if (digit < 48 || digit > 57) { return null }
-        value = value * 10 + digit - 48
+        const byte = bytes[i] as i64
+        if (byte == 46) {
+            if (digits == 0 || value > 255 || octets >= 3) { return false }
+            if (octets == 0 && (value < 224 || value > 239)) { return false }
+            octets += 1
+            digits = 0
+            value = 0
+        } else {
+            if (byte < 48 || byte > 57 || digits >= 3) { return false }
+            value = value * 10 + byte - 48
+            digits += 1
+        }
     }
-    if (value > 255) { return null }
-    return value
-}
-
-fn _validIpv4MulticastGroup(group: string) -> bool {
-    var parts = group.split(".")
-    if (len(parts) != 4) { return false }
-    var first = _parseIpv4Octet(parts[0])
-    if (first == null || first! < 224 || first! > 239) { return false }
-    for (var i = 1; i < 4; i++) {
-        if (_parseIpv4Octet(parts[i]) == null) { return false }
-    }
-    return true
+    if (digits == 0 || value > 255) { return false }
+    return octets == 3
 }
 
 // Open one IPv4 multicast datagram socket. Group syntax and option ranges are

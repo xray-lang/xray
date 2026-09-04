@@ -61,6 +61,29 @@ fn test_net_multicast_rejects_unicast_group() {
     assert(invalid)
 }
 
+fn _multicastGroupRejected(group: string) -> bool {
+    try {
+        var conn = net.udpMulticastBind(group, 47200)
+        net.close(conn)
+    } catch (e: NetError) {
+        return e == NetError.Invalid
+    }
+    return false
+}
+
+// @test multicast syntax validation is allocation-free and exact
+@test
+fn test_net_multicast_rejects_malformed_groups() {
+    assert(_multicastGroupRejected(""))
+    assert(_multicastGroupRejected("239.1.1"))
+    assert(_multicastGroupRejected("239.1.1.1.1"))
+    assert(_multicastGroupRejected("239..1.1"))
+    assert(_multicastGroupRejected("239.1.1."))
+    assert(_multicastGroupRejected("239.256.1.1"))
+    assert(_multicastGroupRejected("239.a.1.1"))
+    assert(_multicastGroupRejected("240.1.1.1"))
+}
+
 // @test valid multicast socket setup is available on both VM and AOT
 @test
 fn test_net_multicast_bind() {
