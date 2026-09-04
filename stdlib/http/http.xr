@@ -1722,7 +1722,15 @@ export fn jsonResponse<T: JSON.Encodable>(
     status: i64 = 200,
     headers: Headers? = null
 ) -> HttpResponse {
-    var responseHeaders = headers ?? Headers()
+    // A response builder owns its header map. Never mutate a borrowed map the
+    // caller may reuse for another response.
+    var responseHeaders = Headers()
+    if (headers != null) {
+        var pairs = headers!.entries()
+        for (var i = 0; i < len(pairs); i++) {
+            responseHeaders.add(pairs[i].0, pairs[i].1)
+        }
+    }
     if (!responseHeaders.contains("Content-Type")) {
         responseHeaders.add("Content-Type", "application/json; charset=utf-8")
     }
