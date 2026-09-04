@@ -178,7 +178,7 @@ class = "host_abi_leaf"
 abi = "send(2), TLS write and scheduler netpoll wait; drains one batch from the generation-selected opaque peer queue"
 ownership = "none"
 effect = "suspends"
-provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the runtime and peer socket lease, synchronized output queue and distinct drained, full, stopped, resource, closed, socket-I/O, provider-error and cancellation facts; a full queue is observed before any batch is detached. cluster.xr owns writer resubmission, fairness, slow-consumer handling, drop and generation-safe disconnect policy"
+provider = "src/io/xcluster_peer_transport.c owns only partial-I/O completion, the runtime and peer socket lease, synchronized output queue and distinct drained, full, stopped, resource, closed, socket-I/O, provider-error and cancellation facts; one locked take reports full or stopped without detaching queued frames, otherwise it atomically transfers the batch. cluster.xr owns writer resubmission, fairness, slow-consumer handling, drop and generation-safe disconnect policy"
 deletion_trigger = "when the peer socket and output queue are ordinary Xray-owned values"
 
 [[leaf]]

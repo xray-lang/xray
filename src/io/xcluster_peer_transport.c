@@ -198,13 +198,17 @@ static XrCFuncResult peer_write_continue(XrVMRuntime *X, int status, XrValue res
     XrClusterPeerWriteEvent event = XR_CLUSTER_PEER_WRITE_IO_ERROR;
     for (;;) {
         if (!operation->frames) {
-            if (xr_cluster_output_queue_is_full(operation->lease.queue)) {
+            XrClusterOutputTakeResult taken = xr_cluster_output_queue_take(
+                operation->lease.queue, &operation->frames);
+            if (taken == XR_CLUSTER_OUTPUT_TAKE_FULL) {
                 peer_counter_add(operation->lease.queue_full_events, 1);
-                peer_io_operation_destroy(operation);
-                *result = xr_int(XR_CLUSTER_PEER_WRITE_QUEUE_FULL);
-                return XR_CFUNC_DONE;
+                event = XR_CLUSTER_PEER_WRITE_QUEUE_FULL;
+                break;
             }
-            operation->frames = xr_cluster_output_queue_take_all(operation->lease.queue);
+            if (taken == XR_CLUSTER_OUTPUT_TAKE_STOPPED) {
+                event = XR_CLUSTER_PEER_WRITE_QUEUE_STOPPED;
+                break;
+            }
         }
 
         if (!operation->frames) {

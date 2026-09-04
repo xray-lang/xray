@@ -168,18 +168,33 @@ XrClusterOutputPushResult xr_cluster_output_queue_push_owned(XrClusterOutputQueu
     return XR_CLUSTER_OUTPUT_ACCEPTED;
 }
 
-XrClusterOutputBatch *xr_cluster_output_queue_take_all(XrClusterOutputQueue *queue) {
-    if (!queue)
-        return NULL;
+XrClusterOutputTakeResult xr_cluster_output_queue_take(XrClusterOutputQueue *queue,
+                                                       XrClusterOutputBatch **out_batch) {
+    if (out_batch)
+        *out_batch = NULL;
+    if (!queue || !out_batch)
+        return XR_CLUSTER_OUTPUT_TAKE_STOPPED;
     xr_amutex_lock(&queue->lock);
+    if (atomic_load_explicit(&queue->stopped, memory_order_relaxed)) {
+        xr_amutex_unlock(&queue->lock);
+        return XR_CLUSTER_OUTPUT_TAKE_STOPPED;
+    }
+    if (atomic_load_explicit(&queue->full, memory_order_relaxed)) {
+        xr_amutex_unlock(&queue->lock);
+        return XR_CLUSTER_OUTPUT_TAKE_FULL;
+    }
     XrClusterOutputBatch *batch = queue->head;
+    if (!batch) {
+        xr_amutex_unlock(&queue->lock);
+        return XR_CLUSTER_OUTPUT_TAKE_EMPTY;
+    }
     queue->head = NULL;
     queue->tail = NULL;
     queue->bytes = 0;
     queue->frames = 0;
-    atomic_store_explicit(&queue->full, false, memory_order_release);
     xr_amutex_unlock(&queue->lock);
-    return batch;
+    *out_batch = batch;
+    return XR_CLUSTER_OUTPUT_TAKE_BATCH;
 }
 
 const uint8_t *xr_cluster_output_batch_data(const XrClusterOutputBatch *batch) {

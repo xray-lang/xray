@@ -32,6 +32,13 @@ typedef enum XrClusterOutputPushResult {
     XR_CLUSTER_OUTPUT_INVALID = 4,
 } XrClusterOutputPushResult;
 
+typedef enum XrClusterOutputTakeResult {
+    XR_CLUSTER_OUTPUT_TAKE_BATCH = 0,
+    XR_CLUSTER_OUTPUT_TAKE_EMPTY = 1,
+    XR_CLUSTER_OUTPUT_TAKE_FULL = 2,
+    XR_CLUSTER_OUTPUT_TAKE_STOPPED = 3,
+} XrClusterOutputTakeResult;
+
 XR_FUNC XrClusterOutputQueue *xr_cluster_output_queue_new(size_t high_watermark);
 XR_FUNC void xr_cluster_output_queue_stop(XrClusterOutputQueue *queue);
 XR_FUNC void xr_cluster_output_queue_destroy(XrClusterOutputQueue *queue);
@@ -42,7 +49,9 @@ XR_FUNC XrClusterOutputPushResult xr_cluster_output_queue_push_copy(XrClusterOut
 XR_FUNC XrClusterOutputPushResult xr_cluster_output_queue_push_owned(XrClusterOutputQueue *queue,
                                                                      uint8_t *data,
                                                                      uint32_t length);
-XR_FUNC XrClusterOutputBatch *xr_cluster_output_queue_take_all(XrClusterOutputQueue *queue);
+/* Observes terminal admission state and detaches a batch under one lock. */
+XR_FUNC XrClusterOutputTakeResult xr_cluster_output_queue_take(
+    XrClusterOutputQueue *queue, XrClusterOutputBatch **out_batch);
 XR_FUNC const uint8_t *xr_cluster_output_batch_data(const XrClusterOutputBatch *batch);
 XR_FUNC uint32_t xr_cluster_output_batch_length(const XrClusterOutputBatch *batch);
 XR_FUNC void xr_cluster_output_batch_consume(XrClusterOutputQueue *queue,
