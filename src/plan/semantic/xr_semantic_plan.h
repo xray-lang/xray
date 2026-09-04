@@ -158,6 +158,12 @@ typedef enum XrSemanticCallTargetKind {
      * whole graph decides, and consumes this the way it consumes the local kind
      * once it has. Unconsumed, the row binds nothing. */
     XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE,
+    /* A call from a generic method body whose receiver is that body's exact
+     * self parameter. Generic receiver types are intentionally erased and do
+     * not freeze a class-instance identity; the enclosing source-method row,
+     * exact self value, selector and arity instead name the template-local
+     * body. An arbitrary value of the same generic spelling does not. */
+    XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -552,9 +558,11 @@ typedef struct XrSemanticOperandRecord {
  * BUILTIN_INSTANCE_YIELDABLE binds a reserved
  * builtin instance type, selector, and arity without asserting a machine call
  * target. SOURCE_INSTANCE_METHOD_LOCAL is an exact final-class declaration;
+ * SOURCE_TEMPLATE_METHOD_LOCAL is an exact generic self-call declaration and
+ * does not assert a frozen generic class-instance identity;
  * SOURCE_INSTANCE_METHOD_OPEN is a dependency-verified open dispatch domain,
- * not an execution target. All eight kinds independently authorize coroutine
- * state creation without retaining Xi data.
+ * not an execution target. All kinds independently authorize coroutine state
+ * creation without retaining Xi data.
  */
 typedef struct XrSemanticCallTargetRecord {
     XrStableId id;

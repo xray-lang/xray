@@ -3361,7 +3361,7 @@ static bool append_builtin_instance_yieldable_call_target(XrSemanticBuildContext
 static int resolve_source_instance_method_local(const XrSemanticBuildContext *ctx,
                                                 const XiValue *value, uint32_t operation,
                                                 uint32_t *receiver_type_out,
-                                                uint8_t *out_class_flags) {
+                                                uint8_t *target_kind_out) {
     if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 || !value->args[0] ||
         !value->aux || (value->aux_int & 1) != 0 || operation >= ctx->plan->operation_count)
         return -1;
@@ -3385,15 +3385,21 @@ static int resolve_source_instance_method_local(const XrSemanticBuildContext *ct
         return -1;
     const XrSemanticSourceClassRecord *source_class =
         &ctx->plan->source_classes[source_class_index];
-    /* A runtime type and a non-generic declaration are what make one body
-     * nameable at all. Being final is a different question: it is what makes
-     * binding that body safe without seeing the whole graph. Report it instead
-     * of requiring it, so the caller can record an obligation for the layer
-     * that does see the graph. */
-    if (!xr_semantic_source_class_can_name_one_method(source_class->flags))
+    /* Ordinary instance authority comes from the receiver's frozen runtime
+     * class. A generic receiver deliberately has no such identity, so it gets
+     * the narrower template authority only when this call uses the enclosing
+     * method's exact self parameter. This is the same declaration relation the
+     * Xi coroutine resolver uses; neither selector spelling nor generic type
+     * spelling alone is sufficient. */
+    bool template_self = exact_self && caller->source_class == source_class_index &&
+                         xr_semantic_source_class_can_name_template_method(source_class->flags);
+    bool ordinary_instance = xr_semantic_source_class_can_name_one_method(source_class->flags);
+    if (!ordinary_instance && !template_self)
         return -1;
-    if (out_class_flags)
-        *out_class_flags = source_class->flags;
+    if (target_kind_out)
+        *target_kind_out = template_self
+                               ? XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL
+                               : xr_semantic_source_instance_method_call_kind(source_class->flags);
     int match = -1;
     for (uint32_t f = 0; f < ctx->function_count; f++) {
         const XrFunctionMapEntry *candidate = &ctx->functions[f];
@@ -3416,9 +3422,9 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
                                                             const XiValue *value,
                                                             uint32_t operation) {
     uint32_t receiver_type = XR_SEMANTIC_INDEX_NONE;
-    uint8_t class_flags = 0;
+    uint8_t target_kind = 0;
     int function =
-        resolve_source_instance_method_local(ctx, value, operation, &receiver_type, &class_flags);
+        resolve_source_instance_method_local(ctx, value, operation, &receiver_type, &target_kind);
     if (function < 0)
         return true;
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
@@ -3438,15 +3444,17 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
     record->source_export = XR_SEMANTIC_INDEX_NONE;
     record->callee_function = ctx->plan->functions[function].id;
     record->callable_type = receiver_type;
-    /* Final says no subclass can exist anywhere, so the binding stands on its
-     * own. Without it the binding holds only if the final graph carries no
-     * override, which this module cannot know -- the row states that
-     * obligation and the graph-holding layer discharges it. */
-    record->kind = xr_semantic_source_instance_method_call_kind(class_flags);
+    /* A template self-call binds through the caller's source-method membership,
+     * not through a generic class object. Ordinary final/sealed calls keep
+     * their existing class-instance authority. */
+    record->kind = target_kind;
     XrTextBuilder key = {0};
+    bool template_method = record->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL;
     bool valid =
         text_append_format(&key,
-                           "call-target-v7:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
+                           template_method ? "call-target-v11:schema=%u:operation="
+                                           : "call-target-v7:schema=%u:operation=",
+                           XR_SEMANTIC_SCHEMA_VERSION) &&
         text_append_stable_id(&key, call->id) && text_append(&key, ":source-class=") &&
         text_append_stable_id(&key, ctx->plan->source_classes[source_class].id) &&
         text_append(&key, ":selector=") && text_append_component(&key, (const char *) value->aux) &&

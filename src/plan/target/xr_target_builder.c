@@ -409,6 +409,8 @@ static const char *target_trace_call_target_kind_name(uint8_t kind) {
             return "SOURCE_INSTANCE_METHOD_LOCAL";
         case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE:
             return "SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE";
+        case XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL:
+            return "SOURCE_TEMPLATE_METHOD_LOCAL";
         case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN:
             return "SOURCE_INSTANCE_METHOD_OPEN";
         case XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR:
@@ -11372,8 +11374,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                         "[target] refused in call target coverage: SemanticPlan proved a call "
                         "target of kind %s, and this family consumes only DIRECT_LOCAL, "
                         "SOURCE_EXPORT, NATIVE_YIELDABLE, NATIVE_NAMESPACE_YIELDABLE, "
-                        "BUILTIN_INSTANCE_YIELDABLE, SOURCE_INSTANCE_METHOD_LOCAL and "
-                        "SOURCE_CLASS_CONSTRUCTOR\n",
+                        "BUILTIN_INSTANCE_YIELDABLE, SOURCE_INSTANCE_METHOD_LOCAL, "
+                        "SOURCE_TEMPLATE_METHOD_LOCAL and SOURCE_CLASS_CONSTRUCTOR\n",
                         target_trace_call_target_kind_name(target ? target->kind : 0u));
                 fprintf(stderr,
                         "[target]   call target=%u    kind=%s (%u), names function %u, dependency "
@@ -11387,7 +11389,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 target_trace_judgement("the operation record exists", operation != NULL);
                 target_trace_judgement("this family consumes the kind",
                                        direct || source || native_namespace || native_yieldable ||
-                                           class_construction || builtin_instance);
+                                           class_construction || builtin_instance ||
+                                           instance_method_local);
                 if (direct)
                     target_trace_judgement("DIRECT_LOCAL names a function in range",
                                            target->function < function_count);

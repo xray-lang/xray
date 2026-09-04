@@ -24,9 +24,8 @@
  * using any result-family judgement. */
 static inline bool
 xr_semantic_local_call_result_opcode_is_exact(const XrSemanticOperationRecord *operation) {
-    return operation &&
-           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
-            operation->opcode == XI_CALL_METHOD);
+    return operation && (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
+                         operation->opcode == XI_CALL_METHOD);
 }
 
 /* Whether the target names a function of this module and sits on the opcode
@@ -48,6 +47,7 @@ xr_semantic_call_target_names_local_function(const XrSemanticCallTargetRecord *t
      * binding is proven or owed, which is a question for the layer holding the
      * module graph, not for the shape. */
     if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL ||
+        target->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL ||
         target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE)
         return operation->opcode == XI_CALL_METHOD;
     return false;
@@ -62,6 +62,7 @@ xr_semantic_call_target_names_local_function(const XrSemanticCallTargetRecord *t
 static inline uint32_t
 xr_semantic_local_call_operand_shift(const XrSemanticCallTargetRecord *target) {
     return (target && (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL ||
+                       target->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL ||
                        target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE))
                ? 0u
                : 1u;

@@ -47,13 +47,17 @@ static inline bool xr_semantic_graph_seals_class(const XrSemanticPlan *primary,
 /* Whether a call target binds a method body in this graph. A final class states
  * the binding outright; a sealed candidate states it under the obligation the
  * walk above discharges. Both then travel the same adapter, collector and
- * boundary, so every layer consuming one consumes the other on these terms. */
+ * boundary, so every layer consuming one consumes the other on these terms.
+ * A template-local self call is already bound by its enclosing source-method
+ * row rather than by a frozen class object, so it also answers true without a
+ * graph sealing walk. */
 static inline bool xr_semantic_call_target_binds_instance_method(
     const XrSemanticCallTargetRecord *target, const XrSemanticPlan *primary,
     const XrSemanticPlan *const *dependencies, uint32_t dependency_count) {
     if (!target)
         return false;
-    if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL)
+    if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL ||
+        target->kind == XR_SEM_CALL_TARGET_SOURCE_TEMPLATE_METHOD_LOCAL)
         return true;
     if (target->kind != XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE)
         return false;

@@ -4523,7 +4523,7 @@ static void test_imported_source_class_constructor_authority(void) {
             semantic_target->function == XR_SEMANTIC_INDEX_NONE &&
             semantic_target->callable_type == operation->result_type &&
             xr_stable_id_equal(semantic_target->export_identity, source_export->id) &&
-            strstr(semantic_target->canonical_key, "call-target-v10:schema=45:") != NULL &&
+            strstr(semantic_target->canonical_key, "call-target-v10:schema=46:") != NULL &&
             xr_semantic_imported_class_construction_authority_source_class(
                 semantic, dependency, &semantic->dependencies[0], source_export, operation,
                 &constructor) == 0 &&

@@ -351,6 +351,15 @@ static inline bool xr_semantic_source_class_can_name_one_method(uint8_t flags) {
            (flags & XR_SEM_SOURCE_CLASS_GENERIC) == 0;
 }
 
+/* A generic declaration cannot freeze one runtime class-instance identity,
+ * but its method body can still name another method body when the call's
+ * receiver is proven separately to be the caller's exact self parameter. This
+ * predicate deliberately answers only the declaration half of that proof;
+ * builder and verifier must also establish exact self, selector and arity. */
+static inline bool xr_semantic_source_class_can_name_template_method(uint8_t flags) {
+    return (flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0;
+}
+
 static inline uint16_t xr_semantic_source_instance_method_call_kind(uint8_t flags) {
     return (flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) != 0
                ? (uint16_t) XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL
