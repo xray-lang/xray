@@ -816,19 +816,25 @@ fn _releaseAcceptLoop(token: i64) {
     var (_, released) = _acceptActiveToken.compareExchange(token, 0)
 }
 
+// Keep the affine connection inside a single-iteration frame. A loop-carried
+// local would have one source identity on both sides of its back edge, which
+// cannot be consumed by one iteration and then reused by the next.
+fn _acceptOne(token: i64) -> bool {
+    var accepted = __acceptPeer(time.monotonic() + _ACCEPT_POLL_MS)
+    if (accepted == null) { return true }
+    var live: NetConn = accepted!
+    accepted = null
+    if (_acceptActiveToken.load() != token) {
+        net.close(live)
+        return false
+    }
+    go _serveAcceptedPeer(move live, token)
+    return true
+}
+
 fn _acceptLoop(token: i64) {
     defer { _releaseAcceptLoop(token) }
-    while (_acceptActiveToken.load() == token) {
-        var accepted = __acceptPeer(time.monotonic() + _ACCEPT_POLL_MS)
-        if (accepted == null) { continue }
-        var live: NetConn = accepted!
-        accepted = null
-        if (_acceptActiveToken.load() != token) {
-            net.close(live)
-            return
-        }
-        go _serveAcceptedPeer(move live, token)
-    }
+    while (_acceptActiveToken.load() == token && _acceptOne(token)) {}
 }
 
 fn _activateClusterSource(started: bool, secret: string) -> bool {
