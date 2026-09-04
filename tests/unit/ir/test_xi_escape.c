@@ -1148,10 +1148,11 @@ static void test_arc_local_method_uses_resolved_borrow_contract(void) {
         .kind = XR_KIND_INSTANCE,
         .id = 16,
         .frozen = true,
-        .instance = {
-            .class_name = "BorrowingReader",
-            .class_ref = (struct XrClassInfo *) &class_identity,
-        },
+        .instance =
+            {
+                .class_name = "BorrowingReader",
+                .class_ref = (struct XrClassInfo *) &class_identity,
+            },
     };
     XiFunc *root = make_func("arc_local_method_module", &t_int);
     XiFunc *caller = make_func("invokeBorrow", &t_int);
@@ -1167,6 +1168,9 @@ static void test_arc_local_method_uses_resolved_borrow_contract(void) {
     XiValue *caller_receiver = xi_param(caller, caller->entry, 0, &receiver_type);
     set_single_param(caller, caller_receiver);
     callee->nparams = 2;
+    callee->has_receiver = true;
+    callee->receiver_mode = XR_PARAM_READ;
+    callee->receiver_borrowed = true;
     callee->params = (XiValue **) xr_calloc(2, sizeof(*callee->params));
     XR_CHECK(callee->params != NULL, "test_xi_escape: method param allocation failed");
     callee->params[0] = xi_param(callee, callee->entry, 0, &receiver_type);
@@ -1214,6 +1218,95 @@ static void test_arc_local_method_uses_resolved_borrow_contract(void) {
               "borrowed local-method argument must not be retained for a consume");
     ASSERT_EQ(count_target_ops(caller, XI_RELEASE, argument), 1,
               "caller must retain ownership and release the borrowed method argument at death");
+    root->module = NULL;
+    xi_func_free(root);
+}
+
+/* Instance call operands and callee parameters both put the receiver at slot
+ * zero. An explicit parameter must therefore keep its index instead of using
+ * the +1 offset reserved for plain and namespace calls. If ARC reads the
+ * receiver's borrowed contract for payload slot one, it releases the payload
+ * after the call even though the method transferred it into shared storage. */
+static void test_arc_local_method_maps_owned_parameter_after_receiver(void) {
+    static int class_identity;
+    XrType receiver_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 17,
+        .frozen = true,
+        .instance =
+            {
+                .class_name = "OwningWriter",
+                .class_ref = (struct XrClassInfo *) &class_identity,
+            },
+    };
+    XiFunc *root = make_func("arc_owned_method_module", &t_int);
+    XiFunc *caller = make_func("invokeStore", &t_int);
+    XiFunc *callee = make_func("storeArray", &t_int);
+    caller->parent_func = root;
+    callee->parent_func = root;
+    root->children = (XiFunc **) xr_calloc(2, sizeof(*root->children));
+    XR_CHECK(root->children != NULL, "test_xi_escape: owned method child allocation failed");
+    root->children[0] = caller;
+    root->children[1] = callee;
+    root->children_cap = root->nchildren = 2;
+
+    XiValue *caller_receiver = xi_param(caller, caller->entry, 0, &receiver_type);
+    set_single_param(caller, caller_receiver);
+    caller->has_receiver = true;
+    caller->receiver_mode = XR_PARAM_READ;
+    caller->receiver_borrowed = true;
+    callee->nparams = 2;
+    callee->has_receiver = true;
+    callee->receiver_mode = XR_PARAM_READ;
+    callee->receiver_borrowed = true;
+    callee->params = (XiValue **) xr_calloc(2, sizeof(*callee->params));
+    XR_CHECK(callee->params != NULL, "test_xi_escape: owned method param allocation failed");
+    callee->params[0] = xi_param(callee, callee->entry, 0, &receiver_type);
+    callee->params[1] = xi_param(callee, callee->entry, 1, &t_array);
+    XiValue *store = xi_value_new(callee, callee->entry, XI_SET_SHARED, &t_unit, 1);
+    store->args[0] = callee->params[1];
+    store->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(callee->entry, xi_const_int(callee, callee->entry, 0, &t_int));
+
+    XiValue *argument = xi_value_new(caller, caller->entry, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *call = xi_value_new(caller, caller->entry, XI_CALL_METHOD, &t_int, 2);
+    call->args[0] = caller_receiver;
+    call->args[1] = argument;
+    call->aux = (void *) "storeArray";
+    call->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(caller->entry, call);
+    xi_block_set_return(root->entry, xi_const_int(root, root->entry, 0, &t_int));
+
+    XiClassMethod methods[2] = {
+        {.name = "invokeStore", .is_static = false},
+        {.name = "storeArray", .is_static = false},
+    };
+    uint16_t child_indices[2] = {0, 1};
+    XiClassData class_data = {
+        .class_info = (struct XrClassInfo *) &class_identity,
+        .class_name = "OwningWriter",
+        .methods = methods,
+        .nmethod = 2,
+        .child_idx = child_indices,
+        .ninst = 2,
+    };
+    XiClassData *classes[1] = {&class_data};
+    XiModule module = {
+        .init = root,
+        .classes = classes,
+        .nclasses = 1,
+    };
+    root->module = &module;
+
+    xi_arc_insert(root);
+
+    ASSERT_EQ(callee->arc_borrow_sig && callee->arc_borrow_sig->valid &&
+                  callee->arc_borrow_sig->param_own[0] == XI_OWN_BORROWED,
+              true, "instance receiver must remain borrowed");
+    ASSERT_EQ(callee->arc_borrow_sig->param_own[1], XI_OWN_OWNED,
+              "stored explicit method parameter must be owned");
+    ASSERT_EQ(count_target_ops(caller, XI_RELEASE, argument), 0,
+              "caller must move an explicit parameter consumed by an instance method");
     root->module = NULL;
     xi_func_free(root);
 }
@@ -2131,6 +2224,7 @@ int main(void) {
     test_arc_unknown_call_result_retains_before_single_consume();
     test_arc_resolved_callee_contract_overrides_callsite_borrow();
     test_arc_local_method_uses_resolved_borrow_contract();
+    test_arc_local_method_maps_owned_parameter_after_receiver();
     test_arc_stringbuilder_builtin_result_is_fresh();
     test_arc_value_clone_is_fresh_owner();
     test_arc_builtin_iterator_results_are_fresh();
