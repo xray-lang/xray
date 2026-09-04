@@ -19,9 +19,11 @@
 
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
+#include "../coro/xcoroutine.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/xisolate_internal.h"
+#include "../runtime/object/xjson.h"
 #include "../shared/xobject_shape.h"
 #include "../stdlib/xstdlib_defs_generated.h"
 
@@ -250,6 +252,12 @@ XR_FUNC XrClass *xr_stdlib_record_class_get(XrVMRuntime *isolate, const char *mo
     entries[cache->native_object_shape_count++] =
         (XrStdlibNativeObjectShapeCacheEntry) {.decl = decl.identity, .cls = cls};
     return cls;
+}
+
+XR_FUNC XrObjectInstance *xr_stdlib_record_new(XrVMRuntime *isolate, const char *module,
+                                               const char *name) {
+    XrClass *cls = xr_stdlib_record_class_get(isolate, module, name);
+    return cls ? xr_object_instance_new_with_class(xr_current_coro(isolate), cls) : NULL;
 }
 
 XR_FUNC void xr_stdlib_cache_free(XrVMRuntime *isolate) {

@@ -58,11 +58,6 @@
 extern char **environ;
 #endif
 
-static XrObjectInstance *os_exec_result_new(XrVMRuntime *X) {
-    XrClass *cls = xr_stdlib_record_class_get(X, "os", "__ExecResult");
-    return cls ? xr_object_instance_new_with_class(xr_current_coro(X), cls) : NULL;
-}
-
 /* ========== External Declarations ========== */
 
 struct XrCoroutine;
@@ -70,47 +65,6 @@ extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
-
-/* ========== Windows Compatibility ========== */
-
-#ifdef XR_OS_WINDOWS
-static int os_setenv_impl(const char *name, const char *value) {
-    if (!SetEnvironmentVariableA(name, value))
-        return -1;
-    /* Keep the CRT view synchronized when it can represent the value. The
-     * Windows process environment is authoritative because the CRT treats an
-     * empty value as deletion while Win32 distinguishes empty from missing. */
-    (void) _putenv_s(name, value);
-    return 0;
-}
-
-static int os_unsetenv_impl(const char *name) {
-    if (!SetEnvironmentVariableA(name, NULL))
-        return -1;
-    (void) _putenv_s(name, "");
-    return 0;
-}
-#else
-#define os_setenv_impl(name, value) setenv(name, value, 1)
-#define os_unsetenv_impl(name) unsetenv(name)
-#endif
-
-static const char *os_core_getenv(void *ctx, const char *name) {
-    (void) ctx;
-#ifdef XR_OS_WINDOWS
-    static XR_THREAD_LOCAL char value[32768];
-    SetLastError(ERROR_SUCCESS);
-    DWORD length = GetEnvironmentVariableA(name, value, (DWORD) sizeof(value));
-    if (length == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
-        return NULL;
-    if (length >= sizeof(value))
-        return NULL;
-    value[length] = '\0';
-    return value;
-#else
-    return getenv(name);
-#endif
-}
 
 /* ========== Environment Variables ========== */
 
@@ -122,7 +76,20 @@ static XrValue os_getenv(XrVMRuntime *X, XrValue *args, int argc) {
     if (!name)
         return xr_null();
 
-    const char *value = os_core_getenv(NULL, name);
+    const char *value = NULL;
+#ifdef XR_OS_WINDOWS
+    static XR_THREAD_LOCAL char windows_value[32768];
+    SetLastError(ERROR_SUCCESS);
+    DWORD length =
+        GetEnvironmentVariableA(name, windows_value, (DWORD) sizeof(windows_value));
+    if (!(length == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) &&
+        length < sizeof(windows_value)) {
+        windows_value[length] = '\0';
+        value = windows_value;
+    }
+#else
+    value = getenv(name);
+#endif
     if (!value)
         return xr_null();
 
@@ -140,7 +107,16 @@ static XrValue os_setenv(XrVMRuntime *X, XrValue *args, int argc) {
     if (!name || !value)
         return xr_bool(false);
 
-    int result = os_setenv_impl(name, value);
+    int result = -1;
+#ifdef XR_OS_WINDOWS
+    if (SetEnvironmentVariableA(name, value)) {
+        /* Keep the CRT view synchronized when it can represent the value. */
+        (void) _putenv_s(name, value);
+        result = 0;
+    }
+#else
+    result = setenv(name, value, 1);
+#endif
     return xr_bool(result == 0);
 }
 
@@ -154,7 +130,15 @@ static XrValue os_unsetenv(XrVMRuntime *X, XrValue *args, int argc) {
     if (!name)
         return xr_bool(false);
 
-    int result = os_unsetenv_impl(name);
+    int result = -1;
+#ifdef XR_OS_WINDOWS
+    if (SetEnvironmentVariableA(name, NULL)) {
+        (void) _putenv_s(name, "");
+        result = 0;
+    }
+#else
+    result = unsetenv(name);
+#endif
     return xr_bool(result == 0);
 }
 
@@ -678,7 +662,7 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
     int raw_status = _pclose(fp);
     int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
 
-    XrObjectInstance *json = os_exec_result_new(X);
+    XrObjectInstance *json = xr_stdlib_record_new(X, "os", "__ExecResult");
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
     xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
                                   xrs_string_value_c(X, output));
@@ -743,7 +727,7 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
     }
     int exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
 
-    XrObjectInstance *json = os_exec_result_new(X);
+    XrObjectInstance *json = xr_stdlib_record_new(X, "os", "__ExecResult");
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
     xr_object_instance_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
                                   xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));

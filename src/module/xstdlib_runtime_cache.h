@@ -43,6 +43,7 @@
 
 struct XrClass;
 struct XrEnumType;
+struct XrObjectInstance;
 struct XrString;
 
 // XML node-shape keys interned once per isolate and reused on every
@@ -140,6 +141,10 @@ XR_FUNC const char *xr_stdlib_enum_type_module(struct XrVMRuntime *isolate,
 // is canonical for (isolate, module, name).
 XR_FUNC struct XrClass *xr_stdlib_record_class_get(struct XrVMRuntime *isolate, const char *module,
                                                    const char *name);
+
+// Allocate one instance of a generated module-private record carrier.
+XR_FUNC struct XrObjectInstance *xr_stdlib_record_new(struct XrVMRuntime *isolate,
+                                                      const char *module, const char *name);
 
 // Release the cache and every lazily-populated object it owns. Safe to
 // call with a NULL isolate or with the cache already freed.
