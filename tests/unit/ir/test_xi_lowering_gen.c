@@ -2169,6 +2169,10 @@ int main(void) {
     XI_LOWERING_TEST_REQUIRE(!xi_lowering_op_backend_legal(XI_VALUE_PRODUCT_PROJECT));
     XI_LOWERING_TEST_REQUIRE(!xi_lowering_op_backend_legal(XI_SUM_INJECT));
     XI_LOWERING_TEST_REQUIRE(!xi_lowering_op_backend_legal(XI_TARGET_POINTER_BITS));
+    XI_LOWERING_TEST_REQUIRE(!xi_lowering_op_backend_legal(XI_TARGET_OPERATING_SYSTEM));
+    XI_LOWERING_TEST_REQUIRE(!xi_lowering_op_backend_legal(XI_TARGET_ARCHITECTURE));
+    XI_LOWERING_TEST_REQUIRE(!xi_lowering_op_backend_legal(XI_TARGET_NATIVE_ABI));
+    XI_LOWERING_TEST_REQUIRE(!xi_lowering_op_backend_legal(XI_TARGET_ENDIANNESS));
     printf("Xi lowering generated coverage: %d entries\n", XI_LOWERING_ENTRY_COUNT);
     return 0;
 }

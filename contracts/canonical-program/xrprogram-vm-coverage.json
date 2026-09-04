@@ -24,7 +24,7 @@
     "decode-policy",
     "quickening-policy"
   ],
-  "operation_count": 37,
+  "operation_count": 43,
   "operations": [
     {
       "stable_id": 1,
@@ -37,6 +37,14 @@
     {
       "stable_id": 2,
       "spelling": "core.constant.bool",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 3,
+      "spelling": "core.constant.target_enum",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",
@@ -77,6 +85,14 @@
     {
       "stable_id": 24,
       "spelling": "core.compare.i64",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 25,
+      "spelling": "core.compare.target_enum",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",
@@ -189,6 +205,38 @@
     {
       "stable_id": 64,
       "spelling": "core.target.pointer_width",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 65,
+      "spelling": "core.target.operating_system",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 66,
+      "spelling": "core.target.architecture",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 67,
+      "spelling": "core.target.native_abi",
+      "vm": "COMPLETE",
+      "baseline_view": "COMPLETE",
+      "fixed_row_view": "COMPLETE",
+      "differential_oracle": "XrReferenceEvaluator"
+    },
+    {
+      "stable_id": 68,
+      "spelling": "core.target.endianness",
       "vm": "COMPLETE",
       "baseline_view": "COMPLETE",
       "fixed_row_view": "COMPLETE",

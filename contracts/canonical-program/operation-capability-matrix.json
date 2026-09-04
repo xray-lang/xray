@@ -32,7 +32,7 @@
     "validated_type": "XrValidatedProgram",
     "generated_coverage": "contracts/canonical-program/xrprogram-semantic-coverage.json",
     "contract": "contracts/canonical-program/xrprogram-verifier-v1.md",
-    "note": "All 37 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; coroutine, import, and boundary surfaces remain fail closed until their owning slices activate them."
+    "note": "All 43 registered operations have bounded verification and independent reference evaluation. Existential pack/test/project use exact TypeId and conformance facts with dominating-test projection admission; witness direct/invoke use exact interface slots and conformance dispatch; callable pack/indirect direct/invoke use exact SignatureId authority and closed FunctionId targets with optional typed capture aggregates; coroutine, import, and boundary surfaces remain fail closed until their owning slices activate them."
   },
   "vm_stage": {
     "status": "COMPLETE",
@@ -45,7 +45,7 @@
       "baseline-validated-graph",
       "fixed-instruction-rows"
     ],
-    "note": "All 37 registered operations execute in the independent typed VM and match the reference evaluator. Private existential/callable carriers, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
+    "note": "All 43 registered operations execute in the independent typed VM and match the reference evaluator. Private existential/callable carriers, witness/callable dispatch tables and fixed rows are disposable runtime views, not a second public bytecode or distribution format."
   },
   "aot_stage": {
     "status": "COMPLETE",
@@ -55,7 +55,7 @@
     "private_realization": "XrBackendIR",
     "generated_coverage": "contracts/canonical-program/xrprogram-aot-coverage.json",
     "native_identity": "ExecutionId + BackendId + ToolchainId + OptimizationPolicyId + native bytes",
-    "note": "All 37 registered operations lower through an independently verified BackendIR into portable C11. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixture links no VM, compiler, program loader, or AOT toolchain."
+    "note": "All 43 registered operations lower through an independently verified BackendIR into portable C11. Existential and callable carriers remain backend-private; witness and indirect calls become closed typed direct-call switches, and the pure native fixture links no VM, compiler, program loader, or AOT toolchain."
   },
   "operations": [
     {
@@ -85,6 +85,24 @@
       "status": "COMPLETE_W7_WAVE1",
       "evidence": [
         "xisa/program/xi-source-projection.json",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.constant.target_enum",
+      "core_spec_contract": "construct one compiler-owned Target enum member from its generated nonzero logical value",
+      "program_encoding": "exact Target TypeId result plus one bounded u16-domain immediate",
+      "decoder_verifier_evaluator": "canonical Target TypeId and generated per-enum member-domain checks with direct logical value evaluation",
+      "vm_implementation": "typed target-enum slot carrying the frozen generated logical value",
+      "aot_lowering": "BackendIR target-enum u16 constant and exact-width portable C literal",
+      "source_producer": "canonical builtin TargetOs, TargetArch, TargetAbi, or TargetEndian member selection",
+      "old_owner_deletion": "the generated target-query registry is the sole enum/member/value authority; no source ordinal, host enum, name fallback, or compatibility alias is reachable",
+      "status": "COMPLETE_W7_WAVE5_TARGET_PROFILE",
+      "evidence": [
+        "xisa/target/query-enums.json",
+        "src/shared/xr_target_query_registry_gen.h",
+        "src/ir/xi_lower_expr.c",
+        "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
       ]
     },
@@ -160,6 +178,26 @@
       "status": "COMPLETE_W7_WAVE1",
       "evidence": [
         "src/program/xr_program_xi_projection_gen.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.compare.target_enum",
+      "core_spec_contract": "equality or inequality over two values of the same compiler-owned Target enum yields canonical bool",
+      "program_encoding": "two same-Target-TypeId operands, bool result, and frozen eq/ne predicate",
+      "decoder_verifier_evaluator": "exact operand nominal identity, predicate range, and direct equality evaluation",
+      "vm_implementation": "typed target-enum equality handler over generated logical values",
+      "aot_lowering": "BackendIR exact-width target-enum equality with canonical bool materialization",
+      "source_producer": "typed equality and inequality between target queries and canonical Target enum members",
+      "old_owner_deletion": "comparison consumes only canonical logical values and exact nominal TypeIds; no host enum representation or spelling inference remains",
+      "status": "COMPLETE_W7_WAVE5_TARGET_PROFILE",
+      "evidence": [
+        "xisa/target/query-enums.json",
+        "src/program/xr_program_from_xi.c",
+        "src/program/xr_program_verify.c",
+        "src/program/xr_reference_evaluator.c",
+        "src/vm/xr_program_vm.c",
+        "src/aot/program/xr_backend_ir_emit_c.c",
         "tests/unit/ir/test_xi_pipeline.c"
       ]
     },
@@ -414,6 +452,74 @@
         "src/program/xr_reference_evaluator.c",
         "src/vm/xr_program_vm.c",
         "src/aot/program/xr_backend_ir_emit_c.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.target.operating_system",
+      "core_spec_contract": "read the immutable bound profile operating system as one generated TargetOs logical value or publish profile-unavailable",
+      "program_encoding": "TargetOs result plus profile.operating-system capability requirement",
+      "decoder_verifier_evaluator": "exact TargetOs type, effect/capability, generated value domain, and bound-profile availability checks",
+      "vm_implementation": "read operating_system from the copied verified execution binding",
+      "aot_lowering": "freeze the same TargetOs logical value into BackendIR without host preprocessor probes",
+      "source_producer": "compiler-owned target.os query with unshadowable target identity",
+      "old_owner_deletion": "generated registry and bound TargetMachine facts are the only authorities; host macros and source spelling inference are forbidden",
+      "status": "COMPLETE_W7_WAVE5_TARGET_PROFILE",
+      "evidence": [
+        "xisa/target/query-enums.json",
+        "src/frontend/analyzer/xa_target_query.h",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.target.architecture",
+      "core_spec_contract": "read the immutable bound profile architecture as one generated TargetArch logical value or publish profile-unavailable",
+      "program_encoding": "TargetArch result plus profile.architecture capability requirement",
+      "decoder_verifier_evaluator": "exact TargetArch type, effect/capability, generated value domain, and bound-profile availability checks",
+      "vm_implementation": "read architecture from the copied verified execution binding",
+      "aot_lowering": "freeze the same TargetArch logical value into BackendIR without compiler-host probes",
+      "source_producer": "compiler-owned target.arch query with unshadowable target identity",
+      "old_owner_deletion": "generated registry and bound TargetMachine facts are the only authorities; host architecture macros and name inference are forbidden",
+      "status": "COMPLETE_W7_WAVE5_TARGET_PROFILE",
+      "evidence": [
+        "xisa/target/query-enums.json",
+        "src/frontend/analyzer/xa_target_query.h",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.target.native_abi",
+      "core_spec_contract": "read the immutable bound profile native ABI as one generated TargetAbi logical value or publish profile-unavailable",
+      "program_encoding": "TargetAbi result plus profile.native-abi capability requirement",
+      "decoder_verifier_evaluator": "exact TargetAbi type, effect/capability, generated value domain, and bound-profile availability checks",
+      "vm_implementation": "read native_abi from the copied verified execution binding",
+      "aot_lowering": "freeze the same TargetAbi logical value into BackendIR without compiler-host ABI inference",
+      "source_producer": "compiler-owned target.abi query with unshadowable target identity",
+      "old_owner_deletion": "generated registry and bound TargetMachine facts are the only authorities; platform defaults and host ABI inference are forbidden",
+      "status": "COMPLETE_W7_WAVE5_TARGET_PROFILE",
+      "evidence": [
+        "xisa/target/query-enums.json",
+        "src/frontend/analyzer/xa_target_query.h",
+        "src/program/xr_program_from_xi.c",
+        "tests/unit/ir/test_xi_pipeline.c"
+      ]
+    },
+    {
+      "id": "core.target.endianness",
+      "core_spec_contract": "read the immutable bound profile endianness as one generated TargetEndian logical value or publish profile-unavailable",
+      "program_encoding": "TargetEndian result plus profile.endianness capability requirement",
+      "decoder_verifier_evaluator": "exact TargetEndian type, effect/capability, generated value domain, and bound-profile availability checks",
+      "vm_implementation": "read endianness from the copied verified execution binding",
+      "aot_lowering": "freeze the same TargetEndian logical value into BackendIR without compiler-host byte-order probes",
+      "source_producer": "compiler-owned target.endian query with unshadowable target identity",
+      "old_owner_deletion": "generated registry and bound TargetMachine facts are the only authorities; host byte-order macros and inference are forbidden",
+      "status": "COMPLETE_W7_WAVE5_TARGET_PROFILE",
+      "evidence": [
+        "xisa/target/query-enums.json",
+        "src/frontend/analyzer/xa_target_query.h",
+        "src/program/xr_program_from_xi.c",
         "tests/unit/ir/test_xi_pipeline.c"
       ]
     },

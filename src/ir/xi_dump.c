@@ -198,7 +198,7 @@ static void dump_value(FILE *out, const XiValue *v) {
                 : v->aux_int == 1 ? "some"
                                   : "invalid",
                 v->aux_int);
-    } else if (v->op == XI_TARGET_POINTER_BITS) {
+    } else if (v->op >= XI_TARGET_POINTER_BITS && v->op <= XI_TARGET_ENDIANNESS) {
         fprintf(out,
                 " [target-query id=%u source=%u ordinal=%u namespace=%u query=%u native=%u "
                 "complete=%u]",

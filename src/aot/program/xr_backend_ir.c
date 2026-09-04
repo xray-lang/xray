@@ -20,11 +20,13 @@ static bool operation_is_supported(uint16_t operation_id) {
     switch (operation_id) {
         case XR_CORE_OP_CORE_CONSTANT_I64:
         case XR_CORE_OP_CORE_CONSTANT_BOOL:
+        case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
         case XR_CORE_OP_CORE_ADD_I64:
         case XR_CORE_OP_CORE_SUB_I64:
         case XR_CORE_OP_CORE_MUL_I64:
         case XR_CORE_OP_CORE_DIV_I64:
         case XR_CORE_OP_CORE_COMPARE_I64:
+        case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM:
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
         case XR_CORE_OP_CORE_BRANCH:
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
@@ -39,6 +41,10 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
         case XR_CORE_OP_CORE_PANIC_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
+        case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:
+        case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
+        case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
+        case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_AGGREGATE_PROJECT:
         case XR_CORE_OP_CORE_AGGREGATE_UPDATE:
@@ -166,6 +172,12 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
             break;
         case XR_CORE_TYPE_U16:
             representation = XR_BACKEND_VALUE_U16;
+            break;
+        case XR_CORE_TYPE_TARGET_OS:
+        case XR_CORE_TYPE_TARGET_ARCH:
+        case XR_CORE_TYPE_TARGET_ABI:
+        case XR_CORE_TYPE_TARGET_ENDIAN:
+            representation = XR_BACKEND_VALUE_TARGET_ENUM_U16;
             break;
         case XR_CORE_TYPE_ERROR:
             representation = XR_BACKEND_VALUE_ERROR_U32;
@@ -402,6 +414,10 @@ void xr_backend_compute_lowering_digest(const XrBackendIR *ir, XrFingerprint *di
     xr_sha256_update(&context, ir->optimization_policy_id.bytes,
                      sizeof(ir->optimization_policy_id.bytes));
     hash_u32(&context, ir->pointer_width);
+    hash_u32(&context, ir->operating_system);
+    hash_u32(&context, ir->architecture);
+    hash_u32(&context, ir->native_abi);
+    hash_u32(&context, ir->endianness);
     hash_u32(&context, ir->entry_function);
     hash_u32(&context, ir->constant_count);
     for (uint32_t constant = 0; constant < ir->constant_count; ++constant) {
@@ -501,6 +517,10 @@ XrBackendStatus xr_backend_ir_build(XrInstance *instance, const XrBackendOptions
     ir->entry_function = program->entry_function;
     ir->pointer_width =
         machine ? (uint16_t) (machine->data_layout.pointer.size * UINT16_C(8)) : 0u;
+    ir->operating_system = machine ? machine->operating_system : 0u;
+    ir->architecture = machine ? machine->architecture : 0u;
+    ir->native_abi = machine ? machine->native_abi : 0u;
+    ir->endianness = machine ? machine->data_layout.endian : 0u;
     ir->constant_count = program->constant_count;
     if (program->function_count > options->max_functions ||
         (ir->pointer_width != 32u && ir->pointer_width != 64u)) {

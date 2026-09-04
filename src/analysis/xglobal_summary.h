@@ -115,6 +115,10 @@ typedef enum XgTargetNamespaceId {
 typedef enum XgTargetQueryKind {
     XG_TARGET_QUERY_NONE = 0,
     XG_TARGET_QUERY_POINTER_BITS = 1,
+    XG_TARGET_QUERY_OPERATING_SYSTEM = 2,
+    XG_TARGET_QUERY_ARCHITECTURE = 3,
+    XG_TARGET_QUERY_NATIVE_ABI = 4,
+    XG_TARGET_QUERY_ENDIANNESS = 5,
 } XgTargetQueryKind;
 
 typedef enum XgDeclKind {
@@ -424,6 +428,10 @@ enum {
     XG_CAP_STACKTRACE = XR_CAP_STACKTRACE,
     XG_CAP_PARALLEL = XR_CAP_PARALLEL,
     XG_CAP_PROFILE_POINTER_WIDTH = 1u << 22,
+    XG_CAP_PROFILE_OPERATING_SYSTEM = 1u << 23,
+    XG_CAP_PROFILE_ARCHITECTURE = 1u << 24,
+    XG_CAP_PROFILE_NATIVE_ABI = 1u << 25,
+    XG_CAP_PROFILE_ENDIANNESS = 1u << 26,
 };
 
 enum {
@@ -1466,6 +1474,7 @@ XR_FUNC bool xg_decl_kind_is_runtime_class(uint8_t kind);
 XR_FUNC bool xg_decl_kind_is_value_aggregate(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
 XR_FUNC const char *xg_target_query_kind_name(uint8_t kind);
+XR_FUNC uint32_t xg_target_query_result_type_key(uint8_t kind);
 XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind);
 XR_FUNC const char *xg_generic_inst_kind_name(uint8_t kind);
 XR_FUNC const char *xg_generic_storage_kind_name(uint8_t kind);

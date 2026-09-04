@@ -27,6 +27,7 @@
 #include "../../runtime/value/xenum_layout.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include "../../shared/xr_core_intrinsic.h"
+#include "../../shared/xr_target_query_registry_gen.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xast_types.h"
@@ -573,6 +574,25 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
     }
 }
 
+/* TargetMachine is the sole source of the public target enum domains.  The
+ * generated registry supplies both these analyzer declarations and the
+ * runtime numeric constants, so source members cannot drift from the values
+ * returned by target queries. */
+static void xa_register_target_query_enums(XaAnalyzer *analyzer) {
+    for (size_t query = 0; query < XR_TARGET_QUERY_ENUM_COUNT; ++query) {
+        const XrTargetQueryEnumDesc *desc = &xr_target_query_enum_rows[query];
+        const char *member_names[9];
+        XR_DCHECK(desc->member_count <= sizeof(member_names) / sizeof(member_names[0]),
+                  "target query enum exceeds registry scratch capacity");
+        if (desc->member_count > sizeof(member_names) / sizeof(member_names[0]))
+            continue;
+        for (size_t member = 0; member < desc->member_count; ++member)
+            member_names[member] = desc->members[member].source_name;
+        register_prelude_enum_full(analyzer, desc->type_name, NULL, 0, member_names,
+                                   (int) desc->member_count, NULL, NULL, NULL, false);
+    }
+}
+
 // Create analyzer
 XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     XR_DCHECK(session != NULL, "xa_analyzer_new: NULL compiler session");
@@ -644,6 +664,7 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // Register prelude enums (Ordering) with single canonical identity,
     // visible in every compilation unit.
     xa_register_prelude_enums(analyzer);
+    xa_register_target_query_enums(analyzer);
 
     // Default options. Strict null checks are ON by default: a possibly-null
     // value must be narrowed before member/index/call access (best-practice

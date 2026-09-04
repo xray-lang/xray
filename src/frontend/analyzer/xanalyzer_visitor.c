@@ -2810,6 +2810,23 @@ XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, 
     if (links && !links->file_path)
         links->file_path = ctx->file_path;
 
+    /* `target` is a compiler-owned namespace, not a shadowable prelude value.
+     * Every source binding kind reaches this common definition boundary, so
+     * locals, parameters, captures, patterns and declarations all fail closed
+     * without teaching the lexer a target-specific rule. */
+    if (!symbol->is_builtin && symbol->name &&
+        strcmp(symbol->name, "target") == 0) {
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "Symbol 'target' redeclares the compiler-owned target namespace");
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = line > 0 ? line : (int) symbol->location.line,
+                          .column = (int) symbol->location.column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_CMP_REDEFINED_VAR, msg, &loc);
+        return;
+    }
+
     XaSymbol *existing = symbol->name ? xa_scope_lookup_local(scope, symbol->name) : NULL;
     if (existing) {
         bool same_source_symbol = existing->kind == symbol->kind &&
@@ -2917,7 +2934,9 @@ static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
     sym->is_exported = node->is_exported;
     sym->is_readonly_binding = true;
     sym->is_rebindable = false;
-    xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+    xa_visit_add_symbol_checked(ctx, sym, (int) node->line);
+    if (sym->scope != ctx->analyzer->current_scope)
+        return;
     var->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -6549,11 +6568,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XaSymbol *err_sym = xa_symbol_new(cc->var_name, XA_SYM_VARIABLE);
                     err_sym->location.line = cc->var_line;
                     err_sym->location.column = cc->var_column;
-                    xa_scope_add_symbol(ctx->analyzer->current_scope, err_sym);
-                    XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
-                    if (err_links) {
-                        err_links->type = xa_resolve_catch_binding_type(ctx, cc, true);
-                        err_links->is_definitely_assigned = true;
+                    xa_visit_add_symbol_checked(ctx, err_sym, (int) cc->var_line);
+                    if (err_sym->scope == ctx->analyzer->current_scope) {
+                        XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
+                        if (err_links) {
+                            err_links->type = xa_resolve_catch_binding_type(ctx, cc, true);
+                            err_links->is_definitely_assigned = true;
+                        }
                     }
                 }
                 if (cc->pattern) {

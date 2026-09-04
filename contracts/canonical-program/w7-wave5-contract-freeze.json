@@ -585,149 +585,191 @@
       "id": "target-profile-query",
       "layers": {
         "source": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "src/frontend/analyzer/xa_target_query.h",
               "tokens": [
                 "typedef struct XaTargetQueryFact",
-                "XA_TARGET_QUERY_POINTER_BITS"
+                "XA_TARGET_QUERY_POINTER_BITS",
+                "XA_TARGET_QUERY_OPERATING_SYSTEM",
+                "XA_TARGET_QUERY_ARCHITECTURE",
+                "XA_TARGET_QUERY_NATIVE_ABI",
+                "XA_TARGET_QUERY_ENDIANNESS"
               ]
             },
             {
               "path": "tests/unit/frontend/test_xa_typed_program.c",
               "tokens": [
                 "target_query_snapshot_preserves_compiler_owned_identity",
-                "user_shadowed_target_does_not_publish_target_query"
+                "target_namespace_is_unshadowable_at_every_source_binding_gate",
+                "target_enum_member_and_query_share_one_canonical_type"
               ]
             }
           ]
         },
         "xglobal": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "src/analysis/xglobal_summary.h",
               "tokens": [
                 "typedef struct XgTargetQuerySummary",
-                "xg_global_evidence_find_target_query"
+                "XG_TARGET_QUERY_OPERATING_SYSTEM",
+                "XG_TARGET_QUERY_ARCHITECTURE",
+                "XG_TARGET_QUERY_NATIVE_ABI",
+                "XG_TARGET_QUERY_ENDIANNESS",
+                "xg_target_query_result_type_key"
               ]
             },
             {
-              "path": "tests/unit/analysis/test_xglobal_summary.c",
+              "path": "src/analysis/xglobal_producer.c",
               "tokens": [
-                "global_evidence_publishes_exact_target_pointer_bits_query"
+                "XG_CAP_PROFILE_OPERATING_SYSTEM",
+                "XG_CAP_PROFILE_ARCHITECTURE",
+                "XG_CAP_PROFILE_NATIVE_ABI",
+                "XG_CAP_PROFILE_ENDIANNESS"
               ]
             }
           ]
         },
         "xi": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "src/ir/xi_lower_expr.c",
               "tokens": [
                 "lower_target_query",
-                "XI_TARGET_POINTER_BITS"
+                "XI_TARGET_OPERATING_SYSTEM",
+                "XI_TARGET_ARCHITECTURE",
+                "XI_TARGET_NATIVE_ABI",
+                "XI_TARGET_ENDIANNESS"
               ]
             },
             {
               "path": "src/ir/xi_verify.c",
               "tokens": [
-                "verify_target_query_contract"
+                "verify_target_query_contract",
+                "verify_target_enum_constant_contract"
               ]
             }
           ]
         },
         "corespec": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "xisa/core/registry.json",
               "tokens": [
-                "\"spelling\": \"core.target.pointer_width\"",
-                "\"profile_dependency\": \"pointer_width\""
+                "\"spelling\": \"core.constant.target_enum\"",
+                "\"spelling\": \"core.compare.target_enum\"",
+                "\"spelling\": \"core.target.operating_system\"",
+                "\"spelling\": \"core.target.architecture\"",
+                "\"spelling\": \"core.target.native_abi\"",
+                "\"spelling\": \"core.target.endianness\"",
+                "\"spelling\": \"core.target.pointer_width\""
               ]
             }
           ]
         },
         "program": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "xisa/program/xi-source-projection.json",
               "tokens": [
-                "\"xi_operation\": \"xi.target.pointer.bits\"",
-                "\"core_operation\": \"core.target.pointer_width\""
+                "\"xi_operation\": \"xi.target.operating.system\"",
+                "\"xi_operation\": \"xi.target.architecture\"",
+                "\"xi_operation\": \"xi.target.native.abi\"",
+                "\"xi_operation\": \"xi.target.endianness\""
               ]
             },
             {
               "path": "src/program/xr_program_from_xi.c",
               "tokens": [
                 "XR_PROGRAM_XI_PROJECTION_TARGET_QUERY",
+                "XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM",
+                "XR_CORE_OP_CORE_COMPARE_TARGET_ENUM",
                 "lacks its exact Xglobal contract"
               ]
             }
           ]
         },
         "verifier": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "src/program/xr_program_verify.c",
               "tokens": [
-                "case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:"
+                "case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:",
+                "case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM:",
+                "case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:",
+                "case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:",
+                "case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:",
+                "case XR_CORE_OP_CORE_TARGET_ENDIANNESS:"
               ]
             }
           ]
         },
         "reference": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "src/program/xr_reference_evaluator.c",
               "tokens": [
-                "case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:"
+                "case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:",
+                "case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM:",
+                "case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:",
+                "case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:",
+                "case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:",
+                "case XR_CORE_OP_CORE_TARGET_ENDIANNESS:"
               ]
             }
           ]
         },
         "vm": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "src/vm/xr_program_vm.c",
               "tokens": [
-                "case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:"
+                "case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:",
+                "case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM:",
+                "case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:",
+                "case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:",
+                "case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:",
+                "case XR_CORE_OP_CORE_TARGET_ENDIANNESS:"
               ]
             }
           ]
         },
         "aot": {
-          "status": "POINTER_WIDTH_CANONICAL_ONLY",
+          "status": "CANONICAL_COMPLETE",
           "evidence": [
             {
               "path": "src/aot/program/xr_backend_ir_emit_c.c",
               "tokens": [
-                "case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:"
+                "case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:",
+                "case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM:",
+                "case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:",
+                "case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:",
+                "case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:",
+                "case XR_CORE_OP_CORE_TARGET_ENDIANNESS:"
               ]
             }
           ]
         },
         "legacy_owner": {
-          "status": "PRESENT_HOST_AND_PRECUT_TARGET_PROBES",
+          "status": "NEW_CANONICAL_DEPENDENCY_ZERO",
           "evidence": [
             {
-              "path": "src/runtime/abi/xr_target_machine_facts.h",
+              "path": "contracts/canonical-program/operation-capability-matrix.json",
               "tokens": [
-                "typedef struct XrTargetMachineFacts",
-                "XrTargetDataLayout data_layout;"
-              ]
-            },
-            {
-              "path": "src/aot/program/xr_backend_ir.c",
-              "tokens": [
-                "machine->data_layout.pointer.size * UINT16_C(8)"
+                "the generated target-query registry is the sole enum/member/value authority",
+                "host macros and source spelling inference are forbidden",
+                "host architecture macros and name inference are forbidden",
+                "platform defaults and host ABI inference are forbidden",
+                "host byte-order macros and inference are forbidden"
               ]
             }
           ]
@@ -775,7 +817,7 @@
     },
     {
       "id": "host-target-probe",
-      "state": "PRESENT_OUTSIDE_POINTER_WIDTH_WALKING_SKELETON",
+      "state": "NEW_CANONICAL_DEPENDENCY_ZERO",
       "paths": [
         "src/app/toolchain/xtc_target_profile.c",
         "src/aot/xaot_bundle.c"

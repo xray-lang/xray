@@ -243,9 +243,15 @@ def self_test(root: Path) -> None:
     else:
         raise GateError("forbidden AOT owner mutation was accepted")
 
-    mutated = emitter.replace('"        v%u = UINT16_C(%u);\\n"',
-                              '"        v%u = UINT32_C(%u);\\n"', 1)
-    require(mutated != emitter, "pointer-width generated-C mutation did not apply")
+    mutated, mutation_count = re.subn(
+        r"(case\s+XR_CORE_OP_CORE_TARGET_POINTER_WIDTH\s*:\s*"
+        r"return\s+append_format\([^;]*?)UINT16_C",
+        lambda match: match.group(1) + "UINT32_C",
+        emitter,
+        count=1,
+        flags=re.DOTALL,
+    )
+    require(mutation_count == 1, "pointer-width generated-C mutation did not apply exactly once")
     try:
         validate_sources(root, {EMITTER: mutated})
     except GateError:

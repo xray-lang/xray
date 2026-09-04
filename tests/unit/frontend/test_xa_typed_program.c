@@ -18,6 +18,8 @@
 #include "toolchain/xcompiler_session.h"
 #include "xray_vm.h"
 
+#include <string.h>
+
 static XrVMRuntime *g_isolate = NULL;
 static XrCompilerSession *g_session = NULL;
 
@@ -258,23 +260,56 @@ TEST(target_query_snapshot_preserves_compiler_owned_identity) {
     xr_program_destroy(program);
 }
 
-TEST(user_shadowed_target_does_not_publish_target_query) {
+static bool has_target_namespace_redeclaration(XaAnalyzer *analyzer) {
+    int count = 0;
+    for (XaDiagnostic *diagnostic = xa_analyzer_get_diagnostics(analyzer, &count); diagnostic;
+         diagnostic = diagnostic->next) {
+        if (diagnostic->severity == XR_DIAG_SEV_ERROR && diagnostic->message &&
+            strstr(diagnostic->message, "compiler-owned target namespace"))
+            return true;
+    }
+    return false;
+}
+
+TEST(target_namespace_is_unshadowable_at_every_source_binding_gate) {
+    static const struct {
+        const char *name;
+        const char *source;
+    } cases[] = {
+        {"top-level", "var target = 1\n"},
+        {"local", "fn read() -> i64 {\n var target = 7\n return target\n}\n"},
+        {"parameter", "fn read(target: i64) -> i64 { return target }\n"},
+        {"const", "const target = 7\n"},
+        {"catch",
+         "enum Failure { Bad }\n"
+         "fn read() {\n try { throw Failure.Bad } catch (target) { return }\n}\n"},
+    };
+    for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+        AstNode *program = parse_and_analyze(analyzer, cases[index].name, cases[index].source);
+        ASSERT_NOT_NULL(program);
+        ASSERT_TRUE(has_target_namespace_redeclaration(analyzer));
+        xa_analyzer_free(analyzer);
+        xr_program_destroy(program);
+    }
+}
+
+TEST(target_enum_member_and_query_share_one_canonical_type) {
     XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     AstNode *program = parse_and_analyze(
-        analyzer, "target-shadow.xr",
-        "fn read() -> i64 {\n"
-        "    var target = {pointerBits: 7}\n"
-        "    return target.pointerBits\n"
-        "}\n");
+        analyzer, "target-os-member.xr",
+        "fn is_darwin() -> bool { return target.os == TargetOs.Darwin }\n");
     ASSERT_NOT_NULL(program);
     ASSERT_EQ_UINT(analyzer->diagnostic_count, 0);
     AstNode *function = program->as.program.statements[0];
     AstNode *body = function ? function->as.function_decl.body : NULL;
-    AstNode *ret = body && body->type == AST_BLOCK ? body->as.block.statements[1] : NULL;
-    AstNode *member = ret && ret->type == AST_RETURN_STMT ? ret->as.return_stmt.values[0] : NULL;
-    ASSERT_NOT_NULL(member);
+    AstNode *ret = body && body->type == AST_BLOCK ? body->as.block.statements[0] : NULL;
+    AstNode *equal = ret && ret->type == AST_RETURN_STMT ? ret->as.return_stmt.values[0] : NULL;
+    ASSERT_NOT_NULL(equal);
+    ASSERT_EQ_INT(equal->type, AST_BINARY_EQ);
     XaTargetQueryFact fact = {0};
-    ASSERT_FALSE(xa_analyzer_get_target_query(analyzer, member, &fact));
+    ASSERT_TRUE(xa_analyzer_get_target_query(analyzer, equal->as.binary.left, &fact));
+    ASSERT_EQ_UINT(fact.query_id, XA_TARGET_QUERY_OPERATING_SYSTEM);
 
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
@@ -334,7 +369,8 @@ RUN_TEST(conversion_snapshot_is_owned_and_immutable);
 RUN_TEST(call_error_effect_snapshot_preserves_flow_sensitive_fact);
 RUN_TEST(function_expr_effect_snapshot_is_distinct_and_immutable);
 RUN_TEST(target_query_snapshot_preserves_compiler_owned_identity);
-RUN_TEST(user_shadowed_target_does_not_publish_target_query);
+RUN_TEST(target_namespace_is_unshadowable_at_every_source_binding_gate);
+RUN_TEST(target_enum_member_and_query_share_one_canonical_type);
 RUN_TEST(top_level_call_publishes_flow_sensitive_error_effect);
 RUN_TEST(error_diagnostic_blocks_publication);
 teardown();

@@ -116,8 +116,8 @@ Generated C may not ask the host compiler to rediscover target layout through
 ## Digest anchors
 
 anchor-sha256: contracts/semantic-owners.toml 05ddaa0d1870aac072fa918a9f444b521c55a305eff4509fd1c9172769980447
-anchor-sha256: contracts/semantic-owner-registry.json 90483e2ff4cee1ce017c598d51c77ed44054a9283dd3995d5c54844683fa2372
+anchor-sha256: contracts/semantic-owner-registry.json bda4c40d1de84f9295412942b3f4488cc1f50d9a6b0dbe2cd2906d5aa76ae93f
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
 anchor-sha256: contracts/shared-core-inventory.json 241fc6d624c38499814b0ca7e15d866b7c6d2d82f2d7634b303bf50d8b340366
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h 32112208cae318f5dc5b318eb7fac6c39b67fd461f5e06b5e17c852426117837
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h cc514fd0784e29a162824d855e7caa28d36230e370f589d99981683cd51b5281
 anchor-sha256: scripts/check_semantic_owners.py b68ad3ae27d9010c07b7809e2319beb6aa057c88cb2273177dce68e80cc8116b

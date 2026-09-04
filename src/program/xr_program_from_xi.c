@@ -25,6 +25,7 @@
 #include "../runtime/class/xenum.h"
 #include "../runtime/value/xenum_layout.h"
 #include "../runtime/value/xtype.h"
+#include "../shared/xr_target_query_registry_gen.h"
 #include "xr_program_verify.h"
 
 #include <stdarg.h>
@@ -256,6 +257,19 @@ static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
                 return true;
             }
             return false;
+        case XR_KIND_ENUM:
+            if (!type->enum_type.enum_name)
+                return false;
+            const XrTargetQueryEnumDesc *target_enum =
+                xr_target_query_enum_by_type_name(type->enum_type.enum_name);
+            const XrClassInfo *nominal = type->enum_type.nominal_ref;
+            if (!target_enum || !nominal || nominal->nominal_kind != XA_NOMINAL_ENUM ||
+                !nominal->declaration_symbol || !nominal->declaration_symbol->is_builtin ||
+                !nominal->declaration_symbol->name ||
+                strcmp(nominal->declaration_symbol->name, target_enum->type_name) != 0)
+                return false;
+            *type_id = target_enum->core_type_id;
+            return true;
         case XR_KIND_CLASS:
         case XR_KIND_INSTANCE:
             if (type->instance.class_name && strcmp(type->instance.class_name, "PanicInfo") == 0) {
@@ -1977,13 +1991,25 @@ static bool xg_effect_contract_to_core(uint32_t xg_effects, uint32_t *core_effec
 
 static bool xg_capability_contract_to_core(uint32_t xg_capabilities,
                                            uint32_t *core_capabilities) {
-    if (!core_capabilities ||
-        (xg_capabilities & ~XG_CAP_PROFILE_POINTER_WIDTH) != 0u)
+    const uint32_t supported = XG_CAP_PROFILE_POINTER_WIDTH |
+                               XG_CAP_PROFILE_OPERATING_SYSTEM |
+                               XG_CAP_PROFILE_ARCHITECTURE |
+                               XG_CAP_PROFILE_NATIVE_ABI |
+                               XG_CAP_PROFILE_ENDIANNESS;
+    if (!core_capabilities || (xg_capabilities & ~supported) != 0u)
         return false;
-    *core_capabilities =
-        (xg_capabilities & XG_CAP_PROFILE_POINTER_WIDTH) != 0u
-            ? XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH
-            : 0u;
+    uint32_t mapped = 0u;
+    if ((xg_capabilities & XG_CAP_PROFILE_POINTER_WIDTH) != 0u)
+        mapped |= XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH;
+    if ((xg_capabilities & XG_CAP_PROFILE_OPERATING_SYSTEM) != 0u)
+        mapped |= XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM;
+    if ((xg_capabilities & XG_CAP_PROFILE_ARCHITECTURE) != 0u)
+        mapped |= XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE;
+    if ((xg_capabilities & XG_CAP_PROFILE_NATIVE_ABI) != 0u)
+        mapped |= XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI;
+    if ((xg_capabilities & XG_CAP_PROFILE_ENDIANNESS) != 0u)
+        mapped |= XR_CORE_CAPABILITY_PROFILE_ENDIANNESS;
+    *core_capabilities = mapped;
     return true;
 }
 
@@ -4488,6 +4514,18 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
     if (value->op == XI_GET_SHARED)
         return translate_imported_callable_pack(context, function, value, instruction, diagnostic,
                                                 diagnostic_size);
+    uint16_t target_enum_type = XR_CORE_TYPE_VOID;
+    if (value->op == XI_CONST && value->nargs == 0u && value->aux == NULL &&
+        value->aux_int > 0 && value->aux_int <= UINT16_MAX &&
+        map_type(context, value->type, &target_enum_type) &&
+        xr_target_query_enum_value_valid(target_enum_type, (uint16_t) value->aux_int)) {
+        instruction->operation_id = XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM;
+        instruction->result = value_key(function, value);
+        instruction->result_type_id = target_enum_type;
+        instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
+        instruction->immediate.u32 = (uint32_t) value->aux_int;
+        return XR_PROGRAM_BUILD_OK;
+    }
     uint32_t unit_enum_ordinal = UINT32_MAX;
     if (resolved_unit_enum_literal(context, function->xi, value, &unit_enum_ordinal)) {
         const XrXiTypeStorage *variant = find_dynamic_type_by_id(context, result_type);
@@ -4555,10 +4593,20 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             if (value->nargs != 2u || result_type != XR_CORE_TYPE_BOOL ||
                 !map_type(context, value->args[0]->type, &left_type) ||
                 !map_type(context, value->args[1]->type, &right_type) ||
-                left_type != XR_CORE_TYPE_I64 || right_type != XR_CORE_TYPE_I64)
+                left_type != right_type)
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
-                            "Xi comparison v%u is not an exact i64 comparison", value->id);
-            instruction->operation_id = projection.core_operation_id;
+                            "Xi comparison v%u operands do not have one exact logical type",
+                            value->id);
+            bool target_enum_compare = left_type >= XR_CORE_TYPE_TARGET_OS &&
+                                       left_type <= XR_CORE_TYPE_TARGET_ENDIAN;
+            if ((!target_enum_compare && left_type != XR_CORE_TYPE_I64) ||
+                (target_enum_compare && projection.immediate_u32 > 1u))
+                return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_UNSUPPORTED_FEATURE,
+                            "Xi comparison v%u is outside the active exact comparison domain",
+                            value->id);
+            instruction->operation_id = target_enum_compare
+                                            ? XR_CORE_OP_CORE_COMPARE_TARGET_ENUM
+                                            : projection.core_operation_id;
             instruction->result = value_key(function, value);
             instruction->result_type_id = XR_CORE_TYPE_BOOL;
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_U32;
@@ -4840,10 +4888,43 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
             const XgTargetQuerySummary *query = xg_global_evidence_find_target_query(
                 context->source->global_evidence,
                 (XgTargetQueryUseId) value->xg_target_query_use_id);
-            if (value->op != XI_TARGET_POINTER_BITS || value->nargs != 0u ||
-                result_type != XR_CORE_TYPE_U16 || value->xg_target_query_use_id == XG_NO_ID ||
+            uint8_t expected_query = XG_TARGET_QUERY_NONE;
+            uint16_t expected_type = XR_CORE_TYPE_VOID;
+            uint16_t expected_operation = 0u;
+            switch (value->op) {
+                case XI_TARGET_POINTER_BITS:
+                    expected_query = XG_TARGET_QUERY_POINTER_BITS;
+                    expected_type = XR_CORE_TYPE_U16;
+                    expected_operation = XR_CORE_OP_CORE_TARGET_POINTER_WIDTH;
+                    break;
+                case XI_TARGET_OPERATING_SYSTEM:
+                    expected_query = XG_TARGET_QUERY_OPERATING_SYSTEM;
+                    expected_type = XR_CORE_TYPE_TARGET_OS;
+                    expected_operation = XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM;
+                    break;
+                case XI_TARGET_ARCHITECTURE:
+                    expected_query = XG_TARGET_QUERY_ARCHITECTURE;
+                    expected_type = XR_CORE_TYPE_TARGET_ARCH;
+                    expected_operation = XR_CORE_OP_CORE_TARGET_ARCHITECTURE;
+                    break;
+                case XI_TARGET_NATIVE_ABI:
+                    expected_query = XG_TARGET_QUERY_NATIVE_ABI;
+                    expected_type = XR_CORE_TYPE_TARGET_ABI;
+                    expected_operation = XR_CORE_OP_CORE_TARGET_NATIVE_ABI;
+                    break;
+                case XI_TARGET_ENDIANNESS:
+                    expected_query = XG_TARGET_QUERY_ENDIANNESS;
+                    expected_type = XR_CORE_TYPE_TARGET_ENDIAN;
+                    expected_operation = XR_CORE_OP_CORE_TARGET_ENDIANNESS;
+                    break;
+                default:
+                    break;
+            }
+            if (expected_query == XG_TARGET_QUERY_NONE || value->nargs != 0u ||
+                result_type != expected_type || projection.core_operation_id != expected_operation ||
+                value->xg_target_query_use_id == XG_NO_ID ||
                 value->xg_target_namespace_id != XG_TARGET_NAMESPACE_TARGET ||
-                value->xg_target_query_kind != XG_TARGET_QUERY_POINTER_BITS ||
+                value->xg_target_query_kind != expected_query ||
                 value->xg_target_result_native_type != XR_NATIVE_U16 ||
                 value->xg_target_query_complete != 1u || !query ||
                 query->use_id != value->xg_target_query_use_id ||
@@ -4851,15 +4932,14 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
                 query->source_node_id != value->xg_target_source_node_id ||
                 query->body_ordinal != value->xg_target_body_ordinal ||
                 query->namespace_id != XG_TARGET_NAMESPACE_TARGET ||
-                query->query_kind != XG_TARGET_QUERY_POINTER_BITS ||
+                query->query_kind != expected_query ||
                 query->result_native_type != XR_NATIVE_U16 || query->contract_complete != 1u ||
-                query->result_type_key !=
-                    xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16))
+                query->result_type_key != xg_target_query_result_type_key(expected_query))
                 return fail(diagnostic, diagnostic_size, XR_PROGRAM_BUILD_INVALID_INPUT,
                             "Xi target query v%u lacks its exact Xglobal contract", value->id);
             instruction->operation_id = projection.core_operation_id;
             instruction->result = value_key(function, value);
-            instruction->result_type_id = XR_CORE_TYPE_U16;
+            instruction->result_type_id = expected_type;
             instruction->result_ownership = logical_ownership_for_type(context, result_type);
             instruction->immediate_kind = XR_CORE_IR_IMMEDIATE_NONE;
             return XR_PROGRAM_BUILD_OK;

@@ -735,13 +735,14 @@ static XrValidatedProgram *build_full_program(void) {
                             sizeof(functions) / sizeof(functions[0]));
 }
 
-static XrValidatedProgram *build_pointer_width_program(void) {
+static XrValidatedProgram *build_target_query_program(uint16_t operation_id, uint16_t result_type,
+                                                       uint32_t capability_mask) {
     XrCoreIrKey width = fixture_key("aot:width:value");
     XrCoreIrKey returned[] = {width};
     XrCoreIrInstructionInput instructions[] = {
-        {.operation_id = XR_CORE_OP_CORE_TARGET_POINTER_WIDTH,
+        {.operation_id = operation_id,
          .result = width,
-         .result_type_id = XR_CORE_TYPE_U16,
+         .result_type_id = result_type,
          .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
         {.operation_id = XR_CORE_OP_CORE_RETURN,
          .result_type_id = XR_CORE_TYPE_VOID,
@@ -757,9 +758,9 @@ static XrValidatedProgram *build_pointer_width_program(void) {
     };
     XrCoreIrFunctionInput function = {
         .key = fixture_key("aot:width:function"),
-        .result_type_id = XR_CORE_TYPE_U16,
+        .result_type_id = result_type,
         .effect_mask = UINT32_C(9),
-        .capability_mask = UINT32_C(1),
+        .capability_mask = capability_mask,
         .entry_block = block_key,
         .blocks = &block,
         .block_count = 1u,
@@ -788,6 +789,54 @@ static XrValidatedProgram *build_pointer_width_program(void) {
     xr_program_artifact_free(&artifact);
     xr_core_ir_program_free(core);
     return program;
+}
+
+static XrValidatedProgram *build_target_enum_equality_program(void) {
+    XrCoreIrKey queried = fixture_key("aot:target-enum:query");
+    XrCoreIrKey wasi = fixture_key("aot:target-enum:wasi");
+    XrCoreIrKey equal = fixture_key("aot:target-enum:equal");
+    XrCoreIrKey compared[] = {queried, wasi};
+    XrCoreIrKey returned[] = {equal};
+    XrCoreIrInstructionInput instructions[] = {
+        {.operation_id = XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM,
+         .result = queried,
+         .result_type_id = XR_CORE_TYPE_TARGET_OS,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+        {.operation_id = XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM,
+         .result = wasi,
+         .result_type_id = XR_CORE_TYPE_TARGET_OS,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = XR_TARGET_OS_WASI},
+        {.operation_id = XR_CORE_OP_CORE_COMPARE_TARGET_ENUM,
+         .result = equal,
+         .result_type_id = XR_CORE_TYPE_BOOL,
+         .operands = compared,
+         .operand_count = 2u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_U32,
+         .immediate.u32 = 0u},
+        {.operation_id = XR_CORE_OP_CORE_RETURN,
+         .result_type_id = XR_CORE_TYPE_VOID,
+         .operands = returned,
+         .operand_count = 1u,
+         .immediate_kind = XR_CORE_IR_IMMEDIATE_NONE},
+    };
+    XrCoreIrKey block_key = fixture_key("aot:target-enum:block");
+    XrCoreIrBlockInput block = {
+        .key = block_key,
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+    };
+    XrCoreIrFunctionInput function = {
+        .key = fixture_key("aot:target-enum:function"),
+        .result_type_id = XR_CORE_TYPE_BOOL,
+        .effect_mask = XR_CORE_EFFECT_TRAP | XR_CORE_EFFECT_TARGET_QUERY,
+        .capability_mask = XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM,
+        .entry_block = block_key,
+        .blocks = &block,
+        .block_count = 1u,
+        .flags = XR_PROGRAM_FUNCTION_ENTRY,
+    };
+    return validate_program(NULL, 0u, NULL, 0u, &function, 1u);
 }
 
 static XrValidatedProgram *build_binary_program(uint16_t operation_id, int64_t left, int64_t right,
@@ -1199,9 +1248,12 @@ static void test_foreign_profile_and_translation_mutation(void) {
     uint8_t representation = 0u;
     REQUIRE(xr_backend_representation_for_type(XR_CORE_TYPE_U16, &representation));
     REQUIRE(representation == XR_BACKEND_VALUE_U16);
-    REQUIRE(!xr_backend_representation_for_type(XR_CORE_TYPE_TARGET_OS, &representation));
+    REQUIRE(xr_backend_representation_for_type(XR_CORE_TYPE_TARGET_OS, &representation));
+    REQUIRE(representation == XR_BACKEND_VALUE_TARGET_ENUM_U16);
 
-    XrValidatedProgram *program = build_pointer_width_program();
+    XrValidatedProgram *program = build_target_query_program(
+        XR_CORE_OP_CORE_TARGET_POINTER_WIDTH, XR_CORE_TYPE_U16,
+        XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH);
     XrTargetProfile *profile =
         xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
     REQUIRE(profile != NULL);
@@ -1264,6 +1316,58 @@ static void test_foreign_profile_and_translation_mutation(void) {
     retire_instance(&instance);
     xr_target_profile_free(profile);
     xr_validated_program_free(program);
+
+    struct TargetQueryCase {
+        uint16_t operation;
+        uint16_t result_type;
+        uint32_t capability;
+        uint16_t expected;
+    } cases[] = {
+        {XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM, XR_CORE_TYPE_TARGET_OS,
+         XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM, XR_TARGET_OS_WASI},
+        {XR_CORE_OP_CORE_TARGET_ARCHITECTURE, XR_CORE_TYPE_TARGET_ARCH,
+         XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE, XR_TARGET_ARCH_WASM32},
+        {XR_CORE_OP_CORE_TARGET_NATIVE_ABI, XR_CORE_TYPE_TARGET_ABI,
+         XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI, XR_TARGET_ABI_WASM},
+        {XR_CORE_OP_CORE_TARGET_ENDIANNESS, XR_CORE_TYPE_TARGET_ENDIAN,
+         XR_CORE_CAPABILITY_PROFILE_ENDIANNESS, XR_TARGET_ENDIAN_LITTLE},
+    };
+    for (size_t index = 0u; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        program = build_target_query_program(cases[index].operation, cases[index].result_type,
+                                             cases[index].capability);
+        profile = xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
+        REQUIRE(profile != NULL);
+        build_bindings(profile, &bindings);
+        instance = create_instance(program, profile, &bindings, 8u + index);
+        ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+        generated = (XrGeneratedC) {0};
+        REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+        char literal[48];
+        (void) snprintf(literal, sizeof(literal), "UINT16_C(%u)", cases[index].expected);
+        REQUIRE(strstr(generated.bytes, literal) != NULL);
+        REQUIRE(strstr(generated.bytes, "sizeof(void") == NULL);
+        xr_generated_c_free(&generated);
+        xr_backend_ir_free(ir);
+        retire_instance(&instance);
+        xr_target_profile_free(profile);
+        xr_validated_program_free(program);
+    }
+
+    program = build_target_enum_equality_program();
+    profile = xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
+    REQUIRE(profile != NULL);
+    build_bindings(profile, &bindings);
+    instance = create_instance(program, profile, &bindings, 20u);
+    ir = build_ir(instance, XR_BACKEND_OPTIMIZATION_PORTABLE);
+    generated = (XrGeneratedC) {0};
+    REQUIRE(xr_backend_ir_emit_c(ir, true, &generated, &diagnostic) == XR_BACKEND_OK);
+    REQUIRE(strstr(generated.bytes, "UINT16_C(4)") != NULL);
+    REQUIRE(strstr(generated.bytes, " == ") != NULL);
+    xr_generated_c_free(&generated);
+    xr_backend_ir_free(ir);
+    retire_instance(&instance);
+    xr_target_profile_free(profile);
+    xr_validated_program_free(program);
 }
 
 static void write_generated_fixture(const char *path, XrInstance *instance, bool standalone_main) {
@@ -1317,6 +1421,12 @@ int main(int argc, char **argv) {
     bool invoke_object_mode = argc == 3 && strcmp(argv[2], "sealed-invoke-object") == 0;
     bool panic_object_mode = argc == 3 && strcmp(argv[2], "typed-panic-object") == 0;
     bool pointer_width_mode = argc == 3 && strcmp(argv[2], "pointer-width") == 0;
+    bool operating_system_mode = argc == 3 && strcmp(argv[2], "operating-system") == 0;
+    bool architecture_mode = argc == 3 && strcmp(argv[2], "architecture") == 0;
+    bool native_abi_mode = argc == 3 && strcmp(argv[2], "native-abi") == 0;
+    bool endianness_mode = argc == 3 && strcmp(argv[2], "endianness") == 0;
+    bool foreign_target_mode = pointer_width_mode || operating_system_mode || architecture_mode ||
+                               native_abi_mode || endianness_mode;
     XrValidatedProgram *program = NULL;
     if (seal_mode)
         program = build_full_program();
@@ -1331,7 +1441,25 @@ int main(int argc, char **argv) {
     else if (argc == 3 && strcmp(argv[2], "callable") == 0)
         program = build_callable_program();
     else if (pointer_width_mode)
-        program = build_pointer_width_program();
+        program = build_target_query_program(XR_CORE_OP_CORE_TARGET_POINTER_WIDTH,
+                                             XR_CORE_TYPE_U16,
+                                             XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH);
+    else if (operating_system_mode)
+        program = build_target_query_program(XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM,
+                                             XR_CORE_TYPE_TARGET_OS,
+                                             XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM);
+    else if (architecture_mode)
+        program = build_target_query_program(XR_CORE_OP_CORE_TARGET_ARCHITECTURE,
+                                             XR_CORE_TYPE_TARGET_ARCH,
+                                             XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE);
+    else if (native_abi_mode)
+        program = build_target_query_program(XR_CORE_OP_CORE_TARGET_NATIVE_ABI,
+                                             XR_CORE_TYPE_TARGET_ABI,
+                                             XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI);
+    else if (endianness_mode)
+        program = build_target_query_program(XR_CORE_OP_CORE_TARGET_ENDIANNESS,
+                                             XR_CORE_TYPE_TARGET_ENDIAN,
+                                             XR_CORE_CAPABILITY_PROFILE_ENDIANNESS);
     else if (invoke_object_mode || panic_object_mode) {
         XrProgramArtifact artifact = {0};
         char diagnostic[256] = {0};
@@ -1349,8 +1477,8 @@ int main(int argc, char **argv) {
         program = build_full_program();
     }
     XrTargetProfile *profile = xr_test_target_profile_build(
-        pointer_width_mode, pointer_width_mode ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
-                                              : XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        foreign_target_mode, foreign_target_mode ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+                                                 : XR_TARGET_RUNTIME_PROFILE_HOSTED);
     REQUIRE(profile != NULL);
     TestBindings bindings;
     build_bindings(profile, &bindings);

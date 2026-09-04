@@ -26,6 +26,10 @@ typedef enum XaTargetNamespaceId {
 typedef enum XaTargetQueryId {
     XA_TARGET_QUERY_NONE = 0,
     XA_TARGET_QUERY_POINTER_BITS = 1,
+    XA_TARGET_QUERY_OPERATING_SYSTEM = 2,
+    XA_TARGET_QUERY_ARCHITECTURE = 3,
+    XA_TARGET_QUERY_NATIVE_ABI = 4,
+    XA_TARGET_QUERY_ENDIANNESS = 5,
 } XaTargetQueryId;
 
 typedef struct XaTargetQueryFact {

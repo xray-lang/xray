@@ -116,7 +116,7 @@ static bool type_id_is_builtin(uint16_t type_id) {
 }
 
 static bool type_id_supported(const XrCoreIrProgram *program, uint16_t type_id) {
-    if (type_id <= XR_CORE_TYPE_U16)
+    if (type_id <= XR_CORE_TYPE_TARGET_ENDIAN)
         return true;
     if (type_id_is_builtin(type_id))
         return false;

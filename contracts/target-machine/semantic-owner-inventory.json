@@ -86,6 +86,7 @@
     "src/frontend/analyzer/xa_memory_effect_db.h",
     "src/frontend/analyzer/xa_ownership.h",
     "src/frontend/analyzer/xa_selection.h",
+    "src/frontend/analyzer/xa_target_query.h",
     "src/frontend/analyzer/xanalyzer_builtins.h",
     "src/frontend/analyzer/xanalyzer_symbol.h",
     "src/frontend/analyzer/xbuiltin_receiver_method.def",
@@ -186,6 +187,7 @@
     "src/shared/xr_static_address_core.h",
     "src/shared/xr_swiss_index.h",
     "src/shared/xr_sync_core.h",
+    "src/shared/xr_target_query_values_gen.h",
     "src/shared/xr_target_simd_core.h",
     "src/shared/xr_type_names.def",
     "src/shared/xr_type_names_core.h",
@@ -197,7 +199,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 279,
+  "operation_count": 284,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -6162,6 +6164,106 @@
     {
       "benchmark_anchor": "target-machine/constant-and-target-query",
       "capabilities": [],
+      "current_aot_owner": null,
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": null,
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "constant-and-target-query",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.target.architecture",
+      "ownership": "borrow",
+      "targets": [
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/constant-and-target-query",
+      "capabilities": [],
+      "current_aot_owner": null,
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": null,
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "constant-and-target-query",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.target.endianness",
+      "ownership": "borrow",
+      "targets": [
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/constant-and-target-query",
+      "capabilities": [],
+      "current_aot_owner": null,
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": null,
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "constant-and-target-query",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.target.native.abi",
+      "ownership": "borrow",
+      "targets": [
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/constant-and-target-query",
+      "capabilities": [],
+      "current_aot_owner": null,
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": null,
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "constant-and-target-query",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.target.operating.system",
+      "ownership": "borrow",
+      "targets": [
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/constant-and-target-query",
+      "capabilities": [],
+      "current_aot_owner": null,
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": null,
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "constant-and-target-query",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.target.pointer.bits",
+      "ownership": "borrow",
+      "targets": [
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/constant-and-target-query",
+      "capabilities": [],
       "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h::xicgen_target_simd_accelerated",
       "current_shared_owner": "src/shared/xr_target_simd_core.h",
       "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
@@ -7393,5 +7495,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "688ba46115adb48691035c68c78fdfbd6e530934add0449341278ddb44c62001"
+  "source_tree_fingerprint": "503971a940d61387a532f018caf55216ffa72b846e444c97559c32ff6cc60c79"
 }

@@ -938,10 +938,24 @@ XR_FUNC const char *xg_target_query_kind_name(uint8_t kind) {
     switch ((XgTargetQueryKind) kind) {
         case XG_TARGET_QUERY_POINTER_BITS:
             return "pointer_bits";
+        case XG_TARGET_QUERY_OPERATING_SYSTEM:
+            return "operating_system";
+        case XG_TARGET_QUERY_ARCHITECTURE:
+            return "architecture";
+        case XG_TARGET_QUERY_NATIVE_ABI:
+            return "native_abi";
+        case XG_TARGET_QUERY_ENDIANNESS:
+            return "endianness";
         case XG_TARGET_QUERY_NONE:
         default:
             return "none";
     }
+}
+
+XR_FUNC uint32_t xg_target_query_result_type_key(uint8_t kind) {
+    if (kind < XG_TARGET_QUERY_POINTER_BITS || kind > XG_TARGET_QUERY_ENDIANNESS)
+        return 0u;
+    return UINT32_C(0x54510000) | (uint32_t) kind;
 }
 
 static const char *xg_body_kind_name(uint8_t kind) {
@@ -1415,6 +1429,14 @@ XR_FUNC const char *xg_capability_name(uint32_t capability) {
             return "parallel";
         case XG_CAP_PROFILE_POINTER_WIDTH:
             return "profile_pointer_width";
+        case XG_CAP_PROFILE_OPERATING_SYSTEM:
+            return "profile_operating_system";
+        case XG_CAP_PROFILE_ARCHITECTURE:
+            return "profile_architecture";
+        case XG_CAP_PROFILE_NATIVE_ABI:
+            return "profile_native_abi";
+        case XG_CAP_PROFILE_ENDIANNESS:
+            return "profile_endianness";
         default:
             return "unknown";
     }
@@ -1430,6 +1452,8 @@ XR_FUNC const uint32_t *xg_capability_catalog(uint32_t *out_count) {
         XG_CAP_RESULT_GROUP, XG_CAP_COUNTDOWN_LATCH, XG_CAP_SEMAPHORE,
         XG_CAP_EVENT_COUNT,  XG_CAP_GENERATOR,       XG_CAP_STACKTRACE,
         XG_CAP_PARALLEL,     XG_CAP_PROFILE_POINTER_WIDTH,
+        XG_CAP_PROFILE_OPERATING_SYSTEM, XG_CAP_PROFILE_ARCHITECTURE,
+        XG_CAP_PROFILE_NATIVE_ABI, XG_CAP_PROFILE_ENDIANNESS,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(capabilities) / sizeof(capabilities[0]));
@@ -2060,7 +2084,9 @@ xg_global_evidence_add_target_query(XgGlobalEvidence *evidence,
         summary->source_node_id == 0 || summary->body_ordinal == 0 ||
         summary->result_type_key == 0 ||
         summary->namespace_id != XG_TARGET_NAMESPACE_TARGET ||
-        summary->query_kind != XG_TARGET_QUERY_POINTER_BITS ||
+        summary->query_kind < XG_TARGET_QUERY_POINTER_BITS ||
+        summary->query_kind > XG_TARGET_QUERY_ENDIANNESS ||
+        summary->result_type_key != xg_target_query_result_type_key(summary->query_kind) ||
         summary->result_native_type != XR_NATIVE_U16 || summary->contract_complete != 1)
         return NULL;
 
@@ -2113,7 +2139,7 @@ XR_FUNC const XgTargetQuerySummary *xg_global_evidence_find_target_query_at(
     uint8_t query_kind) {
     const XgTargetQuerySummary *match = NULL;
     if (!evidence || owner_func_id == XG_NO_ID || source_node_id == 0 ||
-        query_kind != XG_TARGET_QUERY_POINTER_BITS)
+        query_kind < XG_TARGET_QUERY_POINTER_BITS || query_kind > XG_TARGET_QUERY_ENDIANNESS)
         return NULL;
     for (uint32_t i = 0; i < evidence->ntarget_queries; i++) {
         const XgTargetQuerySummary *row = &evidence->target_queries[i];

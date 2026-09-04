@@ -11,6 +11,7 @@
 #include "xr_backend_ir_internal.h"
 
 #include "../../core/xr_core_spec_gen.h"
+#include "../../shared/xr_target_query_registry_gen.h"
 
 #include <string.h>
 
@@ -74,6 +75,11 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_CONSTANT_BOOL:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_CONSTANT &&
                    instruction->immediate.constant_id < ir->constant_count;
+        case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
+                   instruction->immediate.u32 <= UINT16_MAX &&
+                   xr_target_query_enum_value_valid(instruction->result_type_id,
+                                                     (uint16_t) instruction->immediate.u32);
         case XR_CORE_OP_CORE_ADD_I64:
         case XR_CORE_OP_CORE_SUB_I64:
         case XR_CORE_OP_CORE_MUL_I64:
@@ -85,6 +91,14 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_COMPARE_I64:
             return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
                    instruction->immediate.u32 <= 5u;
+        case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM:
+            return instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_U32 &&
+                   instruction->immediate.u32 <= 1u && instruction->operand_count == 2u &&
+                   function->value_types[instruction->operands[0]] >= XR_CORE_TYPE_TARGET_OS &&
+                   function->value_types[instruction->operands[0]] <=
+                       XR_CORE_TYPE_TARGET_ENDIAN &&
+                   function->value_types[instruction->operands[0]] ==
+                       function->value_types[instruction->operands[1]];
         case XR_CORE_OP_CORE_BLOCK_ARGUMENT:
         case XR_CORE_OP_CORE_BRANCH:
         case XR_CORE_OP_CORE_CONDITIONAL_BRANCH:
@@ -92,6 +106,10 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrBackendFuncti
         case XR_CORE_OP_CORE_ERROR_PUBLISH:
         case XR_CORE_OP_CORE_PANIC_PUBLISH:
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
+        case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:
+        case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
+        case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
+        case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
         case XR_CORE_OP_CORE_AGGREGATE_CONSTRUCT:
         case XR_CORE_OP_CORE_EXISTENTIAL_PACK:
         case XR_CORE_OP_CORE_OWNER_COPY:
@@ -136,6 +154,12 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
     if (!ir || !ir->program || !ir->profile || !ir->functions || ir->function_count == 0u ||
         (ir->constant_count != 0u && !ir->constants) || ir->entry_function >= ir->function_count ||
         (ir->pointer_width != 32u && ir->pointer_width != 64u) ||
+        ir->operating_system <= XR_TARGET_OS_NONE ||
+        ir->operating_system >= XR_TARGET_OS_COUNT ||
+        ir->architecture <= XR_TARGET_ARCH_NONE || ir->architecture >= XR_TARGET_ARCH_COUNT ||
+        ir->native_abi <= XR_TARGET_ABI_NONE || ir->native_abi >= XR_TARGET_ABI_COUNT ||
+        (ir->endianness != XR_TARGET_ENDIAN_LITTLE &&
+         ir->endianness != XR_TARGET_ENDIAN_BIG) ||
         fingerprint_is_zero(ir->execution_id) || fingerprint_is_zero(ir->backend_id) ||
         fingerprint_is_zero(ir->optimization_policy_id) ||
         fingerprint_is_zero(ir->lowering_digest)) {
@@ -163,7 +187,10 @@ bool xr_backend_ir_verify(const XrBackendIR *ir, XrBackendDiagnostic *diagnostic
     XrBackendId expected_backend_id = xr_backend_compute_id();
     XrOptimizationPolicyId expected_optimization_policy_id =
         xr_backend_compute_optimization_policy_id(&ir->options);
-    if (ir->pointer_width != pointer_width ||
+    if (ir->pointer_width != pointer_width || !machine ||
+        ir->operating_system != machine->operating_system ||
+        ir->architecture != machine->architecture || ir->native_abi != machine->native_abi ||
+        ir->endianness != machine->data_layout.endian ||
         memcmp(ir->backend_id.bytes, expected_backend_id.bytes, sizeof(ir->backend_id.bytes)) !=
             0 ||
         memcmp(ir->optimization_policy_id.bytes, expected_optimization_policy_id.bytes,

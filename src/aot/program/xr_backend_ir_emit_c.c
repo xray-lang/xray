@@ -97,6 +97,10 @@ static const char *type_c_name(uint16_t type_id, char storage[32]) {
         case XR_CORE_TYPE_PANIC_INFO:
             return "uint32_t";
         case XR_CORE_TYPE_U16:
+        case XR_CORE_TYPE_TARGET_OS:
+        case XR_CORE_TYPE_TARGET_ARCH:
+        case XR_CORE_TYPE_TARGET_ABI:
+        case XR_CORE_TYPE_TARGET_ENDIAN:
             return "uint16_t";
         case XR_CORE_TYPE_VOID:
             return "void";
@@ -121,6 +125,10 @@ static uint32_t outcome_value_kind(uint16_t type_id) {
         case XR_CORE_TYPE_ERROR:
             return 4u;
         case XR_CORE_TYPE_U16:
+        case XR_CORE_TYPE_TARGET_OS:
+        case XR_CORE_TYPE_TARGET_ARCH:
+        case XR_CORE_TYPE_TARGET_ABI:
+        case XR_CORE_TYPE_TARGET_ENDIAN:
             return 6u;
         default:
             return type_id >= XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE ? 5u : UINT32_MAX;
@@ -228,6 +236,10 @@ static const char *outcome_field(uint16_t type_id) {
         case XR_CORE_TYPE_U32:
             return "u32";
         case XR_CORE_TYPE_U16:
+        case XR_CORE_TYPE_TARGET_OS:
+        case XR_CORE_TYPE_TARGET_ARCH:
+        case XR_CORE_TYPE_TARGET_ABI:
+        case XR_CORE_TYPE_TARGET_ENDIAN:
             return "u16";
         case XR_CORE_TYPE_ERROR:
             return "error";
@@ -1069,6 +1081,9 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return append_format(buffer, "        v%u = UINT8_C(%u);\n", instruction->result_id,
                                  constant->value.boolean ? 1u : 0u);
         }
+        case XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM:
+            return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
+                                 instruction->immediate.u32);
         case XR_CORE_OP_CORE_ADD_I64:
         case XR_CORE_OP_CORE_SUB_I64:
         case XR_CORE_OP_CORE_MUL_I64: {
@@ -1101,6 +1116,12 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
                                  instruction->operands[0], instruction->operands[1]);
         case XR_CORE_OP_CORE_COMPARE_I64: {
             static const char *operators[] = {"==", "!=", "<", "<=", ">", ">="};
+            return append_format(buffer, "        v%u = (uint8_t)(v%u %s v%u);\n",
+                                 instruction->result_id, instruction->operands[0],
+                                 operators[instruction->immediate.u32], instruction->operands[1]);
+        }
+        case XR_CORE_OP_CORE_COMPARE_TARGET_ENUM: {
+            static const char *operators[] = {"==", "!="};
             return append_format(buffer, "        v%u = (uint8_t)(v%u %s v%u);\n",
                                  instruction->result_id, instruction->operands[0],
                                  operators[instruction->immediate.u32], instruction->operands[1]);
@@ -1149,6 +1170,18 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
         case XR_CORE_OP_CORE_TARGET_POINTER_WIDTH:
             return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
                                  ir->pointer_width);
+        case XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM:
+            return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
+                                 ir->operating_system);
+        case XR_CORE_OP_CORE_TARGET_ARCHITECTURE:
+            return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
+                                 ir->architecture);
+        case XR_CORE_OP_CORE_TARGET_NATIVE_ABI:
+            return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
+                                 ir->native_abi);
+        case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
+            return append_format(buffer, "        v%u = UINT16_C(%u);\n", instruction->result_id,
+                                 ir->endianness);
         case XR_CORE_OP_CORE_CALLABLE_PACK: {
             uint32_t target_id = instruction->immediate.function_id;
             if (instruction->operand_count == 0u)
@@ -1422,6 +1455,10 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
                 return false;
             break;
         case XR_CORE_TYPE_U16:
+        case XR_CORE_TYPE_TARGET_OS:
+        case XR_CORE_TYPE_TARGET_ARCH:
+        case XR_CORE_TYPE_TARGET_ABI:
+        case XR_CORE_TYPE_TARGET_ENDIAN:
             if (!append_text(buffer, "        exit_code = (int)(result.u16 & UINT16_C(255));\n"))
                 return false;
             break;

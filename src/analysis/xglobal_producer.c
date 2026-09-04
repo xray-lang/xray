@@ -44,6 +44,12 @@ _Static_assert((int) XA_TARGET_NAMESPACE_TARGET == (int) XG_TARGET_NAMESPACE_TAR
                "target namespace identity drifted between analyzer and Xglobal");
 _Static_assert((int) XA_TARGET_QUERY_POINTER_BITS == (int) XG_TARGET_QUERY_POINTER_BITS,
                "target query identity drifted between analyzer and Xglobal");
+_Static_assert((int) XA_TARGET_QUERY_OPERATING_SYSTEM ==
+                   (int) XG_TARGET_QUERY_OPERATING_SYSTEM &&
+                   (int) XA_TARGET_QUERY_ARCHITECTURE == (int) XG_TARGET_QUERY_ARCHITECTURE &&
+                   (int) XA_TARGET_QUERY_NATIVE_ABI == (int) XG_TARGET_QUERY_NATIVE_ABI &&
+                   (int) XA_TARGET_QUERY_ENDIANNESS == (int) XG_TARGET_QUERY_ENDIANNESS,
+               "target query identity drifted between analyzer and Xglobal");
 
 #define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000005)
 
@@ -9947,7 +9953,9 @@ static bool body_add_target_query(XgBodyCollect *bc, const AstNode *node,
         bool lexical_target_query =
             receiver && receiver->type == AST_VARIABLE && receiver->as.variable.name &&
             member->name && strcmp(receiver->as.variable.name, "target") == 0 &&
-            strcmp(member->name, "pointerBits") == 0;
+            (strcmp(member->name, "pointerBits") == 0 || strcmp(member->name, "os") == 0 ||
+             strcmp(member->name, "arch") == 0 || strcmp(member->name, "abi") == 0 ||
+             strcmp(member->name, "endian") == 0);
         return !lexical_target_query;
     }
     bool has_fact = xa_analyzer_get_target_query(bc->producer->analyzer, node, &fact);
@@ -9962,10 +9970,42 @@ static bool body_add_target_query(XgBodyCollect *bc, const AstNode *node,
     if (out_is_target_query)
         *out_is_target_query = true;
     result_type = xa_analyzer_get_node_type(bc->producer->analyzer, node);
+    if (!has_fact)
+        return false;
+    const char *expected_enum = NULL;
+    uint32_t capability = 0u;
+    switch ((XaTargetQueryId) fact.query_id) {
+        case XA_TARGET_QUERY_POINTER_BITS:
+            capability = XG_CAP_PROFILE_POINTER_WIDTH;
+            break;
+        case XA_TARGET_QUERY_OPERATING_SYSTEM:
+            expected_enum = "TargetOs";
+            capability = XG_CAP_PROFILE_OPERATING_SYSTEM;
+            break;
+        case XA_TARGET_QUERY_ARCHITECTURE:
+            expected_enum = "TargetArch";
+            capability = XG_CAP_PROFILE_ARCHITECTURE;
+            break;
+        case XA_TARGET_QUERY_NATIVE_ABI:
+            expected_enum = "TargetAbi";
+            capability = XG_CAP_PROFILE_NATIVE_ABI;
+            break;
+        case XA_TARGET_QUERY_ENDIANNESS:
+            expected_enum = "TargetEndian";
+            capability = XG_CAP_PROFILE_ENDIANNESS;
+            break;
+        default:
+            return false;
+    }
+    bool result_type_matches =
+        expected_enum ? (result_type && result_type->kind == XR_KIND_ENUM &&
+                         result_type->enum_type.enum_name &&
+                         strcmp(result_type->enum_type.enum_name, expected_enum) == 0)
+                      : (result_type && result_type->kind == XR_KIND_INT &&
+                         result_type->scalar_rep == XR_NATIVE_U16);
     if (!has_fact || fact.namespace_id != XA_TARGET_NAMESPACE_TARGET ||
-        fact.query_id != XA_TARGET_QUERY_POINTER_BITS || fact.result_native_type != XR_NATIVE_U16 ||
-        fact.complete != 1 || !result_type || result_type->kind != XR_KIND_INT ||
-        result_type->is_nullable || result_type->scalar_rep != XR_NATIVE_U16)
+        fact.result_native_type != XR_NATIVE_U16 || fact.complete != 1 ||
+        !result_type_matches || result_type->is_nullable)
         return false;
 
     source_node_id = producer_source_node_id(bc->module_id, node);
@@ -9976,15 +10016,15 @@ static bool body_add_target_query(XgBodyCollect *bc, const AstNode *node,
     row.source_node_id = source_node_id;
     row.source_span_id = (uint32_t) node->line;
     row.body_ordinal = ++bc->target_query_count;
-    row.result_type_key = xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U16);
+    row.result_type_key = xg_target_query_result_type_key((uint8_t) fact.query_id);
     row.namespace_id = XG_TARGET_NAMESPACE_TARGET;
-    row.query_kind = XG_TARGET_QUERY_POINTER_BITS;
+    row.query_kind = (uint8_t) fact.query_id;
     row.result_native_type = XR_NATIVE_U16;
     row.contract_complete = 1;
     if (row.result_type_key == 0 || !xg_global_evidence_add_target_query(bc->evidence, &row))
         return false;
     bc->effect_bits |= XG_BODY_MAY_TRAP | XG_BODY_TARGET_QUERY;
-    bc->capability_bits |= XG_CAP_PROFILE_POINTER_WIDTH;
+    bc->capability_bits |= capability;
     return true;
 }
 

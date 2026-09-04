@@ -531,7 +531,8 @@ void xa_node_table_clear_function_expr_effect(XaNodeTable *t, const struct AstNo
 
 static bool target_query_fact_valid(const XaTargetQueryFact *fact) {
     return fact && fact->namespace_id == XA_TARGET_NAMESPACE_TARGET &&
-           fact->query_id == XA_TARGET_QUERY_POINTER_BITS &&
+           fact->query_id >= XA_TARGET_QUERY_POINTER_BITS &&
+           fact->query_id <= XA_TARGET_QUERY_ENDIANNESS &&
            fact->result_native_type == XR_NATIVE_U16 &&
            fact->complete == 1;
 }

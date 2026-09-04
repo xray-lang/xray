@@ -309,6 +309,14 @@ def validate(root: Path) -> None:
         "core.trap",
     }
     wave_five_pointer = {"core.target.pointer_width"}
+    wave_five_target_profile = {
+        "core.constant.target_enum",
+        "core.compare.target_enum",
+        "core.target.operating_system",
+        "core.target.architecture",
+        "core.target.native_abi",
+        "core.target.endianness",
+    }
     wave_three_slice_two = {
         "core.owner.move",
         "core.owner.drop",
@@ -341,6 +349,8 @@ def validate(root: Path) -> None:
         **{operation: "COMPLETE_W7_WAVE3_SLICE5" for operation in wave_three_slice_five},
         **{operation: "COMPLETE_W7_WAVE4" for operation in wave_four_executor},
         **{operation: "COMPLETE_W7_WAVE5_POINTER" for operation in wave_five_pointer},
+        **{operation: "COMPLETE_W7_WAVE5_TARGET_PROFILE"
+           for operation in wave_five_target_profile},
         **{operation: "FROZEN_WALKING_SKELETON" for operation in frozen},
     }
     require(set(expected_status) == registry_ids,

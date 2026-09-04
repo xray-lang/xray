@@ -17,7 +17,7 @@ static void test_registry_identity_and_lookup(void) {
     size_t index;
 
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 37u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 43u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
@@ -49,10 +49,33 @@ static void test_registry_identity_and_lookup(void) {
     CHECK(!xr_core_spec_feature_active(UINT16_MAX));
 }
 
+static void check_target_query(uint16_t operation_id, uint8_t result_type,
+                               uint32_t capability_mask, const char *spelling,
+                               const char *profile_dependency) {
+    const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(operation_id);
+
+    CHECK(operation != NULL);
+    if (!operation)
+        return;
+    CHECK(strcmp(operation->spelling, spelling) == 0);
+    CHECK(strcmp(operation->operation_class, "target-query") == 0);
+    CHECK(operation->operand_arity == 0u);
+    CHECK(operation->result_type == result_type);
+    CHECK(operation->effect_mask ==
+          (XR_CORE_EFFECT_TARGET_QUERY | XR_CORE_EFFECT_TRAP));
+    CHECK(operation->capability_mask == capability_mask);
+    CHECK(strcmp(operation->profile_dependency, profile_dependency) == 0);
+    CHECK(strcmp(operation->materialization, "profile-query") == 0);
+}
+
 static void test_operation_metadata(void) {
     const XrCoreOperationSpec *constant =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CONSTANT_I64);
+    const XrCoreOperationSpec *target_enum_constant =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CONSTANT_TARGET_ENUM);
     const XrCoreOperationSpec *add = xr_core_spec_operation_by_spelling("core.add.i64");
+    const XrCoreOperationSpec *target_enum_compare =
+        xr_core_spec_operation_by_id(XR_CORE_OP_CORE_COMPARE_TARGET_ENUM);
     const XrCoreOperationSpec *branch = xr_core_spec_operation_by_spelling("core.branch");
     const XrCoreOperationSpec *call =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_CALL_SEALED_DIRECT);
@@ -66,6 +89,20 @@ static void test_operation_metadata(void) {
     CHECK(constant != NULL);
     CHECK(constant->operand_arity == 0u);
     CHECK(constant->result_type == XR_CORE_TYPE_I64);
+
+    CHECK(target_enum_constant != NULL);
+    CHECK(target_enum_constant->operand_arity == 0u);
+    CHECK(target_enum_constant->result_type == XR_CORE_TYPE_TYPE_VARIABLE);
+    CHECK(target_enum_constant->effect_mask == UINT32_C(0));
+    CHECK(target_enum_constant->capability_mask == UINT32_C(0));
+    CHECK(strcmp(target_enum_constant->spelling, "core.constant.target_enum") == 0);
+
+    CHECK(target_enum_compare != NULL);
+    CHECK(target_enum_compare->operand_arity == 2u);
+    CHECK(target_enum_compare->result_type == XR_CORE_TYPE_BOOL);
+    CHECK(target_enum_compare->effect_mask == UINT32_C(0));
+    CHECK(target_enum_compare->capability_mask == UINT32_C(0));
+    CHECK(strcmp(target_enum_compare->spelling, "core.compare.target_enum") == 0);
 
     CHECK(add != NULL);
     CHECK(add->operand_arity == 2u);
@@ -85,6 +122,22 @@ static void test_operation_metadata(void) {
     CHECK(target->result_type == XR_CORE_TYPE_U16);
     CHECK(target->capability_mask == UINT32_C(1));
     CHECK(strcmp(target->profile_dependency, "pointer_width") == 0);
+
+    check_target_query(XR_CORE_OP_CORE_TARGET_POINTER_WIDTH, XR_CORE_TYPE_U16,
+                       XR_CORE_CAPABILITY_PROFILE_POINTER_WIDTH,
+                       "core.target.pointer_width", "pointer_width");
+    check_target_query(XR_CORE_OP_CORE_TARGET_OPERATING_SYSTEM, XR_CORE_TYPE_TARGET_OS,
+                       XR_CORE_CAPABILITY_PROFILE_OPERATING_SYSTEM,
+                       "core.target.operating_system", "operating_system");
+    check_target_query(XR_CORE_OP_CORE_TARGET_ARCHITECTURE, XR_CORE_TYPE_TARGET_ARCH,
+                       XR_CORE_CAPABILITY_PROFILE_ARCHITECTURE,
+                       "core.target.architecture", "architecture");
+    check_target_query(XR_CORE_OP_CORE_TARGET_NATIVE_ABI, XR_CORE_TYPE_TARGET_ABI,
+                       XR_CORE_CAPABILITY_PROFILE_NATIVE_ABI,
+                       "core.target.native_abi", "native_abi");
+    check_target_query(XR_CORE_OP_CORE_TARGET_ENDIANNESS, XR_CORE_TYPE_TARGET_ENDIAN,
+                       XR_CORE_CAPABILITY_PROFILE_ENDIANNESS,
+                       "core.target.endianness", "endianness");
 
     CHECK(aggregate != NULL);
     CHECK(aggregate->operand_arity == XR_CORE_SPEC_VARIADIC_ARITY);

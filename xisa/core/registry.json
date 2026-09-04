@@ -96,6 +96,26 @@
       "stable_id": 1,
       "name": "profile.pointer-width",
       "description": "The bound target profile publishes an exact 32- or 64-bit pointer width."
+    },
+    {
+      "stable_id": 2,
+      "name": "profile.operating-system",
+      "description": "The bound target profile publishes one exact TargetOs value."
+    },
+    {
+      "stable_id": 3,
+      "name": "profile.architecture",
+      "description": "The bound target profile publishes one exact TargetArch value."
+    },
+    {
+      "stable_id": 4,
+      "name": "profile.native-abi",
+      "description": "The bound target profile publishes one exact TargetAbi value."
+    },
+    {
+      "stable_id": 5,
+      "name": "profile.endianness",
+      "description": "The bound target profile publishes one exact TargetEndian value."
     }
   ],
   "traps": [
@@ -247,6 +267,70 @@
       "determinism": {
         "kind": "deterministic",
         "allowed_trace": "one exact result"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 3,
+      "spelling": "core.constant.target_enum",
+      "class": "constant",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "TargetEnum",
+        "immediates": {
+          "value": "registered-target-enum-member"
+        }
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one member of the exact declared target enum domain"
       },
       "kat_validator": "scalar-oracle",
       "coverage": {
@@ -652,6 +736,79 @@
       "determinism": {
         "kind": "deterministic",
         "allowed_trace": "one canonical bool"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 25,
+      "spelling": "core.compare.target_enum",
+      "class": "comparison",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [
+          "TargetEnum",
+          "TargetEnum"
+        ],
+        "result": "bool",
+        "immediates": {
+          "predicate": [
+            "eq",
+            "ne"
+          ]
+        }
+      },
+      "evaluation_order": "left-to-right",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [],
+      "capability_requirements": [],
+      "ownership": {
+        "operands": [
+          "borrow-value",
+          "borrow-value"
+        ],
+        "result": "owned-value"
+      },
+      "profile_dependency": "none",
+      "materialization": "value",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one canonical bool from equal logical target enum domains"
       },
       "kat_validator": "scalar-oracle",
       "coverage": {
@@ -1643,6 +1800,274 @@
         "result": "owned-value"
       },
       "profile_dependency": "pointer_width",
+      "materialization": "profile-query",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one value from the immutable bound profile or profile-unavailable"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 65,
+      "spelling": "core.target.operating_system",
+      "class": "target-query",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "TargetOs",
+        "immediates": {}
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "target-query",
+        "trap"
+      ],
+      "capability_requirements": [
+        "profile.operating-system"
+      ],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "operating_system",
+      "materialization": "profile-query",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one value from the immutable bound profile or profile-unavailable"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 66,
+      "spelling": "core.target.architecture",
+      "class": "target-query",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "TargetArch",
+        "immediates": {}
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "target-query",
+        "trap"
+      ],
+      "capability_requirements": [
+        "profile.architecture"
+      ],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "architecture",
+      "materialization": "profile-query",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one value from the immutable bound profile or profile-unavailable"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 67,
+      "spelling": "core.target.native_abi",
+      "class": "target-query",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "TargetAbi",
+        "immediates": {}
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "target-query",
+        "trap"
+      ],
+      "capability_requirements": [
+        "profile.native-abi"
+      ],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "native_abi",
+      "materialization": "profile-query",
+      "determinism": {
+        "kind": "deterministic",
+        "allowed_trace": "one value from the immutable bound profile or profile-unavailable"
+      },
+      "kat_validator": "scalar-oracle",
+      "coverage": {
+        "spec_oracle": {
+          "status": "COMPLETE",
+          "task": 295
+        },
+        "decoder": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "verifier": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "evaluator": {
+          "status": "COMPLETE",
+          "task": 297
+        },
+        "vm": {
+          "status": "COMPLETE",
+          "task": 299
+        },
+        "aot": {
+          "status": "COMPLETE",
+          "task": 300
+        }
+      }
+    },
+    {
+      "stable_id": 68,
+      "spelling": "core.target.endianness",
+      "class": "target-query",
+      "feature": "core.base",
+      "epoch": 1,
+      "type_rule": {
+        "operands": [],
+        "result": "TargetEndian",
+        "immediates": {}
+      },
+      "evaluation_order": "none",
+      "successors": {
+        "normal": true,
+        "error": false,
+        "panic": false,
+        "cancel": false,
+        "suspend": false
+      },
+      "arithmetic": {
+        "kind": "none"
+      },
+      "effects": [
+        "target-query",
+        "trap"
+      ],
+      "capability_requirements": [
+        "profile.endianness"
+      ],
+      "ownership": {
+        "operands": [],
+        "result": "owned-value"
+      },
+      "profile_dependency": "endianness",
       "materialization": "profile-query",
       "determinism": {
         "kind": "deterministic",
