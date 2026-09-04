@@ -70,7 +70,7 @@ fn _decodeChar(c: i64, alphabet: Base64Alphabet) -> i64 {
 //   arg: error length/offset; byteValue: InvalidByte payload
 //   end/rem/outLen: validated decode plan
 fn _scan(text: string, options: Base64DecodeOptions) -> (i64, i64, u8, i64, i64, i64) {
-    var src: Slice<u8> = text.bytes()
+    var src: const Slice<u8> = text.bytes()
     var end = len(src)
     while (end > 0 && src[end - 1] == 61) { end = end - 1 }
 
@@ -156,7 +156,7 @@ fn _encodeAlpha(data: Slice<u8>, alphabet: Base64Alphabet, padding: bool) -> str
     return out.toString()
 }
 
-fn _decodeValidated(src: Slice<u8>, end: i64, rem: i64, outLen: i64,
+fn _decodeValidated(src: const Slice<u8>, end: i64, rem: i64, outLen: i64,
                     options: Base64DecodeOptions) -> Array<u8> {
     var out = Array<u8>(outLen)
     var oi = 0
@@ -193,7 +193,7 @@ fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<u8> {
     if (scan.0 == 3) { throw Base64Error.InvalidPadding { byteOffset: scan.1 } }
     if (scan.0 == 4) { throw Base64Error.NonCanonicalTrailingBits { byteOffset: scan.1 } }
 
-    var src: Slice<u8> = text.bytes()
+    var src: const Slice<u8> = text.bytes()
     return _decodeValidated(src, scan.3, scan.4, scan.5, options)
 }
 
