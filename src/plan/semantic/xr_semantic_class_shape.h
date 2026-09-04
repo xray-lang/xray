@@ -184,6 +184,30 @@ xr_semantic_class_instance_type_source_class(const XrSemanticPlan *plan,
     return type->source_class;
 }
 
+/* The nullable spelling of one declared instance type. Nullability changes the
+ * tagged value's inhabitant set, not the declaration whose allocation a
+ * non-null inhabitant carries, so the class identity proof is the same as the
+ * non-null form with exactly one additional type flag. Keeping this separate
+ * prevents parameter, receiver and construction judgements that require a
+ * definitely non-null object from silently admitting an optional value. */
+static inline uint32_t
+xr_semantic_nullable_class_instance_type_source_class(const XrSemanticPlan *plan,
+                                                      const XrSemanticTypeRecord *type) {
+    if (!plan || !type || type->kind != XR_KIND_INSTANCE || type->builtin_type != XR_TID_NULL ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count != 0 ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 || type->enum_member_count != 0 ||
+        type->enum_flags != 0 ||
+        type->flags !=
+            (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        !xr_semantic_class_declaration_is_frozen(plan, type->source_class))
+        return XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticSourceClassRecord *record =
+        xr_semantic_plan_source_class(plan, type->source_class);
+    if (!record || !xr_stable_id_equal(type->source_class_identity, record->id))
+        return XR_SEMANTIC_INDEX_NONE;
+    return type->source_class;
+}
+
 /* The anonymous instance shape a constructor receiver carries. It is the
  * instance row stripped of its class identity: the frontend types `this` as a
  * bare instance that names no declaration, so this judgement proves only that
@@ -1172,8 +1196,11 @@ xr_semantic_class_instance_result_source_class(const XrSemanticPlan *plan,
         operation->return_complete != 1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
         callee->return_parameter != -1 || callee->return_provenance != XR_SEM_RETURN_OWNED)
         return XR_SEMANTIC_INDEX_NONE;
-    return xr_semantic_class_instance_type_source_class(
-        plan, xr_semantic_plan_type(plan, operation->result_type));
+    const XrSemanticTypeRecord *result_type = xr_semantic_plan_type(plan, operation->result_type);
+    uint32_t source_class = xr_semantic_class_instance_type_source_class(plan, result_type);
+    return source_class != XR_SEMANTIC_INDEX_NONE
+               ? source_class
+               : xr_semantic_nullable_class_instance_type_source_class(plan, result_type);
 }
 
 /* The declaration whose instance this shared read loads, or NONE.
