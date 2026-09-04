@@ -697,27 +697,76 @@ static inline bool xr_semantic_owner_transfer_storage_is_exact(
            xr_semantic_native_storage_owner_forward_is_exact(plan, operation, source_value_out);
 }
 
+/* A source wrapper is a one-field capability boundary: its only explicit
+ * constructor argument is stored into the one field the provider registry
+ * names.  The SemanticPlan already freezes the constructor's field store, so
+ * the linkage is proved from ordinary operations rather than by adding a
+ * provider-specific row to the schema. */
+static inline bool xr_semantic_native_storage_constructor_field_link_is_exact(
+    const XrSemanticPlan *plan, uint32_t source_class, uint32_t constructor,
+    const XrSemanticParameterRecord *storage_parameter,
+    const XrStdlibNativeClassDefEntry *storage) {
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, constructor);
+    const XrSemanticParameterRecord *receiver =
+        function && function->parameter_count != 0
+            ? xr_semantic_plan_parameter(plan, function->parameter_begin)
+            : NULL;
+    if (!plan || !function || !receiver || !storage_parameter || !storage ||
+        !storage->source_storage_field || !storage->source_storage_field[0] ||
+        xr_semantic_class_constructor_receiver_source_class(plan, function->parameter_begin) !=
+            source_class)
+        return false;
+
+    const XrSemanticOperationRecord *field_store = NULL;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->function != constructor || candidate->opcode != XI_STORE_FIELD)
+            continue;
+        if (field_store)
+            return false;
+        field_store = candidate;
+    }
+    if (!field_store || field_store->semantic_immediate != 0 ||
+        xr_semantic_class_field_store_source_class(plan, field_store) != source_class)
+        return false;
+
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (!metadata || field_store->metadata_begin >= metadata_count ||
+        field_store->metadata_count != 1 ||
+        strcmp(metadata[field_store->metadata_begin], storage->source_storage_field) != 0 ||
+        !operands || field_store->operand_begin >= operand_count ||
+        operand_count - field_store->operand_begin < 2)
+        return false;
+    const XrSemanticOperandRecord *field_receiver = &operands[field_store->operand_begin];
+    const XrSemanticOperandRecord *stored = &operands[field_store->operand_begin + 1u];
+    return field_receiver->value == receiver->value && field_receiver->type == receiver->type &&
+           stored->value == storage_parameter->value && stored->type == storage_parameter->type;
+}
+
 /* A private native-storage parameter is admitted only on the constructor of
  * the generated source wrapper that owns that storage row.  The wrapper's
  * frozen source-class module identity supplies the stdlib namespace, so an
  * equal private spelling in another module cannot acquire this authority. */
 static inline const XrStdlibNativeClassDefEntry *
 xr_semantic_native_storage_constructor_parameter_is_exact(const XrSemanticPlan *plan,
-                                                           uint32_t parameter_index) {
-    const XrSemanticParameterRecord *parameter =
-        xr_semantic_plan_parameter(plan, parameter_index);
+                                                          uint32_t parameter_index) {
+    const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
     const XrSemanticFunctionRecord *function =
         parameter ? xr_semantic_plan_function(plan, parameter->function) : NULL;
-    if (!plan || !parameter || !function || parameter->ordinal == 0 ||
-        parameter_index < function->parameter_begin ||
-        parameter_index >= function->parameter_begin + function->parameter_count ||
+    if (!plan || !parameter || !function || function->parameter_count != 2 ||
+        parameter_index != function->parameter_begin + 1u || parameter->ordinal != 1 ||
         parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_READ ||
         (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED) ||
         parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0)
+        parameter->flags != XR_SEM_PARAMETER_REQUIRED || parameter->reserved != 0)
         return NULL;
 
     const XrStdlibNativeClassDefEntry *match = NULL;
+    uint32_t matched_source_class = XR_SEMANTIC_INDEX_NONE;
     uint32_t source_class_count = (uint32_t) xr_semantic_plan_source_class_count(plan);
     for (uint32_t class_index = 0; class_index < source_class_count; class_index++) {
         const XrSemanticSourceClassRecord *source_class =
@@ -743,9 +792,13 @@ xr_semantic_native_storage_constructor_parameter_is_exact(const XrSemanticPlan *
             if (match)
                 return NULL;
             match = storage;
+            matched_source_class = class_index;
         }
     }
-    return match;
+    return match && xr_semantic_native_storage_constructor_field_link_is_exact(
+                        plan, matched_source_class, parameter->function, parameter, match)
+               ? match
+               : NULL;
 }
 
 #endif /* XR_SEMANTIC_NATIVE_LEAF_SHAPE_H */

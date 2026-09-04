@@ -170,6 +170,17 @@ static XrType stub_nullable_net_storage = {
             .class_ref = NULL,
         },
 };
+static XrType stub_net_storage = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 906,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance =
+        {
+            .class_name = "__NetConnStorage",
+            .class_ref = NULL,
+        },
+};
 
 static XrEnumLayout *make_unit_enum_type(XrType *out, uint32_t id, const char *owner,
                                          const char *name) {
@@ -683,6 +694,88 @@ static XrSemanticPlan *build_native_direct_fresh_result_semantic(void) {
     module->init = NULL;
     xi_module_free(module);
     xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_native_storage_constructor_semantic(void) {
+    XiFunc *root = xi_func_new("native_storage_constructor_root", &stub_unit);
+    XiFunc *constructor = xi_func_new("constructor", &stub_unit);
+    XiBlock *root_entry = root ? xi_block_new(root) : NULL;
+    XiBlock *constructor_entry = constructor ? xi_block_new(constructor) : NULL;
+    REQUIRE(root != NULL && constructor != NULL && root_entry != NULL && constructor_entry != NULL);
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    constructor->params = (XiValue **) xr_calloc(2, sizeof(*constructor->params));
+    REQUIRE(root->children != NULL && constructor->params != NULL);
+    root->children[0] = constructor;
+    root->nchildren = root->children_cap = 1;
+    constructor->parent_func = root;
+    constructor->nparams = constructor->min_params = 2;
+    constructor->has_receiver = true;
+    constructor->receiver_mode = XR_PARAM_READ;
+    constructor->is_constructor = true;
+    constructor->params[0] = xi_param(constructor, constructor_entry, 0, &stub_net_conn);
+    constructor->params[1] = xi_param(constructor, constructor_entry, 1, &stub_net_storage);
+    REQUIRE(constructor->params[0] != NULL && constructor->params[1] != NULL);
+    constructor->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+        constructor, (uint32_t) sizeof(*constructor->arc_borrow_sig));
+    REQUIRE(constructor->arc_borrow_sig != NULL);
+    constructor->arc_borrow_sig->nparams = 2;
+    constructor->arc_borrow_sig->param_own[0] = XI_OWN_OWNED;
+    constructor->arc_borrow_sig->param_own[1] = XI_OWN_OWNED;
+    constructor->arc_borrow_sig->valid = true;
+
+    XiValue *store = xi_value_new(constructor, constructor_entry, XI_STORE_FIELD, &stub_unit, 2);
+    REQUIRE(store != NULL);
+    store->args[0] = constructor->params[0];
+    store->args[1] = constructor->params[1];
+    store->aux = "_storage";
+    store->aux_int = 0;
+    store->xg_class_field_id = 907;
+    xi_block_set_return(root_entry, NULL);
+    xi_block_set_return(constructor_entry, NULL);
+    root->stage = constructor->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *module = xi_module_new("net/net.xr", "net", root);
+    REQUIRE(module != NULL &&
+            xi_module_set_identity(module, "stdlib-module-v1:module=3:net:path=10:net/net.xr"));
+    root->module = module;
+    const char *field_names[1] = {"_storage"};
+    XrType *field_types[1] = {&stub_net_storage};
+    uint32_t field_node_ids[1] = {907};
+    XiClassMethod methods[1] = {{.name = "constructor", .is_constructor = true}};
+    uint16_t child_indices[1] = {0};
+    XiClassData source_class = {
+        .class_info = &stub_net_conn_class_info,
+        .xg_class_id = stub_net_conn_class_info.xg_class_id,
+        .class_name = "NetConn",
+        .instance_field_names = field_names,
+        .instance_field_types = field_types,
+        .instance_field_source_node_ids = field_node_ids,
+        .instance_field_count = 1,
+        .source_provider_field_index = 0,
+        .methods = methods,
+        .nmethod = 1,
+        .child_idx = child_indices,
+        .ninst = 1,
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    module->classes = (XiClassData **) xr_calloc(1, sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &source_class;
+    module->nclasses = 1;
+
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native storage constructor semantic fixture failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    root->module = NULL;
+    module->init = NULL;
+    xi_module_free(module);
+    xi_func_free(root);
     return semantic;
 }
 
@@ -2970,6 +3063,87 @@ static void test_native_direct_ref_authority(void) {
 
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_native_storage_constructor_parameter_authority(void) {
+    XrSemanticPlan *semantic = build_native_storage_constructor_semantic();
+    REQUIRE(semantic->source_class_count == 1);
+    uint32_t constructor = xr_semantic_class_constructor_function(semantic, 0);
+    XrSemanticFunctionRecord *function =
+        constructor < semantic->function_count ? &semantic->functions[constructor] : NULL;
+    REQUIRE(function != NULL && function->parameter_count == 2);
+    uint32_t parameter_index = function->parameter_begin + 1u;
+    XrSemanticParameterRecord *parameter = &semantic->parameters[parameter_index];
+    const XrStdlibNativeClassDefEntry *storage =
+        xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index);
+    REQUIRE(storage != NULL && strcmp(storage->module, "net") == 0 &&
+            strcmp(storage->name, "__NetConnStorage") == 0 &&
+            strcmp(storage->source_storage_field, "_storage") == 0);
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native storage constructor TargetPlan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+
+    uint8_t saved_flags = parameter->flags;
+    parameter->flags = 0;
+    REQUIRE(xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index) ==
+            NULL);
+    parameter->flags = saved_flags;
+
+    uint16_t saved_ordinal = parameter->ordinal;
+    parameter->ordinal = 2;
+    REQUIRE(xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index) ==
+            NULL);
+    parameter->ordinal = saved_ordinal;
+
+    uint16_t saved_parameter_count = function->parameter_count;
+    function->parameter_count = 3;
+    REQUIRE(xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index) ==
+            NULL);
+    function->parameter_count = saved_parameter_count;
+
+    XrSemanticOperationRecord *field_store = NULL;
+    for (uint32_t i = 0; i < semantic->operation_count; i++) {
+        if (semantic->operations[i].function == constructor &&
+            semantic->operations[i].opcode == XI_STORE_FIELD)
+            field_store = &semantic->operations[i];
+    }
+    REQUIRE(field_store != NULL && field_store->metadata_count == 1);
+    const char *saved_field_name = semantic->metadata[field_store->metadata_begin];
+    semantic->metadata[field_store->metadata_begin] = "storage";
+    REQUIRE(xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index) ==
+            NULL);
+    semantic->metadata[field_store->metadata_begin] = saved_field_name;
+
+    int64_t saved_field_ordinal = field_store->semantic_immediate;
+    field_store->semantic_immediate = 1;
+    REQUIRE(xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index) ==
+            NULL);
+    field_store->semantic_immediate = saved_field_ordinal;
+
+    XrSemanticOperandRecord *stored = &semantic->operands[field_store->operand_begin + 1u];
+    uint32_t saved_stored_value = stored->value;
+    stored->value = semantic->parameters[function->parameter_begin].value;
+    REQUIRE(xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index) ==
+            NULL);
+    stored->value = saved_stored_value;
+
+    XrStdlibNativeClassDefEntry storage_mutation = *storage;
+    storage_mutation.source_storage_field = "storage";
+    REQUIRE(!xr_semantic_native_storage_constructor_field_link_is_exact(
+        semantic, 0, constructor, parameter, &storage_mutation));
+    storage_mutation.source_storage_field = NULL;
+    REQUIRE(!xr_semantic_native_storage_constructor_field_link_is_exact(
+        semantic, 0, constructor, parameter, &storage_mutation));
+    REQUIRE(xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index) ==
+            storage);
     xr_semantic_plan_free(semantic);
 }
 
@@ -11075,6 +11249,11 @@ int main(int argc, char **argv) {
         puts("Native direct ref authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "native-storage-constructor-authority") == 0) {
+        test_native_storage_constructor_parameter_authority();
+        puts("Native storage constructor authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "native-direct-fresh-result-authority") == 0) {
         test_native_direct_fresh_result_authority();
         puts("Native direct fresh result authority tests passed");
@@ -11324,6 +11503,7 @@ int main(int argc, char **argv) {
     test_plan_snapshot_and_determinism();
     test_native_target_leaf_scalar_authority();
     test_native_direct_ref_authority();
+    test_native_storage_constructor_parameter_authority();
     test_native_direct_fresh_result_authority();
     test_builder_materializes_canonical_scalar_intents();
     test_builder_materializes_parameter_without_operation();
