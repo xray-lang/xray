@@ -12,8 +12,8 @@ real build of it was red.
 
 A probe proves the symbol **is nameable**: that its spelling resolves at the
 arity the registry records. Where a value is cheap to build the probe also
-constructs and uses one; where it is not (`NetConn`, `Ptr<T>`, `CFn<...>`, and
-the other handle types), naming the type in a signature is the whole point and
+constructs and uses one; where it is not (`Ptr<T>`, `CFn<...>`, and the other
+handle types), naming the type in a signature is the whole point and
 the probe stops there. Behavioural coverage for those types lives in
 `tests/regression/` and `tests/diff/`, not here.
 

@@ -83,6 +83,17 @@ class SourceProviderBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "stdlib-internal only"):
             self.parse(provider_def(function_visibility="public"))
 
+    def test_public_leaf_cannot_return_private_storage(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "private native storage.*stdlib-internal only"):
+            definition = provider_def(
+                function_visibility="public",
+                signature="(): __BoxStorage",
+                argc=0,
+                arg_spec="",
+            )
+            before, marker, after = definition.rpartition('    visibility: "public"\n')
+            self.parse(before + marker + '    return_ownership: "fresh"\n' + after)
+
     def test_cross_module_wrapper_reference_is_rejected(self) -> None:
         definition = provider_def(signature="(value: i64): i64") + (
             "module other {\n"
@@ -93,6 +104,26 @@ class SourceProviderBridgeTests(unittest.TestCase):
             "    argc: 1\n"
             '    arg_spec: "v"\n'
             '    visibility: "internal"\n'
+            "  }\n"
+            "}\n"
+        )
+        with tempfile.TemporaryDirectory(prefix="xray-source-provider.") as tmp:
+            root = Path(tmp)
+            write_fixture(root, definition, GOOD_SOURCE)
+            with self.assertRaisesRegex(SystemExit, "belongs to module sample, not other"):
+                parse_def_metadata(root)
+
+    def test_cross_module_storage_reference_is_rejected(self) -> None:
+        definition = provider_def(signature="(value: i64): i64") + (
+            "module other {\n"
+            "  fn __probeOther {\n"
+            '    signature: "(): __BoxStorage"\n'
+            '    doc: "probe"\n'
+            '    vm: "other_probe"\n'
+            "    argc: 0\n"
+            '    arg_spec: ""\n'
+            '    visibility: "internal"\n'
+            '    return_ownership: "fresh"\n'
             "  }\n"
             "}\n"
         )

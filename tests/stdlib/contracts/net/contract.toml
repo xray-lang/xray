@@ -1,6 +1,6 @@
 schema = 1
 module = "net"
-contract_revision = 3
+contract_revision = 4
 legacy_commit = "b6955520e9bc142e23e3a7486c00dbcaf4a55127"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/net/legacy_expected.jsonl"
@@ -49,7 +49,7 @@ intentional_semantic_changes = [
   "sendTo takes Array<u8> payloads and an explicit timeoutMs",
   "copyBidirectional throws NetError only for argument validation (Closed, Invalid); a per-direction I/O error ends that direction and the byte counts are still returned",
   "NetError gains Cancelled so cooperative cancellation is distinct from Closed",
-  "NetConn and NetListener expose no native instance methods; handle state, lifecycle, direction, and deadline policy are source-owned net module functions"
+  "NetConn and NetListener are final source classes with private native storage; handle state, lifecycle, direction, and deadline policy are source-owned net module functions"
 ]
 # Byte-first convergence roadmap:
 #   converged byte read: readBytes returns Array<u8>

@@ -7618,8 +7618,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             return val;
         }
         case XR_TAG_REGEX:
-        case XR_TAG_NET_CONN:
-        case XR_TAG_NET_LISTENER:
+        case XR_TAG_NET_CONN_STORAGE:
+        case XR_TAG_NET_LISTENER_STORAGE:
             xrt_retain(val);
             return val;
         default:

@@ -15,8 +15,9 @@
  *   stdlib/net/net.xr so VM and AOT execute the same Xray semantics.
  *
  *   Primitives never construct NetError values. They record a portable
- *   XrNetErrorKind code plus the raw errno on the handle (net.__lastCode /
- *   net.__lastErrno) or return the code directly when no handle exists yet
+ *   XrNetErrorKind code plus the raw errno on private socket storage (the
+ *   split net.__*LastCode / net.__*LastErrno leaves), or return the code
+ *   directly when no handle exists yet
  *   (net.__connectFd, net.__tlsHandshake); the script layer classifies.
  */
 
@@ -132,24 +133,24 @@ static XrTlsContext *get_tls_client_ctx(void) {
 }
 #endif
 
-// ========== Typed Handle Helpers ==========
+// ========== Private Storage Helpers ==========
 
 /*
- * Handle type checks. Validates GC type is XR_TINSTANCE and the
+ * Storage type checks. Validates GC type is XR_TINSTANCE and the
  * class has the expected builtin_kind.
  */
 static inline bool is_conn_handle(XrValue v) {
     if (!XR_IS_PTR(v) || XR_HEAP_TYPE(v) != XR_TINSTANCE)
         return false;
     XrObjectInstance *inst = (XrObjectInstance *) XR_VALUE_GCPTR(v);
-    return inst->klass && inst->klass->builtin_kind == XR_BK_NETCONN;
+    return inst->klass && inst->klass->builtin_kind == XR_BK_NET_CONN_STORAGE;
 }
 
 static inline bool is_listener_handle(XrValue v) {
     if (!XR_IS_PTR(v) || XR_HEAP_TYPE(v) != XR_TINSTANCE)
         return false;
     XrObjectInstance *inst = (XrObjectInstance *) XR_VALUE_GCPTR(v);
-    return inst->klass && inst->klass->builtin_kind == XR_BK_NETLISTENER;
+    return inst->klass && inst->klass->builtin_kind == XR_BK_NET_LISTENER_STORAGE;
 }
 
 static inline XrNetConn *unwrap_conn(XrValue v) {
@@ -448,7 +449,7 @@ static XrCFuncResult net_connect_fd_step(XrVMRuntime *X, NetConnectState *state,
 }
 
 /*
- * net.__connectFd(addrLiteral, port, deadlineMs) -> NetConn?
+ * net.__connectFd(addrLiteral, port, deadlineMs) -> __NetConnStorage?
  * Yieldable: non-blocking connect to ONE literal address. Name resolution and
  * multi-address fallback are net.xr policy; an unresolvable input here is an
  * invalid-argument code. Null result carries its code on __lastConnectCode.
@@ -625,7 +626,7 @@ static XrCFuncResult net_accept_step(XrVMRuntime *X, NetAcceptState *state, XrVa
 }
 
 /*
- * net.__accept(listener) -> NetConn | null
+ * net.__accept(listener) -> __NetConnStorage | null
  * Yieldable: try-accept fast path, then park until readable.
  */
 static XrCFuncResult net_accept_handle_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
@@ -1209,7 +1210,7 @@ static XrValue net_shutdown_direction(XrVMRuntime *X, XrValue *args, int nargs) 
 // ========== net.__listenFd ==========
 
 /*
- * net.__listenFd(port, backlog, forceV4) -> NetListener | null
+ * net.__listenFd(port, backlog, forceV4) -> __NetListenerStorage | null
  * xr_io_listen owns the dual-stack-preferred bind; forceV4 pins the socket to
  * an IPv4 wildcard for callers that must interoperate with v4-only tooling.
  */
@@ -1243,10 +1244,10 @@ static XrValue net_listen_fd(XrVMRuntime *X, XrValue *args, int nargs) {
     return make_listener_handle(X, fd, port_num);
 }
 
-// ========== net.__close / net.__fd ==========
+// ========== split connection/listener close and fd leaves ==========
 
 /*
- * net.__close(handle) -> void
+ * net.__closeConn/__closeListener(storage) -> void
  * Close connection, listener, or UDP socket. Safe to call multiple times.
  */
 static XrValue net_close_handle(XrVMRuntime *X, XrValue *args, int nargs) {
@@ -1509,7 +1510,7 @@ static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState
  * monotonic deadline (0 means none). Returns 0 on success (the conn is
  * promoted to TLS in place); every failure closes the conn and returns a
  * portable net error code, also stored on the handle. The result is a bare
- * int, not `NetConn | int`: unioning a builtin native class with a scalar
+ * int, not `__NetConnStorage | int`: unioning opaque native storage with a scalar
  * forces module-wide discrimination that miscompiles suspended handle
  * results inside coroutine frames.
  */
@@ -1617,7 +1618,7 @@ static XrCFuncResult net_tls_server_handshake_context_yieldable(XrVMRuntime *X, 
 // ========== UDP primitives ==========
 
 /*
- * net.__udpBind(port, addr) -> NetConn | null
+ * net.__udpBind(port, addr) -> __NetConnStorage | null
  * Empty addr binds the family-appropriate wildcard.
  */
 static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
@@ -1947,26 +1948,25 @@ static XrValue net_udp_from_port(XrVMRuntime *X, XrValue *args, int nargs) {
     return xr_int(conn ? conn->udp_from_port : 0);
 }
 
-#define XR_STDLIB_VM_BIND_CLASS_NET_CONN 1
-#define XR_STDLIB_VM_BIND_CLASS_NET_LISTENER 1
+#define XR_STDLIB_VM_BIND_CLASS___NET_CONN_STORAGE 1
+#define XR_STDLIB_VM_BIND_CLASS___NET_LISTENER_STORAGE 1
 #define XR_STDLIB_VM_BIND_CLASS___TLS_CONTEXT_STORAGE 1
 #include "../stdlib/xstdlib_class_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_CLASS___TLS_CONTEXT_STORAGE
-#undef XR_STDLIB_VM_BIND_CLASS_NET_LISTENER
-#undef XR_STDLIB_VM_BIND_CLASS_NET_CONN
+#undef XR_STDLIB_VM_BIND_CLASS___NET_LISTENER_STORAGE
+#undef XR_STDLIB_VM_BIND_CLASS___NET_CONN_STORAGE
 
 #define XR_STDLIB_VM_BIND_MODULE_NET 1
 #include "../stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_NET
 
-/* NetConn and NetListener class registrations are invoked
- * unconditionally during isolate init by
- * xr_prelude_register_all_native_types, so the XrClasses are available
- * even when user code never `import net`. */
-void xr_netconn_register_class(XrVMRuntime *isolate) {
-    xr_stdlib_vm_register_net_conn_class_generated(isolate);
+/* Private socket storage registration runs during isolate initialization so
+ * resource values returned by net leaves always carry their internal class.
+ * Public NetConn and NetListener classes are declared only by net.xr. */
+void xr_net_conn_storage_register_class(XrVMRuntime *isolate) {
+    xr_stdlib_vm_register___net_conn_storage_class_generated(isolate);
 }
 
-void xr_netlistener_register_class(XrVMRuntime *isolate) {
-    xr_stdlib_vm_register_net_listener_class_generated(isolate);
+void xr_net_listener_storage_register_class(XrVMRuntime *isolate) {
+    xr_stdlib_vm_register___net_listener_storage_class_generated(isolate);
 }

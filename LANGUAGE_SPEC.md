@@ -263,7 +263,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; `stdlib/prelude/builtin_symbols.def` introduces them automatically:
-> `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`.
+> `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`.
 > `Array<u8>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
 > These names **cannot be redeclared**: `class Array {}`, `enum TaskResult {}` and `interface Stringable {}` are all compile errors.
 > The reserved set is every entry in that registry -- types, enums and constraint interfaces -- not only the prelude types listed above.
@@ -616,8 +616,8 @@ Xray is statically typed; every expression has a determined type at compile time
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<u8>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
 | Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
-| Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
-| Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
+| Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, and the `Os*` synchronization types |
+| Module-exported types | `DateTime`, `Logger`, `NetConn`, `NetListener`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -659,8 +659,6 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `JSON.WithRest<T>` | resolver built-in |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | resolver built-in |
-| `NetConn` | prelude |
-| `NetListener` | prelude |
 | `OsBarrier` | prelude |
 | `OsCondvar` | prelude |
 | `OsMutex` | prelude |
@@ -670,8 +668,6 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Path` | prelude |
 | `Ptr<T>` | resolver built-in |
 | `Range` | prelude |
-| `Regex` | prelude |
-| `RegexMatch` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
 | `StringBuilder` | prelude |
@@ -6361,7 +6357,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 >
 > `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `NetConn`, `NetListener`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<u8>` is an `Array` specialization; module types such as `DateTime` and `Logger` must be imported. See §1.5.6 / §2.2.
+> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<u8>` is an `Array` specialization; module types such as `DateTime`, `Logger`, `NetConn`, and `NetListener` must be imported. See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 

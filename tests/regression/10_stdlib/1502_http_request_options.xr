@@ -3,6 +3,7 @@
 import http
 import { Headers, HttpError, HttpMethod, HttpRequestOptions } from http
 import net
+import { NetConn, NetListener } from net
 
 fn recv_line(ch: Channel<string>) -> string {
     return match (ch.recv()) {

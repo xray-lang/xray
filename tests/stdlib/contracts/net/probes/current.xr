@@ -1,4 +1,5 @@
 import net
+import { NetListener } from net
 
 fn emit(name: string, ok: bool) {
     print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{\"transport\":\"loopback\"}}")

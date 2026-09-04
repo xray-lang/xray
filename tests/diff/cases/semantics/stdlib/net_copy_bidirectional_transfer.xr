@@ -1,5 +1,5 @@
 import net
-import { CopyBidirectionalResult } from net
+import { CopyBidirectionalResult, NetConn } from net
 
 // Both peer connections are accepted in the parent and moved into the bridge
 // coroutine, the AOT-supported way to hand fresh handles to a child task.

@@ -997,7 +997,8 @@ const XaBuiltinEnum *xa_builtin_find_enum_by_name(const char *enum_name) {
     return NULL;
 }
 
-static const XaBuiltinClass *xa_builtin_find_class_by_name(const char *class_name) {
+static const XaBuiltinClass *
+xa_builtin_find_class_by_name_for_module(const char *module_name, const char *class_name) {
     if (!class_name)
         return NULL;
     for (int i = 0; i < xa_builtin_get_module_count(); i++) {
@@ -1005,7 +1006,9 @@ static const XaBuiltinClass *xa_builtin_find_class_by_name(const char *class_nam
         if (!mod)
             continue;
         for (int j = 0; j < mod->class_count; j++) {
-            if (mod->classes[j].name && strcmp(mod->classes[j].name, class_name) == 0)
+            if (mod->classes[j].name && strcmp(mod->classes[j].name, class_name) == 0 &&
+                (!mod->classes[j].is_internal ||
+                 (module_name && strcmp(module_name, mod->name) == 0)))
                 return &mod->classes[j];
         }
     }
@@ -1668,12 +1671,9 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *module_name, const cha
             }
         }
 
-        // Last resort: consult the prelude registry. SIMPLE entries
-        // (BigInt, Logger, NetConn, NetListener, Range,
-        // StringBuilder) all surface here as named instances so that
-        // typed cfunc signatures like "(): NetConn?" round-trip
-        // through the analyzer. Generic / singleton kinds were already
-        // handled by the dedicated branches above.
+        // Last resort: consult the prelude registry. SIMPLE entries such as
+        // BigInt, Range, and StringBuilder surface here as named instances.
+        // Generic / singleton kinds were handled by dedicated branches above.
         if (!type && X) {
             const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
             if (symbols) {
@@ -1689,10 +1689,14 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *module_name, const cha
         // Creates an instance type whose class_name matches the handle
         // so that method resolution can find the handle's methods later.
         if (!type) {
-            char name_buf[64];
-            size_t copy_len = base_len < sizeof(name_buf) - 1 ? base_len : sizeof(name_buf) - 1;
-            memcpy(name_buf, s, copy_len);
-            name_buf[copy_len] = '\0';
+            /* Type names have no language-level 63-byte ceiling. Allocate the
+             * exact bounded slice here rather than truncating it into a fixed
+             * buffer and accidentally resolving a different declaration. */
+            char *name_buf = xr_malloc(base_len + 1);
+            if (!name_buf)
+                return xr_type_new_error(X);
+            memcpy(name_buf, s, base_len);
+            name_buf[base_len] = '\0';
 
             const XaBuiltinHandle *handle = xa_builtin_find_handle_by_name(name_buf);
             if (handle) {
@@ -1701,7 +1705,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *module_name, const cha
                     type->instance.class_name = handle->name;
             }
             if (!type) {
-                const XaBuiltinClass *class_decl = xa_builtin_find_class_by_name(name_buf);
+                const XaBuiltinClass *class_decl =
+                    xa_builtin_find_class_by_name_for_module(module_name, name_buf);
                 if (class_decl) {
                     type = xr_type_new_instance(X, NULL);
                     if (type)
@@ -1719,6 +1724,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *module_name, const cha
                 if (enum_decl)
                     type = xa_builtin_enum_decl_type(X, enum_decl, NULL);
             }
+            xr_free(name_buf);
         }
         if (!type)
             type = xr_type_new_error(X);

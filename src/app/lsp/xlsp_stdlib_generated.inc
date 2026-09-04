@@ -473,6 +473,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"sendTo", XLSP_SYM_FUNCTION, "fn(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs?: i64): i64", "", NULL, 0},
     {"recvFrom", XLSP_SYM_FUNCTION, "fn(handle: NetConn, buffer: ref Array<u8>, timeoutMs?: i64): UdpFrom?", "", NULL, 0},
     {"NetError", XLSP_SYM_CLASS, "type NetError", "Enum type", NULL, 0},
+    {"NetConn", XLSP_SYM_CLASS, "type NetConn", "Class type", NULL, 0},
+    {"NetListener", XLSP_SYM_CLASS, "type NetListener", "Class type", NULL, 0},
     {"IpAddress", XLSP_SYM_CLASS, "type IpAddress", "Class type", NULL, 0},
     {"Endpoint", XLSP_SYM_CLASS, "type Endpoint", "Class type", NULL, 0},
     {"DialOptions", XLSP_SYM_CLASS, "type DialOptions", "Class type", NULL, 0},
@@ -481,7 +483,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"TlsClientContext", XLSP_SYM_CLASS, "type TlsClientContext", "Class type", NULL, 0},
     {"TlsServerContext", XLSP_SYM_CLASS, "type TlsServerContext", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 39
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 41
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {

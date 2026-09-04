@@ -827,6 +827,26 @@ def validate_source_provider_bridges(
     native_classes: list[StdlibNativeClassEntry],
 ) -> None:
     """Freeze module-private source-wrapper/provider bridge contracts."""
+    for storage in native_classes:
+        if not storage.is_internal:
+            continue
+        storage_re = re.compile(
+            rf"(?<![A-Za-z0-9_]){re.escape(storage.name)}(?![A-Za-z0-9_])"
+        )
+        for entry in entries:
+            if not storage_re.search(entry.signature):
+                continue
+            if entry.module != storage.module:
+                raise SystemExit(
+                    f"{entry.symbol}: private native storage {storage.name} belongs to module "
+                    f"{storage.module}, not {entry.module}"
+                )
+            if not entry.is_internal:
+                raise SystemExit(
+                    f"{entry.symbol}: private native storage {storage.name} is stdlib-internal "
+                    "only"
+                )
+
     providers = [entry for entry in native_classes if entry.source_wrapper]
     wrappers_by_name: dict[str, set[str]] = {}
     providers_by_module_wrapper: dict[tuple[str, str], StdlibNativeClassEntry] = {}

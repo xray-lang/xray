@@ -1,6 +1,7 @@
 import http
 import { HttpRequest, HttpResponse } from http
 import net
+import { NetConn } from net
 import time
 
 fn serveStaticRoutes(port: i64, running: Atomic<bool>) -> bool {

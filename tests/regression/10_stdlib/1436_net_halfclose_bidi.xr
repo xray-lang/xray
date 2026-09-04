@@ -2,7 +2,7 @@
 // TCP half-close and copyBidirectional.
 
 import net
-import { NetError } from net
+import { NetConn, NetError, NetListener } from net
 
 fn tryListen(backlog: i64) -> NetListener? {
     try {

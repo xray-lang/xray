@@ -2,7 +2,7 @@
 // Called by tls_bench.py; prints RESULT lines parsed by the Python harness.
 
 import net
-import { DialOptions } from net
+import { DialOptions, NetConn } from net
 import time
 
 fn readFull(conn: NetConn, buf: ref Array<u8>, size: i64) -> bool {

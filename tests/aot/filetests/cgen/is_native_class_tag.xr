@@ -1,12 +1,9 @@
 // Prelude native classes have no shared class slot, so an `is` test against
 // them must compile to a value-tag compare, never to the unresolved-class
-// pointer fallback.
-fn isConn(x: NetConn | i64) -> bool { return x is NetConn }
-fn isListener(x: NetListener | i64) -> bool { return x is NetListener }
+// pointer fallback. NetConn/NetListener are ordinary source classes now and
+// are covered by the source-class type-id tests.
 fn isBig(x: BigInt | i64) -> bool { return x is BigInt }
 fn isSb(x: StringBuilder | i64) -> bool { return x is StringBuilder }
 
-print(isConn(1))
-print(isListener(2))
 print(isBig(3))
 print(isSb(4))

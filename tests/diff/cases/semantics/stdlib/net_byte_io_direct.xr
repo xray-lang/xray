@@ -1,4 +1,5 @@
 import net
+import { NetConn } from net
 
 // The server connection is accepted in the parent and moved into the echo
 // coroutine, mirroring how real servers hand each connection to its own task.

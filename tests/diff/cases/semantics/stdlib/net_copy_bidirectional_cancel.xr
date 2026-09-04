@@ -1,6 +1,6 @@
 import net
 import time
-import { CopyBidirectionalResult } from net
+import { CopyBidirectionalResult, NetConn } from net
 
 // copyBidirectional is a real suspension point in both executors.  Cancelling
 // its task must publish TaskResult.Cancelled and wake any provider-side wait;

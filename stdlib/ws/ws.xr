@@ -10,7 +10,7 @@ import text
 import crypto
 import base64
 import net
-import { NetError, DialOptions } from net
+import { DialOptions, NetConn, NetError, NetListener } from net
 import time
 
 const _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"

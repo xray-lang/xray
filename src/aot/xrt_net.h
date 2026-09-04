@@ -51,7 +51,8 @@ typedef enum xrt_net_conn_kind {
 
 /*
  * Portable network error codes. The numbering is a stable script-facing
- * contract shared with the VM handle layer: net.__lastCode returns these
+ * contract shared with the VM storage layer: net.__connLastCode and
+ * net.__listenerLastCode return these
  * values verbatim and the classification table in the net module source maps
  * them to NetError variants, so renumbering is a breaking semantic change.
  */
@@ -214,11 +215,11 @@ static inline void xrt_net_set_error_base(xrt_net_handle_base_t *base, uint8_t k
 }
 
 static inline xrt_net_conn_object_t *xrt_net_conn_ptr(XrValue value) {
-    return value.tag == XR_TAG_NET_CONN && value.ptr ? (xrt_net_conn_object_t *) value.ptr : NULL;
+    return value.tag == XR_TAG_NET_CONN_STORAGE && value.ptr ? (xrt_net_conn_object_t *) value.ptr : NULL;
 }
 
 static inline xrt_net_listener_object_t *xrt_net_listener_ptr(XrValue value) {
-    return value.tag == XR_TAG_NET_LISTENER && value.ptr ? (xrt_net_listener_object_t *) value.ptr
+    return value.tag == XR_TAG_NET_LISTENER_STORAGE && value.ptr ? (xrt_net_listener_object_t *) value.ptr
                                                          : NULL;
 }
 
@@ -231,11 +232,11 @@ static inline xrt_net_handle_base_t *xrt_net_handle_base_ptr(XrValue value) {
 }
 
 static inline XrValue xrt_net_conn_box(xrt_net_conn_object_t *conn) {
-    return conn ? xr_mkptr(conn, XR_TAG_NET_CONN) : XR_NULL_VAL;
+    return conn ? xr_mkptr(conn, XR_TAG_NET_CONN_STORAGE) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_net_listener_box(xrt_net_listener_object_t *listener) {
-    return listener ? xr_mkptr(listener, XR_TAG_NET_LISTENER) : XR_NULL_VAL;
+    return listener ? xr_mkptr(listener, XR_TAG_NET_LISTENER_STORAGE) : XR_NULL_VAL;
 }
 
 static inline xrt_net_try_result_t xrt_net_try_done(XrValue value, int64_t progress) {
@@ -559,13 +560,13 @@ static inline XrValue xrt_net_connect_fail(xr_socket_t fd, int code) {
 }
 
 /*
- * net.__connectFd(addrLiteral, port, deadlineMs) -> NetConn?
+ * net.__connectFd(addrLiteral, port, deadlineMs) -> __NetConnStorage?
  * Non-blocking connect to ONE literal address. Name resolution and
  * multi-address fallback are net module policy; a non-literal input is an
  * invalid-argument code, not a DNS failure. A zero deadline waits without
  * limit; the net module source owns timeout policy. Null result carries its
  * code on __lastConnectCode. The return is deliberately not `NetConn | int`:
- * a union of a builtin native class with a scalar forces module-wide runtime
+ * a union of opaque native storage with a scalar forces module-wide runtime
  * discrimination that miscompiles suspended handle results in coroutine frames.
  */
 static inline XrValue xrt_net_connect_fd(XrValue addr_value, XrValue port_value,
@@ -620,7 +621,7 @@ static inline XrValue xrt_net_last_connect_code(void) {
 }
 
 /*
- * net.__listenFd(port, backlog, forceV4) -> NetListener | null
+ * net.__listenFd(port, backlog, forceV4) -> __NetListenerStorage | null
  * Dual-stack-preferred bind: try a v6 any-address socket with V6ONLY off,
  * fall back to plain IPv4; forceV4 skips the v6 attempt entirely. Ephemeral
  * port requests read the kernel-assigned port back via getsockname.
@@ -902,7 +903,7 @@ static inline XrValue xrt_net_tls_handshake(XrValue conn_value, XrValue host_val
 }
 
 /*
- * net.__udpBind(port, addr) -> NetConn | null
+ * net.__udpBind(port, addr) -> __NetConnStorage | null
  * Empty addr binds the family-appropriate wildcard; a ':' in the addr text
  * selects IPv6, anything else IPv4.
  */

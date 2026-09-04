@@ -3,6 +3,7 @@
 // conns * rounds request/response round-trips. Run via tests/manual; not a
 // regression test.
 import net
+import { NetConn, NetListener } from net
 import time
 
 fn echoConn(c: NetConn) {

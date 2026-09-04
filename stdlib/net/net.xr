@@ -1,8 +1,8 @@
 // net — network semantics over private socket/TLS/netpoll primitives.
 //
-// The native layer exposes only single-shot yieldable primitives plus the
-// NetConn/NetListener handles. Everything with a policy dimension is decided
-// here: address resolution and multi-address dial fallback (RFC 8305 order),
+// The native layer exposes only single-shot yieldable primitives plus private
+// socket storage. Public NetConn/NetListener identity and every policy
+// dimension are decided here: address resolution and multi-address dial fallback (RFC 8305 order),
 // timeout defaults and deadline composition, error classification into
 // NetError, stream copy pumps, and datagram shaping. Connection setup
 // failures throw typed NetError values; per-operation I/O keeps in-band
@@ -44,6 +44,23 @@ export enum NetError {
     Invalid,
     Cancelled,
     OutOfMemory
+}
+
+// Public socket identities are ordinary final Xray classes. The private
+// provider storage owns the OS/TLS resource and is projected only at generated
+// module-private native-leaf call sites. Constructors are capability-sealed by
+// their unexported storage parameter: external modules can neither name nor
+// manufacture that argument, and no raw-storage getter exists.
+export final class NetConn {
+    private _storage: __NetConnStorage
+
+    constructor(storage: __NetConnStorage) { this._storage = storage }
+}
+
+export final class NetListener {
+    private _storage: __NetListenerStorage
+
+    constructor(storage: __NetListenerStorage) { this._storage = storage }
 }
 
 fn _classify(code: i64) -> NetError {
@@ -131,8 +148,8 @@ fn _dialTcp(host: string, port: i64, deadline: i64) -> NetConn {
     for (var i = 0; i < len(addrs); i++) {
         var remaining = deadline - time.monotonic()
         if (remaining <= 0) { throw NetError.Timeout }
-        var conn = __connectFd(addrs[i], port, deadline)
-        if (conn != null) { return conn! }
+        var storage = __connectFd(addrs[i], port, deadline)
+        if (storage != null) { return NetConn(storage!) }
         lastCode = __lastConnectCode()
         if (lastCode == _CODE_TIMEOUT || lastCode == _CODE_CANCELLED) { throw _classify(lastCode) }
     }
@@ -246,9 +263,9 @@ export final class TlsServerContext {
 // Native bind failures have no handle to carry an errno, so every socket,
 // bind, or listen failure surfaces as the coarse NetError.Io.
 fn _listenChecked(port: i64, backlog: i64, forceV4: bool) -> NetListener {
-    var listener = __listenFd(port, backlog, forceV4)
-    if (listener == null) { throw NetError.Io }
-    return listener!
+    var storage = __listenFd(port, backlog, forceV4)
+    if (storage == null) { throw NetError.Io }
+    return NetListener(storage!)
 }
 
 export fn listen(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false) -> NetListener {
@@ -258,7 +275,11 @@ export fn listen(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = fal
 
 // Null means the accept deadline elapsed or the listener was closed;
 // lastError(listener) distinguishes the two so accept loops stay cheap.
-export fn accept(listener: NetListener) -> NetConn? { return __accept(listener) }
+export fn accept(listener: NetListener) -> NetConn? {
+    var storage = __accept(listener)
+    if (storage == null) { return null }
+    return NetConn(storage!)
+}
 
 // ========== Byte I/O ==========
 
@@ -295,9 +316,20 @@ export fn shutdown(conn: NetConn) -> bool {
     return __shutdownDirection(conn, _DIRECTION_BOTH)
 }
 
-export fn close(handle: NetConn | NetListener) { __close(handle) }
-export fn fd(handle: NetConn | NetListener) -> i64 { return __fd(handle) }
-export fn isClosed(handle: NetConn | NetListener) -> bool { return __fd(handle) < 0 }
+export fn close(handle: NetConn | NetListener) {
+    if (handle is NetConn) {
+        __closeConn(handle as NetConn)
+    } else {
+        __closeListener(handle as NetListener)
+    }
+}
+
+export fn fd(handle: NetConn | NetListener) -> i64 {
+    if (handle is NetConn) { return __connFd(handle as NetConn) }
+    return __listenerFd(handle as NetListener)
+}
+
+export fn isClosed(handle: NetConn | NetListener) -> bool { return fd(handle) < 0 }
 export fn isTLS(conn: NetConn) -> bool { return __connIsTLS(conn) }
 export fn port(listener: NetListener) -> i64 { return __listenerPort(listener) }
 
@@ -318,12 +350,20 @@ export fn setAcceptDeadline(listener: NetListener, deadline: i64) -> bool {
 }
 
 export fn lastError(handle: NetConn | NetListener) -> NetError? {
-    var code = __lastCode(handle)
+    var code = 0
+    if (handle is NetConn) {
+        code = __connLastCode(handle as NetConn)
+    } else {
+        code = __listenerLastCode(handle as NetListener)
+    }
     if (code == 0) { return null }
     return _classify(code)
 }
 
-export fn lastErrno(handle: NetConn | NetListener) -> i64 { return __lastErrno(handle) }
+export fn lastErrno(handle: NetConn | NetListener) -> i64 {
+    if (handle is NetConn) { return __connLastErrno(handle as NetConn) }
+    return __listenerLastErrno(handle as NetListener)
+}
 
 // ========== Stream copy ==========
 
@@ -386,9 +426,9 @@ export fn copyBidirectional(a: NetConn, b: NetConn) -> CopyBidirectionalResult {
 
 export fn udpBind(port: i64, address: string = "") -> NetConn {
     if (port < 0 || port > 65535) { throw NetError.Invalid }
-    var conn = __udpBind(port, address)
-    if (conn == null) { throw NetError.Io }
-    return conn!
+    var storage = __udpBind(port, address)
+    if (storage == null) { throw NetError.Io }
+    return NetConn(storage!)
 }
 
 fn _parseIpv4Octet(part: string) -> i64? {
@@ -422,9 +462,9 @@ export fn udpMulticastBind(group: string, port: i64, ttl: i64 = 1,
     if (!_validIpv4MulticastGroup(group) || port <= 0 || port > 65535 || ttl < 0 || ttl > 255) {
         throw NetError.Invalid
     }
-    var conn = __udpMulticastBind(group, port, ttl, loopback)
-    if (conn == null) { throw NetError.Io }
-    return conn!
+    var storage = __udpMulticastBind(group, port, ttl, loopback)
+    if (storage == null) { throw NetError.Io }
+    return NetConn(storage!)
 }
 
 fn _deadlineFromTimeout(timeoutMs: i64) -> i64 {

@@ -11,7 +11,7 @@
 //     for octet through the Array<byte> surface.
 
 import net
-import { NetError } from net
+import { NetConn, NetError, NetListener } from net
 
 fn tryListen(backlog: i64) -> NetListener? {
     try {

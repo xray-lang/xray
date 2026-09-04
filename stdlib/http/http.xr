@@ -19,7 +19,7 @@ import http2
 import { Http2Error } from http2
 import io
 import net
-import { DialOptions, NetError } from net
+import { DialOptions, NetConn, NetError, NetListener } from net
 import path as pathutil
 import time
 

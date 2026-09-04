@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Replaces the old XrObjectInstance-based "{fd, type, tls}" handles that scripts
- *   could read by name. XrNetConn / XrNetListener are opaque heap objects
+ *   could read by name. XrNetConn / XrNetListener are private opaque storage
  *   carrying the underlying fd plus type-specific state. Scripts operate
  *   on them only through the net module's byte primitives (readInto,
  *   writeBytes, accept, close, ...) and the registered handle methods.
@@ -49,7 +49,7 @@ typedef enum {
 
 /*
  * Portable network error codes. The numbering is a stable script-facing
- * contract: net.__lastCode returns these values verbatim and the NetError
+ * contract: net.__connLastCode / __listenerLastCode return these values verbatim and the NetError
  * classification table in stdlib/net/net.xr maps them to enum variants,
  * so renumbering is a breaking semantic change, not a refactor.
  */
@@ -70,7 +70,7 @@ typedef enum {
 
 typedef struct XrNetConn {
     XrObjHeader gc_header;
-    struct XrClass *klass;       /* unified class (builtin_kind == XR_BK_NETCONN)   */
+    struct XrClass *klass;       /* unified class (builtin_kind == XR_BK_NET_CONN_STORAGE)   */
     int fd;                      /* -1 once closed                                 */
     uint8_t kind;                /* XrNetConnKind                                  */
     bool closed;                 /* idempotency guard for close                     */
@@ -91,7 +91,7 @@ typedef struct XrNetConn {
 
 typedef struct XrNetListener {
     XrObjHeader gc_header;
-    struct XrClass *klass; /* unified class (builtin_kind == XR_BK_NETLISTENER) */
+    struct XrClass *klass; /* unified class (builtin_kind == XR_BK_NET_LISTENER_STORAGE) */
     int fd;                /* -1 once closed                                 */
     int port;              /* listening port                                  */
     bool closed;

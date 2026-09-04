@@ -590,6 +590,26 @@ deletion_trigger = "when Xray can mark a store as one the optimiser may not elid
 
 [[leaf]]
 module = "net"
+symbol = "__NetConnStorage"
+class = "host_abi_leaf"
+abi = "close(2) (Win32 closesocket), Xray netpoll deregistration, and OpenSSL SSL_shutdown(3)/SSL_free(3) when the private storage owns a TLS transport"
+ownership = "none"
+effect = "nothrow"
+provider = "the netconn_body_destroy hook in src/io/xnet_handle.c on the VM and the XRT_ARC_KIND_NET_CONN builtin destructor on AOT; net.NetConn in net.xr is the only public owner of this private handle"
+deletion_trigger = "when a generic opaque-provider resource can bind socket, netpoll and TLS teardown to verified structural drop code; the public source class must remain independent of any user destructor syntax"
+
+[[leaf]]
+module = "net"
+symbol = "__NetListenerStorage"
+class = "host_abi_leaf"
+abi = "close(2) (Win32 closesocket) plus Xray netpoll deregistration when the private storage is reclaimed"
+ownership = "none"
+effect = "nothrow"
+provider = "the netlistener_body_destroy hook in src/io/xnet_handle.c on the VM and the XRT_ARC_KIND_NET_LISTENER builtin destructor on AOT; net.NetListener in net.xr is the only public owner of this private handle"
+deletion_trigger = "when a generic opaque-provider resource can bind listener and netpoll teardown to verified structural drop code; the public source class must remain independent of any user destructor syntax"
+
+[[leaf]]
+module = "net"
 symbol = "__accept"
 class = "host_abi_leaf"
 abi = "accept(2) -- on the Linux io_uring path with SOCK_NONBLOCK, i.e. accept4(2) semantics -- plus fcntl(2) F_SETFL and setsockopt(2) TCP_NODELAY on the accepted descriptor"
@@ -600,13 +620,23 @@ deletion_trigger = "when Xray source can issue the accept(2) call itself and reg
 
 [[leaf]]
 module = "net"
-symbol = "__close"
+symbol = "__closeConn"
 class = "host_abi_leaf"
 abi = "close(2) (Win32 closesocket), preceded on the AOT side by shutdown(2) SHUT_RDWR; netpoll deregistration is epoll_ctl(2) EPOLL_CTL_DEL or kevent(2) EV_DELETE; on the VM a TLS connection first runs OpenSSL SSL_shutdown(3) and SSL_free(3)"
 ownership = "none"
 effect = "nothrow"
-provider = "libc close plus Xray netpoll deregistration, plus OpenSSL on the VM only. VM src/io/xnet_provider.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c"
+provider = "libc close plus Xray netpoll deregistration, plus OpenSSL for a TLS connection on the VM. VM src/io/xnet_provider.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c"
 deletion_trigger = "when the runtime offers a typed socket handle whose release Xray source can express, so the descriptor close, the netpoll deregistration and the TLS teardown stop having to happen together inside one C call"
+
+[[leaf]]
+module = "net"
+symbol = "__closeListener"
+class = "host_abi_leaf"
+abi = "close(2) (Win32 closesocket), preceded on the AOT side by shutdown(2) SHUT_RDWR; netpoll deregistration is epoll_ctl(2) EPOLL_CTL_DEL or kevent(2) EV_DELETE"
+ownership = "none"
+effect = "nothrow"
+provider = "libc close plus Xray netpoll deregistration. VM src/io/xnet_provider.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c"
+deletion_trigger = "when the runtime offers a typed listener handle whose release Xray source can express, so descriptor close and netpoll deregistration stop having to happen together inside one C call"
 
 [[leaf]]
 module = "net"
@@ -630,13 +660,23 @@ deletion_trigger = "when the connection handle representation is declared in Xra
 
 [[leaf]]
 module = "net"
-symbol = "__fd"
+symbol = "__connFd"
 class = "runtime_leaf"
 abi = "none; reads the descriptor field of a runtime-owned socket handle, answering -1 once the handle is closed"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
+provider = "the Xray runtime's own connection-storage memory. VM src/io/xnet_provider.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
 deletion_trigger = "when the socket handle's representation is declared in Xray rather than owned by the runtime, so reading its descriptor is a field access instead of a native call"
+
+[[leaf]]
+module = "net"
+symbol = "__listenerFd"
+class = "runtime_leaf"
+abi = "none; reads the descriptor field of a runtime-owned listener handle, answering -1 once the handle is closed"
+ownership = "none"
+effect = "nothrow"
+provider = "the Xray runtime's own listener-storage memory. VM src/io/xnet_provider.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent"
+deletion_trigger = "when the listener handle's representation is declared in Xray rather than owned by the runtime, so reading its descriptor is a field access instead of a native call"
 
 [[leaf]]
 module = "net"
@@ -680,13 +720,23 @@ deletion_trigger = "never while OpenSSL owns TLS policy objects; this remains th
 
 [[leaf]]
 module = "net"
-symbol = "__lastCode"
+symbol = "__connLastCode"
 class = "runtime_leaf"
 abi = "none; reads the portable XR_NETERR_* code cached on the handle by whichever call last failed"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory; the code is written by net_error_from_errno (VM) or xrt_net_error_from_errno (AOT), which normalise errno into one portable vocabulary"
+provider = "the Xray runtime's own connection-storage memory; the code is written by net_error_from_errno (VM) or xrt_net_error_from_errno (AOT), which normalise errno into one portable vocabulary"
 deletion_trigger = "when a failing net leaf returns its error code in its own result instead of leaving it on the handle for a second call to collect"
+
+[[leaf]]
+module = "net"
+symbol = "__listenerLastCode"
+class = "runtime_leaf"
+abi = "none; reads the portable XR_NETERR_* code cached on the listener by whichever call last failed"
+ownership = "none"
+effect = "nothrow"
+provider = "the Xray runtime's own listener-storage memory; the code is written by net_error_from_errno (VM) or xrt_net_error_from_errno (AOT), which normalise errno into one portable vocabulary"
+deletion_trigger = "when a failing listener leaf returns its error code in its own result instead of leaving it on the handle for a second call to collect"
 
 [[leaf]]
 module = "net"
@@ -700,13 +750,23 @@ deletion_trigger = "when net.__connectFd returns its error code in its own resul
 
 [[leaf]]
 module = "net"
-symbol = "__lastErrno"
+symbol = "__connLastErrno"
 class = "runtime_leaf"
 abi = "none; reads the errno snapshot cached on the handle at the point of failure, not the live errno"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray runtime's own object memory. VM src/io/xnet_provider.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno"
+provider = "the Xray runtime's own connection-storage memory. VM src/io/xnet_provider.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno"
 deletion_trigger = "when a failing net leaf returns the platform errno in its own result, so it does not have to be snapshotted onto the handle for a later call"
+
+[[leaf]]
+module = "net"
+symbol = "__listenerLastErrno"
+class = "runtime_leaf"
+abi = "none; reads the errno snapshot cached on the listener at the point of failure, not the live errno"
+ownership = "none"
+effect = "nothrow"
+provider = "the Xray runtime's own listener-storage memory. VM src/io/xnet_provider.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno"
+deletion_trigger = "when a failing listener leaf returns the platform errno in its own result, so it does not have to be snapshotted onto the handle for a later call"
 
 [[leaf]]
 module = "net"

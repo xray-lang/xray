@@ -4,7 +4,7 @@
 // per-yield re-arm that lets the wait stretch far past the request.
 
 import net
-import { NetError, DialOptions } from net
+import { DialOptions, NetError, NetListener } from net
 import time
 
 fn tryListen(backlog: i64) -> NetListener? {

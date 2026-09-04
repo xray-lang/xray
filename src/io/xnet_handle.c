@@ -133,7 +133,7 @@ XrNetConn *xr_net_conn_from_value(XrValue value) {
     if (!XR_IS_PTR(value) || XR_HEAP_TYPE(value) != XR_TINSTANCE)
         return NULL;
     XrNetConn *conn = (XrNetConn *) XR_VALUE_GCPTR(value);
-    return conn->klass && conn->klass->builtin_kind == XR_BK_NETCONN ? conn : NULL;
+    return conn->klass && conn->klass->builtin_kind == XR_BK_NET_CONN_STORAGE ? conn : NULL;
 }
 
 static XrNetTlsContextHandle *tls_context_from_value(XrVMRuntime *X, XrValue value,

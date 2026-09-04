@@ -96,18 +96,12 @@ XR_FUNC const XrPreludeTypeEntry *xr_prelude_lookup_type(const XrPreludeSymbols 
                                                          const char *name, size_t len);
 
 /*
- * Eagerly register every native XrClass that prelude entries refer to:
- * NetConn / NetListener (net). Called from inside
- * xr_prelude_install during isolate init, so user code can use remaining
- * runtime-owned prelude native types without importing each owner module.
+ * Eagerly register runtime-owned native XrClasses. Private provider storage
+ * classes are registered here so stdlib source modules can call their leaves;
+ * they are not prelude types and never publish a user-visible class identity.
  *
- * The cost of this design is that the four stdlib modules above are
- * always linked into the binary (their method handlers and class
- * builders are reachable from the prelude). xray's "batteries included"
- * stance accepts this in exchange for a single uniform registration
- * point — there is no longer any per-module xr_register_native_type
- * call. Each stdlib module exports a `xr_<type>_register_native_type`
- * function that this routine forwards to.
+ * Registration is centralized so class construction order is deterministic
+ * and no stdlib module needs a second user-visible initialization path.
  */
 XR_FUNC void xr_prelude_register_all_native_types(XrVMRuntime *isolate);
 

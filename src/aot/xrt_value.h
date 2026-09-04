@@ -282,8 +282,8 @@ baseline:
 #define XR_TAG_THREAD 33       /* AOT Thread<T> OS-thread handle */
 #define XR_TAG_BUFFER 34       /* AOT mem.Buffer managed byte allocation */
 #define XR_TAG_BIGINT 35       /* AOT static BigInt literal view */
-#define XR_TAG_NET_CONN 36     /* AOT net.NetConn TCP handle */
-#define XR_TAG_NET_LISTENER 37 /* AOT net.NetListener TCP handle */
+#define XR_TAG_NET_CONN_STORAGE 36     /* AOT net.__NetConnStorage resource */
+#define XR_TAG_NET_LISTENER_STORAGE 37 /* AOT net.__NetListenerStorage resource */
 
 typedef struct XrAotEnumBox {
     XrObjHeader hdr;

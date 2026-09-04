@@ -7,7 +7,7 @@
 // shutdown never fabricates an error.
 
 import net
-import { NetError } from net
+import { NetError, NetListener } from net
 import time
 
 fn tryListen(backlog: i64) -> NetListener? {

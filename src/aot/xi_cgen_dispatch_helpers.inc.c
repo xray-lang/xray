@@ -13240,10 +13240,6 @@ static void xicgen_emit_exact_enum_is_predicate(FILE *out, const XiValue *value,
 static const char *xicgen_prelude_native_class_tag_name(const char *class_name) {
     if (!class_name)
         return NULL;
-    if (strcmp(class_name, "NetConn") == 0)
-        return "XR_TAG_NET_CONN";
-    if (strcmp(class_name, "NetListener") == 0)
-        return "XR_TAG_NET_LISTENER";
     if (strcmp(class_name, "BigInt") == 0)
         return "XR_TAG_BIGINT";
     if (strcmp(class_name, "StringBuilder") == 0)

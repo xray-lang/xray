@@ -3,6 +3,7 @@
 // Run via tests/manual; not a regression test. conns/rounds chosen to keep the
 // total round-trip count comparable while scaling connection fan-out.
 import net
+import { NetConn, NetListener } from net
 import time
 
 fn echoConn(c: NetConn) {

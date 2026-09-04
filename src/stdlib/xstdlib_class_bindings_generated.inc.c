@@ -31,39 +31,39 @@ static void xr_stdlib_vm_register___buffer_storage_class_generated(XrVMRuntime *
 }
 #endif  /* XR_STDLIB_VM_BIND_CLASS___BUFFER_STORAGE */
 
-#ifdef XR_STDLIB_VM_BIND_CLASS_NET_CONN
-static void xr_stdlib_vm_register_net_conn_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_net_conn_class_generated: NULL isolate");
+#ifdef XR_STDLIB_VM_BIND_CLASS___NET_CONN_STORAGE
+static void xr_stdlib_vm_register___net_conn_storage_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register___net_conn_storage_class_generated: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_net_conn_class_generated: core not initialised");
-    XR_DCHECK(core->netConnClass == NULL, "xr_stdlib_vm_register_net_conn_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "NetConn", NULL);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_net_conn_class_generated: builder alloc failed");
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register___net_conn_storage_class_generated: core not initialised");
+    XR_DCHECK(core->netConnClass == NULL, "xr_stdlib_vm_register___net_conn_storage_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "__NetConnStorage", NULL);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register___net_conn_storage_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, xr_netconn_body_desc());
     XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_net_conn_class_generated: finalize failed");
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register___net_conn_storage_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
-    cls->builtin_kind = XR_BK_NETCONN;
+    cls->builtin_kind = XR_BK_NET_CONN_STORAGE;
     core->netConnClass = cls;
 }
-#endif  /* XR_STDLIB_VM_BIND_CLASS_NET_CONN */
+#endif  /* XR_STDLIB_VM_BIND_CLASS___NET_CONN_STORAGE */
 
-#ifdef XR_STDLIB_VM_BIND_CLASS_NET_LISTENER
-static void xr_stdlib_vm_register_net_listener_class_generated(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_net_listener_class_generated: NULL isolate");
+#ifdef XR_STDLIB_VM_BIND_CLASS___NET_LISTENER_STORAGE
+static void xr_stdlib_vm_register___net_listener_storage_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register___net_listener_storage_class_generated: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_net_listener_class_generated: core not initialised");
-    XR_DCHECK(core->netListenerClass == NULL, "xr_stdlib_vm_register_net_listener_class_generated: already registered");
-    XrClassBuilder *builder = xr_class_builder_new(X, "NetListener", NULL);
-    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_net_listener_class_generated: builder alloc failed");
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register___net_listener_storage_class_generated: core not initialised");
+    XR_DCHECK(core->netListenerClass == NULL, "xr_stdlib_vm_register___net_listener_storage_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "__NetListenerStorage", NULL);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register___net_listener_storage_class_generated: builder alloc failed");
     xr_class_builder_set_native_body(builder, xr_netlistener_body_desc());
     XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_net_listener_class_generated: finalize failed");
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register___net_listener_storage_class_generated: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
-    cls->builtin_kind = XR_BK_NETLISTENER;
+    cls->builtin_kind = XR_BK_NET_LISTENER_STORAGE;
     core->netListenerClass = cls;
 }
-#endif  /* XR_STDLIB_VM_BIND_CLASS_NET_LISTENER */
+#endif  /* XR_STDLIB_VM_BIND_CLASS___NET_LISTENER_STORAGE */
 
 #ifdef XR_STDLIB_VM_BIND_CLASS___TLS_CONTEXT_STORAGE
 static void xr_stdlib_vm_register___tls_context_storage_class_generated(XrVMRuntime *X) {

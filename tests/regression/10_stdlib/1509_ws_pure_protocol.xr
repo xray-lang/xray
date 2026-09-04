@@ -3,6 +3,7 @@
 import ws
 import { WsConnectOptions, WsConn } from ws
 import net
+import { NetConn, NetListener } from net
 import time
 
 // listen/dial now throw; restricted environments without socket access

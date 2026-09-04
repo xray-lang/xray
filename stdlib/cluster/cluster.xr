@@ -43,7 +43,16 @@ import crypto
 import math
 import mem
 import net
-import { DialOptions, Endpoint, NetError, TlsClientContext, TlsServerContext, UdpFrom } from net
+import {
+    DialOptions,
+    Endpoint,
+    NetConn,
+    NetError,
+    NetListener,
+    TlsClientContext,
+    TlsServerContext,
+    UdpFrom
+} from net
 import time
 
 // ========== Protocol constants ==========

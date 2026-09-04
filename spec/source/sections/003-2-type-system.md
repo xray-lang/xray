@@ -31,8 +31,8 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<u8>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
 | 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
-| Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
-| 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
+| Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`Os*` 同步类型 |
+| 模块导出类型 | `DateTime`、`Logger`、`NetConn`、`NetListener`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -74,8 +74,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `JSON.WithRest<T>` | 解析器内建 |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | 解析器内建 |
-| `NetConn` | prelude |
-| `NetListener` | prelude |
 | `OsBarrier` | prelude |
 | `OsCondvar` | prelude |
 | `OsMutex` | prelude |
@@ -85,8 +83,6 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Path` | prelude |
 | `Ptr<T>` | 解析器内建 |
 | `Range` | prelude |
-| `Regex` | prelude |
-| `RegexMatch` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
 | `StringBuilder` | prelude |
@@ -1171,8 +1167,8 @@ Xray is statically typed; every expression has a determined type at compile time
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<u8>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
 | Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
-| Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
-| Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
+| Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, and the `Os*` synchronization types |
+| Module-exported types | `DateTime`, `Logger`, `NetConn`, `NetListener`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -1214,8 +1210,6 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `JSON.WithRest<T>` | resolver built-in |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | resolver built-in |
-| `NetConn` | prelude |
-| `NetListener` | prelude |
 | `OsBarrier` | prelude |
 | `OsCondvar` | prelude |
 | `OsMutex` | prelude |
@@ -1225,8 +1219,6 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Path` | prelude |
 | `Ptr<T>` | resolver built-in |
 | `Range` | prelude |
-| `Regex` | prelude |
-| `RegexMatch` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
 | `StringBuilder` | prelude |

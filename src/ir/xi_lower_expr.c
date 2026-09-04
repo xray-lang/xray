@@ -136,10 +136,6 @@ static int xi_lower_type_constant_id(const char *name) {
 static int xi_lower_prelude_native_class_typeid(const char *name) {
     if (!name)
         return -1;
-    if (strcmp(name, "NetConn") == 0)
-        return XR_TID_NETCONN;
-    if (strcmp(name, "NetListener") == 0)
-        return XR_TID_NETLISTENER;
     if (strcmp(name, "BigInt") == 0)
         return XR_TID_BIGINT;
     if (strcmp(name, "StringBuilder") == 0)

@@ -1,5 +1,5 @@
 // 1432_net_typed_handle.xr
-// Typed native handles behind source-owned net module operations.
+// Source-defined handles backed by private native storage.
 //
 // Covers:
 //   - net.fd / net.port / net.close / net.isClosed
@@ -9,7 +9,7 @@
 // skip folds the throw back into null here.
 
 import net
-import { NetError } from net
+import { NetError, NetListener } from net
 
 fn tryListen(backlog: i64) -> NetListener? {
     try {
@@ -72,10 +72,9 @@ fn test_operations_via_inference() {
 // ============================================================
 // Module operations via explicit typed annotations
 //
-// NetConn / NetListener are registered as prelude entries with the
-// XrClasses pre-installed by xr_prelude_register_all_native_types, so a
-// user-side NetListener? / NetListener annotation type-checks and
-// crosses the same private provider boundary that inference uses.
+// NetConn / NetListener are exported source classes from net, so explicit
+// NetListener? / NetListener annotations and inference cross the same private
+// provider boundary.
 // ============================================================
 
 @test

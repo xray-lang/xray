@@ -138,11 +138,30 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NOT_NULL(fn);
     ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
     ASSERT_NOT_NULL(fn->function.return_type);
-    /* __connectFd returns NetConn? (a nullable builtin handle), never a
-     * `NetConn | int` union: unioning a native handle with a scalar poisons
-     * handle typing module-wide (see xray-docs/known_bugs.md 2026-08-09). */
+    /* __connectFd returns private nullable provider storage. Public NetConn
+     * identity is declared only by net.xr and wraps a successful result. */
     ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_INSTANCE);
     ASSERT_TRUE(fn->function.return_type->is_nullable);
+    ASSERT_STR_EQ(fn->function.return_type->instance.class_name, "__NetConnStorage");
+
+    const XaBuiltinClass *conn_bridge =
+        xa_builtin_find_source_provider_bridge("net", "NetConn");
+    ASSERT_NOT_NULL(conn_bridge);
+    ASSERT_TRUE(conn_bridge->is_internal);
+    ASSERT_STR_EQ(conn_bridge->name, "__NetConnStorage");
+    ASSERT_STR_EQ(conn_bridge->source_storage_field, "_storage");
+    ASSERT_NULL(xa_builtin_find_source_provider_bridge("http", "NetConn"));
+
+    XrType *net_conn_leaf_type =
+        xa_builtin_parse_type_string_for_module(iso, "net", "NetConn");
+    ASSERT_NOT_NULL(net_conn_leaf_type);
+    ASSERT_EQ_INT(net_conn_leaf_type->kind, XR_KIND_INSTANCE);
+    ASSERT_STR_EQ(net_conn_leaf_type->instance.class_name, "NetConn");
+    ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(iso, "http", "NetConn")->kind,
+                  XR_KIND_ERROR);
+    ASSERT_EQ_INT(
+        xa_builtin_parse_type_string_for_module(iso, "http", "__NetConnStorage")->kind,
+        XR_KIND_ERROR);
 
     /* ws is a pure-script module: its entire connection layer (WsConn,
      * connect, send/recv, serve) lives in stdlib/ws/ws.xr, so ws exposes no

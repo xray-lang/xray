@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_type_names_core.h - Runtime-neutral public type names and TypeId values.
+ * xr_type_names_core.h - Runtime-neutral core type names and TypeId values.
  *
  * This is the only place the XrTypeId enum and the tid -> display name mapping
  * exist. Both are expanded from xr_type_names.def, so an id and the name it
@@ -101,8 +101,8 @@
 
 #define TYPE_NAME_LOGGER "Logger"
 #define TYPE_NAME_RANGE "Range"
-#define TYPE_NAME_NETCONN "NetConn"
-#define TYPE_NAME_NETLISTENER "NetListener"
+#define TYPE_NAME_NET_CONN_STORAGE "__NetConnStorage"
+#define TYPE_NAME_NET_LISTENER_STORAGE "__NetListenerStorage"
 
 /* ========== Language Keywords ========== */
 

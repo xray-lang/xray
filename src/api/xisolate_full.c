@@ -186,7 +186,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
                                  xr_compile_ast_with_source, xr_compile_source_with_path,
                                  xr_program_destroy);
 
-    // Native XrClasses for NetConn / NetListener are registered up
+    // Private native storage classes for net source wrappers are registered up
     // front inside stdlib loaders. Pure stdlib classes such as
     // datetime.DateTime must be imported from their module.
 

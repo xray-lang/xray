@@ -64,7 +64,9 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__writeBytes") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "net.__close") == 0)
+    if (strcmp(symbol, "net.__closeConn") == 0)
+        return XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__closeListener") == 0)
         return XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__tlsClientHandshakeWithContext") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;

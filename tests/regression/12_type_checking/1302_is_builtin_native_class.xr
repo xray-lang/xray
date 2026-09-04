@@ -1,12 +1,11 @@
 // 1302_is_builtin_native_class.xr
-// `is` / `as` against prelude native classes on union values: NetConn,
-// NetListener, BigInt, StringBuilder. These classes have no class value in
-// any scope, so the test lowers to their runtime type id; both the if and
-// the match positions must compile and answer correctly, and the safe cast
-// must reject a mismatching member instead of passing it through.
+// `is` / `as` against source-defined NetConn/NetListener and prelude-native
+// BigInt/StringBuilder on union values. Both identity paths must compile and
+// answer correctly, and a safe cast must reject a mismatching member.
 // Fixed-width targets ride the same lowering path and are pinned here too.
 
 import net
+import { NetConn, NetListener } from net
 
 fn isConn(x: NetConn | i64) -> bool { return x is NetConn }
 fn isListener(x: NetListener | i64) -> bool { return x is NetListener }

@@ -1622,20 +1622,24 @@ module mem {
 }
 
 module net {
-  native_class NetConn {
+  native_class __NetConnStorage {
     visibility: "internal"
     core_slot: "netConnClass"
     native_body_expr: "xr_netconn_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_NETCONN"
+    builtin_kind: "XR_BK_NET_CONN_STORAGE"
+    source_wrapper: "NetConn"
+    source_storage_field: "_storage"
   }
 
-  native_class NetListener {
+  native_class __NetListenerStorage {
     visibility: "internal"
     core_slot: "netListenerClass"
     native_body_expr: "xr_netlistener_body_desc()"
     flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
-    builtin_kind: "XR_BK_NETLISTENER"
+    builtin_kind: "XR_BK_NET_LISTENER_STORAGE"
+    source_wrapper: "NetListener"
+    source_storage_field: "_storage"
   }
 
   native_class __TlsContextStorage {
@@ -1661,7 +1665,7 @@ module net {
   }
 
   fn __connectFd {
-    signature: "(addr: string, port: i64, deadlineMs: i64): NetConn?"
+    signature: "(addr: string, port: i64, deadlineMs: i64): __NetConnStorage?"
     doc: "Connect one literal address under an absolute deadline; null on failure with the code on __lastConnectCode"
     vm: "net_connect_fd_yieldable"
     vm_binding: "yieldable"
@@ -1688,7 +1692,7 @@ module net {
   }
 
   fn __listenFd {
-    signature: "(port: i64, backlog: i64, forceV4: bool): NetListener?"
+    signature: "(port: i64, backlog: i64, forceV4: bool): __NetListenerStorage?"
     doc: "Bind and listen; dual-stack preferred unless forceV4"
     vm: "net_listen_fd"
     argc: 3
@@ -1701,7 +1705,7 @@ module net {
   }
 
   fn __accept {
-    signature: "(listener: NetListener): NetConn?"
+    signature: "(listener: NetListener): __NetConnStorage?"
     doc: "Accept a new connection"
     vm: "net_accept_handle_yieldable"
     vm_binding: "yieldable"
@@ -1755,9 +1759,9 @@ module net {
     layer: "runtime"
   }
 
-  fn __close {
-    signature: "(handle: NetConn | NetListener): ()"
-    doc: "Close a connection or listener; idempotent"
+  fn __closeConn {
+    signature: "(conn: NetConn): ()"
+    doc: "Close a connection; idempotent"
     vm: "net_close_handle"
     argc: 1
     arg_spec: "v"
@@ -1768,9 +1772,34 @@ module net {
     caps: "netpoll"
   }
 
-  fn __fd {
-    signature: "(handle: NetConn | NetListener): i64"
-    doc: "Raw fd of a handle, -1 when closed"
+  fn __closeListener {
+    signature: "(listener: NetListener): ()"
+    doc: "Close a listener; idempotent"
+    vm: "net_close_handle"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_close"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    caps: "netpoll"
+  }
+
+  fn __connFd {
+    signature: "(conn: NetConn): i64"
+    doc: "Raw fd of a connection, -1 when closed"
+    vm: "net_fd_handle"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_fd"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __listenerFd {
+    signature: "(listener: NetListener): i64"
+    doc: "Raw fd of a listener, -1 when closed"
     vm: "net_fd_handle"
     argc: 1
     arg_spec: "v"
@@ -1828,9 +1857,9 @@ module net {
     layer: "runtime"
   }
 
-  fn __lastCode {
-    signature: "(handle: NetConn | NetListener): i64"
-    doc: "Portable error code of the last failed operation; 0 when none"
+  fn __connLastCode {
+    signature: "(conn: NetConn): i64"
+    doc: "Portable error code of the last failed connection operation; 0 when none"
     vm: "net_last_code"
     argc: 1
     arg_spec: "v"
@@ -1840,9 +1869,33 @@ module net {
     layer: "runtime"
   }
 
-  fn __lastErrno {
-    signature: "(handle: NetConn | NetListener): i64"
-    doc: "Raw errno captured for the last failed operation"
+  fn __listenerLastCode {
+    signature: "(listener: NetListener): i64"
+    doc: "Portable error code of the last failed listener operation; 0 when none"
+    vm: "net_last_code"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_last_code"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __connLastErrno {
+    signature: "(conn: NetConn): i64"
+    doc: "Raw errno captured for the last failed connection operation"
+    vm: "net_last_errno"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_last_errno"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __listenerLastErrno {
+    signature: "(listener: NetListener): i64"
+    doc: "Raw errno captured for the last failed listener operation"
     vm: "net_last_errno"
     argc: 1
     arg_spec: "v"
@@ -1929,7 +1982,7 @@ module net {
   }
 
   fn __udpBind {
-    signature: "(port: i64, addr: string): NetConn?"
+    signature: "(port: i64, addr: string): __NetConnStorage?"
     doc: "Bind a UDP socket; empty addr binds the wildcard address"
     vm: "net_udp_bind_handle"
     argc: 2
@@ -1942,7 +1995,7 @@ module net {
   }
 
   fn __udpMulticastBind {
-    signature: "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?"
+    signature: "(group: string, port: i64, ttl: i64, loopback: bool): __NetConnStorage?"
     doc: "Open an IPv4 multicast UDP socket after source-side address and option validation"
     vm: "net_udp_multicast_bind_handle"
     argc: 4
