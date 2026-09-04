@@ -26,7 +26,7 @@
 
 #include "../base/xdefs.h"
 #include "xtls_provider.h"
-#include "../../stdlib/net/xneterror.h"
+#include "xnet_error.h"
 #include "../coro/xnetpoll.h"
 #include <stddef.h>
 #include <stdbool.h>

@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xneterror.c - Unified network error string table
+ * xnet_error.c - Unified network provider error table
  */
 
-#include "xneterror.h"
+#include "xnet_error.h"
 
 static const char *error_strings[] = {
     [XR_NERR_OK] = "Success",

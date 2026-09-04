@@ -26,7 +26,7 @@ typedef struct XrTlsContext XrTlsContext;
 typedef struct XrTlsConn XrTlsConn;
 
 // TLS error codes — aliases into unified XrNetError
-#include "../../stdlib/net/xneterror.h"
+#include "xnet_error.h"
 typedef XrNetError XrTlsError;
 #define XR_TLS_OK XR_NERR_OK
 #define XR_TLS_ERR_INIT XR_NERR_TLS_INIT

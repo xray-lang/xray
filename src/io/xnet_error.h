@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xneterror.h - Unified network error codes
+ * xnet_error.h - Unified network provider error codes
  *
  * KEY CONCEPT:
  *   Single error enum shared by all network modules (net, io, tls,
@@ -20,8 +20,8 @@
  *   - net_error_string() provides human-readable messages for all codes
  */
 
-#ifndef XR_STDLIB_NETERROR_H
-#define XR_STDLIB_NETERROR_H
+#ifndef XR_IO_XNET_ERROR_H
+#define XR_IO_XNET_ERROR_H
 
 typedef enum {
     // Success
@@ -71,4 +71,4 @@ typedef enum {
 // Human-readable error string (never NULL).
 const char *net_error_string(XrNetError err);
 
-#endif  // XR_STDLIB_NETERROR_H
+#endif  // XR_IO_XNET_ERROR_H
