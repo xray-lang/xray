@@ -1974,7 +1974,8 @@ module net {
     vm: "net_udp_multicast_bind_handle"
     argc: 4
     arg_spec: "svvv"
-    aot_direct: false
+    aot: "xrt_net_udp_multicast_bind"
+    aot_direct: true
     link_object: false
     layer: "runtime"
     return_ownership: "fresh"

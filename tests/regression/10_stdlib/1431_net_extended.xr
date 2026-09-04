@@ -61,6 +61,15 @@ fn test_net_multicast_rejects_unicast_group() {
     assert(invalid)
 }
 
+// @test valid multicast socket setup is available on both VM and AOT
+@test
+fn test_net_multicast_bind() {
+    var conn = net.udpMulticastBind("239.255.43.31", 47231, 7, true)
+    assert(net.fd(conn) >= 0)
+    net.close(conn)
+    assertEqual(net.fd(conn), -1)
+}
+
 // @test DNS lookup - multiple calls consistent
 @test
 fn test_lookup_consistent() {

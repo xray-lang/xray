@@ -171,10 +171,15 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         net_xr = (ROOT / "stdlib/net/net.xr").read_text()
         core_def = (ROOT / "stdlib/defs/core.def").read_text()
         net_provider = (ROOT / "src/io/xnet_provider.c").read_text()
+        aot_net = (ROOT / "src/aot/xrt_net.h").read_text()
 
         self.assertIn("net.udpMulticastBind(", cluster_xr)
         self.assertIn("export fn udpMulticastBind(", net_xr)
         self.assertIn("fn __udpMulticastBind {", core_def)
+        self.assertIn('aot: "xrt_net_udp_multicast_bind"', core_def)
+        self.assertIn("static inline XrValue xrt_net_udp_multicast_bind(", aot_net)
+        self.assertIn("IP_ADD_MEMBERSHIP", aot_net)
+        self.assertNotIn("cluster", aot_net)
         self.assertIn("net_udp_multicast_bind_handle", net_provider)
 
     def test_generation_fences_cover_every_long_lived_source_path(self) -> None:

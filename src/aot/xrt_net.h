@@ -980,6 +980,56 @@ static inline XrValue xrt_net_udp_bind(XrValue port_value, XrValue addr_value) {
 }
 
 /*
+ * net.__udpMulticastBind(group, port, ttl, loopback) -> __NetConnStorage | null
+ * The source wrapper owns multicast-address and option validation. This helper
+ * projects the same IPv4 socket setup as the VM provider into hosted AOT.
+ */
+static inline XrValue xrt_net_udp_multicast_bind(XrValue group_value, XrValue port_value,
+                                                 XrValue ttl_value, XrValue loopback_value) {
+    xrt_net_init_once();
+    const char *group = xrt_net_str_arg(group_value);
+    int64_t port_i = xrt_net_int_arg(port_value);
+    int64_t ttl_i = xrt_net_int_arg(ttl_value);
+    bool loopback = xrt_net_bool_arg(loopback_value);
+    if (!group || port_i <= 0 || port_i > UINT16_MAX || ttl_i < 0 || ttl_i > UINT8_MAX)
+        return XR_NULL_VAL;
+
+    struct in_addr group_address;
+    if (inet_pton(AF_INET, group, &group_address) != 1)
+        return XR_NULL_VAL;
+
+    xr_socket_t fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd == XR_INVALID_SOCKET)
+        return XR_NULL_VAL;
+
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons((uint16_t) port_i);
+
+    struct ip_mreq membership;
+    memset(&membership, 0, sizeof(membership));
+    membership.imr_multiaddr = group_address;
+    membership.imr_interface.s_addr = htonl(INADDR_ANY);
+    unsigned char ttl = (unsigned char) ttl_i;
+    unsigned char loop = loopback ? 1u : 0u;
+
+    if (xr_socket_set_reuseaddr(fd, true) != 0 || xr_socket_set_reuseport(fd, true) != 0 ||
+        bind(fd, (struct sockaddr *) &address, sizeof(address)) != 0 ||
+        setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char *) &membership,
+                   sizeof(membership)) != 0 ||
+        setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, (const char *) &ttl, sizeof(ttl)) != 0 ||
+        setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (const char *) &loop, sizeof(loop)) != 0 ||
+        xr_socket_set_nonblocking(fd) != 0) {
+        xrt_net_close_fd(fd);
+        return XR_NULL_VAL;
+    }
+
+    return xrt_net_conn_box(xrt_net_conn_new(fd, XRT_NETCONN_UDP));
+}
+
+/*
  * net.__udpSendTo(conn, data, addrLiteral, port, deadlineMs) -> int
  * Single datagram send to one literal address; bytes sent, or -1 with the
  * code stored on the conn. A zero deadline waits without limit.

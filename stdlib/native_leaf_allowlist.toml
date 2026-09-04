@@ -842,7 +842,7 @@ class = "host_abi_leaf"
 abi = "socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel multicast socket setup in src/io/xnet_provider.c. net.xr owns IPv4 multicast address validation and option ranges; cluster.xr owns discovery bytes, cadence, admission and lifecycle. There is no AOT binding until the generic net provider gains the same multicast socket constructor"
+provider = "kernel multicast socket setup. VM src/io/xnet_provider.c net_udp_multicast_bind_handle and AOT src/aot/xrt_net.h xrt_net_udp_multicast_bind perform the same generic socket construction; net.xr owns IPv4 multicast address validation and option ranges"
 deletion_trigger = "when Xray source can issue the multicast socket setup calls itself; the leaf is generic net host ABI and contains no cluster protocol policy"
 
 [[leaf]]
