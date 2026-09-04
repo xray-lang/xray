@@ -2040,9 +2040,8 @@ module cluster {
     vm: "cluster_start_primitive"
     argc: 10
     arg_spec: "svsvsssvvv"
-    aot: "xrt_cluster_start"
-    aot_direct: true
-    link_object: true
+    aot_direct: false
+    link_object: false
     layer: "runtime"
     caps: "channel"
   }
@@ -2160,9 +2159,8 @@ module cluster {
     vm: "cluster_stop_fn"
     argc: 0
     arg_spec: ""
-    aot: "xrt_cluster_stop"
-    aot_direct: true
-    link_object: true
+    aot_direct: false
+    link_object: false
     layer: "runtime"
     caps: "channel"
   }
@@ -2185,10 +2183,9 @@ module cluster {
     vm: "cluster_publish_local_primitive"
     argc: 2
     arg_spec: "sv"
-    aot: "xrt_cluster_publish_local"
     ret: "i64"
-    aot_direct: true
-    link_object: true
+    aot_direct: false
+    link_object: false
     layer: "runtime"
     caps: "channel"
     effect: "nothrow"
@@ -2201,10 +2198,9 @@ module cluster {
     vm: "cluster_publish_remote_primitive"
     argc: 3
     arg_spec: "svv"
-    aot: "xrt_cluster_publish_remote"
     ret: "i64"
-    aot_direct: true
-    link_object: true
+    aot_direct: false
+    link_object: false
     layer: "runtime"
     caps: "channel"
     effect: "nothrow"
@@ -2217,9 +2213,8 @@ module cluster {
     vm: "cluster_listen_fn"
     argc: 2
     arg_spec: "sv"
-    aot: "xrt_cluster_listen"
-    aot_direct: true
-    link_object: true
+    aot_direct: false
+    link_object: false
     layer: "runtime"
     return_ownership: "fresh"
     caps: "channel"

@@ -40,16 +40,6 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "math.__randomInt";
     if (strcmp(symbol, "crypto.__fillRandomBytes") == 0)
         return "crypto.__fillRandomBytes";
-    if (strcmp(symbol, "cluster.__start") == 0)
-        return "cluster.__start";
-    if (strcmp(symbol, "cluster.__stop") == 0)
-        return "cluster.__stop";
-    if (strcmp(symbol, "cluster.__publishLocal") == 0)
-        return "cluster.__publishLocal";
-    if (strcmp(symbol, "cluster.__publishRemote") == 0)
-        return "cluster.__publishRemote";
-    if (strcmp(symbol, "cluster.__listen") == 0)
-        return "cluster.__listen";
     return NULL;
 }
 

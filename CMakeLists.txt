@@ -1709,7 +1709,6 @@ set(XRAY_RT_CORO_SOURCES
     ${CORO_SRC}
     ${IO_SRC}
     src/aot/xrt_gen_iter.c
-    src/aot/xrt_cluster.c
 )
 list(REMOVE_DUPLICATES XRAY_RT_CORO_SOURCES)
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")
@@ -2819,6 +2818,17 @@ if(BUILD_TESTS)
     )
     set_tests_properties(test_stdlib_arg_spec_gate PROPERTIES
         LABELS "stdlib;metadata;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME test_cluster_aot_boundary
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_cluster_aot_boundary.py
+    )
+    set_tests_properties(test_cluster_aot_boundary PROPERTIES
+        LABELS "stdlib;aot;boundary;unit"
         PROCESSORS 1
         TIMEOUT 30
     )

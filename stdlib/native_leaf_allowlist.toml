@@ -138,7 +138,7 @@ class = "runtime_leaf"
 abi = "none; constructs a bounded channel and registers a topic subscription"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through the single backend-neutral synchronized trie in src/coro/xtopic_registry.c on both VM and AOT; the AOT ABI leaf in src/aot/xrt_cluster.c delegates its blocking service lookup to src/coro/xcluster_blocking_runtime.c. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen()"
+provider = "the Xray channel subsystem (src/coro/xchannel.c), reached through the backend-neutral synchronized trie in src/coro/xtopic_registry.c. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen(); AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
 deletion_trigger = "when cluster.xr can construct a Channel and register a topic pattern directly, which needs the channel constructor and the topic table to be surfaces Xray source can name"
 
 [[leaf]]
@@ -168,28 +168,28 @@ class = "runtime_leaf"
 abi = "none; copies one validated buffer into matching local subscription channels"
 ownership = "none"
 effect = "nothrow"
-provider = "the Xray channel subsystem through src/coro/xtopic_registry.c's single synchronized trie projection shared by VM and AOT. The AOT ABI leaf in src/aot/xrt_cluster.c delegates to src/coro/xcluster_blocking_runtime.c. cluster.xr owns validation, publication order, fanout limit and result precedence"
+provider = "the Xray channel subsystem through src/coro/xtopic_registry.c's synchronized trie projection. cluster.xr owns validation, publication order, fanout limit and result precedence; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
 deletion_trigger = "when cluster.xr can construct Channels and hold a synchronized topic index directly"
 
 [[leaf]]
 module = "cluster"
 symbol = "__publishRemote"
 class = "runtime_leaf"
-abi = "none on the publishing call itself: it enqueues one framed buffer per connected peer and signals the VM writer through its notify pipe or the AOT blocking peer through its condition variable"
+abi = "none on the publishing call itself: it enqueues one framed buffer per connected peer and signals the provider writer"
 ownership = "none"
 effect = "nothrow"
-provider = "the VM cluster transport queue in stdlib/cluster/cluster_topic.c and the AOT blocking service in src/coro/xcluster_blocking_runtime.c over the opaque peer queue in src/io/xcluster_blocking.c. The AOT ABI leaf is only the tagged-value projection in src/aot/xrt_cluster.c. cluster.xr owns validation, local-versus-remote publication order, hop budget and result precedence"
+provider = "the native peer output queue. cluster.xr owns validation, local-versus-remote publication order, hop budget and result precedence; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
 deletion_trigger = "when per-node transport queues are surfaces cluster.xr can name and enqueue into"
 
 [[leaf]]
 module = "cluster"
 symbol = "__start"
 class = "runtime_leaf"
-abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows; standalone AOT additionally installs its opaque blocking cluster service"
+abi = "OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows"
 ownership = "none"
 effect = "nothrow"
-provider = "the VM cluster runtime's TLS contexts and synchronized node/topic/monitor/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence, output-queue high watermark and topic fanout limit. The AOT ABI leaf still installs the separate blocking service and declines TLS"
-deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values and standalone AOT no longer installs a separate cluster service"
+provider = "the native cluster runtime's TLS contexts and synchronized node/topic/monitor/tombstone registries plus the opaque output queue from src/coro/xcluster_output_queue.c. cluster.xr owns identity, secret, health configuration, TLS posture, listener, long-lived coroutines, validation, cadence, output-queue high watermark and topic fanout limit; AOT must refuse this leaf until it can compile the same source-owned cluster runtime"
+deletion_trigger = "when TLS contexts and the synchronized registries are ordinary Xray-owned values"
 
 [[leaf]]
 module = "cluster"
