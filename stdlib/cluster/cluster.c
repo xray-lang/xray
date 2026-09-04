@@ -332,6 +332,11 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
         if (published) {
             node->next = cluster->nodes;
             cluster->nodes = node;
+            /* The list owns the construction reference. Keep a separate
+             * bootstrap lease until both source coroutine shells have either
+             * been published or rolled back; stop may detach the list as soon
+             * as nodes_lock is released. */
+            cluster_node_retain(node);
         }
     }
     xr_amutex_unlock(&cluster->nodes_lock);
@@ -359,6 +364,7 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
             cluster_node_shutdown(node);
             cluster_node_release(node);
         }
+        cluster_node_release(node);
         cluster_runtime_release(cluster);
         return xr_bool(false);
     }
@@ -367,6 +373,7 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
      * monopolize the adopting worker's local run-next slot. */
     XrCoroutine *io_coros[2] = {writer, reader};
     xr_runtime_spawn_batch(runtime, io_coros, 2);
+    cluster_node_release(node);
     cluster_runtime_release(cluster);
     return xr_bool(true);
 }
