@@ -317,7 +317,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "__unregisterCoroutineMonitor", "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool", "Remove one remote monitor registration after source-owned request delivery fails", "cluster_unregister_coro_monitor_fn", "normal", "", "", "ssv", "value", "", "", "", "runtime", "", 0, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__discoveryOpen", "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?", "Open one IPv4 multicast UDP handle for the source-owned discovery loop", "xr_cluster_discovery_socket_open", "normal", "", "", "svvv", "value", "", "", "", "runtime", "", 0, 4, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read mutable peer-registry and delivery-counter state", "cluster_runtime_snapshot_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
+    {"cluster", "__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read connected peer metrics, raw detector storage and registry counters", "cluster_runtime_snapshot_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__publishLocal", "(topic: string, envelope: Buffer): i64", "Offer one validated opaque service envelope to the synchronized local subscription registry", "cluster_publish_local_primitive", "normal", "", "", "sv", "i64", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"cluster", "__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "", "sv", "value", "", "", "", "runtime", "", XR_CAP_CHANNEL, 2, XR_STDLIB_TARGET_LEAF_NONE, false},
 };
@@ -331,7 +331,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
     {"cluster", "__ClusterNodeSnapshot", "name", "string", true},
     {"cluster", "__ClusterNodeSnapshot", "host", "string", true},
     {"cluster", "__ClusterNodeSnapshot", "port", "i64", true},
-    {"cluster", "__ClusterNodeSnapshot", "state", "i64", true},
     {"cluster", "__ClusterNodeSnapshot", "framesSent", "i64", true},
     {"cluster", "__ClusterNodeSnapshot", "framesReceived", "i64", true},
     {"cluster", "__ClusterNodeSnapshot", "bytesSent", "i64", true},
@@ -342,8 +341,11 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___Clust
     {"cluster", "__ClusterNodeSnapshot", "outQueueBytes", "i64", true},
     {"cluster", "__ClusterNodeSnapshot", "outQueueFrames", "i64", true},
     {"cluster", "__ClusterNodeSnapshot", "slow", "bool", true},
-    {"cluster", "__ClusterNodeSnapshot", "phi", "f64", true},
     {"cluster", "__ClusterNodeSnapshot", "missedHeartbeats", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "samples", "i64", true},
+    {"cluster", "__ClusterNodeSnapshot", "mean", "f64", true},
+    {"cluster", "__ClusterNodeSnapshot", "variance", "f64", true},
+    {"cluster", "__ClusterNodeSnapshot", "detectorLastHeartbeatMs", "i64", true},
 };
 
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot[] = {
@@ -395,7 +397,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlo
 };
 
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
-    {"cluster", "__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 16, true},
+    {"cluster", "__ClusterNodeSnapshot", "Private metrics and raw failure-detector storage for one connected peer", xr_stdlib_object_fields_cluster___ClusterNodeSnapshot, 18, true},
     {"cluster", "__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer registries and counters", xr_stdlib_object_fields_cluster___ClusterRuntimeSnapshot, 3, true},
     {"cluster", "__ClusterInboundFrame", "Private projection of one complete frame or terminal reader event", xr_stdlib_object_fields_cluster___ClusterInboundFrame, 3, true},
     {"cluster", "__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's failure detector state", xr_stdlib_object_fields_cluster___ClusterHealthPeerSnapshot, 7, true},

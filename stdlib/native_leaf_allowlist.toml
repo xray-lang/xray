@@ -58,7 +58,7 @@ class = "native_record_shape_leaf"
 abi = "none; a record layout, not a call"
 ownership = "none"
 effect = "nothrow"
-provider = "declaration only (stdlib/defs/core.def). The VM fills it from one runtime-owned cluster node before cluster.xr constructs the public ClusterNodeInfo value; there is no AOT binding"
+provider = "declaration only (stdlib/defs/core.def). The VM fills metrics and raw detector storage from one connected runtime-owned peer; cluster.xr computes phi and constructs ClusterNodeInfo; there is no AOT binding"
 deletion_trigger = "when the cluster node table and counters are exposed through scalar accessor leaves, so cluster.xr can assemble each node snapshot without a native record class"
 
 [[leaf]]
@@ -118,7 +118,7 @@ class = "runtime_leaf"
 abi = "none; reads cluster runtime state under its own mutexes and atomics"
 ownership = "fresh"
 effect = "nothrow"
-provider = "the native node table under nodes_lock, synchronized topic and tombstone registries, and atomic peer counters. cluster.xr owns identity, running state, health configuration and TLS posture, and constructs the public ClusterInfo graph"
+provider = "the native node table under nodes_lock, synchronized topic and tombstone registries, atomic peer counters, and raw detector storage. cluster.xr owns identity, running state, detector math, health configuration and TLS posture, and constructs the public ClusterInfo graph"
 deletion_trigger = "when the peer table, metrics and synchronized registries are Xray-owned values"
 
 [[leaf]]

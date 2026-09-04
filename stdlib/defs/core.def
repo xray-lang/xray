@@ -2023,9 +2023,9 @@ module http2 {
 
 module cluster {
   object __ClusterNodeSnapshot {
-    fields: "const name: string, const host: string, const port: i64, const state: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const phi: f64, const missedHeartbeats: i64"
+    fields: "const name: string, const host: string, const port: i64, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const missedHeartbeats: i64, const samples: i64, const mean: f64, const variance: f64, const detectorLastHeartbeatMs: i64"
     exact: true
-    doc: "Private scalar snapshot for one remote cluster node"
+    doc: "Private metrics and raw failure-detector storage for one connected peer"
   }
 
   object __ClusterRuntimeSnapshot {
@@ -2310,7 +2310,7 @@ module cluster {
 
   fn __runtimeSnapshot {
     signature: "(): __ClusterRuntimeSnapshot?"
-    doc: "Read mutable peer-registry and delivery-counter state"
+    doc: "Read connected peer metrics, raw detector storage and registry counters"
     vm: "cluster_runtime_snapshot_fn"
     argc: 0
     arg_spec: ""

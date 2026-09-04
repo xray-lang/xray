@@ -582,6 +582,22 @@ export fn handshakeProofEqual(left: Array<u8>, right: Array<u8>) -> bool {
 
 // ========== Failure detection ===========
 
+// Native peer tables retain detector samples because socket callbacks update
+// them under the peer lock. Both live health decisions and diagnostic snapshots
+// project those raw scalars through this one source-owned formula.
+fn _phiValue(samples: i64, mean: f64, variance: f64,
+             lastHeartbeatMs: i64, nowMs: i64) -> f64 {
+    if (lastHeartbeatMs == 0 || samples < 2) { return 0.0 }
+    var elapsed = (nowMs - lastHeartbeatMs) as f64
+    if (elapsed < 0.0) { elapsed = 0.0 }
+    var stddev = math.sqrt(variance)
+    if (stddev < 1.0) { stddev = 1.0 }
+    var y = (elapsed - mean) / stddev
+    var later = 1.0 / (1.0 + math.exp(1.7155 * y))
+    if (later < 0.000000000000001) { later = 0.000000000000001 }
+    return -math.log10(later)
+}
+
 export final class PhiDetector {
     intervals: Array<f64>
     sampleCount: i64
@@ -626,15 +642,8 @@ export final class PhiDetector {
     }
 
     value(nowMs: i64) -> f64 {
-        if (this.lastHeartbeatMs == 0 || this.sampleCount < 2) { return 0.0 }
-        var elapsed = (nowMs - this.lastHeartbeatMs) as f64
-        if (elapsed < 0.0) { elapsed = 0.0 }
-        var stddev = math.sqrt(this.variance)
-        if (stddev < 1.0) { stddev = 1.0 }
-        var y = (elapsed - this.mean) / stddev
-        var later = 1.0 / (1.0 + math.exp(1.7155 * y))
-        if (later < 0.000000000000001) { later = 0.000000000000001 }
-        return -math.log10(later)
+        return _phiValue(this.sampleCount, this.mean, this.variance,
+                         this.lastHeartbeatMs, nowMs)
     }
 }
 
@@ -1034,17 +1043,8 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
         for (var i = 0; i < len(peers!); i++) {
             var peer = peers![i]
             var elapsedMs = sentAtMs - peer.lastReceivedAtMs
-            var phi = 0.0
-            if (peer.detectorLastHeartbeatMs != 0 && peer.samples >= 2) {
-                var detectorElapsed = (sentAtMs - peer.detectorLastHeartbeatMs) as f64
-                if (detectorElapsed < 0.0) { detectorElapsed = 0.0 }
-                var detectorStddev = math.sqrt(peer.variance)
-                if (detectorStddev < 1.0) { detectorStddev = 1.0 }
-                var y = (detectorElapsed - peer.mean) / detectorStddev
-                var later = 1.0 / (1.0 + math.exp(1.7155 * y))
-                if (later < 0.000000000000001) { later = 0.000000000000001 }
-                phi = -math.log10(later)
-            }
+            var phi = _phiValue(peer.samples, peer.mean, peer.variance,
+                                peer.detectorLastHeartbeatMs, sentAtMs)
             var expiredDuringWarmup = peer.samples < PHI_MIN_SAMPLES &&
                                       elapsedMs > heartbeatTimeoutMs
             var dead = heartbeatIsDead(phi, peer.samples, elapsedMs, peer.missedHeartbeats,
@@ -1476,14 +1476,6 @@ export fn discover() -> bool {
     return true
 }
 
-fn _nodeStateFromCode(code: i64) -> ClusterNodeState {
-    if (code == 0) { return ClusterNodeState.Idle }
-    if (code == 1) { return ClusterNodeState.Connecting }
-    if (code == 2) { return ClusterNodeState.Handshaking }
-    if (code == 3) { return ClusterNodeState.Connected }
-    return ClusterNodeState.Closing
-}
-
 export fn info() -> ClusterInfo? {
     var maybeState = _sourceStateSnapshot()
     if (maybeState == null) { return null }
@@ -1492,13 +1484,16 @@ export fn info() -> ClusterInfo? {
     var state = maybeState!
     var snapshot = raw!
     var nodes: Array<ClusterNodeInfo> = []
+    var observedAtMs = time.monotonic()
     for (var i = 0; i < len(snapshot.nodes); i++) {
         var node = snapshot.nodes[i]
         var publicNode: ClusterNodeInfo = {
             name: node.name,
             host: node.host,
             port: node.port,
-            state: _nodeStateFromCode(node.state),
+            // Only connected peers are published in the native registry; idle,
+            // handshake and closing states remain source-owned transition state.
+            state: ClusterNodeState.Connected,
             framesSent: node.framesSent,
             framesReceived: node.framesReceived,
             bytesSent: node.bytesSent,
@@ -1509,7 +1504,8 @@ export fn info() -> ClusterInfo? {
             outQueueBytes: node.outQueueBytes,
             outQueueFrames: node.outQueueFrames,
             slow: node.slow,
-            phi: node.phi,
+            phi: _phiValue(node.samples, node.mean, node.variance,
+                           node.detectorLastHeartbeatMs, observedAtMs),
             missedHeartbeats: node.missedHeartbeats,
         }
         nodes.push(publicNode)

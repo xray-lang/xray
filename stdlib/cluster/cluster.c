@@ -155,7 +155,6 @@ static XrValue cluster_health_apply_fn(XrVMRuntime *X, XrValue *args, int argc) 
             if (disconnect) {
                 *cursor = node->next;
                 node->next = NULL;
-                cluster->node_count--;
                 detached = node;
             } else {
                 node->missed_heartbeats = (uint32_t) next_missed;
@@ -318,7 +317,6 @@ static XrValue cluster_adopt_peer_fn(XrVMRuntime *X, XrValue *args, int argc) {
         if (published) {
             node->next = cluster->nodes;
             cluster->nodes = node;
-            cluster->node_count++;
         }
     }
     xr_amutex_unlock(&cluster->nodes_lock);
@@ -448,7 +446,6 @@ static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc) {
     cluster->listener = NULL;
     XrClusterNode *node = cluster->nodes;
     cluster->nodes = NULL;
-    cluster->node_count = 0;
     xr_amutex_unlock(&cluster->nodes_lock);
     if (listener)
         xr_net_listener_close(listener);
@@ -717,8 +714,6 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
                 XrString *nhost = xr_string_intern(X, node->host, (uint32_t) strlen(node->host), 0);
                 xr_object_instance_set_by_key(X, nj, "host", xr_string_value(nhost));
                 xr_object_instance_set_by_key(X, nj, "port", xr_int(node->port));
-                xr_object_instance_set_by_key(X, nj, "state", xr_int((int64_t) node->state));
-
                 /*
                  * Per-node metrics snapshot. All counters are
                  * atomic _Atomic(uint64_t) so the load is wait-free
@@ -759,14 +754,14 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
                 xr_object_instance_set_by_key(X, nj, "slow",
                                               xr_bool(xr_cluster_output_queue_is_full(node->outq)));
 
-                // Phi accrual failure-detector score. The source health loop
-                // is the sole authority that turns this diagnostic into a
-                // peer-removal decision.
-                int64_t now = (int64_t) xr_time_monotonic_ms();
-                double phi = xr_phi_detector_value(&node->phi, now);
-                xr_object_instance_set_by_key(X, nj, "phi", xr_float(phi));
                 xr_object_instance_set_by_key(X, nj, "missedHeartbeats",
                                               xr_int((int64_t) node->missed_heartbeats));
+                xr_object_instance_set_by_key(X, nj, "samples",
+                                              xr_int((int64_t) node->phi.sample_count));
+                xr_object_instance_set_by_key(X, nj, "mean", xr_float(node->phi.mean));
+                xr_object_instance_set_by_key(X, nj, "variance", xr_float(node->phi.variance));
+                xr_object_instance_set_by_key(X, nj, "detectorLastHeartbeatMs",
+                                              xr_int(node->phi.last_heartbeat_ts));
 
                 xr_array_push(node_arr, xr_object_instance_value(nj));
             } else {

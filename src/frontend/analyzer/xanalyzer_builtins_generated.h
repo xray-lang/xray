@@ -85,7 +85,6 @@ static const XaBuiltinObjectField g_gen_cluster___clusternodesnapshot_object_fie
     {"name", "string"},
     {"host", "string"},
     {"port", "i64"},
-    {"state", "i64"},
     {"framesSent", "i64"},
     {"framesReceived", "i64"},
     {"bytesSent", "i64"},
@@ -96,8 +95,11 @@ static const XaBuiltinObjectField g_gen_cluster___clusternodesnapshot_object_fie
     {"outQueueBytes", "i64"},
     {"outQueueFrames", "i64"},
     {"slow", "bool"},
-    {"phi", "f64"},
     {"missedHeartbeats", "i64"},
+    {"samples", "i64"},
+    {"mean", "f64"},
+    {"variance", "f64"},
+    {"detectorLastHeartbeatMs", "i64"},
 };
 
 // cluster.__ClusterRuntimeSnapshot object fields
@@ -132,7 +134,7 @@ static const XaBuiltinObjectField g_gen_cluster___clusterbroadcaststats_object_f
 };
 
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
-    {"__ClusterNodeSnapshot", "Private scalar snapshot for one remote cluster node", g_gen_cluster___clusternodesnapshot_object_fields, 16, true},
+    {"__ClusterNodeSnapshot", "Private metrics and raw failure-detector storage for one connected peer", g_gen_cluster___clusternodesnapshot_object_fields, 18, true},
     {"__ClusterRuntimeSnapshot", "Private snapshot of mutable native peer registries and counters", g_gen_cluster___clusterruntimesnapshot_object_fields, 3, true},
     {"__ClusterInboundFrame", "Private projection of one complete frame or terminal reader event", g_gen_cluster___clusterinboundframe_object_fields, 3, true},
     {"__ClusterHealthPeerSnapshot", "Private scalar snapshot of one connected peer's failure detector state", g_gen_cluster___clusterhealthpeersnapshot_object_fields, 7, true},
@@ -163,7 +165,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__unregisterCoroutineMonitor", "(nodeName: string, coroutineName: string, notifications: Channel<string>): bool", "Remove one remote monitor registration after source-owned request delivery fails", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__discoveryOpen", "(group: string, port: i64, ttl: i64, loopback: bool): NetConn?", "Open one IPv4 multicast UDP handle for the source-owned discovery loop", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read mutable peer-registry and delivery-counter state", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__runtimeSnapshot", "(): __ClusterRuntimeSnapshot?", "Read connected peer metrics, raw detector storage and registry counters", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__publishLocal", "(topic: string, envelope: Buffer): i64", "Offer one validated opaque service envelope to the synchronized local subscription registry", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
 };

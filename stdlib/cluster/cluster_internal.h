@@ -68,30 +68,6 @@ typedef struct XrClusterBroadcastStats {
 /* ========== Cluster Wire Protocol ========== */
 
 #define XR_ADDRESS_HOST_MAX 255
-#define XR_CLUSTER_SECRET_MAX 63
-typedef struct XrFrameBuf {
-    uint8_t stack[4096];
-    uint8_t *data;
-    bool heap;
-} XrFrameBuf;
-
-static inline void cluster_frame_buf_init(XrFrameBuf *fb, size_t needed) {
-    if (needed <= sizeof(fb->stack)) {
-        fb->data = fb->stack;
-        fb->heap = false;
-    } else {
-        fb->data = (uint8_t *) xr_malloc(needed);
-        fb->heap = true;
-    }
-}
-
-static inline void cluster_frame_buf_free(XrFrameBuf *fb) {
-    if (fb->heap && fb->data) {
-        xr_free(fb->data);
-        fb->data = NULL;
-    }
-}
-
 /* ========== Node State ========== */
 
 typedef enum {
@@ -160,7 +136,6 @@ typedef struct XrCluster {
 
     // Connected nodes (linked list, protected by nodes_lock)
     XrClusterNode *nodes;
-    int node_count;
     XrAdaptiveMutex nodes_lock;
 
     /* Synchronized channel index for the topic policy owned by cluster.xr. */
@@ -254,7 +229,6 @@ static inline bool cluster_node_remove(XrCluster *cluster, XrClusterNode *node) 
         if (*link == node) {
             *link = node->next;
             node->next = NULL;
-            cluster->node_count--;
             removed = true;
             break;
         }
@@ -265,8 +239,6 @@ static inline bool cluster_node_remove(XrCluster *cluster, XrClusterNode *node) 
 }
 
 /* ========== Topic Pub/Sub ========== */
-
-#define XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX (1024u * 1024u)
 
 /* The source layer supplies a complete, validated wire frame and decides
  * whether one peer generation is excluded. The native projection owns only
