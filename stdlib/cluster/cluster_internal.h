@@ -135,9 +135,6 @@ typedef struct XrClusterNode {
 void cluster_node_retain(XrClusterNode *node);
 void cluster_node_shutdown(XrClusterNode *node);
 void cluster_node_release(XrClusterNode *node);
-int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len);
-int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
-                            uint32_t payload_len);
 int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, const char *topic,
                                       uint8_t topic_len, const uint8_t *envelope,
                                       uint32_t envelope_len);
@@ -146,7 +143,6 @@ bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrVal
                            XrValue outbound_handler);
 XrValue cluster_take_inbound_frame_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
 XrValue cluster_take_outbound_event_fn(struct XrVMRuntime *isolate, XrValue *args, int argc);
-bool cluster_node_is_slow(XrClusterNode *node);
 
 /* ========== Cluster State ========== */
 

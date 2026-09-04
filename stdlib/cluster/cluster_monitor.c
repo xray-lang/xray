@@ -34,7 +34,8 @@ bool cluster_monitor_register_remote(XrCluster *cluster, const char *node_name,
     uint8_t frame[256];
     int length = cluster_frame_encode_coro_monitor(frame, sizeof(frame), XR_FRAME_CORO_MONITOR,
                                                    coroutine_name);
-    bool queued = length > 0 && cluster_node_enqueue(node, frame, (uint32_t) length) == 0;
+    bool queued =
+        length > 0 && xr_cluster_output_queue_push_copy(node->outq, frame, (uint32_t) length) == 0;
     if (!queued)
         (void) xr_monitor_registry_remove_remote(cluster->monitors, node_name, coroutine_name,
                                                  channel);

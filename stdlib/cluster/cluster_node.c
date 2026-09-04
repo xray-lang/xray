@@ -93,51 +93,6 @@ void cluster_node_release(XrClusterNode *node) {
     }
 }
 
-/* ========== Frame Send/Recv ========== */
-
-// Enqueue pre-built frame data for async writing
-int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len) {
-    if (!node || atomic_load(&node->shutdown_started) || node->state == XR_NODE_CLOSING)
-        return -1;
-    return xr_cluster_output_queue_push_copy(node->outq, data, len);
-}
-
-// Async send — encode frame and enqueue for writer coroutine
-// Uses zero-copy for large frames (>4KB) to avoid extra memcpy
-int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
-                            uint32_t payload_len) {
-    if (!node || atomic_load(&node->shutdown_started) || !node->conn ||
-        node->state == XR_NODE_CLOSING)
-        return -1;
-
-    uint32_t frame_size = 4 + 1 + payload_len;
-
-    if (frame_size <= 4096) {
-        // Small frame: encode to stack, copy into queue
-        uint8_t stack_buf[4096];
-        int wrote = cluster_frame_write(stack_buf, frame_type, payload, payload_len);
-        if (wrote < 0)
-            return -1;
-        return cluster_node_enqueue(node, stack_buf, (uint32_t) wrote);
-    } else {
-        // Large frame: encode to heap, transfer ownership (zero-copy)
-        uint8_t *frame = (uint8_t *) xr_malloc(frame_size);
-        if (!frame)
-            return -1;
-        int wrote = cluster_frame_write(frame, frame_type, payload, payload_len);
-        if (wrote < 0) {
-            xr_free(frame);
-            return -1;
-        }
-        int rc = xr_cluster_output_queue_push_owned(node->outq, frame, (uint32_t) wrote);
-        if (rc != 0) {
-            xr_free(frame);
-            return -1;
-        }
-        return 0;
-    }
-}
-
 int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, const char *topic,
                                       uint8_t topic_len, const uint8_t *envelope,
                                       uint32_t envelope_len) {
@@ -540,14 +495,6 @@ bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node, XrVal
     return true;
 }
 
-/* ========== Slow Consumer Detection ========== */
-
-bool cluster_node_is_slow(XrClusterNode *node) {
-    if (!node)
-        return false;
-    return xr_cluster_output_queue_is_full(node->outq);
-}
-
 /* ========== Heartbeat ========== */
 
 int cluster_node_send_ping(XrClusterNode *node) {
@@ -558,7 +505,7 @@ int cluster_node_send_ping(XrClusterNode *node) {
         return -1;
 
     // Enqueue heartbeat via output queue (async)
-    int rc = cluster_node_enqueue(node, frame, (uint32_t) len);
+    int rc = xr_cluster_output_queue_push_copy(node->outq, frame, (uint32_t) len);
     if (rc == 0) {
         node->last_heartbeat_sent = now;
         return 0;

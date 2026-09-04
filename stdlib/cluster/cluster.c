@@ -519,8 +519,8 @@ static XrValue cluster_peer_enqueue_fn(XrVMRuntime *X, XrValue *args, int argc) 
     xr_amutex_unlock(&cluster->nodes_lock);
     if (!node)
         return xr_bool(false);
-    bool queued =
-        cluster_node_enqueue(node, (const uint8_t *) wire->data, (uint32_t) wire->length) == 0;
+    bool queued = xr_cluster_output_queue_push_copy(node->outq, (const uint8_t *) wire->data,
+                                                    (uint32_t) wire->length) == 0;
     cluster_node_release(node);
     return xr_bool(queued);
 }
@@ -757,7 +757,8 @@ static XrValue cluster_runtime_snapshot_fn(XrVMRuntime *X, XrValue *args, int ar
                                               xr_int(xr_cluster_output_queue_bytes(node->outq)));
                 xr_object_instance_set_by_key(X, nj, "outQueueFrames",
                                               xr_int(xr_cluster_output_queue_frames(node->outq)));
-                xr_object_instance_set_by_key(X, nj, "slow", xr_bool(cluster_node_is_slow(node)));
+                xr_object_instance_set_by_key(X, nj, "slow",
+                                              xr_bool(xr_cluster_output_queue_is_full(node->outq)));
 
                 // Phi accrual failure-detector score. Higher = more
                 // likely dead. Threshold for "kill" is set by
