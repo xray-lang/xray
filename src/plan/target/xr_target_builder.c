@@ -7038,8 +7038,8 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
     bool exact_dynamic = xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation);
     bool exact_native_fresh =
         xr_semantic_native_direct_fresh_result_is_exact(builder->semantic_plan, operation, NULL);
-    bool exact_builtin_runtime =
-        xr_semantic_builtin_runtime_method_is_exact(builder->semantic_plan, operation, NULL, NULL);
+    bool exact_builtin_runtime = xr_semantic_builtin_runtime_method_has_result_class(
+        builder->semantic_plan, operation, XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC);
     bool exact_map_iterator_result =
         xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, NULL, NULL) ||
         xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation, NULL);
@@ -7412,8 +7412,9 @@ static bool builder_add_dynamic_value_storage(XrTargetPlanBuilder *builder, char
         else if (xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation) ||
                  xr_semantic_native_direct_fresh_result_is_exact(builder->semantic_plan, operation,
                                                                  NULL) ||
-                 xr_semantic_builtin_runtime_method_is_exact(builder->semantic_plan, operation,
-                                                             NULL, NULL) ||
+                 xr_semantic_builtin_runtime_method_has_result_class(
+                     builder->semantic_plan, operation,
+                     XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC) ||
                  xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, NULL,
                                                            NULL) ||
                  xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation,
@@ -10081,9 +10082,13 @@ static bool collect_builtin_runtime_method_call_intent(XrTargetPlanBuilder *buil
     const XaBuiltinReceiverMethodSpec *spec = NULL;
     uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
     XrStableId method_identity;
+    XrSemanticBuiltinRuntimeMethodResultClass result_class =
+        XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID;
     if (!xr_semantic_builtin_runtime_method_is_exact(builder->semantic_plan, operation, &spec,
                                                      &receiver) ||
-        !xr_builtin_runtime_method_identity(spec, &method_identity))
+        !xr_builtin_runtime_method_identity(spec, &method_identity) ||
+        (result_class = xr_semantic_builtin_runtime_method_result_class(spec)) ==
+            XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID)
         return fail(error, error_size, "XR_TARGET_1003",
                     "builtin runtime method dispatch authority is incomplete");
     XrTargetCallIntent call = {
@@ -10098,7 +10103,9 @@ static bool collect_builtin_runtime_method_call_intent(XrTargetPlanBuilder *buil
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = 0,
         .result_mode = XR_TARGET_CALL_VALUE,
-        .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
+        .result_ownership = result_class == XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC
+                                ? XR_TARGET_CALL_RETURN_OWNED
+                                : XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD,
         .target_kind = XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD,
     };

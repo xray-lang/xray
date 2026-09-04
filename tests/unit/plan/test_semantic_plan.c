@@ -5463,6 +5463,80 @@ static XrSemanticPlan *build_builtin_runtime_range_to_string_plan(void) {
     return plan;
 }
 
+static XrSemanticPlan *build_builtin_runtime_range_contains_plan(void) {
+    XiFunc *function = xi_func_new("builtin_runtime_range_contains", &stub_bool);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *start = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *end = xi_const_int(function, entry, 5, &stub_int);
+    XiValue *range = xi_value_new(function, entry, XI_RANGE, &stub_range, 2);
+    XiValue *needle = xi_const_int(function, entry, 4, &stub_int);
+    XiValue *contains = xi_value_new(function, entry, XI_CALL_METHOD, &stub_bool, 2);
+    REQUIRE(start != NULL && end != NULL && range != NULL && needle != NULL && contains != NULL);
+    range->args[0] = start;
+    range->args[1] = end;
+    contains->args[0] = range;
+    contains->args[1] = needle;
+    contains->aux = (void *) "contains";
+    contains->aux_int = (int64_t) XI_METHOD_SYMBOL_CONTAINS << 1;
+    xi_block_set_return(entry, contains);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime Range.contains SemanticPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
+static void test_builtin_runtime_range_contains_authority(void) {
+    XrSemanticPlan *plan = build_builtin_runtime_range_contains_plan();
+    XrSemanticOperationRecord *range = NULL;
+    XrSemanticOperationRecord *contains = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        XrSemanticOperationRecord *operation = &plan->operations[i];
+        if (operation->opcode == XI_RANGE)
+            range = operation;
+        if (operation->intrinsic_kind == XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD)
+            contains = operation;
+    }
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(range != NULL && xr_semantic_range_value_is_exact(plan, range));
+    REQUIRE(contains != NULL &&
+            xr_semantic_builtin_runtime_method_is_exact(plan, contains, &spec, &receiver) &&
+            spec != NULL && spec->method_id == XA_BUILTIN_RECEIVER_METHOD_RANGE_CONTAINS &&
+            spec->method_symbol == XI_METHOD_SYMBOL_CONTAINS && receiver == range->result_value &&
+            xr_semantic_builtin_runtime_method_result_class(spec) ==
+                XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_SCALAR &&
+            contains->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+            contains->return_parameter == -1 && contains->return_provenance == XR_SEM_RETURN_NONE &&
+            contains->return_complete == 0);
+
+    uint8_t saved_result_ownership = contains->result_ownership;
+    contains->result_ownership = XI_GEN_RESULT_OWNERSHIP_OWNED;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    contains->result_ownership = saved_result_ownership;
+
+    uint32_t saved_argument_type = plan->operands[contains->operand_begin + 1u].type;
+    plan->operands[contains->operand_begin + 1u].type = contains->result_type;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->operands[contains->operand_begin + 1u].type = saved_argument_type;
+
+    uint32_t saved_registry_id =
+        contains->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID];
+    contains->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] =
+        XA_BUILTIN_RECEIVER_METHOD_RANGE_TO_STRING;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    contains->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] = saved_registry_id;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+}
+
 static void test_builtin_runtime_range_to_string_authority(void) {
     XrSemanticPlan *plan = build_builtin_runtime_range_to_string_plan();
     XrSemanticOperationRecord *range = NULL;
@@ -5480,7 +5554,9 @@ static void test_builtin_runtime_range_to_string_authority(void) {
     REQUIRE(to_string != NULL &&
             xr_semantic_builtin_runtime_method_is_exact(plan, to_string, &spec, &receiver) &&
             spec != NULL && spec->method_id == XA_BUILTIN_RECEIVER_METHOD_RANGE_TO_STRING &&
-            spec->method_symbol == XI_METHOD_SYMBOL_TOSTRING && receiver == range->result_value);
+            spec->method_symbol == XI_METHOD_SYMBOL_TOSTRING && receiver == range->result_value &&
+            xr_semantic_builtin_runtime_method_result_class(spec) ==
+                XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC);
     REQUIRE(!xa_builtin_receiver_matches_type(&stub_shadow_range, XA_BUILTIN_RECEIVER_RANGE));
 
     uint32_t saved_registry_id =
@@ -6751,6 +6827,7 @@ int main(int argc, char **argv) {
     }
     if (argc == 2 && strcmp(argv[1], "builtin-runtime-method-authority") == 0) {
         test_builtin_runtime_string_split_authority();
+        test_builtin_runtime_range_contains_authority();
         test_builtin_runtime_range_to_string_authority();
         puts("Builtin runtime method SemanticPlan authority tests passed");
         return 0;
@@ -6768,6 +6845,7 @@ int main(int argc, char **argv) {
     test_non_singleton_borrow_origin_set_fails_scalar_projection();
     test_operation_registry();
     test_builtin_runtime_string_split_authority();
+    test_builtin_runtime_range_contains_authority();
     test_builtin_runtime_range_to_string_authority();
     test_immutable_owned_snapshot();
     test_string_builder_constructor_allocation_authority();

@@ -43,8 +43,8 @@ expectation's identity adapter. Every mutation reaches the structural verifier
 rather than passing because of stale fingerprint bytes.
 
 anchor-sha256: src/plan/target/xr_target_plan.h c64114debd03439d4674d8d4e24cbf1f7fc727aec14ce37990177cac6f7cb578
-anchor-sha256: src/plan/target/xr_target_builder.c 9636604df6825452c6b1d438976a88a7003d2bb1d67d4776be8f720f5badb793
-anchor-sha256: src/plan/target/xr_target_verify.c 4dccbf52e4e59a6a7b9ca34c2eb28a933737519d7aa72ea3312fad93d79cc86f
+anchor-sha256: src/plan/target/xr_target_builder.c e7d77447af8a6ad41fd0dc8720eec9079c85fbf4aa40fb3c773960adb75f7b2c
+anchor-sha256: src/plan/target/xr_target_verify.c d8358d62a2377bfd0816d258c6c3cd241a2d515231ac64d1c8d5b0ec93766d03
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53

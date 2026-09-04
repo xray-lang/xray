@@ -24,6 +24,32 @@ enum {
     XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID = 7
 };
 
+typedef enum XrSemanticBuiltinRuntimeMethodResultClass {
+    XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID = 0,
+    XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_SCALAR,
+    XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC,
+} XrSemanticBuiltinRuntimeMethodResultClass;
+
+/* A runtime helper may return either an inline scalar or a tagged owner. The
+ * frozen registry result kind is the only authority for that distinction;
+ * selectors and modules do not participate. Unsupported result kinds remain
+ * invalid until their storage contract is defined here. */
+static inline XrSemanticBuiltinRuntimeMethodResultClass
+xr_semantic_builtin_runtime_method_result_class(const XaBuiltinReceiverMethodSpec *spec) {
+    if (!xa_builtin_runtime_receiver_method_spec_is_valid(spec))
+        return XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID;
+    switch (spec->result) {
+        case XA_BUILTIN_TYPE_BOOL:
+        case XA_BUILTIN_TYPE_INT:
+            return XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_SCALAR;
+        case XA_BUILTIN_TYPE_STRING:
+        case XA_BUILTIN_TYPE_ARRAY_OF_STRING:
+            return XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC;
+        default:
+            return XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID;
+    }
+}
+
 static inline const XaBuiltinReceiverMethodSpec *
 xr_semantic_builtin_runtime_method_spec(const XrSemanticOperationRecord *operation) {
     if (!operation || operation->evidence[XR_SEM_BUILTIN_RUNTIME_METHOD_EVIDENCE_REGISTRY_ID] >=
@@ -41,6 +67,22 @@ xr_semantic_builtin_runtime_method_type_is_exact(const XrSemanticPlan *plan,
                                                  XaBuiltinMethodTypeKind expected) {
     if (!plan || !type)
         return false;
+    if (expected == XA_BUILTIN_TYPE_BOOL) {
+        XrStableId zero = {{0}};
+        const char expected_key[] = "type-v3:3:0:0:0:0:0:0:0:0:255:0:";
+        return type->kind == XR_KIND_BOOL && type->builtin_type == XR_TID_NULL &&
+               type->source_class == XR_SEMANTIC_INDEX_NONE &&
+               xr_stable_id_equal(type->source_class_identity, zero) &&
+               xr_stable_id_equal(type->source_enum_identity, zero) && !type->source_enum_key &&
+               type->child_count == 0 && type->aggregate_extent == 0 &&
+               type->aggregate_align == 0 && type->enum_layout_id == 0 &&
+               type->enum_member_count == 0 && type->enum_flags == 0 &&
+               type->reserved_enum == 0 && type->scalar_rep == XR_SCALAR_REP_NONE &&
+               type->flags == 0 && type->canonical_key &&
+               strcmp(type->canonical_key, expected_key) == 0;
+    }
+    if (expected == XA_BUILTIN_TYPE_INT)
+        return xr_semantic_range_bound_type_is_exact(type);
     if (expected == XA_BUILTIN_TYPE_STRING)
         return xr_semantic_tagged_string_type_is_exact(type);
     if (expected == XA_BUILTIN_TYPE_ARRAY_OF_STRING) {
@@ -97,6 +139,23 @@ static inline bool xr_semantic_builtin_runtime_method_operand_type(
     }
     *out_type = spec->params[operand - 1u];
     return true;
+}
+
+static inline bool xr_semantic_builtin_runtime_method_result_contract_is_exact(
+    const XaBuiltinReceiverMethodSpec *spec, const XrSemanticOperationRecord *operation) {
+    XrSemanticBuiltinRuntimeMethodResultClass result_class =
+        xr_semantic_builtin_runtime_method_result_class(spec);
+    if (!operation || operation->return_parameter != -1)
+        return false;
+    if (result_class == XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_SCALAR)
+        return operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+               operation->return_provenance == XR_SEM_RETURN_NONE &&
+               operation->return_complete == 0;
+    if (result_class == XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC)
+        return operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+               operation->return_provenance == XR_SEM_RETURN_OWNED &&
+               operation->return_complete == 1;
+    return false;
 }
 
 static inline const XaBuiltinReceiverMethodSpec *
@@ -157,12 +216,11 @@ static inline bool xr_semantic_builtin_runtime_method_is_exact(
         (operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) &&
          operation->flags != (xi_generated_op_default_flags(XI_CALL_METHOD) | XI_FLAG_TAIL)) ||
         operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        !xr_semantic_builtin_runtime_method_result_contract_is_exact(spec, operation) ||
         operation->transfer_mode != XR_TRANSFER_SHARE ||
         operation->parameter_mode != XR_PARAM_READ ||
         operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
-        operation->return_parameter != -1 || operation->return_provenance != XR_SEM_RETURN_OWNED ||
-        operation->return_complete != 1 || operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
         operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
         operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
         operation->view_origin != XI_VIEW_ORIGIN_NONE || operation->view_capability != 0 ||
@@ -202,6 +260,15 @@ static inline bool xr_semantic_builtin_runtime_method_is_exact(
     if (out_receiver)
         *out_receiver = receiver->value;
     return true;
+}
+
+static inline bool xr_semantic_builtin_runtime_method_has_result_class(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    XrSemanticBuiltinRuntimeMethodResultClass expected) {
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    return expected != XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID &&
+           xr_semantic_builtin_runtime_method_is_exact(plan, operation, &spec, NULL) &&
+           xr_semantic_builtin_runtime_method_result_class(spec) == expected;
 }
 
 #endif /* XR_SEMANTIC_BUILTIN_RUNTIME_METHOD_SHAPE_H */

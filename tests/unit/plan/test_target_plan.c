@@ -1709,6 +1709,34 @@ static XrSemanticPlan *build_builtin_runtime_range_to_string_semantic(void) {
     return semantic;
 }
 
+static XrSemanticPlan *build_builtin_runtime_range_contains_semantic(void) {
+    XiFunc *function = xi_func_new("target_builtin_runtime_range_contains", &stub_bool);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *start = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *end = xi_const_int(function, entry, 5, &stub_int);
+    XiValue *range = xi_value_new(function, entry, XI_RANGE, &stub_target_range, 2);
+    XiValue *needle = xi_const_int(function, entry, 4, &stub_int);
+    XiValue *contains = xi_value_new(function, entry, XI_CALL_METHOD, &stub_bool, 2);
+    REQUIRE(start != NULL && end != NULL && range != NULL && needle != NULL && contains != NULL);
+    range->args[0] = start;
+    range->args[1] = end;
+    contains->args[0] = range;
+    contains->args[1] = needle;
+    contains->aux = (void *) "contains";
+    contains->aux_int = (int64_t) XI_METHOD_SYMBOL_CONTAINS << 1;
+    xi_block_set_return(entry, contains);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime Range.contains SemanticPlan failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
 static XrSemanticPlan *build_string_slice_range_semantic(bool optional_receiver) {
     XiFunc *function = xi_func_new("target_string_slice_range", &stub_int);
     REQUIRE(function != NULL);
@@ -10112,6 +10140,62 @@ static void test_builtin_runtime_range_to_string_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_builtin_runtime_range_contains_call_authority(void) {
+    XrSemanticPlan *semantic = build_builtin_runtime_range_contains_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "builtin runtime Range.contains TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    XrTargetCallRecord *call =
+        find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD);
+    const XrSemanticOperationRecord *operation =
+        call ? xr_semantic_plan_operation(semantic, call->semantic_operation) : NULL;
+    const XaBuiltinReceiverMethodSpec *spec = NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    XrStableId method_identity;
+    XrTargetValueRepRecord *result =
+        operation
+            ? (XrTargetValueRepRecord *) xr_target_plan_value_rep(plan, operation->result_value)
+            : NULL;
+    XrTargetSlotRecord *slot =
+        result && result->slot < plan->slots_count ? &plan->slots[result->slot] : NULL;
+    REQUIRE(call != NULL && operation != NULL &&
+            xr_semantic_builtin_runtime_method_is_exact(semantic, operation, &spec, &receiver));
+    REQUIRE(spec != NULL && spec->method_id == XA_BUILTIN_RECEIVER_METHOD_RANGE_CONTAINS &&
+            xr_semantic_builtin_runtime_method_result_class(spec) ==
+                XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_SCALAR &&
+            xr_builtin_runtime_method_identity(spec, &method_identity));
+    REQUIRE(call->target_kind == XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD &&
+            call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+            call->callee_function == XR_SEMANTIC_INDEX_NONE && call->argument_count == 0 &&
+            call->flags == 0 && call->result_mode == XR_TARGET_CALL_VALUE &&
+            call->result_ownership == XR_TARGET_CALL_NONE &&
+            xr_stable_id_equal(call->native_callee_identity, method_identity));
+    REQUIRE(result != NULL && result->slot == call->result_slot && slot != NULL);
+    REQUIRE(plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_I1 &&
+            plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_I1);
+    REQUIRE(slot->root_kind == XR_TARGET_ROOT_NONE &&
+            slot->ownership == XR_TARGET_OWNERSHIP_TRIVIAL);
+
+    uint8_t saved_ownership = call->result_ownership;
+    call->result_ownership = XR_TARGET_CALL_RETURN_OWNED;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = saved_ownership;
+
+    uint8_t saved_slot_ownership = slot->ownership;
+    slot->ownership = XR_TARGET_OWNERSHIP_OWNED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    slot->ownership = saved_slot_ownership;
+
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_string_slice_range_call_authority(void) {
     XrSemanticPlan *semantic = build_string_slice_range_semantic(false);
     XrTargetProfile *profile = build_profile(0);
@@ -11781,6 +11865,7 @@ int main(int argc, char **argv) {
     }
     if (argc == 2 && strcmp(argv[1], "builtin-runtime-method-authority") == 0) {
         test_builtin_runtime_string_split_call_authority();
+        test_builtin_runtime_range_contains_call_authority();
         test_builtin_runtime_range_to_string_call_authority();
         puts("Builtin runtime method TargetPlan authority tests passed");
         return 0;
@@ -11877,6 +11962,7 @@ int main(int argc, char **argv) {
     test_stringbuilder_clear_call_authority();
     test_string_runes_call_authority();
     test_builtin_runtime_string_split_call_authority();
+    test_builtin_runtime_range_contains_call_authority();
     test_builtin_runtime_range_to_string_call_authority();
     test_string_slice_range_call_authority();
     test_string_slice_optional_parameter_authority();

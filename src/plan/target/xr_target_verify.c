@@ -4370,7 +4370,8 @@ static bool verify_value_binding(
         semantic_direct_local_scalar_ref_address_is_exact_verify(semantic, operation);
     bool exact_dynamic_value =
         (xr_semantic_dynamic_value_is_exact(semantic, operation) ||
-         xr_semantic_builtin_runtime_method_is_exact(semantic, operation, NULL, NULL)) &&
+         xr_semantic_builtin_runtime_method_has_result_class(
+             semantic, operation, XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC)) &&
         operation->result_value == semantic_value && operation->result_type == semantic_type &&
         operation->function == semantic_function;
     bool exact_native_direct_fresh =
@@ -6699,9 +6700,15 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             !semantic_target &&
             xr_semantic_builtin_runtime_method_is_exact(semantic, operation, &builtin_runtime_spec,
                                                         &builtin_runtime_receiver);
+        XrSemanticBuiltinRuntimeMethodResultClass builtin_runtime_result_class =
+            builtin_runtime_method
+                ? xr_semantic_builtin_runtime_method_result_class(builtin_runtime_spec)
+                : XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID;
         XrStableId builtin_runtime_identity = {{0}};
         if (builtin_runtime_method &&
-            !xr_builtin_runtime_method_identity(builtin_runtime_spec, &builtin_runtime_identity)) {
+            (builtin_runtime_result_class == XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_INVALID ||
+             !xr_builtin_runtime_method_identity(builtin_runtime_spec,
+                                                 &builtin_runtime_identity))) {
             valid = false;
             break;
         }
@@ -6867,7 +6874,8 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             string_utf8_static || source_string_result || source_class_result ||
             class_construction || adt_enum_constructor || array_intrinsic || array_fill ||
             panic_info_constructor || container_copy || native_direct_fresh_result ||
-            builtin_runtime_method) {
+            builtin_runtime_result_class ==
+                XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -6977,7 +6985,8 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                          class_construction || adt_enum_constructor || array_intrinsic ||
                          panic_info_constructor || container_copy || map_entries_iterator ||
                          map_entry_iterator_next || native_direct_fresh_result ||
-                         builtin_runtime_method ||
+                         builtin_runtime_result_class ==
+                             XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC ||
                          (array_hof && array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE)
                      ? XR_TARGET_CALL_RETURN_OWNED
                  : string_byte_slice_view ? XR_TARGET_CALL_BORROW
@@ -8031,6 +8040,8 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             if (!valid)
                 break;
         } else if (builtin_runtime_method) {
+            bool owned_dynamic = builtin_runtime_result_class ==
+                                 XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC;
             valid = result_type && !suspends &&
                     reconstruct_call_identity("xray-target-builtin-runtime-method-v1",
                                               operation->id, builtin_runtime_identity,
@@ -8046,10 +8057,15 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     call->flags == 0 &&
                     call->calling_convention == XR_TARGET_CALL_CONVENTION_BUILTIN_RUNTIME_METHOD &&
                     call->target_kind == XR_TARGET_CALL_TARGET_BUILTIN_RUNTIME_METHOD &&
-                    call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && result &&
+                    call->result_ownership ==
+                        (owned_dynamic ? XR_TARGET_CALL_RETURN_OWNED : XR_TARGET_CALL_NONE) &&
+                    result &&
                     result->slot < plan->slots_count &&
-                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
-                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
+                    plan->slots[result->slot].root_kind ==
+                        (owned_dynamic ? XR_TARGET_ROOT_DYNAMIC : XR_TARGET_ROOT_NONE) &&
+                    plan->slots[result->slot].ownership ==
+                        (owned_dynamic ? XR_TARGET_OWNERSHIP_OWNED
+                                       : XR_TARGET_OWNERSHIP_TRIVIAL);
             if (!valid)
                 break;
         } else if (string_runes) {
