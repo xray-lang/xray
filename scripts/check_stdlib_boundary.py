@@ -199,10 +199,11 @@ def check_builtin_distribution(root: Path) -> list[str]:
 
     ws left this set once its connection layer became pure Xray: it now has no
     core.def binding block and, like http, is loaded from its source alone.
-    compress follows the same source-only path after moving its coder into Xray.
+    cluster and compress follow the same source-only path.
     """
     errors: list[str] = []
-    expected = {"cluster", "http2", "crypto"}
+    expected = {"http2", "crypto"}
+    source_only = {"cluster", "compress"}
     manifest = load_manifest(root)
     names = set(manifest.by_name)
     core_def = (root / "stdlib/defs/core.def").read_text(encoding="utf-8")
@@ -226,21 +227,30 @@ def check_builtin_distribution(root: Path) -> list[str]:
         if entry.get("perf_suite") != f"stdlib/{name}":
             errors.append(f"built-in standard module {name}: perf_suite must be stdlib/{name}")
 
-    compress = manifest.by_name.get("compress", {})
-    if not compress:
-        errors.append("built-in standard module compress: missing boundary entry")
-    elif not compress.get("def_migration_complete"):
-        errors.append("built-in standard module compress: source-only migration is not complete")
-    if re.search(r"^module\s+compress\s*\{", core_def, re.M):
-        errors.append("built-in standard module compress: obsolete binding block remains")
-    if "compress" in binders:
-        errors.append("built-in standard module compress: obsolete native-entry binder remains")
+    for name in sorted(source_only):
+        entry = manifest.by_name.get(name, {})
+        if not entry:
+            errors.append(f"built-in standard module {name}: missing boundary entry")
+        elif not entry.get("def_migration_complete"):
+            errors.append(
+                f"built-in standard module {name}: source-only migration is not complete"
+            )
+        if not (root / "stdlib" / name).is_dir():
+            errors.append(f"built-in standard module {name}: missing stdlib/{name}")
+        if re.search(rf"^module\s+{re.escape(name)}\s*\{{", core_def, re.M):
+            errors.append(f"built-in standard module {name}: obsolete binding block remains")
+        if name in binders:
+            errors.append(
+                f"built-in standard module {name}: obsolete native-entry binder remains"
+            )
+        if entry.get("perf_suite") != f"stdlib/{name}":
+            errors.append(f"built-in standard module {name}: perf_suite must be stdlib/{name}")
 
     forbidden = (
         "packages/official",
         "XR_PACKAGE_",
         "XR_OFFICIAL_PACKAGE",
-        *(f"xray/{name}" for name in sorted(expected)),
+        *(f"xray/{name}" for name in sorted(expected | source_only)),
     )
     checked = {
         "CMakeLists.txt": cmake,

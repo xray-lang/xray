@@ -45,33 +45,6 @@
 schema = 1
 
 # ============================================================================
-# cluster -- the distributed-node runtime
-# ============================================================================
-#
-# Leaves without an `aot:` binding are hard refusals, not fallbacks: the code
-# generator reports an unsupported stdlib call when one is reachable.
-
-[[leaf]]
-module = "cluster"
-symbol = "__start"
-class = "runtime_leaf"
-abi = "none; publishes one isolate-local provider lifecycle slot"
-ownership = "none"
-effect = "nothrow"
-provider = "the generic provider lifecycle slot only. cluster.xr owns identity, membership, listener, TLS resources, peer NetConn endpoints, framed I/O, byte-budget queue admission, per-frame fairness, metrics, health, topic and monitor state"
-deletion_trigger = "when source module state has an isolate-lifecycle finalizer independent of a native provider slot"
-
-[[leaf]]
-module = "cluster"
-symbol = "__stop"
-class = "runtime_leaf"
-abi = "none; atomically detaches the isolate-local provider lifecycle slot"
-ownership = "none"
-effect = "nothrow"
-provider = "the generic provider lifecycle slot only. cluster.xr atomically retires source state, closes source channels and listener, shuts down every source-owned peer NetConn and owns all teardown policy"
-deletion_trigger = "when source module state has an isolate-lifecycle finalizer independent of a native provider slot"
-
-# ============================================================================
 # crypto
 # ============================================================================
 
@@ -674,6 +647,16 @@ ownership = "none"
 effect = "nothrow"
 provider = "build configuration. The VM answers from XR_ENABLE_TLS in src/io/xnet_provider.c; the standalone AOT runtime links no TLS engine and src/aot/xrt_net.h returns false unconditionally"
 deletion_trigger = "when the TLS provider is present in every supported build, so the question has one answer and net.xr can stop asking it -- or when build configuration becomes readable from Xray source"
+
+[[leaf]]
+module = "net"
+symbol = "__TlsContextStorage"
+class = "security_provider_leaf"
+abi = "OpenSSL SSL_CTX_free(3) through the native-body destroy hook"
+ownership = "none"
+effect = "nothrow"
+provider = "an immutable private handle whose native body owns one OpenSSL SSL_CTX; source TlsClientContext and TlsServerContext values retain the handle without exposing provider state"
+deletion_trigger = "when the language has a generic opaque-provider resource declaration that can bind a native destroy hook without a module-specific native class"
 
 [[leaf]]
 module = "net"

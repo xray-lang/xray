@@ -115,11 +115,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"DISCOVERY_INTERVAL_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"PhiDetector", XLSP_SYM_CLASS, "type PhiDetector", "Class type", NULL, 0},
     {"ClusterDelivery", XLSP_SYM_CLASS, "type ClusterDelivery", "Enum type", NULL, 0},
-    {"ClusterNodeState", XLSP_SYM_CLASS, "type ClusterNodeState", "Enum type", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 87
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 86
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {

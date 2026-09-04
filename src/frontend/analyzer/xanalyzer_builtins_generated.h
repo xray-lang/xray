@@ -80,13 +80,6 @@ static const XaBuiltinEnum g_gen_Coro_enums[] = {
 };
 #define GEN_CORO_ENUM_COUNT 3
 
-// cluster module functions
-static const XaBuiltinMember g_gen_cluster_functions[] = {
-    {"__start", "(): bool", "Publish the isolate lifecycle slot for the source-owned cluster runtime", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_CLUSTER_FUNCTION_COUNT 2
-
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
     {"__fillRandomBytes", "(bytes: ref Array<u8>): ()", "Overwrite an existing byte array from the platform CSPRNG", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -345,7 +338,6 @@ static const XaBuiltinMember g_gen_time_functions[] = {
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT, NULL, 0},
-    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
@@ -358,7 +350,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 13
+#define GEN_BUILTIN_MODULE_COUNT 12
 
 /* clang-format on */
 

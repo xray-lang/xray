@@ -56,13 +56,6 @@ reason = "stateful-module-slot-identity"
 symbol = "log.setLevel"
 reason = "stateful-module-slot-identity"
 
-
-# cluster is excluded from hosted fragments as a whole module: its Xray source
-# calls private `__`-prefixed native primitives, which a freestanding fragment
-# cannot reach. That subsumes the earlier per-symbol deferrals of the join and
-# stop facades, which had to keep dispatching to the current VM or AOT cluster
-# runtime rather than capture an AOT direct shim in a VM native fastpath.
-
 [dynamic_audit]
 # These modules still expose fixed-shape dynamic APIs and must be migrated
 # by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.
@@ -424,8 +417,8 @@ layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/cluster/cluster.xr"
 public_native = []
-private_native_sources = ["stdlib/cluster/*.c"]
-private_native_reason = "Distributed transport, discovery, channel and node lifecycle data plane consumed by cluster.xr"
+def_migration_complete = true
+aot_helper_forbidden = true
 perf_suite = "stdlib/cluster"
 
 [[module]]

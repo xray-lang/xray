@@ -4,8 +4,7 @@
 //   Cluster policy once crossed source and native implementations, which let
 //   the two backends answer the same question differently. Both backends now
 //   compile this file, so protocol, queue and lifecycle policy has exactly one
-//   owner. The native leaves below retain only host operations that Xray cannot
-//   express directly.
+//   owner. Host resources enter only through generic net and crypto APIs.
 //
 // WHAT LIVES HERE
 //   The address grammar, the topic language, the node-name rule, the admission
@@ -15,8 +14,9 @@
 //
 // WHAT DOES NOT
 //   Sockets, multicast, TLS, the netpoll, OS threads and the channel subsystem.
-//   Those are private native leaves; all protocol bytes, authentication rules,
-//   failure-detector math and discovery admission policy live below in Xray.
+//   Their generic resource providers own host mechanics; all protocol bytes,
+//   authentication rules, failure-detector math and discovery admission policy
+//   live below in Xray.
 //
 // WIRE FORMAT
 //   Normative. Source code reads the four-byte frame boundary through the
@@ -141,8 +141,6 @@ type _ClusterSourceState = {
     heartbeatTimeoutMs: i64,
     maxMissedHeartbeats: i64,
     tlsEnabled: bool,
-    tlsClientReady: bool,
-    tlsServerReady: bool,
 }
 
 type _SourceListener = {
@@ -150,10 +148,15 @@ type _SourceListener = {
     listener: NetListener,
 }
 
+type _DiscoveryGeneration = {
+    runtimeToken: i64,
+    discoveryToken: i64,
+}
+
 type _ClusterTlsResources = {
     runtimeToken: i64,
     client: TlsClientContext,
-    server: TlsServerContext?,
+    server: TlsServerContext,
 }
 
 // Topic routing is ordinary source state. Holding the Channel in this record
@@ -302,8 +305,6 @@ type _PeerTake = {
 // affect a later start on the same isolate. Discovery has a separate token
 // because callers may enable or restart it independently of cluster startup.
 const _discoveryNextToken: Atomic<i64> = Atomic<i64>(0)
-const _discoveryActiveToken: Atomic<i64> = Atomic<i64>(0)
-const _discoveryHashBits: Atomic<i64> = Atomic<i64>(0)
 const _runtimeNextToken: Atomic<i64> = Atomic<i64>(0)
 const _runtimeActiveToken: Atomic<i64> = Atomic<i64>(0)
 const _peerNextGeneration: Atomic<i64> = Atomic<i64>(0)
@@ -312,6 +313,8 @@ const _monitorNextId: Atomic<i64> = Atomic<i64>(0)
 // publication. This closes the check/publish window while keeping generation
 // and notification policy in source.
 const _runtimeDecisionLock: Atomic<bool> = Atomic<bool>(false)
+const _discoveryStateLock: Atomic<bool> = Atomic<bool>(false)
+var _discoveryGeneration: _DiscoveryGeneration? = null
 const _topicStateLock: Atomic<bool> = Atomic<bool>(false)
 var _topicSubscriptions: Array<_TopicSubscription> = []
 const _phiStateLock: Atomic<bool> = Atomic<bool>(false)
@@ -343,6 +346,13 @@ fn _lockSourceState() {
 fn _lockRuntimeDecision() {
     while (true) {
         var (_, acquired) = _runtimeDecisionLock.compareExchange(false, true)
+        if (acquired) { return }
+    }
+}
+
+fn _lockDiscoveryState() {
+    while (true) {
+        var (_, acquired) = _discoveryStateLock.compareExchange(false, true)
         if (acquired) { return }
     }
 }
@@ -432,6 +442,9 @@ fn _reservePeer(runtimeToken: i64, name: string, host: string,
     return reservation
 }
 
+// Directory visibility and transport admission are one transition. The ready
+// channel remains closed until both registries agree, so no observer can see a
+// directory-only ghost and no reader can dispatch a pre-admission frame.
 fn _commitPeer(reservation: _PeerReservation) -> bool {
     _lockRuntimeDecision()
     if (_runtimeActiveToken.load() != reservation.runtimeToken) {
@@ -440,14 +453,34 @@ fn _commitPeer(reservation: _PeerReservation) -> bool {
     }
     _lockPeerDirectory()
     var committed = false
+    var directoryIndex = -1
     for (var i = 0; i < len(_peerDirectory); i++) {
         var entry = _peerDirectory[i]
         if (entry.runtimeToken == reservation.runtimeToken &&
             entry.generation == reservation.generation && entry.state == _PEER_RESERVED) {
-            entry.state = _PEER_COMMITTED
-            _peerDirectory[i] = entry
+            directoryIndex = i
+        }
+    }
+    if (directoryIndex >= 0) {
+        _lockPeerTransport()
+        var transportIndex = -1
+        for (var i = 0; i < len(_peerTransports); i++) {
+            var peer = _peerTransports[i]
+            if (peer.endpoint.runtimeToken == reservation.runtimeToken &&
+                peer.endpoint.generation == reservation.generation && !peer.committed) {
+                transportIndex = i
+            }
+        }
+        if (transportIndex >= 0) {
+            var transport = _peerTransports[transportIndex]
+            transport.committed = true
+            _peerTransports[transportIndex] = transport
+            var directory = _peerDirectory[directoryIndex]
+            directory.state = _PEER_COMMITTED
+            _peerDirectory[directoryIndex] = directory
             committed = true
         }
+        _peerTransportLock.store(false)
     }
     _peerDirectoryLock.store(false)
     _runtimeDecisionLock.store(false)
@@ -523,12 +556,18 @@ fn _peerGeneration(name: string) -> i64 {
     return generation
 }
 // Retirement first makes new registrations fail their locked token recheck.
-// Detaching the complete registry under the lock makes the cutover atomic;
+// Detaching only the retired generation keeps a concurrent restart intact;
 // closing the detached channels afterwards keeps wakeups out of the spinlock.
-fn _closeTopicSubscriptions() {
+fn _closeTopicSubscriptions(runtimeToken: i64) {
     _lockTopicState()
-    var retired = _topicSubscriptions
-    _topicSubscriptions = []
+    var retired: Array<_TopicSubscription> = []
+    var retained: Array<_TopicSubscription> = []
+    for (var i = 0; i < len(_topicSubscriptions); i++) {
+        var subscription = _topicSubscriptions[i]
+        if (subscription.runtimeToken == runtimeToken) { retired.push(subscription) }
+        else { retained.push(subscription) }
+    }
+    _topicSubscriptions = retained
     _topicStateLock.store(false)
     for (var i = 0; i < len(retired); i++) {
         retired[i].notifications.close()
@@ -656,8 +695,13 @@ fn _recentlyDeparted(name: string) -> bool {
     return found
 }
 
-fn _recentDepartureSnapshot(nowMs: i64) -> Array<string> {
+fn _recentDepartureSnapshot(runtimeToken: i64, nowMs: i64) -> Array<string>? {
     _lockMonitorState()
+    if (_monitorRuntimeToken != runtimeToken ||
+        _runtimeActiveToken.load() != runtimeToken) {
+        _monitorStateLock.store(false)
+        return null
+    }
     _pruneRecentDeparturesLocked(nowMs)
     var names: Array<string> = []
     for (var i = 0; i < len(_recentDepartures); i++) {
@@ -667,8 +711,13 @@ fn _recentDepartureSnapshot(nowMs: i64) -> Array<string> {
     return names
 }
 
-fn _recentDepartureCount(nowMs: i64) -> i64 {
+fn _recentDepartureCount(runtimeToken: i64, nowMs: i64) -> i64 {
     _lockMonitorState()
+    if (_monitorRuntimeToken != runtimeToken ||
+        _runtimeActiveToken.load() != runtimeToken) {
+        _monitorStateLock.store(false)
+        return -1
+    }
     _pruneRecentDeparturesLocked(nowMs)
     var count = len(_recentDepartures)
     _monitorStateLock.store(false)
@@ -1459,24 +1508,6 @@ fn _stopPeerTransports(runtimeToken: i64) {
     }
 }
 
-fn _commitPeerTransport(runtimeToken: i64, peerGeneration: i64) -> bool {
-    _lockPeerTransport()
-    var committed = false
-    if (_runtimeActiveToken.load() == runtimeToken) {
-        for (var i = 0; i < len(_peerTransports); i++) {
-            var peer = _peerTransports[i]
-            if (peer.endpoint.runtimeToken == runtimeToken &&
-                peer.endpoint.generation == peerGeneration && !peer.committed) {
-                peer.committed = true
-                _peerTransports[i] = peer
-                committed = true
-            }
-        }
-    }
-    _peerTransportLock.store(false)
-    return committed
-}
-
 // Every protocol decision after one complete bounded source-read frame is
 // keyed by a process-unique peer generation, so a retiring transport cannot
 // address a replacement peer.
@@ -2088,8 +2119,47 @@ export fn shouldJoinDiscoveredNode(selfName: string, connectedNames: Array<strin
     return true
 }
 
-fn _releaseDiscovery(token: i64) {
-    var (_, released) = _discoveryActiveToken.compareExchange(token, 0)
+fn _claimDiscovery(runtimeToken: i64, discoveryToken: i64) -> bool {
+    _lockDiscoveryState()
+    var claimed = _discoveryGeneration == null &&
+                  _runtimeActiveToken.load() == runtimeToken
+    if (claimed) {
+        _discoveryGeneration = {
+            runtimeToken: runtimeToken,
+            discoveryToken: discoveryToken,
+        }
+    }
+    _discoveryStateLock.store(false)
+    return claimed
+}
+
+fn _discoveryIsActive(runtimeToken: i64, discoveryToken: i64) -> bool {
+    _lockDiscoveryState()
+    var active = _discoveryGeneration != null &&
+                 _discoveryGeneration!.runtimeToken == runtimeToken &&
+                 _discoveryGeneration!.discoveryToken == discoveryToken &&
+                 _runtimeActiveToken.load() == runtimeToken
+    _discoveryStateLock.store(false)
+    return active
+}
+
+fn _releaseDiscovery(runtimeToken: i64, discoveryToken: i64) {
+    _lockDiscoveryState()
+    if (_discoveryGeneration != null &&
+        _discoveryGeneration!.runtimeToken == runtimeToken &&
+        _discoveryGeneration!.discoveryToken == discoveryToken) {
+        _discoveryGeneration = null
+    }
+    _discoveryStateLock.store(false)
+}
+
+fn _stopDiscovery(runtimeToken: i64) {
+    _lockDiscoveryState()
+    if (_discoveryGeneration != null &&
+        _discoveryGeneration!.runtimeToken == runtimeToken) {
+        _discoveryGeneration = null
+    }
+    _discoveryStateLock.store(false)
 }
 
 fn _hexNibble(c: rune) -> i64 {
@@ -2138,8 +2208,10 @@ fn _readHandshakeFrame(conn: NetConn) -> ClusterFrame? {
     return decodeFrame(wire)
 }
 
-fn _mayPublishPeer(name: string) -> bool {
-    return name != self() && !_recentlyDeparted(name) && !_peerNameConflict(name)
+fn _mayPublishPeer(runtimeToken: i64, name: string) -> bool {
+    var source = _sourceStateSnapshot(runtimeToken)
+    return source != null && name != source!.selfName && !_recentlyDeparted(name) &&
+           !_peerNameConflict(name) && _runtimeActiveToken.load() == runtimeToken
 }
 
 fn _adoptReservedPeer(conn: move NetConn, runtimeToken: i64, name: string,
@@ -2171,10 +2243,6 @@ fn _adoptReservedPeer(conn: move NetConn, runtimeToken: i64, name: string,
         _removePeerDirectoryEntry(peer.runtimeToken, peer.generation)
         return false
     }
-    if (!_commitPeerTransport(peer.runtimeToken, peer.generation)) {
-        _completePeerDeparture(peer.runtimeToken, peer.generation, time.monotonic())
-        return false
-    }
     // This is the only transition that opens the reader/writer gate. Until the
     // directory is COMMITTED, the coordinator owns the socket but cannot read,
     // write or dispatch an authenticated frame.
@@ -2192,8 +2260,7 @@ fn _dialJoinPeer(host: string, port: i64, timeoutMs: i64) -> NetConn? {
     }
 }
 
-fn _joinPeer(host: string, port: i64) -> bool {
-    var runtimeToken = _runtimeActiveToken.load()
+fn _joinPeerForRuntime(runtimeToken: i64, host: string, port: i64) -> bool {
     if (runtimeToken == 0) { return false }
     var source = _sourceStateSnapshot(runtimeToken)
     if (source == null) { return false }
@@ -2233,7 +2300,7 @@ fn _joinPeer(host: string, port: i64) -> bool {
         return false
     }
     var requestValue: ClusterHandshakeRequest = {
-        name: self(), nonce: nonce!, flags: _CLUSTER_PROTOCOL_FLAGS,
+        name: config.selfName, nonce: nonce!, flags: _CLUSTER_PROTOCOL_FLAGS,
     }
     var request = encodeHandshakeRequest(requestValue)
     if (request == null || net.writeBytes(live, request!) != len(request!)) {
@@ -2267,25 +2334,26 @@ fn _joinPeer(host: string, port: i64) -> bool {
         net.close(live)
         return false
     }
-    if (!_mayPublishPeer(ack!.name)) {
+    if (!_mayPublishPeer(runtimeToken, ack!.name)) {
         net.close(live)
         return false
     }
     return _adoptReservedPeer(move live, runtimeToken, ack!.name, host, port, ack!.flags)
 }
 
+fn _joinPeer(host: string, port: i64) -> bool {
+    var runtimeToken = _runtimeActiveToken.load()
+    return _joinPeerForRuntime(runtimeToken, host, port)
+}
+
 fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: string,
-                      tlsEnabled: bool, tlsServerReady: bool) {
+                      tlsEnabled: bool) {
     var deadline = time.monotonic() + HANDSHAKE_TIMEOUT_MS
     if (_runtimeActiveToken.load() != token || !net.setDeadline(conn, deadline)) {
         net.close(conn)
         return
     }
 
-    if (tlsEnabled && !tlsServerReady) {
-        net.close(conn)
-        return
-    }
     if (tlsEnabled) {
         var context = _tlsServerContextSnapshot(token)
         var remaining = deadline - time.monotonic()
@@ -2311,7 +2379,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         return
     }
     var request = decodeHandshakeRequest(frame!.payload)
-    if (request == null || !_mayPublishPeer(request!.name)) {
+    if (request == null || !_mayPublishPeer(token, request!.name)) {
         net.close(conn)
         return
     }
@@ -2346,7 +2414,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         net.close(conn)
         return
     }
-    if (_runtimeActiveToken.load() != token || !_mayPublishPeer(request!.name)) {
+    if (_runtimeActiveToken.load() != token || !_mayPublishPeer(token, request!.name)) {
         net.close(conn)
         return
     }
@@ -2357,7 +2425,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
 // local would have one source identity on both sides of its back edge, which
 // cannot be consumed by one iteration and then reused by the next.
 fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: string,
-              tlsEnabled: bool, tlsServerReady: bool) -> bool {
+              tlsEnabled: bool) -> bool {
     if (!net.setAcceptDeadline(listener, time.monotonic() + _ACCEPT_POLL_MS)) {
         if (_runtimeActiveToken.load() != token) { return false }
         time.sleep(10)
@@ -2375,25 +2443,25 @@ fn _acceptOne(listener: NetListener, token: i64, selfName: string, secret: strin
         net.close(live)
         return false
     }
-    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled, tlsServerReady)
+    go _serveAcceptedPeer(move live, token, selfName, secret, tlsEnabled)
     return true
 }
 
 fn _acceptLoop(listener: NetListener, token: i64, selfName: string, secret: string,
-               tlsEnabled: bool, tlsServerReady: bool) {
+               tlsEnabled: bool) {
     var live = listener
     defer { _closeSourceListener(token) }
     while (_runtimeActiveToken.load() == token &&
-           _acceptOne(live, token, selfName, secret, tlsEnabled, tlsServerReady)) {}
+           _acceptOne(live, token, selfName, secret, tlsEnabled)) {}
 }
 
 fn _stopFailedHealthGeneration(token: i64) {
     if (!_retireRuntimeGeneration(token)) { return }
+    _stopDiscovery(token)
     _closeSourceListener(token)
-    _closeTopicSubscriptions()
+    _closeTopicSubscriptions(token)
     _clearPhiPeerStates(token)
     _stopPeerTransports(token)
-    __stop()
     _clearSourceState(token)
 }
 
@@ -2445,59 +2513,46 @@ fn _healthLoop(token: i64, tickMs: i64, heartbeatTimeoutMs: i64,
     }
 }
 
-fn _activateClusterSource(started: bool, state: _ClusterSourceState,
-                          tls: _ClusterTlsResources?, tickMs: i64,
-                          pending: move NetListener?) -> bool {
+fn _activateClusterSource(state: _ClusterSourceState, tls: _ClusterTlsResources?,
+                          tickMs: i64, pending: move NetListener?) -> bool {
     if (pending == null) { return false }
     const listener: NetListener = pending!
     pending = null
-    if (!started) {
-        net.close(listener)
-        return false
-    }
     var token = state.runtimeToken
     if (!_activateRuntimeGeneration(token)) {
         net.close(listener)
-        __stop()
         return false
     }
     if (!_installSourceState(state, tls)) {
         _retireRuntimeGeneration(token)
         net.close(listener)
-        __stop()
         return false
-    }
-    _discoveryHashBits.store(discoveryClusterHash(state.secret) as i64)
-    if (state.tlsEnabled && !state.tlsServerReady) {
-        net.close(listener)
-        go _healthLoop(token, tickMs, state.heartbeatTimeoutMs, state.maxMissedHeartbeats)
-        return true
     }
     if (!_installSourceListener(token, listener)) {
         _retireRuntimeGeneration(token)
-        _closeTopicSubscriptions()
+        _closeTopicSubscriptions(token)
         _clearPhiPeerStates(token)
         _stopPeerTransports(token)
         net.close(listener)
-        __stop()
         _clearSourceState(token)
         return false
     }
     go _healthLoop(token, tickMs, state.heartbeatTimeoutMs, state.maxMissedHeartbeats)
     // Source state retains a strong listener reference so stop can close it
     // synchronously; the accept coroutine releases its own reference on exit.
-    go _acceptLoop(listener, token, state.selfName, state.secret, state.tlsEnabled,
-                   state.tlsServerReady)
+    go _acceptLoop(listener, token, state.selfName, state.secret, state.tlsEnabled)
     return true
 }
 
-fn _joinDiscoveredNode(host: string, port: i64) { _joinPeer(host, port) }
+fn _joinDiscoveredNode(runtimeToken: i64, host: string, port: i64) {
+    _joinPeerForRuntime(runtimeToken, host, port)
+}
 
 // Isolate coroutine creation from the loop-carried tombstone owner.  The
 // scheduling frame contains only copied scalar values, so the discovery loop
 // never carries a borrowed ref-place load across `go`.
-fn _scheduleDiscoveredNode(host: string, port: i64) {
-    go _joinDiscoveredNode(host, port)
+fn _scheduleDiscoveredNode(runtimeToken: i64, host: string, port: i64) {
+    go _joinDiscoveredNode(runtimeToken, host, port)
 }
 
 // The mutable receive buffer belongs to one suspension frame. Returning the
@@ -2512,16 +2567,17 @@ fn _receiveDiscoveryDatagram(conn: NetConn, waitMs: i64) -> _DiscoveryDatagram? 
 }
 
 fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
-                  announcement: move Array<u8>, token: i64) {
+                  announcement: move Array<u8>, runtimeToken: i64,
+                  discoveryToken: i64) {
     var live = socket
     var wire = announcement
     defer {
         net.close(live)
-        _releaseDiscovery(token)
+        _releaseDiscovery(runtimeToken, discoveryToken)
     }
 
     var nextAnnouncementMs = 0
-    while (_discoveryActiveToken.load() == token) {
+    while (_discoveryIsActive(runtimeToken, discoveryToken)) {
         var nowMs = time.monotonic()
         if (nowMs >= nextAnnouncementMs) {
             try {
@@ -2539,14 +2595,17 @@ fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
             if (error != null && error != NetError.Timeout) { return }
             continue
         }
-        if (_discoveryActiveToken.load() != token) { return }
+        if (!_discoveryIsActive(runtimeToken, discoveryToken)) {
+            return
+        }
 
         nowMs = time.monotonic()
         var candidate = decodeDiscoveryAnnouncement(datagram!.bytes)
-        var connected = nodes()
+        var connected = _nodesForRuntime(runtimeToken)
         if (candidate == null || connected == null) { continue }
-        var departed = _recentDepartureSnapshot(nowMs)
-        if (shouldJoinDiscoveredNode(selfName, connected!, departed, candidate!, expectedHash)) {
+        var departed = _recentDepartureSnapshot(runtimeToken, nowMs)
+        if (departed == null) { return }
+        if (shouldJoinDiscoveredNode(selfName, connected!, departed!, candidate!, expectedHash)) {
             var peerHost = copy(datagram!.sender.host)
             var peerPort = candidate!.port
             // End every optional-record projection before `go`: these
@@ -2555,7 +2614,7 @@ fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
             datagram = null
             candidate = null
             connected = null
-            _scheduleDiscoveredNode(peerHost, peerPort)
+            _scheduleDiscoveredNode(runtimeToken, peerHost, peerPort)
         }
     }
 }
@@ -2565,6 +2624,8 @@ fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
 export type ClusterTlsOptions = {
     enabled: bool,
     caFile: string?,
+    // Every TLS-enabled node accepts peers as well as joining them, so it must
+    // have one complete identity. Client-only half-nodes are not admitted.
     certFile: string?,
     keyFile: string?,
     insecure: bool,
@@ -2584,9 +2645,9 @@ export type ClusterConfig = {
     maxMissedHeartbeats: i64?,
 }
 
-// Public cluster values and private peer state are declared here. The native
-// boundary is limited to TLS, discovery and listener wakeup; this module owns
-// the public nominal identities and their mapping from runtime state.
+// Public cluster values and private peer state are declared here. Generic net
+// and crypto providers own sockets, TLS, multicast and HMAC host resources;
+// this module owns every cluster-specific identity, policy and lifecycle.
 export enum ClusterDelivery {
     Accepted,
     InvalidTopic,
@@ -2596,25 +2657,12 @@ export enum ClusterDelivery {
     Disconnected,
 }
 
-export enum ClusterNodeState {
-    Idle,
-    Connecting,
-    Handshaking,
-    Connected,
-    Closing,
-}
-
-export type ClusterTlsStatus = {
-    enabled: bool,
-    clientReady: bool,
-    serverReady: bool,
-}
-
 export type ClusterNodeInfo = {
     name: string,
-    host: string,
-    port: i64,
-    state: ClusterNodeState,
+    // An outbound peer has the address used to join it. A directly accepted
+    // peer has no trustworthy advertised endpoint, so both fields are null.
+    host: string?,
+    port: i64?,
     framesSent: i64,
     framesReceived: i64,
     bytesSent: i64,
@@ -2632,14 +2680,13 @@ export type ClusterNodeInfo = {
 export type ClusterInfo = {
     self: string,
     port: i64,
-    running: bool,
     nodes: Array<ClusterNodeInfo>,
     listeners: i64,
     deadNodes: i64,
     heartbeatIntervalMs: i64,
     heartbeatTimeoutMs: i64,
     maxMissedHeartbeats: i64,
-    tls: ClusterTlsStatus,
+    tlsEnabled: bool,
 }
 
 export enum AddressError {
@@ -2829,14 +2876,20 @@ fn _topicTargets(topic: string, token: i64,
     var retained: Array<_TopicSubscription> = []
     var targets: Array<Channel<Buffer>> = []
     _lockTopicState()
+    if (_runtimeActiveToken.load() != token) {
+        _topicStateLock.store(false)
+        return targets
+    }
     for (var i = 0; i < len(_topicSubscriptions); i++) {
         var subscription = _topicSubscriptions[i]
-        if (subscription.runtimeToken != token || subscription.notifications.isClosed) {
-            if (subscription.runtimeToken == token &&
-                topicMatches(subscription.pattern, topic)) {
+        if (subscription.runtimeToken != token) {
+            retained.push(subscription)
+            continue
+        }
+        if (subscription.notifications.isClosed) {
+            if (topicMatches(subscription.pattern, topic)) {
                 stopped = stopped + 1
             }
-            subscription.notifications.close()
             continue
         }
         retained.push(subscription)
@@ -2902,21 +2955,27 @@ fn _deliverTopic(topic: string, envelope: Array<u8>) -> _DeliveryStats? {
     return stats
 }
 
-fn _topicListenerCount() -> i64 {
-    var token = _runtimeActiveToken.load()
-    if (token == 0) { return 0 }
+fn _topicListenerCount(token: i64) -> i64 {
+    if (token == 0) { return -1 }
     var retained: Array<_TopicSubscription> = []
+    var count = 0
     _lockTopicState()
+    if (_runtimeActiveToken.load() != token) {
+        _topicStateLock.store(false)
+        return -1
+    }
     for (var i = 0; i < len(_topicSubscriptions); i++) {
         var subscription = _topicSubscriptions[i]
-        if (subscription.runtimeToken == token && !subscription.notifications.isClosed) {
+        if (subscription.runtimeToken != token) {
             retained.push(subscription)
-        } else {
-            subscription.notifications.close()
+            continue
+        }
+        if (!subscription.notifications.isClosed) {
+            retained.push(subscription)
+            count = count + 1
         }
     }
     _topicSubscriptions = retained
-    var count = len(_topicSubscriptions)
     _topicStateLock.store(false)
     return count
 }
@@ -2931,10 +2990,7 @@ export fn self() -> string {
     return state == null ? "" : state!.selfName
 }
 
-// A node that has not joined a cluster has no membership to report, which is a
-// different answer from an empty cluster and is reported as one.
-export fn nodes() -> Array<string>? {
-    var runtimeToken = _runtimeActiveToken.load()
+fn _nodesForRuntime(runtimeToken: i64) -> Array<string>? {
     if (runtimeToken == 0 || _sourceStateSnapshot(runtimeToken) == null) { return null }
     var peers = _peerDirectorySnapshot(runtimeToken)
     if (_runtimeActiveToken.load() != runtimeToken) { return null }
@@ -2943,39 +2999,51 @@ export fn nodes() -> Array<string>? {
     return names
 }
 
+// A node that has not joined a cluster has no membership to report, which is a
+// different answer from an empty cluster and is reported as one.
+export fn nodes() -> Array<string>? {
+    return _nodesForRuntime(_runtimeActiveToken.load())
+}
+
 export fn discover() -> bool {
-    var snapshot = info()
-    if (snapshot == null || !snapshot!.running) { return false }
-    var hash = _discoveryHashBits.load() as u64
+    var runtimeToken = _runtimeActiveToken.load()
+    if (runtimeToken == 0) { return false }
+    var source = _sourceStateSnapshot(runtimeToken)
+    if (source == null) { return false }
+    var hash = discoveryClusterHash(source!.secret)
     var value: ClusterDiscoveryAnnouncement = {
-        name: snapshot!.self,
-        port: snapshot!.port,
+        name: source!.selfName,
+        port: source!.port,
         clusterHash: hash,
     }
     var announcement = encodeDiscoveryAnnouncement(value)
     if (announcement == null) { return false }
 
     var token = _discoveryNextToken.fetchAdd(1) + 1
-    var (_, acquired) = _discoveryActiveToken.compareExchange(0, token)
-    if (!acquired) { return false }
+    if (!_claimDiscovery(runtimeToken, token)) { return false }
 
     var socket: NetConn? = null
     try {
         socket = net.udpMulticastBind(DISCOVERY_MULTICAST_GROUP, DISCOVERY_MULTICAST_PORT,
                                       _DISCOVERY_MULTICAST_TTL, _DISCOVERY_LOOPBACK)
     } catch (e: NetError) {
-        _releaseDiscovery(token)
+        _releaseDiscovery(runtimeToken, token)
         return false
     }
     if (socket == null) {
-        _releaseDiscovery(token)
+        _releaseDiscovery(runtimeToken, token)
         return false
     }
     var live: NetConn = socket!
     socket = null
+    if (!_discoveryIsActive(runtimeToken, token)) {
+        net.close(live)
+        _releaseDiscovery(runtimeToken, token)
+        return false
+    }
     var wire: Array<u8> = announcement!
     announcement = null
-    go _discoveryLoop(move live, snapshot!.self, hash, move wire, token)
+    go _discoveryLoop(move live, source!.selfName, hash, move wire, runtimeToken, token)
     return true
 }
 
@@ -3009,11 +3077,8 @@ export fn info() -> ClusterInfo? {
                     : 0.0
         var publicNode: ClusterNodeInfo = {
             name: metadata!.name,
-            host: metadata!.host,
-            port: metadata!.port,
-            // Only committed source-directory peers are public. Reservation,
-            // handshake and departure remain private transition states.
-            state: ClusterNodeState.Connected,
+            host: len(metadata!.host) > 0 ? metadata!.host : null,
+            port: metadata!.port > 0 ? metadata!.port : null,
             framesSent: node.framesSent,
             framesReceived: node.framesReceived,
             bytesSent: node.bytesSent,
@@ -3029,23 +3094,22 @@ export fn info() -> ClusterInfo? {
         }
         nodes.push(publicNode)
     }
-    var tls: ClusterTlsStatus = {
-        enabled: state.tlsEnabled,
-        clientReady: state.tlsClientReady,
-        serverReady: state.tlsServerReady,
-    }
+    var listenerCount = _topicListenerCount(runtimeToken)
+    if (listenerCount < 0) { return null }
+    var deadNodeCount = _recentDepartureCount(runtimeToken, observedAtMs)
+    if (deadNodeCount < 0 || _runtimeActiveToken.load() != runtimeToken) { return null }
     var result: ClusterInfo = {
         self: state.selfName,
         port: state.port,
-        running: true,
         nodes: nodes,
-        listeners: _topicListenerCount(),
-        deadNodes: _recentDepartureCount(observedAtMs),
+        listeners: listenerCount,
+        deadNodes: deadNodeCount,
         heartbeatIntervalMs: state.heartbeatIntervalMs,
         heartbeatTimeoutMs: state.heartbeatTimeoutMs,
         maxMissedHeartbeats: state.maxMissedHeartbeats,
-        tls: tls,
+        tlsEnabled: state.tlsEnabled,
     }
+    if (_runtimeActiveToken.load() != runtimeToken) { return null }
     return result
 }
 
@@ -3102,7 +3166,7 @@ fn _clusterListener(port: i64) -> NetListener? {
 
 // A node whose name is not a legal node name cannot start. The listener, TLS
 // contexts, transport state and long-lived loops are ordinary Xray values and
-// coroutines; the runtime leaf only publishes the isolate lifecycle slot.
+// coroutines. The generation transition is the single-winner admission point.
 export fn start(config: ClusterConfig) -> bool {
     if (_currentSourceStateSnapshot() != null) { return false }
     if (!validNodeName(config.name)) { return false }
@@ -3134,6 +3198,7 @@ export fn start(config: ClusterConfig) -> bool {
             return false
         }
         if ((len(certFile) == 0) != (len(keyFile) == 0)) { return false }
+        if (tlsEnabled && len(certFile) == 0) { return false }
     }
 
     var runtimeToken = _runtimeNextToken.fetchAdd(1) + 1
@@ -3142,11 +3207,8 @@ export fn start(config: ClusterConfig) -> bool {
     if (tlsEnabled) {
         try {
             var client = TlsClientContext.create(caFile, certFile, keyFile, !insecure)
-            var server: TlsServerContext? = null
-            if (len(certFile) > 0) {
-                server = TlsServerContext.create(
-                    certFile, keyFile, caFile, !insecure && len(caFile) > 0)
-            }
+            var server = TlsServerContext.create(
+                certFile, keyFile, caFile, !insecure && len(caFile) > 0)
             tlsResources = {
                 runtimeToken: runtimeToken,
                 client: client,
@@ -3164,7 +3226,6 @@ export fn start(config: ClusterConfig) -> bool {
         net.close(listener!)
         return false
     }
-    var started = __start()
     var state: _ClusterSourceState = {
         runtimeToken: runtimeToken,
         selfName: config.name,
@@ -3174,31 +3235,27 @@ export fn start(config: ClusterConfig) -> bool {
         heartbeatTimeoutMs: timeout,
         maxMissedHeartbeats: missed,
         tlsEnabled: tlsEnabled,
-        tlsClientReady: tlsEnabled,
-        tlsServerReady: tlsEnabled && len(certFile) > 0,
     }
-    return _activateClusterSource(started, state, tlsResources, tick, move listener)
+    return _activateClusterSource(state, tlsResources, tick, move listener)
 }
 
-// The address is parsed here and the leaf is handed a host and a port, so the
-// grammar has one owner. A malformed address raises AddressError rather than
-// answering false: "you spelled the address wrong" and "the peer did not
-// answer" are different facts, and both backends used to flatten them into the
-// same false.
+// The address is parsed here and the generic network API receives a host and a
+// port, so the grammar has one owner. A malformed address raises AddressError
+// rather than answering false: "you spelled the address wrong" and "the peer
+// did not answer" are different facts.
 export fn join(addr: string) -> bool {
     var parsed = parseAddress(addr)
     return _joinPeer(parsed.host, parsed.port)
 }
 
 export fn stop() {
-    _discoveryActiveToken.store(0)
     var retiredToken = _retireCurrentRuntimeGeneration()
+    if (retiredToken != 0) { _stopDiscovery(retiredToken) }
     if (retiredToken != 0) { _closeSourceListener(retiredToken) }
-    _closeTopicSubscriptions()
+    if (retiredToken != 0) { _closeTopicSubscriptions(retiredToken) }
     if (retiredToken != 0) { _clearPhiPeerStates(retiredToken) }
     if (retiredToken != 0) { _stopPeerTransports(retiredToken) }
     if (retiredToken != 0) { _clearSourceState(retiredToken) }
-    __stop()
 }
 
 // ========== Publish and subscribe ==========

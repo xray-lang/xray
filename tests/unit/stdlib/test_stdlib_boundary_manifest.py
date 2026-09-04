@@ -60,7 +60,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
 
     def test_source_only_module_declares_no_native_entries(self) -> None:
         manifest = load_manifest(ROOT)
-        for name in ("base64", "compress", "csv"):
+        for name in ("base64", "cluster", "compress", "csv"):
             module = manifest.by_name[name]
             self.assertIn(name, source_modules(ROOT))
             self.assertNotIn(name, native_entry_binder_modules(ROOT))
@@ -75,7 +75,6 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         # bypass the generic loader's boundary inventory.
         self.assertEqual(
             {
-                "cluster",
                 "crypto",
                 "http2",
                 "io",

@@ -1,16 +1,16 @@
 {
   "schema": 1,
-  "base": "7222c8d1f54c8ad60406b529a1dc5c84baa0992f",
+  "base": "b8abcc33a975a0350e261f87dc7784f238013e14",
   "counts": {
     "modules": 33,
     "production_modules": 31,
     "test_only_modules": 2,
-    "symbols": 1820,
-    "production_symbols": 1794,
-    "xray_body_symbols": 1365,
-    "handwritten_c_semantic_owner": 250,
-    "native_leaf_symbols": 175,
-    "production_native_leaf_symbols": 175,
+    "symbols": 1632,
+    "production_symbols": 1606,
+    "xray_body_symbols": 1441,
+    "handwritten_c_semantic_owner": 0,
+    "native_leaf_symbols": 161,
+    "production_native_leaf_symbols": 161,
     "unclassified_native_leaf": 0,
     "whole_module_native_policy": 0,
     "public_native_symbols": 0,
@@ -21,10 +21,10 @@
     "c_functions_without_manifest_module": 0,
     "def_symbols_without_manifest_module": 0,
     "queue": {
-      "deepen-existing-xray": 2,
+      "deepen-existing-xray": 0,
       "establish-xray-source": 1,
       "needs-generic-loader": 0,
-      "native-leaf-only": 28,
+      "native-leaf-only": 30,
       "test-only": 2
     }
   },
@@ -537,22 +537,22 @@
       "policy": "xray_semantic",
       "audience": "production",
       "semantic_source": "stdlib/net/net.xr",
-      "loader_declarations": [],
+      "loader_declarations": [
+        "load_time_classes"
+      ],
       "public_native": [],
       "xr_sources": [
         "stdlib/net/net.xr"
       ],
-      "c_sources": [
-        "stdlib/net/net.c"
-      ],
-      "c_function_count": 110,
+      "c_sources": [],
+      "c_function_count": 0,
       "enters_module_graph": true,
-      "symbol_count": 161,
-      "xray_body_symbols": 48,
-      "handwritten_c_symbols": 109,
+      "symbol_count": 88,
+      "xray_body_symbols": 57,
+      "handwritten_c_symbols": 28,
       "native_leaf_symbols": 29,
-      "queue": "deepen-existing-xray",
-      "queue_reason": "82 handwritten C functions remain behind the .xr surface",
+      "queue": "native-leaf-only",
+      "queue_reason": "no handwritten C owner and no per-module loader",
       "probe": {}
     },
     {
@@ -639,8 +639,8 @@
       ],
       "c_function_count": 2,
       "enters_module_graph": true,
-      "symbol_count": 12,
-      "xray_body_symbols": 10,
+      "symbol_count": 14,
+      "xray_body_symbols": 12,
       "handwritten_c_symbols": 2,
       "native_leaf_symbols": 2,
       "queue": "native-leaf-only",
@@ -680,25 +680,15 @@
       "xr_sources": [
         "stdlib/cluster/cluster.xr"
       ],
-      "c_sources": [
-        "stdlib/cluster/cluster.c",
-        "stdlib/cluster/cluster_aot.c",
-        "stdlib/cluster/cluster_auth.c",
-        "stdlib/cluster/cluster_discovery.c",
-        "stdlib/cluster/cluster_health.c",
-        "stdlib/cluster/cluster_monitor.c",
-        "stdlib/cluster/cluster_node.c",
-        "stdlib/cluster/cluster_proto.c",
-        "stdlib/cluster/cluster_topic.c"
-      ],
-      "c_function_count": 184,
+      "c_sources": [],
+      "c_function_count": 0,
       "enters_module_graph": true,
-      "symbol_count": 275,
-      "xray_body_symbols": 93,
-      "handwritten_c_symbols": 179,
-      "native_leaf_symbols": 14,
-      "queue": "deepen-existing-xray",
-      "queue_reason": "168 handwritten C functions remain behind the .xr surface",
+      "symbol_count": 158,
+      "xray_body_symbols": 158,
+      "handwritten_c_symbols": 0,
+      "native_leaf_symbols": 0,
+      "queue": "native-leaf-only",
+      "queue_reason": "no handwritten C owner and no per-module loader",
       "probe": {}
     },
     {
@@ -8821,14 +8811,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
       "leaf_reason": "abi=getaddrinfo(3) and freeaddrinfo(3), with an inet_pton(3) fast path for literal addresses and inet_ntop(3) on the way out; ownership=fresh; effect=suspends; provider=the platform resolver. The VM wraps it in the runtime's per-runtime DNS LRU cache and offloads the blocking call to the async thread pool so the coroutine parks (src/io/xdns.c); AOT calls getaddrinfo synchronously with no cache and no offload; deletion_trigger=when Xray source can issue the getaddrinfo(3) call itself, and the cache and the thread-pool offload are expressed once rather than existing on one backend only",
       "plan_coverage": "native_binding",
       "vm_binding": "net_resolve_all_yieldable",
-      "aot_binding": "xrt_net_resolve_all",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_resolve_all"
     },
     {
       "module": "net",
@@ -8836,29 +8825,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
       "leaf_reason": "abi=socket(2), fcntl(2) F_SETFL, setsockopt(2) TCP_NODELAY, non-blocking connect(2), then getsockopt(2) SO_ERROR for the verdict; the io_uring path uses IORING_OP_CONNECT and reads the verdict from the completion instead; ownership=fresh; effect=suspends; provider=kernel connect(2); the writability wait is the Xray netpoll on the VM and select(2) on the non-coroutine AOT path. The address differs: VM resolves through src/io/xdns.c, AOT through its own inet_pton(3) wrapper in src/aot/xrt_net.h; deletion_trigger=when Xray source can issue the connect(2) call itself and await writability through the netpoll; the SO_ERROR round trip is the connect verdict and cannot be split off first",
       "plan_coverage": "native_binding",
       "vm_binding": "net_connect_fd_yieldable",
-      "aot_binding": "xrt_net_connect_fd",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "__nowMs",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "native_leaf": true,
-      "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=clock_gettime(2) CLOCK_MONOTONIC; on Windows QueryPerformanceCounter on the VM and GetTickCount64 on AOT; ownership=none; effect=nothrow; provider=kernel clock via libc. VM stdlib/net/net.c -> src/os/os_time.h xr_time_monotonic_ns; AOT src/aot/xrt_net.h inlines clock_gettime. Equivalent on POSIX; different clock sources and resolutions on Windows; deletion_trigger=when net.xr reads the monotonic clock through time.__monotonicNanos instead of its own copy, which needs the multi-module program authority that blockers/a-stdlib-multi-module-program-authority.md tracks",
-      "plan_coverage": "native_binding",
-      "vm_binding": "net_now_ms_fn",
-      "aot_binding": "xrt_net_now_ms_fn",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_connect_fd"
     },
     {
       "module": "net",
@@ -8866,14 +8839,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; reads a per-worker thread-local integer, used because a failed connect has no handle to attach the code to; ownership=none; effect=nothrow; provider=an XR_THREAD_LOCAL slot in the Xray runtime. VM stdlib/net/net.c g_last_connect_code; AOT src/aot/xrt_net.h g_xrt_last_connect_code. Two separate slots with the same contract; deletion_trigger=when net.__connectFd returns its error code in its own result, so no thread-local has to carry it between two calls",
+      "leaf_reason": "abi=none; reads a per-worker thread-local integer, used because a failed connect has no handle to attach the code to; ownership=none; effect=nothrow; provider=an XR_THREAD_LOCAL slot in the Xray runtime. VM src/io/xnet_provider.c g_last_connect_code; AOT src/aot/xrt_net.h g_xrt_last_connect_code. Two separate slots with the same contract; deletion_trigger=when net.__connectFd returns its error code in its own result, so no thread-local has to carry it between two calls",
       "plan_coverage": "native_binding",
       "vm_binding": "net_last_connect_code",
-      "aot_binding": "xrt_net_last_connect_code",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_last_connect_code"
     },
     {
       "module": "net",
@@ -8881,14 +8853,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=socket(2), setsockopt(2) SO_REUSEADDR, setsockopt(2) IPV6_V6ONLY=0 for dual stack, bind(2), listen(2), fcntl(2) F_SETFL, and getsockname(2) to read back a kernel-assigned port; the VM path also sets TCP_NOTSENT_LOWAT; ownership=fresh; effect=nothrow; provider=kernel socket/bind/listen. VM stdlib/net/net.c -> src/io/xnet_transport.c xr_io_listen; AOT src/aot/xrt_net.h xrt_net_listen_fd. Equivalent behaviour, two implementations; deletion_trigger=when Xray source can issue the socket(2)/bind(2)/listen(2) sequence itself; the sequence is one atomic setup from the caller's point of view and cannot be usefully split first",
+      "leaf_reason": "abi=socket(2), setsockopt(2) SO_REUSEADDR, setsockopt(2) IPV6_V6ONLY=0 for dual stack, bind(2), listen(2), fcntl(2) F_SETFL, and getsockname(2) to read back a kernel-assigned port; the VM path also sets TCP_NOTSENT_LOWAT; ownership=fresh; effect=nothrow; provider=kernel socket/bind/listen. VM src/io/xnet_provider.c -> src/io/xnet_transport.c xr_io_listen; AOT src/aot/xrt_net.h xrt_net_listen_fd. Equivalent behaviour, two implementations; deletion_trigger=when Xray source can issue the socket(2)/bind(2)/listen(2) sequence itself; the sequence is one atomic setup from the caller's point of view and cannot be usefully split first",
       "plan_coverage": "native_binding",
       "vm_binding": "net_listen_fd",
-      "aot_binding": "xrt_net_listen_fd",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_listen_fd"
     },
     {
       "module": "net",
@@ -8896,14 +8867,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=accept(2) -- on the Linux io_uring path with SOCK_NONBLOCK, i.e. accept4(2) semantics -- plus fcntl(2) F_SETFL and setsockopt(2) TCP_NODELAY on the accepted descriptor; ownership=fresh; effect=suspends; provider=kernel accept(2); the wait is the Xray netpoll (kqueue/epoll/io_uring/IOCP-AFD) on the VM and, under a coroutine, on AOT too. VM stdlib/net/net.c -> src/coro/xsocket.c xr_socket_accept_try; AOT src/aot/xrt_net.h xrt_net_accept_try under a coroutine and a select(2) wait otherwise; deletion_trigger=when Xray source can issue the accept(2) call itself and register the resulting descriptor with the netpoll; the descriptor's non-blocking and TCP_NODELAY setup would move to net.xr at the same time",
+      "leaf_reason": "abi=accept(2) -- on the Linux io_uring path with SOCK_NONBLOCK, i.e. accept4(2) semantics -- plus fcntl(2) F_SETFL and setsockopt(2) TCP_NODELAY on the accepted descriptor; ownership=fresh; effect=suspends; provider=kernel accept(2); the wait is the Xray netpoll (kqueue/epoll/io_uring/IOCP-AFD) on the VM and, under a coroutine, on AOT too. VM src/io/xnet_provider.c -> src/coro/xsocket.c xr_socket_accept_try; AOT src/aot/xrt_net.h xrt_net_accept_try under a coroutine and a select(2) wait otherwise; deletion_trigger=when Xray source can issue the accept(2) call itself and register the resulting descriptor with the netpoll; the descriptor's non-blocking and TCP_NODELAY setup would move to net.xr at the same time",
       "plan_coverage": "native_binding",
       "vm_binding": "net_accept_handle_yieldable",
-      "aot_binding": "xrt_net_accept",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_accept"
     },
     {
       "module": "net",
@@ -8911,14 +8881,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
       "leaf_reason": "abi=read(2) (Win32 recv(2)) through the xr_socket_recv shim, or IORING_OP_RECV on the io_uring path; on the VM a TLS connection instead uses OpenSSL SSL_read(3) and SSL_get_error(3); ownership=none; effect=suspends; provider=kernel read; the readability wait is the Xray netpoll on the VM and under an AOT coroutine, select(2) otherwise. TLS exists on the VM only -- the AOT helper returns NETERR_TLS for a TLS connection; deletion_trigger=when Xray source can issue the read(2) call itself and await readability through the netpoll, and the TLS branch has one implementation both backends share",
       "plan_coverage": "native_binding",
       "vm_binding": "net_read_into_yieldable",
-      "aot_binding": "xrt_net_read_into",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_read_into"
     },
     {
       "module": "net",
@@ -8926,74 +8895,27 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
       "leaf_reason": "abi=write(2) (Win32 send(2)) through the xr_socket_send shim, or IORING_OP_SEND on the io_uring path; on the VM a TLS connection instead uses OpenSSL SSL_write(3) and SSL_get_error(3); ownership=none; effect=suspends; provider=kernel write; the writability wait is the Xray netpoll on the VM and under an AOT coroutine, select(2) otherwise. TLS exists on the VM only -- the AOT helper returns NETERR_TLS for a TLS connection; deletion_trigger=when Xray source can issue the write(2) call itself and await writability through the netpoll, and the TLS branch has one implementation both backends share",
       "plan_coverage": "native_binding",
       "vm_binding": "net_write_bytes_yieldable",
-      "aot_binding": "xrt_net_write_bytes",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_write_bytes"
     },
     {
       "module": "net",
-      "symbol": "__copyBidirectional",
+      "symbol": "__shutdownDirection",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=read(2)/write(2) through the xr_socket_recv/xr_socket_send shims, shutdown(2) SHUT_WR on each half-close and shutdown(2) SHUT_RDWR at the end; the AOT pump additionally uses select(2); ownership=fresh; effect=suspends, __NetError.Timeout, __NetError.Closed, __NetError.Reset, __NetError.Refused, __NetError.Dns, __NetError.Tls, __NetError.Io, __NetError.Invalid, __NetError.Cancelled, __NetError.OutOfMemory; provider=kernel read/write/shutdown. The pump differs completely: the VM spawns two native coroutines driven by the netpoll (stdlib/net/net.c), while AOT runs a single blocking select(2) loop on the runtime async thread pool and refuses any TLS connection outright (divergence 3 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md); deletion_trigger=when net.xr can spawn two coroutines over __readInto/__writeBytes and express the half-close rule itself, which needs the AOT side to stop declining TLS connections so both backends run the same program",
+      "leaf_reason": "abi=shutdown(2) with SHUT_RD, SHUT_WR, or SHUT_RDWR selected by the primitive direction argument; ownership=none; effect=nothrow; provider=kernel shutdown(2). VM src/io/xnet_provider.c net_shutdown_direction records errno on the handle; AOT src/aot/xrt_net.h xrt_net_shutdown_direction returns only a bool; deletion_trigger=when Xray source can issue shutdown(2) itself; the public direction-specific API is already source-owned and this is the single remaining syscall boundary",
       "plan_coverage": "native_binding",
-      "vm_binding": "net_copy_bidirectional_yieldable",
-      "aot_binding": "xrt_net_copy_bidirectional",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "__shutdownRead",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "native_leaf": true,
-      "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=shutdown(2) with SHUT_RD; ownership=none; effect=nothrow; provider=kernel shutdown(2). VM stdlib/net/net.c net_shutdown_read; AOT src/aot/xrt_net.h xrt_net_shutdown_read; deletion_trigger=when Xray source can issue the shutdown(2) call itself, at which point the three direction-specific leaves collapse into one call with a direction argument",
-      "plan_coverage": "native_binding",
-      "vm_binding": "net_shutdown_read",
-      "aot_binding": "xrt_net_shutdown_read",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "__shutdownWrite",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "native_leaf": true,
-      "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=shutdown(2) with SHUT_WR; ownership=none; effect=nothrow; provider=kernel shutdown(2). VM stdlib/net/net.c net_shutdown_write; AOT src/aot/xrt_net.h xrt_net_shutdown_write; deletion_trigger=when Xray source can issue the shutdown(2) call itself, at which point the three direction-specific leaves collapse into one call with a direction argument",
-      "plan_coverage": "native_binding",
-      "vm_binding": "net_shutdown_write",
-      "aot_binding": "xrt_net_shutdown_write",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "__shutdown",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "native_leaf": true,
-      "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=shutdown(2) with SHUT_RDWR; ownership=none; effect=nothrow; provider=kernel shutdown(2). VM stdlib/net/net.c net_shutdown_conn, which also records the errno on the handle; AOT src/aot/xrt_net.h xrt_net_shutdown, which returns only a bool; deletion_trigger=when Xray source can issue the shutdown(2) call itself; the leaf is already the minimal form of this boundary",
-      "plan_coverage": "native_binding",
-      "vm_binding": "net_shutdown_conn",
-      "aot_binding": "xrt_net_shutdown",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "vm_binding": "net_shutdown_direction",
+      "aot_binding": "xrt_net_shutdown_direction"
     },
     {
       "module": "net",
@@ -9001,14 +8923,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=close(2) (Win32 closesocket), preceded on the AOT side by shutdown(2) SHUT_RDWR; netpoll deregistration is epoll_ctl(2) EPOLL_CTL_DEL or kevent(2) EV_DELETE; on the VM a TLS connection first runs OpenSSL SSL_shutdown(3) and SSL_free(3); ownership=none; effect=nothrow; provider=libc close plus Xray netpoll deregistration, plus OpenSSL on the VM only. VM stdlib/net/net.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c; deletion_trigger=when the runtime offers a typed socket handle whose release Xray source can express, so the descriptor close, the netpoll deregistration and the TLS teardown stop having to happen together inside one C call",
+      "leaf_reason": "abi=close(2) (Win32 closesocket), preceded on the AOT side by shutdown(2) SHUT_RDWR; netpoll deregistration is epoll_ctl(2) EPOLL_CTL_DEL or kevent(2) EV_DELETE; on the VM a TLS connection first runs OpenSSL SSL_shutdown(3) and SSL_free(3); ownership=none; effect=nothrow; provider=libc close plus Xray netpoll deregistration, plus OpenSSL on the VM only. VM src/io/xnet_provider.c -> src/io/xnet_handle.c; AOT src/aot/xrt_net.h -> xr_aot_netpoll_close_fd in src/coro/xaot_runtime.c; deletion_trigger=when the runtime offers a typed socket handle whose release Xray source can express, so the descriptor close, the netpoll deregistration and the TLS teardown stop having to happen together inside one C call",
       "plan_coverage": "native_binding",
       "vm_binding": "net_close_handle",
-      "aot_binding": "xrt_net_close",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_close"
     },
     {
       "module": "net",
@@ -9016,59 +8937,55 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; reads the descriptor field of a runtime-owned socket handle, answering -1 once the handle is closed; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM stdlib/net/net.c net_fd_handle -> handle_get_fd; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent; deletion_trigger=when the socket handle's representation is declared in Xray rather than owned by the runtime, so reading its descriptor is a field access instead of a native call",
+      "leaf_reason": "abi=none; reads the descriptor field of a runtime-owned socket handle, answering -1 once the handle is closed; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM src/io/xnet_provider.c net_fd_handle; AOT src/aot/xrt_net.h xrt_net_fd. Semantically equivalent; deletion_trigger=when the socket handle's representation is declared in Xray rather than owned by the runtime, so reading its descriptor is a field access instead of a native call",
       "plan_coverage": "native_binding",
       "vm_binding": "net_fd_handle",
-      "aot_binding": "xrt_net_fd",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_fd"
     },
     {
       "module": "net",
-      "symbol": "__setReadDeadline",
+      "symbol": "__connIsTLS",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; writes the read-deadline field on the connection handle; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM stdlib/net/net.c net_set_read_deadline; AOT src/aot/xrt_net.h xrt_net_set_read_deadline; deletion_trigger=when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call",
+      "leaf_reason": "abi=none; reads the transport-kind field of a runtime-owned connection handle; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM src/io/xnet_provider.c net_conn_is_tls; AOT src/aot/xrt_net.h xrt_net_is_tls; deletion_trigger=when the connection handle representation is declared in Xray, so the TLS transport tag is an ordinary field read",
       "plan_coverage": "native_binding",
-      "vm_binding": "net_set_read_deadline",
-      "aot_binding": "xrt_net_set_read_deadline",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "vm_binding": "net_conn_is_tls",
+      "aot_binding": "xrt_net_is_tls"
     },
     {
       "module": "net",
-      "symbol": "__setWriteDeadline",
+      "symbol": "__listenerPort",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; writes the write-deadline field on the connection handle; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM stdlib/net/net.c net_set_write_deadline; AOT src/aot/xrt_net.h xrt_net_set_write_deadline; deletion_trigger=when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call",
+      "leaf_reason": "abi=none; reads the bound-port field of a runtime-owned listener handle; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM src/io/xnet_provider.c net_listener_port; AOT src/aot/xrt_net.h xrt_net_listener_port; deletion_trigger=when the listener handle representation is declared in Xray, so the port cached after bind is an ordinary field read",
       "plan_coverage": "native_binding",
-      "vm_binding": "net_set_write_deadline",
-      "aot_binding": "xrt_net_set_write_deadline",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "vm_binding": "net_listener_port",
+      "aot_binding": "xrt_net_listener_port"
     },
     {
       "module": "net",
-      "symbol": "__setDeadline",
+      "symbol": "__setDeadlineDirection",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; writes both the read and the write deadline fields on the connection handle; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM stdlib/net/net.c net_set_deadline; AOT src/aot/xrt_net.h xrt_net_set_deadline; deletion_trigger=when the socket handle's representation is declared in Xray; this leaf is already only the pair of the two single-sided setters and would go with them",
+      "leaf_reason": "abi=none; writes the selected read, write, or both deadline fields on the connection handle; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM src/io/xnet_provider.c net_set_deadline_direction; AOT src/aot/xrt_net.h xrt_net_set_deadline_direction; deletion_trigger=when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call",
       "plan_coverage": "native_binding",
-      "vm_binding": "net_set_deadline",
-      "aot_binding": "xrt_net_set_deadline",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "vm_binding": "net_set_deadline_direction",
+      "aot_binding": "xrt_net_set_deadline_direction"
     },
     {
       "module": "net",
@@ -9076,14 +8993,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
       "leaf_reason": "abi=none; writes an absolute monotonic-millisecond field on the listener handle. It is not setsockopt(2) SO_RCVTIMEO; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory; the field is consumed by the netpoll timer wheel on the VM and by the select(2) timeval on AOT; deletion_trigger=when the socket handle's representation is declared in Xray, so setting a deadline is a field assignment rather than a native call",
       "plan_coverage": "native_binding",
       "vm_binding": "net_set_accept_deadline",
-      "aot_binding": "xrt_net_set_accept_deadline",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_set_accept_deadline"
     },
     {
       "module": "net",
@@ -9091,14 +9007,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
       "leaf_reason": "abi=none; reads the portable XR_NETERR_* code cached on the handle by whichever call last failed; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory; the code is written by net_error_from_errno (VM) or xrt_net_error_from_errno (AOT), which normalise errno into one portable vocabulary; deletion_trigger=when a failing net leaf returns its error code in its own result instead of leaving it on the handle for a second call to collect",
       "plan_coverage": "native_binding",
       "vm_binding": "net_last_code",
-      "aot_binding": "xrt_net_last_code",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_last_code"
     },
     {
       "module": "net",
@@ -9106,14 +9021,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; reads the errno snapshot cached on the handle at the point of failure, not the live errno; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM stdlib/net/net.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno; deletion_trigger=when a failing net leaf returns the platform errno in its own result, so it does not have to be snapshotted onto the handle for a later call",
+      "leaf_reason": "abi=none; reads the errno snapshot cached on the handle at the point of failure, not the live errno; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM src/io/xnet_provider.c net_last_errno; AOT src/aot/xrt_net.h xrt_net_last_errno; deletion_trigger=when a failing net leaf returns the platform errno in its own result, so it does not have to be snapshotted onto the handle for a later call",
       "plan_coverage": "native_binding",
       "vm_binding": "net_last_errno",
-      "aot_binding": "xrt_net_last_errno",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_last_errno"
     },
     {
       "module": "net",
@@ -9121,14 +9035,65 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "build_identity_leaf",
-      "leaf_reason": "abi=none; reports whether a TLS provider was linked into this build; ownership=none; effect=nothrow; provider=build configuration. The VM answers from XR_ENABLE_TLS in stdlib/net/net.c; the standalone AOT runtime links no TLS engine and src/aot/xrt_net.h returns false unconditionally; deletion_trigger=when the TLS provider is present in every supported build, so the question has one answer and net.xr can stop asking it -- or when build configuration becomes readable from Xray source",
+      "leaf_reason": "abi=none; reports whether a TLS provider was linked into this build; ownership=none; effect=nothrow; provider=build configuration. The VM answers from XR_ENABLE_TLS in src/io/xnet_provider.c; the standalone AOT runtime links no TLS engine and src/aot/xrt_net.h returns false unconditionally; deletion_trigger=when the TLS provider is present in every supported build, so the question has one answer and net.xr can stop asking it -- or when build configuration becomes readable from Xray source",
       "plan_coverage": "native_binding",
       "vm_binding": "net_has_tls",
-      "aot_binding": "xrt_net_has_tls",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_has_tls"
+    },
+    {
+      "module": "net",
+      "symbol": "__newTlsClientContext",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "external",
+      "native_leaf": true,
+      "leaf_class": "security_provider_leaf",
+      "leaf_reason": "abi=OpenSSL SSL_CTX_new(3), trust-store loading and optional certificate/private-key loading; ownership=fresh; effect=nothrow; provider=OpenSSL context construction behind an immutable managed Xray resource; net.xr validates paths and chooses verification policy; deletion_trigger=never while OpenSSL owns TLS policy objects; this remains the resource factory for an audited security provider",
+      "plan_coverage": "native_binding",
+      "vm_binding": "net_tls_client_context_new"
+    },
+    {
+      "module": "net",
+      "symbol": "__newTlsServerContext",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "external",
+      "native_leaf": true,
+      "leaf_class": "security_provider_leaf",
+      "leaf_reason": "abi=OpenSSL SSL_CTX_new(3), server certificate/private-key loading and optional peer trust-store loading; ownership=fresh; effect=nothrow; provider=OpenSSL context construction behind an immutable managed Xray resource; net.xr validates paths and chooses verification policy; deletion_trigger=never while OpenSSL owns TLS policy objects; this remains the resource factory for an audited security provider",
+      "plan_coverage": "native_binding",
+      "vm_binding": "net_tls_server_context_new"
+    },
+    {
+      "module": "net",
+      "symbol": "__tlsClientHandshakeWithContext",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "external",
+      "native_leaf": true,
+      "leaf_class": "security_provider_leaf",
+      "leaf_reason": "abi=OpenSSL SSL_new(3), SNI and hostname verification setup, SSL_connect(3), SSL_get_error(3), plus the scheduler netpoll wait ABI; ownership=none; effect=suspends; provider=the generic non-blocking NetConn TLS provider parameterized by an immutable TlsClientContext managed by Xray source; deletion_trigger=never while OpenSSL owns client TLS handshakes; it may merge with the default-context leaf when both backends share one provider ABI",
+      "plan_coverage": "native_binding",
+      "vm_binding": "net_tls_client_handshake_context_yieldable"
+    },
+    {
+      "module": "net",
+      "symbol": "__tlsServerHandshakeWithContext",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "external",
+      "native_leaf": true,
+      "leaf_class": "security_provider_leaf",
+      "leaf_reason": "abi=OpenSSL SSL_new(3), SSL_accept(3), SSL_get_error(3), plus the scheduler netpoll wait ABI; ownership=none; effect=suspends; provider=the generic non-blocking NetConn TLS provider parameterized by an immutable TlsServerContext managed by Xray source; deletion_trigger=never while OpenSSL owns server TLS handshakes; it remains the audited security-provider boundary",
+      "plan_coverage": "native_binding",
+      "vm_binding": "net_tls_server_handshake_context_yieldable"
     },
     {
       "module": "net",
@@ -9136,14 +9101,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "security_provider_leaf",
       "leaf_reason": "abi=OpenSSL SSL_new(3), SSL_set_fd(3), SSL_set_tlsext_host_name(3) for SNI, SSL_connect(3) (the client-side SSL_do_handshake), SSL_get_error(3), and SSL_shutdown(3)/SSL_free(3) plus close(2) on failure; ownership=none; effect=suspends; provider=OpenSSL, on the VM only (src/io/xtls_provider.c xr_tls_conn_handshake_try; WANT_READ/WANT_WRITE park the coroutine on the netpoll). The standalone AOT runtime links no TLS engine and src/aot/xrt_net.h closes the connection and returns NETERR_TLS -- divergence 3 of blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md; deletion_trigger=never on the security grounds alone: a TLS handshake reimplemented in Xray would move certificate validation and the record layer out of an audited provider. The leaf changes only when the provider changes, and it can narrow once both backends link the same one",
       "plan_coverage": "native_binding",
       "vm_binding": "net_tls_handshake_yieldable",
-      "aot_binding": "xrt_net_tls_handshake",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_tls_handshake"
     },
     {
       "module": "net",
@@ -9151,14 +9115,26 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=socket(2) SOCK_DGRAM, inet_pton(3), bind(2) and fcntl(2) F_SETFL; ownership=fresh; effect=nothrow; provider=kernel socket/bind. VM stdlib/net/net.c net_udp_bind_handle; AOT src/aot/xrt_net.h xrt_net_udp_bind. Equivalent behaviour, two implementations; deletion_trigger=when Xray source can issue the socket(2)/bind(2) pair itself; the setup is atomic from the caller's point of view and has no smaller form",
+      "leaf_reason": "abi=socket(2) SOCK_DGRAM, inet_pton(3), bind(2) and fcntl(2) F_SETFL; ownership=fresh; effect=nothrow; provider=kernel socket/bind. VM src/io/xnet_provider.c net_udp_bind_handle; AOT src/aot/xrt_net.h xrt_net_udp_bind. Equivalent behaviour, two implementations; deletion_trigger=when Xray source can issue the socket(2)/bind(2) pair itself; the setup is atomic from the caller's point of view and has no smaller form",
       "plan_coverage": "native_binding",
       "vm_binding": "net_udp_bind_handle",
-      "aot_binding": "xrt_net_udp_bind",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_udp_bind"
+    },
+    {
+      "module": "net",
+      "symbol": "__udpMulticastBind",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "external",
+      "native_leaf": true,
+      "leaf_class": "host_abi_leaf",
+      "leaf_reason": "abi=socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP; ownership=fresh; effect=nothrow; provider=kernel multicast socket setup in src/io/xnet_provider.c. net.xr owns IPv4 multicast address validation and option ranges; cluster.xr owns discovery bytes, cadence, admission and lifecycle. There is no AOT binding until the generic net provider gains the same multicast socket constructor; deletion_trigger=when Xray source can issue the multicast socket setup calls itself; the leaf is generic net host ABI and contains no cluster protocol policy",
+      "plan_coverage": "native_binding",
+      "vm_binding": "net_udp_multicast_bind_handle"
     },
     {
       "module": "net",
@@ -9166,14 +9142,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
       "leaf_reason": "abi=sendto(2); ownership=none; effect=suspends; provider=kernel sendto; the writability wait is the Xray netpoll on the VM and select(2) on AOT. The destination address differs: VM goes through src/io/xdns.c (literals only), AOT through its own inet_pton(3) wrapper; deletion_trigger=when Xray source can issue the sendto(2) call itself and await writability through the netpoll",
       "plan_coverage": "native_binding",
       "vm_binding": "net_udp_send_to_yieldable",
-      "aot_binding": "xrt_net_udp_send_to",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_udp_send_to"
     },
     {
       "module": "net",
@@ -9181,14 +9156,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=recvfrom(2), then inet_ntop(3) and ntohs(3) to record the sender; ownership=none; effect=suspends; provider=kernel recvfrom; the readability wait is the Xray netpoll on the VM and select(2) on AOT. VM stdlib/net/net.c net_udp_recv_step; AOT src/aot/xrt_net.h xrt_net_udp_recv_into; deletion_trigger=when Xray source can issue the recvfrom(2) call itself and await readability through the netpoll; the sender formatting would move to net.xr with it",
+      "leaf_reason": "abi=recvfrom(2), then inet_ntop(3) and ntohs(3) to record the sender; ownership=none; effect=suspends; provider=kernel recvfrom; the readability wait is the Xray netpoll on the VM and select(2) on AOT. VM src/io/xnet_provider.c net_udp_recv_step; AOT src/aot/xrt_net.h xrt_net_udp_recv_into; deletion_trigger=when Xray source can issue the recvfrom(2) call itself and await readability through the netpoll; the sender formatting would move to net.xr with it",
       "plan_coverage": "native_binding",
       "vm_binding": "net_udp_recv_into_yieldable",
-      "aot_binding": "xrt_net_udp_recv_into",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_udp_recv_into"
     },
     {
       "module": "net",
@@ -9196,14 +9170,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
       "leaf_reason": "abi=none; reads the sender-address string cached on the handle. The inet_ntop(3) that formatted it ran inside net.__udpRecvInto, not here; ownership=fresh; effect=nothrow; provider=the Xray runtime's own object memory; the VM interns the string, AOT copies it into a fresh allocation; deletion_trigger=when net.__udpRecvInto returns the sender address in its own result, so it does not have to be parked on the handle for a second call to collect",
       "plan_coverage": "native_binding",
       "vm_binding": "net_udp_from_host",
-      "aot_binding": "xrt_net_udp_from_host",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "aot_binding": "xrt_net_udp_from_host"
     },
     {
       "module": "net",
@@ -9211,36 +9184,13 @@
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
+      "handwritten_c_body": "external",
       "native_leaf": true,
       "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; reads the sender-port field on the handle. The ntohs(3) that produced it ran inside net.__udpRecvInto, not here; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM stdlib/net/net.c net_udp_from_port; AOT src/aot/xrt_net.h xrt_net_udp_from_port; deletion_trigger=when net.__udpRecvInto returns the sender port in its own result, so it does not have to be parked on the handle for a second call to collect",
+      "leaf_reason": "abi=none; reads the sender-port field on the handle. The ntohs(3) that produced it ran inside net.__udpRecvInto, not here; ownership=none; effect=nothrow; provider=the Xray runtime's own object memory. VM src/io/xnet_provider.c net_udp_from_port; AOT src/aot/xrt_net.h xrt_net_udp_from_port; deletion_trigger=when net.__udpRecvInto returns the sender port in its own result, so it does not have to be parked on the handle for a second call to collect",
       "plan_coverage": "native_binding",
       "vm_binding": "net_udp_from_port",
-      "aot_binding": "xrt_net_udp_from_port",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "__CopyBidirectionalResult",
-      "kind": "object-shape",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "native_leaf": true,
-      "leaf_class": "native_record_shape_leaf",
-      "leaf_reason": "abi=none; a record layout, not a call; ownership=none; effect=nothrow; provider=declaration only (stdlib/defs/core.def, exact shape {aToB: i64, bToA: i64}). VM builds it via xr_stdlib_record_class_get(X, \"net\", \"__CopyBidirectionalResult\"); AOT materialises it from the native XrtI64PairResult struct in the coroutine code generator; deletion_trigger=when net.__copyBidirectional is deleted, or when a .def entry can declare its return as a type net.xr owns, so the byte-count pair stops needing a native record shape to travel through",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "net",
-      "symbol": "__NetError",
-      "kind": "enum",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "native_leaf": true,
-      "leaf_class": "native_record_shape_leaf",
-      "leaf_reason": "abi=private zero-payload enum with stable ordinal order Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory; ownership=fresh; effect=nothrow; provider=generated stdlib enum metadata used only by the bidirectional VM/AOT pump error channel; net.xr maps every variant to the source-owned public NetError; deletion_trigger=when __copyBidirectional returns a private scalar status or the two source pumps replace the native implementation",
-      "plan_coverage": "native_binding"
+      "aot_binding": "xrt_net_udp_from_port"
     },
     {
       "module": "net",
@@ -9260,91 +9210,14 @@
     },
     {
       "module": "net",
-      "symbol": "NetConn.fd",
-      "kind": "class-method",
+      "symbol": "__TlsContextStorage",
+      "kind": "native-class",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "conn_method_fd",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "NetConn.close",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "conn_method_close",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "NetConn.isClosed",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "conn_method_is_closed",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "NetConn.isTLS",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "conn_method_is_tls",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "NetListener.fd",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "listener_method_fd",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "NetListener.port",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "listener_method_port",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "NetListener.close",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "listener_method_close",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "NetListener.isClosed",
-      "kind": "class-method",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "native_binding",
-      "vm_binding": "listener_method_is_closed",
-      "covered_c_deletion": "stdlib/net/net.c"
+      "native_leaf": true,
+      "leaf_class": "security_provider_leaf",
+      "leaf_reason": "abi=OpenSSL SSL_CTX_free(3) through the native-body destroy hook; ownership=none; effect=nothrow; provider=an immutable private handle whose native body owns one OpenSSL SSL_CTX; source TlsClientContext and TlsServerContext values retain the handle without exposing provider state; deletion_trigger=when the language has a generic opaque-provider resource declaration that can bind a native destroy hook without a module-specific native class",
+      "plan_coverage": "native_binding"
     },
     {
       "module": "net",
@@ -9368,15 +9241,6 @@
       "module": "net",
       "symbol": "CopyBidirectionalResult.bToA",
       "kind": "field",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "net",
-      "symbol": "CopyBidirectionalResult.constructor",
-      "kind": "method",
       "audience": "production",
       "semantic_source": "stdlib/net/net.xr",
       "xray_body": true,
@@ -9485,6 +9349,60 @@
       "module": "net",
       "symbol": "IpAddress.value",
       "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "TlsClientContext.TlsClientContext",
+      "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "TlsClientContext.create",
+      "kind": "static-method",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "TlsClientContext.upgrade",
+      "kind": "method",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "TlsServerContext.TlsServerContext",
+      "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "TlsServerContext.accept",
+      "kind": "method",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "TlsServerContext.create",
+      "kind": "static-method",
       "audience": "production",
       "semantic_source": "stdlib/net/net.xr",
       "xray_body": true,
@@ -9609,6 +9527,24 @@
     },
     {
       "module": "net",
+      "symbol": "isClosed",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "isTLS",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
       "symbol": "lastErrno",
       "kind": "function",
       "audience": "production",
@@ -9637,6 +9573,15 @@
     {
       "module": "net",
       "symbol": "lookup",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
+      "symbol": "port",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/net/net.xr",
@@ -9762,6 +9707,15 @@
     },
     {
       "module": "net",
+      "symbol": "udpMulticastBind",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/net/net.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "net",
       "symbol": "upgradeTLS",
       "kind": "function",
       "audience": "production",
@@ -9777,746 +9731,6 @@
       "semantic_source": "stdlib/net/net.xr",
       "xray_body": true,
       "plan_coverage": "xray_source"
-    },
-    {
-      "module": "net",
-      "symbol": "net_winsock_init_once",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_platform_init",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_close_fd",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "tls_client_ctx_init",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "get_tls_client_ctx",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "is_conn_handle",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "is_listener_handle",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "unwrap_conn",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "unwrap_listener",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_now_ms",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_timeout_until",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_deadline_from_timeout",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_conn_clear_error",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_listener_clear_error",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_error_from_errno",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_code_from_resume",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_conn_set_error",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_listener_set_error",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "make_conn_handle",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "make_listener_handle",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "make_udp_handle",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "handle_get_fd",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_as_bytes",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_as_writable_bytes",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_is_literal_ip",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_resolved_addrs_value",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_resolve_all_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_connect_fail",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_connect_fd_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_connect_fd_complete",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_connect_fd_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_accept_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_accept_complete",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_accept_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_read_into_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_read_into_value",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_read_into_done",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_read_into_progress",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_read_into_error",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_read_into_complete",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_read_into_wait",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_read_into_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_write_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_write_complete",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_write_wait",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_write_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "xr_coro_ensure_io_buf",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_error_variant_index",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_error_type",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_publish_error",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_bidi_shared_set_error",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_bidi_shared_release",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_bidi_shared_complete",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_copy_notify",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_copy_state_free",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_copy_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_copy_finish",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_copy_error",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_copy_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_copy_start_ex",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_bidi_wait_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_bidi_result_object",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_bidi_wait_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_copy_direction_coro",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_shutdown_mode",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_tls_handshake_fail",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_tls_handshake_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_tls_handshake_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_udp_send_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_udp_send_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_udp_recv_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "net_udp_recv_step",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "xr_netconn_register_class",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
-    },
-    {
-      "module": "net",
-      "symbol": "xr_netlistener_register_class",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/net/net.c",
-      "handwritten_c_body": "stdlib/net/net.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/net/net.c"
     },
     {
       "module": "http",
@@ -13384,6 +12598,15 @@
     },
     {
       "module": "crypto",
+      "symbol": "hmacBytes",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/crypto/crypto.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "crypto",
       "symbol": "md5",
       "kind": "function",
       "audience": "production",
@@ -13430,6 +12653,15 @@
     {
       "module": "crypto",
       "symbol": "timingSafeEqual",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/crypto/crypto.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "crypto",
+      "symbol": "timingSafeEqualBytes",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/crypto/crypto.xr",
@@ -13537,199 +12769,16 @@
     },
     {
       "module": "cluster",
-      "symbol": "__start",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=socket(2), setsockopt(2) SO_REUSEADDR and IPV6_V6ONLY, bind(2), listen(2) for the node listener; OpenSSL SSL_CTX_new(3)/SSL_CTX_set_min_proto_version(3)/SSL_CTX_load_verify_locations(3) when TLS is on, plus CertOpenSystemStoreW on Windows; ownership=none; effect=nothrow; provider=the Xray scheduler, which the leaf asks to publish the heartbeat and accept coroutines, over a listener from src/io/xnet_transport.c xr_io_listen and a TLS context from src/io/xtls_provider.c. AOT (stdlib/cluster/cluster_aot.c xrt_cluster_start) discards all six TLS arguments and returns false outright when tlsEnabled is set, and runs its accept loop on an OS thread instead. The node name, the port range and the heartbeat schedule are cluster.xr's: start() refuses an illegal name or port before the leaf is reached, and passes HEARTBEAT_INTERVAL_MS, HEARTBEAT_TIMEOUT_MS and MAX_MISSED_HEARTBEATS down rather than letting each backend default them; deletion_trigger=when cluster.xr can publish its own coroutines and build its own listener over net's leaves, and the AOT half stops declining TLS so both backends start the same node",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_start_primitive",
-      "aot_binding": "xrt_cluster_start",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__join",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=getaddrinfo(3), socket(2), non-blocking connect(2), getsockopt(2) SO_ERROR, send/recv; OpenSSL SSL_do_handshake(3) when TLS is on; the platform CSPRNG for the handshake nonce; ownership=none; effect=suspends; provider=kernel connect(2) plus, on the VM, the Xray netpoll for the wait and OpenSSL for the handshake (stdlib/cluster/cluster.c cluster_join). AOT (stdlib/cluster/cluster_aot.c xrt_cluster_join) uses a blocking connect(2) with a select(2) timeout, two OS threads per node, no netpoll and no TLS. The leaf takes a host and a port, not an address: the grammar is parseAddress in cluster.xr, which both backends compile, and neither half parses one any more; deletion_trigger=when cluster.xr can reach a peer over net.__connectFd and net.__tlsHandshake instead of the module's own socket path, which needs the multi-module program authority tracked in blockers/a-stdlib-multi-module-program-authority.md",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_join",
-      "aot_binding": "xrt_cluster_join",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__self",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; reads the node's own configured name; ownership=fresh; effect=nothrow; provider=the cluster runtime's own state (stdlib/cluster/cluster.c cluster_self), returning an interned string. There is no AOT binding; deletion_trigger=when cluster.xr holds the node name it passed to cluster.__start rather than reading it back out of the C runtime -- which needs module-level state that survives across calls, the same capability blockers/a-stdlib-module-const-from-native-leaf.md is about",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_self",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__nodes",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; reads the node table under nodes_lock and interns the names; ownership=fresh; effect=nothrow; provider=the cluster runtime's own state (stdlib/cluster/cluster.c cluster_nodes), allocating the result array on the coroutine heap. There is no AOT binding; deletion_trigger=when the cluster runtime's node table is reachable from cluster.xr through a smaller accessor leaf, so building the name array stops being a C-side operation",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_nodes",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__monitorNode",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; constructs a bounded channel and registers one normalized node-down target; ownership=fresh; effect=nothrow; provider=the Xray channel subsystem and the cluster runtime's node-monitor registry, driven by stdlib/cluster/cluster_monitor.c. cluster.xr validates the node target and chooses this exact leaf rather than exposing an arity-based native dispatcher. There is no AOT binding; deletion_trigger=when the cluster monitor registry and Channel constructor are surfaces Xray source can name",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_monitor_node_fn",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__monitorCoroutine",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; constructs a bounded channel, registers one normalized remote-coroutine target and enqueues its monitor frame; ownership=fresh; effect=nothrow; provider=the Xray channel subsystem plus the coroutine registry (src/coro/xcoro_registry.h xr_coro_monitor), driven by stdlib/cluster/cluster_monitor.c. cluster.xr validates both names and chooses this exact leaf rather than exposing an arity-based native dispatcher. There is no AOT binding; deletion_trigger=when the coroutine registry, cluster writer queue and Channel constructor are surfaces Xray source can name",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_monitor_coro_fn",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__discover",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "host_abi_leaf",
-      "leaf_reason": "abi=socket(2) AF_INET/SOCK_DGRAM, bind(2), setsockopt(2) IP_ADD_MEMBERSHIP / IP_MULTICAST_TTL / IP_MULTICAST_LOOP (IP_DROP_MEMBERSHIP on stop), sendto(2) and recvfrom(2); ownership=none; effect=nothrow; provider=kernel multicast sockets, driven by a native yieldable coroutine on the Xray netpoll. VM stdlib/cluster/cluster_discovery.c create_mcast_socket/cluster_discovery_start. There is no AOT binding: the code generator refuses a reachable call; deletion_trigger=when cluster.xr can open a multicast socket over net's own leaves and run the announce/listen loop itself, which needs net to expose setsockopt(2) for the multicast options it currently does not",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_discover_fn",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__stop",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=close(2) on the listener and the notify pipe, setsockopt(2) IP_DROP_MEMBERSHIP, OpenSSL SSL_CTX_free(3), and a secure wipe of the shared secret (memset_s / explicit_bzero / a volatile loop); ownership=none; effect=nothrow; provider=the cluster runtime's own teardown: channel close and coroutine join on the VM (stdlib/cluster/cluster.c cluster_runtime_stop), service-slot removal and thread join on AOT (stdlib/cluster/cluster_aot.c); deletion_trigger=when cluster.xr owns the coroutines and the listener it started, so stopping them is ordinary Xray teardown; the secret wipe would still need a leaf, because Xray cannot promise the compiler will not elide a zeroing store",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_stop_fn",
-      "aot_binding": "xrt_cluster_stop",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__info",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; reads cluster runtime state under its own mutexes and atomics; ownership=fresh; effect=nothrow; provider=the cluster runtime's own state (stdlib/cluster/cluster.c cluster_info_fn): the node tables under nodes_lock/dead_nodes_lock, relaxed atomic counters, and whether the TLS contexts are non-NULL. It does not call OpenSSL. There is no AOT binding; deletion_trigger=when the cluster runtime's node tables and counters are reachable from cluster.xr through smaller accessor leaves; this leaf currently returns only private __Cluster*Snapshot records and cluster.xr alone maps them into the public ClusterInfo graph",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_info_fn",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__send",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none on the sending call itself: it moves buffer ownership, matches the topic trie and enqueues. The only host call is a write(2) on the node's notify pipe; the network bytes leave later on a writer coroutine; ownership=none; effect=nothrow; provider=the cluster transport's own queues and the Xray channel subsystem. VM stdlib/cluster/cluster_topic.c cluster_transport_send; AOT stdlib/cluster/cluster_aot.c xrt_cluster_send, an independent lock-and-list implementation over OS threads. The leaf returns only a private integer code; cluster.xr alone maps it to ClusterDelivery. The two providers still share the topic matching in cluster_topic_core.h and the frame encoding in cluster_proto.c. One divergence is left and is not this leaf's to close: the VM re-forwards a received envelope to every other peer with the hop count decremented (cluster_topic.c cluster_transport_handle_frame) while the AOT reader delivers locally and never reads the hop byte at all (cluster_aot.c aot_cluster_process_transport), so a three-node chain reaches its far end on one backend and not the other; deletion_trigger=when the topic table and the per-node outbound queue are surfaces Xray source can name, so cluster.xr can do the match and the enqueue itself",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_send_primitive",
-      "aot_binding": "xrt_cluster_send",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__listen",
-      "kind": "function",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "native_leaf": true,
-      "leaf_class": "runtime_leaf",
-      "leaf_reason": "abi=none; constructs a bounded channel and registers a topic subscription; ownership=fresh; effect=nothrow; provider=the Xray channel subsystem (src/coro/xchannel.c), reached through cluster_transport_listen on the VM and xrt_cluster_listen on AOT. The channel itself is shared; the subscription table is a trie on the VM and a linked list on AOT. What counts as a legal pattern, and what capacity may be asked for, are cluster.xr's listen(): the three copies of those two rules -- the VM binding, the VM transport and the AOT entry point -- are gone; deletion_trigger=when cluster.xr can construct a Channel and register a topic pattern directly, which needs the channel constructor and the topic table to be surfaces Xray source can name",
-      "plan_coverage": "native_binding",
-      "vm_binding": "cluster_listen_fn",
-      "aot_binding": "xrt_cluster_listen",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__ClusterTlsSnapshot",
-      "kind": "object-shape",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "native_leaf": true,
-      "leaf_class": "native_record_shape_leaf",
-      "leaf_reason": "abi=none; a record layout, not a call; ownership=none; effect=nothrow; provider=declaration only (stdlib/defs/core.def). The VM fills it from the cluster TLS runtime state before cluster.xr constructs the public ClusterTlsStatus value; there is no AOT binding; deletion_trigger=when cluster runtime state is exposed through scalar accessor leaves, so cluster.xr can assemble the TLS snapshot without a native record class",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__ClusterNodeSnapshot",
-      "kind": "object-shape",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "native_leaf": true,
-      "leaf_class": "native_record_shape_leaf",
-      "leaf_reason": "abi=none; a record layout, not a call; ownership=none; effect=nothrow; provider=declaration only (stdlib/defs/core.def). The VM fills it from one runtime-owned cluster node before cluster.xr constructs the public ClusterNodeInfo value; there is no AOT binding; deletion_trigger=when the cluster node table and counters are exposed through scalar accessor leaves, so cluster.xr can assemble each node snapshot without a native record class",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "cluster",
-      "symbol": "__ClusterSnapshot",
-      "kind": "object-shape",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "native_leaf": true,
-      "leaf_class": "native_record_shape_leaf",
-      "leaf_reason": "abi=none; a record layout, not a call; ownership=none; effect=nothrow; provider=declaration only (stdlib/defs/core.def). The VM fills it from runtime-owned cluster state before cluster.xr constructs the public ClusterInfo value; there is no AOT binding; deletion_trigger=when cluster runtime state is exposed through scalar accessor leaves, so cluster.xr can assemble the diagnostic snapshot without a native record class",
-      "plan_coverage": "native_binding"
-    },
-    {
-      "module": "cluster",
       "symbol": "ADDRESS_HOST_MAX_BYTES",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "COROUTINE_MONITOR_CAPACITY",
       "kind": "const",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -13810,6 +12859,177 @@
     },
     {
       "module": "cluster",
+      "symbol": "ClusterCoroExit",
+      "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterCoroExit.name",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterCoroExit.reason",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterDiscoveryAnnouncement",
+      "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterDiscoveryAnnouncement.clusterHash",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterDiscoveryAnnouncement.name",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterDiscoveryAnnouncement.port",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterFrame",
+      "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterFrame.kind",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterFrame.payload",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeAck",
+      "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeAck.flags",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeAck.name",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeAck.nonce",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeAck.proof",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeRequest",
+      "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeRequest.flags",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeRequest.name",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterHandshakeRequest.nonce",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "ClusterInfo",
       "kind": "type",
       "audience": "production",
@@ -13882,15 +13102,6 @@
     },
     {
       "module": "cluster",
-      "symbol": "ClusterInfo.running",
-      "kind": "field",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
       "symbol": "ClusterInfo.self",
       "kind": "field",
       "audience": "production",
@@ -13900,7 +13111,7 @@
     },
     {
       "module": "cluster",
-      "symbol": "ClusterInfo.tls",
+      "symbol": "ClusterInfo.tlsEnabled",
       "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -13946,15 +13157,6 @@
     {
       "module": "cluster",
       "symbol": "ClusterNodeInfo.framesSent",
-      "kind": "field",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
-      "symbol": "ClusterNodeInfo.host",
       "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14053,15 +13255,6 @@
     },
     {
       "module": "cluster",
-      "symbol": "ClusterNodeInfo.state",
-      "kind": "field",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.xr",
-      "xray_body": true,
-      "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
       "symbol": "ClusterTlsOptions",
       "kind": "type",
       "audience": "production",
@@ -14116,7 +13309,7 @@
     },
     {
       "module": "cluster",
-      "symbol": "ClusterTlsStatus",
+      "symbol": "ClusterTransportFrame",
       "kind": "type",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14125,7 +13318,7 @@
     },
     {
       "module": "cluster",
-      "symbol": "ClusterTlsStatus.clientReady",
+      "symbol": "ClusterTransportFrame.envelope",
       "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14134,7 +13327,7 @@
     },
     {
       "module": "cluster",
-      "symbol": "ClusterTlsStatus.enabled",
+      "symbol": "ClusterTransportFrame.hopLimit",
       "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14143,7 +13336,7 @@
     },
     {
       "module": "cluster",
-      "symbol": "ClusterTlsStatus.serverReady",
+      "symbol": "ClusterTransportFrame.topic",
       "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14152,7 +13345,7 @@
     },
     {
       "module": "cluster",
-      "symbol": "ENVELOPE_HEADER_SIZE",
+      "symbol": "DISCOVERY_INTERVAL_MS",
       "kind": "const",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14161,7 +13354,43 @@
     },
     {
       "module": "cluster",
-      "symbol": "FRAME_CORO_DEMONITOR",
+      "symbol": "DISCOVERY_MAGIC",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "DISCOVERY_MULTICAST_GROUP",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "DISCOVERY_MULTICAST_PORT",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "DISCOVERY_VERSION",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "ENVELOPE_HEADER_SIZE",
       "kind": "const",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14296,6 +13525,15 @@
     },
     {
       "module": "cluster",
+      "symbol": "HEARTBEAT_TICK_MIN_MS",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "HEARTBEAT_TIMEOUT_MS",
       "kind": "const",
       "audience": "production",
@@ -14306,6 +13544,15 @@
     {
       "module": "cluster",
       "symbol": "MAX_MISSED_HEARTBEATS",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "NODE_MONITOR_CAPACITY",
       "kind": "const",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14368,8 +13615,143 @@
     },
     {
       "module": "cluster",
+      "symbol": "OUTPUT_QUEUE_HIGH_WATERMARK_BYTES",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PHI_MIN_SAMPLES",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PHI_THRESHOLD",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PHI_WINDOW_SIZE",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "PROOF_SIZE",
       "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.PhiDetector",
+      "kind": "type",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.constructor",
+      "kind": "method",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.intervals",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.lastHeartbeatMs",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.mean",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.sampleCount",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.sum",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.sumSquares",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.value",
+      "kind": "method",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.variance",
+      "kind": "field",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "PhiDetector.writeIndex",
+      "kind": "field",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
       "xray_body": true,
@@ -14395,7 +13777,25 @@
     },
     {
       "module": "cluster",
+      "symbol": "TOMBSTONE_RETENTION_MS",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "TOPIC_DEFAULT_HOP_LIMIT",
+      "kind": "const",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "TOPIC_DELIVERY_FANOUT_MAX",
       "kind": "const",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14422,7 +13822,214 @@
     },
     {
       "module": "cluster",
+      "symbol": "computeHandshakeProof",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeCoroExit",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeCoroMonitor",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeDiscoveryAnnouncement",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeFrame",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeHandshakeAck",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeHandshakeDone",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeHandshakeRequest",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeHeartbeat",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "decodeTransportFrame",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "discover",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "discoveryClusterHash",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeCoroExit",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeCoroMonitor",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeDiscoveryAnnouncement",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeFrame",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeHandshakeAck",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeHandshakeDone",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeHandshakeRequest",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeHeartbeat",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "encodeTransportFrame",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "handshakeProofEqual",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "heartbeatIsDead",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "heartbeatTickInterval",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14503,6 +14110,15 @@
     },
     {
       "module": "cluster",
+      "symbol": "shouldJoinDiscoveredNode",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
       "symbol": "start",
       "kind": "function",
       "audience": "production",
@@ -14513,6 +14129,15 @@
     {
       "module": "cluster",
       "symbol": "stop",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/cluster/cluster.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "cluster",
+      "symbol": "tombstoneIsLive",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/cluster/cluster.xr",
@@ -14563,1686 +14188,6 @@
       "semantic_source": "stdlib/cluster/cluster.xr",
       "xray_body": true,
       "plan_coverage": "xray_source"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_heartbeat_context_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_heartbeat_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_heartbeat_entry",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_inbound_context_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_inbound_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_inbound_wait",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_inbound_reset_read",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_inbound_complete",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_inbound_drive",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_inbound_entry",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_spawn_inbound",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_accept_context_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_accept_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_accept_drive",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_accept_entry",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "build_cluster_tls",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_runtime_start",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_runtime_retain",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_runtime_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_runtime_release",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_runtime_stop",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_runtime_is_running",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_runtime_self_name",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_find",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_add",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_remove",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_context_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_finish",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_adopt_fd",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_open_next",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_prepare_request",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_reset_read",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_wait",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_verify_ack",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_publish",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_drive",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_context_new",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_join_entry",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_runtime_join_spawn",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_binding_text_fits",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_process_frame",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_object_new",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster.c",
-      "handwritten_c_body": "stdlib/cluster/cluster.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_copy_text",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_wait_socket",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_read_all",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_write_all",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_read_frame",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_node_stop",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_node_new",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_frame_free",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_node_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_node_enqueue_ready_frame",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_node_enqueue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_node_enqueue_transport",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_node_take_frame",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_writer_main",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_deliver_local",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_process_transport",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_process_frame",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_reader_main",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_node_start",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_add_node",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_server_handshake",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_accept_main",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_listen_socket",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_connect",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_client_handshake",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_acquire",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_release",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_state_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "aot_cluster_service_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_aot.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_aot.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_aot.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_compute_proof",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_auth.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_auth.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_auth.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_proof_equal",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_auth.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_auth.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_auth.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "build_announce",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "parse_announce",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "create_mcast_socket",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "should_connect",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "discovery_context_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "discovery_drain",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "discovery_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "discovery_drive",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "discovery_entry",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_discovery_start",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_discovery_stop",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_discovery.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_discovery.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_discovery.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_health_check_heartbeats",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_health.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_health.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_health.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_health_send_heartbeats",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_health.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_health.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_health.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_health_mark_dead",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_health.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_health.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_health.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_health_is_dead",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_health.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_health.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_health.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_monitor_node",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_monitor_fire",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_monitor_coro",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "coro_monitor_fwd_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "coro_monitor_fwd_complete",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "coro_monitor_fwd_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "coro_monitor_fwd_entry",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_monitor_handle_coro_request",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_monitor_handle_coro_exit",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_monitor.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_monitor.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_monitor.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_now_ms",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_outq_init",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_outq_close_write_end",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_outq_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "outq_notify",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "outq_enqueue_locked",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_outq_push",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_outq_push_nocopy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_outq_pop_all",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_phi_init",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_phi_record_heartbeat",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_phi_value",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_new",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_retain",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_shutdown",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_release",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_close",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_enqueue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_send_frame",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_send_transport_frame",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_writer_drop_frames",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_writer_context_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_conn_write_try",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_writer_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_writer_drive",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_writer_entry",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_reader_finish",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_reader_context_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_conn_read_try",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_reader_continue",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_reader_drive",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_reader_entry",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_start_io",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_is_slow",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_node_send_ping",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_node.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_node.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_node.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "put_u32",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "put_u64",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "get_u32",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "get_u64",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "get_i64",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_write",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_write_transport",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_read_header",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_encode_handshake_req",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_decode_handshake_req",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_encode_handshake_ack",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_decode_handshake_ack",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_encode_handshake_done",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_decode_handshake_done",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_encode_heartbeat",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_decode_heartbeat",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_encode_coro_monitor",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_decode_coro_monitor",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_encode_coro_exit",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_frame_decode_coro_exit",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_proto.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_proto.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_proto.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "trie_node_new",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "trie_child_get_or_create",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "trie_child_lookup",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "trie_insert",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "emit_subs",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "trie_match",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "trie_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_topics_init",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_topics_destroy",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_transport_listen",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_transport_deliver_local",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "transport_broadcast_envelope",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_transport_handle_frame",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
-    },
-    {
-      "module": "cluster",
-      "symbol": "cluster_transport_send",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/cluster/cluster_topic.c",
-      "handwritten_c_body": "stdlib/cluster/cluster_topic.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/cluster/cluster_topic.c"
     },
     {
       "module": "csv",

@@ -72,6 +72,21 @@ fn test_xray_owned_admission_policy() {
         tls: incompleteTls
     }
     assert(!cluster.start(incompleteTlsConfig))
+
+    var missingTlsIdentity: ClusterTlsOptions = {
+        enabled: true,
+        caFile: null,
+        certFile: null,
+        keyFile: null,
+        insecure: true
+    }
+    var missingTlsIdentityConfig: ClusterConfig = {
+        name: "missing-tls-identity",
+        port: 0,
+        secret: null,
+        tls: missingTlsIdentity
+    }
+    assert(!cluster.start(missingTlsIdentityConfig))
 }
 
 @test
@@ -113,13 +128,10 @@ fn test_typed_start_and_info() {
 
     var info: ClusterInfo = cluster.info()!
     assertEqual(info.self, "typed-control-test")
-    assertEqual(info.port, 0)
-    assert(info.running)
+    assert(info.port > 0)
     assertEqual(len(info.nodes), 0)
     assertEqual(info.listeners, 0)
-    assert(!info.tls.enabled)
-    assert(!info.tls.clientReady)
-    assert(!info.tls.serverReady)
+    assert(!info.tlsEnabled)
 
     cluster.stop()
     assert(cluster.info() == null)

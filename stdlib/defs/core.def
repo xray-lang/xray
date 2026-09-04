@@ -2089,28 +2089,3 @@ module http2 {
   }
 
 }
-
-module cluster {
-  fn __start {
-    signature: "(): bool"
-    doc: "Publish the isolate lifecycle slot for the source-owned cluster runtime"
-    vm: "cluster_start_primitive"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __stop {
-    signature: "(): ()"
-    doc: "Stop cluster node"
-    vm: "cluster_stop_fn"
-    argc: 0
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
-}

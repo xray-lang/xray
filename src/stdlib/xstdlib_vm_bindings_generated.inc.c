@@ -19,20 +19,6 @@
  * module it is loading.
  */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_CLUSTER
-XR_FUNC bool xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule *module) {
-    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
-        return false;
-    size_t expected_count = 0;
-    (void) expected_count;
-    XRS_EXPORT(module, isolate, "__start", cluster_start_primitive);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__stop", cluster_stop_fn);
-    expected_count++;
-    return module->export_count == expected_count;
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_CLUSTER */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_CRYPTO
 XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *module) {
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)

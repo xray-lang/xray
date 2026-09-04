@@ -301,8 +301,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http2", "__send", "(handle: i64, data: Array<u8>, offset: i64): i64", "Perform one TLS write from offset and answer its accepted byte count", "h2_send", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"http2", "__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes once; empty on EOF and null on transport failure", "h2_recv", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 3, XR_STDLIB_TARGET_LEAF_NONE, false},
     {"http2", "__close", "(handle: i64): ()", "Close an HTTP/2 connection and release its handle; stale handles are already closed", "h2_close", "normal", "", "", "v", "value", "", "", "", "runtime", "", 0, 1, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__start", "(): bool", "Publish the isolate lifecycle slot for the source-owned cluster runtime", "cluster_start_primitive", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
-    {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, XR_STDLIB_TARGET_LEAF_NONE, false},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 
