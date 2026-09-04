@@ -81,8 +81,8 @@ static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *
                                                 XrClosure *closure, XrValue *args,
                                                 const uint8_t *arg_modes, int arg_count,
                                                 bool force_private_closure);
-static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
-                                        int arg_count);
+static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, void *context,
+                                        XrCoroContextDestroy destroy_context);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
 static bool vm_backend_setup_yield_continuation(XrVMRuntime *X, XrCoroutine *coro,
@@ -186,9 +186,19 @@ static void vm_entry_reset_no_free(XrVmCoroState *state) {
             state->entry_closure_owner ? state->entry_closure_owner : xr_current_coro_heap();
         xr_rc_release(owner, (XrObjHeader *) state->entry.closure);
     }
+    if (state->entry_type == XR_CORO_ENTRY_CFUNC && state->entry_context) {
+        void *context = state->entry_context;
+        XrCoroContextDestroy destroy_context = state->destroy_entry_context;
+        state->entry_context = NULL;
+        state->destroy_entry_context = NULL;
+        if (destroy_context)
+            destroy_context(context);
+    }
     state->entry_type = XR_CORO_ENTRY_CLOSURE;
     state->entry.closure = NULL;
     state->entry_closure_owner = NULL;
+    state->entry_context = NULL;
+    state->destroy_entry_context = NULL;
     state->args = NULL;
     state->arg_count = 0;
     for (int i = 0; i < 4; i++)
@@ -413,19 +423,29 @@ XrCoroutine *xr_coro_create_vm_closure_owned(XrVMRuntime *X, XrClosure *closure,
     return coro;
 }
 
-XrCoroutine *xr_coro_create_vm_cfunc(XrVMRuntime *X, XrCoroCFuncEntry cfunc, XrValue *args,
-                                     int argc, const char *name) {
-    XrCoroutine *coro = vm_backend_alloc_shell(X, true);
-    if (!coro)
+XrCoroutine *xr_coro_create_vm_cfunc(XrVMRuntime *X, XrCoroCFuncEntry cfunc, void *context,
+                                     XrCoroContextDestroy destroy_context, const char *name) {
+    if (!X || !cfunc) {
+        if (destroy_context && context)
+            destroy_context(context);
         return NULL;
+    }
+    XrCoroutine *coro = vm_backend_alloc_shell(X, true);
+    if (!coro) {
+        if (destroy_context && context)
+            destroy_context(context);
+        return NULL;
+    }
 
     if (!xr_coro_init_shell(coro, X, name, true)) {
         xr_coro_free(coro);
         xr_coro_discard_uninitialized(coro);
+        if (destroy_context && context)
+            destroy_context(context);
         return NULL;
     }
 
-    if (!vm_backend_bind_cfunc_entry(coro, cfunc, args, argc)) {
+    if (!vm_backend_bind_cfunc_entry(coro, cfunc, context, destroy_context)) {
         xr_coro_free(coro);
         xr_coro_discard_uninitialized(coro);
         return NULL;
@@ -653,22 +673,29 @@ static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrVMRuntime *
     return true;
 }
 
-static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
-                                        int arg_count) {
-    if (!coro || !cfunc)
+static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, void *context,
+                                        XrCoroContextDestroy destroy_context) {
+    if (!coro || !cfunc) {
+        if (destroy_context && context)
+            destroy_context(context);
         return false;
-    if (!vm_backend_ensure_state(coro))
+    }
+    if (!vm_backend_ensure_state(coro)) {
+        if (destroy_context && context)
+            destroy_context(context);
         return false;
+    }
     XrVmCoroState *state = vm_state_for_coro(coro);
-    if (!state)
+    if (!state) {
+        if (destroy_context && context)
+            destroy_context(context);
         return false;
+    }
     vm_backend_clear_entry_state(coro);
     state->entry_type = XR_CORO_ENTRY_CFUNC;
     state->entry.cfunc = cfunc;
-    if (!vm_entry_copy_args(coro, NULL, state, args, NULL, arg_count, false)) {
-        vm_backend_clear_entry_state(coro);
-        return false;
-    }
+    state->entry_context = context;
+    state->destroy_entry_context = destroy_context;
     return true;
 }
 
@@ -943,6 +970,7 @@ static XrCFuncResult vm_backend_call_closure(XrVMRuntime *X, XrCoroutine *coro, 
     int copy_count = nargs < proto->numparams ? nargs : proto->numparams;
     for (int i = 0; i < copy_count; i++) {
         closure_base[i] = args[i];
+        xr_rc_retain_value(closure_base[i]);
     }
     for (int i = copy_count; i < proto->maxstacksize; i++) {
         closure_base[i] = xr_null();
@@ -1114,15 +1142,11 @@ static XrVMResult run_cfunc_first_exec(XrVMRuntime *isolate, XrCoroutine *coro,
     frame->cfunc_result_slot = 0;
     frame->has_cfunc_result = false;
 
-    XrValue *base = coro_ctx->stack + frame->base_offset;
-    for (int i = 0; i < vm_state->arg_count && i < 4; i++) {
-        base[i] = vm_state->args[i];
-    }
-    coro_ctx->stack_top = coro_ctx->stack + 1 + vm_state->arg_count;
+    coro_ctx->stack_top = coro_ctx->stack + 1;
 
     XrValue cfunc_result = xr_null();
     XrCFuncResult status =
-        vm_state->entry.cfunc(isolate, vm_state->args, vm_state->arg_count, &cfunc_result);
+        vm_state->entry.cfunc(isolate, vm_state->entry_context, &cfunc_result);
     switch (status) {
         case XR_CFUNC_DONE:
             coro_ctx->stack[0] = cfunc_result;

@@ -378,6 +378,9 @@ static inline XrCFuncResult xr_sm_continuation(struct XrVMRuntime *X, int status
 // (status XR_RESUME_CLOSURE_ERROR) delivered through the resume_value
 // parameter — no implicit per-coroutine state.
 //
+// Arguments are borrowed by the caller. The VM retains every fixed-parameter
+// heap value before installing the closure frame, so the callee owns its
+// parameter slots and the caller may keep or release its references normally.
 // Must be called from a yieldable C function or continuation.
 // Always returns XR_CFUNC_CALL_CLOSURE.
 XR_FUNC XrCFuncResult xr_call_closure(struct XrVMRuntime *X, struct XrClosure *closure,

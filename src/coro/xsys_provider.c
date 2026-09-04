@@ -602,20 +602,17 @@ static XrCFuncResult sys_signal_dispatch_cont(XrVMRuntime *X, int status, XrValu
     (void) resume_value;
     XrSysSignalDispatchCtx *ctx = (XrSysSignalDispatchCtx *) user_ctx;
     if (!ctx || !sys_signal_dispatch_generation_current(ctx)) {
-        sys_signal_dispatch_ctx_free(ctx);
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
 
     if (sys_signal_take_native(ctx->sig)) {
         if (!sys_signal_dispatch_generation_current(ctx)) {
-            sys_signal_dispatch_ctx_free(ctx);
             *result = xr_null();
             return XR_CFUNC_DONE;
         }
         XrClosure *handler = xr_value_to_closure(ctx->handler);
         if (!handler) {
-            sys_signal_dispatch_ctx_free(ctx);
             *result = xr_null();
             return XR_CFUNC_DONE;
         }
@@ -625,13 +622,8 @@ static XrCFuncResult sys_signal_dispatch_cont(XrVMRuntime *X, int status, XrValu
     return xr_yield_for_timeout(X, 10, sys_signal_dispatch_cont, ctx, result);
 }
 
-static XrCFuncResult sys_signal_dispatch_init(XrVMRuntime *X, XrValue *args, int argc,
-                                              XrValue *result) {
-    if (argc < 1 || !XR_IS_INT(args[0])) {
-        *result = xr_null();
-        return XR_CFUNC_DONE;
-    }
-    XrSysSignalDispatchCtx *ctx = (XrSysSignalDispatchCtx *) (intptr_t) XR_TO_INT(args[0]);
+static XrCFuncResult sys_signal_dispatch_init(XrVMRuntime *X, void *context, XrValue *result) {
+    XrSysSignalDispatchCtx *ctx = (XrSysSignalDispatchCtx *) context;
     return sys_signal_dispatch_cont(X, XR_RESUME_TIMEOUT, xr_null(), ctx, result);
 }
 
@@ -659,13 +651,11 @@ XrValue xr_sys_provider_on_signal(XrVMRuntime *isolate, XrValue *args, int argc)
     xr_rc_retain_value(ctx->handler);
     ctx->generation = atomic_fetch_add_explicit(generation_slot, 1, memory_order_acq_rel) + 1;
 
-    XrValue dispatch_args[1] = {xr_int((int64_t) (intptr_t) ctx)};
-    XrCoroutine *dispatcher =
-        xr_coro_create_vm_cfunc(isolate, sys_signal_dispatch_init, dispatch_args, 1, "sys.signal");
-    if (!dispatcher) {
-        sys_signal_dispatch_ctx_free(ctx);
+    XrCoroutine *dispatcher = xr_coro_create_vm_cfunc(
+        isolate, sys_signal_dispatch_init, ctx, (XrCoroContextDestroy) sys_signal_dispatch_ctx_free,
+        "sys.signal");
+    if (!dispatcher)
         return xr_bool(false);
-    }
     xr_coro_spawn(isolate, dispatcher);
     return xr_bool(true);
 }

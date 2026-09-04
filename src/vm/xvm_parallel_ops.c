@@ -456,15 +456,11 @@ static XrCFuncResult vm_par_lane_call_next(XrVMRuntime *isolate, XrVmParLane *la
                            result);
 }
 
-static XrCFuncResult vm_par_lane_entry(XrVMRuntime *isolate, XrValue *args, int nargs,
-                                       XrValue *result) {
-    if (!args || nargs < 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
+static XrCFuncResult vm_par_lane_entry(XrVMRuntime *isolate, void *context, XrValue *result) {
+    XrVmParLane *lane = (XrVmParLane *) context;
+    if (!lane)
         return XR_CFUNC_ERROR;
-    XrVmParBatch *batch = (XrVmParBatch *) (intptr_t) XR_TO_INT(args[0]);
-    int64_t lane_index = XR_TO_INT(args[1]);
-    if (!batch || lane_index < 0 || lane_index >= batch->lane_count)
-        return XR_CFUNC_ERROR;
-    return vm_par_lane_call_next(isolate, &batch->lanes[lane_index], result);
+    return vm_par_lane_call_next(isolate, lane, result);
 }
 
 static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, XrClosure *closure,
@@ -525,9 +521,8 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
         slot->partial_init = false;
         slot->phase = XR_PAR_LANE_PHASE_BODY;
 
-        XrValue args[2] = {vm_par_batch_to_value(batch), xr_int(lane)};
         batch->coros[lane] = xr_coro_create_vm_cfunc(
-            isolate, vm_par_lane_entry, args, 2,
+            isolate, vm_par_lane_entry, slot, NULL,
             reduce_body ? "parallel.reduce.lane"
                         : (map_body ? "parallel.map.lane" : "parallel.forEach.lane"));
         if (!batch->coros[lane]) {
