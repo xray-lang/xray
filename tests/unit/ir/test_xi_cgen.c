@@ -3044,12 +3044,7 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
     XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(function, sizeof(*ref));
     XiValue *callee = xi_value_new(function, entry, XI_IMPORT_REF, &native_function, 0);
     XiValue *call = xi_value_new(function, entry, XI_CALL, &bool_type, 3);
-    XiCallPlan *call_plan =
-        (XiCallPlan *) xi_func_arena_alloc(function, (uint32_t) sizeof(*call_plan));
-    XiCallArgPlan *argument_plan =
-        (XiCallArgPlan *) xi_func_arena_alloc(function, 2u * (uint32_t) sizeof(*argument_plan));
-    if (!function->params || !connection || !direction || !ref || !callee || !call || !call_plan ||
-        !argument_plan) {
+    if (!function->params || !connection || !direction || !ref || !callee || !call) {
         xi_func_free(function);
         return NULL;
     }
@@ -3075,17 +3070,6 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
     call->args[0] = callee;
     call->args[1] = connection;
     call->args[2] = direction;
-    memset(call_plan, 0, sizeof(*call_plan));
-    memset(argument_plan, 0, 2u * sizeof(*argument_plan));
-    for (uint16_t i = 0; i < 2; i++) {
-        argument_plan[i].param_mode = XR_PARAM_READ;
-        argument_plan[i].access = XR_CALL_ARG_PLAIN;
-        argument_plan[i].origin_var_id = XI_NO_VAR_ID;
-    }
-    call_plan->args = argument_plan;
-    call_plan->nargs = 2;
-    call_plan->verified = true;
-    call->call_plan = call_plan;
     xi_block_set_return(entry, call);
     if (out_ref)
         *out_ref = ref;
