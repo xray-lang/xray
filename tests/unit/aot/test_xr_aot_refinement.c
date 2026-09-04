@@ -204,6 +204,13 @@ typedef struct DirectLocalGoCalleeStorageFixture {
     XrTargetPlan *target_plan;
 } DirectLocalGoCalleeStorageFixture;
 
+typedef enum DirectLocalGoFixtureMode {
+    DIRECT_LOCAL_GO_BASIC = 0,
+    DIRECT_LOCAL_GO_DOMINATED_STORE,
+    DIRECT_LOCAL_GO_CONST_ARGUMENT,
+    DIRECT_LOCAL_GO_SHARED_ARGUMENT,
+} DirectLocalGoFixtureMode;
+
 typedef struct SourceNamespaceStorageFixture {
     XiFunc *function;
     XiFunc *caller;
@@ -340,6 +347,33 @@ static XrType direct_local_go_closure = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .function =
         {
+            .return_type = &scalar_unit,
+            .throw_effect = XR_FN_EFFECT_NO_THROW,
+        },
+};
+
+static XrType direct_local_go_const_int = {
+    .kind = XR_KIND_INT,
+    .id = 53,
+    .frozen = true,
+    .is_const = true,
+    .scalar_rep = XR_NATIVE_I64,
+};
+
+static XrFunctionParam direct_local_go_one_arg_params[] = {
+    {.type = &scalar_int, .mode = XR_PARAM_READ},
+};
+
+static XrType direct_local_go_closure_one_arg = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 52,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function =
+        {
+            .params = direct_local_go_one_arg_params,
+            .param_count = 1,
+            .min_params = 1,
             .return_type = &scalar_unit,
             .throw_effect = XR_FN_EFFECT_NO_THROW,
         },
@@ -1341,16 +1375,39 @@ native_namespace_yieldable_storage_fixture_free(NativeNamespaceYieldableStorageF
 }
 
 static DirectLocalGoCalleeStorageFixture
-direct_local_go_callee_storage_fixture_create(bool extra_use, bool second_store) {
+direct_local_go_callee_storage_fixture_create(bool extra_use, bool second_store,
+                                              DirectLocalGoFixtureMode mode) {
     DirectLocalGoCalleeStorageFixture fixture = {0};
     fixture.function = xi_func_new("direct_local_shared_go", &scalar_unit);
     fixture.child = xi_func_new("direct_local_go_target", &scalar_unit);
     fixture.decoy = xi_func_new("direct_local_go_decoy", &scalar_unit);
     REQUIRE(fixture.function && fixture.child && fixture.decoy);
-    fixture.entry = xi_block_new(fixture.function);
+    XiBlock *root_entry = xi_block_new(fixture.function);
+    fixture.entry =
+        mode == DIRECT_LOCAL_GO_DOMINATED_STORE ? xi_block_new(fixture.function) : root_entry;
     XiBlock *child_entry = xi_block_new(fixture.child);
     XiBlock *decoy_entry = xi_block_new(fixture.decoy);
-    REQUIRE(fixture.entry && child_entry && decoy_entry);
+    REQUIRE(root_entry && fixture.entry && child_entry && decoy_entry);
+    XiValue *root_argument = NULL;
+    if (mode == DIRECT_LOCAL_GO_CONST_ARGUMENT || mode == DIRECT_LOCAL_GO_SHARED_ARGUMENT) {
+        XrType *argument_type =
+            mode == DIRECT_LOCAL_GO_CONST_ARGUMENT ? &direct_local_go_const_int : &scalar_int;
+        fixture.function->nparams = fixture.function->min_params = 1;
+        fixture.function->params = (XiValue **) xr_calloc(1, sizeof(*fixture.function->params));
+        REQUIRE(fixture.function->params != NULL);
+        root_argument = xi_param(fixture.function, root_entry, 0, argument_type);
+        REQUIRE(root_argument != NULL);
+        fixture.function->params[0] = root_argument;
+    }
+    if (fixture.entry != root_entry)
+        xi_block_set_jump(root_entry, fixture.entry);
+    if (mode == DIRECT_LOCAL_GO_CONST_ARGUMENT || mode == DIRECT_LOCAL_GO_SHARED_ARGUMENT) {
+        fixture.child->nparams = fixture.child->min_params = 1;
+        fixture.child->params = (XiValue **) xr_calloc(1, sizeof(*fixture.child->params));
+        REQUIRE(fixture.child->params != NULL);
+        fixture.child->params[0] = xi_param(fixture.child, child_entry, 0, &scalar_int);
+        REQUIRE(fixture.child->params[0] != NULL);
+    }
     xi_block_set_return(child_entry, NULL);
     xi_block_set_return(decoy_entry, NULL);
     fixture.function->children = (XiFunc **) xr_calloc(2, sizeof(*fixture.function->children));
@@ -1360,14 +1417,16 @@ direct_local_go_callee_storage_fixture_create(bool extra_use, bool second_store)
     fixture.function->nchildren = fixture.function->children_cap = 2;
     fixture.child->parent_func = fixture.function;
     fixture.decoy->parent_func = fixture.function;
+    XrType *closure_type =
+        mode == DIRECT_LOCAL_GO_CONST_ARGUMENT || mode == DIRECT_LOCAL_GO_SHARED_ARGUMENT
+            ? &direct_local_go_closure_one_arg
+            : &direct_local_go_closure;
     XiValue *closure =
-        xi_value_new(fixture.function, fixture.entry, XI_CLOSURE_NEW, &direct_local_go_closure, 0);
+        xi_value_new(fixture.function, fixture.entry, XI_CLOSURE_NEW, closure_type, 0);
     XiValue *store = xi_value_new(fixture.function, fixture.entry, XI_SET_SHARED, &scalar_unit, 1);
     fixture.load =
         xi_value_new(fixture.function, fixture.entry, XI_GET_SHARED, &opaque_callable, 0);
-    fixture.go = xi_value_new(fixture.function, fixture.entry, XI_GO, &task_unit, 1);
-    fixture.await = xi_value_new(fixture.function, fixture.entry, XI_AWAIT, &scalar_unit, 1);
-    REQUIRE(closure && store && fixture.load && fixture.go && fixture.await);
+    REQUIRE(closure && store && fixture.load);
     closure->aux = fixture.child;
     store->aux_int = 0;
     store->args[0] = closure;
@@ -1382,7 +1441,26 @@ direct_local_go_callee_storage_fixture_create(bool extra_use, bool second_store)
         duplicate->args[0] = decoy_closure;
     }
     fixture.load->aux_int = 0;
+    XiValue *argument = NULL;
+    if (mode == DIRECT_LOCAL_GO_CONST_ARGUMENT) {
+        argument = root_argument;
+    } else if (mode == DIRECT_LOCAL_GO_SHARED_ARGUMENT) {
+        XiValue *shared_store =
+            xi_value_new(fixture.function, fixture.entry, XI_SET_SHARED, &scalar_unit, 1);
+        XiValue *shared_load =
+            xi_value_new(fixture.function, fixture.entry, XI_GET_SHARED, &scalar_int, 0);
+        REQUIRE(root_argument && shared_store && shared_load);
+        shared_store->aux_int = 1;
+        shared_store->args[0] = root_argument;
+        shared_load->aux_int = 1;
+        argument = shared_load;
+    }
+    fixture.go = xi_value_new(fixture.function, fixture.entry, XI_GO, &task_unit, argument ? 2 : 1);
+    fixture.await = xi_value_new(fixture.function, fixture.entry, XI_AWAIT, &scalar_unit, 1);
+    REQUIRE(fixture.go && fixture.await);
     fixture.go->args[0] = fixture.load;
+    if (argument)
+        fixture.go->args[1] = argument;
     fixture.await->args[0] = fixture.go;
     fixture.await->aux_int = XI_AWAIT_AUX_CONSUME_TASK;
     if (extra_use) {
@@ -1391,13 +1469,16 @@ direct_local_go_callee_storage_fixture_create(bool extra_use, bool second_store)
         unexpected->args[0] = fixture.load;
     }
     xi_block_set_return(fixture.entry, NULL);
-    fixture.function->nshared = 1;
+    fixture.function->nshared = mode == DIRECT_LOCAL_GO_SHARED_ARGUMENT ? 2 : 1;
     fixture.function->shared_slot_funcs = (XiFunc **) xi_func_arena_alloc(
-        fixture.function, sizeof(*fixture.function->shared_slot_funcs));
+        fixture.function,
+        (size_t) fixture.function->nshared * sizeof(*fixture.function->shared_slot_funcs));
     REQUIRE(fixture.function->shared_slot_funcs != NULL);
     fixture.function->shared_slot_funcs[0] = fixture.child;
-    fixture.function->shared_slot_func_count = 1;
-    fixture.entry->sealed = child_entry->sealed = decoy_entry->sealed = true;
+    if (fixture.function->nshared > 1)
+        fixture.function->shared_slot_funcs[1] = NULL;
+    fixture.function->shared_slot_func_count = fixture.function->nshared;
+    root_entry->sealed = fixture.entry->sealed = child_entry->sealed = decoy_entry->sealed = true;
     fixture.function->stage = fixture.child->stage = fixture.decoy->stage =
         XI_STAGE_SEMANTIC_LOWERED;
     fixture.function->invariant_mask = fixture.child->invariant_mask =
@@ -1429,6 +1510,25 @@ direct_local_go_callee_storage_fixture_free(DirectLocalGoCalleeStorageFixture *f
     xr_target_profile_free(fixture->target_profile);
     xi_func_free(fixture->function);
     memset(fixture, 0, sizeof(*fixture));
+}
+
+static void
+direct_local_go_callee_storage_require_materialization(DirectLocalGoCalleeStorageFixture *fixture) {
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture->target_plan, xr_target_plan_semantic_plan(fixture->target_plan), &policy, &plan,
+        &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    xi_opt_refresh_representations_with_policy(fixture->function, &policy);
+    bool verified = xr_aot_representation_materialization_verify(
+        &view, fixture->function, fixture->target_plan, &policy, &diag);
+    if (!verified)
+        fprintf(stderr, "direct-local go materialization failed: issue=%u value=%u operation=%u\n",
+                diag.issue, diag.semantic_value, diag.semantic_operation);
+    REQUIRE(verified);
+    xr_aot_refinement_plan_free(plan);
 }
 
 static bool fingerprint_is_zero_bytes(const XrFingerprint *fingerprint) {
@@ -2722,7 +2822,7 @@ static void test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed(
 
 static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     DirectLocalGoCalleeStorageFixture fixture =
-        direct_local_go_callee_storage_fixture_create(false, false);
+        direct_local_go_callee_storage_fixture_create(false, false, DIRECT_LOCAL_GO_BASIC);
     REQUIRE((fixture.target_plan->completed_family_mask &
              XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE) != 0);
     REQUIRE((fixture.target_plan->completed_family_mask &
@@ -2860,11 +2960,33 @@ static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
     xr_aot_refinement_plan_free(plan);
     direct_local_go_callee_storage_fixture_free(&fixture);
     DirectLocalGoCalleeStorageFixture extra =
-        direct_local_go_callee_storage_fixture_create(true, false);
+        direct_local_go_callee_storage_fixture_create(true, false, DIRECT_LOCAL_GO_BASIC);
     direct_local_go_callee_storage_fixture_free(&extra);
     DirectLocalGoCalleeStorageFixture duplicate =
-        direct_local_go_callee_storage_fixture_create(false, true);
+        direct_local_go_callee_storage_fixture_create(false, true, DIRECT_LOCAL_GO_BASIC);
     direct_local_go_callee_storage_fixture_free(&duplicate);
+
+    const DirectLocalGoFixtureMode modes[] = {
+        DIRECT_LOCAL_GO_DOMINATED_STORE,
+        DIRECT_LOCAL_GO_CONST_ARGUMENT,
+        DIRECT_LOCAL_GO_SHARED_ARGUMENT,
+    };
+    for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+        DirectLocalGoCalleeStorageFixture accepted =
+            direct_local_go_callee_storage_fixture_create(false, false, modes[i]);
+        if (modes[i] == DIRECT_LOCAL_GO_DOMINATED_STORE) {
+            direct_local_go_callee_storage_require_materialization(&accepted);
+        } else {
+            XiRepPolicy policy = xi_rep_policy_native_boundary();
+            XrAotRefinementDiagnostic diag = {0};
+            XrAotRefinementPlan *accepted_plan = NULL;
+            REQUIRE(xr_aot_representation_refinement_build_from_authority(
+                accepted.target_plan, xr_target_plan_semantic_plan(accepted.target_plan), &policy,
+                &accepted_plan, &diag));
+            xr_aot_refinement_plan_free(accepted_plan);
+        }
+        direct_local_go_callee_storage_fixture_free(&accepted);
+    }
 }
 
 static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
@@ -5270,7 +5392,7 @@ static XrTargetPlan *build_union_as_conversion_target(uint32_t target_tid, const
     XiValue *load = xi_value_new(function, entry, XI_GET_SHARED, &union_int_string, 0);
     XrType *result_type = target_tid == XR_TID_I64      ? &scalar_int
                           : target_tid == XR_TID_STRING ? &scalar_string
-                                                       : &scalar_bool;
+                                                        : &scalar_bool;
     XiValue *conversion = xi_value_new(function, entry, XI_AS, result_type, 1);
     REQUIRE(function && entry && constant && store && load && conversion);
     store->aux_int = 0;
@@ -5356,6 +5478,11 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "native-direct-fresh") == 0) {
         test_native_direct_fresh_result_refinement_authority_is_exact();
         puts("Native-direct fresh-result AOT refinement tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "direct-local-go-storage") == 0) {
+        test_direct_local_go_callee_storage_is_exact_and_fail_closed();
+        puts("Direct-local go storage AOT refinement tests passed");
         return 0;
     }
     if (argc != 1) {

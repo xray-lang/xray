@@ -40,6 +40,7 @@
 #include "../semantic/xr_semantic_string_shape.h"
 #include "../semantic/xr_semantic_string_utf8_shape.h"
 #include "../semantic/xr_semantic_cleanup_shape.h"
+#include "../semantic/xr_semantic_const_variant_shape.h"
 #include "../semantic/xr_semantic_task_shape.h"
 #include "../semantic/xr_semantic_string_runes_shape.h"
 #include "../semantic/xr_semantic_builtin_runtime_method_shape.h"
@@ -3290,22 +3291,23 @@ static XrVerifierGoStore *verifier_go_find_store(XrVerifierGoStore *stores, uint
     return &stores[slot];
 }
 
-static bool verifier_go_store_before_activation(const XrSemanticPlan *semantic,
-                                                uint32_t function_index, uint32_t store_index) {
-    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(semantic, function_index);
+static bool verifier_go_store_dominates_slot_reads(const XrSemanticPlan *semantic,
+                                                   const XrSemanticGraph *graph, int64_t slot,
+                                                   uint32_t store_index) {
     const XrSemanticOperationRecord *store = xr_semantic_plan_operation(semantic, store_index);
-    const XrSemanticBlockRecord *entry =
-        function ? xr_semantic_plan_block(semantic, function->block_begin) : NULL;
-    if (!function || !store || !entry || entry->function != function_index ||
-        store->block != function->block_begin || store_index < entry->operation_begin ||
-        store_index >= entry->operation_begin + entry->operation_count)
+    if (!semantic || !graph || !store)
         return false;
-    for (uint32_t i = entry->operation_begin; i < store_index; i++) {
-        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
-        if (!operation || operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
-            operation->opcode == XI_CALL_METHOD || operation->opcode == XI_CALL_METHOD_DIRECT ||
-            operation->opcode == XI_CALL_BUILTIN || operation->opcode == XI_GO ||
-            operation->opcode == XI_THREAD_SPAWN)
+    uint32_t count = (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticOperationRecord *read = xr_semantic_plan_operation(semantic, i);
+        if (!read)
+            return false;
+        if (read->opcode != XI_GET_SHARED || read->semantic_immediate != slot ||
+            read->function != store->function)
+            continue;
+        if (read->block == store->block
+                ? i <= store_index
+                : !xr_semantic_graph_dominates(graph, store->block, read->block))
             return false;
     }
     return true;
@@ -3410,7 +3412,7 @@ static bool collect_exact_direct_local_go_callee_values(const XrTargetPlan *plan
                 definition[operand->value] < operation_count
                     ? xr_semantic_plan_operation(semantic, definition[operand->value])
                     : NULL;
-            if (!load || load->opcode != XI_GET_SHARED || use->opcode != XI_GO)
+            if (!load || load->opcode != XI_GET_SHARED || use->opcode != XI_GO || a != 0)
                 continue;
             uint32_t value = load->result_value;
             candidate[value] = 1;
@@ -3443,7 +3445,8 @@ static bool collect_exact_direct_local_go_callee_values(const XrTargetPlan *plan
             bool exact_use =
                 entry && !entry->ambiguous && store && stored && closure && callee && a == 0 &&
                 initialized &&
-                verifier_go_store_before_activation(semantic, store->function, entry->operation) &&
+                verifier_go_store_dominates_slot_reads(semantic, &graph, store->semantic_immediate,
+                                                       entry->operation) &&
                 store->opcode == XI_SET_SHARED && callee->parent == store->function &&
                 store->semantic_immediate == load->semantic_immediate && !store->allocation_key &&
                 stable_id_is_zero(store->allocation_id) &&
@@ -3478,13 +3481,14 @@ static bool collect_exact_direct_local_go_callee_values(const XrTargetPlan *plan
                 const XrSemanticOperandRecord *row = &operands[use->operand_begin + argument];
                 const XrSemanticParameterRecord *parameter =
                     xr_semantic_plan_parameter(semantic, callee->parameter_begin + argument - 1u);
-                exact_use = parameter && row->type == parameter->type &&
-                            row->role == XR_SEM_OPERAND_VALUE && row->parameter == -1 &&
-                            row->parameter_mode == XR_PARAM_READ &&
-                            row->access == XR_CALL_ARG_PLAIN &&
-                            row->origin == XI_PLACE_ORIGIN_NONE &&
-                            row->lifetime == XI_PLACE_LIFETIME_NONE &&
-                            row->escape == XI_PLACE_ESCAPE_NONE && row->flags == 0;
+                exact_use =
+                    parameter &&
+                    xr_semantic_type_is_const_variant(semantic, row->type, parameter->type) &&
+                    row->role == XR_SEM_OPERAND_VALUE && row->parameter == -1 &&
+                    row->parameter_mode == XR_PARAM_READ && row->access == XR_CALL_ARG_PLAIN &&
+                    row->origin == XI_PLACE_ORIGIN_NONE &&
+                    row->lifetime == XI_PLACE_LIFETIME_NONE &&
+                    row->escape == XI_PLACE_ESCAPE_NONE && row->flags == 0;
             }
             if (!exact_use ||
                 (targets[value] != XR_SEMANTIC_INDEX_NONE && targets[value] != target) ||
