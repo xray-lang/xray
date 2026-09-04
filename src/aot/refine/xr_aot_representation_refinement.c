@@ -510,6 +510,39 @@ static bool verify_target_function_index(const VerifyAuthority *ctx, uint32_t se
     return true;
 }
 
+/* Dependency ordinals belong to the importing SemanticPlan. A partitioned
+ * TargetPlan stores the program modules as peers, so resolve the local row by
+ * its durable module identity and semantic fingerprint rather than indexing
+ * the entry module's dependency array. */
+static const XrSemanticPlan *verify_semantic_dependency(const VerifyAuthority *ctx,
+                                                        uint32_t dependency) {
+    if (!ctx || dependency >= xr_semantic_plan_dependency_count(ctx->semantic))
+        return NULL;
+    uint32_t partition_count = 0u;
+    (void) xr_target_plan_module_partitions(ctx->target_plan, &partition_count);
+    if (!partition_count)
+        return ctx->semantic == xr_target_plan_semantic_plan(ctx->target_plan)
+                   ? xr_target_plan_semantic_dependency(ctx->target_plan, dependency)
+                   : NULL;
+    const XrSemanticDependencyRecord *required =
+        xr_semantic_plan_dependency(ctx->semantic, dependency);
+    const XrSemanticPlan *match = NULL;
+    uint32_t module_count = xr_target_plan_program_module_count(ctx->target_plan);
+    for (uint32_t row = 0u; required && row < module_count; row++) {
+        const XrSemanticPlan *candidate = xr_target_plan_program_module(ctx->target_plan, row);
+        const XrSemanticEntityRecord *entity =
+            candidate ? xr_semantic_plan_unique_module_entity(candidate) : NULL;
+        if (!entity || !xr_stable_id_equal(entity->id, required->module) ||
+            !xr_fingerprint_equal(xr_semantic_plan_fingerprint(candidate),
+                                  required->semantic_fingerprint))
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
 typedef enum AotI64OverflowPredicateMatch {
     AOT_I64_OVERFLOW_PREDICATE_NOT_APPLICABLE = 0,
     AOT_I64_OVERFLOW_PREDICATE_EXACT,
@@ -6103,7 +6136,7 @@ oracle_imported_source_class_construction_is_exact(const VerifyAuthority *ctx,
         target_index = i;
     }
     const XrSemanticPlan *dependency =
-        target ? xr_target_plan_semantic_dependency(ctx->target_plan, target->dependency) : NULL;
+        target ? verify_semantic_dependency(ctx, target->dependency) : NULL;
     const XrSemanticSourceExportRecord *source_export =
         dependency && target->source_export < xr_semantic_plan_source_export_count(dependency)
             ? xr_semantic_plan_source_export(dependency, target->source_export)
@@ -6126,16 +6159,14 @@ oracle_imported_source_class_construction_is_exact(const VerifyAuthority *ctx,
                             (!callee && xr_stable_id_equal(target->callee_function, zero)));
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
-    const XrTargetCallRecord *call = NULL;
-    for (uint32_t i = 0; target_identity && calls && i < call_count; i++) {
-        if (calls[i].semantic_operation != operation_index ||
-            calls[i].semantic_call_target != target_index)
-            continue;
-        if (call)
-            return false;
-        call = &calls[i];
-    }
+    uint32_t call_index = operation_index < ctx->operation_count
+                              ? ctx->call_by_operation[operation_index]
+                              : XR_SEMANTIC_INDEX_NONE;
+    const XrTargetCallRecord *call =
+        target_identity && calls && call_index < call_count ? &calls[call_index] : NULL;
     return call && call->source_dependency == target->dependency &&
+           call->semantic_operation == operation_index &&
+           call->semantic_call_target == target_index &&
            call->source_export == target->source_export &&
            xr_stable_id_equal(call->source_export_identity, target->export_identity) &&
            xr_stable_id_equal(call->source_callee_identity, target->callee_function) &&
@@ -6143,6 +6174,78 @@ oracle_imported_source_class_construction_is_exact(const VerifyAuthority *ctx,
            call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
            call->result_value == operation->result_value &&
            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && call->flags == 0;
+}
+
+/* A source-exported function may return an owned instance of a class declared
+ * by its own module. The caller has only an external type row, so the semantic
+ * class identity and type identity are joined across the two verified plans,
+ * then the partition-local operation is joined to its one global Target call. */
+static bool
+oracle_source_export_owned_class_call_is_exact(const VerifyAuthority *ctx, uint32_t operation_index,
+                                               const XrSemanticOperationRecord *operation) {
+    if (!ctx || !operation)
+        return false;
+    const XrSemanticCallTargetRecord *target = NULL;
+    uint32_t target_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(ctx->semantic);
+    for (uint32_t i = 0u; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *candidate =
+            xr_semantic_plan_call_target(ctx->semantic, i);
+        if (!candidate || candidate->operation != operation_index ||
+            candidate->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            continue;
+        if (target)
+            return false;
+        target = candidate;
+        target_index = i;
+    }
+    const XrSemanticPlan *dependency =
+        target ? verify_semantic_dependency(ctx, target->dependency) : NULL;
+    const XrSemanticSourceExportRecord *source_export =
+        dependency && target->source_export < xr_semantic_plan_source_export_count(dependency)
+            ? xr_semantic_plan_source_export(dependency, target->source_export)
+            : NULL;
+    const XrSemanticFunctionRecord *callee =
+        source_export && source_export->kind == XR_SEM_SOURCE_EXPORT_FUNCTION
+            ? xr_semantic_plan_function(dependency, source_export->function)
+            : NULL;
+    uint32_t source_class = xr_semantic_source_export_owned_class_result_source_class(
+        ctx->semantic, dependency, operation, callee);
+    uint32_t call_count = 0u;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
+    uint32_t call_index = operation_index < ctx->operation_count
+                              ? ctx->call_by_operation[operation_index]
+                              : XR_SEMANTIC_INDEX_NONE;
+    const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
+    const XrTargetValueRepRecord *binding = verify_target_value_rep(ctx, operation->result_value);
+    uint32_t caller_function = XR_SEMANTIC_INDEX_NONE;
+    XrStableId expected_identity = {{0}};
+    return target && source_export && callee && source_class != XR_SEMANTIC_INDEX_NONE && call &&
+           binding && target->function == XR_SEMANTIC_INDEX_NONE &&
+           target->callable_type == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(source_export->exported_entity, callee->id) &&
+           xr_stable_id_equal(target->export_identity, source_export->id) &&
+           xr_stable_id_equal(target->callee_function, callee->id) &&
+           verify_target_function_index(ctx, operation->function, &caller_function) &&
+           aot_pair_identity("xray-target-call-v5", target->id, operation->id, 0,
+                             &expected_identity) &&
+           xr_stable_id_equal(call->identity, expected_identity) && call->id == call_index &&
+           call->semantic_operation == operation_index &&
+           call->semantic_call_target == target_index && call->caller_function == caller_function &&
+           call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+           call->source_dependency == target->dependency &&
+           call->source_export == target->source_export &&
+           xr_stable_id_equal(call->source_export_identity, target->export_identity) &&
+           xr_stable_id_equal(call->source_callee_identity, target->callee_function) &&
+           call->result_value == operation->result_value && call->result_slot == binding->slot &&
+           call->caller_storage_slot == XR_SEMANTIC_INDEX_NONE &&
+           call->result_register_rep == binding->register_rep &&
+           call->result_memory_rep == binding->memory_rep &&
+           call->argument_count == callee->parameter_count &&
+           call->calling_convention == XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
+           call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+           call->result_mode == XR_TARGET_CALL_VALUE &&
+           call->result_ownership == XR_TARGET_CALL_RETURN_OWNED;
 }
 
 /* The same proof for the three values a source-class construction produces. The
@@ -6166,8 +6269,11 @@ static bool oracle_dynamic_source_class_instance_storage(const VerifyAuthority *
     bool exact_imported =
         operation && operation->opcode == XI_CALL &&
         oracle_imported_source_class_construction_is_exact(ctx, operation_index, operation);
+    bool exact_source_export =
+        operation && (operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+        oracle_source_export_owned_class_call_is_exact(ctx, operation_index, operation);
     if (!operation || operation->result_value != semantic_value ||
-        (!exact_local && !exact_imported))
+        (!exact_local && !exact_imported && !exact_source_export))
         return false;
     uint8_t ownership = operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED
                             ? XR_TARGET_OWNERSHIP_OWNED
@@ -6186,15 +6292,14 @@ static bool oracle_dynamic_source_class_instance_storage(const VerifyAuthority *
         binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
     uint32_t layout_count = 0;
     const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(ctx->target_plan, &layout_count);
-    const XrTargetLayoutRecord *layout = NULL;
-    for (uint32_t i = 0; i < layout_count; i++) {
-        if (layouts[i].semantic_type != operation->result_type)
-            continue;
-        if (layout)
-            return false;
-        layout = &layouts[i];
-    }
+    uint32_t layout_index = operation->result_type < ctx->type_count
+                                ? ctx->layout_by_type[operation->result_type]
+                                : XR_SEMANTIC_INDEX_NONE;
+    const XrTargetLayoutRecord *layout =
+        layouts && layout_index < layout_count ? &layouts[layout_index] : NULL;
+    uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
     if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        !verify_target_function_index(ctx, operation->function, &target_function) ||
         binding->semantic_value != semantic_value ||
         register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
         memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
@@ -6208,7 +6313,7 @@ static bool oracle_dynamic_source_class_instance_storage(const VerifyAuthority *
         layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
         layout->root_field_count != 0 || layout->fixed_prefix_size != memory_rep->memory_size ||
         layout->align != memory_rep->memory_align || slot->semantic_value != semantic_value ||
-        slot->semantic_operation != operation_index || slot->function != operation->function ||
+        slot->semantic_operation != operation_index || slot->function != target_function ||
         slot->role != XR_TARGET_SLOT_TEMPORARY || slot->register_rep != binding->register_rep ||
         slot->memory_rep != binding->memory_rep || slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
         slot->ownership != ownership)

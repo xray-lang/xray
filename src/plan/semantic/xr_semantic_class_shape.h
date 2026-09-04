@@ -983,6 +983,40 @@ xr_semantic_external_class_instance_type_is_exact(const XrSemanticTypeRecord *ty
            type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
+/* A source-export call crosses independently numbered type and declaration
+ * tables.  The caller therefore names the imported class only by stable
+ * identity, while the dependency must still own the exact frozen declaration.
+ * A matching type ID alone is insufficient: both type rows must also name the
+ * same source-class identity and the return edge must transfer one whole owned
+ * value rather than an alias or parameter borrow. */
+static inline uint32_t xr_semantic_source_export_owned_class_result_source_class(
+    const XrSemanticPlan *caller, const XrSemanticPlan *dependency,
+    const XrSemanticOperationRecord *operation, const XrSemanticFunctionRecord *callee) {
+    const XrSemanticTypeRecord *caller_type =
+        operation ? xr_semantic_plan_type(caller, operation->result_type) : NULL;
+    const XrSemanticTypeRecord *callee_type =
+        callee ? xr_semantic_plan_type(dependency, callee->return_type) : NULL;
+    uint32_t source_class = xr_semantic_class_instance_type_source_class(dependency, callee_type);
+    const XrSemanticSourceClassRecord *declaration =
+        xr_semantic_plan_source_class(dependency, source_class);
+    return caller && dependency && operation && callee &&
+                   (operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+                   operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+                   operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                   operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
+                   operation->return_complete == 1 &&
+                   operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                   callee->return_parameter == -1 &&
+                   callee->return_provenance == XR_SEM_RETURN_OWNED &&
+                   xr_semantic_external_class_instance_type_is_exact(caller_type) && declaration &&
+                   xr_stable_id_equal(caller_type->id, callee_type->id) &&
+                   xr_stable_id_equal(caller_type->source_class_identity,
+                                      callee_type->source_class_identity) &&
+                   xr_stable_id_equal(callee_type->source_class_identity, declaration->id)
+               ? source_class
+               : XR_SEMANTIC_INDEX_NONE;
+}
+
 /* The declaration frozen by one class-export row. The semantic builder and
  * verifier have already proved the root initializer independently; downstream
  * module-set, Target and AOT consumers use only this explicit authority. */

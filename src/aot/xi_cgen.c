@@ -3064,8 +3064,39 @@ static CgValueEmissionStatus cg_cleanup_emission_view(XiCgenCtx *ctx, const XiFu
         entry ? xr_target_plan_cleanups(entry->target_plan, &cleanup_count) : NULL;
     const XrTargetFunctionRecord *functions =
         entry ? xr_target_plan_functions(entry->target_plan, &function_count) : NULL;
-    uint32_t function_index = function->semantic_plan_function_index;
-    if (entry && functions && function_index < function_count &&
+    uint32_t partition = UINT32_MAX;
+    uint32_t partition_count = 0u;
+    const XrTargetModulePartitionRecord *partitions =
+        entry ? xr_target_plan_module_partitions(entry->target_plan, &partition_count) : NULL;
+    uint32_t function_begin = 0u;
+    uint32_t partition_function_count = function_count;
+    uint32_t cleanup_begin = 0u;
+    uint32_t partition_cleanup_count = cleanup_count;
+    if (!entry || !entry->target_plan || !xr_target_plan_is_verified(entry->target_plan) ||
+        !xr_target_plan_partition_for_semantic(entry->target_plan, function->semantic_plan,
+                                               &partition))
+        return cg_value_emission_fail(ctx, "C cleanup SemanticPlan authority is missing");
+    if (partition_count) {
+        if (!partitions || partition >= partition_count ||
+            partitions[partition].functions_begin > function_count ||
+            partitions[partition].functions_count >
+                function_count - partitions[partition].functions_begin ||
+            partitions[partition].cleanups_begin > cleanup_count ||
+            partitions[partition].cleanups_count >
+                cleanup_count - partitions[partition].cleanups_begin)
+            return cg_value_emission_fail(ctx, "C cleanup module partition is invalid");
+        function_begin = partitions[partition].functions_begin;
+        partition_function_count = partitions[partition].functions_count;
+        cleanup_begin = partitions[partition].cleanups_begin;
+        partition_cleanup_count = partitions[partition].cleanups_count;
+    } else if (partition != 0u || partitions) {
+        return cg_value_emission_fail(ctx, "C cleanup singleton partition is invalid");
+    }
+    uint32_t semantic_function = function->semantic_plan_function_index;
+    uint32_t function_index = semantic_function < partition_function_count
+                                  ? function_begin + semantic_function
+                                  : XR_SEMANTIC_INDEX_NONE;
+    if (functions && function_index < function_count &&
         functions[function_index].cleanup_count == 0)
         return CG_VALUE_EMISSION_NOT_COVERED;
     if (!entry || !functions || function_index >= function_count || !cleanups || cleanup_count == 0)
@@ -3092,9 +3123,12 @@ static CgValueEmissionStatus cg_cleanup_emission_view(XiCgenCtx *ctx, const XiFu
     if (!operation || operation->opcode != XI_RELEASE)
         return CG_VALUE_EMISSION_NOT_COVERED;
     const XrTargetCleanupRecord *target = NULL;
-    for (uint32_t i = 0; cleanups && i < cleanup_count; i++) {
+    uint32_t cleanup_end = cleanup_begin + partition_cleanup_count;
+    for (uint32_t i = cleanup_begin; cleanups && i < cleanup_end; i++) {
         if (cleanups[i].semantic_operation != operation_index)
             continue;
+        if (cleanups[i].function != function_index)
+            return cg_value_emission_fail(ctx, "C cleanup function authority is inconsistent");
         if (target)
             return cg_value_emission_fail(ctx, "C cleanup TargetPlan identity is duplicated");
         target = &cleanups[i];

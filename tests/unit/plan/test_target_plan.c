@@ -4767,18 +4767,24 @@ typedef enum SourceExportArgumentKind {
     SOURCE_EXPORT_ARGUMENT_RAW_POINTER_REFERENCE,
     SOURCE_EXPORT_ARGUMENT_EXACT_I64,
     SOURCE_EXPORT_ARGUMENT_STRING,
+    SOURCE_EXPORT_ARGUMENT_CLASS_RESULT,
 } SourceExportArgumentKind;
 
 static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_out,
                                                     SourceExportArgumentKind argument_kind) {
-    bool with_argument = argument_kind != SOURCE_EXPORT_ARGUMENT_NONE;
+    bool exact_class = argument_kind == SOURCE_EXPORT_ARGUMENT_CLASS_RESULT;
+    bool with_argument = argument_kind != SOURCE_EXPORT_ARGUMENT_NONE && !exact_class;
     bool reference = argument_kind == SOURCE_EXPORT_ARGUMENT_RAW_POINTER_REFERENCE;
     bool exact_i64 = argument_kind == SOURCE_EXPORT_ARGUMENT_EXACT_I64;
     bool exact_string = argument_kind == SOURCE_EXPORT_ARGUMENT_STRING;
     XiFunc *dependency_root = xi_func_new("net_init", &stub_unit);
-    XiFunc *write_bytes =
-        xi_func_new(exact_string ? "trim" : "writeBytes",
-                    exact_string ? &stub_exact_string : (exact_i64 ? &stub_int : &stub_unit));
+    XiFunc *write_bytes = xi_func_new(exact_class    ? "makeConn"
+                                      : exact_string ? "trim"
+                                                     : "writeBytes",
+                                      exact_class    ? &stub_target_source_instance
+                                      : exact_string ? &stub_exact_string
+                                      : exact_i64    ? &stub_int
+                                                     : &stub_unit);
     REQUIRE(dependency_root && write_bytes);
     XiBlock *dependency_entry = xi_block_new(dependency_root);
     XiBlock *write_entry = xi_block_new(write_bytes);
@@ -4818,9 +4824,9 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     closure->aux = write_bytes;
     store->args[0] = closure;
     store->aux_int = 0;
-    dependency_root->nshared = 1;
+    dependency_root->nshared = exact_class ? 2 : 1;
     xi_block_set_return(dependency_entry, NULL);
-    if (!with_argument)
+    if (!with_argument && !exact_class)
         REQUIRE(xi_value_new(write_bytes, write_entry, XI_YIELD, &stub_unit, 0));
     XiValue *owned_string_left =
         exact_string ? xi_const_str(write_bytes, write_entry, "trim", &stub_exact_string) : NULL;
@@ -4834,37 +4840,86 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
         owned_string_result->args[0] = owned_string_left;
         owned_string_result->args[1] = owned_string_right;
     }
-    xi_block_set_return(write_entry, exact_string ? owned_string_result
-                                     : exact_i64  ? write_bytes->params[0]
-                                                  : NULL);
-    dependency_root->stage = write_bytes->stage = XI_STAGE_SEMANTIC_LOWERED;
+    XiClassData source_class = {
+        .class_info = &stub_target_source_class_info,
+        .class_name = "FinalTargetWorker",
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    XiValue *class_result = NULL;
+    if (exact_class) {
+        dependency_root->is_module_initializer = true;
+        XiValue *class_object =
+            xi_value_new(dependency_root, dependency_entry, XI_CLASS_CREATE, &stub_unknown, 0);
+        XiValue *class_store =
+            xi_value_new(dependency_root, dependency_entry, XI_SET_SHARED, &stub_unit, 1);
+        XiValue *class_load =
+            xi_value_new(write_bytes, write_entry, XI_GET_SHARED, &stub_unknown, 0);
+        class_result =
+            xi_value_new(write_bytes, write_entry, XI_CALL, &stub_target_source_instance, 1);
+        REQUIRE(class_object && class_store && class_load && class_result);
+        class_object->aux = &source_class;
+        class_store->args[0] = class_object;
+        class_store->aux_int = 1;
+        class_load->aux_int = 1;
+        class_result->args[0] = class_load;
+        class_result->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
+        class_result->call_return_ownership = (XiReturnOwnership) {
+            .kind = XI_RETURN_OWNERSHIP_OWNED,
+            .param_index = -1,
+            .complete = true,
+        };
+        write_bytes->arc_return_ownership = class_result->call_return_ownership;
+    }
+    xi_block_set_return(write_entry, exact_class    ? class_result
+                                     : exact_string ? owned_string_result
+                                     : exact_i64    ? write_bytes->params[0]
+                                                    : NULL);
+    dependency_root->stage = write_bytes->stage =
+        exact_class ? XI_STAGE_OPTIMIZED : XI_STAGE_SEMANTIC_LOWERED;
     dependency_root->invariant_mask = write_bytes->invariant_mask =
-        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
-    REQUIRE(xi_coro_lower(dependency_root, NULL));
+        xi_stage_invariants(exact_class ? XI_STAGE_OPTIMIZED : XI_STAGE_SEMANTIC_LOWERED);
+    if (!exact_class)
+        REQUIRE(xi_coro_lower(dependency_root, NULL));
     dependency_root->stage = write_bytes->stage = XI_STAGE_OPTIMIZED;
     XiModule *dependency_module = xi_module_new("stdlib/net/net.xr", "net", dependency_root);
     REQUIRE(dependency_module);
     REQUIRE(xi_module_set_identity(dependency_module,
                                    "memory-module-v1:id=27:source-export-dependency-v1"));
     dependency_root->module = dependency_module;
-    dependency_module->nslots = 1;
+    dependency_module->nslots = exact_class ? 2 : 1;
     dependency_module->nexports = 1;
     dependency_module->exports =
         (XiModuleExport *) xr_calloc(1, sizeof(*dependency_module->exports));
     REQUIRE(dependency_module->exports);
-    dependency_module->exports[0].name = exact_string ? "trim" : "writeBytes";
+    dependency_module->exports[0].name = exact_class    ? "makeConn"
+                                         : exact_string ? "trim"
+                                                        : "writeBytes";
     dependency_module->exports[0].shared_slot = 0;
     dependency_module->exports[0].function = write_bytes;
+    if (exact_class) {
+        dependency_module->classes =
+            (XiClassData **) xr_calloc(1, sizeof(*dependency_module->classes));
+        REQUIRE(dependency_module->classes);
+        dependency_module->classes[0] = &source_class;
+        dependency_module->nclasses = 1;
+    }
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build_and_attach(dependency_root, error, sizeof(error)));
     XrSemanticPlan *dependency = xr_semantic_plan_retain(dependency_root->semantic_plan);
     REQUIRE(dependency && xr_semantic_plan_source_export_count(dependency) == 1);
 
     XiFunc *caller_root = xi_func_new("http_init", &stub_unit);
-    XiFunc *caller =
-        xi_func_new(exact_string ? "trim_user" : "_serverWriteAll",
-                    exact_string ? &stub_exact_string : (exact_i64 ? &stub_int : &stub_unit));
+    XiFunc *caller = xi_func_new(exact_class    ? "makeConn_user"
+                                 : exact_string ? "trim_user"
+                                                : "_serverWriteAll",
+                                 exact_class    ? &stub_unit
+                                 : exact_string ? &stub_exact_string
+                                 : exact_i64    ? &stub_int
+                                                : &stub_unit);
     REQUIRE(caller_root && caller);
+    caller_root->is_module_initializer = exact_class;
+    caller->is_module_initializer = exact_class;
     XiBlock *root_entry = xi_block_new(caller_root);
     XiBlock *caller_entry = xi_block_new(caller);
     REQUIRE(root_entry && caller_entry);
@@ -4913,10 +4968,12 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
         argument_storage->aux_int = 1;
         argument->args[0] = argument_storage;
     }
-    XiValue *method =
-        xi_value_new(caller, caller_entry, XI_CALL_METHOD,
-                     exact_string ? &stub_exact_string : (exact_i64 ? &stub_int : &stub_unit),
-                     with_argument ? 2 : 1);
+    XiValue *method = xi_value_new(caller, caller_entry, XI_CALL_METHOD,
+                                   exact_class    ? &stub_target_source_instance
+                                   : exact_string ? &stub_exact_string
+                                   : exact_i64    ? &stub_int
+                                                  : &stub_unit,
+                                   with_argument ? 2 : 1);
     REQUIRE(receiver && receiver_alias && (!with_argument || argument) && method);
     receiver->aux_int = 0;
     receiver_alias->args[0] = receiver;
@@ -4945,9 +5002,9 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
         call_plan->verified = true;
         method->call_plan = call_plan;
     }
-    method->aux = (void *) (exact_string ? "trim" : "writeBytes");
+    method->aux = (void *) (exact_class ? "makeConn" : exact_string ? "trim" : "writeBytes");
     method->aux_int = 0;
-    if (exact_string) {
+    if (exact_string || exact_class) {
         XiReturnOwnership owned_return = {
             .kind = XI_RETURN_OWNERSHIP_OWNED,
             .param_index = -1,
@@ -4955,7 +5012,8 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
         };
         write_bytes->arc_return_ownership = owned_return;
         method->call_return_ownership = owned_return;
-        caller->arc_return_ownership = owned_return;
+        if (!exact_class)
+            caller->arc_return_ownership = owned_return;
     }
     if (reference) {
         XiValue *writeback =
@@ -4966,13 +5024,13 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
         writeback_store->args[0] = writeback;
         writeback_store->aux_int = 1;
     }
-    xi_block_set_return(caller_entry, method);
+    xi_block_set_return(caller_entry, exact_class ? NULL : method);
     caller_root->stage = caller->stage = XI_STAGE_SEMANTIC_LOWERED;
     caller_root->invariant_mask = caller->invariant_mask =
         xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
     SourceExportResolverFixture fixture = {
         .callee = write_bytes,
-        .suspendability = with_argument ? 0 : 1,
+        .suspendability = (with_argument || exact_class) ? 0 : 1,
     };
     XiCoroResolver resolver = {
         .resolve_method = source_export_resolve_method,
@@ -6168,6 +6226,89 @@ static void test_source_export_string_result_authority(void) {
 
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_semantic_plan_free(dependency);
+}
+
+static void test_source_export_owned_class_result_program_authority(void) {
+    XrSemanticPlan *dependency = NULL;
+    XrSemanticPlan *semantic =
+        build_source_export_semantic(&dependency, SOURCE_EXPORT_ARGUMENT_CLASS_RESULT);
+    XrSemanticPlan *first = build_single_scalar_semantic(&stub_int);
+    XrTargetProfile *profile = build_profile(0);
+    const XrSemanticPlan *modules[] = {first, dependency, semantic};
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build_program_module_set(modules, 3u, semantic, profile, &plan,
+                                                         error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "three-module source-export class Target fixture failed: %s\n", error);
+    REQUIRE(built && plan && xr_target_plan_verify(plan, error, sizeof(error)) &&
+            plan->module_partitions_count == 3u);
+    const XrTargetModulePartitionRecord *entry = &plan->module_partitions[2];
+    REQUIRE(entry->program_module_row == 2u && entry->calls_count == 1u && entry->calls_begin > 0u);
+    XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0u; i < entry->calls_count; i++) {
+        XrTargetCallRecord *candidate = &plan->calls[entry->calls_begin + i];
+        if (candidate->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT)
+            call = call ? NULL : candidate;
+    }
+    REQUIRE(call != NULL);
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, call->semantic_operation);
+    const XrSemanticCallTargetRecord *target =
+        xr_semantic_plan_call_target(semantic, call->semantic_call_target);
+    const XrSemanticSourceExportRecord *source_export =
+        target ? xr_semantic_plan_source_export(dependency, target->source_export) : NULL;
+    const XrSemanticFunctionRecord *callee =
+        source_export ? xr_semantic_plan_function(dependency, source_export->function) : NULL;
+    const XrTargetValueRepRecord *result =
+        operation ? xr_target_plan_value_rep_for_module(plan, 2u, operation->result_value) : NULL;
+    REQUIRE(operation && target && source_export && callee && result &&
+            xr_semantic_source_export_owned_class_result_source_class(
+                semantic, dependency, operation, callee) != XR_SEMANTIC_INDEX_NONE &&
+            call->caller_function == entry->functions_begin + operation->function &&
+            call->result_value == operation->result_value && call->result_slot == result->slot &&
+            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
+            call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+            result->slot >= entry->slots_begin &&
+            result->slot < entry->slots_begin + entry->slots_count &&
+            plan->slots[result->slot].function == entry->functions_begin + operation->function &&
+            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    bool refined = xr_aot_representation_refinement_build_from_authority(plan, semantic, &policy,
+                                                                         &refinement, &diag);
+    if (!refined)
+        fprintf(stderr,
+                "source-export class refinement failed: issue=%u record=%u pass=%u call=%u "
+                "value=%u operation=%u\n",
+                diag.issue, diag.record_index, diag.pass_id, diag.target_call_index,
+                diag.semantic_value, diag.semantic_operation);
+    REQUIRE(refined);
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
+    REQUIRE(view.frozen && view.verified && xr_aot_refinement_verify(&view, plan, semantic, &diag));
+    xr_aot_refinement_plan_free(refinement);
+
+    XrStableId saved_class_identity = semantic->types[operation->result_type].source_class_identity;
+    semantic->types[operation->result_type].source_class_identity.bytes[0] ^= 1u;
+    REQUIRE(xr_semantic_source_export_owned_class_result_source_class(
+                semantic, dependency, operation, callee) == XR_SEMANTIC_INDEX_NONE);
+    semantic->types[operation->result_type].source_class_identity = saved_class_identity;
+
+    XrTargetCallRecord saved_call = *call;
+    call->result_ownership = XR_TARGET_CALL_NONE;
+    xr_target_call_compute_fingerprint(plan, call->id, &call->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    *call = saved_call;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(first);
     xr_semantic_plan_free(semantic);
     xr_semantic_plan_free(dependency);
 }
@@ -11092,6 +11233,11 @@ int main(int argc, char **argv) {
         puts("Source-export call authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "source-export-owned-class-result") == 0) {
+        test_source_export_owned_class_result_program_authority();
+        puts("Source-export owned class result tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "imported-source-class-constructor-authority") == 0) {
         test_imported_source_class_constructor_authority();
         puts("Imported source-class constructor authority tests passed");
@@ -11170,6 +11316,7 @@ int main(int argc, char **argv) {
     test_source_export_call_authority();
     test_source_export_call_argument_authority();
     test_source_export_string_result_authority();
+    test_source_export_owned_class_result_program_authority();
     test_source_export_ref_argument_is_not_array_projection();
     test_imported_source_class_constructor_authority();
     test_exact_i64_dynamic_entry_authority();

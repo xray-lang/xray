@@ -4013,6 +4013,9 @@ invalid:
 static bool imported_source_class_instance_storage_is_exact_verify(
     const XrTargetPlan *plan, const XrSemanticPlan *semantic, uint32_t semantic_operation,
     const XrSemanticOperationRecord *operation);
+static bool source_export_owned_class_instance_storage_is_exact_verify(
+    const XrTargetPlan *plan, const XrTargetPartitionView *view, uint32_t semantic_operation,
+    const XrSemanticOperationRecord *operation);
 
 static bool rune_to_uint32_type_is_exact_target_verify(const XrSemanticTypeRecord *type,
                                                        uint16_t kind, uint8_t scalar_rep,
@@ -4164,6 +4167,9 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
             xr_semantic_class_instance_value_is_exact(semantic, operation, NULL) ||
             (operation->opcode == XI_CALL && imported_source_class_instance_storage_is_exact_verify(
                                                  plan, semantic, i, operation)) ||
+            ((operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+             source_export_owned_class_instance_storage_is_exact_verify(plan, view, i,
+                                                                        operation)) ||
             xr_semantic_string_literal_is_exact(semantic, operation) ||
             xr_semantic_bigint_value_is_exact(semantic, operation) ||
             xr_semantic_string_concat_is_exact(semantic, operation) ||
@@ -4280,6 +4286,44 @@ static bool imported_source_class_instance_storage_is_exact_verify(
             (!callee && stable_id_is_zero(target->callee_function)));
 }
 
+/* Reconstruct an owned class return without consulting the builder's match.
+ * The caller carries only the dependency class identity, while the dependency
+ * must own the exact class row and exported function declaration. */
+static bool source_export_owned_class_instance_storage_is_exact_verify(
+    const XrTargetPlan *plan, const XrTargetPartitionView *view, uint32_t semantic_operation,
+    const XrSemanticOperationRecord *operation) {
+    const XrSemanticPlan *semantic = view ? view->semantic : NULL;
+    const XrSemanticCallTargetRecord *target = NULL;
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(semantic);
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *candidate = xr_semantic_plan_call_target(semantic, i);
+        if (!candidate || candidate->operation != semantic_operation ||
+            candidate->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            continue;
+        if (target)
+            return false;
+        target = candidate;
+    }
+    const XrSemanticPlan *dependency =
+        target ? verifier_semantic_dependency(plan, semantic, target->dependency) : NULL;
+    const XrSemanticSourceExportRecord *source_export =
+        dependency && target->source_export < xr_semantic_plan_source_export_count(dependency)
+            ? xr_semantic_plan_source_export(dependency, target->source_export)
+            : NULL;
+    const XrSemanticFunctionRecord *callee =
+        source_export && source_export->kind == XR_SEM_SOURCE_EXPORT_FUNCTION
+            ? xr_semantic_plan_function(dependency, source_export->function)
+            : NULL;
+    uint32_t source_class = xr_semantic_source_export_owned_class_result_source_class(
+        semantic, dependency, operation, callee);
+    return target && source_export && callee && source_class != XR_SEMANTIC_INDEX_NONE &&
+           target->function == XR_SEMANTIC_INDEX_NONE &&
+           target->callable_type == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(source_export->exported_entity, callee->id) &&
+           xr_stable_id_equal(target->export_identity, source_export->id) &&
+           xr_stable_id_equal(target->callee_function, callee->id);
+}
+
 /* The module whose SemanticPlan produced this value travels with it: the row
  * indices below are that module's, not the entry module's, and with one module
  * the two are the same plan. */
@@ -4391,7 +4435,10 @@ static bool verify_value_binding(
         (xr_semantic_class_instance_value_is_exact(semantic, operation, NULL) ||
          (operation && operation->opcode == XI_CALL &&
           imported_source_class_instance_storage_is_exact_verify(plan, semantic, operation_index,
-                                                                 operation))) &&
+                                                                 operation)) ||
+         (operation && (operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+          source_export_owned_class_instance_storage_is_exact_verify(plan, view, operation_index,
+                                                                     operation))) &&
         operation && operation->result_value == semantic_value &&
         operation->result_type == semantic_type;
     bool exact_class_instance_borrowed =
@@ -4475,9 +4522,9 @@ static bool verify_value_binding(
     const XrSemanticParameterRecord *parameter =
         operation ? NULL
                   : semantic_parameter_for_value(semantic, semantic_function, semantic_value);
-    uint32_t parameter_index = operation ? XR_SEMANTIC_INDEX_NONE
-                                         : semantic_parameter_index_for_value(
-                                               semantic, semantic_function, semantic_value);
+    uint32_t parameter_index =
+        operation ? XR_SEMANTIC_INDEX_NONE
+                  : semantic_parameter_index_for_value(semantic, semantic_function, semantic_value);
     bool exact_native_storage_parameter =
         parameter && parameter->type == semantic_type &&
         xr_semantic_native_storage_constructor_parameter_is_exact(semantic, parameter_index);
@@ -6608,6 +6655,9 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             operation ? xr_semantic_plan_type(semantic, operation->result_type) : NULL;
         bool source_string_result = source && semantic_source_export_string_result_is_exact_verify(
                                                   semantic, dependency, operation, source_callee);
+        bool source_class_result =
+            source && xr_semantic_source_export_owned_class_result_source_class(
+                          semantic, dependency, operation, source_callee) != XR_SEMANTIC_INDEX_NONE;
         bool source_callee_suspendable = false;
         bool source_suspendability_exact =
             !source ||
@@ -6810,9 +6860,10 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
             stringbuilder_clear || direct_string_result || direct_array_result ||
             direct_adt_enum_result || direct_class_instance_result || json_namespace_value ||
-            string_utf8_static || source_string_result || class_construction ||
-            adt_enum_constructor || array_intrinsic || array_fill || panic_info_constructor ||
-            container_copy || native_direct_fresh_result || builtin_runtime_method) {
+            string_utf8_static || source_string_result || source_class_result ||
+            class_construction || adt_enum_constructor || array_intrinsic || array_fill ||
+            panic_info_constructor || container_copy || native_direct_fresh_result ||
+            builtin_runtime_method) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
@@ -6915,13 +6966,14 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                 (borrowed_stringbuilder_append ? XR_TARGET_CALL_BORROW
                  : stringbuilder_constructor || direct_string_result || direct_array_result ||
                          direct_adt_enum_result || direct_class_instance_result ||
-                         source_string_result || stringbuilder_append_rune || string_runes ||
-                         string_slice_range || rune_to_string || stringbuilder_to_string ||
-                         stringbuilder_append_string || stringbuilder_clear ||
-                         json_namespace_value || string_utf8_static || class_construction ||
-                         adt_enum_constructor || array_intrinsic || panic_info_constructor ||
-                         container_copy || map_entries_iterator || map_entry_iterator_next ||
-                         native_direct_fresh_result || builtin_runtime_method ||
+                         source_string_result || source_class_result || stringbuilder_append_rune ||
+                         string_runes || string_slice_range || rune_to_string ||
+                         stringbuilder_to_string || stringbuilder_append_string ||
+                         stringbuilder_clear || json_namespace_value || string_utf8_static ||
+                         class_construction || adt_enum_constructor || array_intrinsic ||
+                         panic_info_constructor || container_copy || map_entries_iterator ||
+                         map_entry_iterator_next || native_direct_fresh_result ||
+                         builtin_runtime_method ||
                          (array_hof && array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE)
                      ? XR_TARGET_CALL_RETURN_OWNED
                  : string_byte_slice_view ? XR_TARGET_CALL_BORROW
@@ -7251,8 +7303,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0 &&
                     (argument_scalar == 1 || argument_u8_slice || argument_unit_enum ||
                      argument_adt_enum || argument_class_instance || argument_native_storage ||
-                     argument_tagged_ref ||
-                     argument_container_value || argument_leaf_aggregate ||
+                     argument_tagged_ref || argument_container_value || argument_leaf_aggregate ||
                      argument_managed_aggregate) &&
                     (argument_reference || argument_class_instance || argument_native_storage ||
                      (parameter->mode == XR_PARAM_READ && operand->access == XR_CALL_ARG_PLAIN &&
@@ -7291,14 +7342,13 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                       caller_value->memory_rep == callee_value->memory_rep) ||
                      adt_enum_borrow_boundary || tagged_ref_borrow_boundary ||
                      container_value_borrow_boundary || class_instance_boundary ||
-                     native_storage_boundary ||
-                     const_read_boundary) &&
+                     native_storage_boundary || const_read_boundary) &&
                     plan->machine_reps[argument->register_rep].kind ==
-                        (argument_u8_slice         ? XR_MACHINE_REP_VIEW
-                         : argument_unit_enum      ? XR_MACHINE_REP_ENUM_ORDINAL
+                        (argument_u8_slice    ? XR_MACHINE_REP_VIEW
+                         : argument_unit_enum ? XR_MACHINE_REP_ENUM_ORDINAL
                          : (argument_class_instance || argument_native_storage)
                              ? XR_MACHINE_REP_DYN_VALUE
-                                                   : argument_kind) &&
+                             : argument_kind) &&
                     argument->ordinal == ordinal &&
                     argument->mode ==
                         (argument_reference ? XR_TARGET_CALL_REFERENCE : XR_TARGET_CALL_VALUE) &&
@@ -7334,7 +7384,11 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                     call->argument_count == source_callee->parameter_count &&
                     call->flags == (suspends ? XR_TARGET_CALL_SUSPEND : 0) &&
                     call->calling_convention == XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT &&
-                    call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT;
+                    call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_EXPORT &&
+                    (!(source_string_result || source_class_result) ||
+                     (result->slot < plan->slots_count &&
+                      plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                      plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED));
             if (!valid)
                 break;
             for (uint32_t ordinal = 0; valid && ordinal < call->argument_count; ordinal++) {
