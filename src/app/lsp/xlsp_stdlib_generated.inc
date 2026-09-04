@@ -447,6 +447,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"dialEndpoint", XLSP_SYM_FUNCTION, "fn(endpoint: Endpoint, options?: DialOptions?): NetConn", "", NULL, 0},
     {"upgradeTLS", XLSP_SYM_FUNCTION, "fn(conn: NetConn, hostname: string, timeoutMs?: i64): ()", "", NULL, 0},
     {"hasTLS", XLSP_SYM_FUNCTION, "fn(): bool", "", NULL, 0},
+    {"dialTLS", XLSP_SYM_FUNCTION, "fn(host: string, port: i64, timeoutMs?: i64, alpnProtocols?: Array<string>?): NetConn", "", NULL, 0},
     {"listen", XLSP_SYM_FUNCTION, "fn(port: i64, backlog?: i64, forceV4?: bool): NetListener", "", NULL, 0},
     {"accept", XLSP_SYM_FUNCTION, "fn(listener: NetListener): NetConn?", "", NULL, 0},
     {"readInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: ref Array<u8>, maxlen?: i64): i64", "", NULL, 0},
@@ -459,6 +460,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"fd", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): i64", "", NULL, 0},
     {"isClosed", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): bool", "", NULL, 0},
     {"isTLS", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
+    {"negotiatedProtocol", XLSP_SYM_FUNCTION, "fn(conn: NetConn): string?", "", NULL, 0},
     {"port", XLSP_SYM_FUNCTION, "fn(listener: NetListener): i64", "", NULL, 0},
     {"setReadDeadline", XLSP_SYM_FUNCTION, "fn(conn: NetConn, deadline: i64): bool", "", NULL, 0},
     {"setWriteDeadline", XLSP_SYM_FUNCTION, "fn(conn: NetConn, deadline: i64): bool", "", NULL, 0},
@@ -483,7 +485,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"TlsClientContext", XLSP_SYM_CLASS, "type TlsClientContext", "Class type", NULL, 0},
     {"TlsServerContext", XLSP_SYM_CLASS, "type TlsServerContext", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 41
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 43
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {

@@ -76,12 +76,6 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "net.__udpFromHost") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "http2.__connect") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "http2.__send") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
-    if (strcmp(symbol, "http2.__recv") == 0)
-        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     return 0;
 }
 

@@ -140,7 +140,7 @@ EXEMPT = {
     "E0471": "runtime: src/runtime/object/builtins/xjson_builtins.c:117",
     "E0475": "dead: no regex emission point anywhere in the repository",
     "E0476": "dead: no regex emission point anywhere in the repository",
-    "E0480": "runtime: emitted only from a stdlib binding, stdlib/http2/http2_binding.c:33",
+    "E0480": "dead: the HTTP/2 module is source-owned and has no module-specific native binding",
     # -- Module (E05xx).
     "E0501": "dead: module resolution reports E0502 or E0504 instead",
     "E0502": "runtime: src/vm/xvm_dispatch_module.inc.c:45",

@@ -369,8 +369,6 @@ layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/http2/http2.xr"
 public_native = []
-private_native_sources = ["stdlib/http2/*.c"]
-private_native_reason = "Exact VM-only TLS/ALPN connect, one-chunk read/write and close leaves consumed by http2.xr; framing, HPACK, flow control, drain policy and typed error mapping are Xray"
 perf_suite = "stdlib/http2"
 
 [[module]]

@@ -1,0 +1,68 @@
+// 1439_net_alpn.xr
+// ALPN policy is Xray-owned: source validates and encodes the protocol list,
+// while the provider only applies the wire bytes and reports its selection.
+
+import net
+import { NetError, TlsClientContext } from net
+
+fn contextOutcome(protocols: Array<string>) -> NetError? {
+    try {
+        var context = TlsClientContext.create("", "", "", true, protocols)
+        return null
+    } catch (e: NetError) {
+        return e
+    }
+}
+
+fn tryListen() -> NetListener? {
+    try {
+        return net.listen(0, 8)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+@test
+fn test_alpn_protocol_length_boundaries() {
+    var empty: Array<string> = []
+    var emptyOutcome = contextOutcome(empty)
+    if (net.hasTLS()) {
+        assertEqual(emptyOutcome, null)
+    } else {
+        assertEqual(emptyOutcome, NetError.Tls)
+    }
+
+    var zero: Array<string> = [""]
+    assertEqual(contextOutcome(zero), NetError.Invalid)
+
+    var max: Array<string> = ["a".repeat(255)]
+    var maxOutcome = contextOutcome(max)
+    if (net.hasTLS()) {
+        assertEqual(maxOutcome, null)
+    } else {
+        assertEqual(maxOutcome, NetError.Tls)
+    }
+
+    var tooLong: Array<string> = ["a".repeat(256)]
+    assertEqual(contextOutcome(tooLong), NetError.Invalid)
+}
+
+@test
+fn test_alpn_total_wire_length_boundary() {
+    var protocols = Array<string>()
+    for (var i = 0; i < 256; i++) { protocols.push("a".repeat(255)) }
+    assertEqual(contextOutcome(protocols), NetError.Invalid)
+}
+
+@test
+fn test_negotiated_protocol_is_null_without_tls_session() {
+    var maybeListener = tryListen()
+    if (maybeListener == null) { return }
+    var listener = maybeListener!
+    var conn = net.dial("127.0.0.1", net.port(listener))
+    var accepted = net.accept(listener)
+    assertEqual(net.negotiatedProtocol(conn), null)
+    net.close(conn)
+    if (accepted != null) { net.close(accepted!) }
+    net.close(listener)
+}

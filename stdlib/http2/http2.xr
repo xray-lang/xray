@@ -6,13 +6,9 @@
 // state machine and the flow-control accounting. None of it needs a socket,
 // so none of it needs C.
 //
-// What stays native is the part that cannot be stated in Xray at all: opening
-// a TCP connection, negotiating TLS with an ALPN protocol chosen here, and
-// moving one chunk of bytes on or off the wire. Those are four leaves —
-// __connect, __send, __recv, __close — and they know nothing about HTTP/2.
-// The old boundary was a single
-// __request leaf that owned the entire protocol; this module encodes the
-// bytes, hands them to a leaf, takes bytes back, and decodes them.
+// Transport is composed entirely from net's generic connection, TLS/ALPN and
+// byte-stream surface. HTTP/2 owns only its protocol choices and byte-level
+// state machine; it has no module-specific native leaves.
 //
 // This module is also the single owner of the HTTP/2 admission rules. They
 // used to exist twice — once here in Xray and once in C — with two different
@@ -20,6 +16,10 @@
 // ProtocolError while a malformed method returned null and became
 // ConnectionFailed. Every rule is now stated once, in _validateRequest, and
 // every rejection leaves through Http2Error.
+
+import net
+import { NetError } from net
+import time
 
 // ---- Frame types (RFC 7540 Section 6) ----
 const FRAME_DATA = 0x0
@@ -73,17 +73,10 @@ const DEFAULT_MAX_FRAME_SIZE = 16384
 const MAX_ALLOWED_FRAME_SIZE = 16777215
 const MAX_WINDOW = 2147483647
 
-// Transport policy belongs to this source module. The connect leaf only
-// adapts this requested protocol to the TLS provider, while the timeout bound
-// is the exact width accepted by the host ABI.
+// Transport policy belongs to this source module. net only exposes generic
+// TLS/ALPN configuration and the negotiated protocol result.
 const H2_ALPN = "h2"
 const MAX_TRANSPORT_TIMEOUT_MS: i64 = 2147483647
-
-// Raw connect outcomes are a private transport ABI. Typed public errors are
-// selected below, in request(), rather than inside the native provider.
-const CONNECT_FAILED: i64 = -1
-const CONNECT_TLS_UNAVAILABLE: i64 = -2
-const CONNECT_PROTOCOL_MISMATCH: i64 = -3
 
 // The connection preface a client sends before anything else (RFC 7540
 // Section 3.5). Twenty-four bytes, fixed.
@@ -1199,7 +1192,6 @@ fn _parseTarget(url: string) -> Target {
 // Giving up the pool is what buys the tables a safe home while they live
 // here; it costs a TLS handshake per request and is recorded as such.
 final class Exchange {
-    handle: i64
     outbox: Array<u8>
     buf: Array<u8>
     pos: i64
@@ -1222,8 +1214,7 @@ final class Exchange {
     bodyPos: i64
     bodySent: bool
 
-    constructor(handle: i64) {
-        this.handle = handle
+    constructor() {
         this.outbox = Array<u8>()
         this.buf = Array<u8>()
         this.pos = 0
@@ -1557,9 +1548,8 @@ final class Exchange {
 
 // ---- Public surface ----
 
-// Whether this build can speak HTTP/2 at all. The answer is a property of
-// the host binary's TLS/ALPN support, so the capability probe stays native.
-export fn supported() -> bool { return __supported() }
+// HTTP/2 needs TLS but no additional host capability beyond net's provider.
+export fn supported() -> bool { return net.hasTLS() }
 
 // Run the exchange on an already-open connection. Split out so that the
 // caller can close the handle on every path without a `defer`, which cannot
@@ -1574,10 +1564,10 @@ export fn supported() -> bool { return __supported() }
 // arithmetic over `outbox` and `buf`, and this function is the only place
 // bytes cross the boundary. `ex` is a local, so its fields stay writable
 // here; a borrowed parameter would not be.
-fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
-             values: Array<string>, body: Array<u8>,
-             timeoutMs: i64) -> (i64, Array<string>, Array<string>, Array<u8>) {
-    var ex = Exchange(handle)
+fn _exchange(conn: NetConn, target: Target, method: string, names: Array<string>,
+             values: Array<string>, body: Array<u8>) ->
+             (i64, Array<string>, Array<string>, Array<u8>) {
+    var ex = Exchange()
     ex.start()
     var hasBody = len(body) > 0
     ex.sendHeaders(target, method, names, values, !hasBody)
@@ -1587,15 +1577,9 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
     while (true) {
         ex.pushBody(body)
         if (len(ex.outbox) > 0) {
-            // The native leaf performs one TLS write. Owning the drain loop
-            // here keeps partial-write and no-progress policy in Xray.
-            var written = 0
-            while (written < len(ex.outbox)) {
-                var count = __send(handle, ex.outbox, written)
-                if (count <= 0) {
-                    throw Http2Error.ConnectionFailed { target: "write failed" }
-                }
-                written = written + count
+            var count = net.writeBytes(conn, ex.outbox)
+            if (count != len(ex.outbox)) {
+                throw Http2Error.ConnectionFailed { target: "write failed" }
             }
             ex.outbox = Array<u8>()
         }
@@ -1605,15 +1589,15 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
         }
         ex.compact()
         while (ex.frameShortfall() > 0) {
-            var chunk = __recv(handle, DEFAULT_MAX_FRAME_SIZE, timeoutMs)
-            if (chunk == null) {
+            var chunk = Array<u8>(DEFAULT_MAX_FRAME_SIZE)
+            var received = net.readInto(conn, ref chunk, DEFAULT_MAX_FRAME_SIZE)
+            if (received < 0) {
                 throw Http2Error.ConnectionFailed { target: "read failed" }
             }
-            var got = chunk!
-            if (len(got) == 0) {
+            if (received == 0) {
                 throw Http2Error.ConnectionFailed { target: "connection closed before the response ended" }
             }
-            ex.buf.appendFrom(got[:])
+            ex.buf.appendFrom(chunk[:])
         }
         ex.consumeOneFrame()
         frames = frames + 1
@@ -1634,16 +1618,36 @@ fn _exchange(handle: i64, target: Target, method: string, names: Array<string>,
     return (ex.status, ex.headers.names, ex.headers.values, ex.responseBody)
 }
 
+fn _connect(host: string, port: i64, timeoutMs: i64) -> NetConn {
+    if (!net.hasTLS()) { throw Http2Error.TlsUnavailable }
+    var conn: NetConn? = null
+    try {
+        var protocols: Array<string> = [H2_ALPN]
+        conn = net.dialTLS(host, port, timeoutMs, protocols)
+        var live = conn!
+        if (net.negotiatedProtocol(live) != H2_ALPN) {
+            net.close(live)
+            throw Http2Error.FramingError { reason: "peer did not negotiate HTTP/2" }
+        }
+        if (!net.setDeadline(live, time.monotonic() + timeoutMs)) {
+            net.close(live)
+            throw Http2Error.ConnectionFailed { target: host }
+        }
+        return live
+    } catch (e: NetError) {
+        if (conn != null) { net.close(conn!) }
+        throw Http2Error.ConnectionFailed { target: host }
+    }
+}
+
 // Execute one HTTP/2 request and answer (status, headerNames, headerValues,
 // body). The two header arrays are parallel: entry i of `headerNames` pairs
 // with entry i of `headerValues`.
 //
-// Everything but the socket happens here: this validates the request,
-// encodes it, hands the bytes to a leaf, takes bytes back, and decodes them.
+// Everything but the generic net transport happens here: this validates the
+// request, encodes it, moves bytes through NetConn, and decodes the response.
 // Every refusal leaves through Http2Error, so one bad input has one name.
 //
-// The transport leaf reports provider absence and protocol negotiation as
-// private raw outcomes. This function is their only typed error owner.
 export fn request(url: string, method: string, headerNames: Array<string>,
                   headerValues: Array<string>, body: Array<u8>,
                   timeoutMs: i64) -> (i64, Array<string>, Array<string>, Array<u8>) {
@@ -1653,21 +1657,15 @@ export fn request(url: string, method: string, headerNames: Array<string>,
     }
     var target = _parseTarget(url)
 
-    var handle = __connect(target.host, target.port, timeoutMs, H2_ALPN)
-    if (handle == CONNECT_TLS_UNAVAILABLE) { throw Http2Error.TlsUnavailable }
-    if (handle == CONNECT_PROTOCOL_MISMATCH) {
-        throw Http2Error.FramingError { reason: "peer did not negotiate HTTP/2" }
-    }
-    if (handle == CONNECT_FAILED || handle < 0) {
-        throw Http2Error.ConnectionFailed { target: url }
-    }
+    var host = target.host
+    var port = target.port
+    var conn = _connect(host, port, timeoutMs)
     try {
-        var answer = _exchange(handle, target, method, headerNames, headerValues, body,
-                               timeoutMs)
-        __close(handle)
+        var answer = _exchange(conn, target, method, headerNames, headerValues, body)
+        net.close(conn)
         return answer
     } catch (e) {
-        __close(handle)
+        net.close(conn)
         throw e
     }
 }

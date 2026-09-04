@@ -29,6 +29,8 @@ const _DEFAULT_BACKLOG: i64 = 1024
 const _DEFAULT_COPY_BUFFER: i64 = 65536
 const _MIN_COPY_BUFFER: i64 = 1024
 const _MAX_COPY_BUFFER: i64 = 1048576
+const _MAX_ALPN_PROTOCOL_BYTES: i64 = 255
+const _MAX_ALPN_WIRE_BYTES: i64 = 65535
 const _DIRECTION_READ: i64 = 0
 const _DIRECTION_WRITE: i64 = 1
 const _DIRECTION_BOTH: i64 = 2
@@ -161,7 +163,7 @@ fn _dialTcp(host: string, port: i64, deadline: i64) -> NetConn {
 // failure.
 fn _dialTls(host: string, port: i64, deadline: i64) -> NetConn {
     var conn = _dialTcp(host, port, deadline)
-    var code = __tlsHandshake(conn, host, deadline)
+    var code = __tlsHandshake(conn, host, deadline, Array<u8>())
     if (code != 0) { throw _classify(code) }
     return conn
 }
@@ -188,7 +190,7 @@ export fn dialEndpoint(endpoint: Endpoint, options: DialOptions? = null) -> NetC
 export fn upgradeTLS(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS) {
     if (timeoutMs <= 0) { throw NetError.Invalid }
     if (!__hasTLS()) { throw NetError.Tls }
-    var code = __tlsHandshake(conn, hostname, time.monotonic() + timeoutMs)
+    var code = __tlsHandshake(conn, hostname, time.monotonic() + timeoutMs, Array<u8>())
     if (code != 0) { throw _classify(code) }
 }
 
@@ -202,6 +204,22 @@ fn _containsZeroByte(value: string) -> bool {
     return false
 }
 
+fn _encodeAlpnProtocols(protocols: Array<string>?) -> Array<u8> {
+    var wire = Array<u8>()
+    if (protocols == null) { return wire }
+    var values = protocols!
+    for (var i = 0; i < len(values); i++) {
+        var bytes: const Slice<u8> = values[i].bytes()
+        if (len(bytes) == 0 || len(bytes) > _MAX_ALPN_PROTOCOL_BYTES ||
+            len(wire) + len(bytes) + 1 > _MAX_ALPN_WIRE_BYTES) {
+            throw NetError.Invalid
+        }
+        wire.push(len(bytes) as u8)
+        wire.appendFrom(bytes)
+    }
+    return wire
+}
+
 // Public context identities and policy live in Xray. Their only native field
 // is an opaque, non-copyable OpenSSL storage object whose destroy hook runs
 // after the final Xray reference dies.
@@ -211,13 +229,15 @@ export final class TlsClientContext {
     private constructor(storage: __TlsContextStorage) { this._storage = storage }
 
     static create(caFile: string = "", certFile: string = "", keyFile: string = "",
-                  verifyPeer: bool = true) -> TlsClientContext {
+                  verifyPeer: bool = true,
+                  alpnProtocols: Array<string>? = null) -> TlsClientContext {
+        var alpnWire = _encodeAlpnProtocols(alpnProtocols)
         if (!__hasTLS()) { throw NetError.Tls }
         if (_containsZeroByte(caFile) || _containsZeroByte(certFile) ||
             _containsZeroByte(keyFile) || (len(certFile) == 0) != (len(keyFile) == 0)) {
             throw NetError.Invalid
         }
-        var storage = __newTlsClientContext(caFile, certFile, keyFile, verifyPeer)
+        var storage = __newTlsClientContext(caFile, certFile, keyFile, verifyPeer, alpnWire)
         if (storage == null) { throw NetError.Tls }
         return TlsClientContext(storage!)
     }
@@ -228,6 +248,21 @@ export final class TlsClientContext {
             this._storage, conn, hostname, time.monotonic() + timeoutMs)
         if (code != 0) { throw _classify(code) }
     }
+}
+
+// Establish a TLS connection with an explicit ALPN offer. Protocol selection
+// stays observable through negotiatedProtocol so callers own acceptance
+// policy instead of embedding it in the transport provider.
+export fn dialTLS(host: string, port: i64, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS,
+                  alpnProtocols: Array<string>? = null) -> NetConn {
+    if (timeoutMs <= 0) { throw NetError.Invalid }
+    if (!__hasTLS()) { throw NetError.Tls }
+    var deadline = time.monotonic() + timeoutMs
+    var wire = _encodeAlpnProtocols(alpnProtocols)
+    var conn = _dialTcp(host, port, deadline)
+    var code = __tlsHandshake(conn, host, deadline, wire)
+    if (code != 0) { throw _classify(code) }
+    return conn
 }
 
 export final class TlsServerContext {
@@ -331,6 +366,9 @@ export fn fd(handle: NetConn | NetListener) -> i64 {
 
 export fn isClosed(handle: NetConn | NetListener) -> bool { return fd(handle) < 0 }
 export fn isTLS(conn: NetConn) -> bool { return __connIsTLS(conn) }
+export fn negotiatedProtocol(conn: NetConn) -> string? {
+    return __tlsNegotiatedProtocol(conn)
+}
 export fn port(listener: NetListener) -> i64 { return __listenerPort(listener) }
 
 export fn setReadDeadline(conn: NetConn, deadline: i64) -> bool {

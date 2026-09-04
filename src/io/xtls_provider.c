@@ -275,9 +275,9 @@ int xr_tls_context_set_alpn(XrTlsContext *ctx, const unsigned char *protocols, s
     return 0;
 }
 
-const char *xr_tls_conn_get_alpn(XrTlsConn *conn) {
-    if (!conn || !conn->ssl)
-        return NULL;
+bool xr_tls_conn_get_alpn(XrTlsConn *conn, const unsigned char **protocol, size_t *length) {
+    if (!conn || !conn->ssl || !protocol || !length)
+        return false;
 
     const unsigned char *alpn = NULL;
     unsigned int alpn_len = 0;
@@ -285,15 +285,11 @@ const char *xr_tls_conn_get_alpn(XrTlsConn *conn) {
     SSL_get0_alpn_selected(conn->ssl, &alpn, &alpn_len);
 
     if (!alpn || alpn_len == 0)
-        return NULL;
+        return false;
 
-    static _Thread_local char alpn_str[32];
-    if (alpn_len >= sizeof(alpn_str))
-        alpn_len = sizeof(alpn_str) - 1;
-    memcpy(alpn_str, alpn, alpn_len);
-    alpn_str[alpn_len] = '\0';
-
-    return alpn_str;
+    *protocol = alpn;
+    *length = (size_t) alpn_len;
+    return true;
 }
 
 // External: coroutine-safe socket API
@@ -585,9 +581,11 @@ int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname) {
     (void) hostname;
     return -1;
 }
-const char *xr_tls_conn_get_alpn(XrTlsConn *conn) {
+bool xr_tls_conn_get_alpn(XrTlsConn *conn, const unsigned char **protocol, size_t *length) {
     (void) conn;
-    return NULL;
+    (void) protocol;
+    (void) length;
+    return false;
 }
 XrTlsError xr_tls_conn_handshake_client(struct XrVMRuntime *X, XrTlsConn *conn) {
     (void) X;

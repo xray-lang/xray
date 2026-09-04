@@ -169,7 +169,6 @@
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_arc.h"        // L1: execution arena, xrt_str_alloc, xrt_str_concat
 #include "xrt_net.h"        // L1: hosted TCP handle helpers
-#include "xrt_http.h"       // L1: HTTP backend capability boundary
 #include "xrt_range.h"      // L1: lazy Range value
 #include "xrt_coll.h"       // L2: Array, Map, Json, StringBuilder, Closure, index ops
 #include "xrt_arith.h"      // L2: add/sub/mul/div/mod/neg, eq/lt/le, print

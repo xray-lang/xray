@@ -1821,6 +1821,19 @@ module net {
     layer: "runtime"
   }
 
+  fn __tlsNegotiatedProtocol {
+    signature: "(conn: NetConn): string?"
+    doc: "Read the ALPN protocol selected by the TLS provider, or null when none was negotiated"
+    vm: "net_tls_negotiated_protocol"
+    argc: 1
+    arg_spec: "v"
+    aot: "xrt_net_tls_negotiated_protocol"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    return_ownership: "fresh"
+  }
+
   fn __listenerPort {
     signature: "(listener: NetListener): i64"
     doc: "Read the bound port cached on a listener handle"
@@ -1918,11 +1931,11 @@ module net {
   }
 
   fn __newTlsClientContext {
-    signature: "(caFile: string, certFile: string, keyFile: string, verifyPeer: bool): __TlsContextStorage?"
-    doc: "Create one immutable client TLS policy resource from source-validated paths and verification policy"
+    signature: "(caFile: string, certFile: string, keyFile: string, verifyPeer: bool, alpnWire: Array<u8>): __TlsContextStorage?"
+    doc: "Create one immutable client TLS policy resource from source-validated paths, verification policy and ALPN wire bytes"
     vm: "net_tls_client_context_new"
-    argc: 4
-    arg_spec: "sssv"
+    argc: 5
+    arg_spec: "sssvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -1968,13 +1981,13 @@ module net {
   }
 
   fn __tlsHandshake {
-    signature: "(conn: NetConn, hostname: string, deadlineMs: i64): i64"
-    doc: "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code"
+    signature: "(conn: NetConn, hostname: string, deadlineMs: i64, alpnWire: Array<u8>): i64"
+    doc: "Client TLS handshake with a source-encoded ALPN offer under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code"
     vm: "net_tls_handshake_yieldable"
     vm_binding: "yieldable"
     vm_ifdef: "XR_ENABLE_TLS"
-    argc: 3
-    arg_spec: "vvv"
+    argc: 4
+    arg_spec: "vvvv"
     aot: "xrt_net_tls_handshake"
     aot_direct: true
     link_object: false
@@ -2058,70 +2071,4 @@ module net {
     link_object: false
     layer: "runtime"
   }
-}
-
-module http2 {
-  fn __supported {
-    signature: "(): bool"
-    doc: "Whether the built-in HTTP/2 standard module is available on this target"
-    vm: "h2_supported"
-    argc: 0
-    arg_spec: ""
-    aot: "xrt_http_h2_supported"
-    aot_direct: true
-    link_object: false
-    layer: "runtime"
-  }
-
-  fn __connect {
-    signature: "(host: string, port: i64, timeoutMs: i64, alpn: string): i64"
-    doc: "Open one TLS connection for the requested ALPN protocol; answer a handle or a private negative provider outcome"
-    vm: "h2_connect"
-    vm_binding: "yieldable"
-    argc: 4
-    arg_spec: "vvvv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-  }
-
-  fn __send {
-    signature: "(handle: i64, data: Array<u8>, offset: i64): i64"
-    doc: "Perform one TLS write from offset and answer its accepted byte count"
-    vm: "h2_send"
-    vm_binding: "yieldable"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-  }
-
-  fn __recv {
-    signature: "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?"
-    doc: "Read up to maxBytes once; empty on EOF and null on transport failure"
-    vm: "h2_recv"
-    vm_binding: "yieldable"
-    argc: 3
-    arg_spec: "vvv"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    caps: "coro,netpoll"
-    return_ownership: "fresh"
-  }
-
-  fn __close {
-    signature: "(handle: i64): ()"
-    doc: "Close an HTTP/2 connection and release its handle; stale handles are already closed"
-    vm: "h2_close"
-    argc: 1
-    arg_spec: "v"
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-  }
-
 }

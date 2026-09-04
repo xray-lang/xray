@@ -33,26 +33,6 @@ XR_FUNC bool xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_HTTP2
-XR_FUNC bool xr_stdlib_vm_bind_http2_generated(XrVMRuntime *isolate, XrModule *module) {
-    if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
-        return false;
-    size_t expected_count = 0;
-    (void) expected_count;
-    XRS_EXPORT(module, isolate, "__supported", h2_supported);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__connect", h2_connect);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__send", h2_send);
-    expected_count++;
-    XRS_EXPORT_YIELDABLE(module, isolate, "__recv", h2_recv);
-    expected_count++;
-    XRS_EXPORT(module, isolate, "__close", h2_close);
-    expected_count++;
-    return module->export_count == expected_count;
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP2 */
-
 #ifdef XR_STDLIB_VM_BIND_MODULE_IO
 XR_FUNC bool xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *module) {
     if (!isolate || !module || xr_module_state(module) != XR_MODULE_NEW || module->export_count != 0)
@@ -252,6 +232,8 @@ XR_FUNC bool xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "__listenerFd", net_fd_handle);
     expected_count++;
     XRS_EXPORT(module, isolate, "__connIsTLS", net_conn_is_tls);
+    expected_count++;
+    XRS_EXPORT(module, isolate, "__tlsNegotiatedProtocol", net_tls_negotiated_protocol);
     expected_count++;
     XRS_EXPORT(module, isolate, "__listenerPort", net_listener_port);
     expected_count++;

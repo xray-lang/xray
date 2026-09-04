@@ -878,14 +878,15 @@ static inline XrValue xrt_net_has_tls(void) {
 }
 
 /*
- * net.__tlsHandshake(conn, hostname, timeoutMs) -> int
+ * net.__tlsHandshake(conn, hostname, timeoutMs, alpnWire) -> int
  * The standalone AOT runtime carries no TLS engine, so a valid open TCP conn
  * still answers with the TLS-unavailable code; anything else is invalid.
  */
 static inline XrValue xrt_net_tls_handshake(XrValue conn_value, XrValue host_value,
-                                            XrValue deadline_value) {
+                                            XrValue deadline_value, XrValue alpn_wire_value) {
     (void) host_value;
     (void) deadline_value;
+    (void) alpn_wire_value;
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET ||
         conn->conn_kind != XRT_NETCONN_TCP) {
@@ -1105,6 +1106,11 @@ static inline XrValue xrt_net_listener_port(XrValue listener_value) {
 static inline XrValue xrt_net_is_tls(XrValue conn_value) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     return XR_FROM_BOOL(conn && conn->conn_kind == XRT_NETCONN_TLS);
+}
+
+static inline XrValue xrt_net_tls_negotiated_protocol(XrValue conn_value) {
+    (void) conn_value;
+    return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_net_shutdown_direction(XrValue conn_value, XrValue direction_value) {

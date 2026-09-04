@@ -110,6 +110,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__connFd", 1, "xrt_net_fd", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__listenerFd", 1, "xrt_net_fd", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__connIsTLS", 1, "xrt_net_is_tls", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"net", "__tlsNegotiatedProtocol", 1, "xrt_net_tls_negotiated_protocol", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__listenerPort", 1, "xrt_net_listener_port", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__setDeadlineDirection", 3, "xrt_net_set_deadline_direction", "vvv", "w..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__setAcceptDeadline", 2, "xrt_net_set_accept_deadline", "vv", "w.", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -118,13 +119,12 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__connLastErrno", 1, "xrt_net_last_errno", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__listenerLastErrno", 1, "xrt_net_last_errno", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__hasTLS", 0, "xrt_net_has_tls", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"net", "__tlsHandshake", 3, "xrt_net_tls_handshake", "vvv", "w..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"net", "__tlsHandshake", 4, "xrt_net_tls_handshake", "vvvv", "w...", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpBind", 2, "xrt_net_udp_bind", "vv", "..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpSendTo", 5, "xrt_net_udp_send_to", "vvvvv", "w....", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpRecvInto", 3, "xrt_net_udp_recv_into", "vvv", "w..", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpFromHost", 1, "xrt_net_udp_from_host", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__udpFromPort", 1, "xrt_net_udp_from_port", "v", "w", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"http2", "__supported", 0, "xrt_http_h2_supported", "", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))
 

@@ -87,16 +87,6 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 };
 #define GEN_CRYPTO_FUNCTION_COUNT 2
 
-// http2 module functions
-static const XaBuiltinMember g_gen_http2_functions[] = {
-    {"__supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__connect", "(host: string, port: i64, timeoutMs: i64, alpn: string): i64", "Open one TLS connection for the requested ALPN protocol; answer a handle or a private negative provider outcome", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__send", "(handle: i64, data: Array<u8>, offset: i64): i64", "Perform one TLS write from offset and answer its accepted byte count", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__recv", "(handle: i64, maxBytes: i64, timeoutMs: i64): Array<u8>?", "Read up to maxBytes once; empty on EOF and null on transport failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
-    {"__close", "(handle: i64): ()", "Close an HTTP/2 connection and release its handle; stale handles are already closed", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_HTTP2_FUNCTION_COUNT 5
-
 // io.__FileStat handle fields
 static const XaBuiltinHandleField g_gen_io___filestat_fields[] = {
     {"size", "i64", true},
@@ -226,6 +216,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__connFd", "(conn: NetConn): i64", "Raw fd of a connection, -1 when closed", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listenerFd", "(listener: NetListener): i64", "Raw fd of a listener, -1 when closed", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__connIsTLS", "(conn: NetConn): bool", "Read whether a connection handle currently owns a TLS transport", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__tlsNegotiatedProtocol", "(conn: NetConn): string?", "Read the ALPN protocol selected by the TLS provider, or null when none was negotiated", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__listenerPort", "(listener: NetListener): i64", "Read the bound port cached on a listener handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__setDeadlineDirection", "(conn: NetConn, deadline: i64, direction: i64): bool", "Set the selected absolute monotonic deadline (0 read, 1 write, 2 both)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__setAcceptDeadline", "(listener: NetListener, deadline: i64): bool", "Absolute monotonic accept deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -234,11 +225,11 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__connLastErrno", "(conn: NetConn): i64", "Raw errno captured for the last failed connection operation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__listenerLastErrno", "(listener: NetListener): i64", "Raw errno captured for the last failed listener operation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__hasTLS", "(): bool", "Whether TLS support is compiled in", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__newTlsClientContext", "(caFile: string, certFile: string, keyFile: string, verifyPeer: bool): __TlsContextStorage?", "Create one immutable client TLS policy resource from source-validated paths and verification policy", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
+    {"__newTlsClientContext", "(caFile: string, certFile: string, keyFile: string, verifyPeer: bool, alpnWire: Array<u8>): __TlsContextStorage?", "Create one immutable client TLS policy resource from source-validated paths, verification policy and ALPN wire bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__newTlsServerContext", "(certFile: string, keyFile: string, caFile: string, requireClientCertificate: bool): __TlsContextStorage?", "Create one immutable server TLS policy resource, optionally requiring a CA-verified client certificate", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__tlsClientHandshakeWithContext", "(context: __TlsContextStorage, conn: NetConn, hostname: string, deadlineMs: i64): i64", "Promote a TCP connection with an immutable client TLS context under one absolute deadline", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__tlsServerHandshakeWithContext", "(context: __TlsContextStorage, conn: NetConn, deadlineMs: i64): i64", "Promote an accepted TCP connection with an immutable server TLS context under one absolute deadline", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__tlsHandshake", "(conn: NetConn, hostname: string, deadlineMs: i64): i64", "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__tlsHandshake", "(conn: NetConn, hostname: string, deadlineMs: i64, alpnWire: Array<u8>): i64", "Client TLS handshake with a source-encoded ALPN offer under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__udpBind", "(port: i64, addr: string): __NetConnStorage?", "Bind a UDP socket; empty addr binds the wildcard address", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__udpMulticastBind", "(group: string, port: i64, ttl: i64, loopback: bool): __NetConnStorage?", "Open an IPv4 multicast UDP socket after source-side address and option validation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__udpSendTo", "(conn: NetConn, data: Array<u8>, addr: string, port: i64, deadlineMs: i64): i64", "Send one datagram to a literal address under an absolute deadline; bytes sent or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -246,7 +237,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_NET_FUNCTION_COUNT 32
+#define GEN_NET_FUNCTION_COUNT 33
 
 // os module functions
 static const XaBuiltinMember g_gen_os_functions[] = {
@@ -330,7 +321,6 @@ static const XaBuiltinMember g_gen_time_functions[] = {
 static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
-    {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, g_gen_mem_classes, GEN_MEM_CLASS_COUNT},
@@ -341,7 +331,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 12
+#define GEN_BUILTIN_MODULE_COUNT 11
 
 /* clang-format on */
 

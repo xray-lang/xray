@@ -269,10 +269,6 @@ XR_FUNC void xr_stdlib_cache_free(XrVMRuntime *isolate) {
     if (c->log_state_cleanup && c->log_state) {
         c->log_state_cleanup(c->log_state);
     }
-    if (c->http2_state_cleanup && c->http2_state) {
-        c->http2_state_cleanup(c->http2_state);
-    }
-
     xr_free(c->native_object_shape_cache);
     xr_free(c->native_enum_cache);
 

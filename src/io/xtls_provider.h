@@ -95,8 +95,9 @@ XR_FUNC int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname);
 // Set the ALPN protocol list (client)
 XR_FUNC int xr_tls_context_set_alpn(XrTlsContext *ctx, const unsigned char *protocols, size_t len);
 
-// Get the negotiated ALPN protocol
-XR_FUNC const char *xr_tls_conn_get_alpn(XrTlsConn *conn);
+// Borrow the negotiated ALPN protocol bytes from the TLS provider.
+// The returned view remains valid until the connection is freed.
+XR_FUNC bool xr_tls_conn_get_alpn(XrTlsConn *conn, const unsigned char **protocol, size_t *length);
 
 // Set the ALPN callback (server)
 typedef int (*XrAlpnSelectCallback)(const unsigned char **out, unsigned char *outlen,

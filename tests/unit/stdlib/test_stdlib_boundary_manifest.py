@@ -80,7 +80,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
 
     def test_source_only_module_declares_no_native_entries(self) -> None:
         manifest = load_manifest(ROOT)
-        for name in ("base64", "cluster", "compress", "csv"):
+        for name in ("base64", "cluster", "compress", "csv", "http2"):
             module = manifest.by_name[name]
             self.assertIn(name, source_modules(ROOT))
             self.assertNotIn(name, native_entry_binder_modules(ROOT))
@@ -96,7 +96,6 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertEqual(
             {
                 "crypto",
-                "http2",
                 "io",
                 "math",
                 "mem",
@@ -248,42 +247,56 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
 
     def test_http2_transport_policy_is_source_owned(self) -> None:
         source = (ROOT / "stdlib/http2/http2.xr").read_text(encoding="utf-8")
-        binding = (ROOT / "stdlib/http2/http2_binding.c").read_text(encoding="utf-8")
+        net_source = (ROOT / "stdlib/net/net.xr").read_text(encoding="utf-8")
+        net_provider = (ROOT / "src/io/xnet_provider.c").read_text(encoding="utf-8")
+        aot_net = (ROOT / "src/aot/xrt_net.h").read_text(encoding="utf-8")
         definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
-        aot = (ROOT / "src/aot/xrt_http.h").read_text(encoding="utf-8")
         cache = (ROOT / "src/module/xstdlib_runtime_cache.h").read_text(encoding="utf-8")
 
         for owner in (
             'const H2_ALPN = "h2"',
             "const MAX_TRANSPORT_TIMEOUT_MS: i64 = 2147483647",
-            "const CONNECT_TLS_UNAVAILABLE: i64 = -2",
-            "const CONNECT_PROTOCOL_MISMATCH: i64 = -3",
-            "while (written < len(ex.outbox))",
-            "var count = __send(handle, ex.outbox, written)",
+            "net.dialTLS(host, port, timeoutMs, protocols)",
+            "net.negotiatedProtocol(live) != H2_ALPN",
+            "net.writeBytes(conn, ex.outbox)",
+            "net.readInto(conn, ref chunk, DEFAULT_MAX_FRAME_SIZE)",
+            "net.close(conn)",
             "throw Http2Error.TlsUnavailable",
             'throw Http2Error.FramingError { reason: "peer did not negotiate HTTP/2" }',
         ):
             self.assertIn(owner, source)
 
-        for removed_c_policy in (
-            "ALPN_PROTOS",
-            "XR_H2_MAX_READ",
-            "h2_conn_write_all",
-            'xr_hashmap_get(registry->loaded_modules, "http2")',
+        for generic_net_owner in (
+            "fn _encodeAlpnProtocols",
+            "alpnProtocols: Array<string>? = null",
+            "export fn dialTLS",
+            "export fn negotiatedProtocol(conn: NetConn) -> string?",
         ):
-            self.assertNotIn(removed_c_policy, binding)
-        self.assertIn("void *http2_state;", cache)
+            self.assertIn(generic_net_owner, net_source)
+        self.assertIn("net_tls_negotiated_protocol", net_provider)
+        self.assertIn("wire->length > UINT16_MAX", net_provider)
+        self.assertIn("buf->length = (int32_t) n;", net_provider)
+        self.assertIn("ex.buf.appendFrom(chunk[:])", source)
+        self.assertIn("xrt_net_tls_negotiated_protocol", aot_net)
+        self.assertIn("return XR_NULL_VAL;", aot_net)
+        self.assertNotIn("http2_state", cache)
 
-        for unavailable in (
-            "xrt_http_h2_connect_unavailable",
-            "xrt_http_h2_send_unavailable",
-            "xrt_http_h2_recv_unavailable",
-            "xrt_http_h2_close_unavailable",
+        for removed_leaf in (
+            "module http2 {",
+            "h2_supported",
+            "h2_connect",
+            "h2_send",
+            "h2_recv",
+            "h2_close",
         ):
-            self.assertNotIn(unavailable, definitions)
-            self.assertNotIn(unavailable, aot)
-        self.assertIn('signature: "(handle: i64, data: Array<u8>, offset: i64): i64"', definitions)
-        self.assertIn('signature: "(handle: i64): ()"', definitions)
+            self.assertNotIn(removed_leaf, definitions)
+        for removed_path in (
+            "stdlib/http2/http2_binding.c",
+            "src/io/xhttp2_transport.c",
+            "src/io/xhttp2_transport.h",
+            "src/aot/xrt_http.h",
+        ):
+            self.assertFalse((ROOT / removed_path).exists())
 
     def test_exact_aot_runtime_adapters_do_not_allow_module_helper_families(self) -> None:
         manifest = load_manifest(ROOT)

@@ -260,6 +260,22 @@ static inline XrArray *net_as_writable_bytes(XrValue v) {
     return arr;
 }
 
+#ifdef XR_ENABLE_TLS
+static bool net_alpn_wire_valid(const XrArray *wire) {
+    if (!wire || wire->length < 0 || wire->length > UINT16_MAX || (wire->length > 0 && !wire->data))
+        return false;
+    const uint8_t *bytes = (const uint8_t *) wire->data;
+    int32_t offset = 0;
+    while (offset < wire->length) {
+        uint8_t protocol_length = bytes[offset++];
+        if (protocol_length == 0 || protocol_length > wire->length - offset)
+            return false;
+        offset += protocol_length;
+    }
+    return true;
+}
+#endif
+
 // ========== Yieldable net.__resolveAll ==========
 
 /*
@@ -1288,6 +1304,26 @@ static XrValue net_conn_is_tls(XrVMRuntime *X, XrValue *args, int nargs) {
     return xr_bool(c && c->kind == XR_NETCONN_TLS);
 }
 
+static XrValue net_tls_negotiated_protocol(XrVMRuntime *X, XrValue *args, int nargs) {
+#ifdef XR_ENABLE_TLS
+    if (nargs < 1)
+        return XR_NULL_VAL;
+    XrNetConn *conn = unwrap_conn(args[0]);
+    const unsigned char *protocol = NULL;
+    size_t length = 0;
+    if (!conn || !xr_net_conn_is_tls(conn) ||
+        !xr_tls_conn_get_alpn((XrTlsConn *) xr_net_conn_tls_state(conn), &protocol, &length))
+        return XR_NULL_VAL;
+    XrString *value = xr_string_new(X, (const char *) protocol, length);
+    return value ? xr_string_value(value) : XR_NULL_VAL;
+#else
+    (void) X;
+    (void) args;
+    (void) nargs;
+    return XR_NULL_VAL;
+#endif
+}
+
 static XrValue net_listener_port(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
@@ -1378,8 +1414,11 @@ static XrValue net_has_tls(XrVMRuntime *X, XrValue *args, int nargs) {
 
 static XrValue net_tls_client_context_new(XrVMRuntime *X, XrValue *args, int nargs) {
 #ifdef XR_ENABLE_TLS
-    if (nargs < 4 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) ||
+    if (nargs < 5 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) ||
         !XR_IS_BOOL(args[3]))
+        return XR_NULL_VAL;
+    XrArray *alpn = net_as_bytes(args[4]);
+    if (!net_alpn_wire_valid(alpn))
         return XR_NULL_VAL;
     const char *ca_file = XR_STRING_CHARS(XR_TO_STRING(args[0]));
     const char *cert_file = XR_STRING_CHARS(XR_TO_STRING(args[1]));
@@ -1391,7 +1430,9 @@ static XrValue net_tls_client_context_new(XrVMRuntime *X, XrValue *args, int nar
         return XR_NULL_VAL;
     bool configured =
         (!ca_file[0] || xr_tls_context_load_ca(provider, ca_file) == 0) &&
-        (!cert_file[0] || xr_tls_context_load_identity(provider, cert_file, key_file) == 0);
+        (!cert_file[0] || xr_tls_context_load_identity(provider, cert_file, key_file) == 0) &&
+        (alpn->length == 0 ||
+         xr_tls_context_set_alpn(provider, xr_array_raw_u8(alpn), (size_t) alpn->length) == 0);
     if (!configured) {
         xr_tls_context_free(provider);
         return XR_NULL_VAL;
@@ -1505,7 +1546,7 @@ static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState
 }
 
 /*
- * net.__tlsHandshake(conn, hostname, deadlineMs) -> int
+ * net.__tlsHandshake(conn, hostname, deadlineMs, alpnWire) -> int
  * Yieldable client handshake on an established TCP conn under one absolute
  * monotonic deadline (0 means none). Returns 0 on success (the conn is
  * promoted to TLS in place); every failure closes the conn and returns a
@@ -1574,7 +1615,35 @@ static XrCFuncResult net_tls_handshake_with_context(XrVMRuntime *X, XrValue *arg
 
 static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                                  XrValue *result) {
-    return net_tls_handshake_with_context(X, args, nargs, result, get_tls_client_ctx(), false);
+    if (nargs < 4) {
+        *result = xr_int(XR_NETERR_INVALID);
+        return XR_CFUNC_DONE;
+    }
+    XrArray *alpn = net_as_bytes(args[3]);
+    if (!net_alpn_wire_valid(alpn)) {
+        XrNetConn *conn = unwrap_conn(args[0]);
+        net_conn_set_error(conn, XR_NETERR_INVALID, 0);
+        if (conn)
+            xr_net_conn_close(conn);
+        *result = xr_int(XR_NETERR_INVALID);
+        return XR_CFUNC_DONE;
+    }
+    XrTlsContext *context = get_tls_client_ctx();
+    XrTlsContext *ephemeral = NULL;
+    if (alpn->length > 0) {
+        ephemeral = xr_tls_context_new_client();
+        if (!ephemeral ||
+            xr_tls_context_set_alpn(ephemeral, xr_array_raw_u8(alpn), (size_t) alpn->length) != 0) {
+            if (ephemeral)
+                xr_tls_context_free(ephemeral);
+            return net_tls_handshake_with_context(X, args, nargs, result, NULL, false);
+        }
+        context = ephemeral;
+    }
+    XrCFuncResult status = net_tls_handshake_with_context(X, args, nargs, result, context, false);
+    if (ephemeral)
+        xr_tls_context_free(ephemeral);
+    return status;
 }
 
 #endif  // XR_ENABLE_TLS

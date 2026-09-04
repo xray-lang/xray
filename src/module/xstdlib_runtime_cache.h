@@ -117,11 +117,6 @@ typedef struct XrStdlibCache {
     void *log_state;
     void (*log_state_cleanup)(void *);
 
-    // Per-isolate HTTP/2 transport state. The concrete connection table lives
-    // in http2_binding.c; keeping it here avoids finding the module by name on
-    // every transport call.
-    void *http2_state;
-    void (*http2_state_cleanup)(void *);
 } XrStdlibCache;
 
 // Retrieve (and lazily allocate) the per-isolate stdlib cache.
