@@ -3,7 +3,7 @@
 // while the provider only applies the wire bytes and reports its selection.
 
 import net
-import { DialOptions, NetError, TlsClientContext, TlsServerContext } from net
+import { DialOptions, NetError, NetListener, TlsClientContext, TlsServerContext } from net
 
 fn contextOutcome(protocols: Array<string>) -> NetError? {
     try {

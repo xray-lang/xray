@@ -197,13 +197,13 @@ def def_native_classes(root: Path) -> dict[str, set[str]]:
 def check_builtin_distribution(root: Path) -> list[str]:
     """Keep the retained native-library modules inside the one stdlib boundary.
 
-    ws left this set once its connection layer became pure Xray: it now has no
-    core.def binding block and, like http, is loaded from its source alone.
-    cluster and compress follow the same source-only path.
+    ws and http2 left this set once their connection layers became pure Xray:
+    they now have no core.def binding blocks and, like http, are loaded from
+    source alone. cluster and compress follow the same source-only path.
     """
     errors: list[str] = []
-    expected = {"http2", "crypto"}
-    source_only = {"cluster", "compress"}
+    expected = {"crypto"}
+    source_only = {"cluster", "compress", "http2"}
     manifest = load_manifest(root)
     names = set(manifest.by_name)
     core_def = (root / "stdlib/defs/core.def").read_text(encoding="utf-8")

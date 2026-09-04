@@ -369,6 +369,8 @@ layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/http2/http2.xr"
 public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
 perf_suite = "stdlib/http2"
 
 [[module]]
