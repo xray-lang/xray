@@ -109,6 +109,17 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         self.assertNotIn("XrTlsContext *ctx", tls_conn)
         self.assertIn("SSL_VERIFY_FAIL_IF_NO_PEER_CERT", tls_provider)
 
+    def test_multicast_provider_is_a_general_net_boundary(self) -> None:
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+        net_xr = (ROOT / "stdlib/net/net.xr").read_text()
+        core_def = (ROOT / "stdlib/defs/core.def").read_text()
+        net_provider = (ROOT / "src/io/xnet_provider.c").read_text()
+
+        self.assertIn("net.udpMulticastBind(", cluster_xr)
+        self.assertIn("export fn udpMulticastBind(", net_xr)
+        self.assertIn("fn __udpMulticastBind {", core_def)
+        self.assertIn("net_udp_multicast_bind_handle", net_provider)
+
     def test_generation_fences_cover_every_long_lived_source_path(self) -> None:
         cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
 
