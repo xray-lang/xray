@@ -2989,7 +2989,8 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     xi_func_free(ir);
 }
 
-static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
+static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref,
+                                                    XiModule **out_module) {
     static XrClassInfo net_conn_class = {
         .name = "NetConn",
         .xg_class_id = 1901,
@@ -3047,10 +3048,36 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
     XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(function, sizeof(*ref));
     XiValue *callee = xi_value_new(function, entry, XI_IMPORT_REF, &native_function, 0);
     XiValue *call = xi_value_new(function, entry, XI_CALL, &bool_type, 3);
-    if (!function->params || !connection || !direction || !ref || !callee || !call) {
+    XiClassData *class_data =
+        (XiClassData *) xi_func_arena_alloc(function, (uint32_t) sizeof(*class_data));
+    XiModule *module = xi_module_new("native-direct-view.xr", "native_direct_view", function);
+    if (!function->params || !connection || !direction || !ref || !callee || !call ||
+        !class_data || !module ||
+        !xi_module_set_identity(module,
+                                "memory-module-v1:id=18:native-direct-view-mutation-v1")) {
+        xi_module_free(module);
         xi_func_free(function);
         return NULL;
     }
+    module->classes = (XiClassData **) xr_calloc(1, sizeof(*module->classes));
+    if (!module->classes) {
+        xi_module_free(module);
+        xi_func_free(function);
+        return NULL;
+    }
+    *class_data = (XiClassData) {
+        .class_info = &net_conn_class,
+        .xg_class_id = net_conn_class.xg_class_id,
+        .class_name = "NetConn",
+        .source_file = "native-direct-view.xr",
+        .source_provider_field_index = -1,
+        .clinit_child_idx = -1,
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    module->classes[0] = class_data;
+    module->nclasses = 1;
+    function->module = module;
     function->params[0] = connection;
     function->arc_borrow_sig =
         (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
@@ -3076,13 +3103,17 @@ static XiFunc *native_direct_managed_scalar_fixture(XiImportRef **out_ref) {
     xi_block_set_return(entry, call);
     if (out_ref)
         *out_ref = ref;
+    if (out_module)
+        *out_module = module;
     return function;
 }
 
 TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
     XiImportRef *ref = NULL;
-    XiFunc *ir = native_direct_managed_scalar_fixture(&ref);
-    TEST_REQUIRE(ir != NULL && ref != NULL, "native-direct managed/scalar fixture allocated");
+    XiModule *module = NULL;
+    XiFunc *ir = native_direct_managed_scalar_fixture(&ref, &module);
+    TEST_REQUIRE(ir != NULL && ref != NULL && module != NULL,
+                 "native-direct managed/scalar fixture allocated");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "native_direct_view", &had_error);
@@ -3093,17 +3124,13 @@ TEST(cgen_native_direct_uses_verified_call_and_argument_view) {
     TEST_REQUIRE(contains(code, "xr_box_i64("),
                  "native-direct scalar argument crosses the provider ABI as tagged storage");
     xr_free(code);
+    module->init = NULL;
+    xi_module_free(module);
     xi_func_free(ir);
 
-    ir = native_direct_managed_scalar_fixture(&ref);
+    ir = native_direct_managed_scalar_fixture(&ref, &module);
     TEST_REQUIRE(ir != NULL && ref != NULL && test_prepare_backend_ir(ir),
                  "native-direct mutation fixture reached Backend with frozen plans");
-    XiModule *module = xi_module_new("native-direct-view.xr", "native_direct_view_mutation", ir);
-    TEST_REQUIRE(
-        module != NULL &&
-            xi_module_set_identity(module, "memory-module-v1:id=18:native-direct-view-mutation-v1"),
-        "native-direct mutation fixture module has stable identity");
-    ir->module = module;
     XiModule *modules[] = {module};
     TestAotPlan plan;
     test_aot_plan_prepare(&plan, modules, 1, 0);
